@@ -33,9 +33,9 @@ export function SlotCard({ index, start, end, viewZone, signup, showDate, onClai
               {formatDateInZone(start, viewZone)}
             </div>
           )}
-          <div className="font-mono text-lg font-semibold leading-tight" data-testid={`text-time-${index}`}>
-            {formatTimeInZone(start, viewZone)}
-            <span className="text-muted-foreground"> – {formatTimeInZone(end, viewZone)}</span>
+          <div className="font-mono text-base font-semibold leading-tight sm:text-lg" data-testid={`text-time-${index}`}>
+            <span className="whitespace-nowrap">{formatTimeInZone(start, viewZone)}</span>
+            <span className="whitespace-nowrap text-muted-foreground"> – {formatTimeInZone(end, viewZone)}</span>
           </div>
         </div>
         <Badge

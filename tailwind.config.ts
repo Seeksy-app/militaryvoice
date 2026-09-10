@@ -6,10 +6,10 @@ export default {
   theme: {
     extend: {
       borderRadius: {
-        lg: ".5625rem", /* 9px */
-        md: ".375rem", /* 6px */
-        xs: ".1875rem", /* 3px */
-        sm: ".25rem", /* 4px */
+        lg: "1rem", /* 16px */
+        md: ".75rem", /* 12px */
+        xs: ".25rem", /* 4px */
+        sm: ".5rem", /* 8px */
       },
       boxShadow: {
         xs: "0 1px 2px 0 rgb(0 0 0 / 0.05)",

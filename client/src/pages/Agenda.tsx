@@ -74,7 +74,7 @@ export default function Agenda() {
           <>
             <h1
               className="text-xl font-bold tracking-tight sm:text-2xl"
-              style={{ fontFamily: "'Cabinet Grotesk','General Sans',sans-serif" }}
+              style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}
               data-testid="text-agenda-title"
             >
               {event?.name} — On-Air Agenda
