@@ -44,6 +44,7 @@ export const signups = sqliteTable("signups", {
   socialLinks: text("social_links").notNull().default(""),
   notes: text("notes").notNull().default(""),
   timezone: text("timezone").notNull().default(""),
+  photoUrl: text("photo_url").notNull().default(""),
   status: text("status").notNull().default("confirmed"), // confirmed | cancelled
   createdAt: text("created_at").notNull(),
 });
@@ -56,6 +57,7 @@ export const insertSignupSchema = createInsertSchema(signups)
     email: z.string().email("Enter a valid email"),
     numPeople: z.number().int().min(1).max(2),
     slotIndex: z.number().int().min(0),
+    photoUrl: z.string().min(1, "A photo is required"),
   });
 
 export type InsertSignup = z.infer<typeof insertSignupSchema>;
@@ -67,6 +69,8 @@ export type PublicSignup = Pick<
   | "id"
   | "slotIndex"
   | "podcastName"
+  | "hostName"
+  | "photoUrl"
   | "numPeople"
   | "hasVideoIntro"
   | "hasVideoOutro"
@@ -76,3 +80,23 @@ export type PublicSignup = Pick<
   | "socialLinks"
   | "status"
 >;
+
+// ---------------------------------------------------------------------------
+// Reminders — a fan asking to be notified before a specific signup goes live
+// ---------------------------------------------------------------------------
+export const reminders = sqliteTable("reminders", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  signupId: integer("signup_id").notNull(),
+  email: text("email").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertReminderSchema = createInsertSchema(reminders)
+  .omit({ id: true, createdAt: true })
+  .extend({
+    signupId: z.number().int().min(1),
+    email: z.string().email("Enter a valid email"),
+  });
+
+export type InsertReminder = z.infer<typeof insertReminderSchema>;
+export type ReminderRow = typeof reminders.$inferSelect;

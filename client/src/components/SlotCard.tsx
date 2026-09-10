@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Globe2, Mic2, Video, Presentation, Image as ImageIcon, Users, HeadphonesIcon } from "lucide-react";
 import type { PublicSignup } from "@shared/schema";
+import { resolveUploadUrl } from "@/lib/queryClient";
 import { formatTimeInZone, formatDateInZone, primeZonesFor, isHiddenGemSlot } from "@/lib/schedule";
 
 interface Props {
@@ -58,9 +59,18 @@ export function SlotCard({ index, start, end, viewZone, signup, showDate, onClai
 
       {signup ? (
         <div className="flex flex-1 flex-col gap-2">
-          <div className="flex items-center gap-2 text-sm font-medium" data-testid={`text-podcast-${index}`}>
-            <Mic2 className="h-4 w-4 text-primary" />
-            {signup.podcastName}
+          <div className="flex items-center gap-2" data-testid={`text-podcast-${index}`}>
+            {signup.photoUrl && (
+              <img
+                src={resolveUploadUrl(signup.photoUrl)}
+                alt={signup.hostName}
+                className="h-7 w-7 shrink-0 rounded-full object-cover ring-1 ring-border"
+              />
+            )}
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <Mic2 className="h-4 w-4 text-primary" />
+              {signup.podcastName}
+            </span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             <Badge variant="outline" className="gap-1 text-xs font-normal">

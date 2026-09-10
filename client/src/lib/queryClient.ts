@@ -1,6 +1,6 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
-const API_BASE = "__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__";
+export const API_BASE = "__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -22,6 +22,24 @@ export async function apiRequest(
 
   await throwIfResNotOk(res);
   return res;
+}
+
+// For multipart/form-data uploads (e.g. a signup photo). Do not set a
+// Content-Type header manually here — the browser needs to add its own
+// multipart boundary, which it only does when Content-Type is left unset.
+export async function apiUpload(method: string, url: string, formData: FormData): Promise<Response> {
+  const res = await fetch(`${API_BASE}${url}`, {
+    method,
+    body: formData,
+  });
+
+  await throwIfResNotOk(res);
+  return res;
+}
+
+export function resolveUploadUrl(photoUrl: string): string {
+  if (!photoUrl) return "";
+  return `${API_BASE}${photoUrl}`;
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";

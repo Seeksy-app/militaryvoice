@@ -1,5 +1,13 @@
-import { events, signups } from "@shared/schema";
-import type { EventRow, InsertEvent, UpdateEvent, SignupRow, InsertSignup } from "@shared/schema";
+import { events, signups, reminders } from "@shared/schema";
+import type {
+  EventRow,
+  InsertEvent,
+  UpdateEvent,
+  SignupRow,
+  InsertSignup,
+  ReminderRow,
+  InsertReminder,
+} from "@shared/schema";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import { eq } from "drizzle-orm";
@@ -37,10 +45,27 @@ sqlite.exec(`
     social_links TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
     timezone TEXT NOT NULL DEFAULT '',
+    photo_url TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'confirmed',
     created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signup_id INTEGER NOT NULL,
+    email TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
 `);
+
+// Migrate older databases created before the photo_url column existed.
+try {
+  const cols = sqlite.prepare("PRAGMA table_info(signups)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "photo_url")) {
+    sqlite.exec("ALTER TABLE signups ADD COLUMN photo_url TEXT NOT NULL DEFAULT ''");
+  }
+} catch (err) {
+  console.error("Failed to migrate signups.photo_url column:", err);
+}
 
 export interface IStorage {
   getEvent(): Promise<EventRow>;
@@ -50,6 +75,9 @@ export interface IStorage {
   createSignup(signup: InsertSignup): Promise<SignupRow>;
   cancelSignup(id: number): Promise<SignupRow | undefined>;
   deleteSignup(id: number): Promise<{ changes: number }>;
+  getSignupById(id: number): Promise<SignupRow | undefined>;
+  createReminder(reminder: InsertReminder): Promise<ReminderRow>;
+  listReminders(): Promise<ReminderRow[]>;
 }
 
 // Default marathon: kicks off the next Saturday at 12:00 PM Eastern for 24 hours,
@@ -126,6 +154,22 @@ class DatabaseStorage implements IStorage {
 
   async deleteSignup(id: number): Promise<{ changes: number }> {
     return db.delete(signups).where(eq(signups.id, id)).run();
+  }
+
+  async getSignupById(id: number): Promise<SignupRow | undefined> {
+    return db.select().from(signups).where(eq(signups.id, id)).get();
+  }
+
+  async createReminder(reminder: InsertReminder): Promise<ReminderRow> {
+    return db
+      .insert(reminders)
+      .values({ ...reminder, createdAt: new Date().toISOString() })
+      .returning()
+      .get();
+  }
+
+  async listReminders(): Promise<ReminderRow[]> {
+    return db.select().from(reminders).all();
   }
 }
 

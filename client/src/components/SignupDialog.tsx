@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -18,9 +18,10 @@ import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiUpload } from "@/lib/queryClient";
 import { insertSignupSchema } from "@shared/schema";
 import { formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
+import { Camera, ImagePlus, X } from "lucide-react";
 
 const formSchema = insertSignupSchema.extend({
   needsInterviewer: z.boolean(),
@@ -39,6 +40,26 @@ interface Props {
 export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZone }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
+  function handlePhotoChange(file: File | null) {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    if (!file) {
+      setPhotoFile(null);
+      setPhotoPreview(null);
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("That file isn't an image — try a JPG or PNG.");
+      return;
+    }
+    setPhotoError(null);
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  }
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -57,6 +78,7 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
       socialLinks: "",
       notes: "",
       timezone: viewZone,
+      photoUrl: "pending",
     },
   });
 
@@ -77,14 +99,37 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
         socialLinks: "",
         notes: "",
         timezone: viewZone,
+        photoUrl: "pending",
       });
+      handlePhotoChange(null);
+      setPhotoError(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, slotIndex, viewZone]);
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
-      const res = await apiRequest("POST", "/api/signups", values);
+      if (!photoFile) {
+        throw new Error("A photo is required — give us the best one you've got.");
+      }
+      const formData = new FormData();
+      formData.append("slotIndex", String(values.slotIndex));
+      formData.append("podcastName", values.podcastName);
+      formData.append("hostName", values.hostName);
+      formData.append("email", values.email);
+      formData.append("phone", values.phone ?? "");
+      formData.append("numPeople", String(values.numPeople));
+      formData.append("hasVideoIntro", String(values.hasVideoIntro));
+      formData.append("hasVideoOutro", String(values.hasVideoOutro));
+      formData.append("hasSlides", String(values.hasSlides));
+      formData.append("hasImages", String(values.hasImages));
+      formData.append("needsInterviewer", String(values.needsInterviewer));
+      formData.append("socialLinks", values.socialLinks ?? "");
+      formData.append("notes", values.notes ?? "");
+      formData.append("timezone", values.timezone ?? "");
+      formData.append("photo", photoFile);
+      const res = await apiUpload("POST", "/api/signups", formData);
       return res.json();
     },
     onSuccess: () => {
@@ -96,6 +141,14 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
       toast({ title: "Couldn't claim that slot", description: err.message, variant: "destructive" });
     },
   });
+
+  function handleSubmit(values: FormValues) {
+    if (!photoFile) {
+      setPhotoError("A photo is required — give us the best one you've got.");
+      return;
+    }
+    mutation.mutate(values);
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -113,11 +166,55 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
         </DialogHeader>
 
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit((values) => mutation.mutate(values))}
-            className="flex flex-col gap-4"
-            data-testid="form-signup"
-          >
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col gap-4" data-testid="form-signup">
+            <div>
+              <FormLabel>Your photo</FormLabel>
+              <FormDescription className="mt-0.5">
+                Give us the best photo you have — we'll enhance it and put it on the agenda.
+              </FormDescription>
+              <div className="mt-2 flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="group relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-border bg-muted transition-colors hover:border-primary"
+                  data-testid="button-upload-photo"
+                >
+                  {photoPreview ? (
+                    <img src={photoPreview} alt="Your selected photo" className="h-full w-full object-cover" />
+                  ) : (
+                    <Camera className="h-6 w-6 text-muted-foreground transition-colors group-hover:text-primary" />
+                  )}
+                </button>
+                <div className="flex flex-col gap-1.5">
+                  <Button type="button" variant="outline" size="sm" className="w-fit gap-1.5" onClick={() => fileInputRef.current?.click()}>
+                    <ImagePlus className="h-3.5 w-3.5" />
+                    {photoFile ? "Change photo" : "Upload photo"}
+                  </Button>
+                  {photoFile && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handlePhotoChange(null);
+                        if (fileInputRef.current) fileInputRef.current.value = "";
+                      }}
+                      className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" /> Remove
+                    </button>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  data-testid="input-photo"
+                  onChange={(e) => handlePhotoChange(e.target.files?.[0] ?? null)}
+                />
+              </div>
+              {photoError && <p className="mt-1.5 text-sm font-medium text-destructive">{photoError}</p>}
+            </div>
+
             <FormField
               control={form.control}
               name="podcastName"

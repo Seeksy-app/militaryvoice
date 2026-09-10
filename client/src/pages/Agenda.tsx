@@ -2,12 +2,14 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
+import { AgendaSignupActions } from "@/components/AgendaSignupActions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Copy, Globe2, Mic2, Video, Presentation, Image as ImageIcon, HeadphonesIcon } from "lucide-react";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
+import { resolveUploadUrl } from "@/lib/queryClient";
 import {
   detectLocalTimeZone,
   slotStart,
@@ -96,25 +98,46 @@ export default function Agenda() {
             : slots.map((s) => {
                 const prime = primeZonesFor(s.start);
                 const gem = isHiddenGemSlot(s.start);
+                const shareText = s.signup
+                  ? `I'm tuning in to ${s.signup.hostName} on ${s.signup.podcastName} — ${s.dateLabel}, ${formatTimeInZone(
+                      s.start,
+                      viewZone
+                    )} ${zoneLabel(viewZone)}, during the Reveille 24-Hour Podcast Marathon! ${
+                      typeof window !== "undefined" ? window.location.href : ""
+                    }`
+                  : "";
                 return (
-                  <div key={s.index} className="flex flex-col gap-1 p-4" data-testid={`row-agenda-${s.index}`}>
+                  <div key={s.index} className="flex flex-col gap-2 p-4" data-testid={`row-agenda-${s.index}`}>
                     {s.showDate && (
                       <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-primary">{s.dateLabel}</div>
                     )}
-                    <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="flex items-center gap-3">
-                        <span className="font-mono text-sm font-semibold tabular-nums">
-                          {formatTimeInZone(s.start, viewZone)}–{formatTimeInZone(s.end, viewZone)}
-                        </span>
-                        {s.signup ? (
-                          <span className="flex items-center gap-1.5 text-sm font-medium" data-testid={`text-agenda-podcast-${s.index}`}>
-                            <Mic2 className="h-3.5 w-3.5 text-primary" /> {s.signup.podcastName}
-                          </span>
-                        ) : (
-                          <Badge variant="outline" className="text-muted-foreground">
-                            Open — up for grabs
-                          </Badge>
+                        {s.signup?.photoUrl && (
+                          <img
+                            src={resolveUploadUrl(s.signup.photoUrl)}
+                            alt={s.signup.hostName}
+                            className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-border"
+                            data-testid={`img-agenda-photo-${s.index}`}
+                          />
                         )}
+                        <div className="flex flex-col">
+                          <span className="font-mono text-sm font-semibold tabular-nums">
+                            {formatTimeInZone(s.start, viewZone)}–{formatTimeInZone(s.end, viewZone)}
+                          </span>
+                          {s.signup ? (
+                            <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0 text-sm" data-testid={`text-agenda-podcast-${s.index}`}>
+                              <span className="flex items-center gap-1.5 font-medium">
+                                <Mic2 className="h-3.5 w-3.5 text-primary" /> {s.signup.podcastName}
+                              </span>
+                              <span className="text-xs text-muted-foreground">— {s.signup.hostName}</span>
+                            </span>
+                          ) : (
+                            <Badge variant="outline" className="mt-0.5 w-fit text-muted-foreground">
+                              Open — up for grabs
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                       {s.signup && (
                         <div className="flex flex-wrap gap-1">
@@ -135,6 +158,7 @@ export default function Agenda() {
                         {prime.map((z) => z.label).join(", ")}
                       </div>
                     )}
+                    {s.signup && <AgendaSignupActions signup={s.signup} shareText={shareText} />}
                   </div>
                 );
               })}

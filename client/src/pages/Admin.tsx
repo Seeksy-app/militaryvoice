@@ -22,6 +22,7 @@ import { adminGet, adminSend, adminExportUrl } from "@/lib/adminApi";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2 } from "lucide-react";
 import type { EventRow, SignupRow, UpdateEvent } from "@shared/schema";
+import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
 
 const SLOT_LENGTH_OPTIONS = [15, 20, 30, 45, 60, 90, 120];
@@ -325,7 +326,16 @@ function SignupsCard({ password }: { password: string }) {
                           {formatDateInZone(start, zone)} {formatTimeInZone(start, zone)}
                         </TableCell>
                         <TableCell>
-                          <div className="font-medium">{s.podcastName}</div>
+                          <div className="flex items-center gap-2 font-medium">
+                            {s.photoUrl && (
+                              <img
+                                src={resolveUploadUrl(s.photoUrl)}
+                                alt={s.hostName}
+                                className="h-6 w-6 shrink-0 rounded-full object-cover ring-1 ring-border"
+                              />
+                            )}
+                            {s.podcastName}
+                          </div>
                           <div className="flex flex-wrap gap-1 pt-1">
                             <Badge variant="outline" className="text-xs font-normal">
                               {s.numPeople === 2 ? "2 hosts" : "1 host"}
