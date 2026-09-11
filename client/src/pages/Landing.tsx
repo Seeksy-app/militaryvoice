@@ -117,8 +117,7 @@ export default function Landing({ slug }: Props) {
   const { data: podcasters } = useQuery<PublicPodcaster[]>({ queryKey: ["/api/podcasters"] });
   const { data: sponsors } = useQuery<PublicSponsor[]>({ queryKey: ["/api/sponsors"] });
 
-  const { playing: audioPlaying, muted: audioMuted } = useSiteAudio();
-  const audioOn = audioPlaying && !audioMuted;
+  const { playing: audioOn } = useSiteAudio();
 
   const zone = useMemo(detectLocalTimeZone, []);
   const countdown = useCountdown(event?.startAtUtc, event?.durationHours);
@@ -488,10 +487,7 @@ export default function Landing({ slug }: Props) {
             })}
           </div>
           <div className="pointer-events-auto mb-2 flex shrink-0 items-center gap-2">
-            <span className="hidden text-[11px] font-semibold uppercase tracking-wide text-white/60 sm:block">
-              {audioOn ? "Now playing" : "Listen in"}
-            </span>
-            <AudioToggle tone="dark" />
+            <AudioToggle tone="dark" withLabel />
           </div>
           <style>{`@keyframes mvwave { from { transform: scaleY(0.32); opacity:.55 } to { transform: scaleY(1); opacity:1 } }`}</style>
         </div>
