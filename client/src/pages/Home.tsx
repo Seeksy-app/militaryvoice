@@ -7,8 +7,8 @@ import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { SlotCard } from "@/components/SlotCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowRight, Radio, Mic2, Bell } from "lucide-react";
-import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
+import { ArrowRight, Radio, Mic2 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import {
   detectLocalTimeZone,
@@ -17,11 +17,53 @@ import {
   totalSlots,
   formatDateInZone,
   formatTimeInZone,
-  onAirWindow,
 } from "@/lib/schedule";
 
 interface Props {
   slug?: string;
+}
+
+/**
+ * Right-hand visual on the schedule hero. Uses /schedule-hero.jpg (drop a
+ * photo of podcasters into client/public) and falls back to an on-air
+ * graphic until one exists.
+ */
+function HeroArt() {
+  const [photoOk, setPhotoOk] = useState(false);
+  const bars = [14, 26, 40, 22, 34, 48, 30, 18, 38, 26, 44, 20, 32, 16];
+  return (
+    <div className="relative">
+      <div className="absolute inset-0 -rotate-2 rounded-[2rem] bg-[#F0A71F]/90" aria-hidden="true" />
+      <div className="relative aspect-[4/3] overflow-hidden rounded-[1.75rem] bg-[#053877] shadow-2xl">
+        <img
+          src="/schedule-hero.jpg"
+          alt="Podcasters recording together"
+          onLoad={() => setPhotoOk(true)}
+          className={`h-full w-full object-cover ${photoOk ? "" : "hidden"}`}
+        />
+        {!photoOk && (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-6 p-8 text-white" aria-hidden="true">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em]">
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" /> On air
+            </div>
+            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/10 ring-8 ring-white/5">
+              <Mic2 className="h-12 w-12 text-[#F0A71F]" />
+            </div>
+            <div className="flex h-14 items-end gap-1.5">
+              {bars.map((h, i) => (
+                <span
+                  key={i}
+                  className="w-2 rounded-full bg-white/70"
+                  style={{ height: `${h}px`, animation: `mvbar 1.${(i % 5) + 2}s ease-in-out ${i * 0.07}s infinite alternate` }}
+                />
+              ))}
+            </div>
+            <style>{`@keyframes mvbar { from { transform: scaleY(0.4); } to { transform: scaleY(1.15); } }`}</style>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function Home({ slug }: Props) {
@@ -70,14 +112,9 @@ export default function Home({ slug }: Props) {
 
   const openCount = slots.filter((s) => !s.signup).length;
 
-  const nextBooked = useMemo(
-    () => slots.filter((s) => s.signup && s.end > new Date()).sort((a, b) => a.start.getTime() - b.start.getTime())[0],
-    [slots]
-  );
   const onAirSettings = event
     ? { onAirMinutes: event.onAirMinutes, bufferMinutes: event.bufferMinutes, bufferPosition: event.bufferPosition }
     : undefined;
-  const nextOnAir = nextBooked && onAirSettings ? onAirWindow(nextBooked.start, onAirSettings) : null;
 
   return (
     <div className="min-h-screen">
@@ -141,43 +178,7 @@ export default function Home({ slug }: Props) {
 
           {!eventLoading && (
             <div className="relative hidden lg:block">
-              <div className="absolute inset-0 -rotate-2 rounded-[2rem] bg-primary" />
-              <div className="relative flex flex-col gap-4 p-8">
-                <div className="ml-auto w-[88%] rounded-2xl bg-card p-4 shadow-lg" data-testid="card-hero-preview-next">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Next up</span>
-                    <Bell className="h-3.5 w-3.5 text-primary" />
-                  </div>
-                  {nextBooked?.signup ? (
-                    <div className="mt-3 flex items-center gap-3">
-                      {nextBooked.signup.photoUrl ? (
-                        <img
-                          src={resolveUploadUrl(nextBooked.signup.photoUrl)}
-                          alt={nextBooked.signup.hostName}
-                          className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-primary/15"
-                        />
-                      ) : (
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                          <Mic2 className="h-5 w-5" />
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-card-foreground">{nextBooked.signup.podcastName}</div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          {formatDateInZone(nextBooked.start, viewZone)} · {formatTimeInZone(nextOnAir?.start ?? nextBooked.start, viewZone)}
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-3 flex items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                        <Mic2 className="h-5 w-5" />
-                      </div>
-                      <div className="text-sm text-muted-foreground">Slots are open — be the first on the air.</div>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <HeroArt />
             </div>
           )}
         </div>
@@ -192,7 +193,7 @@ export default function Home({ slug }: Props) {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {slots.map((s) => (
               <SlotCard
                 key={s.index}
