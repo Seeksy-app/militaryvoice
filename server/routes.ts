@@ -59,6 +59,13 @@ function toPublicEvent(event: EventRow): PublicEvent {
   return rest;
 }
 
+// Public read endpoints are safe to serve from Vercel's CDN for a few seconds:
+// the homepage fires several in parallel and a cold instance costs ~2s each.
+// Writers invalidate client-side; a 10s window is invisible to visitors.
+function publicCache(res: Response): void {
+  res.setHeader("Cache-Control", "public, s-maxage=10, stale-while-revalidate=120");
+}
+
 function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[number]): PublicSignup {
   return {
     id: s.id,
@@ -150,12 +157,14 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
 export function registerRoutes(app: Express): void {
   // ---- Public: events list (for "Choose Your Event") -------------------------
   app.get("/api/events", async (_req, res) => {
+    publicCache(res);
     const rows = await storage.listEvents();
     res.json(rows.map(toPublicEvent));
   });
 
   // ---- Public: event config (featured by default, or ?slug=) -----------------
   app.get("/api/event", async (req, res) => {
+    publicCache(res);
     const slug = typeof req.query.slug === "string" ? req.query.slug : undefined;
     const event = slug ? await storage.getEventBySlug(slug) : await storage.getFeaturedEvent();
     if (!event) {
@@ -169,6 +178,7 @@ export function registerRoutes(app: Express): void {
   // ---- Public: podcasters with a finished profile (for the homepage spotlight).
   //      No contact info leaves the server.
   app.get("/api/podcasters", async (_req, res) => {
+    publicCache(res);
     const rows = await storage.listCompleteProfiles();
     const out: PublicPodcaster[] = rows.map((p) => ({
       id: p.id,
@@ -185,6 +195,7 @@ export function registerRoutes(app: Express): void {
   });
 
   app.get("/api/signups", async (req, res) => {
+    publicCache(res);
     let eventId = req.query.eventId ? Number(req.query.eventId) : undefined;
     if (!eventId) {
       const featured = await storage.getFeaturedEvent();
