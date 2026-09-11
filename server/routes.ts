@@ -2,17 +2,17 @@ import type { Express, Request, Response, NextFunction } from "express";
 import crypto from "node:crypto";
 import multer from "multer";
 import sharp from "sharp";
-import { storage } from "./storage";
-import { uploadPhoto } from "./photoStorage";
+import { storage } from "./storage.js";
+import { uploadPhoto } from "./photoStorage.js";
 import {
   insertSignupSchema,
   insertReminderSchema,
   updateEventSchema,
   type PublicEvent,
   type PublicSignup,
-} from "../shared/schema";
+} from "../shared/schema.js";
 import { fromError } from "zod-validation-error";
-import { sendConfirmationEmail } from "./email";
+import { sendConfirmationEmail } from "./email.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),

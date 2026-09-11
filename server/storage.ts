@@ -1,4 +1,4 @@
-import { events, signups, reminders } from "../shared/schema";
+import { events, signups, reminders } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -7,7 +7,7 @@ import type {
   InsertSignup,
   ReminderRow,
   InsertReminder,
-} from "../shared/schema";
+} from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { eq } from "drizzle-orm";

@@ -1,5 +1,5 @@
-import { app, log } from "./app";
-import { serveStatic } from "./static";
+import { app, log } from "./app.js";
+import { serveStatic } from "./static.js";
 import { createServer } from "node:http";
 
 const httpServer = createServer(app);
