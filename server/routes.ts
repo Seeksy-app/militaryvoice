@@ -66,9 +66,14 @@ function toPublicEvent(event: EventRow): PublicEvent {
 // the homepage fires several in parallel and a cold instance costs ~2s each.
 // Writers invalidate client-side; a 10s window is invisible to visitors.
 function publicCache(res: Response, seconds = 15): void {
-  // Served from the edge for `seconds`, then refreshed in the background for
-  // up to a day while visitors keep getting the instant cached copy.
-  res.setHeader("Cache-Control", `public, s-maxage=${seconds}, stale-while-revalidate=86400`);
+  // Split the two caches deliberately:
+  //  - Browsers must revalidate every time, so a visitor never sees a stale
+  //    lineup (or, worse, a day-old copy from stale-while-revalidate).
+  //  - Vercel's edge holds it for `seconds` and refreshes in the background,
+  //    which is what actually keeps cold starts off the critical path.
+  res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+  res.setHeader("Vercel-CDN-Cache-Control", `max-age=${seconds}, stale-while-revalidate=600`);
+  res.setHeader("CDN-Cache-Control", `max-age=${seconds}`);
 }
 
 function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[number]): PublicSignup {

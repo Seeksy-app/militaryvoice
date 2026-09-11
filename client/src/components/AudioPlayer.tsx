@@ -5,6 +5,7 @@ const SRC = "/american-warriors-trailer.m4a";
 const TITLE = "American Warriors";
 const SOFT_VOLUME = 0.05; // background level — deliberately very quiet
 const PREF_KEY = "mv_audio"; // "on" | "off"
+const TOGGLE_SELECTOR = '[data-testid="button-audio-mute"]';
 
 function readPref(): "on" | "off" | null {
   try {
@@ -23,6 +24,7 @@ function writePref(v: "on" | "off") {
 }
 
 interface AudioValue {
+  /** True only when the trailer is actually audible. */
   playing: boolean;
   toggle: () => void;
 }
@@ -35,29 +37,68 @@ export function useSiteAudio(): AudioValue {
 }
 
 /**
- * One <audio> element for the whole site, playing the trailer quietly on a
- * loop. Sound is a single on/off the visitor controls, and the choice is
- * remembered — once it's off it stays off across pages and reloads. Browsers
- * block sound that starts on its own, so the first play often needs a tap.
+ * One <audio> element for the whole site, looping the trailer quietly.
+ *
+ * Sound is on by default. Browsers refuse to start audible audio before the
+ * visitor interacts, so when that happens we start the track muted (which is
+ * allowed) and unmute on their first click, tap, or keypress. Turning it off
+ * is remembered, so it stays off across pages and reloads.
  */
 export function SiteAudioProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
+  const playingRef = useRef(false);
+  playingRef.current = playing;
 
-  // Only try to start on a fresh visitor or one who left it on.
   useEffect(() => {
     const el = audioRef.current;
     if (!el || readPref() === "off") return;
     el.volume = SOFT_VOLUME;
+    el.muted = false;
+
+    let cleanup = () => {};
+
+    const armUnmuteOnInteraction = () => {
+      const unmute = (e: Event) => {
+        // A click on the sound button is that button's job, not ours.
+        const t = e.target;
+        if (t instanceof Element && t.closest(TOGGLE_SELECTOR)) return;
+        if (readPref() === "off") {
+          cleanup();
+          return;
+        }
+        el.muted = false;
+        el.volume = SOFT_VOLUME;
+        void el.play().then(() => setPlaying(true)).catch(() => {});
+        cleanup();
+      };
+      const events: (keyof WindowEventMap)[] = ["pointerdown", "keydown", "touchstart", "wheel"];
+      events.forEach((n) => window.addEventListener(n, unmute, { passive: true }));
+      cleanup = () => events.forEach((n) => window.removeEventListener(n, unmute));
+    };
+
     el.play()
       .then(() => setPlaying(true))
-      .catch(() => setPlaying(false));
+      .catch(() => {
+        // Blocked: keep it rolling silently and wait for any interaction.
+        el.muted = true;
+        el.play()
+          .then(armUnmuteOnInteraction)
+          .catch(armUnmuteOnInteraction);
+      });
+
+    return () => cleanup();
   }, []);
 
   const toggle = useCallback(() => {
     const el = audioRef.current;
     if (!el) return;
-    if (el.paused) {
+    if (playingRef.current) {
+      el.pause();
+      el.muted = false;
+      setPlaying(false);
+      writePref("off");
+    } else {
       el.volume = SOFT_VOLUME;
       el.muted = false;
       el.play()
@@ -66,10 +107,6 @@ export function SiteAudioProvider({ children }: { children: ReactNode }) {
           writePref("on");
         })
         .catch(() => setPlaying(false));
-    } else {
-      el.pause();
-      setPlaying(false);
-      writePref("off");
     }
   }, []);
 
@@ -78,15 +115,12 @@ export function SiteAudioProvider({ children }: { children: ReactNode }) {
   return (
     <AudioCtx.Provider value={value}>
       {children}
-      <audio ref={audioRef} src={SRC} loop preload="none" playsInline />
+      <audio ref={audioRef} src={SRC} loop preload="auto" playsInline />
     </AudioCtx.Provider>
   );
 }
 
-/**
- * Sound on/off. Sits in the nav next to the theme toggle and beside the hero
- * waveform. Always visible, including on phones.
- */
+/** Sound on/off. Sits in the nav and beside the hero waveform. */
 export function AudioToggle({
   className = "",
   tone = "light",
@@ -110,10 +144,10 @@ export function AudioToggle({
       aria-label={playing ? `Turn off the ${TITLE} trailer` : `Play the ${TITLE} trailer`}
       title={playing ? "Sound on — tap to turn it off" : "Sound off — tap to listen"}
       aria-pressed={playing}
-      className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-colors ${base} ${className}`}
+      className={`inline-flex h-7 items-center justify-center gap-1 rounded-full border px-2 text-[11px] font-medium leading-none transition-colors ${base} ${className}`}
       data-testid="button-audio-mute"
     >
-      {playing ? <Volume2 className="h-4 w-4 text-[#F0A71F]" /> : <VolumeX className="h-4 w-4" />}
+      {playing ? <Volume2 className="h-3.5 w-3.5 text-[#F0A71F]" /> : <VolumeX className="h-3.5 w-3.5" />}
       {withLabel && <span>{playing ? "Sound on" : "Sound off"}</span>}
     </button>
   );

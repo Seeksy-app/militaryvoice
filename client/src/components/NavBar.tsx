@@ -81,7 +81,7 @@ export function NavBar() {
               <span>{signedIn ? "Dashboard" : "Sign in"}</span>
             </Button>
           </Link>
-          <AudioToggle />
+          <AudioToggle className="h-9 w-9 px-0" />
           <Button
             variant="ghost"
             size="icon"

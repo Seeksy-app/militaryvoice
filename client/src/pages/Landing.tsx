@@ -468,7 +468,7 @@ export default function Landing({ slug }: Props) {
         </div>
 
         {/* live waveform strip — doubles as the trailer's sound control */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-center justify-center gap-4 px-4 pb-4">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-center gap-3 px-4 pb-4">
           <div aria-hidden="true" className="flex h-[72px] items-end justify-center gap-[3px] opacity-80">
             {Array.from({ length: 44 }).map((_, i) => {
               const base = 14 + Math.abs(Math.sin(i * 0.55)) * 58;
@@ -533,6 +533,49 @@ export default function Landing({ slug }: Props) {
           </Reveal>
         </div>
       </section>
+
+      {/* -------------------------------------------------------- SPONSORS */}
+      {(sponsors ?? []).length > 0 && (
+        <section className="overflow-hidden border-b border-border bg-background py-14" data-testid="section-sponsors">
+          <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
+            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+              Friends of the <span className="text-[#F0A71F]">Podcastathon</span>
+            </div>
+            <SponsorDialog>
+              <button type="button" className="mt-3 text-sm font-medium text-primary underline-offset-4 hover:underline" data-testid="button-become-sponsor">
+                Become a sponsor
+              </button>
+            </SponsorDialog>
+          </div>
+          <div className="relative mt-8">
+            <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-background to-transparent" />
+            <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-background to-transparent" />
+            <div className="flex w-max items-center gap-16 px-8 [animation:mvmarquee_var(--mv-marquee-s)_linear_infinite] hover:[animation-play-state:paused]" style={{ ["--mv-marquee-s" as string]: `${Math.max(18, (sponsors ?? []).length * 6)}s` }}>
+              {[...(sponsors ?? []), ...(sponsors ?? [])].map((sp, i) => {
+                const img = (
+                  <img
+                    src={sp.logoUrl}
+                    alt={sp.name}
+                    title={sp.name}
+                    loading="lazy"
+                    className="h-10 w-auto max-w-[180px] object-contain opacity-80 grayscale transition duration-300 hover:opacity-100 hover:grayscale-0 sm:h-12"
+                  />
+                );
+                return sp.url ? (
+                  <a key={`${sp.id}-${i}`} href={sp.url} target="_blank" rel="noopener noreferrer" className="shrink-0" aria-label={sp.name}>
+                    {img}
+                  </a>
+                ) : (
+                  <span key={`${sp.id}-${i}`} className="shrink-0">
+                    {img}
+                  </span>
+                );
+              })}
+            </div>
+            <style>{`@keyframes mvmarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
+          </div>
+        </section>
+      )}
 
       {/* ------------------------------------------------------ PODCASTERS */}
       <section id="podcasters" className={`scroll-mt-16 ${NAVY}`}>
@@ -722,49 +765,6 @@ export default function Landing({ slug }: Props) {
           </div>
         </div>
       </section>
-
-      {/* -------------------------------------------------------- SPONSORS */}
-      {(sponsors ?? []).length > 0 && (
-        <section className="overflow-hidden border-b border-border bg-background py-14" data-testid="section-sponsors">
-          <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-              Friends of the <span className="text-[#F0A71F]">Podcastathon</span>
-            </div>
-            <SponsorDialog>
-              <button type="button" className="mt-3 text-sm font-medium text-primary underline-offset-4 hover:underline" data-testid="button-become-sponsor">
-                Become a sponsor
-              </button>
-            </SponsorDialog>
-          </div>
-          <div className="relative mt-8">
-            <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-background to-transparent" />
-            <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-background to-transparent" />
-            <div className="flex w-max items-center gap-16 px-8 [animation:mvmarquee_var(--mv-marquee-s)_linear_infinite] hover:[animation-play-state:paused]" style={{ ["--mv-marquee-s" as string]: `${Math.max(18, (sponsors ?? []).length * 6)}s` }}>
-              {[...(sponsors ?? []), ...(sponsors ?? [])].map((sp, i) => {
-                const img = (
-                  <img
-                    src={sp.logoUrl}
-                    alt={sp.name}
-                    title={sp.name}
-                    loading="lazy"
-                    className="h-10 w-auto max-w-[180px] object-contain opacity-80 grayscale transition duration-300 hover:opacity-100 hover:grayscale-0 sm:h-12"
-                  />
-                );
-                return sp.url ? (
-                  <a key={`${sp.id}-${i}`} href={sp.url} target="_blank" rel="noopener noreferrer" className="shrink-0" aria-label={sp.name}>
-                    {img}
-                  </a>
-                ) : (
-                  <span key={`${sp.id}-${i}`} className="shrink-0">
-                    {img}
-                  </span>
-                );
-              })}
-            </div>
-            <style>{`@keyframes mvmarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
-          </div>
-        </section>
-      )}
 
       {/* ------------------------------------------------------- FINAL CTA */}
       <section className="bg-[#F0A71F] text-[#1a1200]">
