@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -8,6 +8,8 @@ import type {
   ReminderRow,
   InsertReminder,
   LoginTokenRow,
+  ProfileRow,
+  InsertProfile,
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -113,6 +115,26 @@ async function ensureSchema() {
       created_at TEXT NOT NULL
     );
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS podcaster_profiles (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      podcast_name TEXT NOT NULL DEFAULT '',
+      host_name TEXT NOT NULL DEFAULT '',
+      phone TEXT NOT NULL DEFAULT '',
+      num_people INTEGER NOT NULL DEFAULT 1,
+      has_video_intro BOOLEAN NOT NULL DEFAULT false,
+      has_video_outro BOOLEAN NOT NULL DEFAULT false,
+      has_slides BOOLEAN NOT NULL DEFAULT false,
+      has_images BOOLEAN NOT NULL DEFAULT false,
+      needs_interviewer BOOLEAN NOT NULL DEFAULT false,
+      social_links TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      photo_url TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `;
 
   // Migrate older databases created before these columns existed.
   await sql`ALTER TABLE signups ADD COLUMN IF NOT EXISTS photo_url TEXT NOT NULL DEFAULT ''`;
@@ -163,6 +185,8 @@ export interface IStorage {
   createLoginToken(email: string, token: string, expiresAt: string): Promise<LoginTokenRow>;
   getLoginToken(email: string, token: string): Promise<LoginTokenRow | undefined>;
   markLoginTokenUsed(id: number): Promise<void>;
+  getProfileByEmail(email: string): Promise<ProfileRow | undefined>;
+  upsertProfile(email: string, patch: Partial<InsertProfile> & { photoUrl?: string }): Promise<ProfileRow>;
 }
 
 // Default marathon: kicks off the next Saturday at 12:00 PM Eastern for 24 hours,
@@ -330,6 +354,54 @@ class DatabaseStorage implements IStorage {
   async markLoginTokenUsed(id: number): Promise<void> {
     await ready();
     await db.update(loginTokens).set({ usedAt: new Date().toISOString() }).where(eq(loginTokens.id, id));
+  }
+
+  async getProfileByEmail(email: string): Promise<ProfileRow | undefined> {
+    await ready();
+    const [row] = await db
+      .select()
+      .from(podcasterProfiles)
+      .where(eq(podcasterProfiles.email, email.trim().toLowerCase()));
+    return row;
+  }
+
+  async upsertProfile(
+    email: string,
+    patch: Partial<InsertProfile> & { photoUrl?: string },
+  ): Promise<ProfileRow> {
+    await ready();
+    const normalizedEmail = email.trim().toLowerCase();
+    const now = new Date().toISOString();
+    const existing = await this.getProfileByEmail(normalizedEmail);
+    if (existing) {
+      const [updated] = await db
+        .update(podcasterProfiles)
+        .set({ ...patch, updatedAt: now })
+        .where(eq(podcasterProfiles.email, normalizedEmail))
+        .returning();
+      return updated;
+    }
+    const [created] = await db
+      .insert(podcasterProfiles)
+      .values({
+        email: normalizedEmail,
+        podcastName: patch.podcastName ?? "",
+        hostName: patch.hostName ?? "",
+        phone: patch.phone ?? "",
+        numPeople: patch.numPeople ?? 1,
+        hasVideoIntro: patch.hasVideoIntro ?? false,
+        hasVideoOutro: patch.hasVideoOutro ?? false,
+        hasSlides: patch.hasSlides ?? false,
+        hasImages: patch.hasImages ?? false,
+        needsInterviewer: patch.needsInterviewer ?? false,
+        socialLinks: patch.socialLinks ?? "",
+        notes: patch.notes ?? "",
+        photoUrl: patch.photoUrl ?? "",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    return created;
   }
 }
 

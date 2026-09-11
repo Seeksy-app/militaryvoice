@@ -9,6 +9,7 @@ import {
   insertReminderSchema,
   insertEventSchema,
   updateEventSchema,
+  insertProfileSchema,
   type PublicEvent,
   type PublicSignup,
   type EventRow,
@@ -146,42 +147,37 @@ export function registerRoutes(app: Express): void {
     res.json(rows.filter((r) => r.status !== "cancelled").map(toPublicSignup));
   });
 
-  // ---- Host (podcaster, logged in): claim a slot (multipart: fields + photo) -
-  app.post("/api/signups", requireHostSession, (req, res, next) => {
-    upload.single("photo")(req, res, (err) => {
-      if (err) {
-        res.status(400).json({ message: err.message || "Couldn't process that photo." });
-        return;
-      }
-      next();
-    });
-  }, async (req, res) => {
-    if (!req.file) {
-      res.status(400).json({ message: "A photo is required — give us the best one you've got." });
+  // ---- Host (podcaster, logged in): claim a slot. Reuses their saved profile
+  //      (name, photo, etc.) instead of asking for it again — a plain JSON
+  //      body with just eventId + slotIndex is all that's needed here now.
+  app.post("/api/signups", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const profile = await storage.getProfileByEmail(email);
+    if (!profile || !profile.podcastName || !profile.hostName || !profile.photoUrl) {
+      res.status(400).json({ message: "Set up your podcaster profile before claiming a slot." });
       return;
     }
 
-    const email = (req as any).hostEmail as string;
-    const body = req.body as Record<string, string>;
+    const body = req.body as Record<string, unknown>;
     const featured = await storage.getFeaturedEvent();
     const eventId = body.eventId ? Number(body.eventId) : featured.id;
     const raw = {
       eventId,
       slotIndex: Number(body.slotIndex),
-      podcastName: body.podcastName ?? "",
-      hostName: body.hostName ?? "",
+      podcastName: profile.podcastName,
+      hostName: profile.hostName,
       email,
-      phone: body.phone ?? "",
-      numPeople: Number(body.numPeople),
-      hasVideoIntro: body.hasVideoIntro === "true",
-      hasVideoOutro: body.hasVideoOutro === "true",
-      hasSlides: body.hasSlides === "true",
-      hasImages: body.hasImages === "true",
-      needsInterviewer: body.needsInterviewer === "true",
-      socialLinks: body.socialLinks ?? "",
-      notes: body.notes ?? "",
-      timezone: body.timezone ?? "",
-      photoUrl: "pending", // placeholder so the schema's min-length check passes before we save the file
+      phone: profile.phone,
+      numPeople: profile.numPeople,
+      hasVideoIntro: profile.hasVideoIntro,
+      hasVideoOutro: profile.hasVideoOutro,
+      hasSlides: profile.hasSlides,
+      hasImages: profile.hasImages,
+      needsInterviewer: profile.needsInterviewer,
+      socialLinks: profile.socialLinks,
+      notes: profile.notes,
+      timezone: typeof body.timezone === "string" ? body.timezone : "",
+      photoUrl: profile.photoUrl,
     };
 
     const parsed = insertSignupSchema.safeParse(raw);
@@ -207,15 +203,7 @@ export function registerRoutes(app: Express): void {
       return;
     }
 
-    let photoUrl: string;
-    try {
-      photoUrl = await enhanceAndSavePhoto(req.file.buffer);
-    } catch (err) {
-      res.status(400).json({ message: "That photo couldn't be processed — try a different file." });
-      return;
-    }
-
-    const created = await storage.createSignup({ ...parsed.data, photoUrl });
+    const created = await storage.createSignup(parsed.data);
     res.status(201).json(toPublicSignup(created));
 
     // Send the confirmation email in the background — never block or fail the
@@ -492,6 +480,67 @@ export function registerRoutes(app: Express): void {
   app.post("/api/host/logout", (_req, res) => {
     clearSessionCookie(res);
     res.json({ ok: true });
+  });
+
+  // ---- Host: fetch their podcaster profile (null if not set up yet) --------
+  app.get("/api/host/profile", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const profile = await storage.getProfileByEmail(email);
+    res.json(profile ?? null);
+  });
+
+  // ---- Host: create/update their podcaster profile (multipart: fields + optional photo) --
+  app.put("/api/host/profile", requireHostSession, (req, res, next) => {
+    upload.single("photo")(req, res, (err) => {
+      if (err) {
+        res.status(400).json({ message: err.message || "Couldn't process that photo." });
+        return;
+      }
+      next();
+    });
+  }, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const body = req.body as Record<string, string>;
+    const raw = {
+      podcastName: body.podcastName ?? "",
+      hostName: body.hostName ?? "",
+      phone: body.phone ?? "",
+      numPeople: Number(body.numPeople) || 1,
+      hasVideoIntro: body.hasVideoIntro === "true",
+      hasVideoOutro: body.hasVideoOutro === "true",
+      hasSlides: body.hasSlides === "true",
+      hasImages: body.hasImages === "true",
+      needsInterviewer: body.needsInterviewer === "true",
+      socialLinks: body.socialLinks ?? "",
+      notes: body.notes ?? "",
+    };
+
+    const parsed = insertProfileSchema.safeParse(raw);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+
+    const existing = await storage.getProfileByEmail(email);
+
+    let photoUrl: string | undefined;
+    if (req.file) {
+      try {
+        photoUrl = await enhanceAndSavePhoto(req.file.buffer);
+      } catch (err) {
+        res.status(400).json({ message: "That photo couldn't be processed — try a different file." });
+        return;
+      }
+    } else if (!existing?.photoUrl) {
+      res.status(400).json({ message: "A photo is required — give us the best one you've got." });
+      return;
+    }
+
+    const updated = await storage.upsertProfile(email, {
+      ...parsed.data,
+      ...(photoUrl ? { photoUrl } : {}),
+    });
+    res.json(updated);
   });
 
   // ---- Host: dashboard data (their slot(s), fans who want a reminder, and the

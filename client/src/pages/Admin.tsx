@@ -757,7 +757,7 @@ export default function Admin() {
         <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
           <div className="mb-6 flex items-center justify-between">
             <h1 className="text-xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
-              Host dashboard
+              Admin dashboard
             </h1>
             <Button variant="ghost" size="sm" onClick={logout} className="gap-1.5" data-testid="button-admin-logout">
               <LogOut className="h-3.5 w-3.5" /> Log out

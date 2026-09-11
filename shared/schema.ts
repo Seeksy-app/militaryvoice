@@ -142,3 +142,38 @@ export const loginTokens = pgTable("login_tokens", {
 });
 
 export type LoginTokenRow = typeof loginTokens.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Podcaster profiles — one-time account setup per email. Claiming a slot
+// reuses this instead of asking for the same details (name, photo, etc.)
+// every time.
+// ---------------------------------------------------------------------------
+export const podcasterProfiles = pgTable("podcaster_profiles", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  podcastName: text("podcast_name").notNull().default(""),
+  hostName: text("host_name").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  numPeople: integer("num_people").notNull().default(1),
+  hasVideoIntro: boolean("has_video_intro").notNull().default(false),
+  hasVideoOutro: boolean("has_video_outro").notNull().default(false),
+  hasSlides: boolean("has_slides").notNull().default(false),
+  hasImages: boolean("has_images").notNull().default(false),
+  needsInterviewer: boolean("needs_interviewer").notNull().default(false),
+  socialLinks: text("social_links").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  photoUrl: text("photo_url").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const insertProfileSchema = createInsertSchema(podcasterProfiles)
+  .omit({ id: true, email: true, createdAt: true, updatedAt: true, photoUrl: true })
+  .extend({
+    podcastName: z.string().min(1, "Podcast or show name is required"),
+    hostName: z.string().min(1, "Your name is required"),
+    numPeople: z.number().int().min(1).max(2),
+  });
+
+export type InsertProfile = z.infer<typeof insertProfileSchema>;
+export type ProfileRow = typeof podcasterProfiles.$inferSelect;
