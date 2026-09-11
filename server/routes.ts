@@ -65,6 +65,8 @@ function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[numbe
     hasImages: s.hasImages,
     needsInterviewer: s.needsInterviewer,
     socialLinks: s.socialLinks,
+    rssUrl: s.rssUrl,
+    youtubeUrl: s.youtubeUrl,
     status: s.status,
   };
 }
@@ -175,6 +177,8 @@ export function registerRoutes(app: Express): void {
       hasImages: profile.hasImages,
       needsInterviewer: profile.needsInterviewer,
       socialLinks: profile.socialLinks,
+      rssUrl: profile.rssUrl,
+      youtubeUrl: profile.youtubeUrl,
       notes: profile.notes,
       timezone: typeof body.timezone === "string" ? body.timezone : "",
       photoUrl: profile.photoUrl,
@@ -454,6 +458,10 @@ export function registerRoutes(app: Express): void {
     const code = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     await storage.createLoginToken(email, code, expiresAt);
+    if (!process.env.RESEND_API_KEY && process.env.NODE_ENV !== "production") {
+      // Local dev without Resend: surface the code in the terminal so sign-in still works.
+      console.log(`[dev] login code for ${email}: ${code}`);
+    }
     await sendLoginCodeEmail({ to: email, code });
     res.json({ ok: true, message: "We sent a 6-digit code to that email." });
   });
@@ -512,6 +520,8 @@ export function registerRoutes(app: Express): void {
       hasImages: body.hasImages === "true",
       needsInterviewer: body.needsInterviewer === "true",
       socialLinks: body.socialLinks ?? "",
+      rssUrl: body.rssUrl ?? "",
+      youtubeUrl: body.youtubeUrl ?? "",
       notes: body.notes ?? "",
     };
 

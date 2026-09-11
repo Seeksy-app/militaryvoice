@@ -65,6 +65,8 @@ export const signups = pgTable("signups", {
   hasImages: boolean("has_images").notNull().default(false),
   needsInterviewer: boolean("needs_interviewer").notNull().default(false),
   socialLinks: text("social_links").notNull().default(""),
+  rssUrl: text("rss_url").notNull().default(""),
+  youtubeUrl: text("youtube_url").notNull().default(""),
   notes: text("notes").notNull().default(""),
   timezone: text("timezone").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
@@ -103,6 +105,8 @@ export type PublicSignup = Pick<
   | "hasImages"
   | "needsInterviewer"
   | "socialLinks"
+  | "rssUrl"
+  | "youtubeUrl"
   | "status"
 >;
 
@@ -161,11 +165,35 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
   hasImages: boolean("has_images").notNull().default(false),
   needsInterviewer: boolean("needs_interviewer").notNull().default(false),
   socialLinks: text("social_links").notNull().default(""),
+  // Optional show links. Both are stored normalized with an https:// scheme
+  // (see optionalUrl below) so they can be rendered as plain anchors.
+  rssUrl: text("rss_url").notNull().default(""),
+  youtubeUrl: text("youtube_url").notNull().default(""),
   notes: text("notes").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+// Optional URL field: blank is fine; anything else must look like a web
+// address. A missing scheme is added so "youtube.com/@show" becomes a working link.
+const optionalUrl = (label: string) =>
+  z
+    .string()
+    .trim()
+    .transform((v) => (v && !/^https?:\/\//i.test(v) ? `https://${v}` : v))
+    .refine(
+      (v) => {
+        if (!v) return true;
+        try {
+          const u = new URL(v);
+          return /^https?:$/.test(u.protocol) && u.hostname.includes(".");
+        } catch {
+          return false;
+        }
+      },
+      { message: `Enter a valid ${label} link (or leave it blank)` },
+    );
 
 export const insertProfileSchema = createInsertSchema(podcasterProfiles)
   .omit({ id: true, email: true, createdAt: true, updatedAt: true, photoUrl: true })
@@ -173,6 +201,8 @@ export const insertProfileSchema = createInsertSchema(podcasterProfiles)
     podcastName: z.string().min(1, "Podcast or show name is required"),
     hostName: z.string().min(1, "Your name is required"),
     numPeople: z.number().int().min(1).max(2),
+    rssUrl: optionalUrl("RSS feed"),
+    youtubeUrl: optionalUrl("YouTube"),
   });
 
 export type InsertProfile = z.infer<typeof insertProfileSchema>;

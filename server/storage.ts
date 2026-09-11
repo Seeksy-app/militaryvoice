@@ -395,6 +395,8 @@ class DatabaseStorage implements IStorage {
         hasImages: patch.hasImages ?? false,
         needsInterviewer: patch.needsInterviewer ?? false,
         socialLinks: patch.socialLinks ?? "",
+        rssUrl: patch.rssUrl ?? "",
+        youtubeUrl: patch.youtubeUrl ?? "",
         notes: patch.notes ?? "",
         photoUrl: patch.photoUrl ?? "",
         createdAt: now,

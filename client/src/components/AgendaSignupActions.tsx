@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, API_BASE } from "@/lib/queryClient";
-import { Share2, CalendarPlus, BellRing, Check } from "lucide-react";
+import { Share2, CalendarPlus, BellRing, Check, Rss, Youtube } from "lucide-react";
 import type { PublicSignup } from "@shared/schema";
 
 interface Props {
@@ -49,6 +49,20 @@ export function AgendaSignupActions({ signup, shareText }: Props) {
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      {signup.youtubeUrl && (
+        <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2 text-xs" asChild data-testid={`link-youtube-${signup.id}`}>
+          <a href={signup.youtubeUrl} target="_blank" rel="noopener noreferrer">
+            <Youtube className="h-3 w-3" /> YouTube
+          </a>
+        </Button>
+      )}
+      {signup.rssUrl && (
+        <Button type="button" variant="outline" size="sm" className="h-7 gap-1 px-2 text-xs" asChild data-testid={`link-rss-${signup.id}`}>
+          <a href={signup.rssUrl} target="_blank" rel="noopener noreferrer">
+            <Rss className="h-3 w-3" /> Subscribe
+          </a>
+        </Button>
+      )}
       <Button
         type="button"
         variant="outline"

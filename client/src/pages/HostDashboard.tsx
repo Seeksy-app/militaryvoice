@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Mic2, Users, LogOut, Download, Radio, Mail, KeyRound, UserCircle2, Pencil, ArrowLeft } from "lucide-react";
+import { Mic2, Users, LogOut, Download, Radio, Mail, KeyRound, UserCircle2, ArrowLeft, Settings, Phone, Globe, Rss, Youtube, Video, Presentation, Image as ImageIcon, MessageSquare } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,13 @@ interface HostDashboardData {
   signups: PublicSignup[];
   mySignups: HostSignup[];
   contacts: HostContact[];
+}
+
+function toHref(v: string): string {
+  return /^https?:\/\//i.test(v) ? v : `https://${v}`;
+}
+function linkLabel(v: string): string {
+  return v.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
 }
 
 function LoginCard() {
@@ -250,12 +257,12 @@ export default function HostDashboard() {
         ) : !data ? null : !hasProfile || screen === "editProfile" ? (
           <section className="mt-8 max-w-xl">
             <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold text-foreground">
-              <UserCircle2 className="h-5 w-5 text-primary" />
-              {hasProfile ? "Edit your podcaster profile" : "Set up your podcaster profile"}
+              {hasProfile ? <Settings className="h-5 w-5 text-primary" /> : <UserCircle2 className="h-5 w-5 text-primary" />}
+              {hasProfile ? "Profile Settings" : "Set up your podcaster profile"}
             </h2>
             <p className="mb-6 text-sm text-muted-foreground">
               {hasProfile
-                ? "Update your details below — they'll apply to every slot you claim."
+                ? "Update your details below — they'll apply to every slot you claim from now on."
                 : "Tell us a bit about your show once, and every slot you claim from here on reuses these details — no repeating yourself."}
             </p>
             <ProfileForm
@@ -308,7 +315,7 @@ export default function HostDashboard() {
                   onClick={() => setScreen("editProfile")}
                   className="text-primary underline-offset-2 hover:underline"
                 >
-                  Edit your profile
+                  Open profile settings
                 </button>
                 .
               </p>
@@ -324,32 +331,139 @@ export default function HostDashboard() {
           </section>
         ) : (
           <>
-            <section className="mt-8">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  <UserCircle2 className="h-4 w-4" />
-                  Your profile
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setScreen("editProfile")}
-                  className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                  data-testid="button-edit-profile"
-                >
-                  <Pencil className="h-3 w-3" /> Edit
-                </button>
-              </div>
-              <div className="flex items-center gap-4 rounded-xl border border-border bg-card p-4">
-                {profile?.photoUrl && (
-                  <img
-                    src={resolveUploadUrl(profile.photoUrl)}
-                    alt=""
-                    className="h-12 w-12 shrink-0 rounded-full object-cover"
-                  />
-                )}
-                <div>
-                  <p className="font-semibold text-card-foreground">{profile?.podcastName}</p>
-                  <p className="text-sm text-muted-foreground">{profile?.hostName}</p>
+            <section className="mt-8" data-testid="card-profile-header">
+              <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                <div className="h-1.5 bg-primary" />
+                <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-start sm:p-6">
+                  {profile?.photoUrl ? (
+                    <img
+                      src={resolveUploadUrl(profile.photoUrl)}
+                      alt={profile.hostName}
+                      className="h-24 w-24 shrink-0 rounded-full object-cover ring-4 ring-primary/10"
+                    />
+                  ) : (
+                    <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                      <Mic2 className="h-8 w-8" />
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="truncate text-xl font-bold tracking-tight text-card-foreground sm:text-2xl">
+                          {profile?.podcastName}
+                        </h2>
+                        <p className="mt-0.5 text-sm text-muted-foreground">
+                          Hosted by <span className="font-medium text-card-foreground">{profile?.hostName}</span>
+                          {profile?.numPeople === 2 && " and a co-host"}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 rounded-full"
+                        onClick={() => setScreen("editProfile")}
+                        data-testid="button-profile-settings"
+                      >
+                        <Settings className="h-3.5 w-3.5" />
+                        Profile Settings
+                      </Button>
+                    </div>
+
+                    <dl className="mt-4 grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+                      <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
+                        <Mail className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <dd className="truncate">{data.email}</dd>
+                      </div>
+                      {profile?.phone && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Phone className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <dd>{profile.phone}</dd>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Users className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <dd>{profile?.numPeople === 2 ? "Two on the mic" : "Solo host"}</dd>
+                      </div>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Radio className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <dd>
+                          {data.mySignups.length === 0
+                            ? "No slot claimed yet"
+                            : `${data.mySignups.length} slot${data.mySignups.length === 1 ? "" : "s"} on ${data.event.name.trim()}`}
+                        </dd>
+                      </div>
+                    </dl>
+
+                    {(profile?.socialLinks || profile?.rssUrl || profile?.youtubeUrl) && (
+                      <div className="mt-4 flex flex-wrap gap-1.5">
+                        {profile?.socialLinks && (
+                          <a
+                            href={toHref(profile.socialLinks)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground hover-elevate"
+                            data-testid="link-profile-website"
+                          >
+                            <Globe className="h-3 w-3 text-primary" />
+                            <span className="truncate">{linkLabel(profile.socialLinks)}</span>
+                          </a>
+                        )}
+                        {profile?.youtubeUrl && (
+                          <a
+                            href={profile.youtubeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground hover-elevate"
+                            data-testid="link-profile-youtube"
+                          >
+                            <Youtube className="h-3 w-3 text-primary" /> YouTube
+                          </a>
+                        )}
+                        {profile?.rssUrl && (
+                          <a
+                            href={profile.rssUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground hover-elevate"
+                            data-testid="link-profile-rss"
+                          >
+                            <Rss className="h-3 w-3 text-primary" /> RSS feed
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="mt-4 border-t border-border pt-4">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bringing to the show</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {profile?.hasVideoIntro && (
+                          <Badge variant="secondary" className="gap-1 font-normal"><Video className="h-3 w-3" /> Video intro</Badge>
+                        )}
+                        {profile?.hasVideoOutro && (
+                          <Badge variant="secondary" className="gap-1 font-normal"><Video className="h-3 w-3" /> Video outro</Badge>
+                        )}
+                        {profile?.hasSlides && (
+                          <Badge variant="secondary" className="gap-1 font-normal"><Presentation className="h-3 w-3" /> Slides</Badge>
+                        )}
+                        {profile?.hasImages && (
+                          <Badge variant="secondary" className="gap-1 font-normal"><ImageIcon className="h-3 w-3" /> Images</Badge>
+                        )}
+                        {profile?.needsInterviewer && (
+                          <Badge variant="outline" className="gap-1 border-primary/40 font-normal text-primary"><Users className="h-3 w-3" /> Interviewer requested</Badge>
+                        )}
+                        {!profile?.hasVideoIntro && !profile?.hasVideoOutro && !profile?.hasSlides && !profile?.hasImages && !profile?.needsInterviewer && (
+                          <span className="text-sm text-muted-foreground">Just the conversation — no extra media yet.</span>
+                        )}
+                      </div>
+                      {profile?.notes && (
+                        <p className="mt-3 flex items-start gap-2 text-sm text-muted-foreground">
+                          <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          <span className="italic">{profile.notes}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>

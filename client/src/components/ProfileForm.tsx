@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiUpload, resolveUploadUrl } from "@/lib/queryClient";
 import { insertProfileSchema, type ProfileRow } from "@shared/schema";
 import { PhotoCropDialog } from "@/components/PhotoCropDialog";
-import { Camera, ImagePlus, X, Crop } from "lucide-react";
+import { Camera, ImagePlus, X, Crop, Rss, Youtube } from "lucide-react";
 
 const formSchema = insertProfileSchema.extend({
   needsInterviewer: z.boolean(),
@@ -79,6 +79,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel }: Props) {
       hasImages: profile?.hasImages ?? false,
       needsInterviewer: profile?.needsInterviewer ?? false,
       socialLinks: profile?.socialLinks ?? "",
+      rssUrl: profile?.rssUrl ?? "",
+      youtubeUrl: profile?.youtubeUrl ?? "",
       notes: profile?.notes ?? "",
     },
   });
@@ -101,6 +103,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel }: Props) {
       formData.append("hasImages", String(values.hasImages));
       formData.append("needsInterviewer", String(values.needsInterviewer));
       formData.append("socialLinks", values.socialLinks ?? "");
+      formData.append("rssUrl", values.rssUrl ?? "");
+      formData.append("youtubeUrl", values.youtubeUrl ?? "");
       formData.append("notes", values.notes ?? "");
       if (photoFile) formData.append("photo", photoFile);
       const res = await apiUpload("PUT", "/api/host/profile", formData);
@@ -355,20 +359,61 @@ export function ProfileForm({ email, profile, onSaved, onCancel }: Props) {
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="socialLinks"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Website / social link (optional)</FormLabel>
-              <FormControl>
-                <Input placeholder="instagram.com/yourshow" {...field} data-testid="input-social-links" />
-              </FormControl>
-              <FormDescription>We'll credit this on the public agenda.</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <div className="flex flex-col gap-4 rounded-lg border border-border bg-muted/40 p-4">
+          <div>
+            <p className="text-sm font-medium">Where can people find your show?</p>
+            <p className="text-xs text-muted-foreground">All optional. Anything you add shows up as a link on the public agenda.</p>
+          </div>
+
+          <FormField
+            control={form.control}
+            name="socialLinks"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Website / social link</FormLabel>
+                <FormControl>
+                  <Input placeholder="instagram.com/yourshow" {...field} data-testid="input-social-links" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField
+              control={form.control}
+              name="rssUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-1.5">
+                    <Rss className="h-3.5 w-3.5 text-primary" /> Podcast RSS feed
+                  </FormLabel>
+                  <FormControl>
+                    <Input placeholder="feeds.example.com/yourshow" inputMode="url" {...field} data-testid="input-rss-url" />
+                  </FormControl>
+                  <FormDescription>Lets listeners subscribe in any podcast app.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="youtubeUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-1.5">
+                    <Youtube className="h-3.5 w-3.5 text-primary" /> YouTube podcast
+                  </FormLabel>
+                  <FormControl>
+                    <Input placeholder="youtube.com/@yourshow" inputMode="url" {...field} data-testid="input-youtube-url" />
+                  </FormControl>
+                  <FormDescription>If your show also lives on YouTube.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
 
         <FormField
           control={form.control}
