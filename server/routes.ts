@@ -7,13 +7,14 @@ import { uploadPhoto } from "./photoStorage.js";
 import {
   insertSignupSchema,
   insertReminderSchema,
-  insertWatchSignupSchema,
+  insertEventSchema,
   updateEventSchema,
   type PublicEvent,
   type PublicSignup,
+  type EventRow,
 } from "../shared/schema.js";
 import { fromError } from "zod-validation-error";
-import { sendConfirmationEmail, sendWatchConfirmationEmail, sendMagicLinkEmail } from "./email.js";
+import { sendConfirmationEmail, sendLoginCodeEmail } from "./email.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession } from "./session.js";
 
 const upload = multer({
@@ -43,7 +44,7 @@ async function enhanceAndSavePhoto(buffer: Buffer): Promise<string> {
   return uploadPhoto(filename, processed);
 }
 
-function toPublicEvent(event: Awaited<ReturnType<typeof storage.getEvent>>): PublicEvent {
+function toPublicEvent(event: EventRow): PublicEvent {
   const { adminPassword, ...rest } = event;
   return rest;
 }
@@ -51,6 +52,7 @@ function toPublicEvent(event: Awaited<ReturnType<typeof storage.getEvent>>): Pub
 function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[number]): PublicSignup {
   return {
     id: s.id,
+    eventId: s.eventId,
     slotIndex: s.slotIndex,
     podcastName: s.podcastName,
     hostName: s.hostName,
@@ -107,7 +109,7 @@ function icsEscape(text: string): string {
 
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const password = (req.header("x-admin-password") || (req.query.password as string) || "").trim();
-  const event = await storage.getEvent();
+  const event = await storage.getFeaturedEvent();
   if (!password || password !== event.adminPassword) {
     res.status(401).json({ message: "Invalid admin password" });
     return;
@@ -116,20 +118,36 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
 }
 
 export function registerRoutes(app: Express): void {
-  // ---- Public: event config -------------------------------------------------
-  app.get("/api/event", async (_req, res) => {
-    const event = await storage.getEvent();
+  // ---- Public: events list (for "Choose Your Event") -------------------------
+  app.get("/api/events", async (_req, res) => {
+    const rows = await storage.listEvents();
+    res.json(rows.map(toPublicEvent));
+  });
+
+  // ---- Public: event config (featured by default, or ?slug=) -----------------
+  app.get("/api/event", async (req, res) => {
+    const slug = typeof req.query.slug === "string" ? req.query.slug : undefined;
+    const event = slug ? await storage.getEventBySlug(slug) : await storage.getFeaturedEvent();
+    if (!event) {
+      res.status(404).json({ message: "Event not found" });
+      return;
+    }
     res.json(toPublicEvent(event));
   });
 
   // ---- Public: schedule (privacy-safe signup fields only) -------------------
-  app.get("/api/signups", async (_req, res) => {
-    const rows = await storage.listSignups();
+  app.get("/api/signups", async (req, res) => {
+    let eventId = req.query.eventId ? Number(req.query.eventId) : undefined;
+    if (!eventId) {
+      const featured = await storage.getFeaturedEvent();
+      eventId = featured.id;
+    }
+    const rows = await storage.listSignups(eventId);
     res.json(rows.filter((r) => r.status !== "cancelled").map(toPublicSignup));
   });
 
-  // ---- Public: claim a slot (multipart form: fields + a required photo) ------
-  app.post("/api/signups", (req, res, next) => {
+  // ---- Host (podcaster, logged in): claim a slot (multipart: fields + photo) -
+  app.post("/api/signups", requireHostSession, (req, res, next) => {
     upload.single("photo")(req, res, (err) => {
       if (err) {
         res.status(400).json({ message: err.message || "Couldn't process that photo." });
@@ -143,12 +161,16 @@ export function registerRoutes(app: Express): void {
       return;
     }
 
+    const email = (req as any).hostEmail as string;
     const body = req.body as Record<string, string>;
+    const featured = await storage.getFeaturedEvent();
+    const eventId = body.eventId ? Number(body.eventId) : featured.id;
     const raw = {
+      eventId,
       slotIndex: Number(body.slotIndex),
       podcastName: body.podcastName ?? "",
       hostName: body.hostName ?? "",
-      email: body.email ?? "",
+      email,
       phone: body.phone ?? "",
       numPeople: Number(body.numPeople),
       hasVideoIntro: body.hasVideoIntro === "true",
@@ -168,14 +190,18 @@ export function registerRoutes(app: Express): void {
       return;
     }
 
-    const event = await storage.getEvent();
+    const event = await storage.getEventById(parsed.data.eventId);
+    if (!event) {
+      res.status(400).json({ message: "That event no longer exists." });
+      return;
+    }
     const totalSlots = Math.floor((event.durationHours * 60) / event.slotMinutes);
     if (parsed.data.slotIndex >= totalSlots) {
       res.status(400).json({ message: "That slot doesn't exist on the current schedule." });
       return;
     }
 
-    const existing = await storage.getSignupBySlot(parsed.data.slotIndex);
+    const existing = await storage.getSignupBySlot(parsed.data.eventId, parsed.data.slotIndex);
     if (existing && existing.status !== "cancelled") {
       res.status(409).json({ message: "That slot was just claimed by someone else. Pick another." });
       return;
@@ -231,7 +257,7 @@ export function registerRoutes(app: Express): void {
       res.status(404).json({ message: "Signup not found" });
       return;
     }
-    const event = await storage.getEvent();
+    const event = (await storage.getEventById(signup.eventId)) ?? (await storage.getFeaturedEvent());
     const start = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
     const end = new Date(start.getTime() + event.slotMinutes * 60000);
     const tz = signup.timezone || "America/New_York";
@@ -281,7 +307,7 @@ export function registerRoutes(app: Express): void {
   // ---- Admin: auth check ------------------------------------------------------
   app.post("/api/admin/login", async (req, res) => {
     const password = (req.body?.password || "").trim();
-    const event = await storage.getEvent();
+    const event = await storage.getFeaturedEvent();
     if (!password || password !== event.adminPassword) {
       res.status(401).json({ message: "Incorrect password" });
       return;
@@ -289,11 +315,42 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
-  // ---- Admin: full event settings ---------------------------------------------
+  // ---- Admin: all events (for the events management screen) ------------------
+  app.get("/api/admin/events", requireAdmin, async (_req, res) => {
+    const rows = await storage.listEvents();
+    res.json(rows.map(toPublicEvent));
+  });
+
+  app.post("/api/admin/events", requireAdmin, async (req, res) => {
+    const parsed = insertEventSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const created = await storage.createEvent(parsed.data);
+    res.status(201).json(toPublicEvent(created));
+  });
+
+  app.put("/api/admin/events/:id", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const parsed = updateEventSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const updated = await storage.updateEvent(id, parsed.data);
+    if (!updated) {
+      res.status(404).json({ message: "Event not found" });
+      return;
+    }
+    res.json(toPublicEvent(updated));
+  });
+
+  // ---- Admin: full event settings (alias for the currently featured event) ---
   // Note: adminPassword is intentionally stripped from the response even though
   // this route requires auth — it should never round-trip back to the browser.
   app.get("/api/admin/event", requireAdmin, async (_req, res) => {
-    const event = await storage.getEvent();
+    const event = await storage.getFeaturedEvent();
     res.json(toPublicEvent(event));
   });
 
@@ -303,13 +360,15 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
-    const updated = await storage.updateEvent(parsed.data);
-    res.json(toPublicEvent(updated));
+    const featured = await storage.getFeaturedEvent();
+    const updated = await storage.updateEvent(featured.id, parsed.data);
+    res.json(toPublicEvent(updated!));
   });
 
   // ---- Admin: full signups list (with contact info) ---------------------------
-  app.get("/api/admin/signups", requireAdmin, async (_req, res) => {
-    const rows = await storage.listSignups();
+  app.get("/api/admin/signups", requireAdmin, async (req, res) => {
+    const eventId = req.query.eventId ? Number(req.query.eventId) : undefined;
+    const rows = await storage.listSignups(eventId);
     res.json(rows);
   });
 
@@ -397,60 +456,36 @@ export function registerRoutes(app: Express): void {
     res.send(lines.join("\n"));
   });
 
-  // ---- Public: fan "claim a slot to watch" sign-up (no login needed) ---------
-  app.post("/api/watch-signups", async (req, res) => {
-    const parsed = insertWatchSignupSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ message: fromError(parsed.error).toString() });
-      return;
-    }
-    const created = await storage.createWatchSignup(parsed.data);
-    const event = await storage.getEvent();
-    const scheduleUrl = `${req.protocol}://${req.get("host")}/#/agenda`;
-    await sendWatchConfirmationEmail({
-      to: parsed.data.email,
-      eventName: event.name,
-      confirmationCode: created.confirmationCode,
-      scheduleUrl,
-    });
-    res.status(201).json({ confirmationCode: created.confirmationCode });
-  });
-
-  // ---- Host: request a magic sign-in link -------------------------------------
-  app.post("/api/host/request-link", async (req, res) => {
+  // ---- Host: request a typed sign-in code -------------------------------------
+  app.post("/api/host/request-code", async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     if (!email || !email.includes("@")) {
       res.status(400).json({ message: "Enter a valid email" });
       return;
     }
-    const signupRows = await storage.listSignups();
-    const hasSlot = signupRows.some((s) => s.email.trim().toLowerCase() === email && s.status !== "cancelled");
-    // Always respond the same way whether or not the email matches a signup, so
-    // this endpoint can't be used to probe which emails are registered hosts.
-    if (hasSlot) {
-      const token = crypto.randomBytes(32).toString("base64url");
-      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-      await storage.createLoginToken(email, token, expiresAt);
-      const loginUrl = `${req.protocol}://${req.get("host")}/api/host/verify?token=${token}`;
-      await sendMagicLinkEmail({ to: email, loginUrl });
-    }
-    res.json({ ok: true, message: "If that email has a slot, a sign-in link is on its way." });
+    const code = crypto.randomInt(100000, 1000000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    await storage.createLoginToken(email, code, expiresAt);
+    await sendLoginCodeEmail({ to: email, code });
+    res.json({ ok: true, message: "We sent a 6-digit code to that email." });
   });
 
-  // ---- Host: verify magic link, start session, redirect to dashboard ---------
-  app.get("/api/host/verify", async (req, res) => {
-    const token = String(req.query.token || "");
-    const base = `${req.protocol}://${req.get("host")}`;
-    const row = token ? await storage.getLoginToken(token) : undefined;
+  // ---- Host: verify a typed sign-in code, start session -----------------------
+  app.post("/api/host/verify-code", async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const code = String(req.body?.code || "").trim();
+    if (!email || !code) {
+      res.status(400).json({ message: "Enter your email and the code" });
+      return;
+    }
+    const row = await storage.getLoginToken(email, code);
     if (!row || row.usedAt || new Date(row.expiresAt).getTime() < Date.now()) {
-      // No query string here: this app uses hash-based routing, and a `?`
-      // suffix on the hash path breaks wouter's exact-match route matching.
-      res.redirect(`${base}/#/host/login-expired`);
+      res.status(401).json({ message: "That code is invalid or expired. Request a new one." });
       return;
     }
     await storage.markLoginTokenUsed(row.id);
-    setSessionCookie(res, row.email);
-    res.redirect(`${base}/#/host/dashboard`);
+    setSessionCookie(res, email);
+    res.json({ ok: true, email });
   });
 
   // ---- Host: sign out ----------------------------------------------------------
@@ -459,18 +494,26 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
-  // ---- Host: dashboard data (their slot + fans who asked for a reminder) -----
+  // ---- Host: dashboard data (their slot(s), fans who want a reminder, and the
+  //      open schedule so they can pick and claim a new slot) ------------------
   app.get("/api/host/dashboard", requireHostSession, async (req, res) => {
     const email = (req as any).hostEmail as string;
-    const [signupRows, reminderRows] = await Promise.all([storage.listSignups(), storage.listReminders()]);
-    const mySignups = signupRows.filter((s) => s.email.trim().toLowerCase() === email && s.status !== "cancelled");
+    const event = await storage.getFeaturedEvent();
+    const [signupRows, reminderRows] = await Promise.all([
+      storage.listSignups(event.id),
+      storage.listReminders(),
+    ]);
+    const active = signupRows.filter((s) => s.status !== "cancelled");
+    const mySignups = active.filter((s) => s.email.trim().toLowerCase() === email);
     const mySignupIds = new Set(mySignups.map((s) => s.id));
     const contacts = reminderRows
       .filter((r) => mySignupIds.has(r.signupId))
       .map((r) => ({ id: r.id, email: r.email, createdAt: r.createdAt, signupId: r.signupId }));
     res.json({
       email,
-      signups: mySignups.map((s) => ({
+      event: toPublicEvent(event),
+      signups: active.map(toPublicSignup),
+      mySignups: mySignups.map((s) => ({
         id: s.id,
         slotIndex: s.slotIndex,
         podcastName: s.podcastName,

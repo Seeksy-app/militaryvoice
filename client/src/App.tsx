@@ -9,19 +9,20 @@ import { AdminAuthProvider } from "@/lib/admin-auth";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Agenda from "@/pages/Agenda";
+import Events from "@/pages/Events";
 import Admin from "@/pages/Admin";
-import HostLogin from "@/pages/HostLogin";
 import HostDashboard from "@/pages/HostDashboard";
 
 function AppRouter() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/agenda" component={Agenda} />
-      <Route path="/admin" component={Admin} />
-      <Route path="/host/login">{() => <HostLogin />}</Route>
-      <Route path="/host/login-expired">{() => <HostLogin expired />}</Route>
-      <Route path="/host/dashboard" component={HostDashboard} />
+      <Route path="/">{() => <Home />}</Route>
+      <Route path="/event/:slug/agenda">{(params) => <Agenda slug={params.slug} />}</Route>
+      <Route path="/event/:slug">{(params) => <Home slug={params.slug} />}</Route>
+      <Route path="/events">{() => <Events />}</Route>
+      <Route path="/agenda">{() => <Agenda />}</Route>
+      <Route path="/admin">{() => <Admin />}</Route>
+      <Route path="/host/dashboard">{() => <HostDashboard />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

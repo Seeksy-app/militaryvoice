@@ -4,7 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Globe2, Mic2, Video, Presentation, Image as ImageIcon, Users, HeadphonesIcon } from "lucide-react";
 import type { PublicSignup } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
-import { formatTimeInZone, formatDateInZone, primeZonesFor, isHiddenGemSlot, onAirWindow, type OnAirSettings } from "@/lib/schedule";
+import { AgendaSignupActions } from "@/components/AgendaSignupActions";
+import { formatTimeInZone, formatDateInZone, zoneLabel, primeZonesFor, isHiddenGemSlot, onAirWindow, type OnAirSettings } from "@/lib/schedule";
 
 interface Props {
   index: number;
@@ -111,6 +112,15 @@ export function SlotCard({ index, start, end, viewZone, signup, showDate, onClai
               </Badge>
             )}
           </div>
+          <AgendaSignupActions
+            signup={signup}
+            shareText={`I'm tuning in to ${signup.hostName} on ${signup.podcastName} — ${formatDateInZone(
+              start,
+              viewZone
+            )}, ${formatTimeInZone(start, viewZone)} ${zoneLabel(viewZone)}, during the MilitaryVoice.ai marathon! ${
+              typeof window !== "undefined" ? window.location.href : ""
+            }`}
+          />
         </div>
       ) : (
         <Button

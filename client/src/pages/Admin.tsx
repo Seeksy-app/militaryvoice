@@ -20,8 +20,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend, adminExportUrl } from "@/lib/adminApi";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
-import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2 } from "lucide-react";
-import type { EventRow, SignupRow, UpdateEvent } from "@shared/schema";
+import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil } from "lucide-react";
+import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
 
@@ -71,6 +71,285 @@ function LoginCard() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+interface EventFormState {
+  name: string;
+  slug: string;
+  tagline: string;
+  startLocal: string;
+  durationHours: number;
+  slotMinutes: number;
+}
+
+function blankEventForm(zone: string): EventFormState {
+  return {
+    name: "",
+    slug: "",
+    tagline: "",
+    startLocal: utcToDateTimeLocalValue(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), zone),
+    durationHours: 24,
+    slotMinutes: 60,
+  };
+}
+
+function EventFormFields({
+  form,
+  onChange,
+}: {
+  form: EventFormState;
+  onChange: (next: EventFormState) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div>
+        <Label>Event name</Label>
+        <Input value={form.name} onChange={(e) => onChange({ ...form, name: e.target.value })} data-testid="input-new-event-name" />
+      </div>
+      <div>
+        <Label>Slug (used in the URL)</Label>
+        <Input
+          value={form.slug}
+          onChange={(e) => onChange({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") })}
+          placeholder="summer-marathon"
+          data-testid="input-new-event-slug"
+        />
+      </div>
+      <div className="sm:col-span-2">
+        <Label>Tagline</Label>
+        <Input value={form.tagline} onChange={(e) => onChange({ ...form, tagline: e.target.value })} data-testid="input-new-event-tagline" />
+      </div>
+      <div>
+        <Label>Start time (your local zone)</Label>
+        <Input
+          type="datetime-local"
+          value={form.startLocal}
+          onChange={(e) => onChange({ ...form, startLocal: e.target.value })}
+          data-testid="input-new-event-start"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>Duration (hrs)</Label>
+          <Input
+            type="number"
+            min={1}
+            value={form.durationHours}
+            onChange={(e) => onChange({ ...form, durationHours: Number(e.target.value) })}
+            data-testid="input-new-event-duration"
+          />
+        </div>
+        <div>
+          <Label>Slot length (min)</Label>
+          <Select value={String(form.slotMinutes)} onValueChange={(v) => onChange({ ...form, slotMinutes: Number(v) })}>
+            <SelectTrigger data-testid="select-new-event-slot-minutes">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SLOT_LENGTH_OPTIONS.map((m) => (
+                <SelectItem key={m} value={String(m)}>
+                  {m} minutes
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EventsManagementCard({ password }: { password: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const zone = useMemo(detectLocalTimeZone, []);
+  const { data: events, isLoading } = useQuery<PublicEvent[]>({
+    queryKey: ["/api/admin/events", password],
+    queryFn: () => adminGet<PublicEvent[]>("/api/admin/events", password),
+  });
+
+  const [creating, setCreating] = useState(false);
+  const [newForm, setNewForm] = useState<EventFormState>(() => blankEventForm(zone));
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<EventFormState | null>(null);
+
+  async function refreshEverything() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/events"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/event"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/event"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/events"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/signups"] }),
+    ]);
+  }
+
+  async function handleCreate() {
+    if (!newForm.name.trim() || !newForm.slug.trim()) {
+      toast({ title: "Name and slug are required", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload: InsertEvent = {
+        name: newForm.name,
+        slug: newForm.slug,
+        tagline: newForm.tagline,
+        description: "",
+        startAtUtc: dateTimeLocalToUtc(newForm.startLocal, zone).toISOString(),
+        durationHours: newForm.durationHours,
+        slotMinutes: newForm.slotMinutes,
+        onAirMinutes: Math.max(1, newForm.slotMinutes - 5),
+        bufferMinutes: Math.min(5, newForm.slotMinutes - 1),
+        bufferPosition: "after",
+        isFeatured: false,
+      } as InsertEvent;
+      await adminSend("POST", "/api/admin/events", password, payload);
+      await refreshEverything();
+      toast({ title: "Event created" });
+      setCreating(false);
+      setNewForm(blankEventForm(zone));
+    } catch (err) {
+      toast({ title: "Couldn't create event", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSetFeatured(id: number) {
+    try {
+      await adminSend("PUT", `/api/admin/events/${id}`, password, { isFeatured: true } as UpdateEvent);
+      await refreshEverything();
+      toast({ title: "Featured event updated" });
+    } catch (err) {
+      toast({ title: "Couldn't update", description: (err as Error).message, variant: "destructive" });
+    }
+  }
+
+  function startEdit(event: PublicEvent) {
+    setEditingId(event.id);
+    setEditForm({
+      name: event.name,
+      slug: event.slug,
+      tagline: event.tagline,
+      startLocal: utcToDateTimeLocalValue(new Date(event.startAtUtc), zone),
+      durationHours: event.durationHours,
+      slotMinutes: event.slotMinutes,
+    });
+  }
+
+  async function handleSaveEdit() {
+    if (!editingId || !editForm) return;
+    setSaving(true);
+    try {
+      const patch: UpdateEvent = {
+        name: editForm.name,
+        slug: editForm.slug,
+        tagline: editForm.tagline,
+        startAtUtc: dateTimeLocalToUtc(editForm.startLocal, zone).toISOString(),
+        durationHours: editForm.durationHours,
+        slotMinutes: editForm.slotMinutes,
+      };
+      await adminSend("PUT", `/api/admin/events/${editingId}`, password, patch);
+      await refreshEverything();
+      toast({ title: "Event updated" });
+      setEditingId(null);
+      setEditForm(null);
+    } catch (err) {
+      toast({ title: "Couldn't save", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+        <div>
+          <CardTitle className="text-base">Events</CardTitle>
+          <CardDescription>Add new marathons and choose which one is featured on the homepage.</CardDescription>
+        </div>
+        {!creating && (
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)} data-testid="button-new-event">
+            <Plus className="h-3.5 w-3.5" /> New event
+          </Button>
+        )}
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {creating && (
+          <div className="rounded-lg border border-border p-4">
+            <EventFormFields form={newForm} onChange={setNewForm} />
+            <div className="mt-3 flex gap-2">
+              <Button size="sm" onClick={handleCreate} disabled={saving} data-testid="button-create-event">
+                {saving ? "Creating…" : "Create event"}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setCreating(false)} disabled={saving}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {(events ?? []).map((event) => (
+              <div key={event.id} className="rounded-lg border border-border p-3" data-testid={`card-admin-event-${event.id}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-card-foreground">{event.name}</span>
+                      {event.isFeatured && (
+                        <Badge className="gap-1 bg-primary/15 text-xs font-normal text-primary hover:bg-primary/15">
+                          <Star className="h-3 w-3" /> Featured
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      /event/{event.slug} · {formatDateInZone(new Date(event.startAtUtc), zone)} {formatTimeInZone(new Date(event.startAtUtc), zone)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-1.5">
+                    {!event.isFeatured && (
+                      <Button variant="outline" size="sm" onClick={() => handleSetFeatured(event.id)} data-testid={`button-feature-${event.id}`}>
+                        Set as featured
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => (editingId === event.id ? setEditingId(null) : startEdit(event))}
+                      aria-label="Edit event"
+                      data-testid={`button-edit-event-${event.id}`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                {editingId === event.id && editForm && (
+                  <div className="mt-3 border-t border-border pt-3">
+                    <EventFormFields form={editForm} onChange={setEditForm} />
+                    <div className="mt-3 flex gap-2">
+                      <Button size="sm" onClick={handleSaveEdit} disabled={saving} data-testid={`button-save-event-${event.id}`}>
+                        {saving ? "Saving…" : "Save"}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} disabled={saving}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -485,6 +764,7 @@ export default function Admin() {
             </Button>
           </div>
           <div className="flex flex-col gap-6">
+            <EventsManagementCard password={password} />
             <EventSettingsCard password={password} />
             <SignupsCard password={password} />
           </div>

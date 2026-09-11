@@ -36,9 +36,11 @@ interface Props {
   start: Date | null;
   end: Date | null;
   viewZone: string;
+  eventId: number;
+  lockedEmail: string;
 }
 
-export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZone }: Props) {
+export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZone, eventId, lockedEmail }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,7 +87,7 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
       slotIndex: slotIndex ?? 0,
       podcastName: "",
       hostName: "",
-      email: "",
+      email: lockedEmail,
       phone: "",
       numPeople: 1,
       hasVideoIntro: false,
@@ -106,7 +108,7 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
         slotIndex: slotIndex ?? 0,
         podcastName: "",
         hostName: "",
-        email: "",
+        email: lockedEmail,
         phone: "",
         numPeople: 1,
         hasVideoIntro: false,
@@ -134,10 +136,11 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
         throw new Error("A photo is required — give us the best one you've got.");
       }
       const formData = new FormData();
+      formData.append("eventId", String(eventId));
       formData.append("slotIndex", String(values.slotIndex));
       formData.append("podcastName", values.podcastName);
       formData.append("hostName", values.hostName);
-      formData.append("email", values.email);
+      formData.append("email", lockedEmail);
       formData.append("phone", values.phone ?? "");
       formData.append("numPeople", String(values.numPeople));
       formData.append("hasVideoIntro", String(values.hasVideoIntro));
@@ -154,6 +157,7 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/signups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/host/dashboard"] });
       toast({ title: "You're on the schedule", description: "This slot is now yours — we'll be in touch before air time." });
       onOpenChange(false);
     },
@@ -297,8 +301,9 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
                   <FormItem>
                     <FormLabel>Email</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder="you@example.com" {...field} data-testid="input-email" />
+                      <Input type="email" readOnly disabled value={lockedEmail} data-testid="input-email" />
                     </FormControl>
+                    <FormDescription>Signed in as {lockedEmail}.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Copy, Globe2, Mic2, Video, Presentation, Image as ImageIcon, HeadphonesIcon } from "lucide-react";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
-import { resolveUploadUrl } from "@/lib/queryClient";
+import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import {
   detectLocalTimeZone,
   slotStart,
@@ -23,9 +23,26 @@ import {
   onAirWindow,
 } from "@/lib/schedule";
 
-export default function Agenda() {
-  const { data: event, isLoading: eventLoading } = useQuery<PublicEvent>({ queryKey: ["/api/event"] });
-  const { data: signups, isLoading: signupsLoading } = useQuery<PublicSignup[]>({ queryKey: ["/api/signups"] });
+interface Props {
+  slug?: string;
+}
+
+export default function Agenda({ slug }: Props) {
+  const { data: event, isLoading: eventLoading } = useQuery<PublicEvent>({
+    queryKey: ["/api/event", slug ?? "featured"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", slug ? `/api/event?slug=${encodeURIComponent(slug)}` : "/api/event");
+      return res.json();
+    },
+  });
+  const { data: signups, isLoading: signupsLoading } = useQuery<PublicSignup[]>({
+    queryKey: ["/api/signups", event?.id ?? "none"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/signups?eventId=${event!.id}`);
+      return res.json();
+    },
+    enabled: !!event,
+  });
   const { toast } = useToast();
 
   const [viewZone, setViewZone] = useState(detectLocalTimeZone);

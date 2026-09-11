@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useTheme } from "@/lib/theme";
 
 const LINKS = [
+  { href: "/events", label: "Events" },
   { href: "/", label: "Schedule" },
   { href: "/agenda", label: "Agenda" },
 ];
@@ -38,7 +39,7 @@ export function NavBar() {
             );
           })}
           <Link
-            href="/host/login"
+            href="/host/dashboard"
             data-testid="link-nav-host-login"
             className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors hover-elevate ${
               location.startsWith("/host") ? "text-primary" : "text-muted-foreground"

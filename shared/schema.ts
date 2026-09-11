@@ -3,10 +3,13 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
-// Event — singleton settings for the marathon (start time, slot length, etc.)
+// Events — every event lives as its own row now. One is flagged `isFeatured`
+// (the event shown at "/" and used as the default for legacy links/admin).
 // ---------------------------------------------------------------------------
 export const events = pgTable("events", {
   id: serial("id").primaryKey(),
+  slug: text("slug").notNull().default(""),
+  isFeatured: boolean("is_featured").notNull().default(false),
   name: text("name").notNull(),
   tagline: text("tagline").notNull().default(""),
   description: text("description").notNull().default(""),
@@ -21,11 +24,17 @@ export const events = pgTable("events", {
   bufferMinutes: integer("buffer_minutes").notNull().default(5),
   bufferPosition: text("buffer_position").notNull().default("after"), // "before" | "after"
   adminPassword: text("admin_password").notNull().default("militaryvoice2026"),
+  createdAt: text("created_at").notNull().default(""),
 });
 
 export const insertEventSchema = createInsertSchema(events)
-  .omit({ id: true })
+  .omit({ id: true, createdAt: true })
   .extend({
+    name: z.string().min(1, "Event name is required"),
+    slug: z
+      .string()
+      .min(1, "Slug is required")
+      .regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers, and hyphens only"),
     onAirMinutes: z.number().int().min(1),
     bufferMinutes: z.number().int().min(0),
     bufferPosition: z.enum(["before", "after"]),
@@ -43,6 +52,7 @@ export type PublicEvent = Omit<EventRow, "adminPassword">;
 // ---------------------------------------------------------------------------
 export const signups = pgTable("signups", {
   id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
   slotIndex: integer("slot_index").notNull(),
   podcastName: text("podcast_name").notNull(),
   hostName: text("host_name").notNull(),
@@ -65,6 +75,7 @@ export const signups = pgTable("signups", {
 export const insertSignupSchema = createInsertSchema(signups)
   .omit({ id: true, createdAt: true, status: true })
   .extend({
+    eventId: z.number().int().min(1),
     podcastName: z.string().min(1, "Podcast or show name is required"),
     hostName: z.string().min(1, "Your name is required"),
     email: z.string().email("Enter a valid email"),
@@ -80,6 +91,7 @@ export type SignupRow = typeof signups.$inferSelect;
 export type PublicSignup = Pick<
   SignupRow,
   | "id"
+  | "eventId"
   | "slotIndex"
   | "podcastName"
   | "hostName"
@@ -115,28 +127,8 @@ export type InsertReminder = z.infer<typeof insertReminderSchema>;
 export type ReminderRow = typeof reminders.$inferSelect;
 
 // ---------------------------------------------------------------------------
-// Watch signups — a fan claiming a slot to watch (no account needed), gets a
-// short confirmation code back. Distinct from `reminders`, which is a fan
-// asking to be pinged about one specific podcaster's slot.
-// ---------------------------------------------------------------------------
-export const watchSignups = pgTable("watch_signups", {
-  id: serial("id").primaryKey(),
-  email: text("email").notNull(),
-  confirmationCode: text("confirmation_code").notNull(),
-  createdAt: text("created_at").notNull(),
-});
-
-export const insertWatchSignupSchema = createInsertSchema(watchSignups)
-  .omit({ id: true, confirmationCode: true, createdAt: true })
-  .extend({
-    email: z.string().email("Enter a valid email"),
-  });
-
-export type InsertWatchSignup = z.infer<typeof insertWatchSignupSchema>;
-export type WatchSignupRow = typeof watchSignups.$inferSelect;
-
-// ---------------------------------------------------------------------------
-// Login tokens — one-time magic-link tokens for podcaster (host) login.
+// Login tokens — one-time typed sign-in codes for podcaster (host) login.
+// `token` holds a short human-typeable code (e.g. "482913"), not a link.
 // A host only exists implicitly as "whoever has a signups row with this
 // email" — there's no separate accounts table.
 // ---------------------------------------------------------------------------

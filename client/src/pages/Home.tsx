@@ -1,15 +1,13 @@
 import { useMemo, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { NavBar } from "@/components/NavBar";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { SlotCard } from "@/components/SlotCard";
-import { SignupDialog } from "@/components/SignupDialog";
-import { WatchSignupSection } from "@/components/WatchSignupSection";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Globe2, ArrowRight, Radio, Mic2, Bell } from "lucide-react";
-import { resolveUploadUrl } from "@/lib/queryClient";
+import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import {
   detectLocalTimeZone,
@@ -50,14 +48,30 @@ function useCountdown(startAtUtc?: string, durationHours?: number) {
   return { label: "This marathon has wrapped", phase: "done" as const };
 }
 
-export default function Home() {
-  const { data: event, isLoading: eventLoading } = useQuery<PublicEvent>({ queryKey: ["/api/event"] });
-  const { data: signups, isLoading: signupsLoading } = useQuery<PublicSignup[]>({ queryKey: ["/api/signups"] });
+interface Props {
+  slug?: string;
+}
+
+export default function Home({ slug }: Props) {
+  const [, navigate] = useLocation();
+  const { data: event, isLoading: eventLoading } = useQuery<PublicEvent>({
+    queryKey: ["/api/event", slug ?? "featured"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", slug ? `/api/event?slug=${encodeURIComponent(slug)}` : "/api/event");
+      return res.json();
+    },
+  });
+  const { data: signups, isLoading: signupsLoading } = useQuery<PublicSignup[]>({
+    queryKey: ["/api/signups", event?.id ?? "none"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/signups?eventId=${event!.id}`);
+      return res.json();
+    },
+    enabled: !!event,
+  });
 
   const [viewZone, setViewZone] = useState(detectLocalTimeZone);
   const localZone = useMemo(detectLocalTimeZone, []);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
 
   const countdown = useCountdown(event?.startAtUtc, event?.durationHours);
 
@@ -81,12 +95,12 @@ export default function Home() {
     [slots]
   );
 
-  function openClaim(index: number) {
-    setSelectedSlot(index);
-    setDialogOpen(true);
+  function openClaim(_index: number) {
+    // Claiming requires a podcaster login — send them to the host dashboard,
+    // where they'll sign in (email + typed code) and then pick a slot.
+    navigate("/host/dashboard");
   }
 
-  const selected = slots.find((s) => s.index === selectedSlot);
   const openCount = slots.filter((s) => !s.signup).length;
 
   const nextBooked = useMemo(
@@ -226,8 +240,6 @@ export default function Home() {
         </div>
       </section>
 
-      <WatchSignupSection />
-
       {spotlightSlots.length > 0 && (
         <section className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
           <div className="mb-3 flex items-center gap-2">
@@ -280,15 +292,6 @@ export default function Home() {
           </div>
         )}
       </section>
-
-      <SignupDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        slotIndex={selectedSlot}
-        start={selected?.start ?? null}
-        end={selected?.end ?? null}
-        viewZone={viewZone}
-      />
     </div>
   );
 }

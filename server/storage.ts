@@ -1,4 +1,4 @@
-import { events, signups, reminders, watchSignups, loginTokens } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -7,13 +7,11 @@ import type {
   InsertSignup,
   ReminderRow,
   InsertReminder,
-  WatchSignupRow,
-  InsertWatchSignup,
   LoginTokenRow,
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 // Resolve the Postgres connection string lazily (not at module load) so a
 // missing/bad value surfaces as a normal caught error on first request—
@@ -54,6 +52,8 @@ export const db: ReturnType<typeof drizzle> = new Proxy({} as ReturnType<typeof 
     return (realDb as any)[prop];
   },
 });
+
+const DEFAULT_EVENT_SLUG = "marathon";
 
 // Create tables on boot if they don't exist yet (no migration tooling needed for MVP)
 async function ensureSchema() {
@@ -104,14 +104,6 @@ async function ensureSchema() {
     );
   `;
   await sql`
-    CREATE TABLE IF NOT EXISTS watch_signups (
-      id SERIAL PRIMARY KEY,
-      email TEXT NOT NULL,
-      confirmation_code TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-  `;
-  await sql`
     CREATE TABLE IF NOT EXISTS login_tokens (
       id SERIAL PRIMARY KEY,
       email TEXT NOT NULL,
@@ -127,6 +119,19 @@ async function ensureSchema() {
   await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS on_air_minutes INTEGER NOT NULL DEFAULT 25`;
   await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS buffer_minutes INTEGER NOT NULL DEFAULT 5`;
   await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS buffer_position TEXT NOT NULL DEFAULT 'after'`;
+
+  // Multi-event support: every event gets a slug + a featured flag, signups
+  // now belong to a specific event. `watch_signups` from an earlier build is
+  // intentionally left alone (orphaned, not referenced) rather than dropped.
+  await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS slug TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS is_featured BOOLEAN NOT NULL DEFAULT false`;
+  await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS created_at TEXT NOT NULL DEFAULT ''`;
+  await sql`UPDATE events SET slug = ${DEFAULT_EVENT_SLUG} WHERE slug = '' AND id = (SELECT MIN(id) FROM events)`;
+  await sql`UPDATE events SET is_featured = true WHERE id = (SELECT MIN(id) FROM events) AND NOT EXISTS (SELECT 1 FROM events WHERE is_featured = true)`;
+  await sql`UPDATE events SET created_at = start_at_utc WHERE created_at = ''`;
+
+  await sql`ALTER TABLE signups ADD COLUMN IF NOT EXISTS event_id INTEGER`;
+  await sql`UPDATE signups SET event_id = (SELECT id FROM events WHERE is_featured = true LIMIT 1) WHERE event_id IS NULL`;
 }
 
 let schemaReady: Promise<void> | null = null;
@@ -141,20 +146,22 @@ function ready(): Promise<void> {
 }
 
 export interface IStorage {
-  getEvent(): Promise<EventRow>;
-  updateEvent(patch: UpdateEvent): Promise<EventRow>;
-  listSignups(): Promise<SignupRow[]>;
-  getSignupBySlot(slotIndex: number): Promise<SignupRow | undefined>;
+  listEvents(): Promise<EventRow[]>;
+  getFeaturedEvent(): Promise<EventRow>;
+  getEventBySlug(slug: string): Promise<EventRow | undefined>;
+  getEventById(id: number): Promise<EventRow | undefined>;
+  createEvent(data: InsertEvent): Promise<EventRow>;
+  updateEvent(id: number, patch: UpdateEvent): Promise<EventRow | undefined>;
+  listSignups(eventId?: number): Promise<SignupRow[]>;
+  getSignupBySlot(eventId: number, slotIndex: number): Promise<SignupRow | undefined>;
   createSignup(signup: InsertSignup): Promise<SignupRow>;
   cancelSignup(id: number): Promise<SignupRow | undefined>;
   deleteSignup(id: number): Promise<{ changes: number }>;
   getSignupById(id: number): Promise<SignupRow | undefined>;
   createReminder(reminder: InsertReminder): Promise<ReminderRow>;
   listReminders(): Promise<ReminderRow[]>;
-  createWatchSignup(signup: InsertWatchSignup): Promise<WatchSignupRow>;
-  listWatchSignups(): Promise<WatchSignupRow[]>;
   createLoginToken(email: string, token: string, expiresAt: string): Promise<LoginTokenRow>;
-  getLoginToken(token: string): Promise<LoginTokenRow | undefined>;
+  getLoginToken(email: string, token: string): Promise<LoginTokenRow | undefined>;
   markLoginTokenUsed(id: number): Promise<void>;
 }
 
@@ -170,48 +177,89 @@ function defaultStartAtUtc(): string {
 }
 
 class DatabaseStorage implements IStorage {
-  private async ensureEvent(): Promise<EventRow> {
+  /** Bootstraps the default marathon event on first boot if no events exist at all. */
+  private async ensureAtLeastOneEvent(): Promise<void> {
+    const [existing] = await db.select().from(events).limit(1);
+    if (existing) return;
+    await db.insert(events).values({
+      slug: DEFAULT_EVENT_SLUG,
+      isFeatured: true,
+      name: "MilitaryVoice.ai 24-Hour Podcast Marathon",
+      tagline: "One mic, every time zone, twenty-four hours straight.",
+      description:
+        "Claim your hour. We'll build the on-air agenda automatically as podcasters sign up around the clock.",
+      startAtUtc: defaultStartAtUtc(),
+      durationHours: 24,
+      slotMinutes: 60,
+      onAirMinutes: 25,
+      bufferMinutes: 5,
+      bufferPosition: "after",
+      adminPassword: "militaryvoice2026",
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  async listEvents(): Promise<EventRow[]> {
     await ready();
-    const [row] = await db.select().from(events).where(eq(events.id, 1));
-    if (row) return row;
+    await this.ensureAtLeastOneEvent();
+    return db.select().from(events).orderBy(events.id);
+  }
+
+  async getFeaturedEvent(): Promise<EventRow> {
+    await ready();
+    await this.ensureAtLeastOneEvent();
+    const [featured] = await db.select().from(events).where(eq(events.isFeatured, true));
+    if (featured) return featured;
+    // No event flagged featured yet (shouldn't happen post-bootstrap) — fall back to the first one.
+    const [first] = await db.select().from(events).orderBy(events.id).limit(1);
+    return first;
+  }
+
+  async getEventBySlug(slug: string): Promise<EventRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(events).where(eq(events.slug, slug));
+    return row;
+  }
+
+  async getEventById(id: number): Promise<EventRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(events).where(eq(events.id, id));
+    return row;
+  }
+
+  async createEvent(data: InsertEvent): Promise<EventRow> {
+    await ready();
+    if (data.isFeatured) {
+      await db.update(events).set({ isFeatured: false }).where(eq(events.isFeatured, true));
+    }
     const [created] = await db
       .insert(events)
-      .values({
-        id: 1,
-        name: "MilitaryVoice.ai 24-Hour Podcast Marathon",
-        tagline: "One mic, every time zone, twenty-four hours straight.",
-        description:
-          "Claim your hour. We'll build the on-air agenda automatically as podcasters sign up around the clock.",
-        startAtUtc: defaultStartAtUtc(),
-        durationHours: 24,
-        slotMinutes: 60,
-        onAirMinutes: 25,
-        bufferMinutes: 5,
-        bufferPosition: "after",
-        adminPassword: "militaryvoice2026",
-      })
+      .values({ ...data, createdAt: new Date().toISOString() })
       .returning();
     return created;
   }
 
-  async getEvent(): Promise<EventRow> {
-    return this.ensureEvent();
-  }
-
-  async updateEvent(patch: UpdateEvent): Promise<EventRow> {
-    await this.ensureEvent();
-    const [updated] = await db.update(events).set(patch).where(eq(events.id, 1)).returning();
+  async updateEvent(id: number, patch: UpdateEvent): Promise<EventRow | undefined> {
+    await ready();
+    if (patch.isFeatured) {
+      await db.update(events).set({ isFeatured: false }).where(eq(events.isFeatured, true));
+    }
+    const [updated] = await db.update(events).set(patch).where(eq(events.id, id)).returning();
     return updated;
   }
 
-  async listSignups(): Promise<SignupRow[]> {
+  async listSignups(eventId?: number): Promise<SignupRow[]> {
     await ready();
-    return db.select().from(signups);
+    if (eventId === undefined) return db.select().from(signups);
+    return db.select().from(signups).where(eq(signups.eventId, eventId));
   }
 
-  async getSignupBySlot(slotIndex: number): Promise<SignupRow | undefined> {
+  async getSignupBySlot(eventId: number, slotIndex: number): Promise<SignupRow | undefined> {
     await ready();
-    const [row] = await db.select().from(signups).where(eq(signups.slotIndex, slotIndex));
+    const [row] = await db
+      .select()
+      .from(signups)
+      .where(and(eq(signups.eventId, eventId), eq(signups.slotIndex, slotIndex)));
     return row;
   }
 
@@ -260,21 +308,6 @@ class DatabaseStorage implements IStorage {
     return db.select().from(reminders);
   }
 
-  async createWatchSignup(signup: InsertWatchSignup): Promise<WatchSignupRow> {
-    await ready();
-    const confirmationCode = `MV-${Math.random().toString(36).slice(2, 6).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-    const [created] = await db
-      .insert(watchSignups)
-      .values({ ...signup, confirmationCode, createdAt: new Date().toISOString() })
-      .returning();
-    return created;
-  }
-
-  async listWatchSignups(): Promise<WatchSignupRow[]> {
-    await ready();
-    return db.select().from(watchSignups);
-  }
-
   async createLoginToken(email: string, token: string, expiresAt: string): Promise<LoginTokenRow> {
     await ready();
     const [created] = await db
@@ -284,9 +317,13 @@ class DatabaseStorage implements IStorage {
     return created;
   }
 
-  async getLoginToken(token: string): Promise<LoginTokenRow | undefined> {
+  async getLoginToken(email: string, token: string): Promise<LoginTokenRow | undefined> {
     await ready();
-    const [row] = await db.select().from(loginTokens).where(eq(loginTokens.token, token));
+    const [row] = await db
+      .select()
+      .from(loginTokens)
+      .where(and(eq(loginTokens.email, email.toLowerCase()), eq(loginTokens.token, token)))
+      .orderBy(loginTokens.id);
     return row;
   }
 

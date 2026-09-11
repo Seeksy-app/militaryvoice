@@ -47,13 +47,13 @@ function buildHtml(rawInput: ConfirmationEmailInput): string {
       : "";
   return `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
-    <p style="margin:0 0 4px;color:#6d28d9;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">${input.eventName}</p>
+    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">${input.eventName}</p>
     <h1 style="margin:0 0 20px;color:#111827;font-size:22px;font-weight:700;">You're on the schedule, ${input.hostName}</h1>
     <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
       <strong>${input.podcastName}</strong> is confirmed for the marathon. Here's your time:
     </p>
-    <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:12px;padding:16px 20px;margin:0 0 16px;">
-      <p style="margin:0 0 4px;color:#4c1d95;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">You're on air</p>
+    <div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 16px;">
+      <p style="margin:0 0 4px;color:#053877;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">You're on air</p>
       <p style="margin:0;color:#1f2937;font-size:18px;font-weight:700;">${input.onAirStartLabel} – ${input.onAirEndLabel}</p>
       <p style="margin:4px 0 0;color:#6b7280;font-size:13px;">${input.timezoneLabel}</p>
     </div>
@@ -61,7 +61,7 @@ function buildHtml(rawInput: ConfirmationEmailInput): string {
     <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
       No login needed — just be ready to go live at your on-air start time. You can view or share the full agenda anytime.
     </p>
-    <a href="${input.agendaUrl}" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:9999px;">View the agenda</a>
+    <a href="${input.agendaUrl}" style="display:inline-block;background:#053877;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:9999px;">View the agenda</a>
     <p style="margin:28px 0 0;color:#9ca3af;font-size:12px;">Questions? Just reply to this email.</p>
   </div>`;
 }
@@ -117,54 +117,27 @@ export async function sendConfirmationEmail(input: ConfirmationEmailInput): Prom
   });
 }
 
-export interface WatchConfirmationInput {
+export interface LoginCodeEmailInput {
   to: string;
-  eventName: string;
-  confirmationCode: string;
-  scheduleUrl: string;
+  code: string;
 }
 
-/** Send a fan their "claim a slot to watch" confirmation code. Never throws. */
-export async function sendWatchConfirmationEmail(input: WatchConfirmationInput): Promise<boolean> {
-  const html = `
-  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
-    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">${escapeHtml(input.eventName)}</p>
-    <h1 style="margin:0 0 16px;color:#111827;font-size:22px;font-weight:700;">You're on the watch list</h1>
-    <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">We'll keep this on file so you don't miss the marathon. Here's your confirmation number:</p>
-    <div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 24px;text-align:center;">
-      <p style="margin:0;color:#053877;font-size:24px;font-weight:800;letter-spacing:0.08em;font-family:monospace;">${escapeHtml(input.confirmationCode)}</p>
-    </div>
-    <a href="${input.scheduleUrl}" style="display:inline-block;background:#053877;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:9999px;">View the schedule</a>
-    <p style="margin:28px 0 0;color:#9ca3af;font-size:12px;">Questions? Just reply to this email.</p>
-  </div>`;
-  const text = `You're on the watch list for ${input.eventName}.\n\nConfirmation number: ${input.confirmationCode}\n\nView the schedule: ${input.scheduleUrl}\n`;
-  return sendRawEmail({
-    to: input.to,
-    subject: `Your confirmation number: ${input.confirmationCode}`,
-    html,
-    text,
-  });
-}
-
-export interface MagicLinkEmailInput {
-  to: string;
-  loginUrl: string;
-}
-
-/** Send a podcaster their one-time login link. Never throws. */
-export async function sendMagicLinkEmail(input: MagicLinkEmailInput): Promise<boolean> {
+/** Send a podcaster their one-time typed sign-in code. Never throws. */
+export async function sendLoginCodeEmail(input: LoginCodeEmailInput): Promise<boolean> {
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
     <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoice.ai</p>
-    <h1 style="margin:0 0 16px;color:#111827;font-size:22px;font-weight:700;">Sign in to your host dashboard</h1>
-    <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">Click the button below to sign in. This link works once and expires in 15 minutes.</p>
-    <a href="${input.loginUrl}" style="display:inline-block;background:#053877;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:9999px;">Sign in</a>
+    <h1 style="margin:0 0 16px;color:#111827;font-size:22px;font-weight:700;">Your sign-in code</h1>
+    <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">Enter this code on the sign-in page. It expires in 15 minutes.</p>
+    <div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 24px;text-align:center;">
+      <p style="margin:0;color:#053877;font-size:28px;font-weight:800;letter-spacing:0.2em;font-family:monospace;">${escapeHtml(input.code)}</p>
+    </div>
     <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;">If you didn't request this, you can ignore this email.</p>
   </div>`;
-  const text = `Sign in to your MilitaryVoice.ai host dashboard: ${input.loginUrl}\n\nThis link works once and expires in 15 minutes. If you didn't request this, you can ignore this email.\n`;
+  const text = `Your MilitaryVoice.ai sign-in code: ${input.code}\n\nThis code expires in 15 minutes. If you didn't request this, you can ignore this email.\n`;
   return sendRawEmail({
     to: input.to,
-    subject: "Your MilitaryVoice.ai sign-in link",
+    subject: `Your sign-in code: ${input.code}`,
     html,
     text,
   });

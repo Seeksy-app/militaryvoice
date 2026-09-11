@@ -82,7 +82,7 @@ export function AgendaSignupActions({ signup, shareText }: Props) {
             className="h-7 gap-1 px-2 text-xs"
             data-testid={`button-notify-${signup.id}`}
           >
-            <BellRing className="h-3 w-3" /> Email me
+            <BellRing className="h-3 w-3" /> I want to watch this one
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-72" align="start">
@@ -93,7 +93,7 @@ export function AgendaSignupActions({ signup, shareText }: Props) {
             }}
             className="flex flex-col gap-2"
           >
-            <p className="text-sm font-medium">Get an email before this slot goes live</p>
+            <p className="text-sm font-medium">Drop your email for a reminder before this one goes live</p>
             <Input
               type="email"
               required
