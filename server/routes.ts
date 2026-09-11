@@ -10,7 +10,7 @@ import {
   updateEventSchema,
   type PublicEvent,
   type PublicSignup,
-} from "@shared/schema";
+} from "../shared/schema";
 import { fromError } from "zod-validation-error";
 import { sendConfirmationEmail } from "./email";
 
