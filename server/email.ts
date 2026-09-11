@@ -1,12 +1,12 @@
 // Confirmation emails via Resend. Works two ways:
-//  - Locally (dev sandbox): calls api.resend.com directly. When the server process
-//    was started with the api.resend.com credential attached, outbound requests to
-//    that host are transparently authenticated.
-//  - Published site: publish_website injects CUSTOM_CRED_API_RESEND_COM_URL /
+//  - Vercel/production: set RESEND_API_KEY to a real Resend API key. Requests hit
+//    api.resend.com directly with the standard `Authorization: Bearer` header.
+//  - Our own sandbox preview: publish_website injects CUSTOM_CRED_API_RESEND_COM_URL /
 //    CUSTOM_CRED_API_RESEND_COM_TOKEN, and requests go through that proxy with the
 //    token sent as x-api-key instead of hitting api.resend.com directly.
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_BASE = process.env.CUSTOM_CRED_API_RESEND_COM_URL || "https://api.resend.com";
-const RESEND_TOKEN = process.env.CUSTOM_CRED_API_RESEND_COM_TOKEN;
+const RESEND_PROXY_TOKEN = process.env.CUSTOM_CRED_API_RESEND_COM_TOKEN;
 
 const FROM_ADDRESS = "MilitaryVoice.ai <hello@militaryvoice.ai>";
 
@@ -79,8 +79,10 @@ function buildText(input: ConfirmationEmailInput): string {
 export async function sendConfirmationEmail(input: ConfirmationEmailInput): Promise<boolean> {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (RESEND_TOKEN) {
-      headers["x-api-key"] = RESEND_TOKEN;
+    if (RESEND_API_KEY) {
+      headers["Authorization"] = `Bearer ${RESEND_API_KEY}`;
+    } else if (RESEND_PROXY_TOKEN) {
+      headers["x-api-key"] = RESEND_PROXY_TOKEN;
     }
     const res = await fetch(`${RESEND_BASE}/emails`, {
       method: "POST",
