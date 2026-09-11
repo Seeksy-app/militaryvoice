@@ -189,18 +189,19 @@ export default function Landing({ slug }: Props) {
       <NavBar />
 
       {/* ------------------------------------------------------------ HERO */}
-      <section className="relative overflow-hidden bg-[#000741] text-white">
-        {/* studio photo + navy wash */}
+      <section className="relative flex min-h-[88vh] items-center overflow-hidden bg-[#000741] text-white">
+        {/* studio photo + navy wash (kept light on the right so the room reads) */}
         <img
           src="/hero-bg.jpg"
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover object-center opacity-60"
+          className="absolute inset-0 h-full w-full object-cover object-[70%_center] opacity-90"
         />
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.96)_0%,rgba(5,56,119,0.88)_45%,rgba(5,56,119,0.55)_100%)]"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.94)_0%,rgba(5,56,119,0.82)_38%,rgba(5,56,119,0.42)_68%,rgba(5,56,119,0.18)_100%)]"
         />
+        <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#000741]/70 to-transparent" />
         <motion.div
           aria-hidden="true"
           className="pointer-events-none absolute -left-24 top-1/3 h-[26rem] w-[26rem] rounded-full bg-[#F0A71F] opacity-[0.18] blur-3xl"
@@ -208,7 +209,7 @@ export default function Landing({ slug }: Props) {
           transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
         />
 
-        <div className="relative mx-auto grid max-w-6xl gap-12 px-4 pb-24 pt-16 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:pb-28 lg:pt-24">
+        <div className="relative mx-auto grid w-full max-w-7xl gap-12 px-4 pb-28 pt-20 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:px-10 lg:pb-32 lg:pt-28">
           {eventLoading || !event ? (
             <div className="space-y-4">
               <Skeleton className="h-5 w-56 bg-white/20" />
