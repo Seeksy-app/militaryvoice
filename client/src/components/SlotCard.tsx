@@ -1,11 +1,11 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Globe2, Mic2, Video, Presentation, Image as ImageIcon, Users, HeadphonesIcon } from "lucide-react";
+import { Mic2 } from "lucide-react";
 import type { PublicSignup } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { AgendaSignupActions } from "@/components/AgendaSignupActions";
-import { formatTimeInZone, formatDateInZone, zoneLabel, primeZonesFor, isHiddenGemSlot, onAirWindow, type OnAirSettings } from "@/lib/schedule";
+import { formatTimeInZone, formatDateInZone, zoneLabel, onAirWindow, type OnAirSettings } from "@/lib/schedule";
 
 interface Props {
   index: number;
@@ -19,16 +19,11 @@ interface Props {
 }
 
 export function SlotCard({ index, start, end, viewZone, signup, showDate, onClaim, onAirSettings }: Props) {
-  const prime = primeZonesFor(start);
-  const hiddenGem = isHiddenGemSlot(start);
   const isOpen = !signup;
   const onAir = onAirSettings ? onAirWindow(start, onAirSettings) : null;
 
   return (
-    <Card
-      data-testid={`card-slot-${index}`}
-      className={`flex flex-col gap-3 p-4 pb-5 ${hiddenGem ? "border-primary/50 ring-1 ring-primary/20" : ""}`}
-    >
+    <Card data-testid={`card-slot-${index}`} className="flex flex-col gap-3 p-4 pb-5">
       <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
         <div className="min-w-0">
           {showDate && (
@@ -57,16 +52,6 @@ export function SlotCard({ index, start, end, viewZone, signup, showDate, onClai
         </Badge>
       </div>
 
-      {prime.length > 0 && (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid={`text-prime-${index}`}>
-          <Globe2 className="h-3.5 w-3.5 shrink-0 text-primary" />
-          <span>
-            {hiddenGem ? "Prime time overseas: " : "Great time in: "}
-            {prime.map((z) => z.label).join(", ")}
-          </span>
-        </div>
-      )}
-
       {signup ? (
         <div className="flex flex-1 flex-col gap-2">
           <div className="flex items-center gap-2" data-testid={`text-podcast-${index}`}>
@@ -81,36 +66,6 @@ export function SlotCard({ index, start, end, viewZone, signup, showDate, onClai
               <Mic2 className="h-4 w-4 text-primary" />
               {signup.podcastName}
             </span>
-          </div>
-          <div className="flex flex-wrap gap-x-1.5 gap-y-2">
-            <Badge variant="outline" className="gap-1 text-xs font-normal">
-              <Users className="h-3 w-3" /> {signup.numPeople === 2 ? "2 hosts" : "1 host"}
-            </Badge>
-            {signup.hasVideoIntro && (
-              <Badge variant="outline" className="gap-1 text-xs font-normal">
-                <Video className="h-3 w-3" /> Intro
-              </Badge>
-            )}
-            {signup.hasVideoOutro && (
-              <Badge variant="outline" className="gap-1 text-xs font-normal">
-                <Video className="h-3 w-3" /> Outro
-              </Badge>
-            )}
-            {signup.hasSlides && (
-              <Badge variant="outline" className="gap-1 text-xs font-normal">
-                <Presentation className="h-3 w-3" /> Slides
-              </Badge>
-            )}
-            {signup.hasImages && (
-              <Badge variant="outline" className="gap-1 text-xs font-normal">
-                <ImageIcon className="h-3 w-3" /> Images
-              </Badge>
-            )}
-            {signup.needsInterviewer && (
-              <Badge className="gap-1 text-xs font-normal bg-primary/15 text-primary hover:bg-primary/15">
-                <HeadphonesIcon className="h-3 w-3" /> Needs interviewer
-              </Badge>
-            )}
           </div>
           <AgendaSignupActions
             signup={signup}

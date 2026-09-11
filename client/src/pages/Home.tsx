@@ -6,7 +6,7 @@ import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { SlotCard } from "@/components/SlotCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Globe2, ArrowRight, Radio, Mic2, Bell } from "lucide-react";
+import { ArrowRight, Radio, Mic2, Bell } from "lucide-react";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import {
@@ -16,8 +16,6 @@ import {
   totalSlots,
   formatDateInZone,
   formatTimeInZone,
-  isHiddenGemSlot,
-  primeZonesFor,
   onAirWindow,
 } from "@/lib/schedule";
 
@@ -90,11 +88,6 @@ export default function Home({ slug }: Props) {
     });
   }, [event, signups, viewZone]);
 
-  const spotlightSlots = useMemo(
-    () => slots.filter((s) => !s.signup && isHiddenGemSlot(s.start)).slice(0, 4),
-    [slots]
-  );
-
   function openClaim(_index: number) {
     // Claiming requires a podcaster login — send them to the host dashboard,
     // where they'll sign in (email + typed code) and then pick a slot.
@@ -107,7 +100,6 @@ export default function Home({ slug }: Props) {
     () => slots.filter((s) => s.signup && s.end > new Date()).sort((a, b) => a.start.getTime() - b.start.getTime())[0],
     [slots]
   );
-  const spotlightPreview = spotlightSlots[0];
   const onAirSettings = event
     ? { onAirMinutes: event.onAirMinutes, bufferMinutes: event.bufferMinutes, bufferPosition: event.bufferPosition }
     : undefined;
@@ -211,60 +203,11 @@ export default function Home({ slug }: Props) {
                     </div>
                   )}
                 </div>
-
-                <div className="w-[88%] rounded-2xl bg-card p-4 shadow-lg" data-testid="card-hero-preview-prime">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    <Globe2 className="h-3.5 w-3.5 text-primary" />
-                    Prime time overseas
-                  </div>
-                  <div className="mt-3 text-sm font-medium text-card-foreground">
-                    {spotlightPreview
-                      ? `${formatTimeInZone(spotlightPreview.start, viewZone)} hits daytime for your overseas listeners`
-                      : "Every slot is timezone-mapped for deployed listeners"}
-                  </div>
-                  {spotlightPreview && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {primeZonesFor(spotlightPreview.start)
-                        .slice(0, 3)
-                        .map((z) => (
-                          <span key={z.id} className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
-                            {z.label}
-                          </span>
-                        ))}
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
           )}
         </div>
       </section>
-
-      {spotlightSlots.length > 0 && (
-        <section className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">
-          <div className="mb-3 flex items-center gap-2">
-            <Globe2 className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              Great slots for our overseas listeners
-            </h2>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {spotlightSlots.map((s) => (
-              <SlotCard
-                key={s.index}
-                index={s.index}
-                start={s.start}
-                end={s.end}
-                viewZone={viewZone}
-                signup={s.signup}
-                showDate={true}
-                onClaim={openClaim}
-                onAirSettings={onAirSettings}
-              />
-            ))}
-          </div>
-        </section>
-      )}
 
       <section id="schedule" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-8 sm:px-6">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Full schedule</h2>

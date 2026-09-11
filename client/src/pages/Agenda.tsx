@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Globe2, Mic2, Video, Presentation, Image as ImageIcon, HeadphonesIcon } from "lucide-react";
+import { Copy, Mic2 } from "lucide-react";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import {
@@ -17,8 +17,6 @@ import {
   totalSlots,
   formatDateInZone,
   formatTimeInZone,
-  primeZonesFor,
-  isHiddenGemSlot,
   zoneLabel,
   onAirWindow,
 } from "@/lib/schedule";
@@ -118,8 +116,6 @@ export default function Agenda({ slug }: Props) {
           {signupsLoading || eventLoading
             ? Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
             : slots.map((s) => {
-                const prime = primeZonesFor(s.start);
-                const gem = isHiddenGemSlot(s.start);
                 const shareText = s.signup
                   ? `I'm tuning in to ${s.signup.hostName} on ${s.signup.podcastName} — ${s.dateLabel}, ${formatTimeInZone(
                       s.start,
@@ -167,25 +163,7 @@ export default function Agenda({ slug }: Props) {
                           )}
                         </div>
                       </div>
-                      {s.signup && (
-                        <div className="flex flex-wrap gap-1">
-                          {s.signup.hasVideoIntro && <Video className="h-3.5 w-3.5 text-muted-foreground" aria-label="Video intro" />}
-                          {s.signup.hasVideoOutro && <Video className="h-3.5 w-3.5 scale-x-[-1] text-muted-foreground" aria-label="Video outro" />}
-                          {s.signup.hasSlides && <Presentation className="h-3.5 w-3.5 text-muted-foreground" aria-label="Slides" />}
-                          {s.signup.hasImages && <ImageIcon className="h-3.5 w-3.5 text-muted-foreground" aria-label="Images" />}
-                          {s.signup.needsInterviewer && (
-                            <HeadphonesIcon className="h-3.5 w-3.5 text-primary" aria-label="Needs interviewer" />
-                          )}
-                        </div>
-                      )}
                     </div>
-                    {prime.length > 0 && (
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Globe2 className="h-3 w-3 text-primary" />
-                        {gem ? "Prime time overseas: " : "Great time in: "}
-                        {prime.map((z) => z.label).join(", ")}
-                      </div>
-                    )}
                     {s.signup && <AgendaSignupActions signup={s.signup} shareText={shareText} />}
                   </div>
                 );
