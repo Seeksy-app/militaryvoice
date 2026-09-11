@@ -28,8 +28,8 @@ export function SlotCard({ index, start, end, viewZone, signup, showDate, onClai
       data-testid={`card-slot-${index}`}
       className={`flex flex-col gap-3 p-4 pb-5 ${hiddenGem ? "border-primary/50 ring-1 ring-primary/20" : ""}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+        <div className="min-w-0">
           {showDate && (
             <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid={`text-date-${index}`}>
               {formatDateInZone(start, viewZone)}
@@ -50,7 +50,7 @@ export function SlotCard({ index, start, end, viewZone, signup, showDate, onClai
         <Badge
           variant={isOpen ? "outline" : "secondary"}
           data-testid={`badge-status-${index}`}
-          className={isOpen ? "text-primary border-primary/40" : ""}
+          className={`shrink-0 ${isOpen ? "text-primary border-primary/40" : ""}`}
         >
           {isOpen ? "Open" : "Booked"}
         </Badge>
