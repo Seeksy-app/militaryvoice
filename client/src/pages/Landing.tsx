@@ -195,11 +195,11 @@ export default function Landing({ slug }: Props) {
           src="/hero-bg.jpg"
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover object-[70%_center] opacity-90"
+          className="absolute inset-0 h-full w-full object-cover object-[70%_center] opacity-70"
         />
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.94)_0%,rgba(5,56,119,0.82)_38%,rgba(5,56,119,0.42)_68%,rgba(5,56,119,0.18)_100%)]"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.96)_0%,rgba(5,56,119,0.88)_40%,rgba(5,56,119,0.62)_70%,rgba(5,56,119,0.45)_100%)]"
         />
         <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#000741]/70 to-transparent" />
         <motion.div
@@ -220,7 +220,7 @@ export default function Landing({ slug }: Props) {
             <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09 } } }}>
               <motion.div
                 variants={FADE_UP}
-                className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] backdrop-blur"
+                className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] backdrop-blur sm:text-sm"
               >
                 <span className="relative flex h-2.5 w-2.5">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ED1C24] opacity-75" />
@@ -236,14 +236,14 @@ export default function Landing({ slug }: Props) {
               </motion.div>
               <motion.h1
                 variants={FADE_UP}
-                className="text-5xl font-bold leading-[0.98] tracking-tight sm:text-6xl lg:text-7xl"
+                className="text-5xl font-bold leading-[0.98] tracking-tight sm:text-6xl lg:text-[5.5rem]"
                 style={HEADLINE_FONT}
                 data-testid="text-landing-title"
               >
                 <span className="block">24 Hour</span>
                 <span className="block text-[#F0A71F]">Podcastathon</span>
               </motion.h1>
-              <motion.p variants={FADE_UP} className="mt-6 max-w-xl text-lg leading-relaxed text-white/85" data-testid="text-landing-tagline">
+              <motion.p variants={FADE_UP} className="mt-7 max-w-2xl text-xl leading-relaxed text-white/90 sm:text-2xl sm:leading-relaxed" data-testid="text-landing-tagline">
                 {event.description || event.tagline}
               </motion.p>
 
@@ -251,7 +251,7 @@ export default function Landing({ slug }: Props) {
                 <Link href={openSlotsHref}>
                   <Button
                     size="lg"
-                    className="h-12 gap-2 rounded-full bg-[#F0A71F] px-7 text-base font-semibold text-[#1a1200] shadow-[0_10px_30px_rgba(240,167,31,0.35)] hover:bg-[#f5b944]"
+                    className="h-14 gap-2 rounded-full bg-[#F0A71F] px-8 text-lg font-semibold text-[#1a1200] shadow-[0_10px_30px_rgba(240,167,31,0.35)] hover:bg-[#f5b944]"
                     data-testid="button-landing-claim"
                   >
                     <Mic2 className="h-4 w-4" /> Pick your slot
@@ -261,7 +261,7 @@ export default function Landing({ slug }: Props) {
                   <Button
                     size="lg"
                     variant="outline"
-                    className="h-12 gap-2 rounded-full border-white/30 bg-white/5 px-7 text-base text-white backdrop-blur hover:bg-white/15 hover:text-white"
+                    className="h-14 gap-2 rounded-full border-white/30 bg-white/5 px-8 text-lg text-white backdrop-blur hover:bg-white/15 hover:text-white"
                     data-testid="button-landing-lineup"
                   >
                     See who's on <ArrowRight className="h-4 w-4" />
@@ -269,7 +269,7 @@ export default function Landing({ slug }: Props) {
                 </Link>
               </motion.div>
 
-              <motion.div variants={FADE_UP} className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-white/70">
+              <motion.div variants={FADE_UP} className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-base text-white/75">
                 <span className="inline-flex items-center gap-1.5">
                   <Users className="h-4 w-4 text-[#F0A71F]" /> {booked.length} confirmed
                 </span>
@@ -321,8 +321,8 @@ export default function Landing({ slug }: Props) {
                       [countdown.minutes, "min"],
                       [countdown.seconds, "sec"],
                     ].map(([n, label]) => (
-                      <div key={label} className="rounded-2xl border border-white/10 bg-white/5 px-2 py-3 text-center sm:py-4">
-                        <div className="relative h-[2.6rem] overflow-hidden sm:h-[3.4rem]">
+                      <div key={label} className="rounded-2xl border border-white/10 bg-white/5 px-1 py-3 text-center sm:px-2 sm:py-4">
+                        <div className="relative h-[2.3rem] overflow-hidden sm:h-[3.8rem]">
                           <AnimatePresence mode="popLayout" initial={false}>
                             <motion.div
                               key={n as number}
@@ -330,7 +330,7 @@ export default function Landing({ slug }: Props) {
                               animate={{ y: 0, opacity: 1 }}
                               exit={{ y: "60%", opacity: 0 }}
                               transition={{ duration: 0.28, ease: "easeOut" }}
-                              className="font-mono text-4xl font-bold tabular-nums leading-none text-[#F0A71F] sm:text-5xl"
+                              className="font-mono text-[2rem] font-bold tabular-nums leading-none text-[#F0A71F] sm:text-6xl"
                             >
                               {String(n).padStart(2, "0")}
                             </motion.div>
@@ -456,13 +456,13 @@ export default function Landing({ slug }: Props) {
 
           <Reveal delay={0.1}>
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Hosted by</div>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT} data-testid="text-host-name">
+            <h2 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT} data-testid="text-host-name">
               Riccoh Player
             </h2>
-            <p className="mt-5 text-xl leading-relaxed text-foreground">
+            <p className="mt-5 text-2xl leading-relaxed text-foreground">
               Thirty-three years in the Marine Corps. Five combat tours. An Emmy, and a seat beside a global media executive.
             </p>
-            <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
+            <p className="mt-4 text-xl leading-relaxed text-muted-foreground">
               He's made the transition you are in the middle of, and he wrote down what actually carried over.
             </p>
             <div className="mt-6 flex flex-wrap gap-2">
@@ -487,10 +487,10 @@ export default function Landing({ slug }: Props) {
           <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
             <Reveal>
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">For podcasters</div>
-              <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
+              <h2 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT}>
                 Claiming a slot takes about two minutes.
               </h2>
-              <p className="mt-4 text-base leading-relaxed text-white/75">
+              <p className="mt-4 text-lg leading-relaxed text-white/80">
                 Pick a time, drop your email, tell us about your show once. Every slot you claim after that reuses your
                 photo, show details, and connected socials, so there's nothing to re-enter.
               </p>
@@ -513,10 +513,10 @@ export default function Landing({ slug }: Props) {
                       {i + 1}
                     </div>
                     <div>
-                      <h3 className="flex items-center gap-2 text-base font-semibold">
+                      <h3 className="flex items-center gap-2 text-lg font-semibold">
                         <Icon className="h-4 w-4 text-[#F0A71F]" /> {title}
                       </h3>
-                      <p className="mt-1 text-sm leading-relaxed text-white/75">{body}</p>
+                      <p className="mt-1 text-base leading-relaxed text-white/80">{body}</p>
                     </div>
                   </li>
                 </Reveal>
@@ -608,10 +608,10 @@ export default function Landing({ slug }: Props) {
           <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
             <Reveal>
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">For listeners</div>
-              <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
+              <h2 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT}>
                 Follow along, pick your shows, get a nudge before they go live.
               </h2>
-              <p className="mt-4 text-base leading-relaxed text-white/75">
+              <p className="mt-4 text-lg leading-relaxed text-white/80">
                 Nothing to claim and nothing to install. The agenda fills in as podcasters book their times, and every
                 show has a one-tap reminder that emails you before it starts.
               </p>
@@ -645,10 +645,10 @@ export default function Landing({ slug }: Props) {
                       {i + 1}
                     </div>
                     <div>
-                      <h3 className="flex items-center gap-2 text-base font-semibold">
+                      <h3 className="flex items-center gap-2 text-lg font-semibold">
                         <Icon className="h-4 w-4 text-[#F0A71F]" /> {title}
                       </h3>
-                      <p className="mt-1 text-sm leading-relaxed text-white/75">{body}</p>
+                      <p className="mt-1 text-base leading-relaxed text-white/80">{body}</p>
                     </div>
                   </li>
                 </Reveal>
