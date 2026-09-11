@@ -38,9 +38,25 @@ function getConnection(): { sql: ReturnType<typeof postgres>; db: ReturnType<typ
       );
     }
 
-    // `prepare: false` is required for connecting through Supabase's transaction
-    // pooler (pgbouncer), which doesn't support prepared statements.
-    _sql = postgres(CONNECTION_STRING, { prepare: false });
+    // Serverless + Supabase pooler rules:
+    //  - Session mode (port 5432 on *.pooler.supabase.com) is capped at 15
+    //    clients total; every warm instance holding a pool of 10 blew through
+    //    that under a small burst (EMAXCONNSESSION). Route through transaction
+    //    mode (6543) instead, which multiplexes thousands of clients.
+    //  - `prepare: false` is required in transaction mode (pgbouncer).
+    //  - One connection per instance is plenty for this traffic; drop it when
+    //    idle so instances don't pin the pooler between requests.
+    let url = CONNECTION_STRING;
+    try {
+      const u = new URL(url);
+      if (/\.pooler\.supabase\.com$/i.test(u.hostname) && (u.port === "5432" || u.port === "")) {
+        u.port = "6543";
+        url = u.toString();
+      }
+    } catch {
+      /* leave the string untouched if it isn't a parseable URL */
+    }
+    _sql = postgres(url, { prepare: false, max: 1, idle_timeout: 20, connect_timeout: 10 });
     _db = drizzle(_sql);
   }
   return { sql: _sql, db: _db };
