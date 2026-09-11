@@ -25,7 +25,6 @@ import {
   Radio,
   Mic2,
   Clock,
-  Globe2,
   Users,
   CalendarDays,
   BellRing,
@@ -40,7 +39,7 @@ interface Props {
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const MINI_CARDS = 3;
-const NAVY = "bg-[#053877] text-white dark:bg-[#04244d]";
+const NAVY = "bg-[#053877] text-white";
 const FADE_UP = {
   hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
@@ -143,6 +142,7 @@ export default function Landing({ slug }: Props) {
 
   const agendaHref = slug ? `/event/${slug}/agenda` : "/agenda";
   const scheduleHref = slug ? `/event/${slug}/schedule` : "/schedule";
+  const openSlotsHref = `${scheduleHref}#schedule`; // lands on the slot grid itself
 
   const steps = [
     {
@@ -166,21 +166,21 @@ export default function Landing({ slug }: Props) {
     },
   ];
 
-  const format = [
+  const listenerSteps = [
     {
-      icon: Globe2,
-      title: `${event?.durationHours ?? 24} hours, back to back`,
-      body: "Shows hand off to each other every half hour, so someone is always on the air no matter where the audience is waking up.",
+      icon: Headphones,
+      title: "Browse the agenda",
+      body: "See who's on and when, in your own time zone. It updates live as podcasters claim their slots.",
     },
     {
-      icon: Mic2,
-      title: "Your show, your studio",
-      body: "Record or stream from wherever you normally do. We give you the time block, the lineup, and the audience.",
+      icon: BellRing,
+      title: "Tap Remind me on a show",
+      body: "Your name and email, plus a mobile number if you want a text. We send add-to-calendar links for Google, Outlook, and Apple.",
     },
     {
-      icon: Users,
-      title: "One shared lineup",
-      body: "Every podcaster gets a card on the public agenda with their photo, links, and socials, so listeners can follow you after your slot.",
+      icon: Radio,
+      title: "Tune in live",
+      body: "We nudge you before the show starts. Every card also links to the podcaster's channels so you can follow them after.",
     },
   ];
 
@@ -237,7 +237,7 @@ export default function Landing({ slug }: Props) {
               </motion.p>
 
               <motion.div variants={FADE_UP} className="mt-8 flex flex-wrap items-center gap-3">
-                <Link href={scheduleHref}>
+                <Link href={openSlotsHref}>
                   <Button
                     size="lg"
                     className="gap-2 rounded-full bg-[#F0A71F] px-7 text-base font-semibold text-[#1a1200] hover:bg-[#f5b944]"
@@ -443,7 +443,7 @@ export default function Landing({ slug }: Props) {
                 Pick a time, drop your email, tell us about your show once. Every slot you claim after that reuses your
                 photo, show details, and connected socials, so there's nothing to re-enter.
               </p>
-              <Link href={scheduleHref}>
+              <Link href={openSlotsHref}>
                 <Button
                   size="lg"
                   className="mt-6 gap-2 rounded-full bg-[#F0A71F] px-6 font-semibold text-[#1a1200] hover:bg-[#f5b944]"
@@ -473,19 +473,6 @@ export default function Landing({ slug }: Props) {
             </ol>
           </div>
 
-          <div className="mt-14 grid gap-4 sm:grid-cols-3">
-            {format.map(({ icon: Icon, title, body }, i) => (
-              <Reveal key={title} delay={i * 0.08}>
-                <div className="h-full rounded-2xl border border-white/15 bg-white/[0.06] p-6">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-[#F0A71F]">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <h3 className="mt-4 text-base font-semibold">{title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-white/70">{body}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -514,7 +501,7 @@ export default function Landing({ slug }: Props) {
                   {slotCount} slots are open right now. Early claims get the prime-time picks.
                 </p>
               </div>
-              <Link href={scheduleHref}>
+              <Link href={openSlotsHref}>
                 <Button className="gap-2 rounded-full" data-testid="button-landing-claim-empty">
                   <Mic2 className="h-4 w-4" /> Pick a slot
                 </Button>
@@ -566,53 +553,56 @@ export default function Landing({ slug }: Props) {
 
       {/* ------------------------------------------------------- LISTENERS */}
       <section id="listeners" className={`scroll-mt-16 ${NAVY}`}>
-        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:py-20">
-          <Reveal>
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">For listeners</div>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
-              Follow along, pick your shows, get a nudge before they go live.
-            </h2>
-            <p className="mt-4 text-base leading-relaxed text-white/75">
-              The agenda updates as podcasters claim slots. Every card has a share button, a calendar reminder, and a
-              one-click "I want to watch this one" that emails you before that show starts.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link href={agendaHref}>
-                <Button
-                  size="lg"
-                  className="gap-2 rounded-full bg-[#F0A71F] px-6 font-semibold text-[#1a1200] hover:bg-[#f5b944]"
-                  data-testid="button-landing-listen"
-                >
-                  <Headphones className="h-4 w-4" /> Browse the agenda
-                </Button>
-              </Link>
-              <Link href={scheduleHref}>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="gap-2 rounded-full border-white/30 bg-transparent px-6 text-white hover:bg-white/10 hover:text-white"
-                >
-                  <CalendarDays className="h-4 w-4" /> Full schedule
-                </Button>
-              </Link>
-            </div>
-          </Reveal>
-          <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-            {[
-              { icon: BellRing, title: "Reminders", body: "Drop your email on any show's card and we'll ping you before it starts." },
-              { icon: CalendarDays, title: "Calendar files", body: "Add any slot to your calendar in your own time zone." },
-              { icon: Globe2, title: "Every time zone", body: "Switch the schedule to wherever you are. Overseas listeners welcome." },
-            ].map(({ icon: Icon, title, body }, i) => (
-              <Reveal key={title} delay={i * 0.08}>
-                <div className="flex gap-3 rounded-2xl border border-white/15 bg-white/10 p-4 backdrop-blur">
-                  <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
-                  <div>
-                    <div className="text-sm font-semibold">{title}</div>
-                    <div className="text-sm text-white/70">{body}</div>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
+        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-20">
+          <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+            <Reveal>
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">For listeners</div>
+              <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
+                Follow along, pick your shows, get a nudge before they go live.
+              </h2>
+              <p className="mt-4 text-base leading-relaxed text-white/75">
+                Nothing to claim and nothing to install. The agenda fills in as podcasters book their times, and every
+                show has a one-tap reminder that emails you before it starts.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link href={agendaHref}>
+                  <Button
+                    size="lg"
+                    className="gap-2 rounded-full bg-[#F0A71F] px-6 font-semibold text-[#1a1200] hover:bg-[#f5b944]"
+                    data-testid="button-landing-listen"
+                  >
+                    <Headphones className="h-4 w-4" /> Browse the agenda <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <Link href="/faq#listeners">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="gap-2 rounded-full border-white/30 bg-transparent px-6 text-white hover:bg-white/10 hover:text-white"
+                  >
+                    Listener FAQ
+                  </Button>
+                </Link>
+              </div>
+            </Reveal>
+
+            <ol className="space-y-4">
+              {listenerSteps.map(({ icon: Icon, title, body }, i) => (
+                <Reveal key={title} delay={i * 0.08}>
+                  <li className="flex gap-4 rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F0A71F] font-mono text-sm font-bold text-[#1a1200]">
+                      {i + 1}
+                    </div>
+                    <div>
+                      <h3 className="flex items-center gap-2 text-base font-semibold">
+                        <Icon className="h-4 w-4 text-[#F0A71F]" /> {title}
+                      </h3>
+                      <p className="mt-1 text-sm leading-relaxed text-white/75">{body}</p>
+                    </div>
+                  </li>
+                </Reveal>
+              ))}
+            </ol>
           </div>
         </div>
       </section>
@@ -629,7 +619,7 @@ export default function Landing({ slug }: Props) {
               {countdown.phase === "upcoming" ? countdown.label + "." : ""}
             </p>
           </div>
-          <Link href={scheduleHref}>
+          <Link href={openSlotsHref}>
             <Button
               size="lg"
               className="gap-2 rounded-full bg-[#053877] px-7 text-base font-semibold text-white hover:bg-[#0a4a99]"

@@ -100,7 +100,7 @@ export default function Agenda({ slug }: Props) {
     <div className="min-h-screen">
       <NavBar />
 
-      <section className="relative overflow-hidden bg-[#053877] text-white dark:bg-[#04244d]">
+      <section className="relative overflow-hidden bg-[#053877] text-white">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-[#F0A71F] opacity-[0.14] blur-3xl"
@@ -192,7 +192,7 @@ export default function Agenda({ slug }: Props) {
                                 data-testid={`row-agenda-${s.index}`}
                                 className="relative flex flex-col overflow-hidden rounded-2xl border-2 border-primary/15 bg-card shadow-md transition-shadow hover:shadow-lg"
                               >
-                                <div className="flex items-center justify-between bg-[#053877] px-4 py-2.5 text-white dark:bg-[#04244d]">
+                                <div className="flex items-center justify-between bg-[#053877] px-4 py-2.5 text-white">
                                   <span className="font-mono text-sm font-bold tabular-nums">
                                     {formatTimeInZone(s.start, viewZone)}
                                     <span className="text-white/60"> – {formatTimeInZone(s.end, viewZone)}</span>

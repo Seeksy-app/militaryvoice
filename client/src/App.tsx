@@ -1,4 +1,5 @@
-import { Switch, Route, Router } from "wouter";
+import { useEffect } from "react";
+import { Switch, Route, Router, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -13,6 +14,37 @@ import Admin from "@/pages/Admin";
 import HostDashboard from "@/pages/HostDashboard";
 import Landing from "@/pages/Landing";
 import Faq from "@/pages/Faq";
+
+/**
+ * Client-side navigation keeps the old scroll position by default. Every
+ * route change goes to the top of the new page, or to the element named in
+ * the URL hash (retrying briefly so data-driven sections can render first).
+ */
+function ScrollManager() {
+  const [location] = useLocation();
+  useEffect(() => {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (!hash || hash.startsWith("/")) {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      return;
+    }
+    let cancelled = false;
+    const tryScroll = (attempt: number) => {
+      if (cancelled) return;
+      const el = document.getElementById(hash);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      if (attempt < 8) setTimeout(() => tryScroll(attempt + 1), 120 * (attempt + 1));
+    };
+    tryScroll(0);
+    return () => {
+      cancelled = true;
+    };
+  }, [location]);
+  return null;
+}
 
 function AppRouter() {
   return (
@@ -42,6 +74,7 @@ function App() {
           <TooltipProvider>
             <Toaster />
             <Router>
+              <ScrollManager />
               <AppRouter />
             </Router>
           </TooltipProvider>

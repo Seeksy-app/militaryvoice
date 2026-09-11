@@ -75,7 +75,7 @@ export default function Faq() {
       a: (
         <>
           Three steps. Pick an open time on the{" "}
-          <Link href="/schedule" className="text-primary underline-offset-2 hover:underline">
+          <Link href="/schedule#schedule" className="text-primary underline-offset-2 hover:underline">
             schedule
           </Link>
           , enter your email and the one-time code we send you, then set up your show once with a photo, your show name, and
@@ -177,8 +177,9 @@ export default function Faq() {
       q: "How do I know when a show I care about is starting?",
       a: (
         <>
-          Every show's card on the agenda has "I want to watch this one." Drop your email and we'll message you before that
-          show goes live. You can also add any slot to your calendar in your own time zone.
+          Every show's card on the agenda has a Remind me button. Give us your name and email (and a mobile number if you'd
+          like a text) and we'll message you before that show goes live. The confirmation email includes add-to-calendar
+          links for Google, Outlook, and Apple.
         </>
       ),
     },
@@ -233,7 +234,7 @@ export default function Faq() {
     <div className="min-h-screen">
       <NavBar />
 
-      <section className="relative overflow-hidden bg-[#053877] text-white dark:bg-[#04244d]">
+      <section className="relative overflow-hidden bg-[#053877] text-white">
         <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-[#F0A71F] opacity-[0.14] blur-3xl" />
         <div className="relative mx-auto max-w-4xl px-4 py-14 sm:px-6 lg:py-20">
           <div className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest">
