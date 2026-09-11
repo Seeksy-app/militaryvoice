@@ -44,8 +44,8 @@ function getConnection(): { sql: ReturnType<typeof postgres>; db: ReturnType<typ
     //    that under a small burst (EMAXCONNSESSION). Route through transaction
     //    mode (6543) instead, which multiplexes thousands of clients.
     //  - `prepare: false` is required in transaction mode (pgbouncer).
-    //  - One connection per instance is plenty for this traffic; drop it when
-    //    idle so instances don't pin the pooler between requests.
+    //  - A small per-instance pool (4) lets a page's parallel requests run
+    //    side by side; idle connections close so instances don't pin the pooler.
     let url = CONNECTION_STRING;
     try {
       const u = new URL(url);
@@ -56,7 +56,7 @@ function getConnection(): { sql: ReturnType<typeof postgres>; db: ReturnType<typ
     } catch {
       /* leave the string untouched if it isn't a parseable URL */
     }
-    _sql = postgres(url, { prepare: false, max: 1, idle_timeout: 20, connect_timeout: 10 });
+    _sql = postgres(url, { prepare: false, max: 4, idle_timeout: 20, connect_timeout: 10 });
     _db = drizzle(_sql);
   }
   return { sql: _sql, db: _db };
@@ -177,8 +177,22 @@ async function ensureSchema() {
 // of them with a duplicate-object error even though the schema is fine.
 // Treat those as success, and give anything else one quiet retry.
 const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
+async function schemaAlreadyPresent(): Promise<boolean> {
+  // One cheap query instead of ~12 DDL round-trips on every cold start. The
+  // newest table (podcaster_profiles) plus a column from the latest hand-run
+  // migration (reminders.phone) is a good enough "we've bootstrapped" signal.
+  const { sql } = getConnection();
+  const rows = await sql`
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'reminders' AND column_name = 'phone'
+    LIMIT 1`;
+  return rows.length > 0;
+}
+
 async function ensureSchemaSafe(attempt = 0): Promise<void> {
   try {
+    if (await schemaAlreadyPresent()) return;
     await ensureSchema();
   } catch (err: any) {
     const code = String(err?.code ?? "");
