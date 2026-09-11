@@ -21,6 +21,7 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/#listeners", label: "Listeners", anchor: true },
   { href: "/schedule", label: "Schedule" },
   { href: "/agenda", label: "Agenda" },
+  { href: "/faq", label: "FAQ" },
 ];
 
 export function NavBar() {

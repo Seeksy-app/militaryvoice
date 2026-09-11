@@ -660,6 +660,9 @@ export default function Landing({ slug }: Props) {
             <Link href={agendaHref} className="hover:text-foreground">
               Agenda
             </Link>
+            <Link href="/faq" className="hover:text-foreground">
+              FAQ
+            </Link>
             <Link href="/host/dashboard" className="hover:text-foreground">
               Sign in
             </Link>

@@ -111,6 +111,21 @@ export default function Home({ slug }: Props) {
   }
 
   const openCount = slots.filter((s) => !s.signup).length;
+  const bookedCount = slots.length - openCount;
+  const [showBooked, setShowBooked] = useState(false);
+  // Podcasters come here to pick a time, so open slots are the default view.
+  // Dates need re-deriving after filtering so each day still gets a label.
+  const visibleSlots = useMemo(() => {
+    let lastDate = "";
+    return slots
+      .filter((s) => showBooked || !s.signup)
+      .map((s) => {
+        const dateLabel = formatDateInZone(s.start, viewZone);
+        const showDate = dateLabel !== lastDate;
+        lastDate = dateLabel;
+        return { ...s, showDate };
+      });
+  }, [slots, showBooked, viewZone]);
 
   const onAirSettings = event
     ? { onAirMinutes: event.onAirMinutes, bufferMinutes: event.bufferMinutes, bufferPosition: event.bufferPosition }
@@ -185,7 +200,28 @@ export default function Home({ slug }: Props) {
       </section>
 
       <section id="schedule" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-8 sm:px-6">
-        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Full schedule</h2>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Open slots</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Pick a time below. Booked shows live on the{" "}
+              <Link href={slug ? `/event/${slug}/agenda` : "/agenda"} className="text-primary underline-offset-2 hover:underline">
+                agenda
+              </Link>
+              .
+            </p>
+          </div>
+          {bookedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowBooked((v) => !v)}
+              className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover-elevate"
+              data-testid="button-toggle-booked"
+            >
+              {showBooked ? "Hide" : "Show"} {bookedCount} booked slot{bookedCount === 1 ? "" : "s"}
+            </button>
+          )}
+        </div>
         {eventLoading || signupsLoading ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -194,7 +230,7 @@ export default function Home({ slug }: Props) {
           </div>
         ) : (
           <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {slots.map((s) => (
+            {visibleSlots.map((s) => (
               <SlotCard
                 key={s.index}
                 index={s.index}

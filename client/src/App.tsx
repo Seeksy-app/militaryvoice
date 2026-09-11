@@ -12,6 +12,7 @@ import Events from "@/pages/Events";
 import Admin from "@/pages/Admin";
 import HostDashboard from "@/pages/HostDashboard";
 import Landing from "@/pages/Landing";
+import Faq from "@/pages/Faq";
 
 function AppRouter() {
   return (
@@ -25,6 +26,7 @@ function AppRouter() {
       <Route path="/events">{() => <Events />}</Route>
       <Route path="/schedule">{() => <Home />}</Route>
       <Route path="/agenda">{() => <Agenda />}</Route>
+      <Route path="/faq">{() => <Faq />}</Route>
       <Route path="/admin">{() => <Admin />}</Route>
       <Route path="/host/dashboard">{() => <HostDashboard />}</Route>
       <Route component={NotFound} />

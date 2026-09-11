@@ -5,11 +5,10 @@ import { NavBar } from "@/components/NavBar";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { AgendaSignupActions } from "@/components/AgendaSignupActions";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Mic2, ArrowRight, CalendarDays } from "lucide-react";
+import { Copy, Mic2, ArrowRight, CalendarDays, Radio } from "lucide-react";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import {
@@ -165,94 +164,107 @@ export default function Agenda({ slug }: Props) {
                   <div className="h-px flex-1 bg-border" />
                 </div>
 
-                <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {group.items.map((s) => {
-                    const shareText = s.signup
-                      ? `I'm tuning in to ${s.signup.hostName} on ${s.signup.podcastName} — ${s.dateLabel}, ${formatTimeInZone(
-                          s.start,
-                          viewZone
-                        )} ${zoneLabel(viewZone)}, during the MilitaryVoice.ai 24 Hour Podcastathon! ${
-                          typeof window !== "undefined" ? window.location.href : ""
-                        }`
-                      : "";
-                    return (
-                      <div
-                        key={s.index}
-                        data-testid={`row-agenda-${s.index}`}
-                        className={`relative flex flex-col gap-3 overflow-hidden rounded-2xl p-5 transition-shadow ${
-                          s.signup
-                            ? "border border-border bg-card shadow-sm hover:shadow-md"
-                            : "border border-dashed border-border bg-muted/30"
-                        }`}
-                      >
-                        {s.signup && <div className="absolute inset-x-0 top-0 h-1 bg-[#F0A71F]" aria-hidden="true" />}
-                        <div className="flex items-start justify-between gap-2">
-                          <span
-                            className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 font-mono text-xs font-bold tabular-nums leading-tight sm:text-sm ${
-                              s.signup ? "bg-primary text-primary-foreground" : "bg-background text-foreground ring-1 ring-border"
-                            }`}
-                          >
-                            {formatTimeInZone(s.start, viewZone)}
-                            <span className={s.signup ? "text-primary-foreground/70" : "text-muted-foreground"}>
-                              &nbsp;–&nbsp;{formatTimeInZone(s.end, viewZone)}
-                            </span>
-                          </span>
-                          {!s.signup ? (
-                            <Badge variant="outline" className="shrink-0 text-primary border-primary/40">
-                              Open
-                            </Badge>
-                          ) : (
-                            <Badge className="shrink-0 gap-1 bg-[#F0A71F] text-[#1a1200] hover:bg-[#F0A71F]">
-                              <Mic2 className="h-3 w-3" /> Booked
-                            </Badge>
-                          )}
+                {(() => {
+                  const bookedItems = group.items.filter((s) => s.signup);
+                  const openItems = group.items.filter((s) => !s.signup);
+                  return (
+                    <>
+                      {bookedItems.length === 0 ? (
+                        <div className="rounded-2xl border-2 border-dashed border-primary/20 bg-card p-8 text-center">
+                          <Mic2 className="mx-auto h-8 w-8 text-primary/60" />
+                          <p className="mt-3 font-semibold">No shows confirmed for this day yet.</p>
+                          <p className="mt-1 text-sm text-muted-foreground">Check back soon — the lineup fills in as podcasters claim their times.</p>
                         </div>
-                        {s.signup && onAirSettings && (
-                          <span className="text-xs text-muted-foreground" data-testid={`text-agenda-onair-${s.index}`}>
-                            On air {formatTimeInZone(onAirWindow(s.start, onAirSettings).start, viewZone)}–
-                            {formatTimeInZone(onAirWindow(s.start, onAirSettings).end, viewZone)}
-                          </span>
-                        )}
-
-                        {s.signup ? (
-                          <>
-                            <div className="flex items-center gap-3" data-testid={`text-agenda-podcast-${s.index}`}>
-                              {s.signup.photoUrl ? (
-                                <img
-                                  src={resolveUploadUrl(s.signup.photoUrl)}
-                                  alt={s.signup.hostName}
-                                  className="h-14 w-14 shrink-0 rounded-full object-cover ring-4 ring-[#F0A71F]/30"
-                                  data-testid={`img-agenda-photo-${s.index}`}
-                                />
-                              ) : (
-                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                                  <Mic2 className="h-5 w-5" />
+                      ) : (
+                        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                          {bookedItems.map((s) => {
+                            const signup = s.signup!;
+                            const shareText = `I'm tuning in to ${signup.hostName} on ${signup.podcastName} — ${s.dateLabel}, ${formatTimeInZone(
+                              s.start,
+                              viewZone
+                            )} ${zoneLabel(viewZone)}, during the MilitaryVoice.ai 24 Hour Podcastathon! ${
+                              typeof window !== "undefined" ? window.location.href : ""
+                            }`;
+                            const onAir = onAirSettings ? onAirWindow(s.start, onAirSettings) : null;
+                            return (
+                              <div
+                                key={s.index}
+                                data-testid={`row-agenda-${s.index}`}
+                                className="relative flex flex-col overflow-hidden rounded-2xl border-2 border-primary/15 bg-card shadow-md transition-shadow hover:shadow-lg"
+                              >
+                                <div className="flex items-center justify-between bg-[#053877] px-4 py-2.5 text-white dark:bg-[#04244d]">
+                                  <span className="font-mono text-sm font-bold tabular-nums">
+                                    {formatTimeInZone(s.start, viewZone)}
+                                    <span className="text-white/60"> – {formatTimeInZone(s.end, viewZone)}</span>
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#1a1200]">
+                                    <Radio className="h-3 w-3" /> Live
+                                  </span>
                                 </div>
-                              )}
-                              <div className="min-w-0">
-                                <div className="truncate font-semibold leading-tight">{s.signup.podcastName}</div>
-                                <div className="truncate text-sm text-muted-foreground">{s.signup.hostName}</div>
-                                <SocialIconRow accounts={parseSocialAccounts(s.signup.socialAccounts)} className="mt-1.5" />
+                                <div className="flex flex-col gap-3 p-4">
+                                  <div className="flex items-center gap-3" data-testid={`text-agenda-podcast-${s.index}`}>
+                                    {signup.photoUrl ? (
+                                      <img
+                                        src={resolveUploadUrl(signup.photoUrl)}
+                                        alt={signup.hostName}
+                                        className="h-16 w-16 shrink-0 rounded-full object-cover ring-4 ring-[#F0A71F]/40"
+                                        data-testid={`img-agenda-photo-${s.index}`}
+                                      />
+                                    ) : (
+                                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                                        <Mic2 className="h-6 w-6" />
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
+                                      <div className="line-clamp-2 font-semibold leading-tight">{signup.podcastName}</div>
+                                      <div className="truncate text-sm text-muted-foreground">with {signup.hostName}</div>
+                                      <SocialIconRow accounts={parseSocialAccounts(signup.socialAccounts)} className="mt-1.5" />
+                                    </div>
+                                  </div>
+                                  {onAir && (
+                                    <div className="text-xs text-muted-foreground" data-testid={`text-agenda-onair-${s.index}`}>
+                                      On air {formatTimeInZone(onAir.start, viewZone)}–{formatTimeInZone(onAir.end, viewZone)}
+                                    </div>
+                                  )}
+                                  <div className="mt-auto border-t border-border pt-3">
+                                    <AgendaSignupActions signup={signup} shareText={shareText} />
+                                  </div>
+                                </div>
                               </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {openItems.length > 0 && (
+                        <div className="mt-6 rounded-2xl border border-border bg-muted/40 p-4" data-testid={`strip-open-${group.dateLabel}`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              {openItems.length} open slot{openItems.length === 1 ? "" : "s"} this day
                             </div>
-                            <div className="mt-auto pt-1">
-                              <AgendaSignupActions signup={s.signup} shareText={shareText} />
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <p className="text-sm text-muted-foreground">This half hour is still open.</p>
-                            <Link href={slug ? `/event/${slug}/schedule` : "/schedule"} className="mt-auto" data-testid={`link-claim-${s.index}`}>
-                              <Button variant="outline" size="sm" className="w-full gap-1 rounded-full">
-                                Claim this slot <ArrowRight className="h-3.5 w-3.5" />
-                              </Button>
+                            <Link
+                              href={slug ? `/event/${slug}/schedule` : "/schedule"}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                              data-testid={`link-claim-${group.dateLabel}`}
+                            >
+                              Podcaster? Claim one <ArrowRight className="h-3 w-3" />
                             </Link>
-                          </>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {openItems.map((s) => (
+                              <span
+                                key={s.index}
+                                className="rounded-full border border-border bg-background px-2.5 py-1 font-mono text-[11px] tabular-nums text-muted-foreground"
+                              >
+                                {formatTimeInZone(s.start, viewZone)}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             ))}
           </div>
