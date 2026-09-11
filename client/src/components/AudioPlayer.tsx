@@ -3,7 +3,7 @@ import { Volume2, VolumeX } from "lucide-react";
 
 const SRC = "/american-warriors-trailer.m4a";
 const TITLE = "American Warriors";
-const SOFT_VOLUME = 0.18; // background level — deliberately quiet
+const SOFT_VOLUME = 0.05; // background level — deliberately very quiet
 const PREF_KEY = "mv_audio"; // "on" | "off"
 
 function readPref(): "on" | "off" | null {
