@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Moon, Sun, LogIn, LayoutDashboard, Menu } from "lucide-react";
-import { LogoMark, Wordmark } from "@/components/Logo";
+import { LogoLockup } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -43,9 +43,8 @@ export function NavBar() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <Link href="/" className="flex shrink-0 items-center gap-2.5 text-primary" data-testid="link-home-logo">
-          <LogoMark className="h-11 w-11 sm:h-12 sm:w-12" />
-          <Wordmark className="text-xl text-foreground sm:text-2xl" />
+        <Link href="/" className="shrink-0" data-testid="link-home-logo">
+          <LogoLockup />
         </Link>
 
         {/* Desktop links */}

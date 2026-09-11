@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
-import { LogoMark, Wordmark } from "@/components/Logo";
+import { LogoLockup } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
@@ -58,7 +58,7 @@ const EVENT_FALLBACK: PublicEvent = {
   createdAt: "",
 };
 const HERO_IMAGES = ["/hero-1.jpg", "/hero-2.jpg", "/hero-3.jpg", "/hero-4.jpg", "/hero-5.jpg"];
-const HERO_ROTATE_MS = 4000;
+const HERO_ROTATE_MS = 6000;
 const NAVY = "bg-[#053877] text-white";
 const FADE_UP = {
   hidden: { opacity: 0, y: 10 },
@@ -232,13 +232,13 @@ export default function Landing({ slug }: Props) {
             aria-hidden="true"
             fetchPriority={i === 0 ? "high" : "low"}
             className={`absolute inset-0 h-full w-full object-cover object-[70%_center] transition-opacity duration-[1600ms] ease-in-out ${
-              i === heroIdx ? "opacity-70" : "opacity-0"
+              i === heroIdx ? "opacity-90" : "opacity-0"
             }`}
           />
         ))}
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.96)_0%,rgba(5,56,119,0.88)_40%,rgba(5,56,119,0.62)_70%,rgba(5,56,119,0.45)_100%)]"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.93)_0%,rgba(0,7,65,0.80)_34%,rgba(5,56,119,0.48)_62%,rgba(5,56,119,0.22)_100%)]"
         />
         <div aria-hidden="true" className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-[#000741]/70 to-transparent" />
         <motion.div
@@ -648,11 +648,11 @@ export default function Landing({ slug }: Props) {
           alt=""
           aria-hidden="true"
           loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover object-[60%_30%] opacity-55"
+          className="absolute inset-0 h-full w-full object-cover object-[48%_30%] opacity-90"
         />
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.94)_0%,rgba(5,56,119,0.86)_45%,rgba(5,56,119,0.55)_100%)]"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.93)_0%,rgba(0,7,65,0.78)_38%,rgba(5,56,119,0.34)_72%,rgba(5,56,119,0.12)_100%)]"
         />
         <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-20">
           <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
@@ -772,10 +772,7 @@ export default function Landing({ slug }: Props) {
 
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex items-center gap-2">
-            <LogoMark className="h-5 w-5" />
-            <Wordmark className="text-base" />
-          </div>
+          <LogoLockup className="items-start" />
           <nav className="flex flex-wrap gap-x-5 gap-y-2">
             <a href="/#podcasters" className="hover:text-foreground">
               Podcasters
