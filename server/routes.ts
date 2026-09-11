@@ -10,6 +10,7 @@ import {
   insertEventSchema,
   updateEventSchema,
   insertProfileSchema,
+  insertSponsorInquirySchema,
   type PublicEvent,
   type PublicSignup,
   type PublicPodcaster,
@@ -18,8 +19,8 @@ import {
   updateSponsorSchema,
 } from "../shared/schema.js";
 import { fromError } from "zod-validation-error";
-import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, buildCalendarLinks } from "./email.js";
-import { setSessionCookie, clearSessionCookie, requireHostSession } from "./session.js";
+import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, buildCalendarLinks } from "./email.js";
+import { setSessionCookie, clearSessionCookie, requireHostSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   isUploadPostConfigured,
   ensureUploadPostProfile,
@@ -149,13 +150,21 @@ function icsEscape(text: string): string {
 }
 
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  const password = (req.header("x-admin-password") || (req.query.password as string) || "").trim();
-  const event = await storage.getFeaturedEvent();
-  if (!password || password !== event.adminPassword) {
-    res.status(401).json({ message: "Invalid admin password" });
+  // Preferred: a signed admin session from the email-code sign-in.
+  const sessionEmail = getAdminEmail(req);
+  if (sessionEmail && (await storage.isAdminEmail(sessionEmail))) {
+    (req as any).adminEmail = sessionEmail;
+    next();
     return;
   }
-  next();
+  // Fallback: the legacy shared password (kept so existing links keep working).
+  const password = (req.header("x-admin-password") || (req.query.password as string) || "").trim();
+  const event = await storage.getFeaturedEvent();
+  if (password && password === event.adminPassword) {
+    next();
+    return;
+  }
+  res.status(401).json({ message: "Sign in to the admin dashboard." });
 }
 
 export function registerRoutes(app: Express): void {
@@ -198,12 +207,128 @@ export function registerRoutes(app: Express): void {
     res.json(out);
   });
 
+  // ---- Admin auth: one-time email code, no shared password ---------------------
+  app.get("/api/admin/me", async (req, res) => {
+    const email = getAdminEmail(req);
+    if (!email || !(await storage.isAdminEmail(email))) {
+      res.status(401).json({ message: "Not signed in" });
+      return;
+    }
+    const admins = await storage.listAdmins();
+    const me = admins.find((a) => a.email === email);
+    res.json({ email, name: me?.name ?? "", isOwner: !!me?.isOwner });
+  });
+
+  app.post("/api/admin/request-code", async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      res.status(400).json({ message: "Enter a valid email" });
+      return;
+    }
+    // Always answer the same way so this can't be used to probe who's an admin.
+    if (await storage.isAdminEmail(email)) {
+      const code = crypto.randomInt(100000, 1000000).toString();
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      await storage.createLoginToken(`admin:${email}`, code, expiresAt);
+      if (!process.env.RESEND_API_KEY && process.env.NODE_ENV !== "production") {
+        console.log(`[dev] ADMIN login code for ${email}: ${code}`);
+      }
+      await sendLoginCodeEmail({ to: email, code });
+    } else {
+      console.warn(`Admin sign-in attempted for non-admin email: ${email}`);
+    }
+    res.json({ ok: true, message: "If that email is on the admin list, a code is on its way." });
+  });
+
+  app.post("/api/admin/verify-code", async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const code = String(req.body?.code || "").trim();
+    if (!email || !code) {
+      res.status(400).json({ message: "Enter your email and the code" });
+      return;
+    }
+    const row = await storage.getLoginToken(`admin:${email}`, code);
+    if (!row || row.usedAt || new Date(row.expiresAt).getTime() < Date.now() || !(await storage.isAdminEmail(email))) {
+      res.status(401).json({ message: "That code is invalid or expired. Request a new one." });
+      return;
+    }
+    await storage.markLoginTokenUsed(row.id);
+    setAdminCookie(res, email);
+    res.json({ ok: true, email });
+  });
+
+  app.post("/api/admin/logout", (_req, res) => {
+    clearAdminCookie(res);
+    res.json({ ok: true });
+  });
+
+  // ---- Admin: team members ------------------------------------------------------
+  app.get("/api/admin/team", requireAdmin, async (_req, res) => {
+    res.json(await storage.listAdmins());
+  });
+
+  app.post("/api/admin/team", requireAdmin, async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    const name = String(req.body?.name || "").trim();
+    if (!email || !email.includes("@")) {
+      res.status(400).json({ message: "Enter a valid email" });
+      return;
+    }
+    const created = await storage.addAdmin(email, name);
+    res.status(201).json(created);
+  });
+
+  app.delete("/api/admin/team/:id", requireAdmin, async (req, res) => {
+    const result = await storage.removeAdmin(Number(req.params.id));
+    if (!result.removed) {
+      res.status(400).json({ message: result.reason ?? "Couldn't remove that teammate." });
+      return;
+    }
+    res.json({ ok: true });
+  });
+
   // ---- Public: sponsor logos ("Friends of the Podcastathon") -------------------
   app.get("/api/sponsors", async (_req, res) => {
     publicCache(res, 60);
     const rows = await storage.listSponsors(true);
     const out: PublicSponsor[] = rows.map((r) => ({ id: r.id, name: r.name, url: r.url, logoUrl: r.logoUrl, sortOrder: r.sortOrder }));
     res.json(out);
+  });
+
+  // ---- Public: "become a sponsor" form ------------------------------------------
+  app.post("/api/sponsor-inquiries", async (req, res) => {
+    const parsed = insertSponsorInquirySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const created = await storage.createSponsorInquiry(parsed.data);
+    res.status(201).json({ id: created.id });
+
+    (async () => {
+      try {
+        const admins = await storage.listAdmins();
+        await sendSponsorInquiryEmail({
+          to: admins.map((a) => a.email),
+          name: parsed.data.name,
+          company: parsed.data.company ?? "",
+          email: parsed.data.email,
+          phone: parsed.data.phone ?? "",
+          message: parsed.data.message ?? "",
+        });
+      } catch (err) {
+        console.error("Failed to send sponsor inquiry email:", err);
+      }
+    })();
+  });
+
+  app.get("/api/admin/sponsor-inquiries", requireAdmin, async (_req, res) => {
+    res.json(await storage.listSponsorInquiries());
+  });
+
+  app.patch("/api/admin/sponsor-inquiries/:id", requireAdmin, async (req, res) => {
+    await storage.setSponsorInquiryHandled(Number(req.params.id), !!req.body?.handled);
+    res.json({ ok: true });
   });
 
   // ---- Admin: sponsors CRUD ------------------------------------------------------

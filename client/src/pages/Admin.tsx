@@ -21,26 +21,42 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
-import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake } from "lucide-react";
-import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow } from "@shared/schema";
+import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound } from "lucide-react";
+import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, AdminUserRow, SponsorInquiryRow } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
 
 const SLOT_LENGTH_OPTIONS = [15, 20, 30, 45, 60, 90, 120];
 
 function LoginCard() {
-  const { login } = useAdminAuth();
-  const [password, setPassword] = useState("");
+  const { requestCode, verifyCode } = useAdminAuth();
+  const [step, setStep] = useState<"email" | "code">("email");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
   const { toast } = useToast();
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleEmail(e: React.FormEvent) {
     e.preventDefault();
     setPending(true);
     try {
-      await login(password);
+      await requestCode(email.trim());
+      setStep("code");
+      toast({ title: "Check your email", description: "If that address is on the admin list, a 6-digit code is on its way." });
     } catch (err) {
-      toast({ title: "Incorrect password", variant: "destructive" });
+      toast({ title: "Couldn't send that", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleCode(e: React.FormEvent) {
+    e.preventDefault();
+    setPending(true);
+    try {
+      await verifyCode(email.trim(), code.trim());
+    } catch (err) {
+      toast({ title: "That code didn't work", description: (err as Error).message, variant: "destructive" });
     } finally {
       setPending(false);
     }
@@ -51,27 +67,166 @@ function LoginCard() {
       <Card>
         <CardHeader>
           <div className="mb-1 flex items-center gap-2 text-primary">
-            <Lock className="h-4 w-4" />
-            <CardTitle className="text-base">Host access</CardTitle>
+            {step === "email" ? <Lock className="h-4 w-4" /> : <KeyRound className="h-4 w-4" />}
+            <CardTitle className="text-base">Admin sign-in</CardTitle>
           </div>
-          <CardDescription>Enter the host password to manage this marathon.</CardDescription>
+          <CardDescription>
+            {step === "email"
+              ? "Enter your admin email and we'll send a one-time code. No password to remember."
+              : `Enter the 6-digit code we sent to ${email}.`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3" data-testid="form-admin-login">
-            <Input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              data-testid="input-admin-password"
-            />
-            <Button type="submit" disabled={pending || !password} data-testid="button-admin-login">
-              {pending ? "Checking…" : "Enter dashboard"}
-            </Button>
-          </form>
+          {step === "email" ? (
+            <form onSubmit={handleEmail} className="flex flex-col gap-3" data-testid="form-admin-login">
+              <Input
+                type="email"
+                autoFocus
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                data-testid="input-admin-email"
+              />
+              <Button type="submit" disabled={pending || !email.trim()} data-testid="button-admin-login">
+                {pending ? "Sending…" : "Send me a code"}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleCode} className="flex flex-col gap-3" data-testid="form-admin-verify">
+              <Input
+                inputMode="numeric"
+                autoFocus
+                placeholder="123456"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                data-testid="input-admin-code"
+              />
+              <Button type="submit" disabled={pending || !code.trim()} data-testid="button-admin-verify">
+                {pending ? "Checking…" : "Enter dashboard"}
+              </Button>
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+                onClick={() => {
+                  setStep("email");
+                  setCode("");
+                }}
+              >
+                Use a different email
+              </button>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Team — who can sign in to this dashboard
+// ---------------------------------------------------------------------------
+function TeamCard() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { admin } = useAdminAuth();
+  const { data: team, isLoading } = useQuery<AdminUserRow[]>({
+    queryKey: ["/api/admin/team"],
+    queryFn: () => adminGet<AdminUserRow[]>("/api/admin/team"),
+  });
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await adminSend("POST", "/api/admin/team", { email: email.trim(), name: name.trim() });
+      setEmail("");
+      setName("");
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/team"] });
+      toast({ title: "Teammate added", description: "They can sign in at /admin with their email." });
+    } catch (err) {
+      toast({ title: "Couldn't add them", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: number, label: string) {
+    if (!window.confirm(`Remove ${label} from the admin team?`)) return;
+    try {
+      await adminSend("DELETE", `/api/admin/team/${id}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/team"] });
+      toast({ title: "Removed" });
+    } catch (err) {
+      toast({ title: "Couldn't remove them", description: (err as Error).message, variant: "destructive" });
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Users className="h-4 w-4 text-primary" /> Admin team
+        </CardTitle>
+        <CardDescription>
+          Anyone listed here can sign in at /admin with a one-time code sent to their email. No shared password.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        <form onSubmit={add} className="grid gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-4 sm:grid-cols-[1.2fr_1fr_auto] sm:items-end">
+          <div>
+            <Label htmlFor="team-email" className="text-xs">
+              Email
+            </Label>
+            <Input id="team-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="teammate@example.com" className="mt-1" data-testid="input-team-email" />
+          </div>
+          <div>
+            <Label htmlFor="team-name" className="text-xs">
+              Name (optional)
+            </Label>
+            <Input id="team-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jamie Rivera" className="mt-1" data-testid="input-team-name" />
+          </div>
+          <Button type="submit" disabled={busy || !email.trim()} className="gap-1.5" data-testid="button-add-admin">
+            <Plus className="h-4 w-4" /> {busy ? "Adding…" : "Add"}
+          </Button>
+        </form>
+
+        {isLoading ? (
+          <Skeleton className="h-16 w-full" />
+        ) : (
+          <ul className="divide-y divide-border rounded-xl border border-border">
+            {(team ?? []).map((m) => (
+              <li key={m.id} className="flex items-center gap-3 p-3" data-testid={`row-admin-${m.id}`}>
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                  {(m.name || m.email).charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold">{m.name || m.email}</span>
+                    {m.isOwner && <Badge variant="secondary" className="text-[10px]">Owner</Badge>}
+                    {admin?.email === m.email && <Badge variant="outline" className="text-[10px]">You</Badge>}
+                  </div>
+                  {m.name && <div className="truncate text-xs text-muted-foreground">{m.email}</div>}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive"
+                  disabled={m.isOwner}
+                  title={m.isOwner ? "The owner can't be removed" : "Remove"}
+                  onClick={() => remove(m.id, m.name || m.email)}
+                  data-testid={`button-remove-admin-${m.id}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -161,13 +316,13 @@ function EventFormFields({
   );
 }
 
-function EventsManagementCard({ password }: { password: string }) {
+function EventsManagementCard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const zone = useMemo(detectLocalTimeZone, []);
   const { data: events, isLoading } = useQuery<PublicEvent[]>({
-    queryKey: ["/api/admin/events", password],
-    queryFn: () => adminGet<PublicEvent[]>("/api/admin/events", password),
+    queryKey: ["/api/admin/events"],
+    queryFn: () => adminGet<PublicEvent[]>("/api/admin/events"),
   });
 
   const [creating, setCreating] = useState(false);
@@ -206,7 +361,7 @@ function EventsManagementCard({ password }: { password: string }) {
         bufferPosition: "after",
         isFeatured: false,
       } as InsertEvent;
-      await adminSend("POST", "/api/admin/events", password, payload);
+      await adminSend("POST", "/api/admin/events", payload);
       await refreshEverything();
       toast({ title: "Event created" });
       setCreating(false);
@@ -220,7 +375,7 @@ function EventsManagementCard({ password }: { password: string }) {
 
   async function handleSetFeatured(id: number) {
     try {
-      await adminSend("PUT", `/api/admin/events/${id}`, password, { isFeatured: true } as UpdateEvent);
+      await adminSend("PUT", `/api/admin/events/${id}`, { isFeatured: true } as UpdateEvent);
       await refreshEverything();
       toast({ title: "Featured event updated" });
     } catch (err) {
@@ -252,7 +407,7 @@ function EventsManagementCard({ password }: { password: string }) {
         durationHours: editForm.durationHours,
         slotMinutes: editForm.slotMinutes,
       };
-      await adminSend("PUT", `/api/admin/events/${editingId}`, password, patch);
+      await adminSend("PUT", `/api/admin/events/${editingId}`, patch);
       await refreshEverything();
       toast({ title: "Event updated" });
       setEditingId(null);
@@ -354,12 +509,12 @@ function EventsManagementCard({ password }: { password: string }) {
   );
 }
 
-function EventSettingsCard({ password }: { password: string }) {
+function EventSettingsCard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: event } = useQuery<EventRow>({
-    queryKey: ["/api/admin/event", password],
-    queryFn: () => adminGet<EventRow>("/api/admin/event", password),
+    queryKey: ["/api/admin/event"],
+    queryFn: () => adminGet<EventRow>("/api/admin/event"),
   });
 
   const [zone, setZone] = useState(detectLocalTimeZone);
@@ -419,7 +574,7 @@ function EventSettingsCard({ password }: { password: string }) {
         bufferMinutes: form.bufferMinutes,
         bufferPosition: form.bufferPosition,
       };
-      await adminSend("PUT", "/api/admin/event", password, patch);
+      await adminSend("PUT", "/api/admin/event", patch);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["/api/admin/event"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/event"] }),
@@ -592,28 +747,28 @@ function EventSettingsCard({ password }: { password: string }) {
   );
 }
 
-function SignupsCard({ password }: { password: string }) {
+function SignupsCard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: event } = useQuery<EventRow>({
-    queryKey: ["/api/admin/event", password],
-    queryFn: () => adminGet<EventRow>("/api/admin/event", password),
+    queryKey: ["/api/admin/event"],
+    queryFn: () => adminGet<EventRow>("/api/admin/event"),
   });
   const { data: signups, isLoading } = useQuery<SignupRow[]>({
-    queryKey: ["/api/admin/signups", password],
-    queryFn: () => adminGet<SignupRow[]>("/api/admin/signups", password),
+    queryKey: ["/api/admin/signups"],
+    queryFn: () => adminGet<SignupRow[]>("/api/admin/signups"),
   });
   const zone = useMemo(detectLocalTimeZone, []);
 
   async function cancelSignup(id: number) {
-    await adminSend("PATCH", `/api/admin/signups/${id}/cancel`, password);
+    await adminSend("PATCH", `/api/admin/signups/${id}/cancel`);
     queryClient.invalidateQueries({ queryKey: ["/api/admin/signups"] });
     queryClient.invalidateQueries({ queryKey: ["/api/signups"] });
     toast({ title: "Slot reopened" });
   }
 
   async function deleteSignup(id: number) {
-    await adminSend("DELETE", `/api/admin/signups/${id}`, password);
+    await adminSend("DELETE", `/api/admin/signups/${id}`);
     queryClient.invalidateQueries({ queryKey: ["/api/admin/signups"] });
     queryClient.invalidateQueries({ queryKey: ["/api/signups"] });
     toast({ title: "Signup removed" });
@@ -632,7 +787,7 @@ function SignupsCard({ password }: { password: string }) {
             {needsInterviewer.length > 0 ? ` · ${needsInterviewer.length} need an interviewer` : ""} · times shown in {zoneLabel(zone)}
           </CardDescription>
         </div>
-        <a href={adminExportUrl(password)} target="_blank" rel="noopener noreferrer" data-testid="link-export-csv">
+        <a href={adminExportUrl()} target="_blank" rel="noopener noreferrer" data-testid="link-export-csv">
           <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
             <Download className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Export CSV</span>
           </Button>
@@ -746,12 +901,16 @@ function SignupsCard({ password }: { password: string }) {
 // ---------------------------------------------------------------------------
 // Sponsors — logo strip shown on the homepage as "Friends of the Podcastathon"
 // ---------------------------------------------------------------------------
-function SponsorsCard({ password }: { password: string }) {
+function SponsorsCard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: sponsors, isLoading } = useQuery<SponsorRow[]>({
-    queryKey: ["/api/admin/sponsors", password],
-    queryFn: () => adminGet<SponsorRow[]>("/api/admin/sponsors", password),
+    queryKey: ["/api/admin/sponsors"],
+    queryFn: () => adminGet<SponsorRow[]>("/api/admin/sponsors"),
+  });
+  const { data: inquiries } = useQuery<SponsorInquiryRow[]>({
+    queryKey: ["/api/admin/sponsor-inquiries"],
+    queryFn: () => adminGet<SponsorInquiryRow[]>("/api/admin/sponsor-inquiries"),
   });
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -776,7 +935,7 @@ function SponsorsCard({ password }: { password: string }) {
       fd.append("name", name.trim());
       fd.append("url", url.trim());
       fd.append("logo", logo);
-      await adminUpload("/api/admin/sponsors", password, fd);
+      await adminUpload("/api/admin/sponsors", fd);
       setName("");
       setUrl("");
       setLogo(null);
@@ -792,7 +951,7 @@ function SponsorsCard({ password }: { password: string }) {
   }
 
   async function patch(id: number, body: Partial<Pick<SponsorRow, "name" | "url" | "active" | "sortOrder">>) {
-    await adminSend("PATCH", `/api/admin/sponsors/${id}`, password, body);
+    await adminSend("PATCH", `/api/admin/sponsors/${id}`, body);
     refresh();
   }
 
@@ -807,7 +966,7 @@ function SponsorsCard({ password }: { password: string }) {
 
   async function remove(id: number) {
     if (!window.confirm("Remove this sponsor from the site?")) return;
-    await adminSend("DELETE", `/api/admin/sponsors/${id}`, password);
+    await adminSend("DELETE", `/api/admin/sponsors/${id}`);
     refresh();
     toast({ title: "Sponsor removed" });
   }
@@ -906,26 +1065,84 @@ function SponsorsCard({ password }: { password: string }) {
             ))}
           </ul>
         )}
+
+        {(inquiries ?? []).length > 0 && (
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">
+                Inquiries{" "}
+                <span className="font-normal text-muted-foreground">
+                  ({(inquiries ?? []).filter((q) => !q.handled).length} new)
+                </span>
+              </h3>
+            </div>
+            <ul className="divide-y divide-border rounded-xl border border-border">
+              {(inquiries ?? []).map((q) => (
+                <li key={q.id} className={`p-3 ${q.handled ? "opacity-55" : ""}`} data-testid={`row-inquiry-${q.id}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold">
+                        {q.company || q.name}
+                        {q.company && <span className="ml-1.5 font-normal text-muted-foreground">· {q.name}</span>}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        <a href={`mailto:${q.email}`} className="text-primary hover:underline">
+                          {q.email}
+                        </a>
+                        {q.phone ? ` · ${q.phone}` : ""} · {new Date(q.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1 px-2 text-xs"
+                      onClick={async () => {
+                        await adminSend("PATCH", `/api/admin/sponsor-inquiries/${q.id}`, { handled: !q.handled });
+                        queryClient.invalidateQueries({ queryKey: ["/api/admin/sponsor-inquiries"] });
+                      }}
+                      data-testid={`button-inquiry-handled-${q.id}`}
+                    >
+                      {q.handled ? "Reopen" : "Mark handled"}
+                    </Button>
+                  </div>
+                  {q.message && <p className="mt-2 rounded-lg bg-muted/50 p-2.5 text-sm text-muted-foreground">{q.message}</p>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 }
 
 export default function Admin() {
-  const { isAuthenticated, password, logout } = useAdminAuth();
+  const { isAuthenticated, isLoading, admin, logout } = useAdminAuth();
   const isMobile = useIsMobile();
 
   return (
     <div className="min-h-screen">
       <NavBar />
-      {!isAuthenticated || !password ? (
+      {isLoading ? (
+        <div className="mx-auto mt-16 max-w-sm px-4">
+          <Skeleton className="h-48 w-full rounded-xl" />
+        </div>
+      ) : !isAuthenticated ? (
         <LoginCard />
       ) : (
         <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
           <div className="mb-6 flex items-center justify-between">
-            <h1 className="text-xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
-              Admin dashboard
-            </h1>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
+                Admin dashboard
+              </h1>
+              {admin && (
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Signed in as {admin.name || admin.email}
+                  {admin.isOwner ? " · Owner" : ""}
+                </p>
+              )}
+            </div>
             <Button variant="ghost" size="sm" onClick={logout} className="gap-1.5" data-testid="button-admin-logout">
               <LogOut className="h-3.5 w-3.5" /> Log out
             </Button>
@@ -933,7 +1150,7 @@ export default function Admin() {
 
           {isMobile ? (
             <Tabs defaultValue="setup">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="setup" data-testid="tab-admin-setup">
                   Setup
                 </TabsTrigger>
@@ -943,27 +1160,34 @@ export default function Admin() {
                 <TabsTrigger value="sponsors" data-testid="tab-admin-sponsors">
                   Sponsors
                 </TabsTrigger>
+                <TabsTrigger value="team" data-testid="tab-admin-team">
+                  Team
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="setup" className="mt-6 flex flex-col gap-6">
-                <EventsManagementCard password={password} />
-                <EventSettingsCard password={password} />
+                <EventsManagementCard />
+                <EventSettingsCard />
               </TabsContent>
               <TabsContent value="signups" className="mt-6">
-                <SignupsCard password={password} />
+                <SignupsCard />
               </TabsContent>
               <TabsContent value="sponsors" className="mt-6">
-                <SponsorsCard password={password} />
+                <SponsorsCard />
+              </TabsContent>
+              <TabsContent value="team" className="mt-6">
+                <TeamCard />
               </TabsContent>
             </Tabs>
           ) : (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
               <div className="flex flex-col gap-6">
-                <EventsManagementCard password={password} />
-                <EventSettingsCard password={password} />
-                <SponsorsCard password={password} />
+                <EventsManagementCard />
+                <EventSettingsCard />
+                <SponsorsCard />
+                <TeamCard />
               </div>
               <div className="lg:sticky lg:top-6">
-                <SignupsCard password={password} />
+                <SignupsCard />
               </div>
             </div>
           )}

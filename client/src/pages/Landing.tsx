@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
 import { spotlightFromSignup, type SpotlightItem } from "@/components/SpotlightCard";
+import { SponsorDialog } from "@/components/SponsorDialog";
+import { AudioToggle, useSiteAudio } from "@/components/AudioPlayer";
 import { useCountdown } from "@/hooks/use-countdown";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, PublicPodcaster, PublicSponsor } from "@shared/schema";
@@ -114,6 +116,9 @@ export default function Landing({ slug }: Props) {
   });
   const { data: podcasters } = useQuery<PublicPodcaster[]>({ queryKey: ["/api/podcasters"] });
   const { data: sponsors } = useQuery<PublicSponsor[]>({ queryKey: ["/api/sponsors"] });
+
+  const { playing: audioPlaying, muted: audioMuted } = useSiteAudio();
+  const audioOn = audioPlaying && !audioMuted;
 
   const zone = useMemo(detectLocalTimeZone, []);
   const countdown = useCountdown(event?.startAtUtc, event?.durationHours);
@@ -463,19 +468,32 @@ export default function Landing({ slug }: Props) {
           )}
         </div>
 
-        {/* live waveform strip */}
-        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 flex h-16 items-end justify-center gap-[3px] px-2 opacity-70">
-          {Array.from({ length: 72 }).map((_, i) => {
-            const base = 8 + Math.abs(Math.sin(i * 0.55)) * 34;
-            return (
-              <span
-                key={i}
-                className="w-1 flex-none origin-bottom rounded-t-full bg-[#F0A71F]/70"
-                style={{ height: `${base}px`, animation: `mvwave ${1.4 + (i % 7) * 0.13}s ease-in-out ${(i % 11) * 0.09}s infinite alternate` }}
-              />
-            );
-          })}
-          <style>{`@keyframes mvwave { from { transform: scaleY(0.35); opacity:.5 } to { transform: scaleY(1); opacity:1 } }`}</style>
+        {/* live waveform strip — doubles as the trailer's sound control */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-center gap-3 px-4 pb-3">
+          <div aria-hidden="true" className="flex h-24 flex-1 items-end justify-center gap-[3px] opacity-80">
+            {Array.from({ length: 64 }).map((_, i) => {
+              const base = 14 + Math.abs(Math.sin(i * 0.55)) * 58;
+              return (
+                <span
+                  key={i}
+                  className="w-1 flex-none origin-bottom rounded-t-full bg-[#F0A71F]/75"
+                  style={{
+                    height: `${base}px`,
+                    animation: audioOn
+                      ? `mvwave ${0.6 + (i % 7) * 0.09}s ease-in-out ${(i % 11) * 0.05}s infinite alternate`
+                      : `mvwave ${1.6 + (i % 7) * 0.14}s ease-in-out ${(i % 11) * 0.09}s infinite alternate`,
+                  }}
+                />
+              );
+            })}
+          </div>
+          <div className="pointer-events-auto mb-2 flex shrink-0 items-center gap-2">
+            <span className="hidden text-[11px] font-semibold uppercase tracking-wide text-white/60 sm:block">
+              {audioOn ? "Now playing" : "Listen in"}
+            </span>
+            <AudioToggle tone="dark" />
+          </div>
+          <style>{`@keyframes mvwave { from { transform: scaleY(0.32); opacity:.55 } to { transform: scaleY(1); opacity:1 } }`}</style>
         </div>
       </section>
 
@@ -659,7 +677,8 @@ export default function Landing({ slug }: Props) {
             <Reveal>
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">For listeners</div>
               <h2 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT}>
-                Follow along, pick your shows, get a nudge before they go live.
+                Follow along, pick your shows, get a nudge before they{" "}
+                <span className="whitespace-nowrap">go live.</span>
               </h2>
               <p className="mt-4 text-lg leading-relaxed text-white/80">
                 Nothing to claim and nothing to install. The agenda fills in as podcasters book their times, and every
@@ -715,6 +734,11 @@ export default function Landing({ slug }: Props) {
             <div className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
               Friends of the <span className="text-[#F0A71F]">Podcastathon</span>
             </div>
+            <SponsorDialog>
+              <button type="button" className="mt-3 text-sm font-medium text-primary underline-offset-4 hover:underline" data-testid="button-become-sponsor">
+                Become a sponsor
+              </button>
+            </SponsorDialog>
           </div>
           <div className="relative mt-8">
             <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-background to-transparent" />
@@ -789,6 +813,11 @@ export default function Landing({ slug }: Props) {
             <Link href="/faq" className="hover:text-foreground">
               FAQ
             </Link>
+            <SponsorDialog>
+              <button type="button" className="hover:text-foreground">
+                Sponsors
+              </button>
+            </SponsorDialog>
             <Link href="/host/dashboard" className="hover:text-foreground">
               Sign in
             </Link>

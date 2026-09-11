@@ -14,6 +14,7 @@ import Admin from "@/pages/Admin";
 import HostDashboard from "@/pages/HostDashboard";
 import Landing from "@/pages/Landing";
 import Faq from "@/pages/Faq";
+import { SiteAudioProvider } from "@/components/AudioPlayer";
 
 /**
  * Client-side navigation keeps the old scroll position by default. Every
@@ -73,10 +74,12 @@ function App() {
         <AdminAuthProvider>
           <TooltipProvider>
             <Toaster />
-            <Router>
-              <ScrollManager />
-              <AppRouter />
-            </Router>
+            <SiteAudioProvider>
+              <Router>
+                <ScrollManager />
+                <AppRouter />
+              </Router>
+            </SiteAudioProvider>
           </TooltipProvider>
         </AdminAuthProvider>
       </ThemeProvider>

@@ -1,31 +1,56 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { apiRequest } from "@/lib/queryClient";
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest, getQueryFn } from "@/lib/queryClient";
 
-// Password lives in memory only (no localStorage/cookies — sandboxed iframes
-// block both). Re-entering it after a hard refresh is an acceptable tradeoff
-// for a basic MVP admin dashboard.
+// Admin access is an httpOnly session cookie set by the one-time email code
+// flow, so it survives a refresh and there's no shared password to circulate.
+export interface AdminIdentity {
+  email: string;
+  name: string;
+  isOwner: boolean;
+}
+
 interface AdminAuthValue {
-  password: string | null;
+  admin: AdminIdentity | null;
   isAuthenticated: boolean;
-  login: (password: string) => Promise<void>;
-  logout: () => void;
+  isLoading: boolean;
+  requestCode: (email: string) => Promise<void>;
+  verifyCode: (email: string, code: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AdminAuthContext = createContext<AdminAuthValue | null>(null);
 
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
-  const [password, setPassword] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery<AdminIdentity | null>({
+    queryKey: ["/api/admin/me"],
+    queryFn: getQueryFn({ on401: "returnNull" }),
+    retry: false,
+    staleTime: 60_000,
+  });
 
-  const login = useCallback(async (candidate: string) => {
-    await apiRequest("POST", "/api/admin/login", { password: candidate });
-    setPassword(candidate);
+  const requestCode = useCallback(async (email: string) => {
+    await apiRequest("POST", "/api/admin/request-code", { email });
   }, []);
 
-  const logout = useCallback(() => setPassword(null), []);
+  const verifyCode = useCallback(
+    async (email: string, code: string) => {
+      await apiRequest("POST", "/api/admin/verify-code", { email, code });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/me"] });
+    },
+    [queryClient],
+  );
+
+  const logout = useCallback(async () => {
+    await apiRequest("POST", "/api/admin/logout");
+    queryClient.setQueryData(["/api/admin/me"], null);
+    queryClient.removeQueries({ queryKey: ["/api/admin"] });
+  }, [queryClient]);
 
   const value = useMemo(
-    () => ({ password, isAuthenticated: !!password, login, logout }),
-    [password, login, logout]
+    () => ({ admin: data ?? null, isAuthenticated: !!data, isLoading, requestCode, verifyCode, logout }),
+    [data, isLoading, requestCode, verifyCode, logout],
   );
 
   return <AdminAuthContext.Provider value={value}>{children}</AdminAuthContext.Provider>;

@@ -281,3 +281,43 @@ export const updateSponsorSchema = z.object({
 export type UpdateSponsor = z.infer<typeof updateSponsorSchema>;
 export type SponsorRow = typeof sponsors.$inferSelect;
 export type PublicSponsor = Pick<SponsorRow, "id" | "name" | "url" | "logoUrl" | "sortOrder">;
+
+// ---------------------------------------------------------------------------
+// Admin users — who can open /admin. Sign-in is the same one-time email code
+// podcasters use; there is no shared password to pass around.
+// ---------------------------------------------------------------------------
+export const adminUsers = pgTable("admin_users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name").notNull().default(""),
+  isOwner: boolean("is_owner").notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+
+export type AdminUserRow = typeof adminUsers.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Sponsor inquiries — the "Sponsors" nav popup on the public site.
+// ---------------------------------------------------------------------------
+export const sponsorInquiries = pgTable("sponsor_inquiries", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  company: text("company").notNull().default(""),
+  email: text("email").notNull(),
+  phone: text("phone").notNull().default(""),
+  message: text("message").notNull().default(""),
+  handled: boolean("handled").notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertSponsorInquirySchema = createInsertSchema(sponsorInquiries)
+  .omit({ id: true, createdAt: true, handled: true })
+  .extend({
+    name: z.string().trim().min(1, "Tell us your name"),
+    company: z.string().trim().default(""),
+    email: z.string().trim().email("Enter a valid email"),
+    phone: z.string().trim().default(""),
+    message: z.string().trim().max(2000).default(""),
+  });
+export type InsertSponsorInquiry = z.infer<typeof insertSponsorInquirySchema>;
+export type SponsorInquiryRow = typeof sponsorInquiries.$inferSelect;

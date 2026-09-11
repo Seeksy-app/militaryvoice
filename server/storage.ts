@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -12,10 +12,13 @@ import type {
   InsertProfile,
   SponsorRow,
   UpdateSponsor,
+  AdminUserRow,
+  SponsorInquiryRow,
+  InsertSponsorInquiry,
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { and, eq, ne, asc } from "drizzle-orm";
+import { and, eq, ne, asc, desc } from "drizzle-orm";
 
 // Resolve the Postgres connection string lazily (not at module load) so a
 // missing/bad value surfaces as a normal caught error on first request—
@@ -166,6 +169,35 @@ async function ensureSchema() {
     );
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS sponsor_inquiries (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      company TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL DEFAULT '',
+      message TEXT NOT NULL DEFAULT '',
+      handled BOOLEAN NOT NULL DEFAULT false,
+      created_at TEXT NOT NULL
+    );
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS admin_users (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL DEFAULT '',
+      is_owner BOOLEAN NOT NULL DEFAULT false,
+      created_at TEXT NOT NULL
+    );
+  `;
+  // Seed the account owner so there is always a way in.
+  await sql`
+    INSERT INTO admin_users (email, name, is_owner, created_at)
+    VALUES ('andrew@podlogix.co', 'Andrew Appleton', true, ${new Date().toISOString()})
+    ON CONFLICT (email) DO UPDATE SET is_owner = true
+  `;
+
   // Migrate older databases created before these columns existed.
   await sql`ALTER TABLE signups ADD COLUMN IF NOT EXISTS photo_url TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS on_air_minutes INTEGER NOT NULL DEFAULT 25`;
@@ -198,8 +230,8 @@ async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
   const rows = await sql`
     SELECT 1
-    FROM information_schema.columns
-    WHERE table_name = 'reminders' AND column_name = 'phone'
+    FROM information_schema.tables
+    WHERE table_name = 'admin_users'
     LIMIT 1`;
   return rows.length > 0;
 }
@@ -262,6 +294,13 @@ export interface IStorage {
   createSponsor(data: { name: string; url: string; logoUrl: string }): Promise<SponsorRow>;
   updateSponsor(id: number, patch: UpdateSponsor): Promise<SponsorRow | undefined>;
   deleteSponsor(id: number): Promise<void>;
+  listAdmins(): Promise<AdminUserRow[]>;
+  isAdminEmail(email: string): Promise<boolean>;
+  addAdmin(email: string, name: string): Promise<AdminUserRow>;
+  removeAdmin(id: number): Promise<{ removed: boolean; reason?: string }>;
+  createSponsorInquiry(data: InsertSponsorInquiry): Promise<SponsorInquiryRow>;
+  listSponsorInquiries(): Promise<SponsorInquiryRow[]>;
+  setSponsorInquiryHandled(id: number, handled: boolean): Promise<void>;
 }
 
 // Default marathon: kicks off the next Saturday at 12:00 PM Eastern for 24 hours,
@@ -450,6 +489,60 @@ class DatabaseStorage implements IStorage {
         and(ne(podcasterProfiles.podcastName, ""), ne(podcasterProfiles.hostName, ""), ne(podcasterProfiles.photoUrl, "")),
       )
       .orderBy(podcasterProfiles.createdAt);
+  }
+
+  async createSponsorInquiry(data: InsertSponsorInquiry): Promise<SponsorInquiryRow> {
+    await ready();
+    const [created] = await db
+      .insert(sponsorInquiries)
+      .values({ ...data, createdAt: new Date().toISOString() })
+      .returning();
+    return created;
+  }
+
+  async listSponsorInquiries(): Promise<SponsorInquiryRow[]> {
+    await ready();
+    return db.select().from(sponsorInquiries).orderBy(desc(sponsorInquiries.id));
+  }
+
+  async setSponsorInquiryHandled(id: number, handled: boolean): Promise<void> {
+    await ready();
+    await db.update(sponsorInquiries).set({ handled }).where(eq(sponsorInquiries.id, id));
+  }
+
+  async listAdmins(): Promise<AdminUserRow[]> {
+    await ready();
+    return db.select().from(adminUsers).orderBy(asc(adminUsers.id));
+  }
+
+  async isAdminEmail(email: string): Promise<boolean> {
+    await ready();
+    const [row] = await db.select().from(adminUsers).where(eq(adminUsers.email, email.trim().toLowerCase()));
+    return !!row;
+  }
+
+  async addAdmin(email: string, name: string): Promise<AdminUserRow> {
+    await ready();
+    const normalized = email.trim().toLowerCase();
+    const [existing] = await db.select().from(adminUsers).where(eq(adminUsers.email, normalized));
+    if (existing) return existing;
+    const [created] = await db
+      .insert(adminUsers)
+      .values({ email: normalized, name: name.trim(), isOwner: false, createdAt: new Date().toISOString() })
+      .returning();
+    return created;
+  }
+
+  /** Owners can't be removed, and the last admin can't be removed. */
+  async removeAdmin(id: number): Promise<{ removed: boolean; reason?: string }> {
+    await ready();
+    const all = await this.listAdmins();
+    const target = all.find((a) => a.id === id);
+    if (!target) return { removed: false, reason: "That teammate isn't on the list." };
+    if (target.isOwner) return { removed: false, reason: "The account owner can't be removed." };
+    if (all.length <= 1) return { removed: false, reason: "You can't remove the last admin." };
+    await db.delete(adminUsers).where(eq(adminUsers.id, id));
+    return { removed: true };
   }
 
   async listSponsors(activeOnly: boolean): Promise<SponsorRow[]> {

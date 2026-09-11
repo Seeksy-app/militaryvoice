@@ -239,3 +239,31 @@ export async function sendReminderConfirmationEmail(raw: ReminderEmailInput): Pr
   const text = `You're set, ${raw.name}.\n\nWe'll email you before ${raw.podcastName} with ${raw.hostName} goes live${raw.wantsText ? ", and text you too" : ""}.\n\nOn air: ${raw.whenLabel} (${raw.timezoneLabel})\n\n${calendarText(raw.calendar)}\nView the agenda: ${raw.agendaUrl}\n`;
   return sendRawEmail({ to: raw.to, subject: `Reminder set: ${raw.podcastName} · ${raw.whenLabel}`, html, text });
 }
+
+/** Tell the admin team a sponsor asked to get involved. Never throws. */
+export async function sendSponsorInquiryEmail(input: {
+  to: string[];
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+  message: string;
+}): Promise<boolean> {
+  const row = (label: string, value: string) =>
+    value ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;font-size:13px;">${escapeHtml(label)}</td><td style="padding:4px 0;color:#111827;font-size:14px;">${escapeHtml(value)}</td></tr>` : "";
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
+    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoice.ai</p>
+    <h1 style="margin:0 0 16px;color:#111827;font-size:20px;font-weight:700;">New sponsor inquiry</h1>
+    <table style="border-collapse:collapse;">
+      ${row("Name", input.name)}${row("Company", input.company)}${row("Email", input.email)}${row("Phone", input.phone)}
+    </table>
+    ${input.message ? `<p style="margin:16px 0 0;padding:12px 16px;background:#f3f4f6;border-radius:10px;color:#374151;font-size:14px;line-height:1.6;">${escapeHtml(input.message)}</p>` : ""}
+    <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;">Reply straight to ${escapeHtml(input.email)} to pick it up.</p>
+  </div>`;
+  const text = `New sponsor inquiry\n\nName: ${input.name}\nCompany: ${input.company}\nEmail: ${input.email}\nPhone: ${input.phone}\n\n${input.message}\n`;
+  const results = await Promise.all(
+    input.to.map((to) => sendRawEmail({ to, subject: `Sponsor inquiry: ${input.company || input.name}`, html, text })),
+  );
+  return results.some(Boolean);
+}

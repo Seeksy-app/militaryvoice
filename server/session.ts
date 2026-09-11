@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 
 const COOKIE_NAME = "mv_host_session";
+const ADMIN_COOKIE_NAME = "mv_admin_session";
 const SESSION_DAYS = 30;
 
 // A real secret must be set in production (Vercel env var). The fallback keeps
@@ -97,4 +98,39 @@ export function requireHostSession(req: Request, res: Response, next: NextFuncti
   }
   (req as any).hostEmail = email;
   next();
+}
+
+// ---------------------------------------------------------------------------
+// Admin sessions. Same signing, separate cookie, so signing in as a podcaster
+// never grants admin and vice versa.
+// ---------------------------------------------------------------------------
+const ADMIN_SESSION_DAYS = 14;
+
+export function setAdminCookie(res: Response, email: string): void {
+  const exp = Date.now() + ADMIN_SESSION_DAYS * 24 * 60 * 60 * 1000;
+  const token = sign({ email, exp, role: "admin" });
+  const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+  const attrs = [
+    `${ADMIN_COOKIE_NAME}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${ADMIN_SESSION_DAYS * 24 * 60 * 60}`,
+  ];
+  if (isProd) attrs.push("Secure");
+  res.append("Set-Cookie", attrs.join("; "));
+}
+
+export function clearAdminCookie(res: Response): void {
+  res.append("Set-Cookie", `${ADMIN_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+export function getAdminEmail(req: Request): string | null {
+  const cookies = parseCookies(req.headers.cookie);
+  const token = cookies[ADMIN_COOKIE_NAME];
+  if (!token) return null;
+  const payload = verify(token);
+  if (!payload || payload.role !== "admin" || typeof payload.email !== "string" || typeof payload.exp !== "number") return null;
+  if (Date.now() > payload.exp) return null;
+  return payload.email;
 }

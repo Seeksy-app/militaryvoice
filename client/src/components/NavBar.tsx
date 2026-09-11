@@ -2,6 +2,8 @@ import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Moon, Sun, LogIn, LayoutDashboard, Menu } from "lucide-react";
 import { LogoLockup } from "@/components/Logo";
+import { SponsorDialog } from "@/components/SponsorDialog";
+import { AudioToggle } from "@/components/AudioPlayer";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -61,6 +63,11 @@ export function NavBar() {
               </Link>
             );
           })}
+          <SponsorDialog>
+            <button type="button" className={linkCls(false)} data-testid="link-nav-sponsors">
+              Sponsors
+            </button>
+          </SponsorDialog>
         </nav>
 
         <div className="flex items-center gap-1.5">
@@ -74,6 +81,7 @@ export function NavBar() {
               <span>{signedIn ? "Dashboard" : "Sign in"}</span>
             </Button>
           </Link>
+          <AudioToggle className="hidden sm:inline-flex" />
           <Button
             variant="ghost"
             size="icon"
@@ -104,6 +112,9 @@ export function NavBar() {
                 ),
               )}
               <DropdownMenuSeparator />
+              <SponsorDialog>
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Sponsors</DropdownMenuItem>
+              </SponsorDialog>
               <DropdownMenuItem asChild>
                 <Link href="/events">All events</Link>
               </DropdownMenuItem>
