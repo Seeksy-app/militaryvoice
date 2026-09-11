@@ -659,11 +659,10 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const email = (req as any).hostEmail as string;
-    const profile = await storage.getProfileByEmail(email);
-    if (!profile) {
-      res.status(400).json({ message: "Set up your podcaster profile first." });
-      return;
-    }
+    // First-time podcasters can connect socials from the setup form before
+    // saving; a stub profile row (email only) gives us a stable id to key the
+    // Upload-Post profile on. It stays hidden from public lists until finished.
+    const profile = (await storage.getProfileByEmail(email)) ?? (await storage.upsertProfile(email, {}));
     try {
       const username = profile.uploadPostUsername || uploadPostUsernameFor(profile.id);
       await ensureUploadPostProfile(username);

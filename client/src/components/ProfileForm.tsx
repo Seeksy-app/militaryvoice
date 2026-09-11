@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { apiUpload, resolveUploadUrl } from "@/lib/queryClient";
-import { insertProfileSchema, type ProfileRow } from "@shared/schema";
+import { apiUpload, apiRequest, resolveUploadUrl } from "@/lib/queryClient";
+import { SocialTiles } from "@/components/SocialTiles";
+import { insertProfileSchema, type ProfileRow, type SocialAccount } from "@shared/schema";
 import { PhotoCropDialog } from "@/components/PhotoCropDialog";
 import { formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
 import {
@@ -34,7 +35,33 @@ import {
   Image as ImageIcon,
   Users,
   Sparkles,
+  Save,
+  AlertCircle,
 } from "lucide-react";
+
+const DRAFT_KEY = "mv_profile_draft";
+interface Draft {
+  email: string;
+  values: Partial<FormValues>;
+  photoDataUrl: string | null;
+}
+function readDraft(email: string): Draft | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw) as Draft;
+    return d.email === email ? d : null;
+  } catch {
+    return null;
+  }
+}
+function clearDraft() {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 const formSchema = insertProfileSchema.extend({
   needsInterviewer: z.boolean(),
@@ -97,7 +124,14 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const bypassGuard = useRef(false);
   const isSetup = !profile;
+
+  const { data: social } = useQuery<{ configured: boolean; accounts: SocialAccount[] }>({
+    queryKey: ["/api/host/social"],
+    retry: false,
+  });
 
   function handlePhotoChange(file: File | null) {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
@@ -126,6 +160,10 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
     setPhotoPreview(URL.createObjectURL(file));
     setCropOpen(false);
     setRawImageSrc(null);
+    // Keep a data URL so the photo survives the social-connect round trip.
+    const r = new FileReader();
+    r.onload = () => setPhotoDataUrl(r.result as string);
+    r.readAsDataURL(blob);
   }
 
   const form = useForm<FormValues>({
@@ -147,8 +185,75 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
     },
   });
 
+  // Restore a draft stashed before a social-connect redirect (first-time setup only).
+  useEffect(() => {
+    if (profile) return;
+    const d = readDraft(email);
+    if (!d) return;
+    form.reset({ ...form.getValues(), ...d.values });
+    if (d.photoDataUrl) {
+      fetch(d.photoDataUrl)
+        .then((r) => r.blob())
+        .then((blob) => {
+          const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
+          setPhotoFile(file);
+          setPhotoPreview(URL.createObjectURL(file));
+          setPhotoDataUrl(d.photoDataUrl);
+        })
+        .catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const connectSocial = useMutation({
+    mutationFn: async () => {
+      // Stash everything typed so far; the connect flow leaves the page.
+      try {
+        const draft: Draft = { email, values: form.getValues(), photoDataUrl };
+        sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      } catch {
+        /* storage full or blocked — connect anyway */
+      }
+      const res = await apiRequest("POST", "/api/host/social/connect");
+      return (await res.json()) as { url: string };
+    },
+    onSuccess: ({ url }) => {
+      bypassGuard.current = true;
+      window.location.href = url;
+    },
+    onError: (err: Error) => toast({ title: "Couldn't open the connection page", description: err.message, variant: "destructive" }),
+  });
+
   const existingPhotoUrl = profile?.photoUrl ? resolveUploadUrl(profile.photoUrl) : null;
   const shownPhoto = photoPreview ?? existingPhotoUrl;
+  const dirty = form.formState.isDirty || !!photoFile;
+
+  // "Save before you leave": browser prompt on close/reload, and a confirm on
+  // in-app links while there are unsaved changes.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (bypassGuard.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    const onClickCapture = (e: MouseEvent) => {
+      if (bypassGuard.current) return;
+      const a = (e.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+      if (a.origin !== window.location.origin) return;
+      if (!window.confirm("You have unsaved changes. Leave this page without saving?")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("click", onClickCapture, true);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onClickCapture, true);
+    };
+  }, [dirty]);
   const watchPodcast = form.watch("podcastName");
   const watchHost = form.watch("hostName");
   const watchPeople = form.watch("numPeople");
@@ -178,6 +283,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
       return res.json();
     },
     onSuccess: () => {
+      clearDraft();
+      bypassGuard.current = true; // the caller navigates away next
       queryClient.invalidateQueries({ queryKey: ["/api/host/profile"] });
       queryClient.invalidateQueries({ queryKey: ["/api/podcasters"] });
       toast({
@@ -451,14 +558,31 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                   </FormItem>
                 )}
               />
-              <div className="flex items-start gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-3.5 text-sm">
-                <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <p className="text-muted-foreground">
-                  <span className="font-medium text-foreground">Connect Instagram, TikTok, YouTube, X, Facebook and LinkedIn</span>{" "}
-                  with one click from your dashboard right after this step. Each connected account shows on your card with
-                  your avatar and follower count, so listeners can tap straight through and follow you.
-                </p>
-              </div>
+              {social?.configured ? (
+                <div>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">
+                      <Link2 className="mr-1.5 inline h-4 w-4 text-primary" />
+                      Tap a network to connect it
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Connected accounts show on your card with avatar and follower count.
+                    </p>
+                  </div>
+                  <SocialTiles accounts={social.accounts} onConnect={() => connectSocial.mutate()} connecting={connectSocial.isPending} />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Connecting opens a secure page and brings you right back here. What you've typed is kept.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-3.5 text-sm">
+                  <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <p className="text-muted-foreground">
+                    <span className="font-medium text-foreground">Connect Instagram, TikTok, YouTube, X, Facebook and LinkedIn</span>{" "}
+                    from your dashboard. Each connected account shows on your card with your avatar and follower count.
+                  </p>
+                </div>
+              )}
             </SectionCard>
 
             <SectionCard
@@ -654,10 +778,25 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
         </div>
 
         {/* sticky action bar */}
-        <div className="sticky bottom-0 z-10 mt-6 -mx-4 border-t border-border bg-background/90 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-2xl sm:border">
+        <div
+          className={`sticky bottom-0 z-10 mt-6 -mx-4 border-t-2 px-4 py-3 shadow-[0_-10px_30px_rgba(0,7,65,0.12)] backdrop-blur sm:mx-0 sm:rounded-2xl sm:border-2 ${
+            dirty ? "border-[#F0A71F] bg-[#fff7e6]/95 dark:bg-[#2a1f05]/95" : "border-border bg-background/95"
+          }`}
+          data-testid="bar-save"
+        >
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-muted-foreground">
-              <span className="text-destructive">*</span> Required. Everything else can be added later.
+            <p className="flex items-center gap-2 text-sm">
+              {dirty ? (
+                <>
+                  <AlertCircle className="h-4 w-4 text-[#b7791f]" />
+                  <span className="font-medium text-foreground">Unsaved changes.</span>
+                  <span className="text-muted-foreground">Save before you leave this page.</span>
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground">
+                  <span className="text-destructive">*</span> Required. Everything else can be added later.
+                </span>
+              )}
             </p>
             <div className="flex items-center gap-2">
               {onCancel && (
@@ -665,7 +804,13 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                   Cancel
                 </Button>
               )}
-              <Button type="submit" disabled={mutation.isPending} className="gap-1.5 rounded-full px-5" data-testid="button-save-profile">
+              <Button
+                type="submit"
+                size="lg"
+                disabled={mutation.isPending}
+                className="gap-2 rounded-full bg-[#F0A71F] px-6 text-base font-semibold text-[#1a1200] hover:bg-[#f5b944]"
+                data-testid="button-save-profile"
+              >
                 {mutation.isPending ? (
                   "Saving…"
                 ) : pendingSlot ? (
@@ -673,9 +818,13 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                     <Users className="h-4 w-4" /> Save & claim my slot
                   </>
                 ) : isSetup ? (
-                  "Save & continue"
+                  <>
+                    <Save className="h-4 w-4" /> Save & continue
+                  </>
                 ) : (
-                  "Save changes"
+                  <>
+                    <Save className="h-4 w-4" /> Save changes
+                  </>
                 )}
               </Button>
             </div>

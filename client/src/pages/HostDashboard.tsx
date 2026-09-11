@@ -45,7 +45,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
-import { PlatformIcon, platformLabel, platformColor, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
+import { SocialTiles } from "@/components/SocialTiles";
 import { apiRequest, API_BASE, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, ProfileRow, SocialAccount } from "@shared/schema";
 import {
@@ -740,75 +740,7 @@ export default function HostDashboard() {
                             </Button>
                           </div>
                         </div>
-                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-7">
-                          {ALL_PLATFORMS.map((platform) => {
-                            const a = social.accounts.find((x) => x.platform === platform);
-                            const color = platformColor(platform);
-                            if (!a) {
-                              return (
-                                <button
-                                  key={platform}
-                                  type="button"
-                                  onClick={() => connectSocial.mutate()}
-                                  title={`Connect ${platformLabel(platform)}`}
-                                  className="flex flex-col items-center rounded-xl border border-dashed border-border p-3 text-center opacity-60 transition-opacity hover:opacity-100"
-                                  data-testid={`tile-social-${platform}`}
-                                >
-                                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                                    <PlatformIcon platform={platform} className="h-5 w-5 grayscale" />
-                                  </span>
-                                  <span className="mt-2 w-full truncate text-xs font-medium text-muted-foreground">{platformLabel(platform)}</span>
-                                  <span className="whitespace-nowrap text-[11px] text-muted-foreground/70">Not connected</span>
-                                </button>
-                              );
-                            }
-                            const label =
-                              a.username && !/^\d+$/.test(a.username) ? `@${a.username}` : a.displayName || platformLabel(a.platform);
-                            const followers = formatFollowers(a.followers);
-                            const initial = (a.displayName || a.username || platformLabel(a.platform)).charAt(0).toUpperCase();
-                            const body = (
-                              <>
-                                <span className="relative">
-                                  {a.image ? (
-                                    <img
-                                      src={a.image}
-                                      alt=""
-                                      className="h-12 w-12 rounded-full object-cover ring-2 ring-border"
-                                      referrerPolicy="no-referrer"
-                                    />
-                                  ) : (
-                                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-base font-bold text-primary ring-2 ring-border">
-                                      {initial}
-                                    </span>
-                                  )}
-                                  <span
-                                    className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-white shadow ring-1 ring-black/5"
-                                    style={{ color }}
-                                  >
-                                    <PlatformIcon platform={platform} className="h-3.5 w-3.5" />
-                                  </span>
-                                </span>
-                                <span className="mt-2 w-full truncate text-xs font-semibold text-card-foreground" title={label}>
-                                  {label}
-                                </span>
-                                <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                                  {followers ? `${followers} followers` : platformLabel(platform)}
-                                </span>
-                              </>
-                            );
-                            const cls =
-                              "flex flex-col items-center rounded-xl border border-border bg-background p-3 text-center transition-colors hover:border-primary/40";
-                            return a.url ? (
-                              <a key={platform} href={a.url} target="_blank" rel="noopener noreferrer" className={cls} data-testid={`tile-social-${platform}`}>
-                                {body}
-                              </a>
-                            ) : (
-                              <span key={platform} className={cls} data-testid={`tile-social-${platform}`}>
-                                {body}
-                              </span>
-                            );
-                          })}
-                        </div>
+                        <SocialTiles accounts={social.accounts} onConnect={() => connectSocial.mutate()} connecting={connectSocial.isPending} />
                         {social.accounts.length === 0 && (
                           <p className="mt-2 text-sm text-muted-foreground">
                             Nothing linked yet. Connected accounts light up here and show as follow buttons on your card in the lineup.
