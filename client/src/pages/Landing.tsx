@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
@@ -6,6 +7,7 @@ import { LogoMark, Wordmark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
+import { SpotlightCard } from "@/components/SpotlightCard";
 import { useCountdown } from "@/hooks/use-countdown";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
@@ -37,6 +39,10 @@ interface Props {
 }
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
+const FADE_UP = {
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+};
 
 export default function Landing({ slug }: Props) {
   const { data: event, isLoading: eventLoading } = useQuery<PublicEvent>({
@@ -88,13 +94,17 @@ export default function Landing({ slug }: Props) {
 
       {/* ------------------------------------------------------------ HERO */}
       <section className="relative overflow-hidden bg-[#053877] text-white dark:bg-[#04244d]">
-        <div
+        <motion.div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-[0.12]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 20% 20%, #F0A71F 0, transparent 35%), radial-gradient(circle at 85% 80%, #ffffff 0, transparent 40%)",
-          }}
+          className="pointer-events-none absolute -left-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-[#F0A71F] opacity-[0.14] blur-3xl"
+          animate={{ x: [0, 40, 0], y: [0, 24, 0] }}
+          transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          aria-hidden="true"
+          className="pointer-events-none absolute -bottom-40 right-0 h-[30rem] w-[30rem] rounded-full bg-white opacity-[0.08] blur-3xl"
+          animate={{ x: [0, -30, 0], y: [0, -20, 0] }}
+          transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
         />
         <div className="relative mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
           {eventLoading || !event ? (
@@ -104,8 +114,12 @@ export default function Landing({ slug }: Props) {
               <Skeleton className="h-5 w-96 bg-white/20" />
             </div>
           ) : (
-            <div>
-              <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em]">
+            <motion.div
+              initial="hidden"
+              animate="show"
+              variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09 } } }}
+            >
+              <motion.div variants={FADE_UP} className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em]">
                 <span className="inline-block h-2 w-2 rounded-full bg-[#F0A71F]" />
                 {event.durationHours}-hour podcast marathon
                 {start && (
@@ -114,19 +128,20 @@ export default function Landing({ slug }: Props) {
                     {formatDateInZone(start, zone)}
                   </>
                 )}
-              </div>
-              <h1
+              </motion.div>
+              <motion.h1
+                variants={FADE_UP}
                 className="text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl"
                 style={HEADLINE_FONT}
                 data-testid="text-landing-title"
               >
                 {event.name.trim()}
-              </h1>
-              <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/80" data-testid="text-landing-tagline">
+              </motion.h1>
+              <motion.p variants={FADE_UP} className="mt-5 max-w-xl text-lg leading-relaxed text-white/80" data-testid="text-landing-tagline">
                 {event.tagline || event.description}
-              </p>
+              </motion.p>
 
-              <div className="mt-8 flex flex-wrap items-center gap-3">
+              <motion.div variants={FADE_UP} className="mt-8 flex flex-wrap items-center gap-3">
                 <Link href="/host/dashboard">
                   <Button
                     size="lg"
@@ -146,17 +161,55 @@ export default function Landing({ slug }: Props) {
                     See who's on <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
-              </div>
+              </motion.div>
 
-              <p className="mt-6 text-sm text-white/60">
+              <motion.p variants={FADE_UP} className="mt-6 text-sm text-white/60">
                 Free for podcasters. Go live from your own studio. Times shown in {zoneLabel(zone)}.
-              </p>
-            </div>
+              </motion.p>
+            </motion.div>
           )}
 
-          {/* Stats card */}
-          {event && start && end && (
-            <div className="relative">
+          {/* Right column: rotating podcaster spotlight once anyone has claimed
+              a slot, otherwise the countdown/stats card. */}
+          {event && start && end && lineup.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
+              className="flex flex-col gap-4"
+            >
+              <SpotlightCard items={lineup} zone={zone} agendaHref={agendaHref} />
+              <div className="grid grid-cols-3 gap-2" data-testid="strip-landing-stats">
+                {[
+                  {
+                    label: countdown.phase === "live" ? "Status" : countdown.phase === "done" ? "Status" : "Starts in",
+                    value:
+                      countdown.phase === "upcoming"
+                        ? `${countdown.days > 0 ? `${countdown.days}d ` : ""}${countdown.hours}h ${countdown.minutes}m`
+                        : countdown.phase === "live"
+                          ? "Live now"
+                          : "Wrapped",
+                  },
+                  { label: "Confirmed", value: `${booked.length}` },
+                  { label: "Slots open", value: `${openCount}/${slotCount}` },
+                ].map(({ label, value }) => (
+                  <div key={label} className="rounded-2xl border border-white/15 bg-white/10 px-3 py-3 text-center backdrop-blur">
+                    <div className="font-mono text-base font-bold tabular-nums sm:text-lg">{value}</div>
+                    <div className="text-[11px] font-medium uppercase tracking-wide text-white/60">{label}</div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Stats card (empty lineup) */}
+          {event && start && end && lineup.length === 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
+              className="relative"
+            >
               <div className="absolute inset-0 rotate-2 rounded-[1.75rem] bg-[#F0A71F]/90" aria-hidden="true" />
               <div className="relative rounded-[1.75rem] bg-card p-6 text-card-foreground shadow-2xl sm:p-8" data-testid="card-landing-stats">
                 <div className="flex items-center justify-between">
@@ -216,7 +269,7 @@ export default function Landing({ slug }: Props) {
                   />
                 </div>
               </div>
-            </div>
+            </motion.div>
           )}
         </div>
       </section>
@@ -354,9 +407,13 @@ export default function Landing({ slug }: Props) {
             </div>
           ) : (
             <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {lineup.slice(0, 12).map(({ signup, start: onAirStart }) => (
-                <div
+              {lineup.slice(0, 12).map(({ signup, start: onAirStart }, i) => (
+                <motion.div
                   key={signup.id}
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-40px" }}
+                  transition={{ duration: 0.45, delay: Math.min(i, 6) * 0.06 }}
                   className="flex flex-col items-center rounded-2xl border border-border bg-card p-5 text-center"
                   data-testid={`card-lineup-${signup.id}`}
                 >
@@ -377,7 +434,7 @@ export default function Landing({ slug }: Props) {
                     {formatDateInZone(onAirStart, zone)} · {formatTimeInZone(onAirStart, zone)}
                   </div>
                   <SocialIconRow accounts={parseSocialAccounts(signup.socialAccounts)} className="mt-3 justify-center" />
-                </div>
+                </motion.div>
               ))}
               {lineup.length > 12 && (
                 <Link
