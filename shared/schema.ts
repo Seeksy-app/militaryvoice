@@ -13,10 +13,23 @@ export const events = sqliteTable("events", {
   startAtUtc: text("start_at_utc").notNull(), // ISO 8601 UTC string
   durationHours: integer("duration_hours").notNull().default(24),
   slotMinutes: integer("slot_minutes").notNull().default(60),
+  // On-air time vs. sponsor/transition buffer within each booked slot.
+  // e.g. a 30-minute slot with onAirMinutes=25 and bufferMinutes=5 (bufferPosition="after")
+  // means the podcaster is live for the first 25 minutes, then 5 minutes for the
+  // sponsor read / transition to the next show.
+  onAirMinutes: integer("on_air_minutes").notNull().default(25),
+  bufferMinutes: integer("buffer_minutes").notNull().default(5),
+  bufferPosition: text("buffer_position").notNull().default("after"), // "before" | "after"
   adminPassword: text("admin_password").notNull().default("reveille2026"),
 });
 
-export const insertEventSchema = createInsertSchema(events).omit({ id: true });
+export const insertEventSchema = createInsertSchema(events)
+  .omit({ id: true })
+  .extend({
+    onAirMinutes: z.number().int().min(1),
+    bufferMinutes: z.number().int().min(0),
+    bufferPosition: z.enum(["before", "after"]),
+  });
 export const updateEventSchema = insertEventSchema.partial();
 export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type UpdateEvent = z.infer<typeof updateEventSchema>;

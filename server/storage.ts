@@ -27,6 +27,9 @@ sqlite.exec(`
     start_at_utc TEXT NOT NULL,
     duration_hours INTEGER NOT NULL DEFAULT 24,
     slot_minutes INTEGER NOT NULL DEFAULT 60,
+    on_air_minutes INTEGER NOT NULL DEFAULT 25,
+    buffer_minutes INTEGER NOT NULL DEFAULT 5,
+    buffer_position TEXT NOT NULL DEFAULT 'after',
     admin_password TEXT NOT NULL DEFAULT 'reveille2026'
   );
   CREATE TABLE IF NOT EXISTS signups (
@@ -65,6 +68,22 @@ try {
   }
 } catch (err) {
   console.error("Failed to migrate signups.photo_url column:", err);
+}
+
+// Migrate older databases created before the on-air buffer columns existed.
+try {
+  const cols = sqlite.prepare("PRAGMA table_info(events)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "on_air_minutes")) {
+    sqlite.exec("ALTER TABLE events ADD COLUMN on_air_minutes INTEGER NOT NULL DEFAULT 25");
+  }
+  if (!cols.some((c) => c.name === "buffer_minutes")) {
+    sqlite.exec("ALTER TABLE events ADD COLUMN buffer_minutes INTEGER NOT NULL DEFAULT 5");
+  }
+  if (!cols.some((c) => c.name === "buffer_position")) {
+    sqlite.exec("ALTER TABLE events ADD COLUMN buffer_position TEXT NOT NULL DEFAULT 'after'");
+  }
+} catch (err) {
+  console.error("Failed to migrate events buffer columns:", err);
 }
 
 export interface IStorage {
@@ -106,6 +125,9 @@ class DatabaseStorage implements IStorage {
           startAtUtc: defaultStartAtUtc(),
           durationHours: 24,
           slotMinutes: 60,
+          onAirMinutes: 25,
+          bufferMinutes: 5,
+          bufferPosition: "after",
           adminPassword: "reveille2026",
         })
         .returning()

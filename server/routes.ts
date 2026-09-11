@@ -16,6 +16,7 @@ import {
   type PublicSignup,
 } from "@shared/schema";
 import { fromError } from "zod-validation-error";
+import { sendConfirmationEmail } from "./email";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
@@ -74,6 +75,36 @@ function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[numbe
 // ICS timestamp format: YYYYMMDDTHHMMSSZ
 function toIcsUtcStamp(date: Date): string {
   return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+}
+
+function formatTimeInZone(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit", hour12: true }).format(date);
+}
+
+function formatDateTimeInZone(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
+/** Mirrors client/src/lib/schedule.ts onAirWindow() for use in the server (emails, ICS). */
+function onAirWindowServer(
+  blockStart: Date,
+  onAirMinutes: number,
+  bufferMinutes: number,
+  bufferPosition: string
+): { start: Date; end: Date } {
+  if (bufferPosition === "before") {
+    const start = new Date(blockStart.getTime() + bufferMinutes * 60000);
+    return { start, end: new Date(start.getTime() + onAirMinutes * 60000) };
+  }
+  return { start: blockStart, end: new Date(blockStart.getTime() + onAirMinutes * 60000) };
 }
 
 function icsEscape(text: string): string {
@@ -169,6 +200,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
     const created = await storage.createSignup({ ...parsed.data, photoUrl });
     res.status(201).json(toPublicSignup(created));
+
+    // Send the confirmation email in the background — never block or fail the
+    // signup response on email delivery.
+    (async () => {
+      try {
+        const blockStart = new Date(new Date(event.startAtUtc).getTime() + created.slotIndex * event.slotMinutes * 60000);
+        const blockEnd = new Date(blockStart.getTime() + event.slotMinutes * 60000);
+        const tz = created.timezone || "America/New_York";
+        const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+        const protocol = req.protocol;
+        const host = req.get("host");
+        const agendaUrl = `${protocol}://${host}/#/agenda`;
+        await sendConfirmationEmail({
+          to: created.email,
+          hostName: created.hostName,
+          podcastName: created.podcastName,
+          eventName: event.name,
+          blockStartLabel: formatDateTimeInZone(blockStart, tz),
+          blockEndLabel: formatTimeInZone(blockEnd, tz),
+          onAirStartLabel: formatDateTimeInZone(onAir.start, tz),
+          onAirEndLabel: formatTimeInZone(onAir.end, tz),
+          bufferMinutes: event.bufferMinutes,
+          bufferPosition: (event.bufferPosition as "before" | "after") ?? "after",
+          timezoneLabel: tz,
+          agendaUrl,
+        });
+      } catch (err) {
+        console.error("Failed to send signup confirmation email:", err);
+      }
+    })();
   });
 
   // ---- Public: download a personal calendar reminder for a slot --------------
@@ -182,6 +243,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const event = await storage.getEvent();
     const start = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
     const end = new Date(start.getTime() + event.slotMinutes * 60000);
+    const tz = signup.timezone || "America/New_York";
+    const onAir = onAirWindowServer(start, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+    const bufferNote =
+      event.bufferMinutes > 0
+        ? ` (on air ${formatTimeInZone(onAir.start, tz)}–${formatTimeInZone(onAir.end, tz)} ${tz}, with a ${event.bufferMinutes}-minute buffer ${event.bufferPosition} for sponsor/transition)`
+        : "";
 
     const ics = [
       "BEGIN:VCALENDAR",
@@ -194,7 +261,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       `DTSTART:${toIcsUtcStamp(start)}`,
       `DTEND:${toIcsUtcStamp(end)}`,
       `SUMMARY:${icsEscape(`${signup.podcastName} — Reveille Podcast Marathon`)}`,
-      `DESCRIPTION:${icsEscape(`${signup.hostName} is live on the Reveille 24-Hour Podcast Marathon. Tune in!`)}`,
+      `DESCRIPTION:${icsEscape(`${signup.hostName} is live on the Reveille 24-Hour Podcast Marathon. Tune in!${bufferNote}`)}`,
       "END:VEVENT",
       "END:VCALENDAR",
     ].join("\r\n");

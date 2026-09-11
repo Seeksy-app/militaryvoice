@@ -20,6 +20,7 @@ import {
   primeZonesFor,
   isHiddenGemSlot,
   zoneLabel,
+  onAirWindow,
 } from "@/lib/schedule";
 
 export default function Agenda() {
@@ -29,6 +30,10 @@ export default function Agenda() {
 
   const [viewZone, setViewZone] = useState(detectLocalTimeZone);
   const localZone = useMemo(detectLocalTimeZone, []);
+
+  const onAirSettings = event
+    ? { onAirMinutes: event.onAirMinutes, bufferMinutes: event.bufferMinutes, bufferPosition: event.bufferPosition }
+    : undefined;
 
   const slots = useMemo(() => {
     if (!event) return [];
@@ -125,6 +130,12 @@ export default function Agenda() {
                           <span className="font-mono text-sm font-semibold tabular-nums">
                             {formatTimeInZone(s.start, viewZone)}–{formatTimeInZone(s.end, viewZone)}
                           </span>
+                          {s.signup && onAirSettings && (
+                            <span className="text-xs text-muted-foreground" data-testid={`text-agenda-onair-${s.index}`}>
+                              On air {formatTimeInZone(onAirWindow(s.start, onAirSettings).start, viewZone)}–
+                              {formatTimeInZone(onAirWindow(s.start, onAirSettings).end, viewZone)}
+                            </span>
+                          )}
                           {s.signup ? (
                             <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0 text-sm" data-testid={`text-agenda-podcast-${s.index}`}>
                               <span className="flex items-center gap-1.5 font-medium">

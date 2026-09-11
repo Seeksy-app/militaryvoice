@@ -19,6 +19,7 @@ import {
   formatTimeInZone,
   isHiddenGemSlot,
   primeZonesFor,
+  onAirWindow,
 } from "@/lib/schedule";
 
 function useCountdown(startAtUtc?: string, durationHours?: number) {
@@ -92,6 +93,10 @@ export default function Home() {
     [slots]
   );
   const spotlightPreview = spotlightSlots[0];
+  const onAirSettings = event
+    ? { onAirMinutes: event.onAirMinutes, bufferMinutes: event.bufferMinutes, bufferPosition: event.bufferPosition }
+    : undefined;
+  const nextOnAir = nextBooked && onAirSettings ? onAirWindow(nextBooked.start, onAirSettings) : null;
 
   return (
     <div className="min-h-screen">
@@ -178,7 +183,7 @@ export default function Home() {
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold text-card-foreground">{nextBooked.signup.podcastName}</div>
                         <div className="truncate text-xs text-muted-foreground">
-                          {formatDateInZone(nextBooked.start, viewZone)} · {formatTimeInZone(nextBooked.start, viewZone)}
+                          {formatDateInZone(nextBooked.start, viewZone)} · {formatTimeInZone(nextOnAir?.start ?? nextBooked.start, viewZone)}
                         </div>
                       </div>
                     </div>
@@ -239,6 +244,7 @@ export default function Home() {
                 signup={s.signup}
                 showDate={true}
                 onClaim={openClaim}
+                onAirSettings={onAirSettings}
               />
             ))}
           </div>
@@ -265,6 +271,7 @@ export default function Home() {
                 signup={s.signup}
                 showDate={s.showDate}
                 onClaim={openClaim}
+                onAirSettings={onAirSettings}
               />
             ))}
           </div>

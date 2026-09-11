@@ -23,7 +23,7 @@ import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2 } from "lucide-react";
 import type { EventRow, SignupRow, UpdateEvent } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
-import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
+import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
 
 const SLOT_LENGTH_OPTIONS = [15, 20, 30, 45, 60, 90, 120];
 
@@ -91,6 +91,9 @@ function EventSettingsCard({ password }: { password: string }) {
     startLocal: string;
     durationHours: number;
     slotMinutes: number;
+    onAirMinutes: number;
+    bufferMinutes: number;
+    bufferPosition: "before" | "after";
   } | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -103,6 +106,9 @@ function EventSettingsCard({ password }: { password: string }) {
         startLocal: utcToDateTimeLocalValue(new Date(event.startAtUtc), zone),
         durationHours: event.durationHours,
         slotMinutes: event.slotMinutes,
+        onAirMinutes: event.onAirMinutes,
+        bufferMinutes: event.bufferMinutes,
+        bufferPosition: (event.bufferPosition as "before" | "after") ?? "after",
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -129,6 +135,9 @@ function EventSettingsCard({ password }: { password: string }) {
         startAtUtc: dateTimeLocalToUtc(form.startLocal, zone).toISOString(),
         durationHours: form.durationHours,
         slotMinutes: form.slotMinutes,
+        onAirMinutes: form.onAirMinutes,
+        bufferMinutes: form.bufferMinutes,
+        bufferPosition: form.bufferPosition,
       };
       await adminSend("PUT", "/api/admin/event", password, patch);
       await Promise.all([
@@ -240,6 +249,61 @@ function EventSettingsCard({ password }: { password: string }) {
           That's {Math.floor((form.durationHours * 60) / form.slotMinutes)} slots on the schedule.
         </p>
 
+        <div className="rounded-lg border border-border p-4">
+          <Label className="text-sm font-semibold">On-air time vs. sponsor/transition buffer</Label>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Split each booked slot into the podcaster's actual talk time and a short buffer for sponsor reads or
+            transitioning to the next show.
+          </p>
+          <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <Label htmlFor="event-onair-minutes">On-air minutes</Label>
+              <Input
+                id="event-onair-minutes"
+                type="number"
+                min={1}
+                max={form.slotMinutes}
+                value={form.onAirMinutes}
+                onChange={(e) => setForm({ ...form, onAirMinutes: Number(e.target.value) })}
+                data-testid="input-onair-minutes"
+              />
+            </div>
+            <div>
+              <Label htmlFor="event-buffer-minutes">Buffer minutes</Label>
+              <Input
+                id="event-buffer-minutes"
+                type="number"
+                min={0}
+                max={form.slotMinutes}
+                value={form.bufferMinutes}
+                onChange={(e) => setForm({ ...form, bufferMinutes: Number(e.target.value) })}
+                data-testid="input-buffer-minutes"
+              />
+            </div>
+            <div>
+              <Label htmlFor="event-buffer-position">Buffer position</Label>
+              <Select
+                value={form.bufferPosition}
+                onValueChange={(v) => setForm({ ...form, bufferPosition: v as "before" | "after" })}
+              >
+                <SelectTrigger id="event-buffer-position" data-testid="select-buffer-position">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="before">Before on-air segment</SelectItem>
+                  <SelectItem value="after">After on-air segment</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {form.onAirMinutes + form.bufferMinutes !== form.slotMinutes && (
+            <p className="mt-2 text-xs text-amber-600 dark:text-amber-500" data-testid="text-buffer-mismatch">
+              Heads up: on-air + buffer ({form.onAirMinutes + form.bufferMinutes}m) doesn't match the {form.slotMinutes}m
+              slot length.
+            </p>
+          )}
+        </div>
+
         <Button onClick={handleSave} disabled={saving} className="self-start" data-testid="button-save-event">
           {saving ? "Saving…" : "Save settings"}
         </Button>
@@ -320,10 +384,18 @@ function SignupsCard({ password }: { password: string }) {
                   .sort((a, b) => a.slotIndex - b.slotIndex)
                   .map((s) => {
                     const start = slotStart(event.startAtUtc, event.slotMinutes, s.slotIndex);
+                    const onAir = onAirWindow(start, {
+                      onAirMinutes: event.onAirMinutes,
+                      bufferMinutes: event.bufferMinutes,
+                      bufferPosition: event.bufferPosition,
+                    });
                     return (
                       <TableRow key={s.id} data-testid={`row-signup-${s.id}`}>
                         <TableCell className="whitespace-nowrap font-mono text-xs">
-                          {formatDateInZone(start, zone)} {formatTimeInZone(start, zone)}
+                          <div>{formatDateInZone(start, zone)} {formatTimeInZone(start, zone)}</div>
+                          <div className="text-muted-foreground">
+                            On air {formatTimeInZone(onAir.start, zone)}–{formatTimeInZone(onAir.end, zone)}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2 font-medium">

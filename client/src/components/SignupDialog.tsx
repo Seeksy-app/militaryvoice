@@ -21,7 +21,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiUpload } from "@/lib/queryClient";
 import { insertSignupSchema } from "@shared/schema";
 import { formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
-import { Camera, ImagePlus, X } from "lucide-react";
+import { PhotoCropDialog } from "@/components/PhotoCropDialog";
+import { Camera, ImagePlus, X, Crop } from "lucide-react";
 
 const formSchema = insertSignupSchema.extend({
   needsInterviewer: z.boolean(),
@@ -44,6 +45,8 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
 
   function handlePhotoChange(file: File | null) {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
@@ -57,8 +60,23 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
       return;
     }
     setPhotoError(null);
+    // Open the crop step instead of using the raw file directly — this is what
+    // lets people reposition portrait or landscape photos before we square-crop them.
+    const reader = new FileReader();
+    reader.onload = () => {
+      setRawImageSrc(reader.result as string);
+      setCropOpen(true);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleCropConfirm(blob: Blob) {
+    const file = new File([blob], "photo.jpg", { type: "image/jpeg" });
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoFile(file);
     setPhotoPreview(URL.createObjectURL(file));
+    setCropOpen(false);
+    setRawImageSrc(null);
   }
 
   const form = useForm<FormValues>({
@@ -103,6 +121,8 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
       });
       handlePhotoChange(null);
       setPhotoError(null);
+      setCropOpen(false);
+      setRawImageSrc(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -190,18 +210,35 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
                     <ImagePlus className="h-3.5 w-3.5" />
                     {photoFile ? "Change photo" : "Upload photo"}
                   </Button>
-                  {photoFile && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handlePhotoChange(null);
-                        if (fileInputRef.current) fileInputRef.current.value = "";
-                      }}
-                      className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
-                    >
-                      <X className="h-3 w-3" /> Remove
-                    </button>
-                  )}
+                  <div className="flex items-center gap-3">
+                    {photoFile && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (photoPreview) {
+                            setRawImageSrc(photoPreview);
+                            setCropOpen(true);
+                          }
+                        }}
+                        className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                        data-testid="button-adjust-crop"
+                      >
+                        <Crop className="h-3 w-3" /> Adjust crop
+                      </button>
+                    )}
+                    {photoFile && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handlePhotoChange(null);
+                          if (fileInputRef.current) fileInputRef.current.value = "";
+                        }}
+                        className="flex w-fit items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" /> Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <input
                   ref={fileInputRef}
@@ -213,6 +250,16 @@ export function SignupDialog({ open, onOpenChange, slotIndex, start, end, viewZo
                 />
               </div>
               {photoError && <p className="mt-1.5 text-sm font-medium text-destructive">{photoError}</p>}
+              <PhotoCropDialog
+                open={cropOpen}
+                imageSrc={rawImageSrc}
+                onCancel={() => {
+                  setCropOpen(false);
+                  setRawImageSrc(null);
+                  if (!photoFile && fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                onConfirm={handleCropConfirm}
+              />
             </div>
 
             <FormField

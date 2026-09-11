@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Globe2, Mic2, Video, Presentation, Image as ImageIcon, Users, HeadphonesIcon } from "lucide-react";
 import type { PublicSignup } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
-import { formatTimeInZone, formatDateInZone, primeZonesFor, isHiddenGemSlot } from "@/lib/schedule";
+import { formatTimeInZone, formatDateInZone, primeZonesFor, isHiddenGemSlot, onAirWindow, type OnAirSettings } from "@/lib/schedule";
 
 interface Props {
   index: number;
@@ -14,17 +14,19 @@ interface Props {
   signup?: PublicSignup;
   showDate: boolean;
   onClaim: (index: number) => void;
+  onAirSettings?: OnAirSettings;
 }
 
-export function SlotCard({ index, start, end, viewZone, signup, showDate, onClaim }: Props) {
+export function SlotCard({ index, start, end, viewZone, signup, showDate, onClaim, onAirSettings }: Props) {
   const prime = primeZonesFor(start);
   const hiddenGem = isHiddenGemSlot(start);
   const isOpen = !signup;
+  const onAir = onAirSettings ? onAirWindow(start, onAirSettings) : null;
 
   return (
     <Card
       data-testid={`card-slot-${index}`}
-      className={`flex flex-col gap-3 p-4 ${hiddenGem ? "border-primary/50 ring-1 ring-primary/20" : ""}`}
+      className={`flex flex-col gap-3 p-4 pb-5 ${hiddenGem ? "border-primary/50 ring-1 ring-primary/20" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div>
@@ -37,6 +39,13 @@ export function SlotCard({ index, start, end, viewZone, signup, showDate, onClai
             <span className="whitespace-nowrap">{formatTimeInZone(start, viewZone)}</span>
             <span className="whitespace-nowrap text-muted-foreground"> – {formatTimeInZone(end, viewZone)}</span>
           </div>
+          {onAir && signup && (
+            <div className="mt-0.5 text-xs text-muted-foreground" data-testid={`text-onair-${index}`}>
+              On air {formatTimeInZone(onAir.start, viewZone)}–{formatTimeInZone(onAir.end, viewZone)}
+              {onAirSettings!.bufferMinutes > 0 &&
+                ` · ${onAirSettings!.bufferMinutes}m ${onAirSettings!.bufferPosition === "before" ? "before" : "after"} for transition`}
+            </div>
+          )}
         </div>
         <Badge
           variant={isOpen ? "outline" : "secondary"}
@@ -72,7 +81,7 @@ export function SlotCard({ index, start, end, viewZone, signup, showDate, onClai
               {signup.podcastName}
             </span>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-x-1.5 gap-y-2">
             <Badge variant="outline" className="gap-1 text-xs font-normal">
               <Users className="h-3 w-3" /> {signup.numPeople === 2 ? "2 hosts" : "1 host"}
             </Badge>

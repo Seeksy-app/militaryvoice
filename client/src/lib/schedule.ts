@@ -63,6 +63,43 @@ export function slotEnd(eventStartUtc: string, slotMinutes: number, index: numbe
   return new Date(slotStart(eventStartUtc, slotMinutes, index).getTime() + slotMinutes * 60000);
 }
 
+export interface OnAirSettings {
+  onAirMinutes: number;
+  bufferMinutes: number;
+  bufferPosition: string; // "before" | "after"
+}
+
+/**
+ * The actual live segment within a booked slot — shorter than the full block
+ * to leave room for a sponsor read / transition buffer before or after.
+ */
+export function onAirWindow(
+  blockStart: Date,
+  settings: OnAirSettings
+): { start: Date; end: Date } {
+  const onAirMs = settings.onAirMinutes * 60000;
+  const bufferMs = settings.bufferMinutes * 60000;
+  if (settings.bufferPosition === "before") {
+    const start = new Date(blockStart.getTime() + bufferMs);
+    return { start, end: new Date(start.getTime() + onAirMs) };
+  }
+  const start = blockStart;
+  return { start, end: new Date(start.getTime() + onAirMs) };
+}
+
+/** The buffer window within a booked slot (opposite side of the on-air segment). */
+export function bufferWindow(
+  blockStart: Date,
+  blockEnd: Date,
+  settings: OnAirSettings
+): { start: Date; end: Date } {
+  if (settings.bufferPosition === "before") {
+    return { start: blockStart, end: new Date(blockStart.getTime() + settings.bufferMinutes * 60000) };
+  }
+  const start = new Date(blockStart.getTime() + settings.onAirMinutes * 60000);
+  return { start, end: blockEnd };
+}
+
 export function hourInZone(date: Date, timeZone: string): number {
   const s = new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hour12: false }).format(date);
   const h = parseInt(s, 10);
