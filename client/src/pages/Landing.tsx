@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
@@ -7,7 +7,7 @@ import { LogoMark, Wordmark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
-import { SpotlightCard, spotlightFromSignup, type SpotlightItem } from "@/components/SpotlightCard";
+import { spotlightFromSignup, type SpotlightItem } from "@/components/SpotlightCard";
 import { useCountdown } from "@/hooks/use-countdown";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, PublicPodcaster } from "@shared/schema";
@@ -39,6 +39,7 @@ interface Props {
 }
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
+const MINI_CARDS = 3;
 const FADE_UP = {
   hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
@@ -107,6 +108,20 @@ export default function Landing({ slug }: Props) {
     return [...fromSlots, ...fromProfiles];
   }, [lineup, podcasters]);
 
+  // Small podcaster cards under the event card: up to MINI_CARDS at a time,
+  // rotating through pages every 7s once there are more than fit.
+  const [miniPage, setMiniPage] = useState(0);
+  const miniPages = Math.max(1, Math.ceil(spotlight.length / MINI_CARDS));
+  useEffect(() => {
+    if (miniPages < 2) {
+      setMiniPage(0);
+      return;
+    }
+    const id = setInterval(() => setMiniPage((p) => (p + 1) % miniPages), 7000);
+    return () => clearInterval(id);
+  }, [miniPages]);
+  const miniItems = spotlight.slice(miniPage * MINI_CARDS, miniPage * MINI_CARDS + MINI_CARDS);
+
   const agendaHref = slug ? `/event/${slug}/agenda` : "/agenda";
   const scheduleHref = slug ? `/event/${slug}/schedule` : "/schedule";
 
@@ -164,13 +179,13 @@ export default function Landing({ slug }: Props) {
               </motion.p>
 
               <motion.div variants={FADE_UP} className="mt-8 flex flex-wrap items-center gap-3">
-                <Link href="/host/dashboard">
+                <Link href={scheduleHref}>
                   <Button
                     size="lg"
                     className="gap-2 rounded-full bg-[#F0A71F] px-7 text-base font-semibold text-[#1a1200] hover:bg-[#f5b944]"
                     data-testid="button-landing-claim"
                   >
-                    <Mic2 className="h-4 w-4" /> Claim your slot
+                    <Mic2 className="h-4 w-4" /> Pick your slot
                   </Button>
                 </Link>
                 <Link href={agendaHref}>
@@ -191,47 +206,15 @@ export default function Landing({ slug }: Props) {
             </motion.div>
           )}
 
-          {/* Right column: rotating podcaster spotlight once anyone has claimed
-              a slot, otherwise the countdown/stats card. */}
-          {event && start && end && spotlight.length > 0 && (
+          {/* Event details card + small podcaster cards under it */}
+          {event && start && end && (
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
-              className="flex flex-col gap-4"
+              className="flex flex-col"
             >
-              <SpotlightCard items={spotlight} zone={zone} agendaHref={agendaHref} />
-              <div className="grid grid-cols-3 gap-2" data-testid="strip-landing-stats">
-                {[
-                  {
-                    label: countdown.phase === "live" ? "Status" : countdown.phase === "done" ? "Status" : "Starts in",
-                    value:
-                      countdown.phase === "upcoming"
-                        ? `${countdown.days > 0 ? `${countdown.days}d ` : ""}${countdown.hours}h ${countdown.minutes}m`
-                        : countdown.phase === "live"
-                          ? "Live now"
-                          : "Wrapped",
-                  },
-                  { label: "Confirmed", value: `${booked.length}` },
-                  { label: "Slots open", value: `${openCount}/${slotCount}` },
-                ].map(({ label, value }) => (
-                  <div key={label} className="rounded-2xl border border-white/15 bg-white/10 px-3 py-3 text-center backdrop-blur">
-                    <div className="font-mono text-base font-bold tabular-nums sm:text-lg">{value}</div>
-                    <div className="text-[11px] font-medium uppercase tracking-wide text-white/60">{label}</div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
-          {/* Stats card (empty lineup) */}
-          {event && start && end && spotlight.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
-              className="relative"
-            >
+              <div className="relative">
               <div className="absolute inset-0 rotate-2 rounded-[1.75rem] bg-[#F0A71F]/90" aria-hidden="true" />
               <div className="relative rounded-[1.75rem] bg-card p-6 text-card-foreground shadow-2xl sm:p-8" data-testid="card-landing-stats">
                 <div className="flex items-center justify-between">
@@ -291,6 +274,54 @@ export default function Landing({ slug }: Props) {
                   />
                 </div>
               </div>
+              </div>
+
+              {spotlight.length > 0 && (
+                <div className="relative mt-5" data-testid="strip-mini-podcasters">
+                  <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-white/70">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Radio className="h-3.5 w-3.5 text-[#F0A71F]" />
+                      {booked.length > 0 ? "On the lineup" : "Joining the marathon"}
+                    </span>
+                    {spotlight.length > MINI_CARDS && (
+                      <span className="font-mono normal-case tracking-normal">
+                        {miniPage + 1}/{Math.ceil(spotlight.length / MINI_CARDS)}
+                      </span>
+                    )}
+                  </div>
+                  <div className={`grid gap-2 ${miniItems.length === 1 ? "grid-cols-1" : miniItems.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      {miniItems.map((it) => (
+                        <motion.div
+                          key={it.key}
+                          layout
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.4 }}
+                          className="flex items-center gap-3 rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur"
+                          data-testid={`card-mini-${it.key}`}
+                        >
+                          {it.photoUrl ? (
+                            <img src={resolveUploadUrl(it.photoUrl)} alt={it.hostName} className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-[#F0A71F]/60" />
+                          ) : (
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/15">
+                              <Mic2 className="h-5 w-5" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold leading-tight">{it.podcastName}</div>
+                            <div className="truncate text-xs text-white/70">{it.hostName}</div>
+                            <div className="mt-0.5 truncate font-mono text-[11px] text-[#F0A71F]">
+                              {it.start ? `${formatDateInZone(it.start, zone)} · ${formatTimeInZone(it.start, zone)}` : "Time coming soon"}
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
         </div>
@@ -347,12 +378,12 @@ export default function Landing({ slug }: Props) {
                 Claiming a slot takes about two minutes.
               </h2>
               <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-                Set up your podcaster profile once. After that, every slot you claim reuses your photo, show details, and
-                connected socials, so there's nothing to re-enter.
+                Pick a time, drop your email, tell us about your show once. Every slot you claim after that reuses your
+                photo, show details, and connected socials, so there's nothing to re-enter.
               </p>
-              <Link href="/host/dashboard">
+              <Link href={scheduleHref}>
                 <Button size="lg" className="mt-6 gap-2 rounded-full px-6" data-testid="button-landing-claim-2">
-                  Get started <ArrowRight className="h-4 w-4" />
+                  See open slots <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
             </div>
@@ -360,14 +391,14 @@ export default function Landing({ slug }: Props) {
             <ol className="space-y-4">
               {[
                 {
-                  icon: UserCircle2,
-                  title: "Set up your profile",
-                  body: "Sign in with a one-time email code, add a photo, your show name, and where people can find you.",
-                },
-                {
                   icon: MousePointerClick,
                   title: "Pick an open slot",
-                  body: `Choose any open ${event?.slotMinutes ?? 30}-minute block on the schedule, shown in your own time zone.`,
+                  body: `Choose any open ${event?.slotMinutes ?? 30}-minute block on the schedule, shown in your own time zone. We hold it while you finish.`,
+                },
+                {
+                  icon: UserCircle2,
+                  title: "Drop your email, set up your show",
+                  body: "A one-time code signs you in, no password. Then add a photo, your show name, and your RSS feed so listeners can hit play.",
                 },
                 {
                   icon: Radio,
@@ -421,9 +452,9 @@ export default function Landing({ slug }: Props) {
                   {slotCount} slots are open right now. Early claims get the prime-time picks.
                 </p>
               </div>
-              <Link href="/host/dashboard">
+              <Link href={scheduleHref}>
                 <Button className="gap-2 rounded-full" data-testid="button-landing-claim-empty">
-                  <Mic2 className="h-4 w-4" /> Claim a slot
+                  <Mic2 className="h-4 w-4" /> Pick a slot
                 </Button>
               </Link>
             </div>
@@ -526,13 +557,13 @@ export default function Landing({ slug }: Props) {
               {countdown.phase === "upcoming" ? countdown.label + "." : ""}
             </p>
           </div>
-          <Link href="/host/dashboard">
+          <Link href={scheduleHref}>
             <Button
               size="lg"
               className="gap-2 rounded-full bg-[#F0A71F] px-7 text-base font-semibold text-[#1a1200] hover:bg-[#f5b944]"
               data-testid="button-landing-claim-3"
             >
-              <Mic2 className="h-4 w-4" /> Claim your slot
+              <Mic2 className="h-4 w-4" /> Pick your slot
             </Button>
           </Link>
         </div>

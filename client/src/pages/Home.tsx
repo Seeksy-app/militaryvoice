@@ -62,10 +62,10 @@ export default function Home({ slug }: Props) {
     });
   }, [event, signups, viewZone]);
 
-  function openClaim(_index: number) {
-    // Claiming requires a podcaster login — send them to the host dashboard,
-    // where they'll sign in (email + typed code) and then pick a slot.
-    navigate("/host/dashboard");
+  function openClaim(index: number) {
+    // Pick the time first, then sign in / set up the profile on the dashboard
+    // with this slot held (?slot=&event=). Claiming completes there.
+    navigate(`/host/dashboard?slot=${index}${event ? `&event=${event.id}` : ""}`);
   }
 
   const openCount = slots.filter((s) => !s.signup).length;

@@ -1,7 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearch } from "wouter";
+import { useSearch, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Mic2, Users, LogOut, Download, Radio, Mail, KeyRound, UserCircle2, ArrowLeft, Settings, Phone, Globe, Rss, Youtube, Video, Presentation, Image as ImageIcon, MessageSquare, Link2, RefreshCw } from "lucide-react";
+import {
+  Mic2,
+  Users,
+  LogOut,
+  Download,
+  Radio,
+  Mail,
+  KeyRound,
+  ArrowLeft,
+  Settings,
+  Phone,
+  Globe,
+  Rss,
+  Youtube,
+  Video,
+  Presentation,
+  Image as ImageIcon,
+  MessageSquare,
+  Link2,
+  RefreshCw,
+  CalendarClock,
+} from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,11 +31,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { ProfileForm } from "@/components/ProfileForm";
+import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
+import { PlatformIcon, platformLabel, ALL_PLATFORMS } from "@/components/SocialIcons";
 import { apiRequest, API_BASE, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, ProfileRow, SocialAccount } from "@shared/schema";
-import { PlatformIcon, platformLabel, ALL_PLATFORMS } from "@/components/SocialIcons";
-import { detectLocalTimeZone, slotStart, slotEnd, totalSlots, formatDateInZone, formatTimeInZone } from "@/lib/schedule";
+import {
+  detectLocalTimeZone,
+  slotStart,
+  slotEnd,
+  totalSlots,
+  formatDateInZone,
+  formatTimeInZone,
+  zoneLabel,
+} from "@/lib/schedule";
 
 interface HostSignup {
   id: number;
@@ -46,6 +75,43 @@ interface HostDashboardData {
   contacts: HostContact[];
 }
 
+/** A slot the visitor picked on the schedule before signing in. */
+interface PendingSlot {
+  eventId: number;
+  slotIndex: number;
+}
+
+const PENDING_KEY = "mv_pending_slot";
+
+function readPending(search: string): PendingSlot | null {
+  const params = new URLSearchParams(search);
+  const slot = Number(params.get("slot"));
+  const eventId = Number(params.get("event"));
+  if (params.has("slot") && Number.isInteger(slot) && slot >= 0) {
+    const p = { eventId: Number.isInteger(eventId) && eventId > 0 ? eventId : 0, slotIndex: slot };
+    try {
+      sessionStorage.setItem(PENDING_KEY, JSON.stringify(p));
+    } catch {
+      /* ignore */
+    }
+    return p;
+  }
+  try {
+    const raw = sessionStorage.getItem(PENDING_KEY);
+    return raw ? (JSON.parse(raw) as PendingSlot) : null;
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingStorage() {
+  try {
+    sessionStorage.removeItem(PENDING_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 function toHref(v: string): string {
   return /^https?:\/\//i.test(v) ? v : `https://${v}`;
 }
@@ -53,7 +119,10 @@ function linkLabel(v: string): string {
   return v.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
 }
 
-function LoginCard() {
+// ---------------------------------------------------------------------------
+// Sign-in card (email → 6-digit code). Shows the held slot when there is one.
+// ---------------------------------------------------------------------------
+function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<"email" | "code">("email");
@@ -84,16 +153,39 @@ function LoginCard() {
   });
 
   return (
-    <div className="mx-auto mt-16 max-w-sm px-4">
+    <div className="mx-auto mt-10 max-w-md px-4 sm:mt-16">
+      {pending && (
+        <div className="mb-4 overflow-hidden rounded-2xl border border-[#F0A71F]/50 bg-card" data-testid="banner-pending-slot">
+          <div className="flex items-center gap-2 bg-[#F0A71F] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#1a1200]">
+            <CalendarClock className="h-3.5 w-3.5" /> Step 2 of 3 · Your pick is held
+          </div>
+          <div className="flex items-center justify-between gap-3 px-4 py-3">
+            <div>
+              <div className="text-sm font-semibold">{formatDateInZone(pending.start, pending.zone)}</div>
+              <div className="font-mono text-base font-bold text-primary">
+                {formatTimeInZone(pending.start, pending.zone)}–{formatTimeInZone(pending.end, pending.zone)}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {pending.eventName.trim()} · {zoneLabel(pending.zone)}
+              </div>
+            </div>
+            <Link href="/schedule" className="text-xs text-muted-foreground underline-offset-2 hover:underline">
+              Change
+            </Link>
+          </div>
+        </div>
+      )}
       <Card>
         <CardHeader>
           <div className="mb-1 flex items-center gap-2 text-primary">
             {step === "email" ? <Mail className="h-4 w-4" /> : <KeyRound className="h-4 w-4" />}
-            <CardTitle className="text-base">Podcaster sign-in</CardTitle>
+            <CardTitle className="text-base">{pending ? "Enter your email to hold it" : "Podcaster sign-in"}</CardTitle>
           </div>
           <CardDescription>
             {step === "email"
-              ? "Enter your email and we'll send you a one-time code."
+              ? pending
+                ? "No password needed. We'll email you a one-time code, then you'll set up your show once."
+                : "Enter your email and we'll send you a one-time code."
               : `Enter the 6-digit code we sent to ${email}.`}
           </CardDescription>
         </CardHeader>
@@ -113,13 +205,14 @@ function LoginCard() {
               <Input
                 id="host-email"
                 type="email"
+                autoFocus
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 data-testid="input-host-email"
               />
               <Button type="submit" disabled={requestCode.isPending || !email.trim()} data-testid="button-request-code">
-                {requestCode.isPending ? "Sending…" : "Send me a code"}
+                {requestCode.isPending ? "Sending…" : pending ? "Send my code & hold the slot" : "Send me a code"}
               </Button>
             </form>
           ) : (
@@ -137,6 +230,7 @@ function LoginCard() {
               <Input
                 id="host-code"
                 inputMode="numeric"
+                autoFocus
                 placeholder="123456"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
@@ -160,16 +254,37 @@ function LoginCard() {
           )}
         </CardContent>
       </Card>
+      {!pending && (
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          First time here?{" "}
+          <Link href="/schedule" className="text-primary underline-offset-2 hover:underline">
+            Pick a slot on the schedule
+          </Link>{" "}
+          and we'll walk you through it.
+        </p>
+      )}
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------------
 export default function HostDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const search = useSearch();
   const [screen, setScreen] = useState<"dashboard" | "editProfile" | "claim">("dashboard");
   const [claimIndex, setClaimIndex] = useState<number | null>(null);
+  const [pending, setPending] = useState<PendingSlot | null>(() => readPending(search));
   const zone = useMemo(detectLocalTimeZone, []);
+
+  // If the URL carries a new slot pick, adopt it.
+  useEffect(() => {
+    const p = readPending(search);
+    if (p && (p.slotIndex !== pending?.slotIndex || p.eventId !== pending?.eventId)) setPending(p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const { data, isLoading, isError } = useQuery<HostDashboardData>({
     queryKey: ["/api/host/dashboard"],
@@ -187,6 +302,33 @@ export default function HostDashboard() {
     retry: false,
     enabled: !!data,
   });
+
+  // Public events list so the held slot can be described before sign-in.
+  const { data: events } = useQuery<PublicEvent[]>({ queryKey: ["/api/events"] });
+
+  const pendingEvent: PublicEvent | undefined = useMemo(() => {
+    if (!pending) return undefined;
+    if (data?.event && (!pending.eventId || data.event.id === pending.eventId)) return data.event;
+    return (events ?? []).find((e) => (pending.eventId ? e.id === pending.eventId : e.isFeatured));
+  }, [pending, data?.event, events]);
+
+  const pendingSummary: PendingSlotSummary | null = useMemo(() => {
+    if (!pending || !pendingEvent) return null;
+    const n = totalSlots(pendingEvent.durationHours, pendingEvent.slotMinutes);
+    if (pending.slotIndex >= n) return null;
+    return {
+      eventName: pendingEvent.name,
+      start: slotStart(pendingEvent.startAtUtc, pendingEvent.slotMinutes, pending.slotIndex),
+      end: slotEnd(pendingEvent.startAtUtc, pendingEvent.slotMinutes, pending.slotIndex),
+      zone,
+    };
+  }, [pending, pendingEvent, zone]);
+
+  function clearPending() {
+    setPending(null);
+    clearPendingStorage();
+    if (window.location.search) window.history.replaceState(null, "", window.location.pathname);
+  }
 
   const connectSocial = useMutation({
     mutationFn: async () => {
@@ -208,6 +350,7 @@ export default function HostDashboard() {
       queryClient.setQueryData(["/api/host/social"], result);
       queryClient.invalidateQueries({ queryKey: ["/api/host/profile"] });
       queryClient.invalidateQueries({ queryKey: ["/api/signups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/podcasters"] });
       queryClient.invalidateQueries({ queryKey: ["/api/host/dashboard"] });
       toast({
         title: result.accounts.length ? "Social accounts updated" : "No accounts connected yet",
@@ -220,7 +363,6 @@ export default function HostDashboard() {
   });
 
   // Coming back from the Upload-Post connect page: ?social=connected
-  const search = useSearch();
   useEffect(() => {
     if (!data) return;
     const params = new URLSearchParams(search);
@@ -236,39 +378,69 @@ export default function HostDashboard() {
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: ["/api/host/dashboard"] });
       queryClient.removeQueries({ queryKey: ["/api/host/profile"] });
+      queryClient.removeQueries({ queryKey: ["/api/host/social"] });
       setScreen("dashboard");
+      clearPending();
     },
   });
 
   const claim = useMutation({
-    mutationFn: async (slotIndex: number) => {
+    mutationFn: async (input: { slotIndex: number; eventId?: number }) => {
       if (!data) throw new Error("Not signed in");
-      const res = await apiRequest("POST", "/api/signups", { eventId: data.event.id, slotIndex });
+      const res = await apiRequest("POST", "/api/signups", {
+        eventId: input.eventId || data.event.id,
+        slotIndex: input.slotIndex,
+        timezone: zone,
+      });
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/signups"] });
       queryClient.invalidateQueries({ queryKey: ["/api/host/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/podcasters"] });
       toast({ title: "You're on the schedule", description: "This slot is now yours — we'll be in touch before air time." });
       setScreen("dashboard");
       setClaimIndex(null);
+      clearPending();
     },
     onError: (err: Error) => {
       toast({ title: "Couldn't claim that slot", description: err.message, variant: "destructive" });
+      setScreen("dashboard");
+      setClaimIndex(null);
+      clearPending();
     },
   });
+
+  const loadingProfile = isLoading || (!!data && profileLoading);
+  const hasProfile = !!profile && !!profile.podcastName && !!profile.hostName && !!profile.photoUrl;
+
+  // Signed in with a finished profile and a held slot → jump to confirmation.
+  useEffect(() => {
+    if (!data || loadingProfile || !pending || !hasProfile) return;
+    const taken = data.signups.some((s) => s.slotIndex === pending.slotIndex && s.status !== "cancelled");
+    if (taken) {
+      const mine = data.mySignups.some((s) => s.slotIndex === pending.slotIndex);
+      toast({
+        title: mine ? "That slot is already yours" : "That slot was just taken",
+        description: mine ? "You're all set." : "Pick another open time below.",
+        variant: mine ? "default" : "destructive",
+      });
+      clearPending();
+      return;
+    }
+    setClaimIndex(pending.slotIndex);
+    setScreen("claim");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!data, loadingProfile, hasProfile, pending?.slotIndex]);
 
   if (isError) {
     return (
       <div className="min-h-screen">
         <NavBar />
-        <LoginCard />
+        <LoginCard pending={pendingSummary} />
       </div>
     );
   }
-
-  const loadingProfile = isLoading || (!!data && profileLoading);
-  const hasProfile = !!profile && !!profile.podcastName && !!profile.hostName && !!profile.photoUrl;
 
   const slots = data
     ? Array.from({ length: totalSlots(data.event.durationHours, data.event.slotMinutes) }, (_, i) => {
@@ -280,15 +452,23 @@ export default function HostDashboard() {
     : [];
   const openSlots = slots.filter((s) => !s.signup);
   const selectedSlot = slots.find((s) => s.index === claimIndex);
+  const inSetup = !!data && !loadingProfile && !hasProfile;
 
   return (
     <div className="min-h-screen">
       <NavBar />
-      <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+      <div className={`mx-auto px-4 py-10 sm:px-6 ${inSetup || screen === "editProfile" ? "max-w-6xl" : "max-w-4xl"}`}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Podcaster Dashboard</h1>
-            {data && <p className="mt-1 text-sm text-muted-foreground">Signed in as {data.email}</p>}
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              {inSetup ? "Set up your show" : screen === "editProfile" ? "Profile Settings" : "Podcaster Dashboard"}
+            </h1>
+            {data && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {inSetup && pendingSummary ? "Step 3 of 3 · " : ""}
+                Signed in as {data.email}
+              </p>
+            )}
           </div>
           {data && (
             <Button
@@ -310,21 +490,25 @@ export default function HostDashboard() {
             <Skeleton className="h-24 w-full rounded-xl" />
             <Skeleton className="h-48 w-full rounded-xl" />
           </div>
-        ) : !data ? null : !hasProfile || screen === "editProfile" ? (
-          <section className="mt-8 max-w-xl">
-            <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold text-foreground">
-              {hasProfile ? <Settings className="h-5 w-5 text-primary" /> : <UserCircle2 className="h-5 w-5 text-primary" />}
-              {hasProfile ? "Profile Settings" : "Set up your podcaster profile"}
-            </h2>
-            <p className="mb-6 text-sm text-muted-foreground">
-              {hasProfile
-                ? "Update your details below — they'll apply to every slot you claim from now on."
-                : "Tell us a bit about your show once, and every slot you claim from here on reuses these details — no repeating yourself."}
-            </p>
+        ) : !data ? null : inSetup || screen === "editProfile" ? (
+          <section className="mt-6">
+            {inSetup && (
+              <p className="mb-6 max-w-2xl text-sm text-muted-foreground">
+                Tell us about your show once. Every slot you claim from here on reuses these details, and your card on
+                the public lineup is built from them.
+              </p>
+            )}
             <ProfileForm
               email={data.email}
-              profile={profile ?? null}
-              onSaved={() => setScreen("dashboard")}
+              profile={hasProfile ? (profile ?? null) : null}
+              pendingSlot={inSetup ? pendingSummary : null}
+              onSaved={() => {
+                if (inSetup && pending) {
+                  claim.mutate({ slotIndex: pending.slotIndex, eventId: pending.eventId || undefined });
+                } else {
+                  setScreen("dashboard");
+                }
+              }}
               onCancel={hasProfile ? () => setScreen("dashboard") : undefined}
             />
           </section>
@@ -335,6 +519,7 @@ export default function HostDashboard() {
               onClick={() => {
                 setScreen("dashboard");
                 setClaimIndex(null);
+                clearPending();
               }}
               className="mb-4 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
               data-testid="button-back-to-dashboard"
@@ -347,17 +532,13 @@ export default function HostDashboard() {
             </h2>
             <p className="mb-6 font-mono text-sm text-muted-foreground">
               {formatDateInZone(selectedSlot.start, zone)}, {formatTimeInZone(selectedSlot.start, zone)}–
-              {formatTimeInZone(selectedSlot.end, zone)}
+              {formatTimeInZone(selectedSlot.end, zone)} · {zoneLabel(zone)}
             </p>
 
             <div className="rounded-xl border border-border bg-card p-5">
               <div className="flex items-center gap-4">
                 {profile?.photoUrl && (
-                  <img
-                    src={resolveUploadUrl(profile.photoUrl)}
-                    alt=""
-                    className="h-16 w-16 shrink-0 rounded-full object-cover"
-                  />
+                  <img src={resolveUploadUrl(profile.photoUrl)} alt="" className="h-16 w-16 shrink-0 rounded-full object-cover" />
                 )}
                 <div>
                   <p className="font-semibold text-card-foreground">{profile?.podcastName}</p>
@@ -366,18 +547,14 @@ export default function HostDashboard() {
               </div>
               <p className="mt-4 text-sm text-muted-foreground">
                 We'll use the details from your podcaster profile for this slot. Need to change something first?{" "}
-                <button
-                  type="button"
-                  onClick={() => setScreen("editProfile")}
-                  className="text-primary underline-offset-2 hover:underline"
-                >
+                <button type="button" onClick={() => setScreen("editProfile")} className="text-primary underline-offset-2 hover:underline">
                   Open profile settings
                 </button>
                 .
               </p>
               <Button
                 className="mt-5"
-                onClick={() => claimIndex !== null && claim.mutate(claimIndex)}
+                onClick={() => claimIndex !== null && claim.mutate({ slotIndex: claimIndex, eventId: pending?.eventId || undefined })}
                 disabled={claim.isPending}
                 data-testid="button-confirm-claim"
               >
@@ -387,6 +564,7 @@ export default function HostDashboard() {
           </section>
         ) : (
           <>
+            {/* ------------------------------------------------ profile header */}
             <section className="mt-8" data-testid="card-profile-header">
               <div className="overflow-hidden rounded-2xl border border-border bg-card">
                 <div className="h-1.5 bg-primary" />
@@ -406,9 +584,7 @@ export default function HostDashboard() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h2 className="truncate text-xl font-bold tracking-tight text-card-foreground sm:text-2xl">
-                          {profile?.podcastName}
-                        </h2>
+                        <h2 className="truncate text-xl font-bold tracking-tight text-card-foreground sm:text-2xl">{profile?.podcastName}</h2>
                         <p className="mt-0.5 text-sm text-muted-foreground">
                           Hosted by <span className="font-medium text-card-foreground">{profile?.hostName}</span>
                           {profile?.numPeople === 2 && " and a co-host"}
@@ -567,19 +743,29 @@ export default function HostDashboard() {
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bringing to the show</p>
                       <div className="flex flex-wrap gap-1.5">
                         {profile?.hasVideoIntro && (
-                          <Badge variant="secondary" className="gap-1 font-normal"><Video className="h-3 w-3" /> Video intro</Badge>
+                          <Badge variant="secondary" className="gap-1 font-normal">
+                            <Video className="h-3 w-3" /> Video intro
+                          </Badge>
                         )}
                         {profile?.hasVideoOutro && (
-                          <Badge variant="secondary" className="gap-1 font-normal"><Video className="h-3 w-3" /> Video outro</Badge>
+                          <Badge variant="secondary" className="gap-1 font-normal">
+                            <Video className="h-3 w-3" /> Video outro
+                          </Badge>
                         )}
                         {profile?.hasSlides && (
-                          <Badge variant="secondary" className="gap-1 font-normal"><Presentation className="h-3 w-3" /> Slides</Badge>
+                          <Badge variant="secondary" className="gap-1 font-normal">
+                            <Presentation className="h-3 w-3" /> Slides
+                          </Badge>
                         )}
                         {profile?.hasImages && (
-                          <Badge variant="secondary" className="gap-1 font-normal"><ImageIcon className="h-3 w-3" /> Images</Badge>
+                          <Badge variant="secondary" className="gap-1 font-normal">
+                            <ImageIcon className="h-3 w-3" /> Images
+                          </Badge>
                         )}
                         {profile?.needsInterviewer && (
-                          <Badge variant="outline" className="gap-1 border-primary/40 font-normal text-primary"><Users className="h-3 w-3" /> Interviewer requested</Badge>
+                          <Badge variant="outline" className="gap-1 border-primary/40 font-normal text-primary">
+                            <Users className="h-3 w-3" /> Interviewer requested
+                          </Badge>
                         )}
                         {!profile?.hasVideoIntro && !profile?.hasVideoOutro && !profile?.hasSlides && !profile?.hasImages && !profile?.needsInterviewer && (
                           <span className="text-sm text-muted-foreground">Just the conversation — no extra media yet.</span>
@@ -597,6 +783,7 @@ export default function HostDashboard() {
               </div>
             </section>
 
+            {/* ---------------------------------------------------- my slots */}
             <section className="mt-8">
               <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 <Mic2 className="h-4 w-4" />
@@ -608,22 +795,27 @@ export default function HostDashboard() {
                 </div>
               ) : (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {data.mySignups.map((s) => (
-                    <div key={s.id} className="rounded-xl border border-border bg-card p-4" data-testid={`card-host-signup-${s.id}`}>
-                      <div className="flex items-center gap-2">
-                        <Radio className="h-3.5 w-3.5 text-primary" />
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Slot #{s.slotIndex + 1}
-                        </span>
+                  {data.mySignups.map((s) => {
+                    const st = slotStart(data.event.startAtUtc, data.event.slotMinutes, s.slotIndex);
+                    const en = slotEnd(data.event.startAtUtc, data.event.slotMinutes, s.slotIndex);
+                    return (
+                      <div key={s.id} className="rounded-xl border border-primary/30 bg-card p-4" data-testid={`card-host-signup-${s.id}`}>
+                        <div className="flex items-center gap-2">
+                          <Radio className="h-3.5 w-3.5 text-primary" />
+                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Slot #{s.slotIndex + 1}</span>
+                        </div>
+                        <p className="mt-2 font-mono text-base font-semibold text-card-foreground">
+                          {formatDateInZone(st, zone)} · {formatTimeInZone(st, zone)}–{formatTimeInZone(en, zone)}
+                        </p>
+                        <p className="text-sm text-muted-foreground">{zoneLabel(zone)}</p>
                       </div>
-                      <p className="mt-2 font-semibold text-card-foreground">{s.podcastName}</p>
-                      <p className="text-sm text-muted-foreground">{s.hostName}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </section>
 
+            {/* ------------------------------------------------- open slots */}
             <section className="mt-8">
               <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 <Radio className="h-4 w-4" />
@@ -646,9 +838,7 @@ export default function HostDashboard() {
                       className="rounded-lg border border-border bg-card p-3 text-left text-sm transition-colors hover-elevate"
                       data-testid={`button-pick-slot-${s.index}`}
                     >
-                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        {formatDateInZone(s.start, zone)}
-                      </div>
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{formatDateInZone(s.start, zone)}</div>
                       <div className="font-mono font-semibold">
                         {formatTimeInZone(s.start, zone)}–{formatTimeInZone(s.end, zone)}
                       </div>
@@ -661,6 +851,7 @@ export default function HostDashboard() {
               )}
             </section>
 
+            {/* --------------------------------------------------- reminders */}
             <section className="mt-8">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -694,9 +885,7 @@ export default function HostDashboard() {
                       {data.contacts.map((c) => (
                         <tr key={c.id} className="border-b border-border last:border-0" data-testid={`row-contact-${c.id}`}>
                           <td className="px-4 py-2.5 text-card-foreground">{c.email}</td>
-                          <td className="px-4 py-2.5 text-muted-foreground">
-                            {new Date(c.createdAt).toLocaleDateString()}
-                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{new Date(c.createdAt).toLocaleDateString()}</td>
                         </tr>
                       ))}
                     </tbody>
