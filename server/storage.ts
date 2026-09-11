@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -170,6 +170,13 @@ async function ensureSchema() {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS site_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS sponsor_inquiries (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
@@ -301,6 +308,8 @@ export interface IStorage {
   createSponsorInquiry(data: InsertSponsorInquiry): Promise<SponsorInquiryRow>;
   listSponsorInquiries(): Promise<SponsorInquiryRow[]>;
   setSponsorInquiryHandled(id: number, handled: boolean): Promise<void>;
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string): Promise<void>;
 }
 
 // Default marathon: kicks off the next Saturday at 12:00 PM Eastern for 24 hours,
@@ -489,6 +498,22 @@ class DatabaseStorage implements IStorage {
         and(ne(podcasterProfiles.podcastName, ""), ne(podcasterProfiles.hostName, ""), ne(podcasterProfiles.photoUrl, "")),
       )
       .orderBy(podcasterProfiles.createdAt);
+  }
+
+  async getSetting(key: string): Promise<string | null> {
+    await ready();
+    const [row] = await db.select().from(siteSettings).where(eq(siteSettings.key, key));
+    return row?.value ?? null;
+  }
+
+  async setSetting(key: string, value: string): Promise<void> {
+    await ready();
+    const existing = await this.getSetting(key);
+    if (existing === null) {
+      await db.insert(siteSettings).values({ key, value });
+    } else {
+      await db.update(siteSettings).set({ value }).where(eq(siteSettings.key, key));
+    }
   }
 
   async createSponsorInquiry(data: InsertSponsorInquiry): Promise<SponsorInquiryRow> {

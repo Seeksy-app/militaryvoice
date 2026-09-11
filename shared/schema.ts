@@ -321,3 +321,17 @@ export const insertSponsorInquirySchema = createInsertSchema(sponsorInquiries)
   });
 export type InsertSponsorInquiry = z.infer<typeof insertSponsorInquirySchema>;
 export type SponsorInquiryRow = typeof sponsorInquiries.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Site settings — small key/value switches the admin flips (e.g. whether the
+// sponsor strip shows on the homepage at all).
+// ---------------------------------------------------------------------------
+export const siteSettings = pgTable("site_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
+
+export type SiteSettingRow = typeof siteSettings.$inferSelect;
+export interface PublicSettings {
+  sponsorsVisible: boolean;
+}

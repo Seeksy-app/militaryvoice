@@ -15,6 +15,7 @@ import {
   type PublicSignup,
   type PublicPodcaster,
   type PublicSponsor,
+  type PublicSettings,
   type EventRow,
   updateSponsorSchema,
 } from "../shared/schema.js";
@@ -295,6 +296,11 @@ export function registerRoutes(app: Express): void {
   // ---- Public: sponsor logos ("Friends of the Podcastathon") -------------------
   app.get("/api/sponsors", async (_req, res) => {
     publicCache(res, 60);
+    // Master switch: off by default until there's something worth showing.
+    if ((await storage.getSetting("sponsorsVisible")) !== "true") {
+      res.json([]);
+      return;
+    }
     const rows = await storage.listSponsors(true);
     const out: PublicSponsor[] = rows.map((r) => ({ id: r.id, name: r.name, url: r.url, logoUrl: r.logoUrl, sortOrder: r.sortOrder }));
     res.json(out);
@@ -334,6 +340,26 @@ export function registerRoutes(app: Express): void {
   app.patch("/api/admin/sponsor-inquiries/:id", requireAdmin, async (req, res) => {
     await storage.setSponsorInquiryHandled(Number(req.params.id), !!req.body?.handled);
     res.json({ ok: true });
+  });
+
+  // ---- Public: site settings ----------------------------------------------------
+  app.get("/api/settings", async (_req, res) => {
+    publicCache(res, 60);
+    const out: PublicSettings = { sponsorsVisible: (await storage.getSetting("sponsorsVisible")) === "true" };
+    res.json(out);
+  });
+
+  app.get("/api/admin/settings", requireAdmin, async (_req, res) => {
+    const out: PublicSettings = { sponsorsVisible: (await storage.getSetting("sponsorsVisible")) === "true" };
+    res.json(out);
+  });
+
+  app.patch("/api/admin/settings", requireAdmin, async (req, res) => {
+    if (typeof req.body?.sponsorsVisible === "boolean") {
+      await storage.setSetting("sponsorsVisible", req.body.sponsorsVisible ? "true" : "false");
+    }
+    const out: PublicSettings = { sponsorsVisible: (await storage.getSetting("sponsorsVisible")) === "true" };
+    res.json(out);
   });
 
   // ---- Admin: sponsors CRUD ------------------------------------------------------

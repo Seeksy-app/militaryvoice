@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,7 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound } from "lucide-react";
-import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, AdminUserRow, SponsorInquiryRow } from "@shared/schema";
+import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, AdminUserRow, SponsorInquiryRow, PublicSettings } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
 
@@ -908,6 +909,20 @@ function SponsorsCard() {
     queryKey: ["/api/admin/sponsors"],
     queryFn: () => adminGet<SponsorRow[]>("/api/admin/sponsors"),
   });
+  const { data: settings } = useQuery<PublicSettings>({
+    queryKey: ["/api/admin/settings"],
+    queryFn: () => adminGet<PublicSettings>("/api/admin/settings"),
+  });
+  const visible = !!settings?.sponsorsVisible;
+
+  async function setVisible(next: boolean) {
+    await adminSend("PATCH", "/api/admin/settings", { sponsorsVisible: next });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/sponsors"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+    toast({ title: next ? "Sponsor strip is live" : "Sponsor strip hidden", description: next ? "It shows on the homepage under the host section." : "Nothing sponsor-related shows on the public site." });
+  }
+
   const { data: inquiries } = useQuery<SponsorInquiryRow[]>({
     queryKey: ["/api/admin/sponsor-inquiries"],
     queryFn: () => adminGet<SponsorInquiryRow[]>("/api/admin/sponsor-inquiries"),
@@ -978,9 +993,18 @@ function SponsorsCard() {
           <Handshake className="h-4 w-4 text-primary" /> Friends of the Podcastathon
         </CardTitle>
         <CardDescription>
-          Sponsor logos scroll in a strip on the homepage. PNG or SVG with a transparent background looks best; logos are
-          shown at about 40px tall.
+          Sponsor logos scroll in a strip on the homepage, under the host section. PNG or SVG with a transparent
+          background looks best; logos show at about 40px tall.
         </CardDescription>
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3">
+          <div>
+            <div className="text-sm font-medium">Show the strip on the homepage</div>
+            <div className="text-xs text-muted-foreground">
+              {visible ? "Visitors can see it now." : "Hidden — nothing sponsor-related appears on the public site."}
+            </div>
+          </div>
+          <Switch checked={visible} onCheckedChange={setVisible} aria-label="Show the sponsor strip on the homepage" data-testid="switch-sponsors-visible" />
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
         <form onSubmit={handleAdd} className="grid gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-4 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-end">
