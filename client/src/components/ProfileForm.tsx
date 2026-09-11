@@ -433,7 +433,11 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
               </div>
             </SectionCard>
 
-            <SectionCard icon={Globe} title="Where to follow you" description="Shown as links on your card so listeners can find you after your slot.">
+            <SectionCard
+              icon={Globe}
+              title="Connect your social media"
+              description="So listeners can find and follow you after your slot. Everything here shows on your public card."
+            >
               <FormField
                 control={form.control}
                 name="socialLinks"
@@ -450,8 +454,9 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
               <div className="flex items-start gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-3.5 text-sm">
                 <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <p className="text-muted-foreground">
-                  <span className="font-medium text-foreground">Connect Instagram, TikTok, YouTube, X and more</span> with one
-                  click from your dashboard after this step. Connected accounts appear as follow buttons on your card.
+                  <span className="font-medium text-foreground">Connect Instagram, TikTok, YouTube, X, Facebook and LinkedIn</span>{" "}
+                  with one click from your dashboard right after this step. Each connected account shows on your card with
+                  your avatar and follower count, so listeners can tap straight through and follow you.
                 </p>
               </div>
             </SectionCard>

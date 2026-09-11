@@ -22,7 +22,20 @@ import {
   Link2,
   RefreshCw,
   CalendarClock,
+  Pencil,
+  Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +45,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
-import { PlatformIcon, platformLabel, ALL_PLATFORMS } from "@/components/SocialIcons";
+import { PlatformIcon, platformLabel, platformColor, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
 import { apiRequest, API_BASE, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, ProfileRow, SocialAccount } from "@shared/schema";
 import {
@@ -387,6 +400,10 @@ export default function HostDashboard() {
   const claim = useMutation({
     mutationFn: async (input: { slotIndex: number; eventId?: number }) => {
       if (!data) throw new Error("Not signed in");
+      // One slot per podcaster: moving to a new time releases the current one first.
+      for (const held of data.mySignups) {
+        await apiRequest("DELETE", `/api/host/signups/${held.id}`);
+      }
       const res = await apiRequest("POST", "/api/signups", {
         eventId: input.eventId || data.event.id,
         slotIndex: input.slotIndex,
@@ -398,17 +415,32 @@ export default function HostDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/signups"] });
       queryClient.invalidateQueries({ queryKey: ["/api/host/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/podcasters"] });
-      toast({ title: "You're on the schedule", description: "This slot is now yours — we'll be in touch before air time." });
+      toast({
+        title: data && data.mySignups.length > 0 ? "Moved to your new time" : "You're on the schedule",
+        description: "This slot is now yours — we'll be in touch before air time.",
+      });
       setScreen("dashboard");
       setClaimIndex(null);
       clearPending();
     },
     onError: (err: Error) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/host/dashboard"] });
       toast({ title: "Couldn't claim that slot", description: err.message, variant: "destructive" });
       setScreen("dashboard");
       setClaimIndex(null);
       clearPending();
     },
+  });
+
+  const release = useMutation({
+    mutationFn: async (id: number) => apiRequest("DELETE", `/api/host/signups/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/signups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/host/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/podcasters"] });
+      toast({ title: "Slot released", description: "It's open again for someone else. Pick a new time below whenever you're ready." });
+    },
+    onError: (err: Error) => toast({ title: "Couldn't release that slot", description: err.message, variant: "destructive" }),
   });
 
   const loadingProfile = isLoading || (!!data && profileLoading);
@@ -545,6 +577,16 @@ export default function HostDashboard() {
                   <p className="text-sm text-muted-foreground">{profile?.hostName}</p>
                 </div>
               </div>
+              {data.mySignups.length > 0 && (
+                <p className="mt-4 rounded-lg border border-[#F0A71F]/50 bg-[#F0A71F]/10 p-3 text-sm text-foreground" data-testid="text-swap-notice">
+                  You currently hold{" "}
+                  {data.mySignups.map((m) => {
+                    const st = slotStart(data.event.startAtUtc, data.event.slotMinutes, m.slotIndex);
+                    return `${formatDateInZone(st, zone)} · ${formatTimeInZone(st, zone)}`;
+                  }).join(", ")}
+                  . Confirming moves you to this time and releases that one.
+                </p>
+              )}
               <p className="mt-4 text-sm text-muted-foreground">
                 We'll use the details from your podcaster profile for this slot. Need to change something first?{" "}
                 <button type="button" onClick={() => setScreen("editProfile")} className="text-primary underline-offset-2 hover:underline">
@@ -558,7 +600,7 @@ export default function HostDashboard() {
                 disabled={claim.isPending}
                 data-testid="button-confirm-claim"
               >
-                {claim.isPending ? "Claiming…" : "Confirm & claim slot"}
+                {claim.isPending ? "Claiming…" : data.mySignups.length > 0 ? "Move to this slot" : "Confirm & claim slot"}
               </Button>
             </div>
           </section>
@@ -696,37 +738,71 @@ export default function HostDashboard() {
                             </Button>
                           </div>
                         </div>
-                        <div className="flex flex-wrap gap-1.5">
+                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-7">
                           {ALL_PLATFORMS.map((platform) => {
                             const a = social.accounts.find((x) => x.platform === platform);
+                            const color = platformColor(platform);
                             if (!a) {
                               return (
-                                <span
+                                <button
                                   key={platform}
-                                  title={`${platformLabel(platform)} — not connected`}
-                                  className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1 text-xs font-medium text-muted-foreground/60"
-                                  data-testid={`chip-social-${platform}`}
+                                  type="button"
+                                  onClick={() => connectSocial.mutate()}
+                                  title={`Connect ${platformLabel(platform)}`}
+                                  className="flex flex-col items-center rounded-xl border border-dashed border-border p-3 text-center opacity-60 transition-opacity hover:opacity-100"
+                                  data-testid={`tile-social-${platform}`}
                                 >
-                                  <PlatformIcon platform={platform} className="h-3.5 w-3.5 opacity-40 grayscale" />
-                                  {platformLabel(platform)}
-                                </span>
+                                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                                    <PlatformIcon platform={platform} className="h-5 w-5 grayscale" />
+                                  </span>
+                                  <span className="mt-2 w-full truncate text-xs font-medium text-muted-foreground">{platformLabel(platform)}</span>
+                                  <span className="whitespace-nowrap text-[11px] text-muted-foreground/70">Not connected</span>
+                                </button>
                               );
                             }
-                            const inner = (
+                            const label =
+                              a.username && !/^\d+$/.test(a.username) ? `@${a.username}` : a.displayName || platformLabel(a.platform);
+                            const followers = formatFollowers(a.followers);
+                            const initial = (a.displayName || a.username || platformLabel(a.platform)).charAt(0).toUpperCase();
+                            const body = (
                               <>
-                                <PlatformIcon platform={a.platform} className="h-3.5 w-3.5 text-primary" />
-                                <span className="truncate">{a.username ? `@${a.username}` : a.displayName || platformLabel(a.platform)}</span>
+                                <span className="relative">
+                                  {a.image ? (
+                                    <img
+                                      src={a.image}
+                                      alt=""
+                                      className="h-12 w-12 rounded-full object-cover ring-2 ring-border"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  ) : (
+                                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-base font-bold text-primary ring-2 ring-border">
+                                      {initial}
+                                    </span>
+                                  )}
+                                  <span
+                                    className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-white shadow ring-1 ring-black/5"
+                                    style={{ color }}
+                                  >
+                                    <PlatformIcon platform={platform} className="h-3.5 w-3.5" />
+                                  </span>
+                                </span>
+                                <span className="mt-2 w-full truncate text-xs font-semibold text-card-foreground" title={label}>
+                                  {label}
+                                </span>
+                                <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+                                  {followers ? `${followers} followers` : platformLabel(platform)}
+                                </span>
                               </>
                             );
                             const cls =
-                              "inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border border-primary/30 bg-accent px-3 py-1 text-xs font-medium text-accent-foreground";
+                              "flex flex-col items-center rounded-xl border border-border bg-background p-3 text-center transition-colors hover:border-primary/40";
                             return a.url ? (
-                              <a key={platform} href={a.url} target="_blank" rel="noopener noreferrer" className={`${cls} hover-elevate`} data-testid={`chip-social-${platform}`}>
-                                {inner}
+                              <a key={platform} href={a.url} target="_blank" rel="noopener noreferrer" className={cls} data-testid={`tile-social-${platform}`}>
+                                {body}
                               </a>
                             ) : (
-                              <span key={platform} className={cls} data-testid={`chip-social-${platform}`}>
-                                {inner}
+                              <span key={platform} className={cls} data-testid={`tile-social-${platform}`}>
+                                {body}
                               </span>
                             );
                           })}
@@ -783,11 +859,11 @@ export default function HostDashboard() {
               </div>
             </section>
 
-            {/* ---------------------------------------------------- my slots */}
+            {/* ---------------------------------------------------- my slot */}
             <section className="mt-8">
               <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                 <Mic2 className="h-4 w-4" />
-                Your slot{data.mySignups.length !== 1 ? "s" : ""}
+                Your slot
               </h2>
               {data.mySignups.length === 0 ? (
                 <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
@@ -799,15 +875,60 @@ export default function HostDashboard() {
                     const st = slotStart(data.event.startAtUtc, data.event.slotMinutes, s.slotIndex);
                     const en = slotEnd(data.event.startAtUtc, data.event.slotMinutes, s.slotIndex);
                     return (
-                      <div key={s.id} className="rounded-xl border border-primary/30 bg-card p-4" data-testid={`card-host-signup-${s.id}`}>
-                        <div className="flex items-center gap-2">
-                          <Radio className="h-3.5 w-3.5 text-primary" />
-                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Slot #{s.slotIndex + 1}</span>
+                      <div
+                        key={s.id}
+                        className="relative overflow-hidden rounded-xl border border-primary/30 bg-card p-4"
+                        data-testid={`card-host-signup-${s.id}`}
+                      >
+                        <div className="absolute inset-y-0 left-0 w-1 bg-primary" />
+                        <div className="flex items-start justify-between gap-3 pl-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <Radio className="h-3.5 w-3.5 text-primary" />
+                              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Slot #{s.slotIndex + 1} · {data.event.name.trim()}
+                              </span>
+                            </div>
+                            <p className="mt-2 font-mono text-base font-semibold text-card-foreground">
+                              {formatDateInZone(st, zone)} · {formatTimeInZone(st, zone)}–{formatTimeInZone(en, zone)}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{zoneLabel(zone)}</p>
+                          </div>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+                                aria-label="Change or release this slot"
+                                title="Change or release this slot"
+                                data-testid={`button-edit-slot-${s.id}`}
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Release this slot?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  {formatDateInZone(st, zone)}, {formatTimeInZone(st, zone)}–{formatTimeInZone(en, zone)} goes back on the
+                                  open schedule for anyone to claim. You can pick a different time right after. Fans who asked for a
+                                  reminder on this slot won't be notified.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Keep my slot</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="gap-1.5 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  onClick={() => release.mutate(s.id)}
+                                  data-testid={`button-release-slot-${s.id}`}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" /> Release slot
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
-                        <p className="mt-2 font-mono text-base font-semibold text-card-foreground">
-                          {formatDateInZone(st, zone)} · {formatTimeInZone(st, zone)}–{formatTimeInZone(en, zone)}
-                        </p>
-                        <p className="text-sm text-muted-foreground">{zoneLabel(zone)}</p>
                       </div>
                     );
                   })}
@@ -815,41 +936,43 @@ export default function HostDashboard() {
               )}
             </section>
 
-            {/* ------------------------------------------------- open slots */}
-            <section className="mt-8">
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                <Radio className="h-4 w-4" />
-                Claim a slot on {data.event.name}
-              </h2>
-              {openSlots.length === 0 ? (
-                <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-                  Every slot is claimed right now — check back if plans change.
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {openSlots.map((s) => (
-                    <button
-                      key={s.index}
-                      type="button"
-                      onClick={() => {
-                        setClaimIndex(s.index);
-                        setScreen("claim");
-                      }}
-                      className="rounded-lg border border-border bg-card p-3 text-left text-sm transition-colors hover-elevate"
-                      data-testid={`button-pick-slot-${s.index}`}
-                    >
-                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{formatDateInZone(s.start, zone)}</div>
-                      <div className="font-mono font-semibold">
-                        {formatTimeInZone(s.start, zone)}–{formatTimeInZone(s.end, zone)}
-                      </div>
-                      <Badge variant="outline" className="mt-1.5 text-primary border-primary/40">
-                        Open
-                      </Badge>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
+            {/* ------------------------------------------------- open slots (only until they hold one) */}
+            {data.mySignups.length === 0 && (
+              <section className="mt-8">
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                  <Radio className="h-4 w-4" />
+                  Claim a slot on {data.event.name}
+                </h2>
+                {openSlots.length === 0 ? (
+                  <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
+                    Every slot is claimed right now — check back if plans change.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {openSlots.map((s) => (
+                      <button
+                        key={s.index}
+                        type="button"
+                        onClick={() => {
+                          setClaimIndex(s.index);
+                          setScreen("claim");
+                        }}
+                        className="rounded-lg border border-border bg-card p-3 text-left text-sm transition-colors hover-elevate"
+                        data-testid={`button-pick-slot-${s.index}`}
+                      >
+                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{formatDateInZone(s.start, zone)}</div>
+                        <div className="font-mono font-semibold">
+                          {formatTimeInZone(s.start, zone)}–{formatTimeInZone(s.end, zone)}
+                        </div>
+                        <Badge variant="outline" className="mt-1.5 text-primary border-primary/40">
+                          Open
+                        </Badge>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
 
             {/* --------------------------------------------------- reminders */}
             <section className="mt-8">

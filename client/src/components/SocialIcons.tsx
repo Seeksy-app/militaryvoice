@@ -28,6 +28,27 @@ const LABELS: Record<SocialPlatform, string> = {
   threads: "Threads",
 };
 
+const BRAND: Record<SocialPlatform, string> = {
+  instagram: "#E1306C",
+  tiktok: "#000000",
+  youtube: "#FF0000",
+  x: "#000000",
+  linkedin: "#0A66C2",
+  facebook: "#1877F2",
+  threads: "#000000",
+};
+
+export function platformColor(p: SocialPlatform): string {
+  return BRAND[p];
+}
+
+export function formatFollowers(n?: number): string | null {
+  if (typeof n !== "number" || !Number.isFinite(n)) return null;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 100_000 ? 0 : 1).replace(/\.0$/, "")}K`;
+  return String(n);
+}
+
 export const ALL_PLATFORMS: SocialPlatform[] = ["instagram", "tiktok", "youtube", "x", "linkedin", "facebook", "threads"];
 
 export function PlatformIcon({ platform, className = "h-4 w-4" }: { platform: SocialPlatform; className?: string }) {
@@ -66,7 +87,9 @@ export function SocialIconRow({ accounts, size = "sm", className = "" }: RowProp
   return (
     <div className={`flex flex-wrap items-center gap-1 ${className}`} data-testid="social-icon-row">
       {accounts.map((a) => {
-        const title = `${platformLabel(a.platform)}${a.username ? ` · @${a.username}` : ""}`;
+        const f = formatFollowers(a.followers);
+        const handle = a.username && !/^\d+$/.test(a.username) ? `@${a.username}` : a.displayName;
+        const title = `${platformLabel(a.platform)}${handle ? ` · ${handle}` : ""}${f ? ` · ${f} followers` : ""}`;
         const cls = `inline-flex ${dim} items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary`;
         return a.url ? (
           <a

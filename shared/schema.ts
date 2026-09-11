@@ -241,4 +241,6 @@ export interface SocialAccount {
   displayName: string;
   url: string;
   image: string;
+  /** Follower / subscriber count from the platform's analytics, when available. */
+  followers?: number;
 }

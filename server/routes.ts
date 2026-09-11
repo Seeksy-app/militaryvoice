@@ -23,6 +23,7 @@ import {
   ensureUploadPostProfile,
   createConnectUrl,
   fetchConnectedAccounts,
+  enrichWithFollowers,
   parseSocialAccounts,
 } from "./uploadPost.js";
 
@@ -232,6 +233,16 @@ export function registerRoutes(app: Express): void {
     const existing = await storage.getSignupBySlot(parsed.data.eventId, parsed.data.slotIndex);
     if (existing && existing.status !== "cancelled") {
       res.status(409).json({ message: "That slot was just claimed by someone else. Pick another." });
+      return;
+    }
+
+    // One active slot per podcaster per event. The dashboard swaps by
+    // releasing first; anything else gets a clear message.
+    const mineActive = (await storage.listSignups(parsed.data.eventId)).filter(
+      (s) => s.status !== "cancelled" && s.email.trim().toLowerCase() === email,
+    );
+    if (mineActive.length > 0) {
+      res.status(409).json({ message: "You already hold a slot on this event. Release it from your dashboard to pick a different time." });
       return;
     }
 
@@ -641,7 +652,10 @@ export function registerRoutes(app: Express): void {
       return;
     }
     try {
-      const accounts = await fetchConnectedAccounts(profile.uploadPostUsername);
+      const accounts = await enrichWithFollowers(
+        profile.uploadPostUsername,
+        await fetchConnectedAccounts(profile.uploadPostUsername),
+      );
       const json = JSON.stringify(accounts);
       await storage.upsertProfile(email, { socialAccounts: json });
       await storage.updateSignupSocialAccountsByEmail(email, json);
@@ -650,6 +664,23 @@ export function registerRoutes(app: Express): void {
       console.error("Upload-Post refresh failed:", err);
       res.status(502).json({ message: "Couldn't read your connected accounts right now." });
     }
+  });
+
+  // ---- Host: release (cancel) one of their own slots ---------------------------
+  app.delete("/api/host/signups/:id", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const id = Number(req.params.id);
+    const row = await storage.getSignupById(id);
+    if (!row || row.email.trim().toLowerCase() !== email) {
+      res.status(404).json({ message: "That slot isn't yours to release." });
+      return;
+    }
+    if (row.status === "cancelled") {
+      res.json({ ok: true });
+      return;
+    }
+    await storage.cancelSignup(id);
+    res.json({ ok: true });
   });
 
   // ---- Host: dashboard data (their slot(s), fans who want a reminder, and the

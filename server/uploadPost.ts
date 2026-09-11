@@ -27,6 +27,7 @@ export interface SocialAccount {
   displayName: string;
   url: string; // best-effort public profile URL ("" if we can't build one)
   image: string; // avatar URL from the platform, if provided
+  followers?: number; // from /analytics when the platform reports it
 }
 
 export function isUploadPostConfigured(): boolean {
@@ -153,8 +154,16 @@ export function normalizeSocialAccounts(raw: Record<string, unknown>): SocialAcc
       username = cleanHandle(entry);
     } else if (typeof entry === "object") {
       const e = entry as Record<string, unknown>;
-      username = cleanHandle(e.handle) || cleanHandle(e.username);
       displayName = typeof e.display_name === "string" ? e.display_name.trim() : "";
+      if (platform === "facebook") {
+        // Facebook: `username` is the numeric account/Page id (needed for the
+        // Page URL and analytics); the human name lives in handle/display_name.
+        const id = cleanHandle(e.username);
+        username = /^\d+$/.test(id) ? id : cleanHandle(e.handle) || id;
+        displayName = displayName || cleanHandle(e.handle);
+      } else {
+        username = cleanHandle(e.handle) || cleanHandle(e.username);
+      }
       image = typeof e.social_images === "string" ? e.social_images : "";
       if (!username && !displayName) continue;
     } else {
@@ -180,4 +189,64 @@ export function parseSocialAccounts(json: string | null | undefined): SocialAcco
   } catch {
     return [];
   }
+}
+
+// ---------------------------------------------------------------------------
+// Follower counts. GET /analytics/{username}?platforms=... returns per-platform
+// metrics including `followers`. Facebook needs a Page id; Upload-Post links a
+// personal account first, so when it complains we read the manageable Page out
+// of the error, pin it, and retry — which also gives us the Page's real name.
+// ---------------------------------------------------------------------------
+type AnalyticsResponse = Record<string, { followers?: number; success?: boolean; error?: string } | undefined>;
+
+async function analytics(username: string, platforms: string[], pageId?: string): Promise<AnalyticsResponse> {
+  const q = new URLSearchParams({ platforms: platforms.join(",") });
+  if (pageId) q.set("page_id", pageId);
+  return call<AnalyticsResponse>("GET", `/analytics/${encodeURIComponent(username)}?${q.toString()}`);
+}
+
+async function pinFacebookPage(username: string, pageId: string): Promise<void> {
+  try {
+    await call("POST", "/uploadposts/users/facebook-page", { profile_username: username, facebook_page_id: pageId, page_id: pageId });
+  } catch (err) {
+    console.warn("Upload-Post: pin facebook page failed (non-fatal):", (err as Error).message);
+  }
+}
+
+/** Adds `followers` to each account where the platform reports it. Never throws. */
+export async function enrichWithFollowers(username: string, accounts: SocialAccount[]): Promise<SocialAccount[]> {
+  if (accounts.length === 0) return accounts;
+  const out = accounts.map((a) => ({ ...a }));
+  const byPlatform = new Map(out.map((a) => [a.platform, a]));
+  try {
+    const fb = byPlatform.get("facebook");
+    const pageId = fb && /^\d+$/.test(fb.username) ? fb.username : undefined;
+    let res = await analytics(username, out.map((a) => a.platform), pageId);
+
+    // Facebook: personal account id was linked, not a Page. Pull the Page out
+    // of the error text ("Use one of: OCS Blog (233012933525655)") and retry.
+    const fbErr = res.facebook && res.facebook.success === false ? String(res.facebook.error || "") : "";
+    const m = fbErr.match(/([^:,]+?)\s*\((\d{6,})\)/);
+    if (fb && m) {
+      const [, pageName, newPageId] = m;
+      fb.username = newPageId;
+      fb.displayName = pageName.trim();
+      fb.url = `https://www.facebook.com/${newPageId}`;
+      await pinFacebookPage(username, newPageId);
+      try {
+        const retry = await analytics(username, ["facebook"], newPageId);
+        res = { ...res, facebook: retry.facebook };
+      } catch {
+        /* keep going without facebook followers */
+      }
+    }
+
+    for (const a of out) {
+      const r = res[a.platform];
+      if (r && typeof r.followers === "number" && Number.isFinite(r.followers)) a.followers = Math.max(0, Math.round(r.followers));
+    }
+  } catch (err) {
+    console.warn("Upload-Post analytics failed (followers omitted):", (err as Error).message);
+  }
+  return out;
 }
