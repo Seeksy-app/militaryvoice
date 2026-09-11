@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
 import { useAdminAuth } from "@/lib/admin-auth";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend, adminExportUrl } from "@/lib/adminApi";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
@@ -625,119 +626,115 @@ function SignupsCard({ password }: { password: string }) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
         <div>
-          <CardTitle className="text-base">Signups</CardTitle>
+          <CardTitle className="text-base">Who's signed up</CardTitle>
           <CardDescription>
             {active.length} confirmed
             {needsInterviewer.length > 0 ? ` · ${needsInterviewer.length} need an interviewer` : ""} · times shown in {zoneLabel(zone)}
           </CardDescription>
         </div>
         <a href={adminExportUrl(password)} target="_blank" rel="noopener noreferrer" data-testid="link-export-csv">
-          <Button variant="outline" size="sm" className="gap-1.5">
-            <Download className="h-3.5 w-3.5" /> Export CSV
+          <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+            <Download className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Export CSV</span>
           </Button>
         </a>
       </CardHeader>
       <CardContent>
         {isLoading || !event ? (
           <div className="space-y-2">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-16 w-full" />
           </div>
         ) : active.length === 0 ? (
           <p className="text-sm text-muted-foreground">No signups yet — share the schedule link to get started.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Slot</TableHead>
-                  <TableHead>Podcast</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Notes</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {active
-                  .sort((a, b) => a.slotIndex - b.slotIndex)
-                  .map((s) => {
-                    const start = slotStart(event.startAtUtc, event.slotMinutes, s.slotIndex);
-                    const onAir = onAirWindow(start, {
-                      onAirMinutes: event.onAirMinutes,
-                      bufferMinutes: event.bufferMinutes,
-                      bufferPosition: event.bufferPosition,
-                    });
-                    return (
-                      <TableRow key={s.id} data-testid={`row-signup-${s.id}`}>
-                        <TableCell className="whitespace-nowrap font-mono text-xs">
-                          <div>{formatDateInZone(start, zone)} {formatTimeInZone(start, zone)}</div>
-                          <div className="text-muted-foreground">
-                            On air {formatTimeInZone(onAir.start, zone)}–{formatTimeInZone(onAir.end, zone)}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2 font-medium">
-                            {s.photoUrl && (
-                              <img
-                                src={resolveUploadUrl(s.photoUrl)}
-                                alt={s.hostName}
-                                className="h-6 w-6 shrink-0 rounded-full object-cover ring-1 ring-border"
-                              />
-                            )}
-                            {s.podcastName}
-                          </div>
-                          <div className="flex flex-wrap gap-1 pt-1">
-                            <Badge variant="outline" className="text-xs font-normal">
-                              {s.numPeople === 2 ? "2 hosts" : "1 host"}
-                            </Badge>
-                            {s.hasVideoIntro && <Badge variant="outline" className="text-xs font-normal">Intro</Badge>}
-                            {s.hasVideoOutro && <Badge variant="outline" className="text-xs font-normal">Outro</Badge>}
-                            {s.hasSlides && <Badge variant="outline" className="text-xs font-normal">Slides</Badge>}
-                            {s.hasImages && <Badge variant="outline" className="text-xs font-normal">Images</Badge>}
-                            {s.needsInterviewer && (
-                              <Badge className="gap-1 bg-primary/15 text-xs font-normal text-primary hover:bg-primary/15">
-                                <HeadphonesIcon className="h-3 w-3" /> Needs interviewer
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          <div>{s.hostName}</div>
-                          <div className="text-muted-foreground">{s.email}</div>
-                          {s.phone && <div className="text-muted-foreground">{s.phone}</div>}
-                        </TableCell>
-                        <TableCell className="max-w-[220px] text-sm text-muted-foreground">
-                          {s.socialLinks && <div className="truncate">{s.socialLinks}</div>}
-                          {s.notes && <div className="truncate">{s.notes}</div>}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => cancelSignup(s.id)}
-                              aria-label="Reopen this slot"
-                              data-testid={`button-cancel-${s.id}`}
-                            >
-                              <Ban className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => deleteSignup(s.id)}
-                              aria-label="Delete this signup"
-                              data-testid={`button-delete-${s.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-              </TableBody>
-            </Table>
+          <div className="flex max-h-[70vh] flex-col gap-2.5 overflow-y-auto pr-1">
+            {active
+              .sort((a, b) => a.slotIndex - b.slotIndex)
+              .map((s) => {
+                const start = slotStart(event.startAtUtc, event.slotMinutes, s.slotIndex);
+                const onAir = onAirWindow(start, {
+                  onAirMinutes: event.onAirMinutes,
+                  bufferMinutes: event.bufferMinutes,
+                  bufferPosition: event.bufferPosition,
+                });
+                return (
+                  <div
+                    key={s.id}
+                    className="rounded-lg border border-border p-3"
+                    data-testid={`row-signup-${s.id}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {s.photoUrl && (
+                          <img
+                            src={resolveUploadUrl(s.photoUrl)}
+                            alt={s.hostName}
+                            className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-border"
+                          />
+                        )}
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-card-foreground">{s.podcastName}</div>
+                          <div className="truncate text-xs text-muted-foreground">{s.hostName}</div>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => cancelSignup(s.id)}
+                          aria-label="Reopen this slot"
+                          data-testid={`button-cancel-${s.id}`}
+                        >
+                          <Ban className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => deleteSignup(s.id)}
+                          aria-label="Delete this signup"
+                          data-testid={`button-delete-${s.id}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs text-muted-foreground">
+                      <span className="font-semibold text-foreground">
+                        {formatDateInZone(start, zone)} {formatTimeInZone(start, zone)}
+                      </span>
+                      <span>
+                        On air {formatTimeInZone(onAir.start, zone)}–{formatTimeInZone(onAir.end, zone)}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <Badge variant="outline" className="text-xs font-normal">
+                        {s.numPeople === 2 ? "2 hosts" : "1 host"}
+                      </Badge>
+                      {s.hasVideoIntro && <Badge variant="outline" className="text-xs font-normal">Intro</Badge>}
+                      {s.hasVideoOutro && <Badge variant="outline" className="text-xs font-normal">Outro</Badge>}
+                      {s.hasSlides && <Badge variant="outline" className="text-xs font-normal">Slides</Badge>}
+                      {s.hasImages && <Badge variant="outline" className="text-xs font-normal">Images</Badge>}
+                      {s.needsInterviewer && (
+                        <Badge className="gap-1 bg-primary/15 text-xs font-normal text-primary hover:bg-primary/15">
+                          <HeadphonesIcon className="h-3 w-3" /> Needs interviewer
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      <div className="truncate">{s.email}</div>
+                      {s.phone && <div className="truncate">{s.phone}</div>}
+                      {s.socialLinks && <div className="truncate">{s.socialLinks}</div>}
+                      {s.notes && <div className="truncate">{s.notes}</div>}
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         )}
       </CardContent>
@@ -747,6 +744,7 @@ function SignupsCard({ password }: { password: string }) {
 
 export default function Admin() {
   const { isAuthenticated, password, logout } = useAdminAuth();
+  const isMobile = useIsMobile();
 
   return (
     <div className="min-h-screen">
@@ -754,7 +752,7 @@ export default function Admin() {
       {!isAuthenticated || !password ? (
         <LoginCard />
       ) : (
-        <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6">
+        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
           <div className="mb-6 flex items-center justify-between">
             <h1 className="text-xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
               Admin dashboard
@@ -763,11 +761,36 @@ export default function Admin() {
               <LogOut className="h-3.5 w-3.5" /> Log out
             </Button>
           </div>
-          <div className="flex flex-col gap-6">
-            <EventsManagementCard password={password} />
-            <EventSettingsCard password={password} />
-            <SignupsCard password={password} />
-          </div>
+
+          {isMobile ? (
+            <Tabs defaultValue="setup">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="setup" data-testid="tab-admin-setup">
+                  Setup
+                </TabsTrigger>
+                <TabsTrigger value="signups" data-testid="tab-admin-signups">
+                  Who's signed up
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="setup" className="mt-6 flex flex-col gap-6">
+                <EventsManagementCard password={password} />
+                <EventSettingsCard password={password} />
+              </TabsContent>
+              <TabsContent value="signups" className="mt-6">
+                <SignupsCard password={password} />
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
+              <div className="flex flex-col gap-6">
+                <EventsManagementCard password={password} />
+                <EventSettingsCard password={password} />
+              </div>
+              <div className="lg:sticky lg:top-6">
+                <SignupsCard password={password} />
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
