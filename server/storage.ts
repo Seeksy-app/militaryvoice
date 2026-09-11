@@ -1,4 +1,4 @@
-import { events, signups, reminders } from "../shared/schema.js";
+import { events, signups, reminders, watchSignups, loginTokens } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -7,6 +7,9 @@ import type {
   InsertSignup,
   ReminderRow,
   InsertReminder,
+  WatchSignupRow,
+  InsertWatchSignup,
+  LoginTokenRow,
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -100,6 +103,24 @@ async function ensureSchema() {
       created_at TEXT NOT NULL
     );
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS watch_signups (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      confirmation_code TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS login_tokens (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      token TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT NOT NULL
+    );
+  `;
 
   // Migrate older databases created before these columns existed.
   await sql`ALTER TABLE signups ADD COLUMN IF NOT EXISTS photo_url TEXT NOT NULL DEFAULT ''`;
@@ -130,6 +151,11 @@ export interface IStorage {
   getSignupById(id: number): Promise<SignupRow | undefined>;
   createReminder(reminder: InsertReminder): Promise<ReminderRow>;
   listReminders(): Promise<ReminderRow[]>;
+  createWatchSignup(signup: InsertWatchSignup): Promise<WatchSignupRow>;
+  listWatchSignups(): Promise<WatchSignupRow[]>;
+  createLoginToken(email: string, token: string, expiresAt: string): Promise<LoginTokenRow>;
+  getLoginToken(token: string): Promise<LoginTokenRow | undefined>;
+  markLoginTokenUsed(id: number): Promise<void>;
 }
 
 // Default marathon: kicks off the next Saturday at 12:00 PM Eastern for 24 hours,
@@ -232,6 +258,41 @@ class DatabaseStorage implements IStorage {
   async listReminders(): Promise<ReminderRow[]> {
     await ready();
     return db.select().from(reminders);
+  }
+
+  async createWatchSignup(signup: InsertWatchSignup): Promise<WatchSignupRow> {
+    await ready();
+    const confirmationCode = `MV-${Math.random().toString(36).slice(2, 6).toUpperCase()}${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+    const [created] = await db
+      .insert(watchSignups)
+      .values({ ...signup, confirmationCode, createdAt: new Date().toISOString() })
+      .returning();
+    return created;
+  }
+
+  async listWatchSignups(): Promise<WatchSignupRow[]> {
+    await ready();
+    return db.select().from(watchSignups);
+  }
+
+  async createLoginToken(email: string, token: string, expiresAt: string): Promise<LoginTokenRow> {
+    await ready();
+    const [created] = await db
+      .insert(loginTokens)
+      .values({ email, token, expiresAt, createdAt: new Date().toISOString() })
+      .returning();
+    return created;
+  }
+
+  async getLoginToken(token: string): Promise<LoginTokenRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(loginTokens).where(eq(loginTokens.token, token));
+    return row;
+  }
+
+  async markLoginTokenUsed(id: number): Promise<void> {
+    await ready();
+    await db.update(loginTokens).set({ usedAt: new Date().toISOString() }).where(eq(loginTokens.id, id));
   }
 }
 

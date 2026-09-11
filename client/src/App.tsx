@@ -10,6 +10,8 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Agenda from "@/pages/Agenda";
 import Admin from "@/pages/Admin";
+import HostLogin from "@/pages/HostLogin";
+import HostDashboard from "@/pages/HostDashboard";
 
 function AppRouter() {
   return (
@@ -17,6 +19,9 @@ function AppRouter() {
       <Route path="/" component={Home} />
       <Route path="/agenda" component={Agenda} />
       <Route path="/admin" component={Admin} />
+      <Route path="/host/login">{() => <HostLogin />}</Route>
+      <Route path="/host/login-expired">{() => <HostLogin expired />}</Route>
+      <Route path="/host/dashboard" component={HostDashboard} />
       <Route component={NotFound} />
     </Switch>
   );

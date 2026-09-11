@@ -7,12 +7,14 @@ import { uploadPhoto } from "./photoStorage.js";
 import {
   insertSignupSchema,
   insertReminderSchema,
+  insertWatchSignupSchema,
   updateEventSchema,
   type PublicEvent,
   type PublicSignup,
 } from "../shared/schema.js";
 import { fromError } from "zod-validation-error";
-import { sendConfirmationEmail } from "./email.js";
+import { sendConfirmationEmail, sendWatchConfirmationEmail, sendMagicLinkEmail } from "./email.js";
+import { setSessionCookie, clearSessionCookie, requireHostSession } from "./session.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -395,4 +397,107 @@ export function registerRoutes(app: Express): void {
     res.send(lines.join("\n"));
   });
 
+  // ---- Public: fan "claim a slot to watch" sign-up (no login needed) ---------
+  app.post("/api/watch-signups", async (req, res) => {
+    const parsed = insertWatchSignupSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const created = await storage.createWatchSignup(parsed.data);
+    const event = await storage.getEvent();
+    const scheduleUrl = `${req.protocol}://${req.get("host")}/#/agenda`;
+    await sendWatchConfirmationEmail({
+      to: parsed.data.email,
+      eventName: event.name,
+      confirmationCode: created.confirmationCode,
+      scheduleUrl,
+    });
+    res.status(201).json({ confirmationCode: created.confirmationCode });
+  });
+
+  // ---- Host: request a magic sign-in link -------------------------------------
+  app.post("/api/host/request-link", async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      res.status(400).json({ message: "Enter a valid email" });
+      return;
+    }
+    const signupRows = await storage.listSignups();
+    const hasSlot = signupRows.some((s) => s.email.trim().toLowerCase() === email && s.status !== "cancelled");
+    // Always respond the same way whether or not the email matches a signup, so
+    // this endpoint can't be used to probe which emails are registered hosts.
+    if (hasSlot) {
+      const token = crypto.randomBytes(32).toString("base64url");
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      await storage.createLoginToken(email, token, expiresAt);
+      const loginUrl = `${req.protocol}://${req.get("host")}/api/host/verify?token=${token}`;
+      await sendMagicLinkEmail({ to: email, loginUrl });
+    }
+    res.json({ ok: true, message: "If that email has a slot, a sign-in link is on its way." });
+  });
+
+  // ---- Host: verify magic link, start session, redirect to dashboard ---------
+  app.get("/api/host/verify", async (req, res) => {
+    const token = String(req.query.token || "");
+    const base = `${req.protocol}://${req.get("host")}`;
+    const row = token ? await storage.getLoginToken(token) : undefined;
+    if (!row || row.usedAt || new Date(row.expiresAt).getTime() < Date.now()) {
+      // No query string here: this app uses hash-based routing, and a `?`
+      // suffix on the hash path breaks wouter's exact-match route matching.
+      res.redirect(`${base}/#/host/login-expired`);
+      return;
+    }
+    await storage.markLoginTokenUsed(row.id);
+    setSessionCookie(res, row.email);
+    res.redirect(`${base}/#/host/dashboard`);
+  });
+
+  // ---- Host: sign out ----------------------------------------------------------
+  app.post("/api/host/logout", (_req, res) => {
+    clearSessionCookie(res);
+    res.json({ ok: true });
+  });
+
+  // ---- Host: dashboard data (their slot + fans who asked for a reminder) -----
+  app.get("/api/host/dashboard", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const [signupRows, reminderRows] = await Promise.all([storage.listSignups(), storage.listReminders()]);
+    const mySignups = signupRows.filter((s) => s.email.trim().toLowerCase() === email && s.status !== "cancelled");
+    const mySignupIds = new Set(mySignups.map((s) => s.id));
+    const contacts = reminderRows
+      .filter((r) => mySignupIds.has(r.signupId))
+      .map((r) => ({ id: r.id, email: r.email, createdAt: r.createdAt, signupId: r.signupId }));
+    res.json({
+      email,
+      signups: mySignups.map((s) => ({
+        id: s.id,
+        slotIndex: s.slotIndex,
+        podcastName: s.podcastName,
+        hostName: s.hostName,
+        numPeople: s.numPeople,
+        status: s.status,
+        createdAt: s.createdAt,
+      })),
+      contacts,
+    });
+  });
+
+  // ---- Host: CSV export of their own contacts ---------------------------------
+  app.get("/api/host/export.csv", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const [signupRows, reminderRows] = await Promise.all([storage.listSignups(), storage.listReminders()]);
+    const mySignupIds = new Set(
+      signupRows.filter((s) => s.email.trim().toLowerCase() === email).map((s) => s.id),
+    );
+    const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const lines = ["email,created_at"];
+    for (const r of reminderRows) {
+      if (!mySignupIds.has(r.signupId)) continue;
+      lines.push([r.email, r.createdAt].map(escape).join(","));
+    }
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=my-militaryvoice-contacts.csv");
+    res.send(lines.join("\n"));
+  });
 }

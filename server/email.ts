@@ -74,9 +74,9 @@ function buildText(input: ConfirmationEmailInput): string {
   return `You're on the schedule, ${input.hostName}\n\n${input.podcastName} is confirmed for ${input.eventName}.\n\nYou're on air: ${input.onAirStartLabel} - ${input.onAirEndLabel} (${input.timezoneLabel})\n\n${bufferLine}No login needed - just be ready to go live at your on-air start time.\n\nView the agenda: ${input.agendaUrl}\n`;
 }
 
-/** Send the confirmation email. Never throws — logs and returns false on failure so a
- *  flaky email provider never blocks someone from claiming their slot. */
-export async function sendConfirmationEmail(input: ConfirmationEmailInput): Promise<boolean> {
+/** Low-level Resend sender shared by every email type. Never throws — logs and
+ *  returns false on failure so a flaky email provider never blocks a user flow. */
+async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string }): Promise<boolean> {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (RESEND_API_KEY) {
@@ -89,10 +89,10 @@ export async function sendConfirmationEmail(input: ConfirmationEmailInput): Prom
       headers,
       body: JSON.stringify({
         from: FROM_ADDRESS,
-        to: [input.to],
-        subject: `You're on the schedule: ${input.podcastName} at ${input.onAirStartLabel}`,
-        html: buildHtml(input),
-        text: buildText(input),
+        to: [opts.to],
+        subject: opts.subject,
+        html: opts.html,
+        text: opts.text,
       }),
     });
     if (!res.ok) {
@@ -102,7 +102,70 @@ export async function sendConfirmationEmail(input: ConfirmationEmailInput): Prom
     }
     return true;
   } catch (err) {
-    console.error("Failed to send confirmation email:", err);
+    console.error("Failed to send email:", err);
     return false;
   }
+}
+
+/** Send the on-air confirmation email. Never throws. */
+export async function sendConfirmationEmail(input: ConfirmationEmailInput): Promise<boolean> {
+  return sendRawEmail({
+    to: input.to,
+    subject: `You're on the schedule: ${input.podcastName} at ${input.onAirStartLabel}`,
+    html: buildHtml(input),
+    text: buildText(input),
+  });
+}
+
+export interface WatchConfirmationInput {
+  to: string;
+  eventName: string;
+  confirmationCode: string;
+  scheduleUrl: string;
+}
+
+/** Send a fan their "claim a slot to watch" confirmation code. Never throws. */
+export async function sendWatchConfirmationEmail(input: WatchConfirmationInput): Promise<boolean> {
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">${escapeHtml(input.eventName)}</p>
+    <h1 style="margin:0 0 16px;color:#111827;font-size:22px;font-weight:700;">You're on the watch list</h1>
+    <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">We'll keep this on file so you don't miss the marathon. Here's your confirmation number:</p>
+    <div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 24px;text-align:center;">
+      <p style="margin:0;color:#053877;font-size:24px;font-weight:800;letter-spacing:0.08em;font-family:monospace;">${escapeHtml(input.confirmationCode)}</p>
+    </div>
+    <a href="${input.scheduleUrl}" style="display:inline-block;background:#053877;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:9999px;">View the schedule</a>
+    <p style="margin:28px 0 0;color:#9ca3af;font-size:12px;">Questions? Just reply to this email.</p>
+  </div>`;
+  const text = `You're on the watch list for ${input.eventName}.\n\nConfirmation number: ${input.confirmationCode}\n\nView the schedule: ${input.scheduleUrl}\n`;
+  return sendRawEmail({
+    to: input.to,
+    subject: `Your confirmation number: ${input.confirmationCode}`,
+    html,
+    text,
+  });
+}
+
+export interface MagicLinkEmailInput {
+  to: string;
+  loginUrl: string;
+}
+
+/** Send a podcaster their one-time login link. Never throws. */
+export async function sendMagicLinkEmail(input: MagicLinkEmailInput): Promise<boolean> {
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoice.ai</p>
+    <h1 style="margin:0 0 16px;color:#111827;font-size:22px;font-weight:700;">Sign in to your host dashboard</h1>
+    <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">Click the button below to sign in. This link works once and expires in 15 minutes.</p>
+    <a href="${input.loginUrl}" style="display:inline-block;background:#053877;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:9999px;">Sign in</a>
+    <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;">If you didn't request this, you can ignore this email.</p>
+  </div>`;
+  const text = `Sign in to your MilitaryVoice.ai host dashboard: ${input.loginUrl}\n\nThis link works once and expires in 15 minutes. If you didn't request this, you can ignore this email.\n`;
+  return sendRawEmail({
+    to: input.to,
+    subject: "Your MilitaryVoice.ai sign-in link",
+    html,
+    text,
+  });
 }

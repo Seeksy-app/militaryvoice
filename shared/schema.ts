@@ -113,3 +113,40 @@ export const insertReminderSchema = createInsertSchema(reminders)
 
 export type InsertReminder = z.infer<typeof insertReminderSchema>;
 export type ReminderRow = typeof reminders.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Watch signups — a fan claiming a slot to watch (no account needed), gets a
+// short confirmation code back. Distinct from `reminders`, which is a fan
+// asking to be pinged about one specific podcaster's slot.
+// ---------------------------------------------------------------------------
+export const watchSignups = pgTable("watch_signups", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  confirmationCode: text("confirmation_code").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const insertWatchSignupSchema = createInsertSchema(watchSignups)
+  .omit({ id: true, confirmationCode: true, createdAt: true })
+  .extend({
+    email: z.string().email("Enter a valid email"),
+  });
+
+export type InsertWatchSignup = z.infer<typeof insertWatchSignupSchema>;
+export type WatchSignupRow = typeof watchSignups.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Login tokens — one-time magic-link tokens for podcaster (host) login.
+// A host only exists implicitly as "whoever has a signups row with this
+// email" — there's no separate accounts table.
+// ---------------------------------------------------------------------------
+export const loginTokens = pgTable("login_tokens", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  token: text("token").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  usedAt: text("used_at"),
+  createdAt: text("created_at").notNull(),
+});
+
+export type LoginTokenRow = typeof loginTokens.$inferSelect;

@@ -5,6 +5,7 @@ import { NavBar } from "@/components/NavBar";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { SlotCard } from "@/components/SlotCard";
 import { SignupDialog } from "@/components/SignupDialog";
+import { WatchSignupSection } from "@/components/WatchSignupSection";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Globe2, ArrowRight, Radio, Mic2, Bell } from "lucide-react";
@@ -224,6 +225,8 @@ export default function Home() {
           )}
         </div>
       </section>
+
+      <WatchSignupSection />
 
       {spotlightSlots.length > 0 && (
         <section className="mx-auto max-w-6xl px-4 pt-8 sm:px-6">

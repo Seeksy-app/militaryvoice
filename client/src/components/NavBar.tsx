@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Moon, Sun, ShieldCheck } from "lucide-react";
+import { Moon, Sun, ShieldCheck, KeyRound } from "lucide-react";
 import { LogoMark, Wordmark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/lib/theme";
@@ -38,6 +38,16 @@ export function NavBar() {
             );
           })}
           <Link
+            href="/host/login"
+            data-testid="link-nav-host-login"
+            className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors hover-elevate ${
+              location.startsWith("/host") ? "text-primary" : "text-muted-foreground"
+            }`}
+          >
+            <KeyRound className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Podcaster Login</span>
+          </Link>
+          <Link
             href="/admin"
             data-testid="link-nav-admin"
             className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors hover-elevate ${
@@ -45,7 +55,7 @@ export function NavBar() {
             }`}
           >
             <ShieldCheck className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Host</span>
+            <span className="hidden sm:inline">Admin</span>
           </Link>
           <Button
             variant="ghost"
