@@ -59,7 +59,18 @@ const EVENT_FALLBACK: PublicEvent = {
   bufferPosition: "after",
   createdAt: "",
 };
-const HERO_IMAGES = ["/hero-1.jpg", "/hero-2.jpg", "/hero-3.jpg", "/hero-4.jpg", "/hero-5.jpg"];
+const HERO_IMAGES = [
+  "/hero-1.jpg",
+  "/hero-2.jpg",
+  "/hero-3.jpg",
+  "/hero-4.jpg",
+  "/hero-5.jpg",
+  "/hero-6.jpg",
+  "/hero-7.jpg",
+  "/hero-8.jpg",
+  "/hero-9.jpg",
+  "/hero-10.jpg",
+];
 const HERO_ROTATE_MS = 6000;
 const NAVY = "bg-[#053877] text-white";
 const FADE_UP = {
@@ -578,8 +589,19 @@ export default function Landing({ slug }: Props) {
       )}
 
       {/* ------------------------------------------------------ PODCASTERS */}
-      <section id="podcasters" className={`scroll-mt-16 ${NAVY}`}>
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-20">
+      <section id="podcasters" className={`relative scroll-mt-16 overflow-hidden ${NAVY}`}>
+        <img
+          src="/podcasters-bg.jpg"
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover object-[65%_center] opacity-85"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.93)_0%,rgba(0,7,65,0.80)_36%,rgba(5,56,119,0.45)_68%,rgba(5,56,119,0.22)_100%)]"
+        />
+        <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-20">
           <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
             <Reveal>
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">For podcasters</div>
