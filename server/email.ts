@@ -25,7 +25,22 @@ export interface ConfirmationEmailInput {
   agendaUrl: string;
 }
 
-function buildHtml(input: ConfirmationEmailInput): string {
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildHtml(rawInput: ConfirmationEmailInput): string {
+  const input: ConfirmationEmailInput = {
+    ...rawInput,
+    hostName: escapeHtml(rawInput.hostName),
+    podcastName: escapeHtml(rawInput.podcastName),
+    eventName: escapeHtml(rawInput.eventName),
+  };
   const bufferLine =
     input.bufferMinutes > 0
       ? `<p style="margin:0 0 16px;color:#4b5563;font-size:14px;line-height:1.6;">Your booked block runs <strong>${input.blockStartLabel} – ${input.blockEndLabel}</strong> (${input.timezoneLabel}), which includes a ${input.bufferMinutes}-minute buffer ${input.bufferPosition} your segment for a sponsor read and transition to the next show.</p>`
