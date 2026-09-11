@@ -5,6 +5,11 @@ import { registerRoutes } from "./routes.js";
 
 export const app = express();
 
+// Vercel terminates TLS at its edge and forwards X-Forwarded-Proto. Trusting
+// the proxy makes req.protocol report "https" so links we build for emails
+// and third-party redirects (Upload-Post) don't come out as http://.
+app.set("trust proxy", true);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
