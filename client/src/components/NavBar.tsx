@@ -43,9 +43,9 @@ export function NavBar() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
-        <Link href="/" className="flex shrink-0 items-center gap-2 text-primary" data-testid="link-home-logo">
-          <LogoMark className="h-7 w-7" />
-          <Wordmark className="text-lg text-foreground" />
+        <Link href="/" className="flex shrink-0 items-center gap-2.5 text-primary" data-testid="link-home-logo">
+          <LogoMark className="h-11 w-11 sm:h-12 sm:w-12" />
+          <Wordmark className="text-xl text-foreground sm:text-2xl" />
         </Link>
 
         {/* Desktop links */}

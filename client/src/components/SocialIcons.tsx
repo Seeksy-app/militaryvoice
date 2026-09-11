@@ -90,7 +90,8 @@ export function SocialIconRow({ accounts, size = "sm", className = "" }: RowProp
         const f = formatFollowers(a.followers);
         const handle = a.username && !/^\d+$/.test(a.username) ? `@${a.username}` : a.displayName;
         const title = `${platformLabel(a.platform)}${handle ? ` · ${handle}` : ""}${f ? ` · ${f} followers` : ""}`;
-        const cls = `inline-flex ${dim} items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary`;
+        const cls = `inline-flex ${dim} items-center justify-center rounded-full border border-border bg-white shadow-sm transition-transform hover:scale-110 dark:bg-white/95`;
+        const style = { color: platformColor(a.platform) };
         return a.url ? (
           <a
             key={a.platform}
@@ -100,12 +101,13 @@ export function SocialIconRow({ accounts, size = "sm", className = "" }: RowProp
             title={title}
             aria-label={title}
             className={cls}
+            style={style}
             onClick={(e) => e.stopPropagation()}
           >
             <PlatformIcon platform={a.platform} className={icon} />
           </a>
         ) : (
-          <span key={a.platform} title={title} aria-label={title} className={cls}>
+          <span key={a.platform} title={title} aria-label={title} className={cls} style={style}>
             <PlatformIcon platform={a.platform} className={icon} />
           </span>
         );

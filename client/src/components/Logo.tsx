@@ -1,24 +1,26 @@
-// Two-tone brand mark: Navy stands for "Military" (the broadcast ring/insignia
-// chevron), Amber stands for "Voice" (the mic + sound waves). Colors are pinned
-// to the brand palette rather than currentColor so the mark stays recognizable
-// on any background; the navy tone gets a lighter dark-mode variant for contrast.
-export function LogoMark({ className = "h-6 w-6" }: { className?: string }) {
+// Brand mark: a navy shield (Military) carrying an amber microphone (Voice)
+// with two sound-wave arcs breaking out of the shield's right edge. Colors are
+// pinned to the brand palette so the mark reads the same on any background;
+// navy lightens slightly in dark mode for contrast.
+export function LogoMark({ className = "h-8 w-8" }: { className?: string }) {
   return (
     <svg viewBox="0 0 48 48" fill="none" className={className} aria-hidden="true">
-      <g className="text-[#053877] dark:text-[#5AA9EE]">
-        <circle cx="24" cy="24" r="17.5" stroke="currentColor" strokeWidth="2.5" />
-        <line x1="24" y1="6" x2="24" y2="10.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-        <line x1="42" y1="24" x2="37.5" y2="24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-        <line x1="24" y1="42" x2="24" y2="37.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-        <line x1="6" y1="24" x2="10.5" y2="24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-        <line x1="24" y1="24" x2="31.5" y2="15" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-        <circle cx="24" cy="24" r="2.25" fill="currentColor" />
-      </g>
-      <g className="text-[#F0A71F]">
-        <rect x="28.7" y="9.8" width="6" height="9.4" rx="3" transform="rotate(37 31.7 14.5)" fill="currentColor" />
-        <path d="M38 9 Q42.5 11 41 16.5" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-        <path d="M41.5 4.5 Q48 8 45.5 16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-      </g>
+      {/* shield */}
+      <path
+        d="M24 3.5 41 9.5v14.2c0 10.6-7.2 18.3-17 21.8C14.2 42 7 34.3 7 23.7V9.5L24 3.5Z"
+        className="fill-[#053877] dark:fill-[#0d4c9c]"
+      />
+      <path
+        d="M24 8 36.5 12.4v11.2c0 8.3-5.4 14.4-12.5 17.2-7.1-2.8-12.5-8.9-12.5-17.2V12.4L24 8Z"
+        className="fill-white/10"
+      />
+      {/* microphone */}
+      <rect x="20" y="13" width="8" height="14" rx="4" className="fill-[#F0A71F]" />
+      <path d="M16.5 22.5a7.5 7.5 0 0 0 15 0" stroke="#F0A71F" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M24 30v4.5M19.5 35h9" stroke="#F0A71F" strokeWidth="2.4" strokeLinecap="round" />
+      {/* sound waves */}
+      <path d="M36.5 17.5c1.9 1.6 3 3.9 3 6.5s-1.1 4.9-3 6.5" stroke="#F0A71F" strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M40.5 14c3 2.6 4.8 6.2 4.8 10s-1.8 7.4-4.8 10" stroke="#F0A71F" strokeWidth="2.2" strokeLinecap="round" opacity="0.7" />
     </svg>
   );
 }

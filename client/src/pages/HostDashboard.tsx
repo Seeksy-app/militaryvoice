@@ -70,7 +70,9 @@ interface HostSignup {
 
 interface HostContact {
   id: number;
+  name: string;
   email: string;
+  phone: string;
   createdAt: string;
   signupId: number;
 }
@@ -1000,14 +1002,18 @@ export default function HostDashboard() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                        <th className="px-4 py-2.5 font-medium">Name</th>
                         <th className="px-4 py-2.5 font-medium">Email</th>
+                        <th className="px-4 py-2.5 font-medium">Phone</th>
                         <th className="px-4 py-2.5 font-medium">Signed up</th>
                       </tr>
                     </thead>
                     <tbody>
                       {data.contacts.map((c) => (
                         <tr key={c.id} className="border-b border-border last:border-0" data-testid={`row-contact-${c.id}`}>
+                          <td className="px-4 py-2.5 font-medium text-card-foreground">{c.name || "—"}</td>
                           <td className="px-4 py-2.5 text-card-foreground">{c.email}</td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{c.phone || "—"}</td>
                           <td className="px-4 py-2.5 text-muted-foreground">{new Date(c.createdAt).toLocaleDateString()}</td>
                         </tr>
                       ))}

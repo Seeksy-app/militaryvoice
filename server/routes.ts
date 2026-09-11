@@ -16,7 +16,7 @@ import {
   type EventRow,
 } from "../shared/schema.js";
 import { fromError } from "zod-validation-error";
-import { sendConfirmationEmail, sendLoginCodeEmail } from "./email.js";
+import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, buildCalendarLinks } from "./email.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession } from "./session.js";
 import {
   isUploadPostConfigured,
@@ -79,6 +79,23 @@ function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[numbe
     socialAccounts: s.socialAccounts,
     status: s.status,
   };
+}
+
+function slotWindow(event: EventRow, slotIndex: number): { start: Date; end: Date } {
+  const start = new Date(new Date(event.startAtUtc).getTime() + slotIndex * event.slotMinutes * 60000);
+  return { start, end: new Date(start.getTime() + event.slotMinutes * 60000) };
+}
+
+function calendarLinksFor(signup: { id: number; podcastName: string; hostName: string; slotIndex: number }, event: EventRow, origin: string) {
+  const { start, end } = slotWindow(event, signup.slotIndex);
+  return buildCalendarLinks({
+    title: `${signup.podcastName} — ${event.name.trim()}`,
+    details: `${signup.hostName} is live on the MilitaryVoice.ai ${event.name.trim()}. Agenda: ${origin}/agenda`,
+    start,
+    end,
+    icsUrl: `${origin}/api/signups/${signup.id}/calendar.ics`,
+    location: `${origin}/agenda`,
+  });
 }
 
 // ICS timestamp format: YYYYMMDDTHHMMSSZ
@@ -273,6 +290,7 @@ export function registerRoutes(app: Express): void {
           bufferPosition: (event.bufferPosition as "before" | "after") ?? "after",
           timezoneLabel: tz,
           agendaUrl,
+          calendar: calendarLinksFor(created, event, `${protocol}://${host}`),
         });
       } catch (err) {
         console.error("Failed to send signup confirmation email:", err);
@@ -333,6 +351,31 @@ export function registerRoutes(app: Express): void {
     }
     const created = await storage.createReminder(parsed.data);
     res.status(201).json({ id: created.id });
+
+    // Confirmation with add-to-calendar links, in the background.
+    (async () => {
+      try {
+        const event = (await storage.getEventById(signup.eventId)) ?? (await storage.getFeaturedEvent());
+        const tz = parsed.data.timezone || "America/New_York";
+        const { start } = slotWindow(event, signup.slotIndex);
+        const onAir = onAirWindowServer(start, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+        const origin = `${req.protocol}://${req.get("host")}`;
+        await sendReminderConfirmationEmail({
+          to: parsed.data.email,
+          name: parsed.data.name,
+          podcastName: signup.podcastName,
+          hostName: signup.hostName,
+          eventName: event.name,
+          whenLabel: formatDateTimeInZone(onAir.start, tz),
+          timezoneLabel: tz,
+          agendaUrl: `${origin}/agenda`,
+          calendar: calendarLinksFor(signup, event, origin),
+          wantsText: !!parsed.data.phone,
+        });
+      } catch (err) {
+        console.error("Failed to send reminder confirmation email:", err);
+      }
+    })();
   });
 
   // ---- Admin: auth check ------------------------------------------------------
@@ -697,7 +740,7 @@ export function registerRoutes(app: Express): void {
     const mySignupIds = new Set(mySignups.map((s) => s.id));
     const contacts = reminderRows
       .filter((r) => mySignupIds.has(r.signupId))
-      .map((r) => ({ id: r.id, email: r.email, createdAt: r.createdAt, signupId: r.signupId }));
+      .map((r) => ({ id: r.id, name: r.name, email: r.email, phone: r.phone, createdAt: r.createdAt, signupId: r.signupId }));
     res.json({
       email,
       event: toPublicEvent(event),
@@ -723,10 +766,10 @@ export function registerRoutes(app: Express): void {
       signupRows.filter((s) => s.email.trim().toLowerCase() === email).map((s) => s.id),
     );
     const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const lines = ["email,created_at"];
+    const lines = ["name,email,phone,created_at"];
     for (const r of reminderRows) {
       if (!mySignupIds.has(r.signupId)) continue;
-      lines.push([r.email, r.createdAt].map(escape).join(","));
+      lines.push([r.name, r.email, r.phone, r.createdAt].map(escape).join(","));
     }
     res.setHeader("Content-Type", "text/csv");
     res.setHeader("Content-Disposition", "attachment; filename=my-militaryvoice-contacts.csv");

@@ -122,6 +122,9 @@ export const reminders = pgTable("reminders", {
   id: serial("id").primaryKey(),
   signupId: integer("signup_id").notNull(),
   email: text("email").notNull(),
+  name: text("name").notNull().default(""),
+  phone: text("phone").notNull().default(""), // optional; for a future text reminder
+  timezone: text("timezone").notNull().default(""), // fan's zone, for the email
   createdAt: text("created_at").notNull(),
 });
 
@@ -129,7 +132,14 @@ export const insertReminderSchema = createInsertSchema(reminders)
   .omit({ id: true, createdAt: true })
   .extend({
     signupId: z.number().int().min(1),
-    email: z.string().email("Enter a valid email"),
+    email: z.string().trim().email("Enter a valid email"),
+    name: z.string().trim().min(1, "Tell us your name"),
+    phone: z
+      .string()
+      .trim()
+      .refine((v) => v === "" || v.replace(/\D/g, "").length >= 10, { message: "Enter a full phone number (or leave it blank)" })
+      .default(""),
+    timezone: z.string().trim().default(""),
   });
 
 export type InsertReminder = z.infer<typeof insertReminderSchema>;
