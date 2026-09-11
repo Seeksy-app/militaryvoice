@@ -8,16 +8,17 @@ export interface Countdown {
   days: number;
   hours: number;
   minutes: number;
+  seconds: number;
 }
 
-/** Ticks every 30s. Shared by the schedule hero and the landing page. */
+/** Ticks every second. Shared by the schedule hero and the landing page. */
 export function useCountdown(startAtUtc?: string, durationHours?: number): Countdown {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30000);
+    const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
-  if (!startAtUtc || !durationHours) return { phase: "loading", label: "", days: 0, hours: 0, minutes: 0 };
+  if (!startAtUtc || !durationHours) return { phase: "loading", label: "", days: 0, hours: 0, minutes: 0, seconds: 0 };
 
   const start = new Date(startAtUtc);
   const end = new Date(start.getTime() + durationHours * 3600000);
@@ -27,13 +28,14 @@ export function useCountdown(startAtUtc?: string, durationHours?: number): Count
     const days = Math.floor(diffMs / 86400000);
     const hours = Math.floor((diffMs % 86400000) / 3600000);
     const minutes = Math.floor((diffMs % 3600000) / 60000);
+    const seconds = Math.floor((diffMs % 60000) / 1000);
     const parts = [];
     if (days > 0) parts.push(`${days}d`);
     parts.push(`${hours}h`, `${minutes}m`);
-    return { phase: "upcoming", label: `Starts in ${parts.join(" ")}`, days, hours, minutes };
+    return { phase: "upcoming", label: `Starts in ${parts.join(" ")}`, days, hours, minutes, seconds };
   }
   if (now >= start && now < end) {
-    return { phase: "live", label: "On the air right now", days: 0, hours: 0, minutes: 0 };
+    return { phase: "live", label: "On the air right now", days: 0, hours: 0, minutes: 0, seconds: 0 };
   }
-  return { phase: "done", label: "This marathon has wrapped", days: 0, hours: 0, minutes: 0 };
+  return { phase: "done", label: "This marathon has wrapped", days: 0, hours: 0, minutes: 0, seconds: 0 };
 }

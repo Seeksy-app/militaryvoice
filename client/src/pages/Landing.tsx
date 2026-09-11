@@ -189,20 +189,26 @@ export default function Landing({ slug }: Props) {
       <NavBar />
 
       {/* ------------------------------------------------------------ HERO */}
-      <section className={`relative overflow-hidden ${NAVY}`}>
-        <motion.div
+      <section className="relative overflow-hidden bg-[#000741] text-white">
+        {/* studio photo + navy wash */}
+        <img
+          src="/hero-bg.jpg"
+          alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute -left-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-[#F0A71F] opacity-[0.14] blur-3xl"
-          animate={{ x: [0, 40, 0], y: [0, 24, 0] }}
-          transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute inset-0 h-full w-full object-cover object-center opacity-60"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.96)_0%,rgba(5,56,119,0.88)_45%,rgba(5,56,119,0.55)_100%)]"
         />
         <motion.div
           aria-hidden="true"
-          className="pointer-events-none absolute -bottom-40 right-0 h-[30rem] w-[30rem] rounded-full bg-white opacity-[0.08] blur-3xl"
-          animate={{ x: [0, -30, 0], y: [0, -20, 0] }}
-          transition={{ duration: 22, repeat: Infinity, ease: "easeInOut" }}
+          className="pointer-events-none absolute -left-24 top-1/3 h-[26rem] w-[26rem] rounded-full bg-[#F0A71F] opacity-[0.18] blur-3xl"
+          animate={{ x: [0, 30, 0], y: [0, -20, 0] }}
+          transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
         />
-        <div className="relative mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
+
+        <div className="relative mx-auto grid max-w-6xl gap-12 px-4 pb-24 pt-16 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:pb-28 lg:pt-24">
           {eventLoading || !event ? (
             <div className="space-y-4">
               <Skeleton className="h-5 w-56 bg-white/20" />
@@ -213,10 +219,13 @@ export default function Landing({ slug }: Props) {
             <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09 } } }}>
               <motion.div
                 variants={FADE_UP}
-                className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em]"
+                className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] backdrop-blur"
               >
-                <span className="inline-block h-2 w-2 rounded-full bg-[#F0A71F]" />
-                Live · National Military Podcast Day
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ED1C24] opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#ED1C24]" />
+                </span>
+                National Military Podcast Day
                 {start && (
                   <>
                     <span className="opacity-40">·</span>
@@ -226,13 +235,14 @@ export default function Landing({ slug }: Props) {
               </motion.div>
               <motion.h1
                 variants={FADE_UP}
-                className="text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl"
+                className="text-5xl font-bold leading-[0.98] tracking-tight sm:text-6xl lg:text-7xl"
                 style={HEADLINE_FONT}
                 data-testid="text-landing-title"
               >
-                {event.name.trim()}
+                <span className="block">24 Hour</span>
+                <span className="block text-[#F0A71F]">Podcastathon</span>
               </motion.h1>
-              <motion.p variants={FADE_UP} className="mt-5 max-w-xl text-lg leading-relaxed text-white/80" data-testid="text-landing-tagline">
+              <motion.p variants={FADE_UP} className="mt-6 max-w-xl text-lg leading-relaxed text-white/85" data-testid="text-landing-tagline">
                 {event.description || event.tagline}
               </motion.p>
 
@@ -240,7 +250,7 @@ export default function Landing({ slug }: Props) {
                 <Link href={openSlotsHref}>
                   <Button
                     size="lg"
-                    className="gap-2 rounded-full bg-[#F0A71F] px-7 text-base font-semibold text-[#1a1200] hover:bg-[#f5b944]"
+                    className="h-12 gap-2 rounded-full bg-[#F0A71F] px-7 text-base font-semibold text-[#1a1200] shadow-[0_10px_30px_rgba(240,167,31,0.35)] hover:bg-[#f5b944]"
                     data-testid="button-landing-claim"
                   >
                     <Mic2 className="h-4 w-4" /> Pick your slot
@@ -250,7 +260,7 @@ export default function Landing({ slug }: Props) {
                   <Button
                     size="lg"
                     variant="outline"
-                    className="gap-2 rounded-full border-white/30 bg-transparent px-7 text-base text-white hover:bg-white/10 hover:text-white"
+                    className="h-12 gap-2 rounded-full border-white/30 bg-white/5 px-7 text-base text-white backdrop-blur hover:bg-white/15 hover:text-white"
                     data-testid="button-landing-lineup"
                   >
                     See who's on <ArrowRight className="h-4 w-4" />
@@ -258,84 +268,109 @@ export default function Landing({ slug }: Props) {
                 </Link>
               </motion.div>
 
-              <motion.p variants={FADE_UP} className="mt-6 text-sm text-white/60">
-                Free for podcasters. Go live from your own studio. Times shown in {zoneLabel(zone)}.
-              </motion.p>
+              <motion.div variants={FADE_UP} className="mt-7 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-white/70">
+                <span className="inline-flex items-center gap-1.5">
+                  <Users className="h-4 w-4 text-[#F0A71F]" /> {booked.length} confirmed
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-[#F0A71F]" /> {openCount} of {slotCount} slots open
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Radio className="h-4 w-4 text-[#F0A71F]" /> Free for podcasters
+                </span>
+              </motion.div>
             </motion.div>
           )}
 
-          {/* Event details card + small podcaster cards under it */}
+          {/* Scoreboard countdown + lineup card */}
           {event && start && end && (
             <motion.div
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: 24, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
-              className="flex flex-col"
+              className="flex flex-col gap-4"
             >
-              <div className="relative">
-                <div className="absolute inset-0 rotate-2 rounded-[1.75rem] bg-[#F0A71F]/90" aria-hidden="true" />
-                <div className="relative rounded-[1.75rem] bg-card p-6 text-card-foreground shadow-2xl sm:p-8" data-testid="card-landing-stats">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      {countdown.phase === "live" ? "Live now" : countdown.phase === "done" ? "Wrapped" : "Countdown"}
-                    </span>
-                    <Radio className={`h-4 w-4 ${countdown.phase === "live" ? "animate-pulse text-destructive" : "text-primary"}`} />
-                  </div>
+              <div
+                className="relative overflow-hidden rounded-3xl border border-white/15 bg-[#000741]/75 p-6 shadow-[0_30px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-7"
+                data-testid="card-landing-stats"
+              >
+                <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#F0A71F] opacity-20 blur-3xl" />
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-white/70">
+                    {countdown.phase === "live" ? (
+                      <>
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-[#ED1C24]" /> Live now
+                      </>
+                    ) : countdown.phase === "done" ? (
+                      "That's a wrap"
+                    ) : (
+                      <>
+                        <Radio className="h-3.5 w-3.5 text-[#F0A71F]" /> We go live in
+                      </>
+                    )}
+                  </span>
+                  <span className="font-mono text-[11px] uppercase tracking-wide text-white/50">{zoneLabel(zone)}</span>
+                </div>
 
-                  {countdown.phase === "upcoming" ? (
-                    <div className="mt-3 grid grid-cols-3 gap-2">
-                      {[
-                        [countdown.days, "days"],
-                        [countdown.hours, "hours"],
-                        [countdown.minutes, "min"],
-                      ].map(([n, label]) => (
-                        <div key={label} className="rounded-xl bg-muted px-3 py-3 text-center">
-                          <div className="font-mono text-3xl font-bold tabular-nums text-foreground sm:text-4xl">{n}</div>
-                          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+                {countdown.phase === "upcoming" ? (
+                  <div className="mt-4 grid grid-cols-4 gap-2 sm:gap-3">
+                    {[
+                      [countdown.days, "days"],
+                      [countdown.hours, "hrs"],
+                      [countdown.minutes, "min"],
+                      [countdown.seconds, "sec"],
+                    ].map(([n, label]) => (
+                      <div key={label} className="rounded-2xl border border-white/10 bg-white/5 px-2 py-3 text-center sm:py-4">
+                        <div className="relative h-[2.6rem] overflow-hidden sm:h-[3.4rem]">
+                          <AnimatePresence mode="popLayout" initial={false}>
+                            <motion.div
+                              key={n as number}
+                              initial={{ y: "-60%", opacity: 0 }}
+                              animate={{ y: 0, opacity: 1 }}
+                              exit={{ y: "60%", opacity: 0 }}
+                              transition={{ duration: 0.28, ease: "easeOut" }}
+                              className="font-mono text-4xl font-bold tabular-nums leading-none text-[#F0A71F] sm:text-5xl"
+                            >
+                              {String(n).padStart(2, "0")}
+                            </motion.div>
+                          </AnimatePresence>
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="mt-3 text-2xl font-bold">{countdown.label}</div>
-                  )}
-
-                  <dl className="mt-6 space-y-3 text-sm">
-                    <div className="flex items-start gap-3">
-                      <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                      <div>
-                        <dt className="font-medium">
-                          {formatDateInZone(start, zone)} · {formatTimeInZone(start, zone)}
-                        </dt>
-                        <dd className="text-muted-foreground">
-                          through {formatDateInZone(end, zone)} · {formatTimeInZone(end, zone)}
-                        </dd>
+                        <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/55 sm:text-[11px]">{label}</div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Users className="h-4 w-4 shrink-0 text-primary" />
-                      <dt className="font-medium">
-                        {booked.length} podcaster{booked.length === 1 ? "" : "s"} confirmed
-                      </dt>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Clock className="h-4 w-4 shrink-0 text-primary" />
-                      <dt className="font-medium" data-testid="text-landing-open">
-                        {openCount} of {slotCount} slots still open
-                      </dt>
-                    </div>
-                  </dl>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-4 text-3xl font-bold" style={HEADLINE_FONT}>
+                    {countdown.label}
+                  </div>
+                )}
 
-                  <div className="mt-6 h-2 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{ width: `${slotCount ? Math.round((booked.length / slotCount) * 100) : 0}%` }}
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span className="inline-flex items-center gap-2 text-white/85">
+                    <CalendarDays className="h-4 w-4 text-[#F0A71F]" />
+                    {formatDateInZone(start, zone)} · {formatTimeInZone(start, zone)}
+                    <span className="text-white/45">→ {formatDateInZone(end, zone)} · {formatTimeInZone(end, zone)}</span>
+                  </span>
+                </div>
+
+                <div className="mt-4">
+                  <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-white/55">
+                    <span>Lineup filling</span>
+                    <span className="font-mono">{booked.length}/{slotCount}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                    <motion.div
+                      className="h-full rounded-full bg-gradient-to-r from-[#F0A71F] to-[#ED1C24]"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${slotCount ? Math.max(2, Math.round((booked.length / slotCount) * 100)) : 0}%` }}
+                      transition={{ duration: 1.2, ease: "easeOut", delay: 0.6 }}
                     />
                   </div>
                 </div>
               </div>
 
               {spotlight.length > 0 && (
-                <div className="relative mt-5" data-testid="strip-mini-podcasters">
+                <div className="relative" data-testid="strip-mini-podcasters">
                   <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-white/70">
                     <span className="inline-flex items-center gap-1.5">
                       <Radio className="h-3.5 w-3.5 text-[#F0A71F]" />
@@ -357,14 +392,14 @@ export default function Landing({ slug }: Props) {
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -10 }}
                           transition={{ duration: 0.4 }}
-                          className="flex items-center gap-3 rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur"
+                          className="flex items-center gap-3 rounded-2xl border border-white/15 bg-[#000741]/60 p-3 backdrop-blur-xl"
                           data-testid={`card-mini-${it.key}`}
                         >
                           {it.photoUrl ? (
                             <img
                               src={resolveUploadUrl(it.photoUrl)}
                               alt={it.hostName}
-                              className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-[#F0A71F]/60"
+                              className="h-11 w-11 shrink-0 rounded-full object-cover ring-2 ring-[#F0A71F]/70"
                             />
                           ) : (
                             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/15">
@@ -386,6 +421,21 @@ export default function Landing({ slug }: Props) {
               )}
             </motion.div>
           )}
+        </div>
+
+        {/* live waveform strip */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 flex h-16 items-end justify-center gap-[3px] px-2 opacity-70">
+          {Array.from({ length: 72 }).map((_, i) => {
+            const base = 8 + Math.abs(Math.sin(i * 0.55)) * 34;
+            return (
+              <span
+                key={i}
+                className="w-1 flex-none origin-bottom rounded-t-full bg-[#F0A71F]/70"
+                style={{ height: `${base}px`, animation: `mvwave ${1.4 + (i % 7) * 0.13}s ease-in-out ${(i % 11) * 0.09}s infinite alternate` }}
+              />
+            );
+          })}
+          <style>{`@keyframes mvwave { from { transform: scaleY(0.35); opacity:.5 } to { transform: scaleY(1); opacity:1 } }`}</style>
         </div>
       </section>
 
