@@ -5,6 +5,7 @@ import { Mic2 } from "lucide-react";
 import type { PublicSignup } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { AgendaSignupActions } from "@/components/AgendaSignupActions";
+import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
 import { formatTimeInZone, formatDateInZone, zoneLabel, onAirWindow, type OnAirSettings } from "@/lib/schedule";
 
 interface Props {
@@ -67,6 +68,7 @@ export function SlotCard({ index, start, end, viewZone, signup, showDate, onClai
               {signup.podcastName}
             </span>
           </div>
+          <SocialIconRow accounts={parseSocialAccounts(signup.socialAccounts)} />
           <AgendaSignupActions
             signup={signup}
             shareText={`I'm tuning in to ${signup.hostName} on ${signup.podcastName} — ${formatDateInZone(

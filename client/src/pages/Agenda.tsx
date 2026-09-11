@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { AgendaSignupActions } from "@/components/AgendaSignupActions";
+import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -208,6 +209,7 @@ export default function Agenda({ slug }: Props) {
                               <div className="min-w-0">
                                 <div className="truncate font-semibold leading-tight">{s.signup.podcastName}</div>
                                 <div className="truncate text-sm text-muted-foreground">{s.signup.hostName}</div>
+                                <SocialIconRow accounts={parseSocialAccounts(s.signup.socialAccounts)} className="mt-1.5" />
                               </div>
                             </div>
                             <div className="mt-auto pt-1">
@@ -216,7 +218,7 @@ export default function Agenda({ slug }: Props) {
                           </>
                         ) : (
                           <Link
-                            href="/#schedule"
+                            href={slug ? `/event/${slug}/schedule` : "/schedule"}
                             className="mt-auto flex items-center gap-1 text-sm font-medium text-primary hover-elevate"
                             data-testid={`link-claim-${s.index}`}
                           >

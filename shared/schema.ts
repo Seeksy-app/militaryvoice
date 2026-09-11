@@ -67,6 +67,10 @@ export const signups = pgTable("signups", {
   socialLinks: text("social_links").notNull().default(""),
   rssUrl: text("rss_url").notNull().default(""),
   youtubeUrl: text("youtube_url").notNull().default(""),
+  // JSON array of connected social accounts (see server/uploadPost.ts),
+  // snapshotted from the profile when the slot is claimed and refreshed
+  // whenever the podcaster reconnects accounts.
+  socialAccounts: text("social_accounts").notNull().default(""),
   notes: text("notes").notNull().default(""),
   timezone: text("timezone").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
@@ -107,6 +111,7 @@ export type PublicSignup = Pick<
   | "socialLinks"
   | "rssUrl"
   | "youtubeUrl"
+  | "socialAccounts"
   | "status"
 >;
 
@@ -169,6 +174,9 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
   // (see optionalUrl below) so they can be rendered as plain anchors.
   rssUrl: text("rss_url").notNull().default(""),
   youtubeUrl: text("youtube_url").notNull().default(""),
+  // Upload-Post user profile name + cached JSON array of connected accounts.
+  uploadPostUsername: text("upload_post_username").notNull().default(""),
+  socialAccounts: text("social_accounts").notNull().default(""),
   notes: text("notes").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
@@ -196,7 +204,15 @@ const optionalUrl = (label: string) =>
     );
 
 export const insertProfileSchema = createInsertSchema(podcasterProfiles)
-  .omit({ id: true, email: true, createdAt: true, updatedAt: true, photoUrl: true })
+  .omit({
+    id: true,
+    email: true,
+    createdAt: true,
+    updatedAt: true,
+    photoUrl: true,
+    uploadPostUsername: true,
+    socialAccounts: true,
+  })
   .extend({
     podcastName: z.string().min(1, "Podcast or show name is required"),
     hostName: z.string().min(1, "Your name is required"),
@@ -207,3 +223,15 @@ export const insertProfileSchema = createInsertSchema(podcasterProfiles)
 
 export type InsertProfile = z.infer<typeof insertProfileSchema>;
 export type ProfileRow = typeof podcasterProfiles.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Connected social account (stored as JSON in `socialAccounts` columns).
+// ---------------------------------------------------------------------------
+export type SocialPlatform = "instagram" | "tiktok" | "youtube" | "x" | "linkedin" | "facebook" | "threads";
+export interface SocialAccount {
+  platform: SocialPlatform;
+  username: string;
+  displayName: string;
+  url: string;
+  image: string;
+}

@@ -3,6 +3,7 @@
   "outputDirectory": "dist/public",
   "installCommand": "npm install",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" }
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
   ]
 }

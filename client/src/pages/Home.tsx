@@ -1,4 +1,5 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
+import { useCountdown } from "@/hooks/use-countdown";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { NavBar } from "@/components/NavBar";
@@ -18,33 +19,6 @@ import {
   formatTimeInZone,
   onAirWindow,
 } from "@/lib/schedule";
-
-function useCountdown(startAtUtc?: string, durationHours?: number) {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30000);
-    return () => clearInterval(id);
-  }, []);
-  if (!startAtUtc || !durationHours) return { label: "", phase: "loading" as const };
-
-  const start = new Date(startAtUtc);
-  const end = new Date(start.getTime() + durationHours * 3600000);
-
-  if (now < start) {
-    const diffMs = start.getTime() - now.getTime();
-    const days = Math.floor(diffMs / 86400000);
-    const hours = Math.floor((diffMs % 86400000) / 3600000);
-    const mins = Math.floor((diffMs % 3600000) / 60000);
-    const parts = [];
-    if (days > 0) parts.push(`${days}d`);
-    parts.push(`${hours}h`, `${mins}m`);
-    return { label: `Starts in ${parts.join(" ")}`, phase: "upcoming" as const };
-  }
-  if (now >= start && now < end) {
-    return { label: "On the air right now", phase: "live" as const };
-  }
-  return { label: "This marathon has wrapped", phase: "done" as const };
-}
 
 interface Props {
   slug?: string;
@@ -142,7 +116,7 @@ export default function Home({ slug }: Props) {
                 >
                   Claim a slot <ArrowRight className="h-4 w-4" />
                 </Button>
-                <Link href="/agenda">
+                <Link href={slug ? `/event/${slug}/agenda` : "/agenda"}>
                   <Button variant="outline" size="lg" className="rounded-full px-6" data-testid="button-view-agenda">
                     View shareable agenda
                   </Button>

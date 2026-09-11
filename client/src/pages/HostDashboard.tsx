@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Mic2, Users, LogOut, Download, Radio, Mail, KeyRound, UserCircle2, ArrowLeft, Settings, Phone, Globe, Rss, Youtube, Video, Presentation, Image as ImageIcon, MessageSquare } from "lucide-react";
+import { Mic2, Users, LogOut, Download, Radio, Mail, KeyRound, UserCircle2, ArrowLeft, Settings, Phone, Globe, Rss, Youtube, Video, Presentation, Image as ImageIcon, MessageSquare, Link2, RefreshCw } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ProfileForm } from "@/components/ProfileForm";
 import { apiRequest, API_BASE, resolveUploadUrl } from "@/lib/queryClient";
-import type { PublicEvent, PublicSignup, ProfileRow } from "@shared/schema";
+import type { PublicEvent, PublicSignup, ProfileRow, SocialAccount } from "@shared/schema";
+import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import { detectLocalTimeZone, slotStart, slotEnd, totalSlots, formatDateInZone, formatTimeInZone } from "@/lib/schedule";
 
 interface HostSignup {
@@ -29,6 +31,11 @@ interface HostContact {
   email: string;
   createdAt: string;
   signupId: number;
+}
+
+interface SocialStatus {
+  configured: boolean;
+  accounts: SocialAccount[];
 }
 
 interface HostDashboardData {
@@ -174,6 +181,55 @@ export default function HostDashboard() {
     retry: false,
     enabled: !!data,
   });
+
+  const { data: social } = useQuery<SocialStatus>({
+    queryKey: ["/api/host/social"],
+    retry: false,
+    enabled: !!data,
+  });
+
+  const connectSocial = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/host/social/connect");
+      return (await res.json()) as { url: string };
+    },
+    onSuccess: ({ url }) => {
+      window.location.href = url;
+    },
+    onError: (err: Error) => toast({ title: "Couldn't open the connection page", description: err.message, variant: "destructive" }),
+  });
+
+  const refreshSocial = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/host/social/refresh");
+      return (await res.json()) as SocialStatus;
+    },
+    onSuccess: (result) => {
+      queryClient.setQueryData(["/api/host/social"], result);
+      queryClient.invalidateQueries({ queryKey: ["/api/host/profile"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/signups"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/host/dashboard"] });
+      toast({
+        title: result.accounts.length ? "Social accounts updated" : "No accounts connected yet",
+        description: result.accounts.length
+          ? `${result.accounts.length} account${result.accounts.length === 1 ? "" : "s"} will show on your card.`
+          : "Connect at least one account and we'll add it to your card.",
+      });
+    },
+    onError: (err: Error) => toast({ title: "Couldn't refresh your accounts", description: err.message, variant: "destructive" }),
+  });
+
+  // Coming back from the Upload-Post connect page: ?social=connected
+  const search = useSearch();
+  useEffect(() => {
+    if (!data) return;
+    const params = new URLSearchParams(search);
+    if (params.get("social") === "connected") {
+      window.history.replaceState(null, "", window.location.pathname);
+      refreshSocial.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, !!data]);
 
   const logout = useMutation({
     mutationFn: async () => apiRequest("POST", "/api/host/logout"),
@@ -430,6 +486,66 @@ export default function HostDashboard() {
                           >
                             <Rss className="h-3 w-3 text-primary" /> RSS feed
                           </a>
+                        )}
+                      </div>
+                    )}
+
+                    {social?.configured && (
+                      <div className="mt-4 border-t border-border pt-4" data-testid="section-social-accounts">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Social accounts</p>
+                          <div className="flex items-center gap-1">
+                            {social.accounts.length > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 gap-1 px-2 text-xs"
+                                onClick={() => refreshSocial.mutate()}
+                                disabled={refreshSocial.isPending}
+                                data-testid="button-social-refresh"
+                              >
+                                <RefreshCw className={`h-3 w-3 ${refreshSocial.isPending ? "animate-spin" : ""}`} /> Refresh
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 gap-1 rounded-full px-2.5 text-xs"
+                              onClick={() => connectSocial.mutate()}
+                              disabled={connectSocial.isPending}
+                              data-testid="button-social-connect"
+                            >
+                              <Link2 className="h-3 w-3" />
+                              {connectSocial.isPending ? "Opening…" : social.accounts.length ? "Manage" : "Connect accounts"}
+                            </Button>
+                          </div>
+                        </div>
+                        {social.accounts.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            Link Instagram, TikTok, YouTube, X, and more. They'll show as follow buttons on your card in the lineup.
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {social.accounts.map((a) => {
+                              const inner = (
+                                <>
+                                  <PlatformIcon platform={a.platform} className="h-3.5 w-3.5 text-primary" />
+                                  <span className="truncate">{a.username ? `@${a.username}` : a.displayName || platformLabel(a.platform)}</span>
+                                </>
+                              );
+                              const cls =
+                                "inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground";
+                              return a.url ? (
+                                <a key={a.platform} href={a.url} target="_blank" rel="noopener noreferrer" className={`${cls} hover-elevate`} data-testid={`chip-social-${a.platform}`}>
+                                  {inner}
+                                </a>
+                              ) : (
+                                <span key={a.platform} className={cls} data-testid={`chip-social-${a.platform}`}>
+                                  {inner}
+                                </span>
+                              );
+                            })}
+                          </div>
                         )}
                       </div>
                     )}

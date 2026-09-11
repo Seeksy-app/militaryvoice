@@ -6,7 +6,7 @@ import { useTheme } from "@/lib/theme";
 
 const LINKS = [
   { href: "/events", label: "Events" },
-  { href: "/", label: "Schedule" },
+  { href: "/schedule", label: "Schedule" },
   { href: "/agenda", label: "Agenda" },
 ];
 
@@ -24,7 +24,8 @@ export function NavBar() {
 
         <nav className="flex items-center gap-1 sm:gap-2" aria-label="Primary">
           {LINKS.map((link) => {
-            const active = location === link.href;
+            const active =
+              location === link.href || (link.href !== "/" && location.startsWith("/event/") && location.endsWith(link.href));
             return (
               <Link
                 key={link.href}

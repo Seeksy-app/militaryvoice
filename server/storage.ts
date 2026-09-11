@@ -186,7 +186,11 @@ export interface IStorage {
   getLoginToken(email: string, token: string): Promise<LoginTokenRow | undefined>;
   markLoginTokenUsed(id: number): Promise<void>;
   getProfileByEmail(email: string): Promise<ProfileRow | undefined>;
-  upsertProfile(email: string, patch: Partial<InsertProfile> & { photoUrl?: string }): Promise<ProfileRow>;
+  upsertProfile(
+    email: string,
+    patch: Partial<InsertProfile> & { photoUrl?: string; uploadPostUsername?: string; socialAccounts?: string },
+  ): Promise<ProfileRow>;
+  updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void>;
 }
 
 // Default marathon: kicks off the next Saturday at 12:00 PM Eastern for 24 hours,
@@ -365,9 +369,17 @@ class DatabaseStorage implements IStorage {
     return row;
   }
 
+  async updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void> {
+    await ready();
+    await db
+      .update(signups)
+      .set({ socialAccounts: socialAccountsJson })
+      .where(eq(signups.email, email.trim().toLowerCase()));
+  }
+
   async upsertProfile(
     email: string,
-    patch: Partial<InsertProfile> & { photoUrl?: string },
+    patch: Partial<InsertProfile> & { photoUrl?: string; uploadPostUsername?: string; socialAccounts?: string },
   ): Promise<ProfileRow> {
     await ready();
     const normalizedEmail = email.trim().toLowerCase();
@@ -397,6 +409,8 @@ class DatabaseStorage implements IStorage {
         socialLinks: patch.socialLinks ?? "",
         rssUrl: patch.rssUrl ?? "",
         youtubeUrl: patch.youtubeUrl ?? "",
+        uploadPostUsername: patch.uploadPostUsername ?? "",
+        socialAccounts: patch.socialAccounts ?? "",
         notes: patch.notes ?? "",
         photoUrl: patch.photoUrl ?? "",
         createdAt: now,

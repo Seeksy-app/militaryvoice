@@ -17,6 +17,13 @@ import {
 import { fromError } from "zod-validation-error";
 import { sendConfirmationEmail, sendLoginCodeEmail } from "./email.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession } from "./session.js";
+import {
+  isUploadPostConfigured,
+  ensureUploadPostProfile,
+  createConnectUrl,
+  fetchConnectedAccounts,
+  parseSocialAccounts,
+} from "./uploadPost.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -67,6 +74,7 @@ function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[numbe
     socialLinks: s.socialLinks,
     rssUrl: s.rssUrl,
     youtubeUrl: s.youtubeUrl,
+    socialAccounts: s.socialAccounts,
     status: s.status,
   };
 }
@@ -179,6 +187,7 @@ export function registerRoutes(app: Express): void {
       socialLinks: profile.socialLinks,
       rssUrl: profile.rssUrl,
       youtubeUrl: profile.youtubeUrl,
+      socialAccounts: profile.socialAccounts,
       notes: profile.notes,
       timezone: typeof body.timezone === "string" ? body.timezone : "",
       photoUrl: profile.photoUrl,
@@ -220,7 +229,7 @@ export function registerRoutes(app: Express): void {
         const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
         const protocol = req.protocol;
         const host = req.get("host");
-        const agendaUrl = `${protocol}://${host}/#/agenda`;
+        const agendaUrl = `${protocol}://${host}/agenda`;
         await sendConfirmationEmail({
           to: created.email,
           hostName: created.hostName,
@@ -551,6 +560,77 @@ export function registerRoutes(app: Express): void {
       ...(photoUrl ? { photoUrl } : {}),
     });
     res.json(updated);
+  });
+
+  // ---- Host: social accounts via Upload-Post -----------------------------------
+  //      GET    → is the feature on, and what's connected right now
+  //      POST /connect → a hosted URL where they link accounts, then bounce back
+  //      POST /refresh → re-read what they linked and cache it on profile + signups
+  app.get("/api/host/social", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const profile = await storage.getProfileByEmail(email);
+    res.json({
+      configured: isUploadPostConfigured(),
+      accounts: parseSocialAccounts(profile?.socialAccounts),
+      lastSyncedAt: profile?.updatedAt ?? null,
+    });
+  });
+
+  function uploadPostUsernameFor(profileId: number): string {
+    return `mv-${profileId}`;
+  }
+
+  app.post("/api/host/social/connect", requireHostSession, async (req, res) => {
+    if (!isUploadPostConfigured()) {
+      res.status(503).json({ message: "Social account linking isn't switched on yet." });
+      return;
+    }
+    const email = (req as any).hostEmail as string;
+    const profile = await storage.getProfileByEmail(email);
+    if (!profile) {
+      res.status(400).json({ message: "Set up your podcaster profile first." });
+      return;
+    }
+    try {
+      const username = profile.uploadPostUsername || uploadPostUsernameFor(profile.id);
+      await ensureUploadPostProfile(username);
+      if (!profile.uploadPostUsername) {
+        await storage.upsertProfile(email, { uploadPostUsername: username });
+      }
+      const origin = `${req.protocol}://${req.get("host")}`;
+      const url = await createConnectUrl({
+        username,
+        redirectUrl: `${origin}/host/dashboard?social=connected`,
+        logoUrl: `${origin}/favicon.png`,
+      });
+      res.json({ url });
+    } catch (err: any) {
+      console.error("Upload-Post connect failed:", err);
+      res.status(502).json({ message: "Couldn't start the social connection right now. Try again in a minute." });
+    }
+  });
+
+  app.post("/api/host/social/refresh", requireHostSession, async (req, res) => {
+    if (!isUploadPostConfigured()) {
+      res.status(503).json({ message: "Social account linking isn't switched on yet." });
+      return;
+    }
+    const email = (req as any).hostEmail as string;
+    const profile = await storage.getProfileByEmail(email);
+    if (!profile?.uploadPostUsername) {
+      res.json({ configured: true, accounts: [] });
+      return;
+    }
+    try {
+      const accounts = await fetchConnectedAccounts(profile.uploadPostUsername);
+      const json = JSON.stringify(accounts);
+      await storage.upsertProfile(email, { socialAccounts: json });
+      await storage.updateSignupSocialAccountsByEmail(email, json);
+      res.json({ configured: true, accounts });
+    } catch (err: any) {
+      console.error("Upload-Post refresh failed:", err);
+      res.status(502).json({ message: "Couldn't read your connected accounts right now." });
+    }
   });
 
   // ---- Host: dashboard data (their slot(s), fans who want a reminder, and the
