@@ -12,29 +12,49 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { eq } from "drizzle-orm";
 
-// Resolve the Postgres connection string. Supabase's Vercel Marketplace
+// Resolve the Postgres connection string lazily (not at module load) so a
+// missing/bad value surfaces as a normal caught error on first request—
+// visible in the API response—instead of crashing the whole serverless
+// function before Express can respond. Supabase's Vercel Marketplace
 // integration sets POSTGRES_URL (pooled, safe for serverless). Fall back to a
 // plain DATABASE_URL for anyone wiring the DB up manually.
-const CONNECTION_STRING =
-  process.env.POSTGRES_URL ||
-  process.env.POSTGRES_PRISMA_URL ||
-  process.env.DATABASE_URL;
+let _sql: ReturnType<typeof postgres> | null = null;
+let _db: ReturnType<typeof drizzle> | null = null;
 
-if (!CONNECTION_STRING) {
-  throw new Error(
-    "No Postgres connection string found. Set POSTGRES_URL (from the Supabase " +
-      "Vercel integration) or DATABASE_URL in your environment.",
-  );
+function getConnection(): { sql: ReturnType<typeof postgres>; db: ReturnType<typeof drizzle> } {
+  if (!_sql || !_db) {
+    const CONNECTION_STRING =
+      process.env.POSTGRES_URL ||
+      process.env.POSTGRES_PRISMA_URL ||
+      process.env.DATABASE_URL;
+
+    if (!CONNECTION_STRING) {
+      throw new Error(
+        "No Postgres connection string found. Set POSTGRES_URL (from the Supabase " +
+          "Vercel integration) or DATABASE_URL in your environment.",
+      );
+    }
+
+    // `prepare: false` is required for connecting through Supabase's transaction
+    // pooler (pgbouncer), which doesn't support prepared statements.
+    _sql = postgres(CONNECTION_STRING, { prepare: false });
+    _db = drizzle(_sql);
+  }
+  return { sql: _sql, db: _db };
 }
 
-// `prepare: false` is required for connecting through Supabase's transaction
-// pooler (pgbouncer), which doesn't support prepared statements.
-const sql = postgres(CONNECTION_STRING, { prepare: false });
-
-export const db = drizzle(sql);
+// Proxy so existing `db.select()...` call sites keep working unchanged while
+// the underlying client is created lazily on first real use.
+export const db: ReturnType<typeof drizzle> = new Proxy({} as ReturnType<typeof drizzle>, {
+  get(_target, prop) {
+    const { db: realDb } = getConnection();
+    return (realDb as any)[prop];
+  },
+});
 
 // Create tables on boot if they don't exist yet (no migration tooling needed for MVP)
 async function ensureSchema() {
+  const { sql } = getConnection();
   await sql`
     CREATE TABLE IF NOT EXISTS events (
       id SERIAL PRIMARY KEY,
