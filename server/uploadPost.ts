@@ -110,7 +110,7 @@ export async function fetchConnectedAccounts(username: string): Promise<SocialAc
 }
 
 function cleanHandle(v: unknown): string {
-  return typeof v === "string" ? v.trim().replace(/^@/, "") : "";
+  return typeof v === "string" ? v.trim().replace(/^@+/, "") : "";
 }
 
 function profileUrlFor(platform: SocialPlatform, handle: string): string {

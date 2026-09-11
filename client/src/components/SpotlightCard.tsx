@@ -3,13 +3,37 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "wouter";
 import { Mic2, ArrowRight, Radio, Rss, Youtube } from "lucide-react";
 import type { PublicSignup } from "@shared/schema";
+import { Clock } from "lucide-react";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
 import { formatDateInZone, formatTimeInZone } from "@/lib/schedule";
 
+/** A card-worthy podcaster: either a claimed slot (with on-air start) or a
+ *  finished profile that hasn't picked a slot yet. */
 export interface SpotlightItem {
-  signup: PublicSignup;
-  start: Date; // on-air start
+  key: string;
+  podcastName: string;
+  hostName: string;
+  photoUrl: string;
+  numPeople: number;
+  socialAccounts: string;
+  rssUrl: string;
+  youtubeUrl: string;
+  start?: Date; // on-air start when a slot is claimed
+}
+
+export function spotlightFromSignup(signup: PublicSignup, start: Date): SpotlightItem {
+  return {
+    key: `signup-${signup.id}`,
+    podcastName: signup.podcastName,
+    hostName: signup.hostName,
+    photoUrl: signup.photoUrl,
+    numPeople: signup.numPeople,
+    socialAccounts: signup.socialAccounts,
+    rssUrl: signup.rssUrl,
+    youtubeUrl: signup.youtubeUrl,
+    start,
+  };
 }
 
 interface Props {
@@ -40,7 +64,8 @@ export function SpotlightCard({ items, zone, agendaHref, intervalMs = 6000 }: Pr
 
   const current = items[index] ?? items[0];
   if (!current) return null;
-  const { signup, start } = current;
+  const signup = current;
+  const start = current.start;
   const socials = parseSocialAccounts(signup.socialAccounts);
 
   return (
@@ -61,7 +86,7 @@ export function SpotlightCard({ items, zone, agendaHref, intervalMs = 6000 }: Pr
       <div className="relative overflow-hidden rounded-[1.75rem] bg-card text-card-foreground shadow-2xl">
         <div className="flex items-center justify-between px-6 pt-5 sm:px-8">
           <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <Radio className="h-3.5 w-3.5 text-primary" /> On the lineup
+            <Radio className="h-3.5 w-3.5 text-primary" /> {start ? "On the lineup" : "Joining the marathon"}
           </span>
           {items.length > 1 && (
             <span className="font-mono text-xs text-muted-foreground">
@@ -72,7 +97,7 @@ export function SpotlightCard({ items, zone, agendaHref, intervalMs = 6000 }: Pr
 
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
-            key={signup.id}
+            key={signup.key}
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -14 }}
@@ -103,10 +128,16 @@ export function SpotlightCard({ items, zone, agendaHref, intervalMs = 6000 }: Pr
                   with <span className="font-medium text-card-foreground">{signup.hostName}</span>
                   {signup.numPeople > 1 && " and co-host"}
                 </p>
-                <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 font-mono text-xs font-semibold text-foreground">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#F0A71F]" />
-                  {formatDateInZone(start, zone)} · {formatTimeInZone(start, zone)}
-                </p>
+                {start ? (
+                  <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 font-mono text-xs font-semibold text-foreground">
+                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#F0A71F]" />
+                    {formatDateInZone(start, zone)} · {formatTimeInZone(start, zone)}
+                  </p>
+                ) : (
+                  <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                    <Clock className="h-3 w-3" /> Slot time coming soon
+                  </p>
+                )}
               </div>
             </div>
 
@@ -148,9 +179,9 @@ export function SpotlightCard({ items, zone, agendaHref, intervalMs = 6000 }: Pr
                 <div className="flex items-center gap-1.5" aria-label="Featured podcasters">
                   {items.map((it, i) => (
                     <button
-                      key={it.signup.id}
+                      key={it.key}
                       type="button"
-                      aria-label={`Show ${it.signup.podcastName}`}
+                      aria-label={`Show ${it.podcastName}`}
                       onClick={() => setIndex(i)}
                       className={`h-1.5 rounded-full transition-all ${
                         i === index ? "w-5 bg-primary" : "w-1.5 bg-border hover:bg-muted-foreground/50"

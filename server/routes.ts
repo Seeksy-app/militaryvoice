@@ -12,6 +12,7 @@ import {
   insertProfileSchema,
   type PublicEvent,
   type PublicSignup,
+  type PublicPodcaster,
   type EventRow,
 } from "../shared/schema.js";
 import { fromError } from "zod-validation-error";
@@ -147,6 +148,24 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Public: schedule (privacy-safe signup fields only) -------------------
+  // ---- Public: podcasters with a finished profile (for the homepage spotlight).
+  //      No contact info leaves the server.
+  app.get("/api/podcasters", async (_req, res) => {
+    const rows = await storage.listCompleteProfiles();
+    const out: PublicPodcaster[] = rows.map((p) => ({
+      id: p.id,
+      podcastName: p.podcastName,
+      hostName: p.hostName,
+      photoUrl: p.photoUrl,
+      numPeople: p.numPeople,
+      socialLinks: p.socialLinks,
+      rssUrl: p.rssUrl,
+      youtubeUrl: p.youtubeUrl,
+      socialAccounts: p.socialAccounts,
+    }));
+    res.json(out);
+  });
+
   app.get("/api/signups", async (req, res) => {
     let eventId = req.query.eventId ? Number(req.query.eventId) : undefined;
     if (!eventId) {

@@ -7,10 +7,10 @@ import { LogoMark, Wordmark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
-import { SpotlightCard } from "@/components/SpotlightCard";
+import { SpotlightCard, spotlightFromSignup, type SpotlightItem } from "@/components/SpotlightCard";
 import { useCountdown } from "@/hooks/use-countdown";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
-import type { PublicEvent, PublicSignup } from "@shared/schema";
+import type { PublicEvent, PublicSignup, PublicPodcaster } from "@shared/schema";
 import {
   detectLocalTimeZone,
   slotStart,
@@ -61,6 +61,8 @@ export default function Landing({ slug }: Props) {
     enabled: !!event,
   });
 
+  const { data: podcasters } = useQuery<PublicPodcaster[]>({ queryKey: ["/api/podcasters"] });
+
   const zone = useMemo(detectLocalTimeZone, []);
   const countdown = useCountdown(event?.startAtUtc, event?.durationHours);
 
@@ -84,6 +86,26 @@ export default function Landing({ slug }: Props) {
         return { signup: s, start: onAir.start };
       });
   }, [booked, event]);
+
+  // Spotlight = everyone with a claimed slot (first), then podcasters who've
+  // finished a profile but haven't picked a time yet.
+  const spotlight = useMemo<SpotlightItem[]>(() => {
+    const fromSlots = lineup.map(({ signup, start }) => spotlightFromSignup(signup, start));
+    const seen = new Set(fromSlots.map((i) => `${i.podcastName}|${i.hostName}`.toLowerCase()));
+    const fromProfiles = (podcasters ?? [])
+      .filter((p) => !seen.has(`${p.podcastName}|${p.hostName}`.toLowerCase()))
+      .map<SpotlightItem>((p) => ({
+        key: `profile-${p.id}`,
+        podcastName: p.podcastName,
+        hostName: p.hostName,
+        photoUrl: p.photoUrl,
+        numPeople: p.numPeople,
+        socialAccounts: p.socialAccounts,
+        rssUrl: p.rssUrl,
+        youtubeUrl: p.youtubeUrl,
+      }));
+    return [...fromSlots, ...fromProfiles];
+  }, [lineup, podcasters]);
 
   const agendaHref = slug ? `/event/${slug}/agenda` : "/agenda";
   const scheduleHref = slug ? `/event/${slug}/schedule` : "/schedule";
@@ -171,14 +193,14 @@ export default function Landing({ slug }: Props) {
 
           {/* Right column: rotating podcaster spotlight once anyone has claimed
               a slot, otherwise the countdown/stats card. */}
-          {event && start && end && lineup.length > 0 && (
+          {event && start && end && spotlight.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
               className="flex flex-col gap-4"
             >
-              <SpotlightCard items={lineup} zone={zone} agendaHref={agendaHref} />
+              <SpotlightCard items={spotlight} zone={zone} agendaHref={agendaHref} />
               <div className="grid grid-cols-3 gap-2" data-testid="strip-landing-stats">
                 {[
                   {
@@ -203,7 +225,7 @@ export default function Landing({ slug }: Props) {
           )}
 
           {/* Stats card (empty lineup) */}
-          {event && start && end && lineup.length === 0 && (
+          {event && start && end && spotlight.length === 0 && (
             <motion.div
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}

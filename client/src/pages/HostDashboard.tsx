@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ProfileForm } from "@/components/ProfileForm";
 import { apiRequest, API_BASE, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, ProfileRow, SocialAccount } from "@shared/schema";
-import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
+import { PlatformIcon, platformLabel, ALL_PLATFORMS } from "@/components/SocialIcons";
 import { detectLocalTimeZone, slotStart, slotEnd, totalSlots, formatDateInZone, formatTimeInZone } from "@/lib/schedule";
 
 interface HostSignup {
@@ -520,32 +520,45 @@ export default function HostDashboard() {
                             </Button>
                           </div>
                         </div>
-                        {social.accounts.length === 0 ? (
-                          <p className="text-sm text-muted-foreground">
-                            Link Instagram, TikTok, YouTube, X, and more. They'll show as follow buttons on your card in the lineup.
-                          </p>
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5">
-                            {social.accounts.map((a) => {
-                              const inner = (
-                                <>
-                                  <PlatformIcon platform={a.platform} className="h-3.5 w-3.5 text-primary" />
-                                  <span className="truncate">{a.username ? `@${a.username}` : a.displayName || platformLabel(a.platform)}</span>
-                                </>
-                              );
-                              const cls =
-                                "inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground";
-                              return a.url ? (
-                                <a key={a.platform} href={a.url} target="_blank" rel="noopener noreferrer" className={`${cls} hover-elevate`} data-testid={`chip-social-${a.platform}`}>
-                                  {inner}
-                                </a>
-                              ) : (
-                                <span key={a.platform} className={cls} data-testid={`chip-social-${a.platform}`}>
-                                  {inner}
+                        <div className="flex flex-wrap gap-1.5">
+                          {ALL_PLATFORMS.map((platform) => {
+                            const a = social.accounts.find((x) => x.platform === platform);
+                            if (!a) {
+                              return (
+                                <span
+                                  key={platform}
+                                  title={`${platformLabel(platform)} — not connected`}
+                                  className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1 text-xs font-medium text-muted-foreground/60"
+                                  data-testid={`chip-social-${platform}`}
+                                >
+                                  <PlatformIcon platform={platform} className="h-3.5 w-3.5 opacity-40 grayscale" />
+                                  {platformLabel(platform)}
                                 </span>
                               );
-                            })}
-                          </div>
+                            }
+                            const inner = (
+                              <>
+                                <PlatformIcon platform={a.platform} className="h-3.5 w-3.5 text-primary" />
+                                <span className="truncate">{a.username ? `@${a.username}` : a.displayName || platformLabel(a.platform)}</span>
+                              </>
+                            );
+                            const cls =
+                              "inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border border-primary/30 bg-accent px-3 py-1 text-xs font-medium text-accent-foreground";
+                            return a.url ? (
+                              <a key={platform} href={a.url} target="_blank" rel="noopener noreferrer" className={`${cls} hover-elevate`} data-testid={`chip-social-${platform}`}>
+                                {inner}
+                              </a>
+                            ) : (
+                              <span key={platform} className={cls} data-testid={`chip-social-${platform}`}>
+                                {inner}
+                              </span>
+                            );
+                          })}
+                        </div>
+                        {social.accounts.length === 0 && (
+                          <p className="mt-2 text-sm text-muted-foreground">
+                            Nothing linked yet. Connected accounts light up here and show as follow buttons on your card in the lineup.
+                          </p>
                         )}
                       </div>
                     )}

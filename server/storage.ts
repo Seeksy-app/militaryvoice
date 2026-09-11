@@ -13,7 +13,7 @@ import type {
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 
 // Resolve the Postgres connection string lazily (not at module load) so a
 // missing/bad value surfaces as a normal caught error on first request—
@@ -191,6 +191,7 @@ export interface IStorage {
     patch: Partial<InsertProfile> & { photoUrl?: string; uploadPostUsername?: string; socialAccounts?: string },
   ): Promise<ProfileRow>;
   updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void>;
+  listCompleteProfiles(): Promise<ProfileRow[]>;
 }
 
 // Default marathon: kicks off the next Saturday at 12:00 PM Eastern for 24 hours,
@@ -367,6 +368,18 @@ class DatabaseStorage implements IStorage {
       .from(podcasterProfiles)
       .where(eq(podcasterProfiles.email, email.trim().toLowerCase()));
     return row;
+  }
+
+  /** Profiles that have everything a public card needs (name, host, photo). */
+  async listCompleteProfiles(): Promise<ProfileRow[]> {
+    await ready();
+    return db
+      .select()
+      .from(podcasterProfiles)
+      .where(
+        and(ne(podcasterProfiles.podcastName, ""), ne(podcasterProfiles.hostName, ""), ne(podcasterProfiles.photoUrl, "")),
+      )
+      .orderBy(podcasterProfiles.createdAt);
   }
 
   async updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void> {

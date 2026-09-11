@@ -224,6 +224,13 @@ export const insertProfileSchema = createInsertSchema(podcasterProfiles)
 export type InsertProfile = z.infer<typeof insertProfileSchema>;
 export type ProfileRow = typeof podcasterProfiles.$inferSelect;
 
+// Public-safe podcaster shape (no contact info) for the homepage roster —
+// podcasters who've finished a profile, whether or not they've claimed a slot.
+export type PublicPodcaster = Pick<
+  ProfileRow,
+  "id" | "podcastName" | "hostName" | "photoUrl" | "numPeople" | "socialLinks" | "rssUrl" | "youtubeUrl" | "socialAccounts"
+> & { email?: never };
+
 // ---------------------------------------------------------------------------
 // Connected social account (stored as JSON in `socialAccounts` columns).
 // ---------------------------------------------------------------------------

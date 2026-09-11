@@ -28,6 +28,8 @@ const LABELS: Record<SocialPlatform, string> = {
   threads: "Threads",
 };
 
+export const ALL_PLATFORMS: SocialPlatform[] = ["instagram", "tiktok", "youtube", "x", "linkedin", "facebook", "threads"];
+
 export function PlatformIcon({ platform, className = "h-4 w-4" }: { platform: SocialPlatform; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden="true">
