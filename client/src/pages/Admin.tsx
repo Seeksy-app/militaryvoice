@@ -19,10 +19,10 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { adminGet, adminSend, adminExportUrl } from "@/lib/adminApi";
+import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
-import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil } from "lucide-react";
-import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent } from "@shared/schema";
+import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake } from "lucide-react";
+import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
 
@@ -742,6 +742,175 @@ function SignupsCard({ password }: { password: string }) {
   );
 }
 
+
+// ---------------------------------------------------------------------------
+// Sponsors — logo strip shown on the homepage as "Friends of the Podcastathon"
+// ---------------------------------------------------------------------------
+function SponsorsCard({ password }: { password: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: sponsors, isLoading } = useQuery<SponsorRow[]>({
+    queryKey: ["/api/admin/sponsors", password],
+    queryFn: () => adminGet<SponsorRow[]>("/api/admin/sponsors", password),
+  });
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [logo, setLogo] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function refresh() {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/sponsors"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/sponsors"] });
+  }
+
+  async function handleAdd(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !logo) {
+      toast({ title: "Name and logo are required", variant: "destructive" });
+      return;
+    }
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("name", name.trim());
+      fd.append("url", url.trim());
+      fd.append("logo", logo);
+      await adminUpload("/api/admin/sponsors", password, fd);
+      setName("");
+      setUrl("");
+      setLogo(null);
+      if (preview) URL.revokeObjectURL(preview);
+      setPreview(null);
+      refresh();
+      toast({ title: "Sponsor added", description: "It's on the homepage strip now." });
+    } catch (err) {
+      toast({ title: "Couldn't add sponsor", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function patch(id: number, body: Partial<Pick<SponsorRow, "name" | "url" | "active" | "sortOrder">>) {
+    await adminSend("PATCH", `/api/admin/sponsors/${id}`, password, body);
+    refresh();
+  }
+
+  async function move(index: number, dir: -1 | 1) {
+    const list = [...(sponsors ?? [])];
+    const j = index + dir;
+    if (j < 0 || j >= list.length) return;
+    const a = list[index];
+    const b = list[j];
+    await Promise.all([patch(a.id, { sortOrder: b.sortOrder === a.sortOrder ? b.sortOrder + dir : b.sortOrder }), patch(b.id, { sortOrder: a.sortOrder })]);
+  }
+
+  async function remove(id: number) {
+    if (!window.confirm("Remove this sponsor from the site?")) return;
+    await adminSend("DELETE", `/api/admin/sponsors/${id}`, password);
+    refresh();
+    toast({ title: "Sponsor removed" });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Handshake className="h-4 w-4 text-primary" /> Friends of the Podcastathon
+        </CardTitle>
+        <CardDescription>
+          Sponsor logos scroll in a strip on the homepage. PNG or SVG with a transparent background looks best; logos are
+          shown at about 40px tall.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-6">
+        <form onSubmit={handleAdd} className="grid gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-4 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-end">
+          <div>
+            <Label className="text-xs">Logo</Label>
+            <label className="mt-1 flex h-16 w-28 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-border bg-background text-muted-foreground hover:border-primary">
+              {preview ? <img src={preview} alt="" className="max-h-12 max-w-[6.5rem] object-contain" /> : <ImagePlus className="h-5 w-5" />}
+              <input
+                type="file"
+                accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                className="hidden"
+                data-testid="input-sponsor-logo"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] ?? null;
+                  if (preview) URL.revokeObjectURL(preview);
+                  setLogo(f);
+                  setPreview(f ? URL.createObjectURL(f) : null);
+                }}
+              />
+            </label>
+          </div>
+          <div>
+            <Label htmlFor="sponsor-name" className="text-xs">
+              Name
+            </Label>
+            <Input id="sponsor-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Dept. of Hydration" className="mt-1" data-testid="input-sponsor-name" />
+          </div>
+          <div>
+            <Label htmlFor="sponsor-url" className="text-xs">
+              Link (optional)
+            </Label>
+            <Input id="sponsor-url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="example.com" className="mt-1" data-testid="input-sponsor-url" />
+          </div>
+          <Button type="submit" disabled={busy} className="gap-1.5" data-testid="button-add-sponsor">
+            <Plus className="h-4 w-4" /> {busy ? "Adding…" : "Add"}
+          </Button>
+        </form>
+
+        {isLoading ? (
+          <Skeleton className="h-16 w-full" />
+        ) : (sponsors ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">No sponsors yet. Add the first one above and the strip appears on the homepage.</p>
+        ) : (
+          <ul className="divide-y divide-border rounded-xl border border-border">
+            {(sponsors ?? []).map((sp, i, arr) => (
+              <li key={sp.id} className={`flex flex-wrap items-center gap-3 p-3 ${sp.active ? "" : "opacity-60"}`} data-testid={`row-sponsor-${sp.id}`}>
+                <div className="flex h-12 w-28 items-center justify-center rounded-lg border border-border bg-white px-2">
+                  <img src={sp.logoUrl} alt={sp.name} className="max-h-9 max-w-[6rem] object-contain" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold">{sp.name}</div>
+                  {sp.url ? (
+                    <a href={sp.url} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-primary hover:underline">
+                      {sp.url.replace(/^https?:\/\//, "")}
+                    </a>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">No link</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move up">
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" disabled={i === arr.length - 1} onClick={() => move(i, 1)} aria-label="Move down">
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => patch(sp.id, { active: !sp.active })}
+                    aria-label={sp.active ? "Hide from site" : "Show on site"}
+                    title={sp.active ? "Hide from site" : "Show on site"}
+                  >
+                    {sp.active ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(sp.id)} aria-label="Remove">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Admin() {
   const { isAuthenticated, password, logout } = useAdminAuth();
   const isMobile = useIsMobile();
@@ -764,12 +933,15 @@ export default function Admin() {
 
           {isMobile ? (
             <Tabs defaultValue="setup">
-              <TabsList className="grid w-full grid-cols-2">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="setup" data-testid="tab-admin-setup">
                   Setup
                 </TabsTrigger>
                 <TabsTrigger value="signups" data-testid="tab-admin-signups">
-                  Who's signed up
+                  Signed up
+                </TabsTrigger>
+                <TabsTrigger value="sponsors" data-testid="tab-admin-sponsors">
+                  Sponsors
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="setup" className="mt-6 flex flex-col gap-6">
@@ -779,12 +951,16 @@ export default function Admin() {
               <TabsContent value="signups" className="mt-6">
                 <SignupsCard password={password} />
               </TabsContent>
+              <TabsContent value="sponsors" className="mt-6">
+                <SponsorsCard password={password} />
+              </TabsContent>
             </Tabs>
           ) : (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
               <div className="flex flex-col gap-6">
                 <EventsManagementCard password={password} />
                 <EventSettingsCard password={password} />
+                <SponsorsCard password={password} />
               </div>
               <div className="lg:sticky lg:top-6">
                 <SignupsCard password={password} />

@@ -33,3 +33,10 @@ export async function adminSend(method: string, path: string, password: string, 
 export function adminExportUrl(password: string): string {
   return `${API_BASE}${withPassword("/api/admin/export.csv", password)}`;
 }
+
+/** Multipart upload (e.g. a sponsor logo). Browser sets the boundary header. */
+export async function adminUpload(path: string, password: string, formData: FormData): Promise<Response> {
+  const res = await fetch(`${API_BASE}${withPassword(path, password)}`, { method: "POST", body: formData });
+  await throwIfNotOk(res);
+  return res;
+}

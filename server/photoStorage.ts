@@ -53,11 +53,11 @@ async function ensureBucket(): Promise<void> {
 }
 
 /** Upload a processed JPEG buffer to Supabase Storage and return its public URL. */
-export async function uploadPhoto(filename: string, buffer: Buffer): Promise<string> {
+export async function uploadPhoto(filename: string, buffer: Buffer, contentType = "image/jpeg"): Promise<string> {
   await ensureBucket();
   const supabase = getClient();
   const { error } = await supabase.storage.from(BUCKET).upload(filename, buffer, {
-    contentType: "image/jpeg",
+    contentType,
     cacheControl: "31536000",
     upsert: false,
   });

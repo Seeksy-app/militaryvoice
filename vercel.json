@@ -2,6 +2,7 @@
   "buildCommand": "vite build",
   "outputDirectory": "dist/public",
   "installCommand": "npm install",
+  "regions": ["pdx1"],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
     { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }

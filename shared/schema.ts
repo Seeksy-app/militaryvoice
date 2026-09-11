@@ -254,3 +254,30 @@ export interface SocialAccount {
   /** Follower / subscriber count from the platform's analytics, when available. */
   followers?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Sponsors — "Friends of the Podcastathon" logo strip, managed from admin.
+// ---------------------------------------------------------------------------
+export const sponsors = pgTable("sponsors", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  url: text("url").notNull().default(""),
+  logoUrl: text("logo_url").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  createdAt: text("created_at").notNull(),
+});
+
+export const updateSponsorSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").optional(),
+  url: z
+    .string()
+    .trim()
+    .transform((v) => (v && !/^https?:\/\//i.test(v) ? `https://${v}` : v))
+    .optional(),
+  sortOrder: z.number().int().optional(),
+  active: z.boolean().optional(),
+});
+export type UpdateSponsor = z.infer<typeof updateSponsorSchema>;
+export type SponsorRow = typeof sponsors.$inferSelect;
+export type PublicSponsor = Pick<SponsorRow, "id" | "name" | "url" | "logoUrl" | "sortOrder">;

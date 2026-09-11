@@ -13,7 +13,9 @@ import {
   type PublicEvent,
   type PublicSignup,
   type PublicPodcaster,
+  type PublicSponsor,
   type EventRow,
+  updateSponsorSchema,
 } from "../shared/schema.js";
 import { fromError } from "zod-validation-error";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, buildCalendarLinks } from "./email.js";
@@ -62,8 +64,10 @@ function toPublicEvent(event: EventRow): PublicEvent {
 // Public read endpoints are safe to serve from Vercel's CDN for a few seconds:
 // the homepage fires several in parallel and a cold instance costs ~2s each.
 // Writers invalidate client-side; a 10s window is invisible to visitors.
-function publicCache(res: Response): void {
-  res.setHeader("Cache-Control", "public, s-maxage=10, stale-while-revalidate=120");
+function publicCache(res: Response, seconds = 15): void {
+  // Served from the edge for `seconds`, then refreshed in the background for
+  // up to a day while visitors keep getting the instant cached copy.
+  res.setHeader("Cache-Control", `public, s-maxage=${seconds}, stale-while-revalidate=86400`);
 }
 
 function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[number]): PublicSignup {
@@ -157,14 +161,14 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
 export function registerRoutes(app: Express): void {
   // ---- Public: events list (for "Choose Your Event") -------------------------
   app.get("/api/events", async (_req, res) => {
-    publicCache(res);
+    publicCache(res, 60);
     const rows = await storage.listEvents();
     res.json(rows.map(toPublicEvent));
   });
 
   // ---- Public: event config (featured by default, or ?slug=) -----------------
   app.get("/api/event", async (req, res) => {
-    publicCache(res);
+    publicCache(res, 60);
     const slug = typeof req.query.slug === "string" ? req.query.slug : undefined;
     const event = slug ? await storage.getEventBySlug(slug) : await storage.getFeaturedEvent();
     if (!event) {
@@ -192,6 +196,71 @@ export function registerRoutes(app: Express): void {
       socialAccounts: p.socialAccounts,
     }));
     res.json(out);
+  });
+
+  // ---- Public: sponsor logos ("Friends of the Podcastathon") -------------------
+  app.get("/api/sponsors", async (_req, res) => {
+    publicCache(res, 60);
+    const rows = await storage.listSponsors(true);
+    const out: PublicSponsor[] = rows.map((r) => ({ id: r.id, name: r.name, url: r.url, logoUrl: r.logoUrl, sortOrder: r.sortOrder }));
+    res.json(out);
+  });
+
+  // ---- Admin: sponsors CRUD ------------------------------------------------------
+  app.get("/api/admin/sponsors", requireAdmin, async (_req, res) => {
+    res.json(await storage.listSponsors(false));
+  });
+
+  app.post("/api/admin/sponsors", requireAdmin, (req, res, next) => {
+    upload.single("logo")(req, res, (err) => {
+      if (err) {
+        res.status(400).json({ message: err.message || "Couldn't read that logo." });
+        return;
+      }
+      next();
+    });
+  }, async (req, res) => {
+    const body = req.body as Record<string, string>;
+    const name = String(body.name ?? "").trim();
+    if (!name) {
+      res.status(400).json({ message: "Give the sponsor a name." });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({ message: "Upload a logo (PNG or SVG with a transparent background works best)." });
+      return;
+    }
+    const parsedUrl = updateSponsorSchema.shape.url.safeParse(body.url ?? "");
+    const url = parsedUrl.success ? parsedUrl.data ?? "" : "";
+    try {
+      const ext = (req.file.mimetype.split("/")[1] || "png").replace("svg+xml", "svg").replace("jpeg", "jpg");
+      const filename = `sponsors/${Date.now()}-${crypto.randomBytes(5).toString("hex")}.${ext}`;
+      const logoUrl = await uploadPhoto(filename, req.file.buffer, req.file.mimetype);
+      const created = await storage.createSponsor({ name, url, logoUrl });
+      res.status(201).json(created);
+    } catch (err) {
+      console.error("Sponsor logo upload failed:", err);
+      res.status(500).json({ message: "Couldn't store that logo. Try again." });
+    }
+  });
+
+  app.patch("/api/admin/sponsors/:id", requireAdmin, async (req, res) => {
+    const parsed = updateSponsorSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const updated = await storage.updateSponsor(Number(req.params.id), parsed.data);
+    if (!updated) {
+      res.status(404).json({ message: "Sponsor not found" });
+      return;
+    }
+    res.json(updated);
+  });
+
+  app.delete("/api/admin/sponsors/:id", requireAdmin, async (req, res) => {
+    await storage.deleteSponsor(Number(req.params.id));
+    res.json({ ok: true });
   });
 
   app.get("/api/signups", async (req, res) => {

@@ -10,7 +10,7 @@ import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
 import { spotlightFromSignup, type SpotlightItem } from "@/components/SpotlightCard";
 import { useCountdown } from "@/hooks/use-countdown";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
-import type { PublicEvent, PublicSignup, PublicPodcaster } from "@shared/schema";
+import type { PublicEvent, PublicSignup, PublicPodcaster, PublicSponsor } from "@shared/schema";
 import {
   detectLocalTimeZone,
   slotStart,
@@ -39,10 +39,30 @@ interface Props {
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const MINI_CARDS = 3;
+// Rendered instantly while /api/event is in flight (a cold serverless start
+// can take a couple of seconds). Live data replaces it as soon as it lands.
+const EVENT_FALLBACK: PublicEvent = {
+  id: 0,
+  slug: "marathon",
+  isFeatured: true,
+  name: "24 Hour Podcastathon",
+  tagline: "Twenty-four straight hours of live veteran podcasting on National Military Podcast Day.",
+  description:
+    "Twenty-four straight hours of live veteran podcasting on National Military Podcast Day. Back-to-back shows, special guests, and stories from the community, streaming around the clock.",
+  startAtUtc: "2026-10-05T11:00:00.000Z",
+  durationHours: 24,
+  slotMinutes: 30,
+  onAirMinutes: 25,
+  bufferMinutes: 5,
+  bufferPosition: "after",
+  createdAt: "",
+};
+const HERO_IMAGES = ["/hero-1.jpg", "/hero-2.jpg", "/hero-3.jpg", "/hero-4.jpg", "/hero-5.jpg"];
+const HERO_ROTATE_MS = 4000;
 const NAVY = "bg-[#053877] text-white";
 const FADE_UP = {
-  hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+  hidden: { opacity: 0, y: 10 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
 };
 
 function longDate(d: Date, zone: string): string {
@@ -65,22 +85,35 @@ function Reveal({ children, delay = 0, className = "" }: { children: React.React
 }
 
 export default function Landing({ slug }: Props) {
-  const { data: event, isLoading: eventLoading } = useQuery<PublicEvent>({
+  const { data: liveEvent } = useQuery<PublicEvent>({
     queryKey: ["/api/event", slug ?? "featured"],
     queryFn: async () => {
       const res = await apiRequest("GET", slug ? `/api/event?slug=${encodeURIComponent(slug)}` : "/api/event");
       return res.json();
     },
   });
+  // Featured event paints from the fallback immediately; a specific /event/:slug
+  // waits for its own record.
+  const event: PublicEvent | undefined = liveEvent ?? (slug ? undefined : EVENT_FALLBACK);
+  const eventLoading = !event;
+  const dataReady = !!liveEvent;
+
+  // Rotating hero backdrop.
+  const [heroIdx, setHeroIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setHeroIdx((i) => (i + 1) % HERO_IMAGES.length), HERO_ROTATE_MS);
+    return () => clearInterval(id);
+  }, []);
   const { data: signups } = useQuery<PublicSignup[]>({
-    queryKey: ["/api/signups", event?.id ?? "none"],
+    queryKey: ["/api/signups", liveEvent?.id ?? "none"],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/signups?eventId=${event!.id}`);
+      const res = await apiRequest("GET", `/api/signups?eventId=${liveEvent!.id}`);
       return res.json();
     },
-    enabled: !!event,
+    enabled: !!liveEvent,
   });
   const { data: podcasters } = useQuery<PublicPodcaster[]>({ queryKey: ["/api/podcasters"] });
+  const { data: sponsors } = useQuery<PublicSponsor[]>({ queryKey: ["/api/sponsors"] });
 
   const zone = useMemo(detectLocalTimeZone, []);
   const countdown = useCountdown(event?.startAtUtc, event?.durationHours);
@@ -190,13 +223,19 @@ export default function Landing({ slug }: Props) {
 
       {/* ------------------------------------------------------------ HERO */}
       <section className="relative flex min-h-[88vh] items-center overflow-hidden bg-[#000741] text-white">
-        {/* studio photo + navy wash (kept light on the right so the room reads) */}
-        <img
-          src="/hero-bg.jpg"
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover object-[70%_center] opacity-70"
-        />
+        {/* rotating studio photos + navy wash (kept lighter on the right so the room reads) */}
+        {HERO_IMAGES.map((src, i) => (
+          <img
+            key={src}
+            src={src}
+            alt=""
+            aria-hidden="true"
+            fetchPriority={i === 0 ? "high" : "low"}
+            className={`absolute inset-0 h-full w-full object-cover object-[70%_center] transition-opacity duration-[1600ms] ease-in-out ${
+              i === heroIdx ? "opacity-70" : "opacity-0"
+            }`}
+          />
+        ))}
         <div
           aria-hidden="true"
           className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.96)_0%,rgba(5,56,119,0.88)_40%,rgba(5,56,119,0.62)_70%,rgba(5,56,119,0.45)_100%)]"
@@ -217,7 +256,7 @@ export default function Landing({ slug }: Props) {
               <Skeleton className="h-5 w-96 bg-white/20" />
             </div>
           ) : (
-            <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.09 } } }}>
+            <motion.div initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.04 } } }}>
               <motion.div
                 variants={FADE_UP}
                 className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] backdrop-blur sm:text-sm"
@@ -271,10 +310,10 @@ export default function Landing({ slug }: Props) {
 
               <motion.div variants={FADE_UP} className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-base text-white/75">
                 <span className="inline-flex items-center gap-1.5">
-                  <Users className="h-4 w-4 text-[#F0A71F]" /> {booked.length} confirmed
+                  <Users className="h-4 w-4 text-[#F0A71F]" /> {dataReady ? booked.length : "…"} confirmed
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <Clock className="h-4 w-4 text-[#F0A71F]" /> {openCount} of {slotCount} slots open
+                  <Clock className="h-4 w-4 text-[#F0A71F]" /> {dataReady ? `${openCount} of ${slotCount}` : "…"} slots open
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Radio className="h-4 w-4 text-[#F0A71F]" /> Free for podcasters
@@ -286,9 +325,9 @@ export default function Landing({ slug }: Props) {
           {/* Scoreboard countdown + lineup card */}
           {event && start && end && (
             <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.98 }}
+              initial={{ opacity: 0, y: 16, scale: 0.985 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.6, ease: "easeOut", delay: 0.2 }}
+              transition={{ duration: 0.4, ease: "easeOut", delay: 0.08 }}
               className="flex flex-col gap-4"
             >
               <div
@@ -357,7 +396,7 @@ export default function Landing({ slug }: Props) {
                 <div className="mt-4">
                   <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-white/55">
                     <span>Lineup filling</span>
-                    <span className="font-mono">{booked.length}/{slotCount}</span>
+                    <span className="font-mono">{dataReady ? `${booked.length}/${slotCount}` : "…"}</span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-white/10">
                     <motion.div
@@ -603,8 +642,19 @@ export default function Landing({ slug }: Props) {
       </section>
 
       {/* ------------------------------------------------------- LISTENERS */}
-      <section id="listeners" className={`scroll-mt-16 ${NAVY}`}>
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-20">
+      <section id="listeners" className={`relative scroll-mt-16 overflow-hidden ${NAVY}`}>
+        <img
+          src="/listeners-bg.jpg"
+          alt=""
+          aria-hidden="true"
+          loading="lazy"
+          className="absolute inset-0 h-full w-full object-cover object-[60%_30%] opacity-55"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.94)_0%,rgba(5,56,119,0.86)_45%,rgba(5,56,119,0.55)_100%)]"
+        />
+        <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-20">
           <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
             <Reveal>
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">For listeners</div>
@@ -657,6 +707,44 @@ export default function Landing({ slug }: Props) {
           </div>
         </div>
       </section>
+
+      {/* -------------------------------------------------------- SPONSORS */}
+      {(sponsors ?? []).length > 0 && (
+        <section className="overflow-hidden border-b border-border bg-background py-14" data-testid="section-sponsors">
+          <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
+            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
+              Friends of the <span className="text-[#F0A71F]">Podcastathon</span>
+            </div>
+          </div>
+          <div className="relative mt-8">
+            <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-background to-transparent" />
+            <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-background to-transparent" />
+            <div className="flex w-max items-center gap-16 px-8 [animation:mvmarquee_var(--mv-marquee-s)_linear_infinite] hover:[animation-play-state:paused]" style={{ ["--mv-marquee-s" as string]: `${Math.max(18, (sponsors ?? []).length * 6)}s` }}>
+              {[...(sponsors ?? []), ...(sponsors ?? [])].map((sp, i) => {
+                const img = (
+                  <img
+                    src={sp.logoUrl}
+                    alt={sp.name}
+                    title={sp.name}
+                    loading="lazy"
+                    className="h-10 w-auto max-w-[180px] object-contain opacity-80 grayscale transition duration-300 hover:opacity-100 hover:grayscale-0 sm:h-12"
+                  />
+                );
+                return sp.url ? (
+                  <a key={`${sp.id}-${i}`} href={sp.url} target="_blank" rel="noopener noreferrer" className="shrink-0" aria-label={sp.name}>
+                    {img}
+                  </a>
+                ) : (
+                  <span key={`${sp.id}-${i}`} className="shrink-0">
+                    {img}
+                  </span>
+                );
+              })}
+            </div>
+            <style>{`@keyframes mvmarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
+          </div>
+        </section>
+      )}
 
       {/* ------------------------------------------------------- FINAL CTA */}
       <section className="bg-[#F0A71F] text-[#1a1200]">

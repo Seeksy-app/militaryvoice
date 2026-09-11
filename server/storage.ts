@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -10,10 +10,12 @@ import type {
   LoginTokenRow,
   ProfileRow,
   InsertProfile,
+  SponsorRow,
+  UpdateSponsor,
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, asc } from "drizzle-orm";
 
 // Resolve the Postgres connection string lazily (not at module load) so a
 // missing/bad value surfaces as a normal caught error on first request—
@@ -152,6 +154,18 @@ async function ensureSchema() {
     );
   `;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS sponsors (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL DEFAULT '',
+      logo_url TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TEXT NOT NULL
+    );
+  `;
+
   // Migrate older databases created before these columns existed.
   await sql`ALTER TABLE signups ADD COLUMN IF NOT EXISTS photo_url TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS on_air_minutes INTEGER NOT NULL DEFAULT 25`;
@@ -244,6 +258,10 @@ export interface IStorage {
   ): Promise<ProfileRow>;
   updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void>;
   listCompleteProfiles(): Promise<ProfileRow[]>;
+  listSponsors(activeOnly: boolean): Promise<SponsorRow[]>;
+  createSponsor(data: { name: string; url: string; logoUrl: string }): Promise<SponsorRow>;
+  updateSponsor(id: number, patch: UpdateSponsor): Promise<SponsorRow | undefined>;
+  deleteSponsor(id: number): Promise<void>;
 }
 
 // Default marathon: kicks off the next Saturday at 12:00 PM Eastern for 24 hours,
@@ -432,6 +450,35 @@ class DatabaseStorage implements IStorage {
         and(ne(podcasterProfiles.podcastName, ""), ne(podcasterProfiles.hostName, ""), ne(podcasterProfiles.photoUrl, "")),
       )
       .orderBy(podcasterProfiles.createdAt);
+  }
+
+  async listSponsors(activeOnly: boolean): Promise<SponsorRow[]> {
+    await ready();
+    const q = db.select().from(sponsors);
+    const rows = activeOnly ? await q.where(eq(sponsors.active, true)).orderBy(asc(sponsors.sortOrder), asc(sponsors.id)) : await q.orderBy(asc(sponsors.sortOrder), asc(sponsors.id));
+    return rows;
+  }
+
+  async createSponsor(data: { name: string; url: string; logoUrl: string }): Promise<SponsorRow> {
+    await ready();
+    const existing = await this.listSponsors(false);
+    const sortOrder = existing.length ? Math.max(...existing.map((s) => s.sortOrder)) + 1 : 0;
+    const [created] = await db
+      .insert(sponsors)
+      .values({ ...data, sortOrder, active: true, createdAt: new Date().toISOString() })
+      .returning();
+    return created;
+  }
+
+  async updateSponsor(id: number, patch: UpdateSponsor): Promise<SponsorRow | undefined> {
+    await ready();
+    const [updated] = await db.update(sponsors).set(patch).where(eq(sponsors.id, id)).returning();
+    return updated;
+  }
+
+  async deleteSponsor(id: number): Promise<void> {
+    await ready();
+    await db.delete(sponsors).where(eq(sponsors.id, id));
   }
 
   async updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void> {
