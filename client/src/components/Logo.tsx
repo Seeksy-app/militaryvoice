@@ -18,7 +18,7 @@ export function LogoMark({ className = "h-6 w-6" }: { className?: string }) {
 export function Wordmark({ className = "" }: { className?: string }) {
   return (
     <span className={`font-bold tracking-tight ${className}`} style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
-      Reveille
+      MilitaryVoice<span style={{ opacity: 0.6 }}>.ai</span>
     </span>
   );
 }

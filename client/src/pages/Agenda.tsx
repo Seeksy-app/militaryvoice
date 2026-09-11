@@ -107,7 +107,7 @@ export default function Agenda() {
                   ? `I'm tuning in to ${s.signup.hostName} on ${s.signup.podcastName} — ${s.dateLabel}, ${formatTimeInZone(
                       s.start,
                       viewZone
-                    )} ${zoneLabel(viewZone)}, during the Reveille 24-Hour Podcast Marathon! ${
+                    )} ${zoneLabel(viewZone)}, during the MilitaryVoice.ai 24-Hour Podcast Marathon! ${
                       typeof window !== "undefined" ? window.location.href : ""
                     }`
                   : "";

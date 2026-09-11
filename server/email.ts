@@ -8,7 +8,7 @@
 const RESEND_BASE = process.env.CUSTOM_CRED_API_RESEND_COM_URL || "https://api.resend.com";
 const RESEND_TOKEN = process.env.CUSTOM_CRED_API_RESEND_COM_TOKEN;
 
-const FROM_ADDRESS = "Reveille Podcast Marathon <hello@militaryvoice.ai>";
+const FROM_ADDRESS = "MilitaryVoice.ai <hello@militaryvoice.ai>";
 
 export interface ConfirmationEmailInput {
   to: string;

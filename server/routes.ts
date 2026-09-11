@@ -1,13 +1,9 @@
-import express from "express";
 import type { Express, Request, Response, NextFunction } from "express";
-import { createServer } from "node:http";
-import type { Server } from "node:http";
-import path from "node:path";
-import fs from "node:fs";
 import crypto from "node:crypto";
 import multer from "multer";
 import sharp from "sharp";
 import { storage } from "./storage";
+import { uploadPhoto } from "./photoStorage";
 import {
   insertSignupSchema,
   insertReminderSchema,
@@ -17,9 +13,6 @@ import {
 } from "@shared/schema";
 import { fromError } from "zod-validation-error";
 import { sendConfirmationEmail } from "./email";
-
-const UPLOADS_DIR = path.join(process.cwd(), "uploads");
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -34,19 +27,18 @@ const upload = multer({
 });
 
 // "Enhance" a submitted photo: normalize exposure/contrast, sharpen slightly,
-// crop to a consistent square, and re-encode as a reasonably sized JPEG so the
-// agenda looks clean no matter what the original photo looked like.
+// crop to a consistent square, re-encode as a reasonably sized JPEG, and store
+// it in Supabase Storage so it survives across serverless invocations.
 async function enhanceAndSavePhoto(buffer: Buffer): Promise<string> {
   const filename = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.jpg`;
-  const outPath = path.join(UPLOADS_DIR, filename);
-  await sharp(buffer)
+  const processed = await sharp(buffer)
     .rotate() // respect EXIF orientation
     .resize(720, 720, { fit: "cover", position: "attention" })
     .normalize() // auto-level contrast
     .sharpen()
     .jpeg({ quality: 88 })
-    .toFile(outPath);
-  return `/uploads/${filename}`;
+    .toBuffer();
+  return uploadPhoto(filename, processed);
 }
 
 function toPublicEvent(event: Awaited<ReturnType<typeof storage.getEvent>>): PublicEvent {
@@ -121,10 +113,7 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
-  // ---- Uploaded (and enhanced) signup photos ---------------------------------
-  app.use("/uploads", express.static(UPLOADS_DIR));
-
+export function registerRoutes(app: Express): void {
   // ---- Public: event config -------------------------------------------------
   app.get("/api/event", async (_req, res) => {
     const event = await storage.getEvent();
@@ -253,21 +242,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const ics = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//Reveille//Podcast Marathon//EN",
+      "PRODID:-//MilitaryVoice.ai//Podcast Marathon//EN",
       "CALSCALE:GREGORIAN",
       "BEGIN:VEVENT",
-      `UID:reveille-signup-${signup.id}@signups.pplx.app`,
+      `UID:militaryvoice-signup-${signup.id}@militaryvoice.ai`,
       `DTSTAMP:${toIcsUtcStamp(new Date())}`,
       `DTSTART:${toIcsUtcStamp(start)}`,
       `DTEND:${toIcsUtcStamp(end)}`,
-      `SUMMARY:${icsEscape(`${signup.podcastName} — Reveille Podcast Marathon`)}`,
-      `DESCRIPTION:${icsEscape(`${signup.hostName} is live on the Reveille 24-Hour Podcast Marathon. Tune in!${bufferNote}`)}`,
+      `SUMMARY:${icsEscape(`${signup.podcastName} — MilitaryVoice.ai Podcast Marathon`)}`,
+      `DESCRIPTION:${icsEscape(`${signup.hostName} is live on the MilitaryVoice.ai 24-Hour Podcast Marathon. Tune in!${bufferNote}`)}`,
       "END:VEVENT",
       "END:VCALENDAR",
     ].join("\r\n");
 
     res.setHeader("Content-Type", "text/calendar; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="reveille-${signup.id}.ics"`);
+    res.setHeader("Content-Disposition", `attachment; filename="militaryvoice-${signup.id}.ics"`);
     res.send(ics);
   });
 
@@ -402,9 +391,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       );
     }
     res.setHeader("Content-Type", "text/csv");
-    res.setHeader("Content-Disposition", "attachment; filename=reveille-signups.csv");
+    res.setHeader("Content-Disposition", "attachment; filename=militaryvoice-signups.csv");
     res.send(lines.join("\n"));
   });
 
-  return httpServer;
 }

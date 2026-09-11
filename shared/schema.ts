@@ -1,12 +1,12 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { pgTable, text, integer, boolean, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 // ---------------------------------------------------------------------------
 // Event — singleton settings for the marathon (start time, slot length, etc.)
 // ---------------------------------------------------------------------------
-export const events = sqliteTable("events", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const events = pgTable("events", {
+  id: serial("id").primaryKey(),
   name: text("name").notNull(),
   tagline: text("tagline").notNull().default(""),
   description: text("description").notNull().default(""),
@@ -20,7 +20,7 @@ export const events = sqliteTable("events", {
   onAirMinutes: integer("on_air_minutes").notNull().default(25),
   bufferMinutes: integer("buffer_minutes").notNull().default(5),
   bufferPosition: text("buffer_position").notNull().default("after"), // "before" | "after"
-  adminPassword: text("admin_password").notNull().default("reveille2026"),
+  adminPassword: text("admin_password").notNull().default("militaryvoice2026"),
 });
 
 export const insertEventSchema = createInsertSchema(events)
@@ -41,19 +41,19 @@ export type PublicEvent = Omit<EventRow, "adminPassword">;
 // ---------------------------------------------------------------------------
 // Signups — one podcaster/team claiming one slot
 // ---------------------------------------------------------------------------
-export const signups = sqliteTable("signups", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const signups = pgTable("signups", {
+  id: serial("id").primaryKey(),
   slotIndex: integer("slot_index").notNull(),
   podcastName: text("podcast_name").notNull(),
   hostName: text("host_name").notNull(),
   email: text("email").notNull(),
   phone: text("phone").notNull().default(""),
   numPeople: integer("num_people").notNull().default(1),
-  hasVideoIntro: integer("has_video_intro", { mode: "boolean" }).notNull().default(false),
-  hasVideoOutro: integer("has_video_outro", { mode: "boolean" }).notNull().default(false),
-  hasSlides: integer("has_slides", { mode: "boolean" }).notNull().default(false),
-  hasImages: integer("has_images", { mode: "boolean" }).notNull().default(false),
-  needsInterviewer: integer("needs_interviewer", { mode: "boolean" }).notNull().default(false),
+  hasVideoIntro: boolean("has_video_intro").notNull().default(false),
+  hasVideoOutro: boolean("has_video_outro").notNull().default(false),
+  hasSlides: boolean("has_slides").notNull().default(false),
+  hasImages: boolean("has_images").notNull().default(false),
+  needsInterviewer: boolean("needs_interviewer").notNull().default(false),
   socialLinks: text("social_links").notNull().default(""),
   notes: text("notes").notNull().default(""),
   timezone: text("timezone").notNull().default(""),
@@ -97,8 +97,8 @@ export type PublicSignup = Pick<
 // ---------------------------------------------------------------------------
 // Reminders — a fan asking to be notified before a specific signup goes live
 // ---------------------------------------------------------------------------
-export const reminders = sqliteTable("reminders", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+export const reminders = pgTable("reminders", {
+  id: serial("id").primaryKey(),
   signupId: integer("signup_id").notNull(),
   email: text("email").notNull(),
   createdAt: text("created_at").notNull(),
