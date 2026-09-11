@@ -65,7 +65,10 @@ export const queryClient = new QueryClient({
       refetchInterval: false,
       refetchOnWindowFocus: false,
       staleTime: Infinity,
-      retry: false,
+      // A cold serverless start can throw one 500; retry those briefly. Never
+      // retry 4xx (401 drives the sign-in screen, 404s are real).
+      retry: (count, err) => count < 2 && !/^4\d\d:/.test(String((err as Error)?.message ?? "")),
+      retryDelay: (attempt) => 600 * (attempt + 1),
     },
     mutations: {
       retry: false,

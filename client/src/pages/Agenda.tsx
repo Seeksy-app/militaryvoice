@@ -5,10 +5,8 @@ import { NavBar } from "@/components/NavBar";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { AgendaSignupActions } from "@/components/AgendaSignupActions";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
-import { Copy, Mic2, ArrowRight, CalendarDays, Radio } from "lucide-react";
+import { Mic2, ArrowRight, CalendarDays, Radio } from "lucide-react";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import {
@@ -42,7 +40,6 @@ export default function Agenda({ slug }: Props) {
     },
     enabled: !!event,
   });
-  const { toast } = useToast();
 
   const [viewZone, setViewZone] = useState(detectLocalTimeZone);
   const localZone = useMemo(detectLocalTimeZone, []);
@@ -65,24 +62,6 @@ export default function Agenda({ slug }: Props) {
       return { index: i, start, end, showDate, dateLabel, signup };
     });
   }, [event, signups, viewZone]);
-
-  function copyAgenda() {
-    if (!event) return;
-    const lines = [`${event.name} — Agenda (${zoneLabel(viewZone)})`, ""];
-    let lastDate = "";
-    for (const s of slots) {
-      if (s.dateLabel !== lastDate) {
-        lines.push(`— ${s.dateLabel} —`);
-        lastDate = s.dateLabel;
-      }
-      const time = `${formatTimeInZone(s.start, viewZone)}–${formatTimeInZone(s.end, viewZone)}`;
-      lines.push(s.signup ? `${time}  ${s.signup.podcastName}` : `${time}  OPEN — sign up now`);
-    }
-    navigator.clipboard.writeText(lines.join("\n")).then(
-      () => toast({ title: "Agenda copied", description: "Paste it anywhere — social captions, show notes, emails." }),
-      () => toast({ title: "Couldn't copy", variant: "destructive" })
-    );
-  }
 
   const groups = useMemo(() => {
     const out: { dateLabel: string; items: typeof slots }[] = [];
@@ -125,18 +104,8 @@ export default function Agenda({ slug }: Props) {
               </p>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
-                <div className="rounded-xl bg-white/95 p-1 text-foreground shadow">
-                  <TimeZoneSelect value={viewZone} onChange={setViewZone} onDetect={() => setViewZone(localZone)} localZone={localZone} />
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={copyAgenda}
-                  className="gap-1.5 rounded-full border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white"
-                  data-testid="button-copy-agenda"
-                >
-                  <Copy className="h-3.5 w-3.5" /> Copy as text
-                </Button>
+                <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Times shown in</span>
+                <TimeZoneSelect variant="dark" value={viewZone} onChange={setViewZone} onDetect={() => setViewZone(localZone)} localZone={localZone} />
               </div>
             </>
           )}

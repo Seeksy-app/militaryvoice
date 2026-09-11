@@ -156,10 +156,32 @@ async function ensureSchema() {
   await sql`UPDATE signups SET event_id = (SELECT id FROM events WHERE is_featured = true LIMIT 1) WHERE event_id IS NULL`;
 }
 
+// Two serverless instances booting at the same instant can both run the
+// CREATE/ALTER ... IF NOT EXISTS statements above; Postgres then rejects one
+// of them with a duplicate-object error even though the schema is fine.
+// Treat those as success, and give anything else one quiet retry.
+const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
+async function ensureSchemaSafe(attempt = 0): Promise<void> {
+  try {
+    await ensureSchema();
+  } catch (err: any) {
+    const code = String(err?.code ?? "");
+    if (BENIGN_SCHEMA_ERRORS.has(code)) {
+      console.warn(`Schema bootstrap race ignored (${code}).`);
+      return;
+    }
+    if (attempt < 1) {
+      await new Promise((r) => setTimeout(r, 400));
+      return ensureSchemaSafe(attempt + 1);
+    }
+    throw err;
+  }
+}
+
 let schemaReady: Promise<void> | null = null;
 function ready(): Promise<void> {
   if (!schemaReady) {
-    schemaReady = ensureSchema().catch((err) => {
+    schemaReady = ensureSchemaSafe().catch((err) => {
       schemaReady = null;
       throw err;
     });
