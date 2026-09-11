@@ -40,6 +40,9 @@ interface Props {
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const MINI_CARDS = 3;
+function longDate(d: Date, zone: string): string {
+  return new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: zone }).format(d);
+}
 const FADE_UP = {
   hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
@@ -158,11 +161,11 @@ export default function Landing({ slug }: Props) {
             >
               <motion.div variants={FADE_UP} className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em]">
                 <span className="inline-block h-2 w-2 rounded-full bg-[#F0A71F]" />
-                {event.durationHours}-hour podcast marathon
+                Live · National Military Podcast Day
                 {start && (
                   <>
                     <span className="opacity-40">·</span>
-                    {formatDateInZone(start, zone)}
+                    {longDate(start, zone)}
                   </>
                 )}
               </motion.div>
@@ -175,7 +178,7 @@ export default function Landing({ slug }: Props) {
                 {event.name.trim()}
               </motion.h1>
               <motion.p variants={FADE_UP} className="mt-5 max-w-xl text-lg leading-relaxed text-white/80" data-testid="text-landing-tagline">
-                {event.tagline || event.description}
+                {event.description || event.tagline}
               </motion.p>
 
               <motion.div variants={FADE_UP} className="mt-8 flex flex-wrap items-center gap-3">
@@ -327,18 +330,62 @@ export default function Landing({ slug }: Props) {
         </div>
       </section>
 
-      {/* ------------------------------------------------------- WHAT IT IS */}
+      {/* ------------------------------------------------------------ HOST */}
       <section className="border-b border-border">
         <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-          <div className="max-w-2xl">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">What this is</div>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
-              One mic, every time zone, around the clock.
-            </h2>
-            {event?.description && <p className="mt-4 text-base leading-relaxed text-muted-foreground">{event.description}</p>}
+          <div className="grid gap-10 lg:grid-cols-[0.75fr_1.25fr] lg:items-center">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className="relative mx-auto w-full max-w-sm"
+            >
+              <div className="absolute -inset-3 -rotate-2 rounded-[2rem] bg-[#F0A71F]/80" aria-hidden="true" />
+              <img
+                src="/rico-player.jpg"
+                alt="Rico Player in Marine Corps utilities holding his Emmy award"
+                className="relative aspect-[3/4] w-full rounded-[1.75rem] object-cover object-top shadow-2xl"
+                loading="lazy"
+                data-testid="img-host"
+              />
+              <div className="absolute bottom-4 left-4 right-4 rounded-xl border border-white/40 bg-background/90 px-4 py-3 shadow-lg backdrop-blur">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-primary">Your host</div>
+                <div className="text-lg font-bold leading-tight" style={HEADLINE_FONT}>
+                  Rico Player
+                </div>
+                <div className="text-xs text-muted-foreground">Marine · Emmy winner · Podcaster</div>
+              </div>
+            </motion.div>
+
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Hosted by</div>
+              <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT} data-testid="text-host-name">
+                Rico Player
+              </h2>
+              <p className="mt-5 text-xl leading-relaxed text-foreground">
+                Thirty-three years in the Marine Corps. Five combat tours. An Emmy, and a seat beside a global media
+                executive.
+              </p>
+              <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
+                He's made the transition you are in the middle of, and he wrote down what actually carried over.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2">
+                {[
+                  ["33", "years in the Corps"],
+                  ["5", "combat tours"],
+                  ["1", "Emmy"],
+                ].map(([n, label]) => (
+                  <div key={label} className="flex items-baseline gap-1.5 rounded-full border border-border bg-card px-4 py-2">
+                    <span className="font-mono text-lg font-bold text-primary">{n}</span>
+                    <span className="text-sm text-muted-foreground">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="mt-10 grid gap-6 sm:grid-cols-3">
+          <div className="mt-16 grid gap-6 sm:grid-cols-3">
             {[
               {
                 icon: Globe2,

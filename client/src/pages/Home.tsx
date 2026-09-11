@@ -94,7 +94,7 @@ export default function Home({ slug }: Props) {
             <div>
               <div className="mb-4 inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-primary">
                 <span className="inline-block h-2.5 w-4 rounded-full bg-primary" />
-                24-Hour Podcast Marathon
+                Live schedule · pick your slot
               </div>
               <h1
                 className="text-3xl font-bold leading-[1.08] tracking-tight text-foreground sm:text-4xl lg:text-[2.75rem]"

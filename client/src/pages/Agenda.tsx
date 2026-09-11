@@ -159,7 +159,7 @@ export default function Agenda({ slug }: Props) {
                       ? `I'm tuning in to ${s.signup.hostName} on ${s.signup.podcastName} — ${s.dateLabel}, ${formatTimeInZone(
                           s.start,
                           viewZone
-                        )} ${zoneLabel(viewZone)}, during the MilitaryVoice.ai 24-Hour Podcast Marathon! ${
+                        )} ${zoneLabel(viewZone)}, during the MilitaryVoice.ai 24 Hour Podcastathon! ${
                           typeof window !== "undefined" ? window.location.href : ""
                         }`
                       : "";
