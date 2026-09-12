@@ -307,6 +307,7 @@ export interface IStorage {
     patch: Partial<InsertProfile> & { photoUrl?: string; uploadPostUsername?: string; socialAccounts?: string },
   ): Promise<ProfileRow>;
   updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void>;
+  syncSignupsFromProfile(email: string, profile: ProfileRow): Promise<number>;
   listCompleteProfiles(): Promise<ProfileRow[]>;
   listSponsors(activeOnly: boolean): Promise<SponsorRow[]>;
   createSponsor(data: { name: string; url: string; logoUrl: string }): Promise<SponsorRow>;
@@ -608,6 +609,44 @@ class DatabaseStorage implements IStorage {
   async deleteSponsor(id: number): Promise<void> {
     await ready();
     await db.delete(sponsors).where(eq(sponsors.id, id));
+  }
+
+  /**
+   * A signup stores its own copy of the podcaster's details, taken when the
+   * slot was claimed, so the public agenda can be read without joining. That
+   * copy goes stale the moment someone edits their profile — push the new
+   * values onto every slot they still hold. Slot, event, timezone and status
+   * belong to the booking, not the profile, so they're left alone.
+   */
+  async syncSignupsFromProfile(email: string, profile: ProfileRow): Promise<number> {
+    await ready();
+    const rows = await db
+      .update(signups)
+      .set({
+        podcastName: profile.podcastName,
+        hostName: profile.hostName,
+        phone: profile.phone,
+        numPeople: profile.numPeople,
+        hasVideoIntro: profile.hasVideoIntro,
+        hasVideoOutro: profile.hasVideoOutro,
+        hasSlides: profile.hasSlides,
+        hasImages: profile.hasImages,
+        needsInterviewer: profile.needsInterviewer,
+        socialLinks: profile.socialLinks,
+        rssUrl: profile.rssUrl,
+        youtubeUrl: profile.youtubeUrl,
+        socialAccounts: profile.socialAccounts,
+        showFormat: profile.showFormat,
+        recordingUrl: profile.recordingUrl,
+        introStyle: profile.introStyle,
+        branch: profile.branch,
+        serviceStatus: profile.serviceStatus,
+        notes: profile.notes,
+        photoUrl: profile.photoUrl,
+      })
+      .where(and(eq(signups.email, email.trim().toLowerCase()), ne(signups.status, "cancelled")))
+      .returning({ id: signups.id });
+    return rows.length;
   }
 
   async updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void> {

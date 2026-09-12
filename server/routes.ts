@@ -1015,6 +1015,8 @@ export function registerRoutes(app: Express): void {
       ...parsed.data,
       ...(photoUrl ? { photoUrl } : {}),
     });
+    // Keep any slots they already hold in step with the profile.
+    await storage.syncSignupsFromProfile(email, updated);
     res.json(updated);
   });
 
