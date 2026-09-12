@@ -273,7 +273,6 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
   }, [dirty]);
   const watchPodcast = form.watch("podcastName");
   const watchHost = form.watch("hostName");
-  const watchPeople = form.watch("numPeople");
   const watchRss = form.watch("rssUrl");
   const watchYouTube = form.watch("youtubeUrl");
   // Same accounts the public card will show.
@@ -354,127 +353,28 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
           {/* ------------------------------------------------ main column */}
           <div className="flex flex-col gap-6">
             <SectionCard
-              id="section-about"
+              id="section-show"
               step={1}
-              icon={User}
-              title="About you"
-              description="Who's behind the mic. Your photo goes on the public lineup; contact details stay with the production team."
+              icon={Mic2}
+              title="Your show"
+              description="What listeners see on the lineup."
             >
-              {/* Photo */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`group relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 bg-muted transition-colors hover:border-primary ${
-                    shownPhoto ? "border-transparent ring-4 ring-primary/10" : "border-dashed border-border"
-                  }`}
-                  data-testid="button-upload-photo"
-                >
-                  {shownPhoto ? (
-                    <img src={shownPhoto} alt="Your selected photo" className="h-full w-full object-cover" />
-                  ) : (
-                    <Camera className="h-7 w-7 text-muted-foreground transition-colors group-hover:text-primary" />
-                  )}
-                </button>
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-sm font-medium">Photo {shownPhoto ? "" : <span className="text-destructive">*</span>}</div>
-                  <p className="text-xs text-muted-foreground">
-                    Square works best. We'll enhance it and crop it to a circle for the agenda.
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
-                      <ImagePlus className="h-3.5 w-3.5" />
-                      {shownPhoto ? "Change photo" : "Upload photo"}
-                    </Button>
-                    {photoFile && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (photoPreview) {
-                              setRawImageSrc(photoPreview);
-                              setCropOpen(true);
-                            }
-                          }}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-                          data-testid="button-adjust-crop"
-                        >
-                          <Crop className="h-3 w-3" /> Adjust crop
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handlePhotoChange(null);
-                            if (fileInputRef.current) fileInputRef.current.value = "";
-                          }}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
-                        >
-                          <X className="h-3 w-3" /> Remove
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  {photoError && <p className="text-sm font-medium text-destructive">{photoError}</p>}
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  data-testid="input-photo"
-                  onChange={(e) => handlePhotoChange(e.target.files?.[0] ?? null)}
-                />
-                <PhotoCropDialog
-                  open={cropOpen}
-                  imageSrc={rawImageSrc}
-                  onCancel={() => {
-                    setCropOpen(false);
-                    setRawImageSrc(null);
-                    if (!photoFile && fileInputRef.current) fileInputRef.current.value = "";
-                  }}
-                  onConfirm={handleCropConfirm}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="hostName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Your name <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input placeholder="Jamie Rivera" {...field} data-testid="input-host-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input type="email" readOnly disabled value={email} data-testid="input-email" />
-                  </FormControl>
-                  <FormDescription>You signed in with this. It's where we'll send show-day details.</FormDescription>
-                </FormItem>
-              </div>
-
               <FormField
                 control={form.control}
-                name="phone"
+                name="podcastName"
                 render={({ field }) => (
-                  <FormItem className="sm:max-w-xs">
-                    <FormLabel>Phone (optional)</FormLabel>
+                  <FormItem>
+                    <FormLabel>
+                      Podcast / show name <span className="text-destructive">*</span>
+                    </FormLabel>
                     <FormControl>
-                      <Input placeholder="(555) 555-5555" {...field} data-testid="input-phone" />
+                      <Input placeholder="The Night Watch Podcast" {...field} data-testid="input-podcast-name" />
                     </FormControl>
-                    <FormDescription>Only used if we need to reach you fast on show day.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
             </SectionCard>
 
             <SectionCard
@@ -607,72 +507,125 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                 </div>
               )}
             </SectionCard>
+
             <SectionCard
-              id="section-show"
+              id="section-about"
               step={3}
-              icon={Mic2}
-              title="Your show"
-              description="What listeners see on the lineup."
+              icon={User}
+              title="About you"
+              description="Who's behind the mic. Your photo goes on the public lineup; contact details stay with the production team."
             >
-              <FormField
-                control={form.control}
-                name="podcastName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      Podcast / show name <span className="text-destructive">*</span>
-                    </FormLabel>
-                    <FormControl>
-                      <Input placeholder="The Night Watch Podcast" {...field} data-testid="input-podcast-name" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* Photo */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`group relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 bg-muted transition-colors hover:border-primary ${
+                    shownPhoto ? "border-transparent ring-4 ring-primary/10" : "border-dashed border-border"
+                  }`}
+                  data-testid="button-upload-photo"
+                >
+                  {shownPhoto ? (
+                    <img src={shownPhoto} alt="Your selected photo" className="h-full w-full object-cover" />
+                  ) : (
+                    <Camera className="h-7 w-7 text-muted-foreground transition-colors group-hover:text-primary" />
+                  )}
+                </button>
+                <div className="flex flex-col gap-1.5">
+                  <div className="text-sm font-medium">Photo {shownPhoto ? "" : <span className="text-destructive">*</span>}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Square works best. We'll enhance it and crop it to a circle for the agenda.
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
+                      <ImagePlus className="h-3.5 w-3.5" />
+                      {shownPhoto ? "Change photo" : "Upload photo"}
+                    </Button>
+                    {photoFile && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (photoPreview) {
+                              setRawImageSrc(photoPreview);
+                              setCropOpen(true);
+                            }
+                          }}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                          data-testid="button-adjust-crop"
+                        >
+                          <Crop className="h-3 w-3" /> Adjust crop
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handlePhotoChange(null);
+                            if (fileInputRef.current) fileInputRef.current.value = "";
+                          }}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" /> Remove
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {photoError && <p className="text-sm font-medium text-destructive">{photoError}</p>}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  data-testid="input-photo"
+                  onChange={(e) => handlePhotoChange(e.target.files?.[0] ?? null)}
+                />
+                <PhotoCropDialog
+                  open={cropOpen}
+                  imageSrc={rawImageSrc}
+                  onCancel={() => {
+                    setCropOpen(false);
+                    setRawImageSrc(null);
+                    if (!photoFile && fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  onConfirm={handleCropConfirm}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="hostName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Your name <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input placeholder="Jamie Rivera" {...field} data-testid="input-host-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input type="email" readOnly disabled value={email} data-testid="input-email" />
+                  </FormControl>
+                  <FormDescription>You signed in with this. It's where we'll send show-day details.</FormDescription>
+                </FormItem>
+              </div>
 
               <FormField
                 control={form.control}
-                name="numPeople"
+                name="phone"
                 render={({ field }) => (
-                  <FormItem className={isPrerecorded ? "opacity-50" : undefined}>
-                    <FormLabel>Who's on the mic?</FormLabel>
+                  <FormItem className="sm:max-w-xs">
+                    <FormLabel>Phone (optional)</FormLabel>
                     <FormControl>
-                      <RadioGroup
-                        value={String(field.value)}
-                        onValueChange={(v) => field.onChange(Number(v))}
-                        disabled={isPrerecorded}
-                        className="grid max-w-md grid-cols-2 gap-2"
-                      >
-                        {[
-                          ["1", "Just me"],
-                          ["2", "Two of us"],
-                        ].map(([v, label]) => (
-                          <FormItem key={v} className="space-y-0">
-                            <FormLabel
-                              className={`flex items-center gap-2 rounded-lg border p-2.5 text-sm font-normal transition-colors ${
-                                isPrerecorded
-                                  ? "cursor-not-allowed border-border"
-                                  : String(field.value) === v
-                                    ? "cursor-pointer border-primary bg-primary/5"
-                                    : "cursor-pointer border-border hover:bg-muted/50"
-                              }`}
-                            >
-                              <FormControl>
-                                <RadioGroupItem
-                                  value={v}
-                                  disabled={isPrerecorded}
-                                  data-testid={`radio-people-${v === "1" ? "one" : "two"}`}
-                                />
-                              </FormControl>
-                              {label}
-                            </FormLabel>
-                          </FormItem>
-                        ))}
-                      </RadioGroup>
+                      <Input placeholder="(555) 555-5555" {...field} data-testid="input-phone" />
                     </FormControl>
-                    {isPrerecorded && (
-                      <FormDescription>Not needed for a recorded episode — whoever's on the mic is already in the file.</FormDescription>
-                    )}
+                    <FormDescription>Only used if we need to reach you fast on show day.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -930,7 +883,6 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                 </div>
                 <div className="mt-0.5 truncate text-xs text-muted-foreground">
                   {watchHost?.trim() || "Host name"}
-                  {!isPrerecorded && watchPeople === 2 && " + co-host"}
                 </div>
                 <div className="mt-2 font-mono text-xs text-primary">
                   {pendingSlot

@@ -632,7 +632,6 @@ export default function HostDashboard() {
                         <h2 className="truncate text-xl font-bold tracking-tight text-card-foreground sm:text-2xl">{profile?.podcastName}</h2>
                         <p className="mt-0.5 text-sm text-muted-foreground">
                           Hosted by <span className="font-medium text-card-foreground">{profile?.hostName}</span>
-                          {profile?.numPeople === 2 && " and a co-host"}
                         </p>
                       </div>
                       <Button
@@ -658,10 +657,6 @@ export default function HostDashboard() {
                           <dd>{profile.phone}</dd>
                         </div>
                       )}
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Users className="h-3.5 w-3.5 shrink-0 text-primary" />
-                        <dd>{profile?.numPeople === 2 ? "Two on the mic" : "Solo host"}</dd>
-                      </div>
                     </dl>
 
                     {(profile?.socialLinks || profile?.rssUrl || profile?.youtubeUrl) && (
