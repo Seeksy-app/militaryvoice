@@ -277,6 +277,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
   const watchYouTube = form.watch("youtubeUrl");
   const watchFormat = form.watch("showFormat");
   const isPrerecorded = watchFormat === "prerecorded";
+  const watchIntro = form.watch("introStyle");
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
@@ -288,11 +289,14 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
       formData.append("hostName", values.hostName);
       formData.append("phone", values.phone ?? "");
       formData.append("numPeople", String(values.numPeople));
-      formData.append("hasVideoIntro", String(values.hasVideoIntro));
-      formData.append("hasVideoOutro", String(values.hasVideoOutro));
-      formData.append("hasSlides", String(values.hasSlides));
-      formData.append("hasImages", String(values.hasImages));
-      formData.append("needsInterviewer", String(values.needsInterviewer));
+      // A finished episode carries its own intro, slides and guests, and there's
+      // no interview to staff — don't ship stale production flags the form hid.
+      const prerecorded = values.showFormat === "prerecorded";
+      formData.append("hasVideoIntro", String(prerecorded ? false : values.hasVideoIntro));
+      formData.append("hasVideoOutro", String(prerecorded ? false : values.hasVideoOutro));
+      formData.append("hasSlides", String(prerecorded ? false : values.hasSlides));
+      formData.append("hasImages", String(prerecorded ? false : values.hasImages));
+      formData.append("needsInterviewer", String(prerecorded ? false : values.needsInterviewer));
       formData.append("socialLinks", values.socialLinks ?? "");
       formData.append("rssUrl", values.rssUrl ?? "");
       formData.append("youtubeUrl", values.youtubeUrl ?? "");
@@ -663,101 +667,22 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
 
             <SectionCard
               step={4}
-              icon={Headphones}
-              title="Where people can listen"
-              description="Both optional — add whichever you have, or skip this and come back later."
-            >
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="rssUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-1.5">
-                        <Rss className="h-4 w-4 text-primary" /> Podcast RSS feed
-                      </FormLabel>
-                      <FormControl>
-                        <Input placeholder="https://feeds.example.com/your-show" inputMode="url" {...field} data-testid="input-rss-url" />
-                      </FormControl>
-                      <FormDescription>
-                        Lets listeners play your episodes from your card. It's in your host's settings (Buzzsprout,
-                        Spotify for Creators, Libsyn, Transistor, Podbean…).
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="youtubeUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-1.5">
-                        <Youtube className="h-4 w-4 text-primary" /> YouTube channel
-                      </FormLabel>
-                      <FormControl>
-                        <Input placeholder="youtube.com/@yourshow" inputMode="url" {...field} data-testid="input-youtube-url" />
-                      </FormControl>
-                      <FormDescription>Perfect if your show lives on YouTube rather than a podcast feed.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </SectionCard>
-
-            <SectionCard
-              step={5}
-              icon={Globe}
-              title="Connect your social media"
-              description="So listeners can find and follow you after your slot. Everything here shows on your public card."
-            >
-              <FormField
-                control={form.control}
-                name="socialLinks"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Website or main social link (optional)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="instagram.com/yourshow" {...field} data-testid="input-social-links" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              {social?.configured ? (
-                <div>
-                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-medium">
-                      <Link2 className="mr-1.5 inline h-4 w-4 text-primary" />
-                      Tap a network to connect it
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Connected accounts show on your card with avatar and follower count.
-                    </p>
-                  </div>
-                  <SocialTiles accounts={social.accounts} onConnect={() => connectSocial.mutate()} connecting={connectSocial.isPending} />
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Connecting opens a secure page and brings you right back here. What you've typed is kept.
-                  </p>
-                </div>
-              ) : (
-                <div className="flex items-start gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-3.5 text-sm">
-                  <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                  <p className="text-muted-foreground">
-                    <span className="font-medium text-foreground">Connect Instagram, TikTok, YouTube, X, Facebook and LinkedIn</span>{" "}
-                    from your dashboard. Each connected account shows on your card with your avatar and follower count.
-                  </p>
-                </div>
-              )}
-            </SectionCard>
-
-            <SectionCard
-              step={6}
               icon={Clapperboard}
               title="For the production team"
-              description="Helps us plan transitions and line up support. You can change any of this later."
+              description={
+                isPrerecorded
+                  ? "We're rolling your finished episode, so there's almost nothing to plan."
+                  : "Helps us plan transitions and line up support. You can change any of this later."
+              }
             >
+              {isPrerecorded ? (
+                <p className="rounded-xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                  Because you're playing a recorded episode, we don't need to know about intros, slides, or an
+                  interviewer — it's all already in your file
+                  {watchIntro === "virtual" ? ", and we'll cue you in for the live intro before it rolls" : ""}.
+                </p>
+              ) : (
+                <>
               <div>
                 <FormLabel>What are you bringing?</FormLabel>
                 <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -838,6 +763,9 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                 )}
               />
 
+                </>
+              )}
+
               <FormField
                 control={form.control}
                 name="notes"
@@ -856,6 +784,97 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                   </FormItem>
                 )}
               />
+            </SectionCard>
+
+            <SectionCard
+              step={5}
+              icon={Headphones}
+              title="Where people can listen"
+              description="Both optional — add whichever you have, or skip this and come back later."
+            >
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="rssUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5">
+                        <Rss className="h-4 w-4 text-primary" /> Podcast RSS feed
+                      </FormLabel>
+                      <FormControl>
+                        <Input placeholder="https://feeds.example.com/your-show" inputMode="url" {...field} data-testid="input-rss-url" />
+                      </FormControl>
+                      <FormDescription>
+                        Lets listeners play your episodes from your card. It's in your host's settings (Buzzsprout,
+                        Spotify for Creators, Libsyn, Transistor, Podbean…).
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="youtubeUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5">
+                        <Youtube className="h-4 w-4 text-primary" /> YouTube channel
+                      </FormLabel>
+                      <FormControl>
+                        <Input placeholder="youtube.com/@yourshow" inputMode="url" {...field} data-testid="input-youtube-url" />
+                      </FormControl>
+                      <FormDescription>Perfect if your show lives on YouTube rather than a podcast feed.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              step={6}
+              icon={Globe}
+              title="Connect your social media"
+              description="So listeners can find and follow you after your slot. Everything here shows on your public card."
+            >
+              <FormField
+                control={form.control}
+                name="socialLinks"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Website or main social link (optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="instagram.com/yourshow" {...field} data-testid="input-social-links" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {social?.configured ? (
+                <div>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-medium">
+                      <Link2 className="mr-1.5 inline h-4 w-4 text-primary" />
+                      Tap a network to connect it
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Connected accounts show on your card with avatar and follower count.
+                    </p>
+                  </div>
+                  <SocialTiles accounts={social.accounts} onConnect={() => connectSocial.mutate()} connecting={connectSocial.isPending} />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Connecting opens a secure page and brings you right back here. What you've typed is kept.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-3.5 text-sm">
+                  <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <p className="text-muted-foreground">
+                    <span className="font-medium text-foreground">Connect Instagram, TikTok, YouTube, X, Facebook and LinkedIn</span>{" "}
+                    from your dashboard. Each connected account shows on your card with your avatar and follower count.
+                  </p>
+                </div>
+              )}
             </SectionCard>
           </div>
 
