@@ -163,7 +163,13 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/host/dashboard"] });
+      // staleTime is Infinity, and the nav fetches /api/host/profile while
+      // signed out (returning null). Without clearing those, a returning
+      // podcaster lands on the "Set up your show" form instead of their
+      // dashboard. Drop every per-account query so they refetch as this user.
+      for (const key of ["/api/host/dashboard", "/api/host/profile", "/api/host/social"]) {
+        queryClient.removeQueries({ queryKey: [key] });
+      }
     },
     onError: (err: Error) => toast({ title: "That code didn't work", description: err.message, variant: "destructive" }),
   });
@@ -886,34 +892,86 @@ export default function HostDashboard() {
               <section className="mt-8">
                 <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   <Radio className="h-4 w-4" />
-                  Claim a slot on {data.event.name}
+                  Pick your slot on {data.event.name}
+                  <span className="ml-1 font-normal normal-case tracking-normal text-muted-foreground">
+                    · {openSlots.length} open · {slots.length - openSlots.length} taken
+                  </span>
                 </h2>
-                {openSlots.length === 0 ? (
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Every half hour in order, so you can see who's on before and after you. Tap any open time to take it.
+                </p>
+                {slots.length === 0 ? (
                   <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-                    Every slot is claimed right now — check back if plans change.
+                    The schedule isn't published yet — check back shortly.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {openSlots.map((s) => (
-                      <button
-                        key={s.index}
-                        type="button"
-                        onClick={() => {
-                          setClaimIndex(s.index);
-                          setScreen("claim");
-                        }}
-                        className="rounded-lg border border-border bg-card p-3 text-left text-sm transition-colors hover-elevate"
-                        data-testid={`button-pick-slot-${s.index}`}
-                      >
-                        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{formatDateInZone(s.start, zone)}</div>
-                        <div className="font-mono font-semibold">
-                          {formatTimeInZone(s.start, zone)}–{formatTimeInZone(s.end, zone)}
-                        </div>
-                        <Badge variant="outline" className="mt-1.5 text-primary border-primary/40">
-                          Open
-                        </Badge>
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {slots.map((s) => {
+                      const mine = !!s.signup && data.mySignups.some((m) => m.slotIndex === s.index);
+                      const header = (
+                        <>
+                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            {formatDateInZone(s.start, zone)}
+                          </div>
+                          <div className="font-mono font-semibold">
+                            {formatTimeInZone(s.start, zone)}–{formatTimeInZone(s.end, zone)}
+                          </div>
+                        </>
+                      );
+
+                      if (s.signup) {
+                        return (
+                          <div
+                            key={s.index}
+                            className={`rounded-lg border p-3 text-sm ${
+                              mine ? "border-primary/50 bg-primary/5" : "border-border bg-muted/40"
+                            }`}
+                            data-testid={`card-taken-slot-${s.index}`}
+                          >
+                            {header}
+                            <div className="mt-2 flex items-center gap-2">
+                              {s.signup.photoUrl ? (
+                                <img
+                                  src={resolveUploadUrl(s.signup.photoUrl)}
+                                  alt={s.signup.hostName}
+                                  className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-[#F0A71F]/50"
+                                />
+                              ) : (
+                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                                  <Mic2 className="h-3.5 w-3.5" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="truncate text-xs font-semibold leading-tight text-card-foreground">
+                                  {s.signup.podcastName}
+                                </div>
+                                <div className="truncate text-[11px] text-muted-foreground">
+                                  {mine ? "That's you" : s.signup.hostName}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <button
+                          key={s.index}
+                          type="button"
+                          onClick={() => {
+                            setClaimIndex(s.index);
+                            setScreen("claim");
+                          }}
+                          className="rounded-lg border border-border bg-card p-3 text-left text-sm transition-colors hover-elevate"
+                          data-testid={`button-pick-slot-${s.index}`}
+                        >
+                          {header}
+                          <Badge variant="outline" className="mt-2 text-primary border-primary/40">
+                            Open
+                          </Badge>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </section>

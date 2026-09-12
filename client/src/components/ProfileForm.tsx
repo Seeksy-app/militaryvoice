@@ -40,6 +40,7 @@ import {
   PlayCircle,
   Film,
   FileVideo,
+  Headphones,
 } from "lucide-react";
 
 const DRAFT_KEY = "mv_profile_draft";
@@ -95,25 +96,34 @@ function SectionCard({
   description,
   children,
   id,
+  step,
 }: {
   icon: typeof Mic2;
   title: string;
   description?: string;
   children: React.ReactNode;
   id?: string;
+  step?: number;
 }) {
   return (
-    <section id={id} className="overflow-hidden rounded-2xl border border-border bg-card">
-      <header className="flex items-start gap-3 border-b border-border bg-muted/40 px-5 py-4">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Icon className="h-4.5 w-4.5" />
+    <section id={id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <header className="flex items-start gap-3 bg-[#053877] px-5 py-4 text-white">
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[#F0A71F]">
+          <Icon className="h-5 w-5" />
+          {step !== undefined && (
+            <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#F0A71F] font-mono text-[11px] font-bold text-[#1a1200]">
+              {step}
+            </span>
+          )}
         </div>
-        <div>
-          <h3 className="text-base font-semibold leading-tight text-card-foreground">{title}</h3>
-          {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
+        <div className="min-w-0">
+          <h3 className="text-base font-semibold leading-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
+            {title}
+          </h3>
+          {description && <p className="mt-0.5 text-sm leading-relaxed text-white/70">{description}</p>}
         </div>
       </header>
-      <div className="flex flex-col gap-5 px-5 py-5">{children}</div>
+      <div className="flex flex-col gap-5 px-5 py-6">{children}</div>
     </section>
   );
 }
@@ -264,6 +274,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
   const watchHost = form.watch("hostName");
   const watchPeople = form.watch("numPeople");
   const watchRss = form.watch("rssUrl");
+  const watchYouTube = form.watch("youtubeUrl");
   const watchFormat = form.watch("showFormat");
   const isPrerecorded = watchFormat === "prerecorded";
 
@@ -336,10 +347,11 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
           {/* ------------------------------------------------ main column */}
           <div className="flex flex-col gap-6">
             <SectionCard
-              id="section-show"
-              icon={Mic2}
-              title="Your show"
-              description="The essentials listeners see on the lineup, and the feed we use to pull your episodes."
+              id="section-about"
+              step={1}
+              icon={User}
+              title="About you"
+              description="Who's behind the mic. Your photo goes on the public lineup; contact details stay with the production team."
             >
               {/* Photo */}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
@@ -417,6 +429,54 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                 />
               </div>
 
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="hostName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Your name <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input placeholder="Jamie Rivera" {...field} data-testid="input-host-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input type="email" readOnly disabled value={email} data-testid="input-email" />
+                  </FormControl>
+                  <FormDescription>You signed in with this. It's where we'll send show-day details.</FormDescription>
+                </FormItem>
+              </div>
+
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem className="sm:max-w-xs">
+                    <FormLabel>Phone (optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="(555) 555-5555" {...field} data-testid="input-phone" />
+                    </FormControl>
+                    <FormDescription>Only used if we need to reach you fast on show day.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </SectionCard>
+
+            <SectionCard
+              id="section-show"
+              step={2}
+              icon={Mic2}
+              title="Your show"
+              description="What listeners see on the lineup."
+            >
               <FormField
                 control={form.control}
                 name="podcastName"
@@ -435,37 +495,35 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
 
               <FormField
                 control={form.control}
-                name="rssUrl"
-                render={({ field }) => (
-                  <FormItem className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-                    <FormLabel className="flex items-center gap-1.5">
-                      <Rss className="h-4 w-4 text-primary" /> Podcast RSS feed
-                    </FormLabel>
-                    <FormControl>
-                      <Input placeholder="https://feeds.example.com/your-show" inputMode="url" {...field} data-testid="input-rss-url" />
-                    </FormControl>
-                    <FormDescription>
-                      This is how we pull your episodes so listeners can hit play right from your card. Find it in your
-                      host's settings (Buzzsprout, Spotify for Creators, Libsyn, Transistor, Podbean…). Optional, but
-                      strongly recommended.
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="youtubeUrl"
+                name="numPeople"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="flex items-center gap-1.5">
-                      <Youtube className="h-4 w-4 text-primary" /> YouTube channel (optional)
-                    </FormLabel>
+                    <FormLabel>Who's on the mic?</FormLabel>
                     <FormControl>
-                      <Input placeholder="youtube.com/@yourshow" inputMode="url" {...field} data-testid="input-youtube-url" />
+                      <RadioGroup
+                        value={String(field.value)}
+                        onValueChange={(v) => field.onChange(Number(v))}
+                        className="grid max-w-md grid-cols-2 gap-2"
+                      >
+                        {[
+                          ["1", "Just me"],
+                          ["2", "Two of us"],
+                        ].map(([v, label]) => (
+                          <FormItem key={v} className="space-y-0">
+                            <FormLabel
+                              className={`flex cursor-pointer items-center gap-2 rounded-lg border p-2.5 text-sm font-normal transition-colors ${
+                                String(field.value) === v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                              }`}
+                            >
+                              <FormControl>
+                                <RadioGroupItem value={v} data-testid={`radio-people-${v === "1" ? "one" : "two"}`} />
+                              </FormControl>
+                              {label}
+                            </FormLabel>
+                          </FormItem>
+                        ))}
+                      </RadioGroup>
                     </FormControl>
-                    <FormDescription>If your show also lives on YouTube, we'll link it.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -473,6 +531,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
             </SectionCard>
 
             <SectionCard
+              step={3}
               icon={Radio}
               title="How your slot runs"
               description="Broadcast live in your time block, or hand us an episode you've already recorded."
@@ -602,78 +661,44 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
               )}
             </SectionCard>
 
-            <SectionCard icon={User} title="About you" description="Who's behind the mic. Contact details stay private to the production team.">
+            <SectionCard
+              step={4}
+              icon={Headphones}
+              title="Where people can listen"
+              description="Both optional — add whichever you have, or skip this and come back later."
+            >
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="hostName"
+                  name="rssUrl"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
-                        Your name <span className="text-destructive">*</span>
+                      <FormLabel className="flex items-center gap-1.5">
+                        <Rss className="h-4 w-4 text-primary" /> Podcast RSS feed
                       </FormLabel>
                       <FormControl>
-                        <Input placeholder="Jamie Rivera" {...field} data-testid="input-host-name" />
+                        <Input placeholder="https://feeds.example.com/your-show" inputMode="url" {...field} data-testid="input-rss-url" />
                       </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input type="email" readOnly disabled value={email} data-testid="input-email" />
-                  </FormControl>
-                  <FormDescription>You signed in with this. It's where we'll send show-day details.</FormDescription>
-                </FormItem>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone (optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="(555) 555-5555" {...field} data-testid="input-phone" />
-                      </FormControl>
-                      <FormDescription>Only used if we need to reach you fast on show day.</FormDescription>
+                      <FormDescription>
+                        Lets listeners play your episodes from your card. It's in your host's settings (Buzzsprout,
+                        Spotify for Creators, Libsyn, Transistor, Podbean…).
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
                 <FormField
                   control={form.control}
-                  name="numPeople"
+                  name="youtubeUrl"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Who's on the mic?</FormLabel>
+                      <FormLabel className="flex items-center gap-1.5">
+                        <Youtube className="h-4 w-4 text-primary" /> YouTube channel
+                      </FormLabel>
                       <FormControl>
-                        <RadioGroup
-                          value={String(field.value)}
-                          onValueChange={(v) => field.onChange(Number(v))}
-                          className="grid grid-cols-2 gap-2"
-                        >
-                          {[
-                            ["1", "Just me"],
-                            ["2", "Two of us"],
-                          ].map(([v, label]) => (
-                            <FormItem key={v} className="space-y-0">
-                              <FormLabel
-                                className={`flex cursor-pointer items-center gap-2 rounded-lg border p-2.5 text-sm font-normal transition-colors ${
-                                  String(field.value) === v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-                                }`}
-                              >
-                                <FormControl>
-                                  <RadioGroupItem value={v} data-testid={`radio-people-${v === "1" ? "one" : "two"}`} />
-                                </FormControl>
-                                {label}
-                              </FormLabel>
-                            </FormItem>
-                          ))}
-                        </RadioGroup>
+                        <Input placeholder="youtube.com/@yourshow" inputMode="url" {...field} data-testid="input-youtube-url" />
                       </FormControl>
+                      <FormDescription>Perfect if your show lives on YouTube rather than a podcast feed.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -682,6 +707,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
             </SectionCard>
 
             <SectionCard
+              step={5}
               icon={Globe}
               title="Connect your social media"
               description="So listeners can find and follow you after your slot. Everything here shows on your public card."
@@ -727,6 +753,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
             </SectionCard>
 
             <SectionCard
+              step={6}
               icon={Clapperboard}
               title="For the production team"
               description="Helps us plan transitions and line up support. You can change any of this later."
@@ -882,9 +909,9 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                     <PlayCircle className="h-3 w-3 text-primary" /> Pre-recorded
                   </div>
                 )}
-                {watchRss?.trim() && (
+                {(watchRss?.trim() || watchYouTube?.trim()) && (
                   <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px]">
-                    <Rss className="h-3 w-3 text-primary" /> Episodes linked
+                    {watchRss?.trim() ? <Rss className="h-3 w-3 text-primary" /> : <Youtube className="h-3 w-3 text-primary" />} Episodes linked
                   </div>
                 )}
               </div>
@@ -892,7 +919,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                 {[
                   ["Photo", photoDone],
                   ["Show and host name", basicsDone],
-                  ["RSS feed (recommended)", !!watchRss?.trim()],
+                  ["Somewhere to listen (optional)", !!watchRss?.trim() || !!watchYouTube?.trim()],
                 ].map(([label, done]) => (
                   <li key={label as string} className="flex items-center gap-2">
                     <span
