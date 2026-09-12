@@ -5,6 +5,7 @@ import { NavBar } from "@/components/NavBar";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { AgendaSignupActions } from "@/components/AgendaSignupActions";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
+import { PodcasterDialog } from "@/components/PodcasterDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Mic2, ArrowRight, CalendarDays, Radio } from "lucide-react";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
@@ -42,6 +43,9 @@ export default function Agenda({ slug }: Props) {
   });
 
   const [viewZone, setViewZone] = useState(detectLocalTimeZone);
+  // Podcaster whose bio popup is open, plus their block start so the dialog can
+  // show the on-air window.
+  const [selected, setSelected] = useState<{ signup: PublicSignup; start: Date } | null>(null);
   const localZone = useMemo(detectLocalTimeZone, []);
 
   const onAirSettings = event
@@ -133,112 +137,129 @@ export default function Agenda({ slug }: Props) {
                   <div className="h-px flex-1 bg-border" />
                 </div>
 
-                {(() => {
-                  const bookedItems = group.items.filter((s) => s.signup);
-                  const openItems = group.items.filter((s) => !s.signup);
-                  return (
-                    <>
-                      {bookedItems.length === 0 ? (
-                        <div className="rounded-2xl border-2 border-dashed border-primary/20 bg-card p-8 text-center">
-                          <Mic2 className="mx-auto h-8 w-8 text-primary/60" />
-                          <p className="mt-3 font-semibold">No shows confirmed for this day yet.</p>
-                          <p className="mt-1 text-sm text-muted-foreground">Check back soon — the lineup fills in as podcasters claim their times.</p>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                          {bookedItems.map((s) => {
-                            const signup = s.signup!;
-                            const shareText = `I'm tuning in to ${signup.hostName} on ${signup.podcastName} — ${s.dateLabel}, ${formatTimeInZone(
-                              s.start,
-                              viewZone
-                            )} ${zoneLabel(viewZone)}, during the MilitaryVoice.ai 24 Hour Podcastathon! ${
-                              typeof window !== "undefined" ? window.location.href : ""
-                            }`;
-                            const onAir = onAirSettings ? onAirWindow(s.start, onAirSettings) : null;
-                            return (
-                              <div
-                                key={s.index}
-                                data-testid={`row-agenda-${s.index}`}
-                                className="relative flex flex-col overflow-hidden rounded-2xl border-2 border-primary/15 bg-card shadow-md transition-shadow hover:shadow-lg"
-                              >
-                                <div className="flex items-center justify-between bg-[#053877] px-4 py-2.5 text-white">
-                                  <span className="font-mono text-sm font-bold tabular-nums">
-                                    {formatTimeInZone(s.start, viewZone)}
-                                    <span className="text-white/60"> – {formatTimeInZone(s.end, viewZone)}</span>
-                                  </span>
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#1a1200]">
-                                    <Radio className="h-3 w-3" /> Live
-                                  </span>
-                                </div>
-                                <div className="flex flex-col gap-3 p-4">
-                                  <div className="flex items-center gap-3" data-testid={`text-agenda-podcast-${s.index}`}>
-                                    {signup.photoUrl ? (
-                                      <img
-                                        src={resolveUploadUrl(signup.photoUrl)}
-                                        alt={signup.hostName}
-                                        className="h-16 w-16 shrink-0 rounded-full object-cover ring-4 ring-[#F0A71F]/40"
-                                        data-testid={`img-agenda-photo-${s.index}`}
-                                      />
-                                    ) : (
-                                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                                        <Mic2 className="h-6 w-6" />
-                                      </div>
-                                    )}
-                                    <div className="min-w-0">
-                                      <div className="line-clamp-2 font-semibold leading-tight">{signup.podcastName}</div>
-                                      <div className="truncate text-sm text-muted-foreground">with {signup.hostName}</div>
-                                      <SocialIconRow accounts={parseSocialAccounts(signup.socialAccounts)} className="mt-1.5" />
-                                    </div>
-                                  </div>
-                                  {onAir && (
-                                    <div className="text-xs text-muted-foreground" data-testid={`text-agenda-onair-${s.index}`}>
-                                      On air {formatTimeInZone(onAir.start, viewZone)}–{formatTimeInZone(onAir.end, viewZone)}
-                                    </div>
-                                  )}
-                                  <div className="mt-auto border-t border-border pt-3">
-                                    <AgendaSignupActions signup={signup} shareText={shareText} />
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                <div className="grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {group.items.map((s) => {
+                    const signup = s.signup;
+                    const onAir = onAirSettings ? onAirWindow(s.start, onAirSettings) : null;
 
-                      {openItems.length > 0 && (
-                        <div className="mt-6 rounded-2xl border border-border bg-muted/40 p-4" data-testid={`strip-open-${group.dateLabel}`}>
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                              {openItems.length} open slot{openItems.length === 1 ? "" : "s"} this day
-                            </div>
-                            <Link
-                              href={slug ? `/event/${slug}/schedule` : "/schedule"}
-                              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                              data-testid={`link-claim-${group.dateLabel}`}
-                            >
-                              Podcaster? Claim one <ArrowRight className="h-3 w-3" />
-                            </Link>
+                    if (!signup) {
+                      return (
+                        <Link
+                          key={s.index}
+                          href={slug ? `/event/${slug}/schedule#schedule` : "/schedule#schedule"}
+                          className="group flex h-full flex-col overflow-hidden rounded-2xl border-2 border-dashed border-border bg-muted/20 transition-colors hover:border-primary/40 hover:bg-muted/40"
+                          data-testid={`card-open-${s.index}`}
+                        >
+                          <div className="flex items-center justify-between bg-muted/60 px-4 py-2.5">
+                            <span className="font-mono text-sm font-bold tabular-nums text-muted-foreground">
+                              {formatTimeInZone(s.start, viewZone)}
+                              <span className="opacity-60"> – {formatTimeInZone(s.end, viewZone)}</span>
+                            </span>
+                            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Open
+                            </span>
                           </div>
-                          <div className="mt-3 flex flex-wrap gap-1.5">
-                            {openItems.map((s) => (
-                              <span
-                                key={s.index}
-                                className="rounded-full border border-border bg-background px-2.5 py-1 font-mono text-[11px] tabular-nums text-muted-foreground"
-                              >
-                                {formatTimeInZone(s.start, viewZone)}
-                              </span>
-                            ))}
+                          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-5 text-center">
+                            <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed border-border text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
+                              <Mic2 className="h-5 w-5" />
+                            </div>
+                            <div className="text-sm font-semibold text-muted-foreground">This could be you</div>
+                            <div className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                              Claim this slot <ArrowRight className="h-3 w-3" />
+                            </div>
+                          </div>
+                        </Link>
+                      );
+                    }
+
+                    const shareText = `I'm tuning in to ${signup.hostName} on ${signup.podcastName} — ${s.dateLabel}, ${formatTimeInZone(
+                      s.start,
+                      viewZone
+                    )} ${zoneLabel(viewZone)}, during the MilitaryVoice.ai 24 Hour Podcastathon! ${
+                      typeof window !== "undefined" ? window.location.href : ""
+                    }`;
+
+                    return (
+                      <div
+                        key={s.index}
+                        data-testid={`row-agenda-${s.index}`}
+                        className="flex h-full flex-col overflow-hidden rounded-2xl border-2 border-primary/15 bg-card shadow-md transition-shadow hover:shadow-lg"
+                      >
+                        <div className="flex items-center justify-between bg-[#053877] px-4 py-2.5 text-white">
+                          <span className="font-mono text-sm font-bold tabular-nums">
+                            {formatTimeInZone(s.start, viewZone)}
+                            <span className="text-white/60"> – {formatTimeInZone(s.end, viewZone)}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#1a1200]">
+                            <Radio className="h-3 w-3" /> Live
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelected({ signup, start: s.start })}
+                          className="flex items-center gap-3 p-4 text-left transition-colors hover:bg-muted/40"
+                          data-testid={`button-profile-${s.index}`}
+                        >
+                          {signup.photoUrl ? (
+                            <img
+                              src={resolveUploadUrl(signup.photoUrl)}
+                              alt={signup.hostName}
+                              className="h-16 w-16 shrink-0 rounded-full object-cover ring-4 ring-[#F0A71F]/40"
+                              data-testid={`img-agenda-photo-${s.index}`}
+                            />
+                          ) : (
+                            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                              <Mic2 className="h-6 w-6" />
+                            </div>
+                          )}
+                          <span className="min-w-0">
+                            <span className="line-clamp-2 block font-semibold leading-tight text-card-foreground">
+                              {signup.podcastName}
+                            </span>
+                            <span className="block truncate text-sm text-muted-foreground">with {signup.hostName}</span>
+                            <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                              View profile <ArrowRight className="h-3 w-3" />
+                            </span>
+                          </span>
+                        </button>
+
+                        <div className="mt-auto flex flex-col gap-3 px-4 pb-4">
+                          <SocialIconRow accounts={parseSocialAccounts(signup.socialAccounts)} />
+                          {onAir && (
+                            <div className="text-xs text-muted-foreground" data-testid={`text-agenda-onair-${s.index}`}>
+                              On air {formatTimeInZone(onAir.start, viewZone)}–{formatTimeInZone(onAir.end, viewZone)}
+                            </div>
+                          )}
+                          <div className="border-t border-border pt-3">
+                            <AgendaSignupActions signup={signup} shareText={shareText} />
                           </div>
                         </div>
-                      )}
-                    </>
-                  );
-                })()}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>
         )}
       </section>
+
+      <PodcasterDialog
+        signup={selected?.signup ?? null}
+        onAirStart={selected && onAirSettings ? onAirWindow(selected.start, onAirSettings).start : undefined}
+        onAirEnd={selected && onAirSettings ? onAirWindow(selected.start, onAirSettings).end : undefined}
+        zone={viewZone}
+        shareText={
+          selected
+            ? `I'm tuning in to ${selected.signup.hostName} on ${selected.signup.podcastName} during the MilitaryVoice.ai 24 Hour Podcastathon! ${
+                typeof window !== "undefined" ? window.location.href : ""
+              }`
+            : undefined
+        }
+        open={!!selected}
+        onOpenChange={(o) => !o && setSelected(null)}
+      />
     </div>
   );
 }

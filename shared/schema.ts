@@ -216,9 +216,15 @@ const optionalUrl = (label: string) =>
     .refine(
       (v) => {
         if (!v) return true;
+        // "frankzaccari@gmail.com" becomes https://frankzaccari@gmail.com,
+        // which is a technically valid URL with a username. Reject anything
+        // carrying credentials, and require a real-looking hostname.
+        if (/@/.test(v.replace(/^https?:\/\//i, "").split("/")[0])) return false;
         try {
           const u = new URL(v);
-          return /^https?:$/.test(u.protocol) && u.hostname.includes(".");
+          if (!/^https?:$/.test(u.protocol)) return false;
+          if (u.username || u.password) return false;
+          return /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/i.test(u.hostname);
         } catch {
           return false;
         }

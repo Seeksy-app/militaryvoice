@@ -117,6 +117,84 @@ function calendarLinksFor(signup: { id: number; podcastName: string; hostName: s
   });
 }
 
+
+export interface LatestEpisode {
+  title: string;
+  audioUrl: string;
+  pubDate: string;
+  durationLabel: string;
+}
+
+function decodeXmlEntities(v: string): string {
+  return v
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&amp;/g, "&")
+    .trim();
+}
+
+/** iTunes duration is either seconds ("3007") or "HH:MM:SS" — normalise both. */
+function formatDuration(raw: string): string {
+  if (!raw) return "";
+  if (raw.includes(":")) return raw;
+  const total = Number(raw);
+  if (!Number.isFinite(total) || total <= 0) return "";
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = Math.floor(total % 60);
+  return h > 0
+    ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
+    : `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+/** Pull the newest <item> that carries a playable enclosure. */
+function parseLatestEpisode(xml: string): LatestEpisode | null {
+  const items = xml.split(/<item[\s>]/i).slice(1);
+  for (const raw of items) {
+    const item = raw.split(/<\/item>/i)[0];
+    const enclosure = item.match(/<enclosure\b[^>]*\burl\s*=\s*["']([^"']+)["'][^>]*>/i);
+    const audioUrl = enclosure?.[1];
+    if (!audioUrl || !/^https?:\/\//i.test(audioUrl)) continue;
+    const title = item.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "Latest episode";
+    const pubDate = item.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i)?.[1] ?? "";
+    const duration = item.match(/<itunes:duration[^>]*>([\s\S]*?)<\/itunes:duration>/i)?.[1] ?? "";
+    return {
+      title: decodeXmlEntities(title).slice(0, 200),
+      audioUrl,
+      pubDate: decodeXmlEntities(pubDate),
+      durationLabel: formatDuration(decodeXmlEntities(duration)),
+    };
+  }
+  return null;
+}
+
+
+/**
+ * Podcasters routinely paste the Apple Podcasts page instead of their feed.
+ * Apple's public lookup API turns that into the real RSS URL; anything else is
+ * used as-is.
+ */
+async function resolveFeedUrl(raw: string): Promise<string | null> {
+  const appleId = raw.match(/podcasts\.apple\.com\/.*\/id(\d+)/i)?.[1];
+  if (!appleId) return raw;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(`https://itunes.apple.com/lookup?id=${appleId}&entity=podcast`, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { results?: { feedUrl?: string }[] };
+    const feed = data.results?.[0]?.feedUrl;
+    return feed && /^https?:\/\//i.test(feed) ? feed : null;
+  } catch (err) {
+    console.error("Apple Podcasts lookup failed:", err);
+    return null;
+  }
+}
+
 // ICS timestamp format: YYYYMMDDTHHMMSSZ
 function toIcsUtcStamp(date: Date): string {
   return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
@@ -195,6 +273,62 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Public: schedule (privacy-safe signup fields only) -------------------
+  // ---- Public: latest episode from a podcaster's RSS feed --------------------
+  //      Keyed by signup id so we only ever fetch a feed URL a podcaster gave
+  //      us, never an arbitrary URL from the query string.
+  const feedCache = new Map<number, { at: number; body: LatestEpisode | null }>();
+  const FEED_TTL_MS = 10 * 60 * 1000;
+
+  app.get("/api/signups/:id/latest-episode", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) {
+      res.status(400).json({ message: "Bad id" });
+      return;
+    }
+    const cached = feedCache.get(id);
+    if (cached && Date.now() - cached.at < FEED_TTL_MS) {
+      publicCache(res, 300);
+      res.json(cached.body);
+      return;
+    }
+    const signup = await storage.getSignupById(id);
+    const feedUrl = signup?.rssUrl?.trim();
+    if (!signup || signup.status === "cancelled" || !feedUrl || !/^https?:\/\//i.test(feedUrl)) {
+      publicCache(res, 300);
+      res.json(null);
+      return;
+    }
+    let episode: LatestEpisode | null = null;
+    try {
+      const resolved = await resolveFeedUrl(feedUrl);
+      if (!resolved) {
+        feedCache.set(id, { at: Date.now(), body: null });
+        publicCache(res, 300);
+        res.json(null);
+        return;
+      }
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      const feedRes = await fetch(resolved, {
+        signal: controller.signal,
+        redirect: "follow",
+        headers: { "User-Agent": "MilitaryVoice.ai/1.0 (+https://www.militaryvoice.ai)" },
+      });
+      clearTimeout(timer);
+      if (feedRes.ok) {
+        // Only read the head of the feed — the newest item is at the top and
+        // some shows publish megabytes of back catalogue.
+        const xml = (await feedRes.text()).slice(0, 400_000);
+        episode = parseLatestEpisode(xml);
+      }
+    } catch (err) {
+      console.error("RSS fetch failed for signup", id, err);
+    }
+    feedCache.set(id, { at: Date.now(), body: episode });
+    publicCache(res, 300);
+    res.json(episode);
+  });
+
   // ---- Public: podcasters with a finished profile (for the homepage spotlight).
   //      No contact info leaves the server.
   app.get("/api/podcasters", async (_req, res) => {
