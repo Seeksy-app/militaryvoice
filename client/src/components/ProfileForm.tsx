@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiUpload, apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { SocialTiles } from "@/components/SocialTiles";
+import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
 import { insertProfileSchema, type ProfileRow, type SocialAccount } from "@shared/schema";
 import { PhotoCropDialog } from "@/components/PhotoCropDialog";
 import { formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
@@ -30,17 +31,17 @@ import {
   CalendarClock,
   Check,
   Link2,
-  Video,
-  Presentation,
-  Image as ImageIcon,
   Users,
   Sparkles,
   Save,
   AlertCircle,
-  PlayCircle,
-  Film,
   FileVideo,
   Headphones,
+  Video,
+  Presentation,
+  Image as ImageIcon,
+  PlayCircle,
+  Film,
 } from "lucide-react";
 
 const DRAFT_KEY = "mv_profile_draft";
@@ -275,6 +276,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
   const watchPeople = form.watch("numPeople");
   const watchRss = form.watch("rssUrl");
   const watchYouTube = form.watch("youtubeUrl");
+  // Same accounts the public card will show.
+  const connectedAccounts = parseSocialAccounts(profile?.socialAccounts);
   const watchFormat = form.watch("showFormat");
   const isPrerecorded = watchFormat === "prerecorded";
   const watchIntro = form.watch("introStyle");
@@ -475,67 +478,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
             </SectionCard>
 
             <SectionCard
-              id="section-show"
               step={2}
-              icon={Mic2}
-              title="Your show"
-              description="What listeners see on the lineup."
-            >
-              <FormField
-                control={form.control}
-                name="podcastName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      Podcast / show name <span className="text-destructive">*</span>
-                    </FormLabel>
-                    <FormControl>
-                      <Input placeholder="The Night Watch Podcast" {...field} data-testid="input-podcast-name" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="numPeople"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Who's on the mic?</FormLabel>
-                    <FormControl>
-                      <RadioGroup
-                        value={String(field.value)}
-                        onValueChange={(v) => field.onChange(Number(v))}
-                        className="grid max-w-md grid-cols-2 gap-2"
-                      >
-                        {[
-                          ["1", "Just me"],
-                          ["2", "Two of us"],
-                        ].map(([v, label]) => (
-                          <FormItem key={v} className="space-y-0">
-                            <FormLabel
-                              className={`flex cursor-pointer items-center gap-2 rounded-lg border p-2.5 text-sm font-normal transition-colors ${
-                                String(field.value) === v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-                              }`}
-                            >
-                              <FormControl>
-                                <RadioGroupItem value={v} data-testid={`radio-people-${v === "1" ? "one" : "two"}`} />
-                              </FormControl>
-                              {label}
-                            </FormLabel>
-                          </FormItem>
-                        ))}
-                      </RadioGroup>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </SectionCard>
-
-            <SectionCard
-              step={3}
               icon={Radio}
               title="How your slot runs"
               description="Broadcast live in your time block, or hand us an episode you've already recorded."
@@ -663,6 +606,77 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                   />
                 </div>
               )}
+            </SectionCard>
+            <SectionCard
+              id="section-show"
+              step={3}
+              icon={Mic2}
+              title="Your show"
+              description="What listeners see on the lineup."
+            >
+              <FormField
+                control={form.control}
+                name="podcastName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Podcast / show name <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input placeholder="The Night Watch Podcast" {...field} data-testid="input-podcast-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="numPeople"
+                render={({ field }) => (
+                  <FormItem className={isPrerecorded ? "opacity-50" : undefined}>
+                    <FormLabel>Who's on the mic?</FormLabel>
+                    <FormControl>
+                      <RadioGroup
+                        value={String(field.value)}
+                        onValueChange={(v) => field.onChange(Number(v))}
+                        disabled={isPrerecorded}
+                        className="grid max-w-md grid-cols-2 gap-2"
+                      >
+                        {[
+                          ["1", "Just me"],
+                          ["2", "Two of us"],
+                        ].map(([v, label]) => (
+                          <FormItem key={v} className="space-y-0">
+                            <FormLabel
+                              className={`flex items-center gap-2 rounded-lg border p-2.5 text-sm font-normal transition-colors ${
+                                isPrerecorded
+                                  ? "cursor-not-allowed border-border"
+                                  : String(field.value) === v
+                                    ? "cursor-pointer border-primary bg-primary/5"
+                                    : "cursor-pointer border-border hover:bg-muted/50"
+                              }`}
+                            >
+                              <FormControl>
+                                <RadioGroupItem
+                                  value={v}
+                                  disabled={isPrerecorded}
+                                  data-testid={`radio-people-${v === "1" ? "one" : "two"}`}
+                                />
+                              </FormControl>
+                              {label}
+                            </FormLabel>
+                          </FormItem>
+                        ))}
+                      </RadioGroup>
+                    </FormControl>
+                    {isPrerecorded && (
+                      <FormDescription>Not needed for a recorded episode — whoever's on the mic is already in the file.</FormDescription>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </SectionCard>
 
             <SectionCard
@@ -903,36 +917,27 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
               <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 <Sparkles className="h-3.5 w-3.5 text-primary" /> How you'll appear
               </div>
-              <div className="flex flex-col items-center rounded-xl border border-border bg-background p-4 text-center">
+              <div className="flex flex-col items-center rounded-2xl border border-border bg-background p-5 text-center">
                 {shownPhoto ? (
-                  <img src={shownPhoto} alt="" className="h-16 w-16 rounded-full object-cover ring-4 ring-primary/10" />
+                  <img src={shownPhoto} alt="" className="h-20 w-20 rounded-full object-cover ring-4 ring-primary/10" />
                 ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                    <Mic2 className="h-6 w-6" />
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <Mic2 className="h-7 w-7" />
                   </div>
                 )}
-                <div className="mt-2 line-clamp-2 text-sm font-semibold leading-tight">
+                <div className="mt-3 line-clamp-2 text-sm font-semibold leading-tight">
                   {watchPodcast?.trim() || <span className="text-muted-foreground">Your show name</span>}
                 </div>
-                <div className="text-xs text-muted-foreground">
+                <div className="mt-0.5 truncate text-xs text-muted-foreground">
                   {watchHost?.trim() || "Host name"}
-                  {watchPeople === 2 && " + co-host"}
+                  {!isPrerecorded && watchPeople === 2 && " + co-host"}
                 </div>
-                {pendingSlot && (
-                  <div className="mt-2 font-mono text-[11px] text-primary">
-                    {formatDateInZone(pendingSlot.start, pendingSlot.zone)} · {formatTimeInZone(pendingSlot.start, pendingSlot.zone)}
-                  </div>
-                )}
-                {isPrerecorded && (
-                  <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px]">
-                    <PlayCircle className="h-3 w-3 text-primary" /> Pre-recorded
-                  </div>
-                )}
-                {(watchRss?.trim() || watchYouTube?.trim()) && (
-                  <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px]">
-                    {watchRss?.trim() ? <Rss className="h-3 w-3 text-primary" /> : <Youtube className="h-3 w-3 text-primary" />} Episodes linked
-                  </div>
-                )}
+                <div className="mt-2 font-mono text-xs text-primary">
+                  {pendingSlot
+                    ? `${formatDateInZone(pendingSlot.start, pendingSlot.zone)} · ${formatTimeInZone(pendingSlot.start, pendingSlot.zone)}`
+                    : "Time coming soon"}
+                </div>
+                <SocialIconRow accounts={connectedAccounts} className="mt-3 justify-center" />
               </div>
               <ul className="mt-4 space-y-2 text-xs">
                 {[
