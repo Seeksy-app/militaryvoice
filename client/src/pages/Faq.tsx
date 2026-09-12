@@ -27,9 +27,9 @@ export default function Faq() {
       q: "What is the 24 Hour Podcastathon?",
       a: (
         <>
-          Twenty-four straight hours of live veteran podcasting on National Military Podcast Day. Back-to-back shows, special
-          guests, and stories from the community, streaming around the clock. Shows hand off to each other every {slotMin}{" "}
-          minutes, so someone is always on the air.
+          Twenty-four hours of live and &lsquo;Best of MilVet&rsquo; podcasting for National Military Podcast
+          Day&mdash;featuring back-to-back shows, special guests, and stories from the military and veteran community,
+          streaming around the clock. Shows hand off to each other every {slotMin} minutes, so someone is always on the air.
         </>
       ),
     },

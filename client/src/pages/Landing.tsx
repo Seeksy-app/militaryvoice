@@ -48,9 +48,9 @@ const EVENT_FALLBACK: PublicEvent = {
   slug: "marathon",
   isFeatured: true,
   name: "24 Hour Podcastathon",
-  tagline: "Twenty-four straight hours of live veteran podcasting on National Military Podcast Day.",
+  tagline: "Twenty-four hours of live and ‘Best of MilVet’ podcasting for National Military Podcast Day.",
   description:
-    "Twenty-four straight hours of live veteran podcasting on National Military Podcast Day. Back-to-back shows, special guests, and stories from the community, streaming around the clock.",
+    "Twenty-four hours of live and ‘Best of MilVet’ podcasting for National Military Podcast Day—featuring back-to-back shows, special guests, and stories from the military and veteran community, streaming around the clock.",
   startAtUtc: "2026-10-05T11:00:00.000Z",
   durationHours: 24,
   slotMinutes: 30,
