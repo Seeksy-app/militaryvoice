@@ -84,6 +84,17 @@ export default function Agenda({ slug }: Props) {
       <NavBar />
 
       <section className="relative overflow-hidden bg-[#053877] text-white">
+        {/* full-bleed studio shot behind the banner */}
+        <img
+          src="/agenda-bg.jpg"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover object-[center_32%]"
+        />
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.94)_0%,rgba(0,7,65,0.82)_38%,rgba(5,56,119,0.55)_68%,rgba(5,56,119,0.35)_100%)]"
+        />
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-[#F0A71F] opacity-[0.14] blur-3xl"
