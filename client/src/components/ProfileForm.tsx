@@ -37,6 +37,9 @@ import {
   Sparkles,
   Save,
   AlertCircle,
+  PlayCircle,
+  Film,
+  FileVideo,
 } from "lucide-react";
 
 const DRAFT_KEY = "mv_profile_draft";
@@ -63,9 +66,9 @@ function clearDraft() {
   }
 }
 
-const formSchema = insertProfileSchema.extend({
-  needsInterviewer: z.boolean(),
-});
+// insertProfileSchema carries a refinement (a pre-recorded slot needs a link),
+// so it can't be extended — use it as-is.
+const formSchema = insertProfileSchema;
 type FormValues = z.infer<typeof formSchema>;
 
 export interface PendingSlotSummary {
@@ -181,6 +184,9 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
       socialLinks: profile?.socialLinks ?? "",
       rssUrl: profile?.rssUrl ?? "",
       youtubeUrl: profile?.youtubeUrl ?? "",
+      showFormat: (profile?.showFormat as "live" | "prerecorded") ?? "live",
+      recordingUrl: profile?.recordingUrl ?? "",
+      introStyle: (profile?.introStyle as "virtual" | "straight") ?? "virtual",
       notes: profile?.notes ?? "",
     },
   });
@@ -258,6 +264,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
   const watchHost = form.watch("hostName");
   const watchPeople = form.watch("numPeople");
   const watchRss = form.watch("rssUrl");
+  const watchFormat = form.watch("showFormat");
+  const isPrerecorded = watchFormat === "prerecorded";
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
@@ -277,6 +285,9 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
       formData.append("socialLinks", values.socialLinks ?? "");
       formData.append("rssUrl", values.rssUrl ?? "");
       formData.append("youtubeUrl", values.youtubeUrl ?? "");
+      formData.append("showFormat", values.showFormat);
+      formData.append("recordingUrl", values.recordingUrl ?? "");
+      formData.append("introStyle", values.introStyle);
       formData.append("notes", values.notes ?? "");
       if (photoFile) formData.append("photo", photoFile);
       const res = await apiUpload("PUT", "/api/host/profile", formData);
@@ -459,6 +470,136 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                   </FormItem>
                 )}
               />
+            </SectionCard>
+
+            <SectionCard
+              icon={Radio}
+              title="How your slot runs"
+              description="Broadcast live in your time block, or hand us an episode you've already recorded."
+            >
+              <FormField
+                control={form.control}
+                name="showFormat"
+                render={({ field }) => (
+                  <FormItem className="space-y-0">
+                    <FormControl>
+                      <RadioGroup value={field.value} onValueChange={field.onChange} className="grid gap-3 sm:grid-cols-2">
+                        {[
+                          {
+                            v: "live",
+                            icon: Radio,
+                            title: "Go live",
+                            body: "You broadcast in real time during your window, from your own studio.",
+                          },
+                          {
+                            v: "prerecorded",
+                            icon: PlayCircle,
+                            title: "Play a recorded episode",
+                            body: "Already have it in the can? Send us the file and we'll roll it in your slot.",
+                          },
+                        ].map(({ v, icon: Icon, title, body }) => (
+                          <FormItem key={v} className="space-y-0">
+                            <FormLabel
+                              className={`flex h-full cursor-pointer flex-col gap-2 rounded-xl border-2 p-4 font-normal transition-colors ${
+                                field.value === v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                              }`}
+                              data-testid={`radio-format-${v}`}
+                            >
+                              <span className="flex items-center justify-between">
+                                <Icon className={`h-5 w-5 ${field.value === v ? "text-primary" : "text-muted-foreground"}`} />
+                                <FormControl>
+                                  <RadioGroupItem value={v} />
+                                </FormControl>
+                              </span>
+                              <span className="text-sm font-semibold text-card-foreground">{title}</span>
+                              <span className="text-xs leading-relaxed text-muted-foreground">{body}</span>
+                            </FormLabel>
+                          </FormItem>
+                        ))}
+                      </RadioGroup>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {isPrerecorded && (
+                <div className="flex flex-col gap-5 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                  <FormField
+                    control={form.control}
+                    name="recordingUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5">
+                          <FileVideo className="h-4 w-4 text-primary" /> Link to your episode <span className="text-destructive">*</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="youtube.com/watch?v=… or a Drive / Dropbox link"
+                            inputMode="url"
+                            {...field}
+                            data-testid="input-recording-url"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Paste an unlisted YouTube or Vimeo link, or a Google Drive, Dropbox, or WeTransfer link to the video
+                          or audio file. Make sure sharing is set so anyone with the link can view it. We'll download it and
+                          check the audio before your slot.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="introStyle"
+                    render={({ field }) => (
+                      <FormItem className="space-y-0">
+                        <FormLabel className="mb-2 block">How should we open your slot?</FormLabel>
+                        <FormControl>
+                          <RadioGroup value={field.value} onValueChange={field.onChange} className="grid gap-2 sm:grid-cols-2">
+                            {[
+                              {
+                                v: "virtual",
+                                icon: Film,
+                                title: "Live virtual intro first",
+                                body: "You join on camera for a short hello, then we roll the episode.",
+                              },
+                              {
+                                v: "straight",
+                                icon: PlayCircle,
+                                title: "Just play the episode",
+                                body: "Straight into the recording. Nothing needed from you on the day.",
+                              },
+                            ].map(({ v, icon: Icon, title, body }) => (
+                              <FormItem key={v} className="space-y-0">
+                                <FormLabel
+                                  className={`flex h-full cursor-pointer items-start gap-3 rounded-lg border bg-background p-3 font-normal transition-colors ${
+                                    field.value === v ? "border-primary ring-1 ring-primary/30" : "border-border hover:bg-muted/50"
+                                  }`}
+                                  data-testid={`radio-intro-${v}`}
+                                >
+                                  <FormControl>
+                                    <RadioGroupItem value={v} className="mt-0.5" />
+                                  </FormControl>
+                                  <span>
+                                    <span className="flex items-center gap-1.5 text-sm font-medium text-card-foreground">
+                                      <Icon className="h-3.5 w-3.5 text-primary" /> {title}
+                                    </span>
+                                    <span className="mt-0.5 block text-xs text-muted-foreground">{body}</span>
+                                  </span>
+                                </FormLabel>
+                              </FormItem>
+                            ))}
+                          </RadioGroup>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
             </SectionCard>
 
             <SectionCard icon={User} title="About you" description="Who's behind the mic. Contact details stay private to the production team.">
@@ -734,6 +875,11 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                 {pendingSlot && (
                   <div className="mt-2 font-mono text-[11px] text-primary">
                     {formatDateInZone(pendingSlot.start, pendingSlot.zone)} · {formatTimeInZone(pendingSlot.start, pendingSlot.zone)}
+                  </div>
+                )}
+                {isPrerecorded && (
+                  <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px]">
+                    <PlayCircle className="h-3 w-3 text-primary" /> Pre-recorded
                   </div>
                 )}
                 {watchRss?.trim() && (

@@ -205,6 +205,12 @@ async function ensureSchema() {
     ON CONFLICT (email) DO UPDATE SET is_owner = true
   `;
 
+  for (const t of ["signups", "podcaster_profiles"]) {
+    await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS show_format TEXT NOT NULL DEFAULT 'live'`);
+    await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS recording_url TEXT NOT NULL DEFAULT ''`);
+    await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS intro_style TEXT NOT NULL DEFAULT 'virtual'`);
+  }
+
   // Migrate older databases created before these columns existed.
   await sql`ALTER TABLE signups ADD COLUMN IF NOT EXISTS photo_url TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS on_air_minutes INTEGER NOT NULL DEFAULT 25`;
@@ -230,15 +236,18 @@ async function ensureSchema() {
 // of them with a duplicate-object error even though the schema is fine.
 // Treat those as success, and give anything else one quiet retry.
 const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
+// Bump this whenever ensureSchema() gains a new table or column, and point
+// SCHEMA_SENTINEL at something that migration creates. The fast path below
+// skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
+// skips new migrations — which is exactly how show_format went missing once.
+const SCHEMA_SENTINEL = { table: "podcaster_profiles", column: "show_format" };
+
 async function schemaAlreadyPresent(): Promise<boolean> {
-  // One cheap query instead of ~12 DDL round-trips on every cold start. The
-  // newest table (podcaster_profiles) plus a column from the latest hand-run
-  // migration (reminders.phone) is a good enough "we've bootstrapped" signal.
   const { sql } = getConnection();
   const rows = await sql`
     SELECT 1
-    FROM information_schema.tables
-    WHERE table_name = 'admin_users'
+    FROM information_schema.columns
+    WHERE table_name = ${SCHEMA_SENTINEL.table} AND column_name = ${SCHEMA_SENTINEL.column}
     LIMIT 1`;
   return rows.length > 0;
 }
@@ -641,6 +650,9 @@ class DatabaseStorage implements IStorage {
         youtubeUrl: patch.youtubeUrl ?? "",
         uploadPostUsername: patch.uploadPostUsername ?? "",
         socialAccounts: patch.socialAccounts ?? "",
+        showFormat: patch.showFormat ?? "live",
+        recordingUrl: patch.recordingUrl ?? "",
+        introStyle: patch.introStyle ?? "virtual",
         notes: patch.notes ?? "",
         photoUrl: patch.photoUrl ?? "",
         createdAt: now,

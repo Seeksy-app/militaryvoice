@@ -22,6 +22,7 @@ import {
   Link2,
   RefreshCw,
   CalendarClock,
+  PlayCircle,
   Pencil,
   Trash2,
 } from "lucide-react";
@@ -752,6 +753,16 @@ export default function HostDashboard() {
                     <div className="mt-4 border-t border-border pt-4">
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bringing to the show</p>
                       <div className="flex flex-wrap gap-1.5">
+                        {profile?.showFormat === "prerecorded" ? (
+                          <Badge className="gap-1 bg-[#F0A71F] font-normal text-[#1a1200] hover:bg-[#F0A71F]">
+                            <PlayCircle className="h-3 w-3" />
+                            Pre-recorded{profile.introStyle === "virtual" ? " + live intro" : ""}
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="gap-1 font-normal">
+                            <Radio className="h-3 w-3" /> Going live
+                          </Badge>
+                        )}
                         {profile?.hasVideoIntro && (
                           <Badge variant="secondary" className="gap-1 font-normal">
                             <Video className="h-3 w-3" /> Video intro

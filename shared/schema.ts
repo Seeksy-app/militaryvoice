@@ -71,6 +71,12 @@ export const signups = pgTable("signups", {
   // snapshotted from the profile when the slot is claimed and refreshed
   // whenever the podcaster reconnects accounts.
   socialAccounts: text("social_accounts").notNull().default(""),
+  // How the slot runs: "live" (they broadcast in real time) or "prerecorded"
+  // (they hand us a finished episode to roll). Pre-recorded shows also choose
+  // whether they open with a short live virtual intro.
+  showFormat: text("show_format").notNull().default("live"),
+  recordingUrl: text("recording_url").notNull().default(""),
+  introStyle: text("intro_style").notNull().default("virtual"),
   notes: text("notes").notNull().default(""),
   timezone: text("timezone").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
@@ -112,6 +118,7 @@ export type PublicSignup = Pick<
   | "rssUrl"
   | "youtubeUrl"
   | "socialAccounts"
+  | "showFormat"
   | "status"
 >;
 
@@ -187,6 +194,12 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
   // Upload-Post user profile name + cached JSON array of connected accounts.
   uploadPostUsername: text("upload_post_username").notNull().default(""),
   socialAccounts: text("social_accounts").notNull().default(""),
+  // How the slot runs: "live" (they broadcast in real time) or "prerecorded"
+  // (they hand us a finished episode to roll). Pre-recorded shows also choose
+  // whether they open with a short live virtual intro.
+  showFormat: text("show_format").notNull().default("live"),
+  recordingUrl: text("recording_url").notNull().default(""),
+  introStyle: text("intro_style").notNull().default("virtual"),
   notes: text("notes").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
@@ -213,7 +226,7 @@ const optionalUrl = (label: string) =>
       { message: `Enter a valid ${label} link (or leave it blank)` },
     );
 
-export const insertProfileSchema = createInsertSchema(podcasterProfiles)
+export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
   .omit({
     id: true,
     email: true,
@@ -229,7 +242,28 @@ export const insertProfileSchema = createInsertSchema(podcasterProfiles)
     numPeople: z.number().int().min(1).max(2),
     rssUrl: optionalUrl("RSS feed"),
     youtubeUrl: optionalUrl("YouTube"),
+    needsInterviewer: z.boolean(),
+    showFormat: z.enum(["live", "prerecorded"]),
+    introStyle: z.enum(["virtual", "straight"]),
+    recordingUrl: optionalUrl("episode"),
   });
+
+// Refined version used for validation. Kept separate because a schema with a
+// refinement can no longer be `.extend()`ed.
+export const insertProfileSchema = profileFieldsSchema
+  .superRefine((v, ctx) => {
+    // A pre-recorded slot is only bookable once we can actually get the file.
+    if (v.showFormat === "prerecorded" && !v.recordingUrl) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["recordingUrl"],
+        message: "Add a link to your recorded episode so we can pull it before the event.",
+      });
+    }
+  });
+
+export type ShowFormat = "live" | "prerecorded";
+export type IntroStyle = "virtual" | "straight";
 
 export type InsertProfile = z.infer<typeof insertProfileSchema>;
 export type ProfileRow = typeof podcasterProfiles.$inferSelect;

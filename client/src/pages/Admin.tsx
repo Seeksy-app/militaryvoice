@@ -22,7 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
-import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound } from "lucide-react";
+import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle } from "lucide-react";
 import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, AdminUserRow, SponsorInquiryRow, PublicSettings } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
@@ -777,6 +777,7 @@ function SignupsCard() {
 
   const active = (signups ?? []).filter((s) => s.status !== "cancelled");
   const needsInterviewer = active.filter((s) => s.needsInterviewer);
+  const prerecorded = active.filter((s) => s.showFormat === "prerecorded");
 
   return (
     <Card>
@@ -785,7 +786,8 @@ function SignupsCard() {
           <CardTitle className="text-base">Who's signed up</CardTitle>
           <CardDescription>
             {active.length} confirmed
-            {needsInterviewer.length > 0 ? ` · ${needsInterviewer.length} need an interviewer` : ""} · times shown in {zoneLabel(zone)}
+            {needsInterviewer.length > 0 ? ` · ${needsInterviewer.length} need an interviewer` : ""}
+            {prerecorded.length > 0 ? ` · ${prerecorded.length} pre-recorded` : ""} · times shown in {zoneLabel(zone)}
           </CardDescription>
         </div>
         <a href={adminExportUrl()} target="_blank" rel="noopener noreferrer" data-testid="link-export-csv">
@@ -871,6 +873,12 @@ function SignupsCard() {
                       <Badge variant="outline" className="text-xs font-normal">
                         {s.numPeople === 2 ? "2 hosts" : "1 host"}
                       </Badge>
+                      {s.showFormat === "prerecorded" && (
+                        <Badge className="gap-1 bg-[#F0A71F] text-xs font-normal text-[#1a1200] hover:bg-[#F0A71F]">
+                          <PlayCircle className="h-3 w-3" />
+                          Pre-recorded{s.introStyle === "virtual" ? " + intro" : ""}
+                        </Badge>
+                      )}
                       {s.hasVideoIntro && <Badge variant="outline" className="text-xs font-normal">Intro</Badge>}
                       {s.hasVideoOutro && <Badge variant="outline" className="text-xs font-normal">Outro</Badge>}
                       {s.hasSlides && <Badge variant="outline" className="text-xs font-normal">Slides</Badge>}

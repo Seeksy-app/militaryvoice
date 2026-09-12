@@ -121,11 +121,24 @@ export default function Faq() {
       ),
     },
     {
+      q: "Can I play an episode I already recorded instead of going live?",
+      a: (
+        <>
+          Yes. In your profile, under "How your slot runs", choose <strong>Play a recorded episode</strong> and paste a link
+          to the file — an unlisted YouTube or Vimeo link, or Google Drive, Dropbox, or WeTransfer all work. Set sharing so
+          anyone with the link can view it. We download it and check the audio before the event. You then pick whether to
+          open with a short live virtual intro on camera, or go straight into the recording with nothing needed from you on
+          the day.
+        </>
+      ),
+    },
+    {
       q: "Where do I broadcast from?",
       a: (
         <>
           Your own setup. Record or stream from wherever you normally do. We give you the time block, the lineup, and the
-          audience. Show-day connection details are emailed to every confirmed podcaster before the event.
+          audience. Show-day connection details are emailed to every confirmed podcaster before the event. If you're playing
+          a pre-recorded episode instead, you don't need to be anywhere unless you chose the live virtual intro.
         </>
       ),
     },
