@@ -19,6 +19,7 @@ import {
   RefreshCw,
   CalendarClock,
   Trash2,
+  Shield,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -655,6 +656,14 @@ export default function HostDashboard() {
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Phone className="h-3.5 w-3.5 shrink-0 text-primary" />
                           <dd>{profile.phone}</dd>
+                        </div>
+                      )}
+                      {(profile?.serviceStatus || profile?.branch) && (
+                        <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
+                          <Shield className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <dd className="truncate">
+                            {[profile.serviceStatus, profile.branch].filter((v) => v && v !== "Not applicable").join(" · ")}
+                          </dd>
                         </div>
                       )}
                     </dl>

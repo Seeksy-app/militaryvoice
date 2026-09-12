@@ -209,6 +209,8 @@ async function ensureSchema() {
     await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS show_format TEXT NOT NULL DEFAULT 'live'`);
     await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS recording_url TEXT NOT NULL DEFAULT ''`);
     await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS intro_style TEXT NOT NULL DEFAULT 'virtual'`);
+    await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS branch TEXT NOT NULL DEFAULT ''`);
+    await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS service_status TEXT NOT NULL DEFAULT ''`);
   }
 
   // Migrate older databases created before these columns existed.
@@ -240,7 +242,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "podcaster_profiles", column: "show_format" };
+const SCHEMA_SENTINEL = { table: "podcaster_profiles", column: "service_status" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
@@ -653,6 +655,8 @@ class DatabaseStorage implements IStorage {
         showFormat: patch.showFormat ?? "live",
         recordingUrl: patch.recordingUrl ?? "",
         introStyle: patch.introStyle ?? "virtual",
+        branch: patch.branch ?? "",
+        serviceStatus: patch.serviceStatus ?? "",
         notes: patch.notes ?? "",
         photoUrl: patch.photoUrl ?? "",
         createdAt: now,

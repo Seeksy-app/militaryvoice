@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -13,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiUpload, apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { SocialTiles } from "@/components/SocialTiles";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
-import { insertProfileSchema, type ProfileRow, type SocialAccount } from "@shared/schema";
+import { insertProfileSchema, SERVICE_BRANCHES, SERVICE_STATUSES, type ProfileRow, type SocialAccount } from "@shared/schema";
 import { PhotoCropDialog } from "@/components/PhotoCropDialog";
 import { formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
 import {
@@ -198,6 +199,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
       showFormat: (profile?.showFormat as "live" | "prerecorded") ?? "live",
       recordingUrl: profile?.recordingUrl ?? "",
       introStyle: (profile?.introStyle as "virtual" | "straight") ?? "virtual",
+      branch: profile?.branch ?? "",
+      serviceStatus: profile?.serviceStatus ?? "",
       notes: profile?.notes ?? "",
     },
   });
@@ -305,6 +308,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
       formData.append("showFormat", values.showFormat);
       formData.append("recordingUrl", values.recordingUrl ?? "");
       formData.append("introStyle", values.introStyle);
+      formData.append("branch", values.branch ?? "");
+      formData.append("serviceStatus", values.serviceStatus ?? "");
       formData.append("notes", values.notes ?? "");
       if (photoFile) formData.append("photo", photoFile);
       const res = await apiUpload("PUT", "/api/host/profile", formData);
@@ -353,8 +358,185 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
           {/* ------------------------------------------------ main column */}
           <div className="flex flex-col gap-6">
             <SectionCard
-              id="section-show"
+              id="section-about"
               step={1}
+              icon={User}
+              title="About you"
+              description="Who's behind the mic. Your photo goes on the public lineup; contact details stay with the production team."
+            >
+              {/* Photo */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`group relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 bg-muted transition-colors hover:border-primary ${
+                    shownPhoto ? "border-transparent ring-4 ring-primary/10" : "border-dashed border-border"
+                  }`}
+                  data-testid="button-upload-photo"
+                >
+                  {shownPhoto ? (
+                    <img src={shownPhoto} alt="Your selected photo" className="h-full w-full object-cover" />
+                  ) : (
+                    <Camera className="h-7 w-7 text-muted-foreground transition-colors group-hover:text-primary" />
+                  )}
+                </button>
+                <div className="flex flex-col gap-1.5">
+                  <div className="text-sm font-medium">Photo {shownPhoto ? "" : <span className="text-destructive">*</span>}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Square works best. We'll enhance it and crop it to a circle for the agenda.
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
+                      <ImagePlus className="h-3.5 w-3.5" />
+                      {shownPhoto ? "Change photo" : "Upload photo"}
+                    </Button>
+                    {photoFile && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (photoPreview) {
+                              setRawImageSrc(photoPreview);
+                              setCropOpen(true);
+                            }
+                          }}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                          data-testid="button-adjust-crop"
+                        >
+                          <Crop className="h-3 w-3" /> Adjust crop
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handlePhotoChange(null);
+                            if (fileInputRef.current) fileInputRef.current.value = "";
+                          }}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" /> Remove
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {photoError && <p className="text-sm font-medium text-destructive">{photoError}</p>}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  data-testid="input-photo"
+                  onChange={(e) => handlePhotoChange(e.target.files?.[0] ?? null)}
+                />
+                <PhotoCropDialog
+                  open={cropOpen}
+                  imageSrc={rawImageSrc}
+                  onCancel={() => {
+                    setCropOpen(false);
+                    setRawImageSrc(null);
+                    if (!photoFile && fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  onConfirm={handleCropConfirm}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="hostName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Your name <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input placeholder="Jamie Rivera" {...field} data-testid="input-host-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input type="email" readOnly disabled value={email} data-testid="input-email" />
+                  </FormControl>
+                  <FormDescription>You signed in with this. It's where we'll send show-day details.</FormDescription>
+                </FormItem>
+              </div>
+
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem className="sm:max-w-xs">
+                    <FormLabel>Phone (optional)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="(555) 555-5555" {...field} data-testid="input-phone" />
+                    </FormControl>
+                    <FormDescription>Only used if we need to reach you fast on show day.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="serviceStatus"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status (optional)</FormLabel>
+                      <Select value={field.value || undefined} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-service-status">
+                            <SelectValue placeholder="Select your status" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {SERVICE_STATUSES.map((o) => (
+                            <SelectItem key={o} value={o}>
+                              {o}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>How you're connected to the military community.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="branch"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Branch (optional)</FormLabel>
+                      <Select value={field.value || undefined} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-branch">
+                            <SelectValue placeholder="Select a branch" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {SERVICE_BRANCHES.map((o) => (
+                            <SelectItem key={o} value={o}>
+                              {o}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Pick "Not applicable" if you're a supporter or an organization.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              id="section-show"
+              step={2}
               icon={Mic2}
               title="Your show"
               description="What listeners see on the lineup."
@@ -378,7 +560,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
             </SectionCard>
 
             <SectionCard
-              step={2}
+              step={3}
               icon={Radio}
               title="How your slot runs"
               description="Broadcast live in your time block, or hand us an episode you've already recorded."
@@ -506,130 +688,6 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                   />
                 </div>
               )}
-            </SectionCard>
-
-            <SectionCard
-              id="section-about"
-              step={3}
-              icon={User}
-              title="About you"
-              description="Who's behind the mic. Your photo goes on the public lineup; contact details stay with the production team."
-            >
-              {/* Photo */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`group relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 bg-muted transition-colors hover:border-primary ${
-                    shownPhoto ? "border-transparent ring-4 ring-primary/10" : "border-dashed border-border"
-                  }`}
-                  data-testid="button-upload-photo"
-                >
-                  {shownPhoto ? (
-                    <img src={shownPhoto} alt="Your selected photo" className="h-full w-full object-cover" />
-                  ) : (
-                    <Camera className="h-7 w-7 text-muted-foreground transition-colors group-hover:text-primary" />
-                  )}
-                </button>
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-sm font-medium">Photo {shownPhoto ? "" : <span className="text-destructive">*</span>}</div>
-                  <p className="text-xs text-muted-foreground">
-                    Square works best. We'll enhance it and crop it to a circle for the agenda.
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
-                      <ImagePlus className="h-3.5 w-3.5" />
-                      {shownPhoto ? "Change photo" : "Upload photo"}
-                    </Button>
-                    {photoFile && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (photoPreview) {
-                              setRawImageSrc(photoPreview);
-                              setCropOpen(true);
-                            }
-                          }}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-                          data-testid="button-adjust-crop"
-                        >
-                          <Crop className="h-3 w-3" /> Adjust crop
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handlePhotoChange(null);
-                            if (fileInputRef.current) fileInputRef.current.value = "";
-                          }}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
-                        >
-                          <X className="h-3 w-3" /> Remove
-                        </button>
-                      </>
-                    )}
-                  </div>
-                  {photoError && <p className="text-sm font-medium text-destructive">{photoError}</p>}
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  data-testid="input-photo"
-                  onChange={(e) => handlePhotoChange(e.target.files?.[0] ?? null)}
-                />
-                <PhotoCropDialog
-                  open={cropOpen}
-                  imageSrc={rawImageSrc}
-                  onCancel={() => {
-                    setCropOpen(false);
-                    setRawImageSrc(null);
-                    if (!photoFile && fileInputRef.current) fileInputRef.current.value = "";
-                  }}
-                  onConfirm={handleCropConfirm}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="hostName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Your name <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input placeholder="Jamie Rivera" {...field} data-testid="input-host-name" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input type="email" readOnly disabled value={email} data-testid="input-email" />
-                  </FormControl>
-                  <FormDescription>You signed in with this. It's where we'll send show-day details.</FormDescription>
-                </FormItem>
-              </div>
-
-              <FormField
-                control={form.control}
-                name="phone"
-                render={({ field }) => (
-                  <FormItem className="sm:max-w-xs">
-                    <FormLabel>Phone (optional)</FormLabel>
-                    <FormControl>
-                      <Input placeholder="(555) 555-5555" {...field} data-testid="input-phone" />
-                    </FormControl>
-                    <FormDescription>Only used if we need to reach you fast on show day.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </SectionCard>
 
             <SectionCard

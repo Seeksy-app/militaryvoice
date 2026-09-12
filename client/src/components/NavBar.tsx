@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Moon, Sun, LogIn, LayoutDashboard, Menu } from "lucide-react";
 import { LogoLockup } from "@/components/Logo";
 import { SponsorDialog } from "@/components/SponsorDialog";
-import { AudioToggle } from "@/components/AudioPlayer";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -81,7 +80,6 @@ export function NavBar() {
               <span>{signedIn ? "Dashboard" : "Sign in"}</span>
             </Button>
           </Link>
-          <AudioToggle className="h-9 w-9 px-0" />
           <Button
             variant="ghost"
             size="icon"

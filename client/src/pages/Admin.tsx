@@ -879,6 +879,11 @@ function SignupsCard() {
                           Pre-recorded{s.introStyle === "virtual" ? " + intro" : ""}
                         </Badge>
                       )}
+                      {(s.serviceStatus || s.branch) && (
+                        <Badge variant="outline" className="text-xs font-normal">
+                          {[s.serviceStatus, s.branch].filter((v) => v && v !== "Not applicable").join(" · ")}
+                        </Badge>
+                      )}
                       {s.hasVideoIntro && <Badge variant="outline" className="text-xs font-normal">Intro</Badge>}
                       {s.hasVideoOutro && <Badge variant="outline" className="text-xs font-normal">Outro</Badge>}
                       {s.hasSlides && <Badge variant="outline" className="text-xs font-normal">Slides</Badge>}

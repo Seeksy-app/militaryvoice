@@ -96,6 +96,8 @@ function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[numbe
     youtubeUrl: s.youtubeUrl,
     socialAccounts: s.socialAccounts,
     showFormat: s.showFormat,
+    branch: s.branch,
+    serviceStatus: s.serviceStatus,
     status: s.status,
   };
 }
@@ -599,6 +601,8 @@ export function registerRoutes(app: Express): void {
       showFormat: profile.showFormat,
       recordingUrl: profile.recordingUrl,
       introStyle: profile.introStyle,
+      branch: profile.branch,
+      serviceStatus: profile.serviceStatus,
       notes: profile.notes,
       timezone: typeof body.timezone === "string" ? body.timezone : "",
       photoUrl: profile.photoUrl,
@@ -981,6 +985,8 @@ export function registerRoutes(app: Express): void {
       showFormat: body.showFormat === "prerecorded" ? "prerecorded" : "live",
       recordingUrl: body.recordingUrl ?? "",
       introStyle: body.introStyle === "straight" ? "straight" : "virtual",
+      branch: body.branch ?? "",
+      serviceStatus: body.serviceStatus ?? "",
       notes: body.notes ?? "",
     };
 

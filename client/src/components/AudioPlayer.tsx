@@ -90,6 +90,27 @@ export function SiteAudioProvider({ children }: { children: ReactNode }) {
     return () => cleanup();
   }, []);
 
+  // Two tabs open on the site would each play their own copy, which sounds like
+  // the trailer doubling over itself. localStorage fires a `storage` event in
+  // every *other* tab, so turning it off anywhere turns it off everywhere.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== PREF_KEY) return;
+      const el = audioRef.current;
+      if (!el) return;
+      if (e.newValue === "off") {
+        el.pause();
+        setPlaying(false);
+      } else if (e.newValue === "on" && el.paused) {
+        el.volume = SOFT_VOLUME;
+        el.muted = false;
+        void el.play().then(() => setPlaying(true)).catch(() => {});
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   const toggle = useCallback(() => {
     const el = audioRef.current;
     if (!el) return;
@@ -120,7 +141,7 @@ export function SiteAudioProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** Sound on/off. Sits in the nav and beside the hero waveform. */
+/** Sound on/off. The single control, beside the hero waveform. */
 export function AudioToggle({
   className = "",
   tone = "light",

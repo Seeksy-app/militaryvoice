@@ -77,6 +77,10 @@ export const signups = pgTable("signups", {
   showFormat: text("show_format").notNull().default("live"),
   recordingUrl: text("recording_url").notNull().default(""),
   introStyle: text("intro_style").notNull().default("virtual"),
+  // Who they are in the military community. Both optional — a supporter or an
+  // organization has no branch.
+  branch: text("branch").notNull().default(""),
+  serviceStatus: text("service_status").notNull().default(""),
   notes: text("notes").notNull().default(""),
   timezone: text("timezone").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
@@ -119,6 +123,8 @@ export type PublicSignup = Pick<
   | "youtubeUrl"
   | "socialAccounts"
   | "showFormat"
+  | "branch"
+  | "serviceStatus"
   | "status"
 >;
 
@@ -200,6 +206,10 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
   showFormat: text("show_format").notNull().default("live"),
   recordingUrl: text("recording_url").notNull().default(""),
   introStyle: text("intro_style").notNull().default("virtual"),
+  // Who they are in the military community. Both optional — a supporter or an
+  // organization has no branch.
+  branch: text("branch").notNull().default(""),
+  serviceStatus: text("service_status").notNull().default(""),
   notes: text("notes").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
@@ -232,6 +242,33 @@ const optionalUrl = (label: string) =>
       { message: `Enter a valid ${label} link (or leave it blank)` },
     );
 
+export const SERVICE_BRANCHES = [
+  "Army",
+  "Marine Corps",
+  "Navy",
+  "Air Force",
+  "Space Force",
+  "Coast Guard",
+  "National Guard",
+  "Not applicable",
+] as const;
+
+export const SERVICE_STATUSES = [
+  "Active duty",
+  "Veteran",
+  "Retired",
+  "Military spouse",
+  "Military organization",
+  "Supporter of the military",
+] as const;
+
+export type ServiceBranch = (typeof SERVICE_BRANCHES)[number];
+export type ServiceStatus = (typeof SERVICE_STATUSES)[number];
+
+/** Empty (not answered) or one of the listed options. */
+const optionalChoice = (options: readonly string[], label: string) =>
+  z.string().trim().refine((v) => v === "" || options.includes(v), { message: `Pick a ${label} from the list` });
+
 export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
   .omit({
     id: true,
@@ -252,6 +289,8 @@ export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
     showFormat: z.enum(["live", "prerecorded"]),
     introStyle: z.enum(["virtual", "straight"]),
     recordingUrl: optionalUrl("episode"),
+    branch: optionalChoice(SERVICE_BRANCHES, "branch"),
+    serviceStatus: optionalChoice(SERVICE_STATUSES, "status"),
   });
 
 // Refined version used for validation. Kept separate because a schema with a
