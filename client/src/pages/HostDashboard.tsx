@@ -15,15 +15,9 @@ import {
   Globe,
   Rss,
   Youtube,
-  Video,
-  Presentation,
-  Image as ImageIcon,
-  MessageSquare,
   Link2,
   RefreshCw,
   CalendarClock,
-  PlayCircle,
-  Pencil,
   Trash2,
 } from "lucide-react";
 import {
@@ -668,14 +662,6 @@ export default function HostDashboard() {
                         <Users className="h-3.5 w-3.5 shrink-0 text-primary" />
                         <dd>{profile?.numPeople === 2 ? "Two on the mic" : "Solo host"}</dd>
                       </div>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Radio className="h-3.5 w-3.5 shrink-0 text-primary" />
-                        <dd>
-                          {data.mySignups.length === 0
-                            ? "No slot claimed yet"
-                            : `${data.mySignups.length} slot${data.mySignups.length === 1 ? "" : "s"} on ${data.event.name.trim()}`}
-                        </dd>
-                      </div>
                     </dl>
 
                     {(profile?.socialLinks || profile?.rssUrl || profile?.youtubeUrl) && (
@@ -717,6 +703,78 @@ export default function HostDashboard() {
                       </div>
                     )}
 
+                    <div className="mt-4 border-t border-border pt-4" data-testid="section-your-slot">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your slot</p>
+                      {data.mySignups.length === 0 ? (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border bg-muted/30 px-4 py-3">
+                          <p className="text-sm text-muted-foreground">You haven't claimed a time yet.</p>
+                          <Button
+                            size="sm"
+                            className="gap-1.5 rounded-full"
+                            onClick={() => document.getElementById("pick-slot")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                            data-testid="button-jump-to-slots"
+                          >
+                            <Radio className="h-3.5 w-3.5" /> Pick a slot
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          {data.mySignups.map((s) => {
+                            const st = slotStart(data.event.startAtUtc, data.event.slotMinutes, s.slotIndex);
+                            const en = slotEnd(data.event.startAtUtc, data.event.slotMinutes, s.slotIndex);
+                            return (
+                              <div
+                                key={s.id}
+                                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3"
+                                data-testid={`card-host-signup-${s.id}`}
+                              >
+                                <div className="min-w-0">
+                                  <div className="font-mono text-base font-semibold text-card-foreground">
+                                    {formatDateInZone(st, zone)} · {formatTimeInZone(st, zone)}–{formatTimeInZone(en, zone)}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {zoneLabel(zone)} · {data.event.name.trim()}
+                                  </div>
+                                </div>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="gap-1.5 rounded-full text-destructive hover:text-destructive"
+                                      data-testid={`button-edit-slot-${s.id}`}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" /> Remove me from this slot
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Remove you from this slot?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        {formatDateInZone(st, zone)}, {formatTimeInZone(st, zone)}–{formatTimeInZone(en, zone)} goes back on
+                                        the open schedule for anyone to claim. You can pick a different time right after. Fans who asked
+                                        for a reminder on this slot won't be notified.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Keep my slot</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        className="gap-1.5 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                        onClick={() => release.mutate(s.id)}
+                                        data-testid={`button-release-slot-${s.id}`}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" /> Remove me
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
                     {social?.configured && (
                       <div className="mt-4 border-t border-border pt-4" data-testid="section-social-accounts">
                         <div className="mb-2 flex items-center justify-between gap-3">
@@ -755,141 +813,14 @@ export default function HostDashboard() {
                         )}
                       </div>
                     )}
-
-                    <div className="mt-4 border-t border-border pt-4">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bringing to the show</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {profile?.showFormat === "prerecorded" ? (
-                          <Badge className="gap-1 bg-[#F0A71F] font-normal text-[#1a1200] hover:bg-[#F0A71F]">
-                            <PlayCircle className="h-3 w-3" />
-                            Pre-recorded{profile.introStyle === "virtual" ? " + live intro" : ""}
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="gap-1 font-normal">
-                            <Radio className="h-3 w-3" /> Going live
-                          </Badge>
-                        )}
-                        {profile?.hasVideoIntro && (
-                          <Badge variant="secondary" className="gap-1 font-normal">
-                            <Video className="h-3 w-3" /> Video intro
-                          </Badge>
-                        )}
-                        {profile?.hasVideoOutro && (
-                          <Badge variant="secondary" className="gap-1 font-normal">
-                            <Video className="h-3 w-3" /> Video outro
-                          </Badge>
-                        )}
-                        {profile?.hasSlides && (
-                          <Badge variant="secondary" className="gap-1 font-normal">
-                            <Presentation className="h-3 w-3" /> Slides
-                          </Badge>
-                        )}
-                        {profile?.hasImages && (
-                          <Badge variant="secondary" className="gap-1 font-normal">
-                            <ImageIcon className="h-3 w-3" /> Images
-                          </Badge>
-                        )}
-                        {profile?.needsInterviewer && (
-                          <Badge variant="outline" className="gap-1 border-primary/40 font-normal text-primary">
-                            <Users className="h-3 w-3" /> Interviewer requested
-                          </Badge>
-                        )}
-                        {!profile?.hasVideoIntro && !profile?.hasVideoOutro && !profile?.hasSlides && !profile?.hasImages && !profile?.needsInterviewer && (
-                          <span className="text-sm text-muted-foreground">Just the conversation — no extra media yet.</span>
-                        )}
-                      </div>
-                      {profile?.notes && (
-                        <p className="mt-3 flex items-start gap-2 text-sm text-muted-foreground">
-                          <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                          <span className="italic">{profile.notes}</span>
-                        </p>
-                      )}
-                    </div>
                   </div>
                 </div>
               </div>
             </section>
 
-            {/* ---------------------------------------------------- my slot */}
-            <section className="mt-8">
-              <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                <Mic2 className="h-4 w-4" />
-                Your slot
-              </h2>
-              {data.mySignups.length === 0 ? (
-                <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-                  You don't have a claimed slot on this email yet — pick one below.
-                </div>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {data.mySignups.map((s) => {
-                    const st = slotStart(data.event.startAtUtc, data.event.slotMinutes, s.slotIndex);
-                    const en = slotEnd(data.event.startAtUtc, data.event.slotMinutes, s.slotIndex);
-                    return (
-                      <div
-                        key={s.id}
-                        className="relative overflow-hidden rounded-xl border border-primary/30 bg-card p-4"
-                        data-testid={`card-host-signup-${s.id}`}
-                      >
-                        <div className="absolute inset-y-0 left-0 w-1 bg-primary" />
-                        <div className="flex items-start justify-between gap-3 pl-2">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <Radio className="h-3.5 w-3.5 text-primary" />
-                              <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                Slot #{s.slotIndex + 1} · {data.event.name.trim()}
-                              </span>
-                            </div>
-                            <p className="mt-2 font-mono text-base font-semibold text-card-foreground">
-                              {formatDateInZone(st, zone)} · {formatTimeInZone(st, zone)}–{formatTimeInZone(en, zone)}
-                            </p>
-                            <p className="text-sm text-muted-foreground">{zoneLabel(zone)}</p>
-                          </div>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
-                                aria-label="Change or release this slot"
-                                title="Change or release this slot"
-                                data-testid={`button-edit-slot-${s.id}`}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Release this slot?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  {formatDateInZone(st, zone)}, {formatTimeInZone(st, zone)}–{formatTimeInZone(en, zone)} goes back on the
-                                  open schedule for anyone to claim. You can pick a different time right after. Fans who asked for a
-                                  reminder on this slot won't be notified.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Keep my slot</AlertDialogCancel>
-                                <AlertDialogAction
-                                  className="gap-1.5 bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  onClick={() => release.mutate(s.id)}
-                                  data-testid={`button-release-slot-${s.id}`}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" /> Release slot
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
             {/* ------------------------------------------------- open slots (only until they hold one) */}
             {data.mySignups.length === 0 && (
-              <section className="mt-8">
+              <section id="pick-slot" className="mt-8 scroll-mt-24">
                 <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   <Radio className="h-4 w-4" />
                   Pick your slot on {data.event.name}
