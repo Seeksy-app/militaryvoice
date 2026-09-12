@@ -37,6 +37,11 @@ export function useSiteAudio(): AudioValue {
 }
 
 /**
+ * CURRENTLY UNUSED — the background trailer was switched off on 2026-09-12.
+ * To bring it back: wrap the Router in <SiteAudioProvider> in App.tsx and drop
+ * an <AudioToggle tone="dark" withLabel /> beside the hero waveform in
+ * Landing.tsx. The audio file is still at client/public.
+ *
  * One <audio> element for the whole site, looping the trailer quietly.
  *
  * Sound is on by default. Browsers refuse to start audible audio before the

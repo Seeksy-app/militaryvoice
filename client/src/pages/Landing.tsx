@@ -9,7 +9,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
 import { spotlightFromSignup, type SpotlightItem } from "@/components/SpotlightCard";
 import { SponsorDialog } from "@/components/SponsorDialog";
-import { AudioToggle, useSiteAudio } from "@/components/AudioPlayer";
 import { useCountdown } from "@/hooks/use-countdown";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, PublicPodcaster, PublicSponsor } from "@shared/schema";
@@ -128,7 +127,6 @@ export default function Landing({ slug }: Props) {
   const { data: podcasters } = useQuery<PublicPodcaster[]>({ queryKey: ["/api/podcasters"] });
   const { data: sponsors } = useQuery<PublicSponsor[]>({ queryKey: ["/api/sponsors"] });
 
-  const { playing: audioOn } = useSiteAudio();
 
   const zone = useMemo(detectLocalTimeZone, []);
   const countdown = useCountdown(event?.startAtUtc, event?.durationHours);
@@ -478,8 +476,8 @@ export default function Landing({ slug }: Props) {
           )}
         </div>
 
-        {/* live waveform strip — doubles as the trailer's sound control */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-center gap-3 px-4 pb-4">
+        {/* decorative waveform strip along the bottom edge */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-center px-4 pb-4">
           <div aria-hidden="true" className="flex h-[72px] items-end justify-center gap-[3px] opacity-80">
             {Array.from({ length: 44 }).map((_, i) => {
               const base = 14 + Math.abs(Math.sin(i * 0.55)) * 58;
@@ -489,16 +487,11 @@ export default function Landing({ slug }: Props) {
                   className="w-1 flex-none origin-bottom rounded-t-full bg-[#F0A71F]/75"
                   style={{
                     height: `${base}px`,
-                    animation: audioOn
-                      ? `mvwave ${0.6 + (i % 7) * 0.09}s ease-in-out ${(i % 11) * 0.05}s infinite alternate`
-                      : `mvwave ${1.6 + (i % 7) * 0.14}s ease-in-out ${(i % 11) * 0.09}s infinite alternate`,
+                    animation: `mvwave ${1.6 + (i % 7) * 0.14}s ease-in-out ${(i % 11) * 0.09}s infinite alternate`,
                   }}
                 />
               );
             })}
-          </div>
-          <div className="pointer-events-auto flex shrink-0 items-center">
-            <AudioToggle tone="dark" withLabel />
           </div>
           <style>{`@keyframes mvwave { from { transform: scaleY(0.32); opacity:.55 } to { transform: scaleY(1); opacity:1 } }`}</style>
         </div>
