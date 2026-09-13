@@ -37,7 +37,12 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const verifyCode = useCallback(
     async (email: string, code: string) => {
       await apiRequest("POST", "/api/admin/verify-code", { email, code });
-      await queryClient.invalidateQueries({ queryKey: ["/api/admin/me"] });
+      // Admin panels mount before sign-in and their queries 401. staleTime is
+      // Infinity, so those failures would stick and the cards would never load.
+      // Drop every admin query so they refetch as the signed-in admin.
+      queryClient.removeQueries({
+        predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/admin"),
+      });
     },
     [queryClient],
   );

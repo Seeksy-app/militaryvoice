@@ -86,6 +86,10 @@ export const signups = pgTable("signups", {
   postEdits: text("post_edits").notNull().default(""),
   streamPlatform: text("stream_platform").notNull().default(""),
   streamPlatformOther: text("stream_platform_other").notNull().default(""),
+  // Show-day details the studio team needs.
+  guests: text("guests").notNull().default(""),
+  interviewQuestions: text("interview_questions").notNull().default(""),
+  promoNotes: text("promo_notes").notNull().default(""),
   notes: text("notes").notNull().default(""),
   timezone: text("timezone").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
@@ -220,6 +224,10 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
   postEdits: text("post_edits").notNull().default(""),
   streamPlatform: text("stream_platform").notNull().default(""),
   streamPlatformOther: text("stream_platform_other").notNull().default(""),
+  // Show-day details the studio team needs.
+  guests: text("guests").notNull().default(""),
+  interviewQuestions: text("interview_questions").notNull().default(""),
+  promoNotes: text("promo_notes").notNull().default(""),
   notes: text("notes").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
@@ -318,6 +326,9 @@ export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
     postEdits: optionalChoice(POST_EDIT_ANSWERS, "yes or no"),
     streamPlatform: optionalChoice(STREAM_PLATFORMS, "platform"),
     streamPlatformOther: z.string().trim().max(80, "Keep it under 80 characters"),
+    guests: z.string().trim().max(2000, "Keep it under 2000 characters"),
+    interviewQuestions: z.string().trim().max(4000, "Keep it under 4000 characters"),
+    promoNotes: z.string().trim().max(2000, "Keep it under 2000 characters"),
   });
 
 // Refined version used for validation. Kept separate because a schema with a
@@ -441,3 +452,54 @@ export type SiteSettingRow = typeof siteSettings.$inferSelect;
 export interface PublicSettings {
   sponsorsVisible: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Files a podcaster sends ahead of their slot — intro/outro clips, images, or
+// a link to something too big to upload.
+// ---------------------------------------------------------------------------
+export const ASSET_KINDS = ["Intro", "Outro", "Mid-roll", "Image", "Other"] as const;
+export type AssetKind = (typeof ASSET_KINDS)[number];
+
+export const showAssets = pgTable("show_assets", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  kind: text("kind").notNull().default("Other"),
+  label: text("label").notNull().default(""),
+  fileUrl: text("file_url").notNull().default(""),
+  linkUrl: text("link_url").notNull().default(""),
+  fileName: text("file_name").notNull().default(""),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+});
+export type ShowAssetRow = typeof showAssets.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Run of show — the minute-by-minute plan the studio follows. Generated from
+// the schedule, then edited by hand.
+// ---------------------------------------------------------------------------
+export const RUN_ITEM_KINDS = ["Pre-show", "Sponsor", "Intro", "Segment", "Handoff", "Break", "Custom"] as const;
+export type RunItemKind = (typeof RUN_ITEM_KINDS)[number];
+
+export const runOfShow = pgTable("run_of_show", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  sortIndex: integer("sort_index").notNull().default(0),
+  kind: text("kind").notNull().default("Custom"),
+  title: text("title").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  startAtUtc: text("start_at_utc").notNull().default(""),
+  durationMinutes: integer("duration_minutes").notNull().default(0),
+  signupId: integer("signup_id"),
+  createdAt: text("created_at").notNull(),
+});
+export type RunItemRow = typeof runOfShow.$inferSelect;
+
+export const runItemInputSchema = z.object({
+  kind: z.enum(RUN_ITEM_KINDS),
+  title: z.string().trim().max(200),
+  notes: z.string().trim().max(2000),
+  startAtUtc: z.string().trim(),
+  durationMinutes: z.number().int().min(0).max(1440),
+  signupId: z.number().int().positive().nullable().optional(),
+});
+export type RunItemInput = z.infer<typeof runItemInputSchema>;

@@ -233,12 +233,12 @@ export default function Prepare() {
             Get your material to us early
           </h2>
           <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-            Anything you want played, shown or read out needs to reach us before show day so it's loaded and tested. Send
-            it to{" "}
-            <a href="mailto:hello@militaryvoice.ai" className="text-primary underline-offset-2 hover:underline">
-              hello@militaryvoice.ai
-            </a>
-            .
+            Anything you want played, shown or read out needs to reach us before show day so it's loaded and tested.
+            Upload it in the <strong className="text-foreground">Show materials</strong> panel on your{" "}
+            <Link href="/host/dashboard" className="text-primary underline-offset-2 hover:underline">
+              dashboard
+            </Link>{" "}
+            and it attaches to your slot automatically. Files up to 50MB upload directly; anything larger, paste a link.
           </p>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">

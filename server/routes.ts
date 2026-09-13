@@ -3,13 +3,17 @@ import crypto from "node:crypto";
 import multer from "multer";
 import sharp from "sharp";
 import { storage } from "./storage.js";
-import { uploadPhoto } from "./photoStorage.js";
+import { uploadPhoto, uploadShowAsset, deleteShowAsset } from "./photoStorage.js";
 import {
   insertSignupSchema,
   insertReminderSchema,
   insertEventSchema,
   updateEventSchema,
   insertProfileSchema,
+  runItemInputSchema,
+  ASSET_KINDS,
+  type RunItemInput,
+  type ShowAssetRow,
   insertSponsorInquirySchema,
   type PublicEvent,
   type PublicSignup,
@@ -489,6 +493,212 @@ export function registerRoutes(app: Express): void {
 
   app.patch("/api/admin/sponsor-inquiries/:id", requireAdmin, async (req, res) => {
     await storage.setSponsorInquiryHandled(Number(req.params.id), !!req.body?.handled);
+    res.json({ ok: true });
+  });
+
+  // ---- Show-day material ----------------------------------------------------
+  //      Uploads go to their own Supabase bucket; anything too big for a
+  //      request body can be handed over as a link instead.
+  const assetUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 },
+  });
+
+  app.get("/api/host/assets", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    res.json(await storage.listAssetsByEmail(email));
+  });
+
+  app.post(
+    "/api/host/assets",
+    requireHostSession,
+    (req, res, next) => {
+      assetUpload.single("file")(req, res, (err: any) => {
+        if (err) {
+          const tooBig = err?.code === "LIMIT_FILE_SIZE";
+          res.status(400).json({
+            message: tooBig
+              ? "That file is over 50MB. Upload a smaller version, or paste a link to it instead."
+              : err.message || "Couldn't accept that file.",
+          });
+          return;
+        }
+        next();
+      });
+    },
+    async (req, res) => {
+      const email = (req as any).hostEmail as string;
+      const body = req.body as Record<string, string>;
+      const kind = (ASSET_KINDS as readonly string[]).includes(body.kind) ? body.kind : "Other";
+      const label = (body.label ?? "").trim().slice(0, 120);
+      const linkUrl = (body.linkUrl ?? "").trim();
+
+      if (!req.file && !linkUrl) {
+        res.status(400).json({ message: "Attach a file or paste a link." });
+        return;
+      }
+      if (linkUrl && !/^https?:\/\//i.test(linkUrl)) {
+        res.status(400).json({ message: "That link needs to start with http:// or https://" });
+        return;
+      }
+
+      let fileUrl = "";
+      let fileName = "";
+      let sizeBytes = 0;
+      if (req.file) {
+        const safe = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+        const key = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${safe}`;
+        try {
+          fileUrl = await uploadShowAsset(key, req.file.buffer, req.file.mimetype || "application/octet-stream");
+        } catch (err) {
+          console.error("Show asset upload failed:", err);
+          res.status(502).json({ message: "Upload failed. Try again, or paste a link instead." });
+          return;
+        }
+        fileName = req.file.originalname;
+        sizeBytes = req.file.size;
+      }
+
+      const created = await storage.createAsset({ email, kind, label, fileUrl, linkUrl, fileName, sizeBytes });
+      res.status(201).json(created);
+    },
+  );
+
+  app.delete("/api/host/assets/:id", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const id = Number(req.params.id);
+    const mine = (await storage.listAssetsByEmail(email)).find((a) => a.id === id);
+    if (!mine) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    await storage.deleteAsset(id, email);
+    if (mine.fileUrl) {
+      try {
+        await deleteShowAsset(mine.fileUrl);
+      } catch (err) {
+        console.error("Couldn't remove the stored file:", err);
+      }
+    }
+    res.json({ ok: true });
+  });
+
+  app.get("/api/admin/assets", requireAdmin, async (_req, res) => {
+    res.json(await storage.listAllAssets());
+  });
+
+  // ---- Run of show ------------------------------------------------------------
+  app.get("/api/admin/run-of-show", requireAdmin, async (req, res) => {
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    res.json(await storage.listRunOfShow(eventId));
+  });
+
+  /** Build the default plan from the schedule: pre-show, then each slot with a
+   *  sponsor break and an intro ahead of it. Overwrites whatever is there. */
+  app.post("/api/admin/run-of-show/generate", requireAdmin, async (req, res) => {
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const event = await storage.getEventById(eventId);
+    if (!event) {
+      res.status(404).json({ message: "Event not found" });
+      return;
+    }
+    const preRollMinutes = Number(req.body?.preRollMinutes) > 0 ? Number(req.body.preRollMinutes) : 15;
+    const sponsorMinutes = Number(req.body?.sponsorMinutes) >= 0 ? Number(req.body.sponsorMinutes) : 2;
+    const host = (req.body?.hostName as string) || "Riccoh Player";
+
+    const signups = (await storage.listSignups(eventId)).filter((s) => s.status !== "cancelled");
+    const bySlot = new Map(signups.map((s) => [s.slotIndex, s]));
+    const eventStart = new Date(event.startAtUtc);
+    const items: RunItemInput[] = [];
+
+    items.push({
+      kind: "Pre-show",
+      title: "Stream live — pre-show",
+      notes: "Go live early. Bumper loop, holding slate, sound check.",
+      startAtUtc: new Date(eventStart.getTime() - preRollMinutes * 60000).toISOString(),
+      durationMinutes: preRollMinutes,
+      signupId: null,
+    });
+    items.push({
+      kind: "Sponsor",
+      title: "Sponsor reel & event info",
+      notes: "Run sponsor spots and the welcome card until the top of the hour.",
+      startAtUtc: new Date(eventStart.getTime() - preRollMinutes * 60000).toISOString(),
+      durationMinutes: preRollMinutes,
+      signupId: null,
+    });
+
+    const total = Math.floor((event.durationHours * 60) / event.slotMinutes);
+    for (let i = 0; i < total; i++) {
+      const blockStart = new Date(eventStart.getTime() + i * event.slotMinutes * 60000);
+      const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+      const signup = bySlot.get(i);
+      const who = signup ? `${signup.podcastName} — ${signup.hostName}` : "Open slot";
+
+      items.push({
+        kind: "Intro",
+        title: i === 0 ? `Welcome & introduction — ${host}` : `Intro to ${who}`,
+        notes: i === 0 ? "Open the event, then hand to the first show." : `${host} introduces the next show.`,
+        startAtUtc: blockStart.toISOString(),
+        durationMinutes: 0,
+        signupId: signup?.id ?? null,
+      });
+      items.push({
+        kind: "Segment",
+        title: who,
+        notes: signup
+          ? signup.showFormat === "prerecorded"
+            ? `PRE-RECORDED — roll the episode.${signup.introStyle === "virtual" ? " Live virtual intro first." : ""}`
+            : "Live from their own studio."
+          : "Nobody booked. Fill with sponsor reel or a house segment.",
+        startAtUtc: onAir.start.toISOString(),
+        durationMinutes: event.onAirMinutes,
+        signupId: signup?.id ?? null,
+      });
+      if (event.bufferMinutes > 0) {
+        items.push({
+          kind: "Handoff",
+          title: `Sponsor read & handoff`,
+          notes: `${sponsorMinutes}-minute sponsor read, then reset for the next show.`,
+          startAtUtc: onAir.end.toISOString(),
+          durationMinutes: event.bufferMinutes,
+          signupId: null,
+        });
+      }
+    }
+
+    res.json(await storage.replaceRunOfShow(eventId, items));
+  });
+
+  app.post("/api/admin/run-of-show", requireAdmin, async (req, res) => {
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const parsed = runItemInputSchema.safeParse(req.body?.item);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const existing = await storage.listRunOfShow(eventId);
+    res.status(201).json(await storage.createRunItem(eventId, parsed.data, existing.length));
+  });
+
+  app.patch("/api/admin/run-of-show/:id", requireAdmin, async (req, res) => {
+    const parsed = runItemInputSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const patch: any = { ...parsed.data };
+    if (typeof req.body?.sortIndex === "number") patch.sortIndex = req.body.sortIndex;
+    const row = await storage.updateRunItem(Number(req.params.id), patch);
+    if (!row) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    res.json(row);
+  });
+
+  app.delete("/api/admin/run-of-show/:id", requireAdmin, async (req, res) => {
+    await storage.deleteRunItem(Number(req.params.id));
     res.json({ ok: true });
   });
 
@@ -1003,6 +1213,9 @@ export function registerRoutes(app: Express): void {
       postEdits: body.postEdits ?? "",
       streamPlatform: body.streamPlatform ?? "",
       streamPlatformOther: body.streamPlatformOther ?? "",
+      guests: body.guests ?? "",
+      interviewQuestions: body.interviewQuestions ?? "",
+      promoNotes: body.promoNotes ?? "",
       notes: body.notes ?? "",
     };
 

@@ -21,6 +21,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi";
+import { RunOfShow } from "@/components/RunOfShow";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle } from "lucide-react";
 import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, AdminUserRow, SponsorInquiryRow, PublicSettings } from "@shared/schema";
@@ -1187,7 +1188,7 @@ export default function Admin() {
 
           {isMobile ? (
             <Tabs defaultValue="setup">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="setup" data-testid="tab-admin-setup">
                   Setup
                 </TabsTrigger>
@@ -1196,6 +1197,9 @@ export default function Admin() {
                 </TabsTrigger>
                 <TabsTrigger value="sponsors" data-testid="tab-admin-sponsors">
                   Sponsors
+                </TabsTrigger>
+                <TabsTrigger value="run" data-testid="tab-admin-run">
+                  Run
                 </TabsTrigger>
                 <TabsTrigger value="team" data-testid="tab-admin-team">
                   Team
@@ -1211,12 +1215,17 @@ export default function Admin() {
               <TabsContent value="sponsors" className="mt-6">
                 <SponsorsCard />
               </TabsContent>
+              <TabsContent value="run" className="mt-6">
+                <RunOfShow adminGet={adminGet} adminSend={adminSend} />
+              </TabsContent>
               <TabsContent value="team" className="mt-6">
                 <TeamCard />
               </TabsContent>
             </Tabs>
           ) : (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
+            <div className="flex flex-col gap-6">
+              <RunOfShow adminGet={adminGet} adminSend={adminSend} />
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
               <div className="flex flex-col gap-6">
                 <EventsManagementCard />
                 <EventSettingsCard />
@@ -1225,6 +1234,7 @@ export default function Admin() {
               </div>
               <div className="lg:sticky lg:top-6">
                 <SignupsCard />
+              </div>
               </div>
             </div>
           )}

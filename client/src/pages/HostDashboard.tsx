@@ -43,6 +43,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
+import { ShowMaterials } from "@/components/ShowMaterials";
 import { SocialTiles } from "@/components/SocialTiles";
 import { apiRequest, API_BASE, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, ProfileRow, SocialAccount } from "@shared/schema";
@@ -823,6 +824,8 @@ export default function HostDashboard() {
                 </div>
               </div>
             </section>
+
+            {profile && data.mySignups.length > 0 && <ShowMaterials profile={profile} />}
 
             <section className="mt-8">
               <Link href="/prepare" data-testid="link-prepare-guide">

@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -13,6 +13,9 @@ import type {
   SponsorRow,
   UpdateSponsor,
   AdminUserRow,
+  ShowAssetRow,
+  RunItemRow,
+  RunItemInput,
   SponsorInquiryRow,
   InsertSponsorInquiry,
 } from "../shared/schema.js";
@@ -170,6 +173,37 @@ async function ensureSchema() {
   `;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS show_assets (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'Other',
+      label TEXT NOT NULL DEFAULT '',
+      file_url TEXT NOT NULL DEFAULT '',
+      link_url TEXT NOT NULL DEFAULT '',
+      file_name TEXT NOT NULL DEFAULT '',
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS show_assets_email_idx ON show_assets (email)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS run_of_show (
+      id SERIAL PRIMARY KEY,
+      event_id INTEGER NOT NULL,
+      sort_index INTEGER NOT NULL DEFAULT 0,
+      kind TEXT NOT NULL DEFAULT 'Custom',
+      title TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      start_at_utc TEXT NOT NULL DEFAULT '',
+      duration_minutes INTEGER NOT NULL DEFAULT 0,
+      signup_id INTEGER,
+      created_at TEXT NOT NULL
+    );
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS run_of_show_event_idx ON run_of_show (event_id, sort_index)`;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS site_settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
@@ -215,6 +249,9 @@ async function ensureSchema() {
     await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS post_edits TEXT NOT NULL DEFAULT ''`);
     await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS stream_platform TEXT NOT NULL DEFAULT ''`);
     await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS stream_platform_other TEXT NOT NULL DEFAULT ''`);
+    await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS guests TEXT NOT NULL DEFAULT ''`);
+    await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS interview_questions TEXT NOT NULL DEFAULT ''`);
+    await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS promo_notes TEXT NOT NULL DEFAULT ''`);
   }
 
   // Migrate older databases created before these columns existed.
@@ -246,7 +283,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "podcaster_profiles", column: "stream_platform" };
+const SCHEMA_SENTINEL = { table: "podcaster_profiles", column: "promo_notes" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
@@ -324,6 +361,15 @@ export interface IStorage {
   createSponsorInquiry(data: InsertSponsorInquiry): Promise<SponsorInquiryRow>;
   listSponsorInquiries(): Promise<SponsorInquiryRow[]>;
   setSponsorInquiryHandled(id: number, handled: boolean): Promise<void>;
+  listAssetsByEmail(email: string): Promise<ShowAssetRow[]>;
+  listAllAssets(): Promise<ShowAssetRow[]>;
+  createAsset(a: Omit<ShowAssetRow, "id" | "createdAt">): Promise<ShowAssetRow>;
+  deleteAsset(id: number, email?: string): Promise<boolean>;
+  listRunOfShow(eventId: number): Promise<RunItemRow[]>;
+  replaceRunOfShow(eventId: number, items: RunItemInput[]): Promise<RunItemRow[]>;
+  createRunItem(eventId: number, item: RunItemInput, sortIndex: number): Promise<RunItemRow>;
+  updateRunItem(id: number, patch: Partial<RunItemInput> & { sortIndex?: number }): Promise<RunItemRow | undefined>;
+  deleteRunItem(id: number): Promise<void>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
 }
@@ -516,6 +562,70 @@ class DatabaseStorage implements IStorage {
       .orderBy(podcasterProfiles.createdAt);
   }
 
+  async listAssetsByEmail(email: string): Promise<ShowAssetRow[]> {
+    await ready();
+    return db.select().from(showAssets).where(eq(showAssets.email, email.trim().toLowerCase())).orderBy(asc(showAssets.id));
+  }
+
+  async listAllAssets(): Promise<ShowAssetRow[]> {
+    await ready();
+    return db.select().from(showAssets).orderBy(asc(showAssets.id));
+  }
+
+  async createAsset(a: Omit<ShowAssetRow, "id" | "createdAt">): Promise<ShowAssetRow> {
+    await ready();
+    const [row] = await db
+      .insert(showAssets)
+      .values({ ...a, email: a.email.trim().toLowerCase(), createdAt: new Date().toISOString() })
+      .returning();
+    return row;
+  }
+
+  /** `email` scopes the delete so a podcaster can only remove their own. */
+  async deleteAsset(id: number, email?: string): Promise<boolean> {
+    await ready();
+    const where = email ? and(eq(showAssets.id, id), eq(showAssets.email, email.trim().toLowerCase())) : eq(showAssets.id, id);
+    const rows = await db.delete(showAssets).where(where).returning({ id: showAssets.id });
+    return rows.length > 0;
+  }
+
+  async listRunOfShow(eventId: number): Promise<RunItemRow[]> {
+    await ready();
+    return db.select().from(runOfShow).where(eq(runOfShow.eventId, eventId)).orderBy(asc(runOfShow.sortIndex), asc(runOfShow.id));
+  }
+
+  /** Used by "regenerate" — wipes the plan and writes a fresh one. */
+  async replaceRunOfShow(eventId: number, items: RunItemInput[]): Promise<RunItemRow[]> {
+    await ready();
+    await db.delete(runOfShow).where(eq(runOfShow.eventId, eventId));
+    if (!items.length) return [];
+    const now = new Date().toISOString();
+    return db
+      .insert(runOfShow)
+      .values(items.map((it, i) => ({ ...it, signupId: it.signupId ?? null, eventId, sortIndex: i, createdAt: now })))
+      .returning();
+  }
+
+  async createRunItem(eventId: number, item: RunItemInput, sortIndex: number): Promise<RunItemRow> {
+    await ready();
+    const [row] = await db
+      .insert(runOfShow)
+      .values({ ...item, signupId: item.signupId ?? null, eventId, sortIndex, createdAt: new Date().toISOString() })
+      .returning();
+    return row;
+  }
+
+  async updateRunItem(id: number, patch: Partial<RunItemInput> & { sortIndex?: number }): Promise<RunItemRow | undefined> {
+    await ready();
+    const [row] = await db.update(runOfShow).set(patch).where(eq(runOfShow.id, id)).returning();
+    return row;
+  }
+
+  async deleteRunItem(id: number): Promise<void> {
+    await ready();
+    await db.delete(runOfShow).where(eq(runOfShow.id, id));
+  }
+
   async getSetting(key: string): Promise<string | null> {
     await ready();
     const [row] = await db.select().from(siteSettings).where(eq(siteSettings.key, key));
@@ -649,6 +759,9 @@ class DatabaseStorage implements IStorage {
         postEdits: profile.postEdits,
         streamPlatform: profile.streamPlatform,
         streamPlatformOther: profile.streamPlatformOther,
+        guests: profile.guests,
+        interviewQuestions: profile.interviewQuestions,
+        promoNotes: profile.promoNotes,
         notes: profile.notes,
         photoUrl: profile.photoUrl,
       })
@@ -708,6 +821,9 @@ class DatabaseStorage implements IStorage {
         postEdits: patch.postEdits ?? "",
         streamPlatform: patch.streamPlatform ?? "",
         streamPlatformOther: patch.streamPlatformOther ?? "",
+        guests: patch.guests ?? "",
+        interviewQuestions: patch.interviewQuestions ?? "",
+        promoNotes: patch.promoNotes ?? "",
         notes: patch.notes ?? "",
         photoUrl: patch.photoUrl ?? "",
         createdAt: now,
