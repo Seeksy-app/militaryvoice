@@ -490,6 +490,11 @@ export const runOfShow = pgTable("run_of_show", {
   startAtUtc: text("start_at_utc").notNull().default(""),
   durationMinutes: integer("duration_minutes").notNull().default(0),
   signupId: integer("signup_id"),
+  // Stable identity for a generated row ("segment-14"), so a rebuild can find
+  // and refresh it. Empty for rows an admin added by hand.
+  sourceKey: text("source_key").notNull().default(""),
+  // Set once an admin changes the wording; rebuild then leaves those fields be.
+  edited: boolean("edited").notNull().default(false),
   createdAt: text("created_at").notNull(),
 });
 export type RunItemRow = typeof runOfShow.$inferSelect;
@@ -503,3 +508,29 @@ export const runItemInputSchema = z.object({
   signupId: z.number().int().positive().nullable().optional(),
 });
 export type RunItemInput = z.infer<typeof runItemInputSchema>;
+export type GeneratedRunItem = RunItemInput & { sourceKey: string };
+
+// ---------------------------------------------------------------------------
+// Interest in the platform itself — "register my event" and beta sign-ups.
+// ---------------------------------------------------------------------------
+export const platformInterest = pgTable("platform_interest", {
+  id: serial("id").primaryKey(),
+  intent: text("intent").notNull().default("beta"), // register | beta
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  organization: text("organization").notNull().default(""),
+  eventTiming: text("event_timing").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  handled: boolean("handled").notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+export type PlatformInterestRow = typeof platformInterest.$inferSelect;
+
+export const platformInterestSchema = z.object({
+  intent: z.enum(["register", "beta"]),
+  name: z.string().trim().min(1, "Your name is required").max(120),
+  email: z.string().trim().email("Enter a valid email"),
+  organization: z.string().trim().max(160),
+  eventTiming: z.string().trim().max(60),
+  notes: z.string().trim().max(2000),
+});

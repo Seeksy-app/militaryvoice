@@ -34,6 +34,8 @@ import {
   Radio,
   Download,
   PlayCircle,
+  Lock,
+  RotateCcw,
 } from "lucide-react";
 
 interface Props {
@@ -117,6 +119,16 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
     onError: (e: Error) => toast({ title: "Couldn't save", description: e.message, variant: "destructive" }),
   });
 
+  const resetItem = useMutation({
+    mutationFn: async (id: number) => adminSend("PATCH", `/api/admin/run-of-show/${id}`, { resetToGenerated: true }),
+    onSuccess: () => {
+      refresh();
+      setEditing(null);
+      setDraft({});
+      toast({ title: "Unpinned", description: "The next rebuild will rewrite this row." });
+    },
+  });
+
   const removeItem = useMutation({
     mutationFn: async (id: number) => adminSend("DELETE", `/api/admin/run-of-show/${id}`),
     onSuccess: () => {
@@ -182,12 +194,12 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Rebuild the run of show?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This replaces every row with a fresh plan built from the current schedule and bookings. Any edits or
-                    rows you've added by hand will be lost.
+                    Times, lengths and podcaster names are refreshed from the current schedule and bookings. Rows you've
+                    reworded keep your wording, and rows you added by hand are left alone.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Keep what's there</AlertDialogCancel>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction onClick={() => generate.mutate()}>Rebuild</AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
@@ -291,6 +303,18 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                       >
                         <X className="h-3.5 w-3.5" /> Cancel
                       </Button>
+                      {it.edited && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="ml-auto gap-1.5 text-muted-foreground"
+                          title="Let the next rebuild rewrite this row from the schedule"
+                          onClick={() => resetItem.mutate(it.id)}
+                          data-testid={`button-run-reset-${it.id}`}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" /> Unpin
+                        </Button>
+                      )}
                     </div>
                   </div>
                 );
@@ -310,7 +334,14 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                     </div>
                   </div>
 
-                  <Badge className={`shrink-0 font-normal hover:opacity-100 ${KIND_STYLE[it.kind] ?? KIND_STYLE.Custom}`}>{it.kind}</Badge>
+                  <div className="flex shrink-0 flex-col items-start gap-1">
+                    <Badge className={`font-normal hover:opacity-100 ${KIND_STYLE[it.kind] ?? KIND_STYLE.Custom}`}>{it.kind}</Badge>
+                    {it.edited && (
+                      <Badge variant="outline" className="gap-1 border-primary/40 text-[10px] font-normal text-primary" title="Rebuild won't overwrite this row's wording">
+                        <Lock className="h-2.5 w-2.5" /> Edited
+                      </Badge>
+                    )}
+                  </div>
 
                   <div className="min-w-[200px] flex-1">
                     <div className="text-sm font-semibold text-card-foreground">{it.title}</div>

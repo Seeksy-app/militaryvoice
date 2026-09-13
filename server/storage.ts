@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -16,6 +16,8 @@ import type {
   ShowAssetRow,
   RunItemRow,
   RunItemInput,
+  GeneratedRunItem,
+  PlatformInterestRow,
   SponsorInquiryRow,
   InsertSponsorInquiry,
 } from "../shared/schema.js";
@@ -202,6 +204,22 @@ async function ensureSchema() {
     );
   `;
   await sql`CREATE INDEX IF NOT EXISTS run_of_show_event_idx ON run_of_show (event_id, sort_index)`;
+  await sql`ALTER TABLE run_of_show ADD COLUMN IF NOT EXISTS source_key TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE run_of_show ADD COLUMN IF NOT EXISTS edited BOOLEAN NOT NULL DEFAULT false`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS platform_interest (
+      id SERIAL PRIMARY KEY,
+      intent TEXT NOT NULL DEFAULT 'beta',
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      organization TEXT NOT NULL DEFAULT '',
+      event_timing TEXT NOT NULL DEFAULT '',
+      notes TEXT NOT NULL DEFAULT '',
+      handled BOOLEAN NOT NULL DEFAULT false,
+      created_at TEXT NOT NULL
+    );
+  `;
 
   await sql`
     CREATE TABLE IF NOT EXISTS site_settings (
@@ -366,10 +384,12 @@ export interface IStorage {
   createAsset(a: Omit<ShowAssetRow, "id" | "createdAt">): Promise<ShowAssetRow>;
   deleteAsset(id: number, email?: string): Promise<boolean>;
   listRunOfShow(eventId: number): Promise<RunItemRow[]>;
-  replaceRunOfShow(eventId: number, items: RunItemInput[]): Promise<RunItemRow[]>;
+  mergeRunOfShow(eventId: number, generated: GeneratedRunItem[]): Promise<RunItemRow[]>;
   createRunItem(eventId: number, item: RunItemInput, sortIndex: number): Promise<RunItemRow>;
   updateRunItem(id: number, patch: Partial<RunItemInput> & { sortIndex?: number }): Promise<RunItemRow | undefined>;
   deleteRunItem(id: number): Promise<void>;
+  createPlatformInterest(v: Omit<PlatformInterestRow, "id" | "handled" | "createdAt">): Promise<PlatformInterestRow>;
+  listPlatformInterest(): Promise<PlatformInterestRow[]>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
 }
@@ -594,16 +614,73 @@ class DatabaseStorage implements IStorage {
     return db.select().from(runOfShow).where(eq(runOfShow.eventId, eventId)).orderBy(asc(runOfShow.sortIndex), asc(runOfShow.id));
   }
 
-  /** Used by "regenerate" — wipes the plan and writes a fresh one. */
-  async replaceRunOfShow(eventId: number, items: RunItemInput[]): Promise<RunItemRow[]> {
+  /**
+   * Fold a freshly generated plan into whatever is already there.
+   *
+   *  - a generated row that already exists keeps its wording if an admin edited
+   *    it, and always takes the new time, length and podcaster
+   *  - a generated row that's new gets inserted
+   *  - a generated row that no longer applies is dropped, unless it was edited
+   *  - rows an admin added by hand are never touched
+   *
+   * Everything is then re-sorted by start time so the list still reads in order.
+   */
+  async mergeRunOfShow(eventId: number, generated: GeneratedRunItem[]): Promise<RunItemRow[]> {
     await ready();
-    await db.delete(runOfShow).where(eq(runOfShow.eventId, eventId));
-    if (!items.length) return [];
+    const existing = await db.select().from(runOfShow).where(eq(runOfShow.eventId, eventId));
+    const byKey = new Map(existing.filter((r) => r.sourceKey).map((r) => [r.sourceKey, r]));
     const now = new Date().toISOString();
-    return db
-      .insert(runOfShow)
-      .values(items.map((it, i) => ({ ...it, signupId: it.signupId ?? null, eventId, sortIndex: i, createdAt: now })))
-      .returning();
+    const wanted = new Set(generated.map((g) => g.sourceKey));
+
+    for (const g of generated) {
+      const prev = byKey.get(g.sourceKey);
+      if (!prev) {
+        await db.insert(runOfShow).values({
+          eventId,
+          sortIndex: 0,
+          kind: g.kind,
+          title: g.title,
+          notes: g.notes,
+          startAtUtc: g.startAtUtc,
+          durationMinutes: g.durationMinutes,
+          signupId: g.signupId ?? null,
+          sourceKey: g.sourceKey,
+          edited: false,
+          createdAt: now,
+        });
+        continue;
+      }
+      // Timing and the linked podcaster always follow the schedule; the wording
+      // only refreshes when nobody has rewritten it.
+      const patch: Record<string, unknown> = {
+        startAtUtc: g.startAtUtc,
+        durationMinutes: prev.edited ? prev.durationMinutes : g.durationMinutes,
+        signupId: g.signupId ?? null,
+      };
+      if (!prev.edited) {
+        patch.kind = g.kind;
+        patch.title = g.title;
+        patch.notes = g.notes;
+      }
+      await db.update(runOfShow).set(patch).where(eq(runOfShow.id, prev.id));
+    }
+
+    const orphans = existing.filter((r) => r.sourceKey && !wanted.has(r.sourceKey) && !r.edited);
+    for (const o of orphans) await db.delete(runOfShow).where(eq(runOfShow.id, o.id));
+
+    // Re-sort: timed rows in chronological order, untimed ones after.
+    const all = await db.select().from(runOfShow).where(eq(runOfShow.eventId, eventId));
+    all.sort((a, b) => {
+      if (!a.startAtUtc && !b.startAtUtc) return a.sortIndex - b.sortIndex;
+      if (!a.startAtUtc) return 1;
+      if (!b.startAtUtc) return -1;
+      const d = a.startAtUtc.localeCompare(b.startAtUtc);
+      return d !== 0 ? d : a.sortIndex - b.sortIndex;
+    });
+    for (let i = 0; i < all.length; i++) {
+      if (all[i].sortIndex !== i) await db.update(runOfShow).set({ sortIndex: i }).where(eq(runOfShow.id, all[i].id));
+    }
+    return this.listRunOfShow(eventId);
   }
 
   async createRunItem(eventId: number, item: RunItemInput, sortIndex: number): Promise<RunItemRow> {
@@ -624,6 +701,20 @@ class DatabaseStorage implements IStorage {
   async deleteRunItem(id: number): Promise<void> {
     await ready();
     await db.delete(runOfShow).where(eq(runOfShow.id, id));
+  }
+
+  async createPlatformInterest(v: Omit<PlatformInterestRow, "id" | "handled" | "createdAt">): Promise<PlatformInterestRow> {
+    await ready();
+    const [row] = await db
+      .insert(platformInterest)
+      .values({ ...v, email: v.email.trim().toLowerCase(), handled: false, createdAt: new Date().toISOString() })
+      .returning();
+    return row;
+  }
+
+  async listPlatformInterest(): Promise<PlatformInterestRow[]> {
+    await ready();
+    return db.select().from(platformInterest).orderBy(desc(platformInterest.id));
   }
 
   async getSetting(key: string): Promise<string | null> {

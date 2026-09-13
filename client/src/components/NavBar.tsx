@@ -23,6 +23,7 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/schedule", label: "Schedule" },
   { href: "/agenda", label: "Agenda" },
   { href: "/faq", label: "FAQ" },
+  { href: "/platform", label: "What is MilitaryVoice.ai?" },
 ];
 
 export function NavBar() {
@@ -39,17 +40,19 @@ export function NavBar() {
   const signedIn = me !== null && me !== undefined;
 
   const linkCls = (active: boolean) =>
-    `rounded-md px-3 py-2 text-sm font-medium transition-colors hover-elevate ${active ? "text-primary" : "text-muted-foreground"}`;
+    `whitespace-nowrap rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors hover-elevate ${
+      active ? "text-primary" : "text-muted-foreground"
+    }`;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6">
         <Link href="/" className="shrink-0" data-testid="link-home-logo">
           <LogoLockup />
         </Link>
 
         {/* Desktop links */}
-        <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
+        <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Primary">
           {LINKS.map((link) => {
             const active = !link.anchor && (location === link.href || (location.startsWith("/event/") && location.endsWith(link.href)));
             return link.anchor ? (
@@ -93,7 +96,7 @@ export function NavBar() {
           {/* Mobile menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu" data-testid="button-nav-menu">
+              <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open menu" data-testid="button-nav-menu">
                 <Menu className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>

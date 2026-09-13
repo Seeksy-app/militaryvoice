@@ -257,3 +257,39 @@ export async function sendSponsorInquiryEmail(input: {
   );
   return results.some(Boolean);
 }
+
+export interface PlatformInterestInput {
+  intent: "register" | "beta";
+  name: string;
+  email: string;
+  organization: string;
+  eventTiming: string;
+  notes: string;
+}
+
+/** Internal heads-up when someone asks about the platform. Never throws. */
+export async function sendPlatformInterestEmail(v: PlatformInterestInput): Promise<boolean> {
+  const heading = v.intent === "register" ? "Event registration" : "Beta list sign-up";
+  const rows: [string, string][] = [
+    ["Name", v.name],
+    ["Email", v.email],
+    ["Organization", v.organization || "—"],
+    ["Next event", v.eventTiming || "—"],
+    ["Notes", v.notes || "—"],
+  ];
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
+    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoice.ai platform</p>
+    <h1 style="margin:0 0 20px;color:#111827;font-size:20px;font-weight:700;">${escapeHtml(heading)}</h1>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+      ${rows
+        .map(
+          ([k, val]) =>
+            `<tr><td style="padding:6px 12px 6px 0;color:#6b7280;vertical-align:top;white-space:nowrap;">${k}</td><td style="padding:6px 0;color:#1f2937;">${escapeHtml(val)}</td></tr>`,
+        )
+        .join("")}
+    </table>
+  </div>`;
+  const text = `${heading}\n\n` + rows.map(([k, val]) => `${k}: ${val}`).join("\n") + "\n";
+  return sendRawEmail({ to: "hello@militaryvoice.ai", subject: `${heading}: ${v.name}`, html, text });
+}

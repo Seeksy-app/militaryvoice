@@ -11,8 +11,9 @@ import {
   updateEventSchema,
   insertProfileSchema,
   runItemInputSchema,
+  platformInterestSchema,
   ASSET_KINDS,
-  type RunItemInput,
+  type GeneratedRunItem,
   type ShowAssetRow,
   insertSponsorInquirySchema,
   type PublicEvent,
@@ -24,7 +25,7 @@ import {
   updateSponsorSchema,
 } from "../shared/schema.js";
 import { fromError } from "zod-validation-error";
-import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, buildCalendarLinks } from "./email.js";
+import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   isUploadPostConfigured,
@@ -593,8 +594,8 @@ export function registerRoutes(app: Express): void {
     res.json(await storage.listRunOfShow(eventId));
   });
 
-  /** Build the default plan from the schedule: pre-show, then each slot with a
-   *  sponsor break and an intro ahead of it. Overwrites whatever is there. */
+  /** Build the plan from the schedule: pre-show, then each slot with a sponsor
+   *  break and an intro ahead of it. Merged in, so hand edits survive. */
   app.post("/api/admin/run-of-show/generate", requireAdmin, async (req, res) => {
     const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
     const event = await storage.getEventById(eventId);
@@ -609,9 +610,10 @@ export function registerRoutes(app: Express): void {
     const signups = (await storage.listSignups(eventId)).filter((s) => s.status !== "cancelled");
     const bySlot = new Map(signups.map((s) => [s.slotIndex, s]));
     const eventStart = new Date(event.startAtUtc);
-    const items: RunItemInput[] = [];
+    const items: GeneratedRunItem[] = [];
 
     items.push({
+      sourceKey: "preshow",
       kind: "Pre-show",
       title: "Stream live — pre-show",
       notes: "Go live early. Bumper loop, holding slate, sound check.",
@@ -620,6 +622,7 @@ export function registerRoutes(app: Express): void {
       signupId: null,
     });
     items.push({
+      sourceKey: "preshow-sponsor",
       kind: "Sponsor",
       title: "Sponsor reel & event info",
       notes: "Run sponsor spots and the welcome card until the top of the hour.",
@@ -636,6 +639,7 @@ export function registerRoutes(app: Express): void {
       const who = signup ? `${signup.podcastName} — ${signup.hostName}` : "Open slot";
 
       items.push({
+        sourceKey: `intro-${i}`,
         kind: "Intro",
         title: i === 0 ? `Welcome & introduction — ${host}` : `Intro to ${who}`,
         notes: i === 0 ? "Open the event, then hand to the first show." : `${host} introduces the next show.`,
@@ -644,6 +648,7 @@ export function registerRoutes(app: Express): void {
         signupId: signup?.id ?? null,
       });
       items.push({
+        sourceKey: `segment-${i}`,
         kind: "Segment",
         title: who,
         notes: signup
@@ -657,6 +662,7 @@ export function registerRoutes(app: Express): void {
       });
       if (event.bufferMinutes > 0) {
         items.push({
+          sourceKey: `handoff-${i}`,
           kind: "Handoff",
           title: `Sponsor read & handoff`,
           notes: `${sponsorMinutes}-minute sponsor read, then reset for the next show.`,
@@ -667,7 +673,7 @@ export function registerRoutes(app: Express): void {
       }
     }
 
-    res.json(await storage.replaceRunOfShow(eventId, items));
+    res.json(await storage.mergeRunOfShow(eventId, items));
   });
 
   app.post("/api/admin/run-of-show", requireAdmin, async (req, res) => {
@@ -689,6 +695,9 @@ export function registerRoutes(app: Express): void {
     }
     const patch: any = { ...parsed.data };
     if (typeof req.body?.sortIndex === "number") patch.sortIndex = req.body.sortIndex;
+    // Rewording a row pins it; `resetToGenerated` hands it back to the generator.
+    if (req.body?.resetToGenerated === true) patch.edited = false;
+    else if (["kind", "title", "notes", "durationMinutes"].some((k) => k in parsed.data)) patch.edited = true;
     const row = await storage.updateRunItem(Number(req.params.id), patch);
     if (!row) {
       res.status(404).json({ message: "Not found" });
@@ -700,6 +709,30 @@ export function registerRoutes(app: Express): void {
   app.delete("/api/admin/run-of-show/:id", requireAdmin, async (req, res) => {
     await storage.deleteRunItem(Number(req.params.id));
     res.json({ ok: true });
+  });
+
+  // ---- Public: interest in the platform itself --------------------------------
+  app.post("/api/platform-interest", async (req, res) => {
+    const parsed = platformInterestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const row = await storage.createPlatformInterest(parsed.data);
+    res.status(201).json({ ok: true, id: row.id });
+
+    // Tell the team, but never let a flaky mailer fail the submission.
+    (async () => {
+      try {
+        await sendPlatformInterestEmail(parsed.data);
+      } catch (err) {
+        console.error("Platform interest notification failed:", err);
+      }
+    })();
+  });
+
+  app.get("/api/admin/platform-interest", requireAdmin, async (_req, res) => {
+    res.json(await storage.listPlatformInterest());
   });
 
   // ---- Public: site settings ----------------------------------------------------
