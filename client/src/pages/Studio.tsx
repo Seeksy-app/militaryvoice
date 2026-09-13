@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useStudioRoom, type RoomPeer } from "@/hooks/use-studio-room";
 import type { StudioParticipantRow } from "@shared/schema";
 import { Mic, MicOff, Video, VideoOff, Radio, Users, CheckCircle2, AlertTriangle, LogOut } from "lucide-react";
 
@@ -36,6 +37,45 @@ function clientKey(): string {
   }
 }
 
+/** Attaches a subscribed LiveKit track to a real media element. */
+function PeerTile({ peer }: { peer: RoomPeer }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el || !peer.videoTrack) return;
+    peer.videoTrack.attach(el);
+    return () => {
+      peer.videoTrack?.detach(el);
+    };
+  }, [peer.videoTrack]);
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el || !peer.audioTrack) return;
+    peer.audioTrack.attach(el);
+    return () => {
+      peer.audioTrack?.detach(el);
+    };
+  }, [peer.audioTrack]);
+
+  return (
+    <div className="relative aspect-video overflow-hidden rounded-xl border border-white/15 bg-black">
+      <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
+      <audio ref={audioRef} autoPlay />
+      {!peer.videoTrack && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <VideoOff className="h-5 w-5 text-white/30" />
+        </div>
+      )}
+      <span className="absolute inset-x-1.5 bottom-1.5 truncate rounded bg-black/60 px-1.5 py-0.5 text-[11px] text-white">
+        {peer.name}
+      </span>
+    </div>
+  );
+}
+
 export default function Studio({ slug }: { slug?: string }) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -49,6 +89,8 @@ export default function Studio({ slug }: { slug?: string }) {
   const [micOn, setMicOn] = useState(false);
   const [level, setLevel] = useState(0);
   const [mediaError, setMediaError] = useState<string | null>(null);
+  // Kept in state as well as a ref so the page re-renders when the camera comes up.
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   const queryClient = useQueryClient();
   const stateKey = ["/api/studio/state", slug ?? "featured", key];
@@ -77,6 +119,7 @@ export default function Studio({ slug }: { slug?: string }) {
     try {
       const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       streamRef.current = s;
+      setStream(s);
       if (videoRef.current) videoRef.current.srcObject = s;
       setCamOn(s.getVideoTracks().some((t) => t.enabled));
       setMicOn(s.getAudioTracks().some((t) => t.enabled));
@@ -154,6 +197,16 @@ export default function Studio({ slug }: { slug?: string }) {
     else setMicOn(next);
   }
 
+  // Real audio and video, when the event has a media layer configured. Without
+  // it the page still works as a green room; it just doesn't carry sound.
+  const { status: roomStatus, peers } = useStudioRoom({
+    enabled: joined,
+    clientKey: key,
+    slug,
+    stream,
+  });
+  const onAirPeers = peers.filter((p) => p.state === "On stage");
+
   const onStage = state?.me?.state === "On stage";
   const live = state?.studio.status === "Live";
 
@@ -225,7 +278,7 @@ export default function Studio({ slug }: { slug?: string }) {
                 }`}
               >
                 <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
-                {!streamRef.current && (
+                {!stream && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
                     <VideoOff className="h-8 w-8 text-white/40" />
                     <p className="text-sm text-white/70">Your camera isn't on yet.</p>
@@ -254,7 +307,7 @@ export default function Studio({ slug }: { slug?: string }) {
                   size="sm"
                   className="gap-1.5 rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
                   onClick={() => toggleTrack("video")}
-                  disabled={!streamRef.current}
+                  disabled={!stream}
                   data-testid="button-studio-toggle-cam"
                 >
                   {camOn ? <Video className="h-3.5 w-3.5" /> : <VideoOff className="h-3.5 w-3.5 text-[#ED1C24]" />}
@@ -265,14 +318,14 @@ export default function Studio({ slug }: { slug?: string }) {
                   size="sm"
                   className="gap-1.5 rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
                   onClick={() => toggleTrack("audio")}
-                  disabled={!streamRef.current}
+                  disabled={!stream}
                   data-testid="button-studio-toggle-mic"
                 >
                   {micOn ? <Mic className="h-3.5 w-3.5" /> : <MicOff className="h-3.5 w-3.5 text-[#ED1C24]" />}
                   {micOn ? "Mic on" : "Mic off"}
                 </Button>
 
-                {streamRef.current && (
+                {stream && (
                   <div className="ml-1 flex items-center gap-1" aria-label="Microphone level">
                     {Array.from({ length: 10 }).map((_, i) => (
                       <span
@@ -293,6 +346,7 @@ export default function Studio({ slug }: { slug?: string }) {
                     await apiRequest("POST", "/api/studio/leave", { clientKey: key, slug }).catch(() => {});
                     streamRef.current?.getTracks().forEach((t) => t.stop());
                     streamRef.current = null;
+                    setStream(null);
                     setJoined(false);
                   }}
                   data-testid="button-studio-leave"
@@ -319,6 +373,30 @@ export default function Studio({ slug }: { slug?: string }) {
                     : "Stay here with your camera on. The producer will bring you up when it's your turn."}
                 </p>
               </div>
+
+              {onAirPeers.length > 0 && (
+                <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-5">
+                  <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/60">
+                    Also on stage
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {onAirPeers.map((p) => (
+                      <PeerTile key={p.identity} peer={p} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {roomStatus === "unavailable" && (
+                <p className="rounded-2xl border border-white/15 bg-white/[0.06] p-4 text-sm text-white/60">
+                  Sound and video for this event aren't switched on yet. Your camera check still works.
+                </p>
+              )}
+              {roomStatus === "error" && (
+                <p className="rounded-2xl border border-[#ED1C24]/50 bg-[#ED1C24]/10 p-4 text-sm text-white/85">
+                  We couldn't connect you to the live room. Refresh, and tell the producer if it happens again.
+                </p>
+              )}
 
               <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-5">
                 <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/60">Your check</div>

@@ -29,6 +29,13 @@ import {
   updateSponsorSchema,
 } from "../shared/schema.js";
 import { fromError } from "zod-validation-error";
+import {
+  isLiveKitConfigured,
+  publicLiveKitUrl,
+  roomName,
+  studioToken,
+  syncParticipantState,
+} from "./livekit.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
@@ -815,6 +822,42 @@ export function registerRoutes(app: Express): void {
     res.json(await speakerState(found.event, found.studio, parsed.data.clientKey));
   });
 
+  // A LiveKit token for one speaker. Everyone who has joined publishes, green
+  // room included, so the producer can check their camera and mic before they
+  // are on air; what actually reaches the broadcast is decided by the composite.
+  app.post("/api/studio/token", async (req, res) => {
+    noStore(res);
+    if (!isLiveKitConfigured()) {
+      res.json({ configured: false });
+      return;
+    }
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined);
+    const key = typeof req.body?.clientKey === "string" ? req.body.clientKey : "";
+    if (!found || !key) {
+      res.status(404).json({ message: "No event" });
+      return;
+    }
+    const me = (await storage.listStudioParticipants(found.studio.id)).find((p) => p.clientKey === key);
+    if (!me) {
+      res.status(404).json({ message: "Join first" });
+      return;
+    }
+    const room = roomName(found.studio.id);
+    res.json({
+      configured: true,
+      url: publicLiveKitUrl(),
+      room,
+      identity: `p-${me.id}`,
+      token: await studioToken({
+        room,
+        identity: `p-${me.id}`,
+        name: me.displayName || "Speaker",
+        canPublish: true,
+        attributes: { state: me.state, participantId: String(me.id) },
+      }),
+    });
+  });
+
   app.post("/api/studio/leave", async (req, res) => {
     const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined);
     const key = typeof req.body?.clientKey === "string" ? req.body.clientKey : "";
@@ -834,6 +877,31 @@ export function registerRoutes(app: Express): void {
     res.json({
       studio,
       participants: participants.map((p) => ({ ...p, present: withPresence(p) })),
+    });
+  });
+
+  // The producer watches but never publishes, and holds roomAdmin so they can
+  // move people around from the console.
+  app.post("/api/admin/studio/token", requireAdmin, async (req, res) => {
+    noStore(res);
+    if (!isLiveKitConfigured()) {
+      res.json({ configured: false });
+      return;
+    }
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const studio = await storage.getOrCreateStudio(eventId);
+    const room = roomName(studio.id);
+    res.json({
+      configured: true,
+      url: publicLiveKitUrl(),
+      room,
+      token: await studioToken({
+        room,
+        identity: `producer-${getAdminEmail(req) || "console"}`,
+        name: "Control room",
+        canPublish: false,
+        admin: true,
+      }),
     });
   });
 
@@ -871,6 +939,7 @@ export function registerRoutes(app: Express): void {
       res.status(404).json({ message: "Not found" });
       return;
     }
+    await syncParticipantState(roomName(row.studioId), `p-${row.id}`, state);
     res.json(row);
   });
 

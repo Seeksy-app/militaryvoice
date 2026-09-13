@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useProducerRoom, type ProducerFeed } from "@/hooks/use-producer-room";
 import { STUDIO_STATUSES, type StudioRow, type StudioParticipantRow, type RunItemRow } from "@shared/schema";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
 import {
@@ -48,6 +49,33 @@ interface StudioPayload {
   participants: Participant[];
 }
 
+
+/** Live camera thumbnail for one participant, or their initials if they
+ *  haven't published yet. Muted: the control room monitors on the stage feed,
+ *  not by playing every green-room mic at once. */
+function FeedThumb({ feed, initials }: { feed?: ProducerFeed; initials: string }) {
+  const ref = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !feed?.video) return;
+    feed.video.attach(el);
+    return () => {
+      feed.video?.detach(el);
+    };
+  }, [feed?.video]);
+
+  return (
+    <div className="relative h-11 w-[74px] shrink-0 overflow-hidden rounded-lg bg-[#053877]">
+      {feed?.video ? (
+        <video ref={ref} autoPlay playsInline muted className="h-full w-full object-cover" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white">{initials}</div>
+      )}
+    </div>
+  );
+}
+
 export function StudioConsole({ adminGet, adminSend }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -64,6 +92,9 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
     queryKey: ["/api/admin/run-of-show"],
     queryFn: () => adminGet<RunItemRow[]>("/api/admin/run-of-show"),
   });
+
+  // Live pictures for the green room, when the event has a media layer.
+  const { status: roomStatus, feeds } = useProducerRoom({ enabled: true, adminSend });
 
   const studio = data?.studio;
   const present = (data?.participants ?? []).filter((p) => p.present);
@@ -122,9 +153,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
         }`}
         data-testid={`studio-participant-${p.id}`}
       >
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#053877] text-sm font-bold text-white">
-          {(p.displayName || "?").slice(0, 2).toUpperCase()}
-        </div>
+        <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={(p.displayName || "?").slice(0, 2).toUpperCase()} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">{p.displayName || "Unnamed"}</div>
           <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
@@ -198,6 +227,24 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
               >
                 {joinUrl.replace(/^https?:\/\//, "")} <Copy className="h-3 w-3" />
               </button>
+              <span className="ml-2 inline-flex items-center gap-1.5 text-xs">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    roomStatus === "connected"
+                      ? "bg-emerald-500"
+                      : roomStatus === "error"
+                        ? "bg-destructive"
+                        : "bg-muted-foreground/40"
+                  }`}
+                />
+                {roomStatus === "connected"
+                  ? "Camera and sound connected"
+                  : roomStatus === "connecting"
+                    ? "Connecting to the room…"
+                    : roomStatus === "error"
+                      ? "Couldn't reach the media room"
+                      : "Media layer off"}
+              </span>
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
