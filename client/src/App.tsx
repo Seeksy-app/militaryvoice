@@ -14,6 +14,7 @@ import Admin from "@/pages/Admin";
 import HostDashboard from "@/pages/HostDashboard";
 import Landing from "@/pages/Landing";
 import Faq from "@/pages/Faq";
+import Prepare from "@/pages/Prepare";
 
 /**
  * Client-side navigation keeps the old scroll position by default. Every
@@ -59,6 +60,7 @@ function AppRouter() {
       <Route path="/schedule">{() => <Home />}</Route>
       <Route path="/agenda">{() => <Agenda />}</Route>
       <Route path="/faq">{() => <Faq />}</Route>
+      <Route path="/prepare">{() => <Prepare />}</Route>
       <Route path="/admin">{() => <Admin />}</Route>
       <Route path="/host/dashboard">{() => <HostDashboard />}</Route>
       <Route component={NotFound} />

@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiUpload, apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { SocialTiles } from "@/components/SocialTiles";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
-import { insertProfileSchema, SERVICE_BRANCHES, SERVICE_STATUSES, type ProfileRow, type SocialAccount } from "@shared/schema";
+import { insertProfileSchema, SERVICE_BRANCHES, SERVICE_STATUSES, RECORDING_MODES, POST_EDIT_ANSWERS, STREAM_PLATFORMS, type ProfileRow, type SocialAccount } from "@shared/schema";
 import { PhotoCropDialog } from "@/components/PhotoCropDialog";
 import { formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
 import {
@@ -201,6 +201,10 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
       introStyle: (profile?.introStyle as "virtual" | "straight") ?? "virtual",
       branch: profile?.branch ?? "",
       serviceStatus: profile?.serviceStatus ?? "",
+      recordingMode: profile?.recordingMode ?? "",
+      postEdits: profile?.postEdits ?? "",
+      streamPlatform: profile?.streamPlatform ?? "",
+      streamPlatformOther: profile?.streamPlatformOther ?? "",
       notes: profile?.notes ?? "",
     },
   });
@@ -283,6 +287,9 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
   const watchFormat = form.watch("showFormat");
   const isPrerecorded = watchFormat === "prerecorded";
   const watchIntro = form.watch("introStyle");
+  const watchRecordingMode = form.watch("recordingMode");
+  const watchPlatform = form.watch("streamPlatform");
+  const streams = watchRecordingMode === "Live stream" || watchRecordingMode === "Both";
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
@@ -310,6 +317,10 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
       formData.append("introStyle", values.introStyle);
       formData.append("branch", values.branch ?? "");
       formData.append("serviceStatus", values.serviceStatus ?? "");
+      formData.append("recordingMode", values.recordingMode ?? "");
+      formData.append("postEdits", values.postEdits ?? "");
+      formData.append("streamPlatform", values.streamPlatform ?? "");
+      formData.append("streamPlatformOther", values.streamPlatformOther ?? "");
       formData.append("notes", values.notes ?? "");
       if (photoFile) formData.append("photo", photoFile);
       const res = await apiUpload("PUT", "/api/host/profile", formData);
@@ -700,6 +711,101 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                   : "Helps us plan transitions and line up support. You can change any of this later."
               }
             >
+              <div className="flex flex-col gap-4 rounded-xl border border-border bg-muted/20 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your usual setup</p>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="recordingMode"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Do you record and edit, or live stream?</FormLabel>
+                        <Select value={field.value || undefined} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-recording-mode">
+                              <SelectValue placeholder="Select one" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {RECORDING_MODES.map((o) => (
+                              <SelectItem key={o} value={o}>
+                                {o}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {streams && (
+                    <FormField
+                      control={form.control}
+                      name="postEdits"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Do you edit after the stream?</FormLabel>
+                          <Select value={field.value || undefined} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-post-edits">
+                                <SelectValue placeholder="Select one" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {POST_EDIT_ANSWERS.map((o) => (
+                                <SelectItem key={o} value={o}>
+                                  {o}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  <FormField
+                    control={form.control}
+                    name="streamPlatform"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>What do you use?</FormLabel>
+                        <Select value={field.value || undefined} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-stream-platform">
+                              <SelectValue placeholder="Select a platform" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {STREAM_PLATFORMS.map((o) => (
+                              <SelectItem key={o} value={o}>
+                                {o}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  {watchPlatform === "Other" && (
+                    <FormField
+                      control={form.control}
+                      name="streamPlatformOther"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Which one?</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Tell us what you use" {...field} data-testid="input-stream-platform-other" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+              </div>
+
               {isPrerecorded ? (
                 <p className="rounded-xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
                   Because you're playing a recorded episode, we don't need to know about intros, slides, or an

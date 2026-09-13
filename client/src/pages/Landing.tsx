@@ -821,6 +821,9 @@ export default function Landing({ slug }: Props) {
             <Link href={agendaHref} className="hover:text-foreground">
               Agenda
             </Link>
+            <Link href="/prepare" className="hover:text-foreground">
+              Podcaster guide
+            </Link>
             <Link href="/faq" className="hover:text-foreground">
               FAQ
             </Link>

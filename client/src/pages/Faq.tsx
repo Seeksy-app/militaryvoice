@@ -165,7 +165,11 @@ export default function Faq() {
       q: "What should I have ready?",
       a: (
         <>
-          A good square photo of yourself, your show name, and your RSS feed. If you're bringing a video intro or outro,
+          Start with the{" "}
+          <Link href="/prepare" className="text-primary underline-offset-2 hover:underline">
+            podcaster guide
+          </Link>
+          , which walks through show day end to end. In short: a good square photo of yourself, your show name, and your RSS feed. If you're bringing a video intro or outro,
           slides, or images, tick those boxes in your profile so the production team can plan the transitions. If you'd like
           to be paired with an interviewer, say so there too and we'll line someone up before air time.
         </>

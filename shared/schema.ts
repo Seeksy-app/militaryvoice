@@ -81,6 +81,11 @@ export const signups = pgTable("signups", {
   // organization has no branch.
   branch: text("branch").notNull().default(""),
   serviceStatus: text("service_status").notNull().default(""),
+  // How they normally produce their show, so the studio team knows what to expect.
+  recordingMode: text("recording_mode").notNull().default(""),
+  postEdits: text("post_edits").notNull().default(""),
+  streamPlatform: text("stream_platform").notNull().default(""),
+  streamPlatformOther: text("stream_platform_other").notNull().default(""),
   notes: text("notes").notNull().default(""),
   timezone: text("timezone").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
@@ -210,6 +215,11 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
   // organization has no branch.
   branch: text("branch").notNull().default(""),
   serviceStatus: text("service_status").notNull().default(""),
+  // How they normally produce their show, so the studio team knows what to expect.
+  recordingMode: text("recording_mode").notNull().default(""),
+  postEdits: text("post_edits").notNull().default(""),
+  streamPlatform: text("stream_platform").notNull().default(""),
+  streamPlatformOther: text("stream_platform_other").notNull().default(""),
   notes: text("notes").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
@@ -262,6 +272,19 @@ export const SERVICE_STATUSES = [
   "Supporter of the military",
 ] as const;
 
+export const RECORDING_MODES = ["Record and edit", "Live stream", "Both"] as const;
+export const POST_EDIT_ANSWERS = ["Yes", "No"] as const;
+export const STREAM_PLATFORMS = [
+  "Zoom",
+  "Restream",
+  "StreamYard",
+  "Riverside",
+  "OBS",
+  "Twitch",
+  "YouTube",
+  "Other",
+] as const;
+
 export type ServiceBranch = (typeof SERVICE_BRANCHES)[number];
 export type ServiceStatus = (typeof SERVICE_STATUSES)[number];
 
@@ -291,6 +314,10 @@ export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
     recordingUrl: optionalUrl("episode"),
     branch: optionalChoice(SERVICE_BRANCHES, "branch"),
     serviceStatus: optionalChoice(SERVICE_STATUSES, "status"),
+    recordingMode: optionalChoice(RECORDING_MODES, "recording style"),
+    postEdits: optionalChoice(POST_EDIT_ANSWERS, "yes or no"),
+    streamPlatform: optionalChoice(STREAM_PLATFORMS, "platform"),
+    streamPlatformOther: z.string().trim().max(80, "Keep it under 80 characters"),
   });
 
 // Refined version used for validation. Kept separate because a schema with a

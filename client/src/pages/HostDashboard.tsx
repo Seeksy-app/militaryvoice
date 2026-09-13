@@ -20,6 +20,8 @@ import {
   CalendarClock,
   Trash2,
   Shield,
+  BookOpen,
+  ArrowRight,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -820,6 +822,27 @@ export default function HostDashboard() {
                   </div>
                 </div>
               </div>
+            </section>
+
+            <section className="mt-8">
+              <Link href="/prepare" data-testid="link-prepare-guide">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-5 transition-colors hover-elevate">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <BookOpen className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-card-foreground">Getting ready for your slot</p>
+                      <p className="mt-0.5 text-sm text-muted-foreground">
+                        What to send us beforehand, how show day runs, and when to be in the studio.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
+                    Read the guide <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+              </Link>
             </section>
 
             {/* ------------------------------------------------- open slots (only until they hold one) */}

@@ -616,6 +616,10 @@ export function registerRoutes(app: Express): void {
       introStyle: profile.introStyle,
       branch: profile.branch,
       serviceStatus: profile.serviceStatus,
+      recordingMode: profile.recordingMode,
+      postEdits: profile.postEdits,
+      streamPlatform: profile.streamPlatform,
+      streamPlatformOther: profile.streamPlatformOther,
       notes: profile.notes,
       timezone: typeof body.timezone === "string" ? body.timezone : "",
       photoUrl: profile.photoUrl,
@@ -995,6 +999,10 @@ export function registerRoutes(app: Express): void {
       introStyle: body.introStyle === "straight" ? "straight" : "virtual",
       branch: body.branch ?? "",
       serviceStatus: body.serviceStatus ?? "",
+      recordingMode: body.recordingMode ?? "",
+      postEdits: body.postEdits ?? "",
+      streamPlatform: body.streamPlatform ?? "",
+      streamPlatformOther: body.streamPlatformOther ?? "",
       notes: body.notes ?? "",
     };
 
