@@ -89,7 +89,7 @@ export function SpotlightCard({ items, zone, agendaHref, intervalMs = 6000 }: Pr
             <Radio className="h-3.5 w-3.5 text-primary" /> {start ? "On the lineup" : "Joining the marathon"}
           </span>
           {items.length > 1 && (
-            <span className="font-mono text-xs text-muted-foreground">
+            <span className="tabular-nums text-xs text-muted-foreground">
               {index + 1}/{items.length}
             </span>
           )}
@@ -129,7 +129,7 @@ export function SpotlightCard({ items, zone, agendaHref, intervalMs = 6000 }: Pr
                   {signup.numPeople > 1 && " and co-host"}
                 </p>
                 {start ? (
-                  <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 font-mono text-xs font-semibold text-foreground">
+                  <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 tabular-nums text-xs font-semibold text-foreground">
                     <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#F0A71F]" />
                     {formatDateInZone(start, zone)} · {formatTimeInZone(start, zone)}
                   </p>

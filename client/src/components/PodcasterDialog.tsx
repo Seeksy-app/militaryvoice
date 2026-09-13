@@ -85,7 +85,7 @@ export function PodcasterDialog({ signup, onAirStart, onAirEnd, zone, shareText,
                 </DialogDescription>
               </DialogHeader>
               {onAirStart && onAirEnd && (
-                <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 font-mono text-xs font-semibold">
+                <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 tabular-nums text-xs font-semibold">
                   <CalendarClock className="h-3 w-3 text-[#F0A71F]" />
                   {formatDateInZone(onAirStart, zone)} · {formatTimeInZone(onAirStart, zone)}–{formatTimeInZone(onAirEnd, zone)}
                 </p>

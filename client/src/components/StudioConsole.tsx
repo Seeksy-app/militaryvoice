@@ -935,7 +935,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
                         }`}
                         data-testid={`button-cue-${r.id}`}
                       >
-                        <span className="pt-0.5 font-mono text-[10px] tabular-nums opacity-70">
+                        <span className="pt-0.5 text-[10px] tabular-nums opacity-70">
                           {r.startAtUtc ? formatTimeInZone(new Date(r.startAtUtc), zone) : "--:--"}
                         </span>
                         <span className="min-w-0 flex-1">
@@ -1182,7 +1182,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
                 {item ? (
                   <>
                     <div className="mt-1 text-sm font-semibold">{(item as RunItemRow).title}</div>
-                    <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+                    <div className="mt-0.5 tabular-nums text-xs text-muted-foreground">
                       {formatTimeInZone(new Date((item as RunItemRow).startAtUtc), zone)}
                       {(item as RunItemRow).durationMinutes ? ` · ${(item as RunItemRow).durationMinutes}m` : ""}
                     </div>

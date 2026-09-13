@@ -162,7 +162,7 @@ export default function Agenda({ slug }: Props) {
                           data-testid={`card-open-${s.index}`}
                         >
                           <div className="flex items-center justify-between bg-muted/60 px-4 py-2.5">
-                            <span className="font-mono text-sm font-bold tabular-nums text-muted-foreground">
+                            <span className="text-sm font-bold tabular-nums text-muted-foreground">
                               {formatTimeInZone(s.start, viewZone)}
                               <span className="opacity-60"> – {formatTimeInZone(s.end, viewZone)}</span>
                             </span>
@@ -197,7 +197,7 @@ export default function Agenda({ slug }: Props) {
                         className="flex h-full flex-col overflow-hidden rounded-2xl border-2 border-primary/15 bg-card shadow-md transition-shadow hover:shadow-lg"
                       >
                         <div className="flex items-center justify-between bg-[#053877] px-4 py-2.5 text-white">
-                          <span className="font-mono text-sm font-bold tabular-nums">
+                          <span className="text-sm font-bold tabular-nums">
                             {formatTimeInZone(s.start, viewZone)}
                             <span className="text-white/60"> – {formatTimeInZone(s.end, viewZone)}</span>
                           </span>

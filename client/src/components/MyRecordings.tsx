@@ -82,7 +82,7 @@ export function MyRecordings({ socialAccounts }: { socialAccounts?: string | nul
           >
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold text-card-foreground">{r.title || "Your session"}</div>
-              <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+              <div className="mt-0.5 tabular-nums text-xs text-muted-foreground">
                 {new Date(r.startedAt).toLocaleString()}
                 {[duration(r.durationSec), size(r.sizeBytes)].filter(Boolean).map((v) => ` · ${v}`)}
               </div>

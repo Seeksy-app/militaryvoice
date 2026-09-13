@@ -29,7 +29,7 @@ export function SlotCard({ index, start, end, viewZone, signup, showDate, onClai
               {formatDateInZone(start, viewZone)}
             </div>
           )}
-          <div className="font-mono text-base font-semibold leading-tight sm:text-lg" data-testid={`text-time-${index}`}>
+          <div className="tabular-nums text-base font-semibold leading-tight sm:text-lg" data-testid={`text-time-${index}`}>
             <span className="whitespace-nowrap">{formatTimeInZone(start, viewZone)}</span>
             <span className="whitespace-nowrap text-muted-foreground"> – {formatTimeInZone(end, viewZone)}</span>
           </div>

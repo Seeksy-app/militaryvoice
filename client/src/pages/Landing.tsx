@@ -364,7 +364,7 @@ export default function Landing({ slug }: Props) {
                       </>
                     )}
                   </span>
-                  <span className="font-mono text-[11px] uppercase tracking-wide text-white/50">{zoneLabel(zone)}</span>
+                  <span className="tabular-nums text-[11px] uppercase tracking-wide text-white/50">{zoneLabel(zone)}</span>
                 </div>
 
                 {countdown.phase === "upcoming" ? (
@@ -384,7 +384,7 @@ export default function Landing({ slug }: Props) {
                               animate={{ y: 0, opacity: 1 }}
                               exit={{ y: "60%", opacity: 0 }}
                               transition={{ duration: 0.28, ease: "easeOut" }}
-                              className="font-mono text-[2rem] font-bold tabular-nums leading-none text-[#F0A71F] sm:text-6xl"
+                              className="text-[2rem] font-bold tabular-nums leading-none text-[#F0A71F] sm:text-6xl"
                             >
                               {String(n).padStart(2, "0")}
                             </motion.div>
@@ -411,7 +411,7 @@ export default function Landing({ slug }: Props) {
                 <div className="mt-4">
                   <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-white/55">
                     <span>Lineup filling</span>
-                    <span className="font-mono">{dataReady ? `${booked.length}/${slotCount}` : "…"}</span>
+                    <span className="tabular-nums">{dataReady ? `${booked.length}/${slotCount}` : "…"}</span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-white/10">
                     <motion.div
@@ -432,7 +432,7 @@ export default function Landing({ slug }: Props) {
                       {booked.length > 0 ? "On the lineup" : "Joining the podcastathon"}
                     </span>
                     {spotlight.length > MINI_CARDS && (
-                      <span className="font-mono normal-case tracking-normal">
+                      <span className="tabular-nums normal-case tracking-normal">
                         {miniPage + 1}/{Math.ceil(spotlight.length / MINI_CARDS)}
                       </span>
                     )}
@@ -464,7 +464,7 @@ export default function Landing({ slug }: Props) {
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold leading-tight">{it.podcastName}</div>
                             <div className="truncate text-xs text-white/70">{it.hostName}</div>
-                            <div className="mt-0.5 truncate font-mono text-[11px] text-[#F0A71F]">
+                            <div className="mt-0.5 truncate tabular-nums text-[11px] text-[#F0A71F]">
                               {it.start ? `${formatDateInZone(it.start, zone)} · ${formatTimeInZone(it.start, zone)}` : "Time coming soon"}
                             </div>
                           </div>
@@ -560,7 +560,7 @@ export default function Landing({ slug }: Props) {
                 ["1", "Emmy"],
               ].map(([n, label]) => (
                 <div key={label} className="flex items-baseline gap-1.5 rounded-full border border-border bg-card px-4 py-2">
-                  <span className="font-mono text-lg font-bold text-primary">{n}</span>
+                  <span className="tabular-nums text-lg font-bold text-primary">{n}</span>
                   <span className="text-sm text-muted-foreground">{label}</span>
                 </div>
               ))}
@@ -725,7 +725,7 @@ export default function Landing({ slug }: Props) {
                   )}
                   <div className="mt-3 line-clamp-2 text-sm font-semibold leading-tight">{signup.podcastName}</div>
                   <div className="mt-0.5 truncate text-xs text-muted-foreground">{signup.hostName}</div>
-                  <div className="mt-2 font-mono text-xs text-primary">
+                  <div className="mt-2 tabular-nums text-xs text-primary">
                     {formatDateInZone(onAirStart, zone)} · {formatTimeInZone(onAirStart, zone)}
                   </div>
                   <SocialIconRow accounts={parseSocialAccounts(signup.socialAccounts)} variant="filled" className="mt-3 justify-center" />

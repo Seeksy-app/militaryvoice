@@ -112,7 +112,7 @@ export function StudioDemo() {
             <span className="h-1.5 w-1.5 rounded-full bg-white" style={{ animation: "mvdemopulse 1.6s infinite" }} />
             On air
           </span>
-          <span className="font-mono text-[11px] tabular-nums text-white/60">{clock}</span>
+          <span className="text-[11px] tabular-nums text-white/60">{clock}</span>
         </span>
       </div>
 
@@ -218,7 +218,7 @@ export function StudioDemo() {
                     i === 1 ? "bg-[#F0A71F]/15" : ""
                   }`}
                 >
-                  <span className="font-mono text-[10px] tabular-nums text-white/45">{c.at}</span>
+                  <span className="text-[10px] tabular-nums text-white/45">{c.at}</span>
                   <span className={`min-w-0 flex-1 truncate text-[11px] ${i === 1 ? "text-white" : "text-white/60"}`}>
                     {c.label}
                   </span>

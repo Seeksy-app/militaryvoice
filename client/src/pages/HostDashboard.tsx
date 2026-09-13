@@ -186,7 +186,7 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <div>
               <div className="text-sm font-semibold">{formatDateInZone(pending.start, pending.zone)}</div>
-              <div className="font-mono text-base font-bold text-primary">
+              <div className="tabular-nums text-base font-bold text-primary">
                 {formatTimeInZone(pending.start, pending.zone)}–{formatTimeInZone(pending.end, pending.zone)}
               </div>
               <div className="text-xs text-muted-foreground">
@@ -573,7 +573,7 @@ export default function HostDashboard() {
               <Radio className="h-5 w-5 text-primary" />
               Claim this slot
             </h2>
-            <p className="mb-6 font-mono text-sm text-muted-foreground">
+            <p className="mb-6 tabular-nums text-sm text-muted-foreground">
               {formatDateInZone(selectedSlot.start, zone)}, {formatTimeInZone(selectedSlot.start, zone)}–
               {formatTimeInZone(selectedSlot.end, zone)} · {zoneLabel(zone)}
             </p>
@@ -740,7 +740,7 @@ export default function HostDashboard() {
                                 data-testid={`card-host-signup-${s.id}`}
                               >
                                 <div className="min-w-0">
-                                  <div className="font-mono text-base font-semibold text-card-foreground">
+                                  <div className="tabular-nums text-base font-semibold text-card-foreground">
                                     {formatDateInZone(st, zone)} · {formatTimeInZone(st, zone)}–{formatTimeInZone(en, zone)}
                                   </div>
                                   <div className="text-xs text-muted-foreground">
@@ -911,7 +911,7 @@ export default function HostDashboard() {
                           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                             {formatDateInZone(s.start, zone)}
                           </div>
-                          <div className="font-mono font-semibold">
+                          <div className="tabular-nums font-semibold">
                             {formatTimeInZone(s.start, zone)}–{formatTimeInZone(s.end, zone)}
                           </div>
                         </>

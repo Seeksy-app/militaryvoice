@@ -177,7 +177,7 @@ export default function Prepare() {
               <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">You're on air</div>
-                  <div className="mt-1 font-mono text-xl font-bold text-card-foreground">
+                  <div className="mt-1 tabular-nums text-xl font-bold text-card-foreground">
                     {formatTimeInZone(slot.onAir.start, zone)} – {formatTimeInZone(slot.onAir.end, zone)}
                   </div>
                   <div className="text-sm text-muted-foreground">
@@ -188,7 +188,7 @@ export default function Prepare() {
                   <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-primary">
                     <Clock className="h-3.5 w-3.5" /> Be in the studio by
                   </div>
-                  <div className="mt-1 font-mono text-xl font-bold text-card-foreground">
+                  <div className="mt-1 tabular-nums text-xl font-bold text-card-foreground">
                     {formatTimeInZone(slot.arriveBy, zone)}
                   </div>
                   <div className="text-sm text-muted-foreground">Ten minutes before you go live.</div>

@@ -862,7 +862,7 @@ function SignupsCard() {
                       </div>
                     </div>
 
-                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs text-muted-foreground">
+                    <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 tabular-nums text-xs text-muted-foreground">
                       <span className="font-semibold text-foreground">
                         {formatDateInZone(start, zone)} {formatTimeInZone(start, zone)}
                       </span>

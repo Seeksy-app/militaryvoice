@@ -375,7 +375,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                   data-testid={`run-row-${it.id}`}
                 >
                   <div className="w-[104px] shrink-0">
-                    <div className="font-mono text-sm font-bold tabular-nums">{when ? formatTimeInZone(when, zone) : "—"}</div>
+                    <div className="text-sm font-bold tabular-nums">{when ? formatTimeInZone(when, zone) : "—"}</div>
                     <div className="text-[11px] text-muted-foreground">
                       {when ? formatDateInZone(when, zone) : ""}
                       {it.durationMinutes ? ` · ${it.durationMinutes}m` : ""}

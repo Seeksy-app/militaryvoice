@@ -1019,7 +1019,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                 <div className="px-4 py-4">
                   <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{pendingSlot.eventName.trim()}</div>
                   <div className="mt-1 font-semibold">{formatDateInZone(pendingSlot.start, pendingSlot.zone)}</div>
-                  <div className="font-mono text-lg font-bold text-primary">
+                  <div className="tabular-nums text-lg font-bold text-primary">
                     {formatTimeInZone(pendingSlot.start, pendingSlot.zone)}–{formatTimeInZone(pendingSlot.end, pendingSlot.zone)}
                   </div>
                   <div className="text-xs text-muted-foreground">{zoneLabel(pendingSlot.zone)}</div>
@@ -1048,7 +1048,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                 <div className="mt-0.5 truncate text-xs text-muted-foreground">
                   {watchHost?.trim() || "Host name"}
                 </div>
-                <div className="mt-2 font-mono text-xs text-primary">
+                <div className="mt-2 tabular-nums text-xs text-primary">
                   {pendingSlot
                     ? `${formatDateInZone(pendingSlot.start, pendingSlot.zone)} · ${formatTimeInZone(pendingSlot.start, pendingSlot.zone)}`
                     : "Time coming soon"}
