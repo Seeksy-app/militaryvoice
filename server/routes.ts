@@ -42,6 +42,9 @@ import {
   studioToken,
   syncParticipantState,
   updateBroadcastTargets,
+  createRtmpIngress,
+  deleteIngress,
+  listIngressForRoom,
   webhooks,
 } from "./livekit.js";
 import { ensureRecordingsBucket, signedRecordingUrl } from "./recordingStorage.js";
@@ -594,6 +597,117 @@ export function registerRoutes(app: Express): void {
       res.status(201).json(created);
     },
   );
+
+  // ---- Bring your own encoder ---------------------------------------------------
+  //      Some podcasters run OBS or StreamYard with three cameras and a
+  //      soundboard and won't give that up for a web page. We hand them an
+  //      RTMP URL and key instead; their feed arrives in the room as an
+  //      ordinary participant and the producer promotes them like anyone else.
+  app.get("/api/host/ingress", requireHostSession, async (req, res) => {
+    noStore(res);
+    if (!isLiveKitConfigured()) {
+      res.json({ configured: false });
+      return;
+    }
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const row = await storage.getIngressByEmail(email);
+    // Their own key, for their own encoder — this one they're meant to see.
+    res.json({
+      configured: true,
+      ingress: row ? { id: row.id, url: row.url, streamKey: row.streamKey, displayName: row.displayName } : null,
+    });
+  });
+
+  app.post("/api/host/ingress", requireHostSession, async (req, res) => {
+    if (!isLiveKitConfigured()) {
+      res.status(503).json({ message: "The studio isn't switched on for this event yet." });
+      return;
+    }
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const existing = await storage.getIngressByEmail(email);
+    if (existing) {
+      res.json({ id: existing.id, url: existing.url, streamKey: existing.streamKey, displayName: existing.displayName });
+      return;
+    }
+    const event = await storage.getFeaturedEvent();
+    const studio = await storage.getOrCreateStudio(event.id);
+    const profile = await storage.getProfileByEmail(email);
+    const mySignup = (await storage.listSignups(event.id)).find(
+      (sg) => sg.email.toLowerCase().trim() === email && sg.status === "confirmed",
+    );
+    const displayName = mySignup?.hostName || profile?.hostName || email.split("@")[0];
+    const identity = `rtmp-${mySignup?.id ?? email.replace(/[^a-z0-9]/gi, "").slice(0, 20)}`;
+
+    try {
+      const cred = await createRtmpIngress({ room: roomName(studio.id), identity, name: displayName });
+      const row = await storage.createIngressRow({
+        eventId: event.id,
+        studioId: studio.id,
+        signupId: mySignup?.id ?? null,
+        ownerEmail: email,
+        ingressId: cred.ingressId,
+        participantIdentity: identity,
+        displayName,
+        url: cred.url,
+        streamKey: cred.streamKey,
+      });
+      res.status(201).json({ id: row.id, url: row.url, streamKey: row.streamKey, displayName: row.displayName });
+    } catch (err: any) {
+      console.error("Couldn't create an ingress:", err);
+      res.status(502).json({ message: err?.message ?? "Couldn't set that up right now." });
+    }
+  });
+
+  /** Regenerating is delete-then-create: a leaked key should stop working. */
+  app.delete("/api/host/ingress", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const row = await storage.getIngressByEmail(email);
+    if (!row) {
+      res.json({ ok: true });
+      return;
+    }
+    await deleteIngress(row.ingressId).catch(() => {});
+    await storage.deleteIngressRow(row.id);
+    res.json({ ok: true });
+  });
+
+  app.get("/api/admin/ingress", requireAdmin, async (req, res) => {
+    noStore(res);
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    const rows = await storage.listIngresses(eventId);
+    // Whether anything is actually arriving, straight from LiveKit.
+    let statuses = new Map<string, string>();
+    if (isLiveKitConfigured() && rows.length) {
+      try {
+        const studio = await storage.getOrCreateStudio(eventId);
+        for (const i of await listIngressForRoom(roomName(studio.id))) {
+          statuses.set(i.ingressId, i.state?.status !== undefined ? String(i.state.status) : "");
+        }
+      } catch {
+        /* if LiveKit is unreachable we still list what we issued */
+      }
+    }
+    res.json(
+      rows.map((r) => ({
+        id: r.id,
+        signupId: r.signupId,
+        ownerEmail: r.ownerEmail,
+        displayName: r.displayName,
+        url: r.url,
+        keyHint: r.streamKey ? `••••${r.streamKey.slice(-4)}` : "",
+        status: statuses.get(r.ingressId) ?? "",
+      })),
+    );
+  });
+
+  app.delete("/api/admin/ingress/:id", requireAdmin, async (req, res) => {
+    const row = await storage.getIngressRow(Number(req.params.id));
+    if (row) {
+      await deleteIngress(row.ingressId).catch(() => {});
+      await storage.deleteIngressRow(row.id);
+    }
+    res.json({ ok: true });
+  });
 
   // ---- A podcaster's own destinations -------------------------------------------
   //      Their slot can go out to their own channel as well as ours. They add

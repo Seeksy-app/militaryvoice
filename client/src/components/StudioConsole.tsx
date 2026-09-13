@@ -40,6 +40,7 @@ import {
   Disc,
   Square,
   Signal,
+  Cable,
 } from "lucide-react";
 
 interface Props {
@@ -138,6 +139,20 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
       adminSend("PATCH", `/api/admin/studio/participants/${id}`, { state }),
     onSuccess: () => refresh(),
     onError: (e: Error) => toast({ title: "Couldn't move them", description: e.message, variant: "destructive" }),
+  });
+
+  const { data: feeds2 } = useQuery<
+    { id: number; ownerEmail: string; displayName: string; url: string; keyHint: string; status: string }[]
+  >({
+    queryKey: ["/api/admin/ingress"],
+    queryFn: () => adminGet("/api/admin/ingress"),
+    refetchInterval: 15000,
+  });
+
+  const dropIngress = useMutation({
+    mutationFn: async (id: number) => adminSend("DELETE", `/api/admin/ingress/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/ingress"] }),
+    onError: (e: Error) => toast({ title: "Couldn't remove that feed", description: e.message, variant: "destructive" }),
   });
 
   const { data: signups } = useQuery<SignupRow[]>({
@@ -405,6 +420,43 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
           broadcasting={broadcasting}
           signups={signups ?? []}
         />
+
+        {(feeds2 ?? []).length > 0 && (
+          <div className="rounded-xl border border-border bg-muted/30 p-4">
+            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Cable className="h-3.5 w-3.5 text-primary" /> Their own encoders
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              These podcasters push in from their own software. They arrive in the green room like anyone else.
+            </p>
+            <div className="mt-3 flex flex-col gap-2">
+              {(feeds2 ?? []).map((f) => (
+                <div
+                  key={f.id}
+                  className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-background p-3"
+                  data-testid={`ingress-${f.id}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold">{f.displayName || f.ownerEmail}</div>
+                    <div className="truncate font-mono text-xs text-muted-foreground">key {f.keyHint}</div>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {f.status === "2" ? "Receiving" : f.status === "1" ? "Waiting for their stream" : "Set up"}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => dropIngress.mutate(f.id)}
+                    aria-label="Remove this feed"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* keeping the slot: a separate egress from whatever is going out, so
             stopping it never touches the broadcast */}

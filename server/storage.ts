@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -23,6 +23,7 @@ import type {
   RecordingRow,
   DestinationRow,
   DestinationInput,
+  IngressRow,
   SponsorInquiryRow,
   InsertSponsorInquiry,
 } from "../shared/schema.js";
@@ -285,6 +286,23 @@ async function ensureSchema() {
   await sql`CREATE INDEX IF NOT EXISTS destinations_event_idx ON destinations (event_id)`;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS ingresses (
+      id SERIAL PRIMARY KEY,
+      event_id INTEGER NOT NULL,
+      studio_id INTEGER NOT NULL,
+      signup_id INTEGER,
+      owner_email TEXT NOT NULL DEFAULT '',
+      ingress_id TEXT NOT NULL,
+      participant_identity TEXT NOT NULL DEFAULT '',
+      display_name TEXT NOT NULL DEFAULT '',
+      url TEXT NOT NULL DEFAULT '',
+      stream_key TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS ingresses_owner_idx ON ingresses (owner_email)`;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS platform_interest (
       id SERIAL PRIMARY KEY,
       intent TEXT NOT NULL DEFAULT 'beta',
@@ -378,7 +396,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "destinations", column: "rtmp_url" };
+const SCHEMA_SENTINEL = { table: "ingresses", column: "stream_key" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
@@ -499,6 +517,11 @@ export interface IStorage {
   createDestination(eventId: number, ownerEmail: string, v: DestinationInput): Promise<DestinationRow>;
   updateDestination(id: number, patch: Partial<DestinationRow>): Promise<DestinationRow | undefined>;
   deleteDestination(id: number): Promise<void>;
+  listIngresses(eventId: number): Promise<IngressRow[]>;
+  getIngressByEmail(email: string): Promise<IngressRow | undefined>;
+  getIngressRow(id: number): Promise<IngressRow | undefined>;
+  createIngressRow(v: Omit<IngressRow, "id" | "createdAt">): Promise<IngressRow>;
+  deleteIngressRow(id: number): Promise<void>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
 }
@@ -1033,6 +1056,38 @@ class DatabaseStorage implements IStorage {
   async deleteDestination(id: number): Promise<void> {
     await ready();
     await db.delete(destinations).where(eq(destinations.id, id));
+  }
+
+  // ---- Ingress -----------------------------------------------------------------
+  async listIngresses(eventId: number): Promise<IngressRow[]> {
+    await ready();
+    return db.select().from(ingresses).where(eq(ingresses.eventId, eventId)).orderBy(asc(ingresses.id));
+  }
+
+  async getIngressByEmail(email: string): Promise<IngressRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(ingresses).where(eq(ingresses.ownerEmail, email.toLowerCase().trim()));
+    return row;
+  }
+
+  async getIngressRow(id: number): Promise<IngressRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(ingresses).where(eq(ingresses.id, id));
+    return row;
+  }
+
+  async createIngressRow(v: Omit<IngressRow, "id" | "createdAt">): Promise<IngressRow> {
+    await ready();
+    const [row] = await db
+      .insert(ingresses)
+      .values({ ...v, createdAt: new Date().toISOString() })
+      .returning();
+    return row;
+  }
+
+  async deleteIngressRow(id: number): Promise<void> {
+    await ready();
+    await db.delete(ingresses).where(eq(ingresses.id, id));
   }
 
   async getSetting(key: string): Promise<string | null> {

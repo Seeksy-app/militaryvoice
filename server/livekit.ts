@@ -1,4 +1,12 @@
-import { AccessToken, RoomServiceClient, EgressClient, EncodedFileType, WebhookReceiver } from "livekit-server-sdk";
+import {
+  AccessToken,
+  RoomServiceClient,
+  EgressClient,
+  IngressClient,
+  IngressInput,
+  EncodedFileType,
+  WebhookReceiver,
+} from "livekit-server-sdk";
 import type { EncodedFileOutput, StreamOutput } from "livekit-server-sdk";
 
 // The media layer. Everything in here is optional: without LIVEKIT_* set the
@@ -32,6 +40,12 @@ let _rooms: RoomServiceClient | null = null;
 export function rooms(): RoomServiceClient {
   if (!_rooms) _rooms = new RoomServiceClient(httpUrl(), LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
   return _rooms;
+}
+
+let _ingress: IngressClient | null = null;
+export function ingress(): IngressClient {
+  if (!_ingress) _ingress = new IngressClient(httpUrl(), LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+  return _ingress;
 }
 
 let _egress: EgressClient | null = null;
@@ -174,4 +188,43 @@ let _hooks: WebhookReceiver | null = null;
 export function webhooks(): WebhookReceiver {
   if (!_hooks) _hooks = new WebhookReceiver(LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
   return _hooks;
+}
+
+// ---- Ingress -----------------------------------------------------------------
+// The other direction: instead of a podcaster coming to our studio page, we
+// hand them an RTMP URL and key and they push their own produced feed in from
+// OBS, StreamYard, Riverside — whatever they already run. It arrives in the
+// room as an ordinary participant, so the producer promotes them to the stage
+// exactly like anyone else. This is also the pipe Zoom will use.
+
+export interface IngressCredentials {
+  ingressId: string;
+  url: string;
+  streamKey: string;
+}
+
+export async function createRtmpIngress(args: {
+  room: string;
+  identity: string;
+  name: string;
+}): Promise<IngressCredentials> {
+  const info = await ingress().createIngress(IngressInput.RTMP_INPUT, {
+    name: args.name || args.identity,
+    roomName: args.room,
+    participantIdentity: args.identity,
+    participantName: args.name || args.identity,
+    // RTMP always needs transcoding — the encoder's output won't match what
+    // the room's other participants are negotiating.
+    enableTranscoding: true,
+  });
+  return { ingressId: info.ingressId, url: info.url, streamKey: info.streamKey };
+}
+
+export async function deleteIngress(ingressId: string): Promise<void> {
+  await ingress().deleteIngress(ingressId);
+}
+
+/** Which encoder feeds exist, and whether anything is arriving on them. */
+export async function listIngressForRoom(room: string) {
+  return ingress().listIngress({ roomName: room });
 }

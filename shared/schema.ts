@@ -613,6 +613,24 @@ export const destinations = pgTable("destinations", {
 });
 export type DestinationRow = typeof destinations.$inferSelect;
 
+// A podcaster who'd rather push from their own encoder than use our studio
+// page. We issue them an RTMP URL and key; whatever they send arrives in the
+// room as a normal participant.
+export const ingresses = pgTable("ingresses", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  studioId: integer("studio_id").notNull(),
+  signupId: integer("signup_id"),
+  ownerEmail: text("owner_email").notNull().default(""),
+  ingressId: text("ingress_id").notNull(),
+  participantIdentity: text("participant_identity").notNull().default(""),
+  displayName: text("display_name").notNull().default(""),
+  url: text("url").notNull().default(""),
+  streamKey: text("stream_key").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});
+export type IngressRow = typeof ingresses.$inferSelect;
+
 export const DESTINATION_PLATFORMS = ["youtube", "x", "linkedin", "instagram", "custom"] as const;
 
 export const destinationInputSchema = z.object({
