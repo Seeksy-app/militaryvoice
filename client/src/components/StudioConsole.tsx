@@ -967,16 +967,18 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
             />
             {onCamera && (
               <>
+                {/* Zoom's wording, because that's the muscle memory everyone
+                    arrives with. The label says what pressing it will do. */}
                 <DeckButton
                   icon={micOn ? Mic : MicOff}
-                  label={micOn ? "Mic on" : "Muted"}
+                  label={micOn ? "Mute myself" : "Unmute myself"}
                   active={!micOn}
                   onClick={() => void toggleMic()}
                   testId="button-deck-mic"
                 />
                 <DeckButton
                   icon={camOn ? Video : VideoOff}
-                  label={camOn ? "Camera on" : "Camera off"}
+                  label={camOn ? "Stop my video" : "Start my video"}
                   active={!camOn}
                   onClick={() => void toggleCam()}
                   testId="button-deck-cam"
@@ -1000,6 +1002,15 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
 
             <span className="mx-1 h-8 w-px bg-white/15" />
 
+            <a
+              href={joinUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/15"
+              data-testid="link-deck-greenroom"
+            >
+              <Users className="h-4 w-4" /> Green room
+            </a>
             <a
               href={watchUrl}
               target="_blank"
