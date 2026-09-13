@@ -51,6 +51,8 @@ import {
   VolumeX,
   Film,
   Image as ImageIcon,
+  Clapperboard,
+  Plus,
 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -153,6 +155,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   const [mode, setMode] = useState<"setup" | "live">("setup");
   const [monitorMuted, setMonitorMuted] = useState(true);
   const [mediaPicker, setMediaPicker] = useState<null | "image" | "video" | "all">(null);
+  const [sceneName, setSceneName] = useState("");
 
   const { data: studios } = useQuery<(StudioRow & { isPrimary: boolean })[]>({
     queryKey: ["/api/admin/studios"],
@@ -249,6 +252,30 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   });
 
   // Shares a cache key with <Destinations>, so this is free.
+  const { data: scenes } = useQuery<
+    { id: number; name: string; mediaUrl: string; mediaLabel: string }[]
+  >({
+    queryKey: ["/api/admin/scenes", studioId],
+    queryFn: () => adminGet(`/api/admin/scenes${q}`),
+  });
+
+  const applyScene = useMutation({
+    mutationFn: async (id: number) => adminSend("POST", `/api/admin/scenes/${id}/apply`, { studioId }),
+    onSuccess: () => refresh(),
+    onError: (e: Error) => toast({ title: "Couldn't take that scene", description: e.message, variant: "destructive" }),
+  });
+
+  const saveScene = useMutation({
+    mutationFn: async (name: string) => adminSend("POST", "/api/admin/scenes", { name, studioId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/scenes", studioId] }),
+    onError: (e: Error) => toast({ title: "Couldn't save that scene", description: e.message, variant: "destructive" }),
+  });
+
+  const dropScene = useMutation({
+    mutationFn: async (id: number) => adminSend("DELETE", `/api/admin/scenes/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/scenes", studioId] }),
+  });
+
   const { data: dests } = useQuery<{ id: number; enabled: boolean; signupId: number | null }[]>({
     queryKey: ["/api/admin/destinations"],
     queryFn: () => adminGet("/api/admin/destinations"),
@@ -828,6 +855,31 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
             </div>
           </div>
 
+          {/* scenes, one press each */}
+          {(scenes ?? []).length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-[#04102b] px-4 py-2.5">
+              <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/40">Scenes</span>
+              {(scenes ?? []).map((sc) => {
+                const on = sc.mediaUrl
+                  ? studio?.stageMediaPlaying && studio?.stageMediaUrl === sc.mediaUrl
+                  : !studio?.stageMediaPlaying;
+                return (
+                  <button
+                    key={sc.id}
+                    type="button"
+                    onClick={() => applyScene.mutate(sc.id)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      on ? "bg-[#F0A71F] text-[#1a1200]" : "bg-white/8 text-white/80 hover:bg-white/15"
+                    }`}
+                    data-testid={`button-scene-${sc.id}`}
+                  >
+                    {sc.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {/* the deck */}
           <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-[#000741] px-4 py-3">
             <DeckButton
@@ -1354,6 +1406,62 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                 >
                   Save the link
                 </Button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-muted/25 p-4">
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                <Clapperboard className="h-3.5 w-3.5 text-primary" /> Scenes
+              </div>
+              <p className="mb-3 mt-1 text-xs text-muted-foreground">
+                Set the stage how you want it, then save it under a name. During the show it's one press —
+                countdown, welcome, outro. A scene with nothing on the stage means "back to the cameras".
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {(scenes ?? []).map((sc) => (
+                  <span
+                    key={sc.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background py-1 pl-3 pr-1 text-xs font-medium"
+                  >
+                    {sc.name}
+                    <button
+                      type="button"
+                      className="rounded-full p-1 text-muted-foreground hover:text-destructive"
+                      onClick={() => dropScene.mutate(sc.id)}
+                      aria-label={`Remove ${sc.name}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+                <form
+                  className="flex items-center gap-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (sceneName.trim()) {
+                      saveScene.mutate(sceneName.trim());
+                      setSceneName("");
+                    }
+                  }}
+                >
+                  <Input
+                    className="h-8 w-40 text-xs"
+                    placeholder="Name this scene"
+                    value={sceneName}
+                    onChange={(e) => setSceneName(e.target.value)}
+                    data-testid="input-scene-name"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1 rounded-full text-xs"
+                    disabled={!sceneName.trim() || saveScene.isPending}
+                    data-testid="button-scene-save"
+                  >
+                    <Plus className="h-3 w-3" /> Save the stage
+                  </Button>
+                </form>
               </div>
             </div>
 

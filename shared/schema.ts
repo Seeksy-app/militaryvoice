@@ -577,6 +577,21 @@ export const studios = pgTable("studios", {
 });
 export type StudioRow = typeof studios.$inferSelect;
 
+// A saved state of the stage. Set it up how you want it, name it, and it
+// becomes one button during the show — a countdown, a welcome card, an outro.
+// Cameras is just the scene with no media on top.
+export const scenes = pgTable("scenes", {
+  id: serial("id").primaryKey(),
+  studioId: integer("studio_id").notNull(),
+  name: text("name").notNull().default("Scene"),
+  sortIndex: integer("sort_index").notNull().default(0),
+  mediaUrl: text("media_url").notNull().default(""),
+  mediaKind: text("media_kind").notNull().default("video"),
+  mediaLabel: text("media_label").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});
+export type SceneRow = typeof scenes.$inferSelect;
+
 // One finished file per podcaster slot. Written when LiveKit tells us the
 // egress ended, so the row always points at something that actually exists.
 export const recordings = pgTable("recordings", {

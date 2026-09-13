@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -24,6 +24,7 @@ import type {
   DestinationRow,
   DestinationInput,
   IngressRow,
+  SceneRow,
   SponsorInquiryRow,
   InsertSponsorInquiry,
 } from "../shared/schema.js";
@@ -253,6 +254,20 @@ async function ensureSchema() {
   await sql`ALTER TABLE studios ADD COLUMN IF NOT EXISTS stage_media_playing BOOLEAN NOT NULL DEFAULT false`;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS scenes (
+      id SERIAL PRIMARY KEY,
+      studio_id INTEGER NOT NULL,
+      name TEXT NOT NULL DEFAULT 'Scene',
+      sort_index INTEGER NOT NULL DEFAULT 0,
+      media_url TEXT NOT NULL DEFAULT '',
+      media_kind TEXT NOT NULL DEFAULT 'video',
+      media_label TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS scenes_studio_idx ON scenes (studio_id)`;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS recordings (
       id SERIAL PRIMARY KEY,
       event_id INTEGER NOT NULL,
@@ -401,7 +416,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "studios", column: "stage_media_url" };
+const SCHEMA_SENTINEL = { table: "scenes", column: "media_url" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
@@ -496,6 +511,10 @@ export interface IStorage {
   getStudioById(id: number): Promise<StudioRow | undefined>;
   createStudio(eventId: number, name: string): Promise<StudioRow>;
   deleteStudio(id: number): Promise<void>;
+  listScenes(studioId: number): Promise<SceneRow[]>;
+  getScene(id: number): Promise<SceneRow | undefined>;
+  createScene(v: Omit<SceneRow, "id" | "createdAt">): Promise<SceneRow>;
+  deleteScene(id: number): Promise<void>;
   updateStudio(id: number, patch: Partial<StudioRow>): Promise<StudioRow | undefined>;
   listStudioParticipants(studioId: number): Promise<StudioParticipantRow[]>;
   upsertStudioParticipant(
@@ -915,6 +934,29 @@ class DatabaseStorage implements IStorage {
     await ready();
     await db.delete(studioParticipants).where(eq(studioParticipants.studioId, id));
     await db.delete(studios).where(eq(studios.id, id));
+  }
+
+  // ---- Scenes -------------------------------------------------------------
+  async listScenes(studioId: number): Promise<SceneRow[]> {
+    await ready();
+    return db.select().from(scenes).where(eq(scenes.studioId, studioId)).orderBy(asc(scenes.sortIndex), asc(scenes.id));
+  }
+
+  async getScene(id: number): Promise<SceneRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(scenes).where(eq(scenes.id, id));
+    return row;
+  }
+
+  async createScene(v: Omit<SceneRow, "id" | "createdAt">): Promise<SceneRow> {
+    await ready();
+    const [row] = await db.insert(scenes).values({ ...v, createdAt: new Date().toISOString() }).returning();
+    return row;
+  }
+
+  async deleteScene(id: number): Promise<void> {
+    await ready();
+    await db.delete(scenes).where(eq(scenes.id, id));
   }
 
   async updateStudio(id: number, patch: Partial<StudioRow>): Promise<StudioRow | undefined> {

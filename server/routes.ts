@@ -1410,6 +1410,63 @@ export function registerRoutes(app: Express): void {
     );
   });
 
+  // ---- Scenes ---------------------------------------------------------------
+  //      A scene is the stage saved as it stands, so during the show it's one
+  //      button rather than three decisions.
+  app.get("/api/admin/scenes", requireAdmin, async (req, res) => {
+    noStore(res);
+    const { studio } = await adminStudio(req);
+    res.json(await storage.listScenes(studio.id));
+  });
+
+  /** Saves whatever is on the stage right now under a name. */
+  app.post("/api/admin/scenes", requireAdmin, async (req, res) => {
+    const { studio } = await adminStudio(req);
+    const name = String(req.body?.name ?? "").trim().slice(0, 60) || "Scene";
+    const existing = await storage.listScenes(studio.id);
+    res.status(201).json(
+      await storage.createScene({
+        studioId: studio.id,
+        name,
+        sortIndex: existing.length,
+        mediaUrl: studio.stageMediaPlaying ? studio.stageMediaUrl : "",
+        mediaKind: studio.stageMediaKind,
+        mediaLabel: studio.stageMediaLabel,
+      }),
+    );
+  });
+
+  app.delete("/api/admin/scenes/:id", requireAdmin, async (req, res) => {
+    await storage.deleteScene(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
+  /** One click during the show: put the stage back the way this scene had it. */
+  app.post("/api/admin/scenes/:id/apply", requireAdmin, async (req, res) => {
+    const scene = await storage.getScene(Number(req.params.id));
+    if (!scene) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    const studio = await storage.getStudioById(scene.studioId);
+    if (!studio) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    const updated = await storage.updateStudio(studio.id, {
+      stageMediaUrl: scene.mediaUrl,
+      stageMediaKind: scene.mediaKind,
+      stageMediaLabel: scene.mediaLabel,
+      // A scene with no media is "back to the cameras".
+      stageMediaPlaying: Boolean(scene.mediaUrl),
+    });
+    if (updated) {
+      const ev = await storage.getEventById(studio.eventId);
+      await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated));
+    }
+    res.json(updated);
+  });
+
   /** Put something on the stage, or take it off. */
   app.post("/api/admin/studio/media", requireAdmin, async (req, res) => {
     const { studio } = await adminStudio(req);
