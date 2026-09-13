@@ -28,12 +28,20 @@ interface Args {
   enabled: boolean;
   /** The console's authenticated POST, so we don't duplicate admin auth here. */
   adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
+  /** Which studio we're watching — changing it reconnects. */
+  studioId: number | null;
+  /** Go on camera: reconnects as a real participant who can publish. */
+  publish: boolean;
+  displayName?: string;
 }
 
-export function useProducerRoom({ enabled, adminSend }: Args) {
+export function useProducerRoom({ enabled, adminSend, studioId, publish, displayName }: Args) {
   const roomRef = useRef<Room | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [feeds, setFeeds] = useState<Map<string, ProducerFeed>>(new Map());
+  const [camOn, setCamOn] = useState(false);
+  const [micOn, setMicOn] = useState(false);
+  const [selfKey, setSelfKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -64,9 +72,13 @@ export function useProducerRoom({ enabled, adminSend }: Args) {
 
     (async () => {
       setStatus("connecting");
-      let cfg: { configured: boolean; url?: string; token?: string };
+      let cfg: { configured: boolean; url?: string; token?: string; clientKey?: string };
       try {
-        const res = await adminSend("POST", "/api/admin/studio/token");
+        const res = await adminSend("POST", "/api/admin/studio/token", {
+          studioId,
+          publish,
+          displayName,
+        });
         cfg = await res.json();
       } catch {
         if (!cancelled) setStatus("error");
@@ -93,6 +105,15 @@ export function useProducerRoom({ enabled, adminSend }: Args) {
       try {
         await room.connect(cfg.url, cfg.token);
         if (cancelled) return;
+        setSelfKey(cfg.clientKey ?? null);
+        if (publish) {
+          // Camera and mic come up together; the deck turns each off again.
+          await room.localParticipant.enableCameraAndMicrophone().catch(() => {});
+          if (!cancelled) {
+            setCamOn(room.localParticipant.isCameraEnabled);
+            setMicOn(room.localParticipant.isMicrophoneEnabled);
+          }
+        }
         setStatus("connected");
         snapshot(room);
       } catch {
@@ -107,7 +128,23 @@ export function useProducerRoom({ enabled, adminSend }: Args) {
     };
     // adminSend is stable for the life of the console
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled]);
+  }, [enabled, studioId, publish]);
 
-  return { status, feeds };
+  async function toggleCam() {
+    const room = roomRef.current;
+    if (!room) return;
+    const next = !room.localParticipant.isCameraEnabled;
+    await room.localParticipant.setCameraEnabled(next).catch(() => {});
+    setCamOn(room.localParticipant.isCameraEnabled);
+  }
+
+  async function toggleMic() {
+    const room = roomRef.current;
+    if (!room) return;
+    const next = !room.localParticipant.isMicrophoneEnabled;
+    await room.localParticipant.setMicrophoneEnabled(next).catch(() => {});
+    setMicOn(room.localParticipant.isMicrophoneEnabled);
+  }
+
+  return { status, feeds, camOn, micOn, toggleCam, toggleMic, selfKey };
 }

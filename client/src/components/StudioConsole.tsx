@@ -179,7 +179,16 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   });
 
   // Live pictures for the green room, when the event has a media layer.
-  const { status: roomStatus, feeds } = useProducerRoom({ enabled: true, adminSend });
+  const [onCamera, setOnCamera] = useState(false);
+  const {
+    status: roomStatus,
+    feeds,
+    camOn,
+    micOn,
+    toggleCam,
+    toggleMic,
+    selfKey,
+  } = useProducerRoom({ enabled: true, adminSend, studioId, publish: onCamera, displayName: "Host" });
 
   const studio = data?.studio;
   const present = (data?.participants ?? []).filter((p) => p.present);
@@ -417,6 +426,22 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   useEffect(() => {
     if (broadcasting) setMode("live");
   }, [broadcasting]);
+
+  // Presence is what keeps the host in the room lists; without a heartbeat
+  // they'd vanish after twenty-five seconds like anyone who closed their laptop.
+  useEffect(() => {
+    if (!onCamera || !selfKey) return;
+    const beat = () =>
+      fetch("/api/studio/heartbeat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ clientKey: selfKey, camReady: camOn, micReady: micOn, studioId }),
+      }).catch(() => {});
+    void beat();
+    const id = setInterval(beat, 8000);
+    return () => clearInterval(id);
+  }, [onCamera, selfKey, camOn, micOn, studioId]);
 
   const houseDests = (dests ?? []).filter((d) => d.enabled && !d.signupId).length;
   const steps = [
@@ -832,6 +857,32 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
             />
 
             <DeckButton
+              icon={onCamera ? Video : VideoOff}
+              label={onCamera ? "You're in the room" : "Go on camera"}
+              active={onCamera}
+              onClick={() => setOnCamera((v) => !v)}
+              testId="button-deck-oncamera"
+            />
+            {onCamera && (
+              <>
+                <DeckButton
+                  icon={micOn ? Mic : MicOff}
+                  label={micOn ? "Mic on" : "Muted"}
+                  active={!micOn}
+                  onClick={() => void toggleMic()}
+                  testId="button-deck-mic"
+                />
+                <DeckButton
+                  icon={camOn ? Video : VideoOff}
+                  label={camOn ? "Camera on" : "Camera off"}
+                  active={!camOn}
+                  onClick={() => void toggleCam()}
+                  testId="button-deck-cam"
+                />
+              </>
+            )}
+
+            <DeckButton
               icon={ImageIcon}
               label="Share image"
               onClick={() => setMediaPicker("image")}
@@ -847,15 +898,6 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
 
             <span className="mx-1 h-8 w-px bg-white/15" />
 
-            <a
-              href={joinUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/15"
-              data-testid="link-deck-join"
-            >
-              <Video className="h-4 w-4" /> Join as host
-            </a>
             <a
               href={watchUrl}
               target="_blank"

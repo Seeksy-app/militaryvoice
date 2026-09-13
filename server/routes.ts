@@ -1239,13 +1239,45 @@ export function registerRoutes(app: Express): void {
     }
     const { studio } = await adminStudio(req);
     const room = roomName(studio.id);
+    const email = getAdminEmail(req) || "console";
+
+    // Watching the room and being in it are different jobs. A producer who
+    // wants to appear needs a real participant row, so they show up in the
+    // green room and get promoted the same way as everyone else — the stage
+    // shouldn't have a special case for the person running it.
+    if (req.body?.publish === true) {
+      const row = await storage.upsertStudioParticipant(studio.id, `admin:${email}`, {
+        displayName: String(req.body?.displayName ?? "").trim() || "Host",
+        email,
+        role: "Host",
+      });
+      res.json({
+        configured: true,
+        url: publicLiveKitUrl(),
+        room,
+        publishing: true,
+        clientKey: `admin:${email}`,
+        participantId: row.id,
+        token: await studioToken({
+          room,
+          identity: `p-${row.id}`,
+          name: row.displayName || "Host",
+          canPublish: true,
+          admin: true,
+          attributes: { state: row.state, participantId: String(row.id) },
+        }),
+      });
+      return;
+    }
+
     res.json({
       configured: true,
       url: publicLiveKitUrl(),
       room,
+      publishing: false,
       token: await studioToken({
         room,
-        identity: `producer-${getAdminEmail(req) || "console"}`,
+        identity: `producer-${email}`,
         name: "Control room",
         canPublish: false,
         admin: true,
