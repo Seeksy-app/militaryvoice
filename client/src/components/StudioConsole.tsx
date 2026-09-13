@@ -42,7 +42,10 @@ import {
   Signal,
   Cable,
   Trash2,
+  Check,
 } from "lucide-react";
+
+const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
 interface Props {
   adminGet: <T>(path: string) => Promise<T>;
@@ -182,6 +185,12 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
     onError: (e: Error) => toast({ title: "Couldn't remove that feed", description: e.message, variant: "destructive" }),
   });
 
+  // Shares a cache key with <Destinations>, so this is free.
+  const { data: dests } = useQuery<{ id: number; enabled: boolean; signupId: number | null }[]>({
+    queryKey: ["/api/admin/destinations"],
+    queryFn: () => adminGet("/api/admin/destinations"),
+  });
+
   const { data: signups } = useQuery<SignupRow[]>({
     queryKey: ["/api/admin/signups"],
     queryFn: () => adminGet<SignupRow[]>("/api/admin/signups"),
@@ -231,6 +240,25 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   const recording = Boolean(studio?.recordingEgressId);
   const broadcasting = Boolean(studio?.broadcastEgressId);
   const stageFull = !!studio && onStage.length >= studio.maxOnStage;
+  /**
+   * The standby clip is played by a <video> tag on the broadcast, so it has to
+   * be an actual media file. A YouTube or Vimeo *page* link looks right and
+   * plays as a black screen — which is the worst possible thing to discover
+   * during the emergency you queued it up for.
+   */
+  function standbyProblem(url: string): string | null {
+    const v = url.trim();
+    if (!v) return null;
+    if (/^https?:\/\/(www\.)?(youtube\.com|youtu\.be|vimeo\.com|twitch\.tv)/i.test(v)) {
+      return "That's a page link, not a video file. The broadcast plays this with a video player, so it needs to end in .mp4 (or be an .m3u8 stream). Upload the clip and paste its direct link.";
+    }
+    if (!/^https?:\/\//i.test(v)) return "That needs to be a full https:// link.";
+    if (!/\.(mp4|m4v|mov|webm|m3u8)(\?|$)/i.test(v)) {
+      return "That doesn't look like a video file. It should end in .mp4 or .m3u8 — worth testing before you rely on it.";
+    }
+    return null;
+  }
+
   function commitRename() {
     const next = (renaming ?? "").trim();
     if (next && next !== currentStudio?.name) patchStudio.mutate({ name: next });
@@ -239,6 +267,10 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
 
   const currentStudio = (studios ?? []).find((x) => x.id === (studioId ?? studios?.[0]?.id));
   const isPrimary = currentStudio?.isPrimary !== false;
+  const watchUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/watch${currentStudio && !currentStudio.isPrimary ? `?studioId=${currentStudio.id}` : ""}`
+      : "/watch";
   const joinUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}/studio${currentStudio && !currentStudio.isPrimary ? `?studioId=${currentStudio.id}` : ""}`
@@ -297,18 +329,43 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
       </div>
     );
   }
+  // What the producer should do next. A control room is a sequence, not a
+  // wall of equal-weight panels, so the console says where you are in it.
+  const houseDests = (dests ?? []).filter((d) => d.enabled && !d.signupId).length;
+  const steps = [
+    { n: 1, label: "Get people in", done: present.length > 0, hint: "Send them the join link." },
+    { n: 2, label: "Put someone on stage", done: onStage.length > 0, hint: "Press On beside a name in the green room." },
+    {
+      n: 3,
+      label: "Add somewhere else (optional)",
+      done: houseDests > 0,
+      hint: "Your own watch page always carries it. Add YouTube, X or Twitch to go out there too.",
+    },
+    { n: 4, label: "Go out live", done: broadcasting, hint: "Opens the watch page and pushes to every destination." },
+  ];
+  // Step 3 is optional, so it never blocks the prompt — it only shows as the
+  // next thing to do once everything required is done.
+  const step = steps.find((x) => !x.done && x.n !== 3) ?? steps.find((x) => !x.done);
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <MonitorPlay className="h-4 w-4" />
+    <Card className="overflow-hidden">
+      {/* ---------------------------------------------------- the control bar */}
+      <div className={`relative ${broadcasting || live ? "bg-[#3d0a0d]" : "bg-[#000741]"} px-5 py-4 text-white`}>
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_140%_at_15%_0%,rgba(240,167,31,0.16),transparent_60%)]"
+        />
+        <div className="relative flex flex-wrap items-center gap-x-4 gap-y-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10">
+              <MonitorPlay className="h-4.5 w-4.5 text-[#F0A71F]" />
+            </div>
+            <div className="min-w-0">
               {renaming === null ? (
                 <button
                   type="button"
-                  className="rounded px-1 -mx-1 hover:bg-muted"
+                  className="-mx-1 block truncate rounded px-1 text-lg font-bold leading-tight hover:bg-white/10"
+                  style={HEADLINE_FONT}
                   title="Rename this studio"
                   onClick={() => setRenaming(currentStudio?.name ?? "")}
                   data-testid="button-rename-studio"
@@ -319,7 +376,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                 <Input
                   autoFocus
                   onFocus={(e) => e.currentTarget.select()}
-                  className="h-7 w-48 text-base"
+                  className="h-8 w-52 border-white/25 bg-white/10 text-base text-white"
                   value={renaming}
                   onChange={(e) => setRenaming(e.target.value)}
                   onBlur={() => commitRename()}
@@ -333,52 +390,42 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                   data-testid="input-studio-name"
                 />
               )}
-              {live && (
-                <Badge className="gap-1 bg-[#ED1C24] text-white hover:bg-[#ED1C24]">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> Live
-                </Badge>
-              )}
-            </CardTitle>
-            <CardDescription>
-              Who's waiting, who's on stage, and the standby clip. Speakers join at{" "}
-              <button
-                type="button"
-                className="inline-flex items-center gap-1 text-primary hover:underline"
-                onClick={() => {
-                  navigator.clipboard.writeText(joinUrl).then(
-                    () => toast({ title: "Link copied", description: joinUrl }),
-                    () => {},
-                  );
-                }}
-              >
-                {joinUrl.replace(/^https?:\/\//, "")} <Copy className="h-3 w-3" />
-              </button>
-              <span className="ml-2 inline-flex items-center gap-1.5 text-xs">
+              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-white/55">
                 <span
                   className={`h-1.5 w-1.5 rounded-full ${
                     roomStatus === "connected"
-                      ? "bg-emerald-500"
+                      ? "bg-emerald-400"
                       : roomStatus === "error"
-                        ? "bg-destructive"
-                        : "bg-muted-foreground/40"
+                        ? "bg-[#ED1C24]"
+                        : "bg-white/35"
                   }`}
                 />
                 {roomStatus === "connected"
                   ? "Camera and sound connected"
                   : roomStatus === "connecting"
-                    ? "Connecting to the room…"
+                    ? "Connecting…"
                     : roomStatus === "error"
-                      ? "Couldn't reach the media room"
+                      ? "Can't reach the media room"
                       : "Media layer off"}
-              </span>
-            </CardDescription>
+              </div>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+
+          {broadcasting && (
+            <span className="inline-flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.14em]">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> On air
+            </span>
+          )}
+
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <Select
               value={String(currentStudio?.id ?? "")}
               onValueChange={(v) => (v === "new" ? makeStudio.mutate("New studio") : pick(Number(v)))}
             >
-              <SelectTrigger className="h-9 w-[190px]" data-testid="select-studio">
+              <SelectTrigger
+                className="h-9 w-[180px] border-white/20 bg-white/10 text-white hover:bg-white/15"
+                data-testid="select-studio"
+              >
                 <SelectValue placeholder="Studio" />
               </SelectTrigger>
               <SelectContent>
@@ -393,7 +440,10 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
             </Select>
 
             <Select value={studio?.status ?? "Offline"} onValueChange={(v) => patchStudio.mutate({ status: v })}>
-              <SelectTrigger className="h-9 w-[130px]" data-testid="select-studio-status">
+              <SelectTrigger
+                className="h-9 w-[124px] border-white/20 bg-white/10 text-white hover:bg-white/15"
+                data-testid="select-studio-status"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -409,7 +459,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                className="h-9 w-9 text-white/50 hover:bg-white/10 hover:text-[#ED1C24]"
                 title="Remove this studio"
                 onClick={() => removeStudio.mutate(currentStudio.id)}
                 data-testid="button-delete-studio"
@@ -418,11 +468,27 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
               </Button>
             )}
 
+            <span className="mx-1 hidden h-7 w-px bg-white/15 sm:block" />
+
+            <Button
+              size="sm"
+              className={`h-9 gap-1.5 rounded-full px-4 font-semibold ${
+                broadcasting
+                  ? "bg-white/15 text-white hover:bg-white/25"
+                  : "bg-[#ED1C24] text-white shadow-[0_6px_20px_rgba(237,28,36,0.45)] hover:bg-[#c81820]"
+              }`}
+              disabled={broadcast.isPending}
+              onClick={() => broadcast.mutate(broadcasting ? "stop" : "start")}
+              data-testid="button-broadcast-toggle"
+            >
+              <Signal className="h-3.5 w-3.5" /> {broadcasting ? "Stop the broadcast" : "Go out live"}
+            </Button>
+
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button
                   size="sm"
-                  className={`gap-1.5 rounded-full ${
+                  className={`h-9 gap-1.5 rounded-full px-4 font-semibold ${
                     studio?.fallbackPlaying
                       ? "bg-[#ED1C24] text-white hover:bg-[#c81820]"
                       : "bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b944]"
@@ -430,7 +496,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                   data-testid="button-studio-fallback"
                 >
                   <PlayCircle className="h-3.5 w-3.5" />
-                  {studio?.fallbackPlaying ? "Stop standby video" : "Start video now"}
+                  {studio?.fallbackPlaying ? "Stop standby" : "Start video now"}
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
@@ -459,29 +525,103 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
             </AlertDialog>
           </div>
         </div>
-      </CardHeader>
 
-      <CardContent className="flex flex-col gap-6">
+        {/* ------------------------------------------------ where you are in it */}
+        <div className="relative mt-4 flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-white/10 pt-3">
+          {steps.map((x, i) => {
+            const isNow = step?.n === x.n;
+            return (
+              <div key={x.n} className="flex items-center gap-2">
+                <div
+                  className={`flex items-center gap-2 rounded-full py-1 pl-1 pr-3 ${
+                    isNow ? "bg-[#F0A71F] text-[#1a1200]" : x.done ? "text-white/70" : "text-white/35"
+                  }`}
+                >
+                  <span
+                    className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                      isNow ? "bg-[#1a1200] text-[#F0A71F]" : x.done ? "bg-emerald-500/25 text-emerald-300" : "bg-white/10"
+                    }`}
+                  >
+                    {x.done ? <Check className="h-3 w-3" /> : x.n}
+                  </span>
+                  <span className="text-xs font-semibold">{x.label}</span>
+                </div>
+                {i < steps.length - 1 && <span className="h-px w-3 bg-white/15" aria-hidden="true" />}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* --------------------------------------------------- what to do next */}
+      {step && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-border bg-[#F0A71F]/10 px-5 py-3">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#F0A71F] text-xs font-bold text-[#1a1200]">
+            {step.n}
+          </span>
+          <p className="min-w-0 flex-1 text-sm">
+            <span className="font-semibold">{step.label}.</span>{" "}
+            <span className="text-muted-foreground">{step.hint}</span>
+          </p>
+          {step.n === 1 && (
+            <Button
+              size="sm"
+              className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]"
+              onClick={() =>
+                navigator.clipboard.writeText(joinUrl).then(
+                  () => toast({ title: "Join link copied", description: joinUrl }),
+                  () => {},
+                )
+              }
+              data-testid="button-copy-join"
+            >
+              <Copy className="h-3.5 w-3.5" /> Copy the join link
+            </Button>
+          )}
+        </div>
+      )}
+
+      <CardContent className="flex flex-col gap-6 pt-6">
         {studio?.fallbackPlaying && (
-          <div className="flex items-start gap-3 rounded-xl border-2 border-[#ED1C24] bg-[#ED1C24]/10 p-4">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[#ED1C24]" />
-            <div>
-              <p className="text-sm font-semibold">Standby video is on the air.</p>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                {studio.fallbackLabel || studio.fallbackVideoUrl}. Everyone in the green room has been told to hold.
+          <div
+            className={`flex items-start gap-3 rounded-xl border-2 p-4 ${
+              broadcasting ? "border-[#ED1C24] bg-[#ED1C24]/10" : "border-[#F0A71F] bg-[#F0A71F]/10"
+            }`}
+          >
+            <AlertTriangle
+              className={`mt-0.5 h-5 w-5 shrink-0 ${broadcasting ? "text-[#ED1C24]" : "text-[#F0A71F]"}`}
+            />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">
+                {broadcasting ? "Standby video is on the air." : "Standby is armed, but nothing is going out."}
               </p>
+              <p className="mt-0.5 break-words text-sm text-muted-foreground">
+                {studio.fallbackLabel || studio.fallbackVideoUrl}.{" "}
+                {broadcasting
+                  ? "Everyone in the green room has been told to hold."
+                  : "It will be the first thing the audience sees the moment you go out live."}
+              </p>
+              {standbyProblem(studio.fallbackVideoUrl) && (
+                <p className="mt-2 text-sm font-medium text-[#ED1C24]">
+                  {standbyProblem(studio.fallbackVideoUrl)}
+                </p>
+              )}
             </div>
           </div>
         )}
 
-        {/* what the run of show says is happening now */}
         {isPrimary && (current || next) && (
           <div className="grid gap-3 sm:grid-cols-2">
             {[
               ["On air now", current],
               ["Up next", next],
             ].map(([label, item]) => (
-              <div key={label as string} className="rounded-xl border border-border bg-muted/30 p-4">
+              <div
+                key={label as string}
+                className={`rounded-xl border p-4 ${
+                  label === "On air now" ? "border-[#053877]/25 bg-[#053877]/5" : "border-border bg-muted/30"
+                }`}
+              >
                 <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <Clock className="h-3 w-3 text-primary" /> {label as string}
                 </div>
@@ -493,7 +633,9 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                       {(item as RunItemRow).durationMinutes ? ` · ${(item as RunItemRow).durationMinutes}m` : ""}
                     </div>
                     {(item as RunItemRow).notes && (
-                      <p className="mt-1.5 whitespace-pre-line text-xs text-muted-foreground">{(item as RunItemRow).notes}</p>
+                      <p className="mt-1.5 whitespace-pre-line text-xs text-muted-foreground">
+                        {(item as RunItemRow).notes}
+                      </p>
                     )}
                   </>
                 ) : (
@@ -504,231 +646,284 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
           </div>
         )}
 
-        <div
-          className={`flex flex-wrap items-center gap-3 rounded-xl border p-4 ${
-            broadcasting ? "border-[#ED1C24]/50 bg-[#ED1C24]/5" : "border-border bg-muted/30"
-          }`}
-        >
-          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <Signal className={`h-3.5 w-3.5 ${broadcasting ? "text-[#ED1C24]" : "text-primary"}`} /> Broadcast
-          </div>
-          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
-            {broadcasting
-              ? "The stage is going out to every destination switched on below."
-              : "One composite of the stage, sent to all your destinations at once."}
-          </p>
-          <Button
-            size="sm"
-            variant={broadcasting ? "outline" : "default"}
-            className={`gap-1.5 rounded-full ${broadcasting ? "" : "bg-[#ED1C24] text-white hover:bg-[#c81820]"}`}
-            disabled={broadcast.isPending}
-            onClick={() => broadcast.mutate(broadcasting ? "stop" : "start")}
-            data-testid="button-broadcast-toggle"
-          >
-            <Signal className="h-3.5 w-3.5" /> {broadcasting ? "Stop the broadcast" : "Go out live"}
-          </Button>
-        </div>
-
-        <Destinations
-          adminGet={adminGet}
-          adminSend={adminSend}
-          broadcasting={broadcasting}
-          signups={signups ?? []}
-        />
-
-        {(feeds2 ?? []).length > 0 && (
-          <div className="rounded-xl border border-border bg-muted/30 p-4">
-            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <Cable className="h-3.5 w-3.5 text-primary" /> Their own encoders
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              These podcasters push in from their own software. They arrive in the green room like anyone else.
-            </p>
-            <div className="mt-3 flex flex-col gap-2">
-              {(feeds2 ?? []).map((f) => (
-                <div
-                  key={f.id}
-                  className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-background p-3"
-                  data-testid={`ingress-${f.id}`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">{f.displayName || f.ownerEmail}</div>
-                    <div className="truncate font-mono text-xs text-muted-foreground">key {f.keyHint}</div>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {f.status === "2" ? "Receiving" : f.status === "1" ? "Waiting for their stream" : "Set up"}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                    onClick={() => dropIngress.mutate(f.id)}
-                    aria-label="Remove this feed"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* keeping the slot: a separate egress from whatever is going out, so
-            stopping it never touches the broadcast */}
-        <div
-          className={`flex flex-wrap items-center gap-3 rounded-xl border p-4 ${
-            recording ? "border-[#ED1C24]/50 bg-[#ED1C24]/5" : "border-border bg-muted/30"
-          }`}
-        >
-          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <Disc className={`h-3.5 w-3.5 ${recording ? "text-[#ED1C24]" : "text-primary"}`} /> Recording
-          </div>
-          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
-            {recording
-              ? "This slot is being kept. It lands in the podcaster's dashboard when you stop."
-              : current?.title
-                ? `Ready to keep "${current.title}".`
-                : "Records the room to one file for the slot that's on air."}
-          </p>
-          {recording ? (
-            <Button
-              size="sm"
-              className="gap-1.5 rounded-full bg-[#ED1C24] text-white hover:bg-[#c81820]"
-              disabled={record.isPending}
-              onClick={() => record.mutate({ action: "stop" })}
-              data-testid="button-studio-record-stop"
+        {/* ------------------------------------------------------------ people */}
+        <section>
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <h3 className="text-sm font-bold uppercase tracking-[0.12em]" style={HEADLINE_FONT}>
+              The room
+            </h3>
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+              onClick={() =>
+                navigator.clipboard.writeText(joinUrl).then(
+                  () => toast({ title: "Join link copied", description: joinUrl }),
+                  () => {},
+                )
+              }
             >
-              <Square className="h-3.5 w-3.5" /> Stop and save
-            </Button>
+              {joinUrl.replace(/^https?:\/\//, "")} <Copy className="h-3 w-3" />
+            </button>
+          </div>
+
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
           ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 rounded-full"
-              disabled={record.isPending}
-              onClick={() => record.mutate({ action: "start", signupId: current?.signupId ?? undefined })}
-              data-testid="button-studio-record-start"
-            >
-              <Disc className="h-3.5 w-3.5" /> Record this slot
-            </Button>
-          )}
-        </div>
-
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : (
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* green room */}
-            <div>
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  <Users className="h-4 w-4" /> Green room ({greenRoom.length})
-                </h3>
-              </div>
-              {greenRoom.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
-                  Nobody waiting. Send them the join link above.
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border border-border bg-muted/25 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    <Users className="h-3.5 w-3.5" /> Green room
+                    <span className="rounded-full bg-background px-2 py-0.5 text-[11px] font-semibold">
+                      {greenRoom.length}
+                    </span>
+                  </h4>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {greenRoom.map((p) => (
-                    <Tile key={p.id} p={p} stage={false} />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* stage */}
-            <div>
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                  <Radio className="h-4 w-4" /> On stage ({onStage.length}/{studio?.maxOnStage ?? 5})
-                </h3>
-                <Select
-                  value={String(studio?.maxOnStage ?? 5)}
-                  onValueChange={(v) => patchStudio.mutate({ maxOnStage: Number(v) })}
-                >
-                  <SelectTrigger className="h-7 w-[110px] text-xs" data-testid="select-studio-capacity">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[2, 3, 4, 5, 6, 8].map((n) => (
-                      <SelectItem key={n} value={String(n)}>
-                        Max {n}
-                      </SelectItem>
+                {greenRoom.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border p-6 text-center">
+                    <Users className="mx-auto h-5 w-5 text-muted-foreground/40" />
+                    <p className="mt-2 text-sm text-muted-foreground">Nobody waiting yet.</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">Send them the join link above.</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {greenRoom.map((p) => (
+                      <Tile key={p.id} p={p} stage={false} />
                     ))}
-                  </SelectContent>
-                </Select>
+                  </div>
+                )}
               </div>
-              {onStage.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
-                  Stage is empty.
+
+              <div
+                className={`rounded-2xl border p-4 ${
+                  onStage.length > 0 ? "border-[#ED1C24]/40 bg-[#ED1C24]/5" : "border-border bg-muted/25"
+                }`}
+              >
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    <Radio className="h-3.5 w-3.5" /> On stage
+                    <span className="rounded-full bg-background px-2 py-0.5 text-[11px] font-semibold">
+                      {onStage.length}/{studio?.maxOnStage ?? 5}
+                    </span>
+                  </h4>
+                  <Select
+                    value={String(studio?.maxOnStage ?? 5)}
+                    onValueChange={(v) => patchStudio.mutate({ maxOnStage: Number(v) })}
+                  >
+                    <SelectTrigger className="h-7 w-[104px] text-xs" data-testid="select-studio-capacity">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[2, 3, 4, 5, 6, 8].map((n) => (
+                        <SelectItem key={n} value={String(n)}>
+                          Max {n}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {onStage.map((p) => (
-                    <Tile key={p.id} p={p} stage />
+                {onStage.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border p-6 text-center">
+                    <Radio className="mx-auto h-5 w-5 text-muted-foreground/40" />
+                    <p className="mt-2 text-sm text-muted-foreground">Nobody on air.</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Press <strong>On</strong> beside a name to bring them up.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {onStage.map((p) => (
+                      <Tile key={p.id} p={p} stage />
+                    ))}
+                  </div>
+                )}
+                {stageFull && (
+                  <p className="mt-2 text-xs text-muted-foreground">Stage is full. Take someone off to add another.</p>
+                )}
+              </div>
+            </div>
+          )}
+          {stale.length > 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {stale.length} {stale.length === 1 ? "person has" : "people have"} dropped off and stopped reporting in.
+            </p>
+          )}
+        </section>
+
+        {/* ------------------------------------------------------------ output */}
+        <section>
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-[0.12em]" style={HEADLINE_FONT}>
+            Where it goes
+          </h3>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-3 rounded-2xl border-2 border-[#053877]/30 bg-[#053877]/5 p-4">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877] text-white">
+                <Radio className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold">Our own watch page · always on</div>
+                <p className="text-xs text-muted-foreground">
+                  The audience watches here with no delay. Everything below is in addition to this, never instead of it.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  onClick={() =>
+                    navigator.clipboard.writeText(watchUrl).then(
+                      () => toast({ title: "Watch link copied", description: watchUrl }),
+                      () => {},
+                    )
+                  }
+                  data-testid="button-copy-watch"
+                >
+                  {watchUrl.replace(/^https?:\/\//, "")} <Copy className="h-3 w-3" />
+                </button>
+                <a
+                  href={watchUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                  data-testid="link-open-watch"
+                >
+                  Open
+                </a>
+              </div>
+            </div>
+
+            <Destinations
+              adminGet={adminGet}
+              adminSend={adminSend}
+              broadcasting={broadcasting}
+              signups={signups ?? []}
+            />
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div
+                className={`flex flex-col gap-3 rounded-2xl border p-4 ${
+                  recording ? "border-[#ED1C24]/50 bg-[#ED1C24]/5" : "border-border bg-muted/25"
+                }`}
+              >
+                <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                  <Disc className={`h-3.5 w-3.5 ${recording ? "text-[#ED1C24]" : "text-primary"}`} /> Recording
+                </div>
+                <p className="flex-1 text-sm text-muted-foreground">
+                  {recording
+                    ? "This slot is being kept. It lands in the podcaster's dashboard when you stop."
+                    : current?.title
+                      ? `Ready to keep "${current.title}".`
+                      : "Records the room to one file for the slot that's on air."}
+                </p>
+                {recording ? (
+                  <Button
+                    size="sm"
+                    className="w-fit gap-1.5 rounded-full bg-[#ED1C24] text-white hover:bg-[#c81820]"
+                    disabled={record.isPending}
+                    onClick={() => record.mutate({ action: "stop" })}
+                    data-testid="button-studio-record-stop"
+                  >
+                    <Square className="h-3.5 w-3.5" /> Stop and save
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-fit gap-1.5 rounded-full"
+                    disabled={record.isPending}
+                    onClick={() => record.mutate({ action: "start", signupId: current?.signupId ?? undefined })}
+                    data-testid="button-studio-record-start"
+                  >
+                    <Disc className="h-3.5 w-3.5" /> Record this slot
+                  </Button>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-border bg-muted/25 p-4">
+                <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                  <PlayCircle className="h-3.5 w-3.5 text-[#F0A71F]" /> Standby video
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  One button rolls this if something goes wrong. Keep something here at all times.
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_140px]">
+                  <Input
+                    placeholder="https://…  (mp4 or a stream URL)"
+                    value={fallbackUrl ?? studio?.fallbackVideoUrl ?? ""}
+                    onChange={(e) => setFallbackUrl(e.target.value)}
+                    data-testid="input-studio-fallback-url"
+                  />
+                  <Input
+                    placeholder="Sponsor reel"
+                    value={fallbackLabel ?? studio?.fallbackLabel ?? ""}
+                    onChange={(e) => setFallbackLabel(e.target.value)}
+                    data-testid="input-studio-fallback-label"
+                  />
+                </div>
+                {standbyProblem(fallbackUrl ?? studio?.fallbackVideoUrl ?? "") && (
+                  <p className="mt-2 flex items-start gap-1.5 text-xs text-[#ED1C24]">
+                    <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                    {standbyProblem(fallbackUrl ?? studio?.fallbackVideoUrl ?? "")}
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 rounded-full"
+                  disabled={fallbackUrl === null && fallbackLabel === null}
+                  onClick={() => {
+                    patchStudio.mutate({
+                      fallbackVideoUrl: fallbackUrl ?? studio?.fallbackVideoUrl ?? "",
+                      fallbackLabel: fallbackLabel ?? studio?.fallbackLabel ?? "",
+                    });
+                    setFallbackUrl(null);
+                    setFallbackLabel(null);
+                  }}
+                  data-testid="button-studio-save-fallback"
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+
+            {(feeds2 ?? []).length > 0 && (
+              <div className="rounded-2xl border border-border bg-muted/25 p-4">
+                <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                  <Cable className="h-3.5 w-3.5 text-primary" /> Their own encoders
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  These podcasters push in from their own software. They arrive in the green room like anyone else.
+                </p>
+                <div className="mt-3 flex flex-col gap-2">
+                  {(feeds2 ?? []).map((f) => (
+                    <div
+                      key={f.id}
+                      className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-background p-3"
+                      data-testid={`ingress-${f.id}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-semibold">{f.displayName || f.ownerEmail}</div>
+                        <div className="truncate font-mono text-xs text-muted-foreground">key {f.keyHint}</div>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {f.status === "2" ? "Receiving" : f.status === "1" ? "Waiting for their stream" : "Set up"}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => dropIngress.mutate(f.id)}
+                        aria-label="Remove this feed"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   ))}
                 </div>
-              )}
-              {stageFull && <p className="mt-2 text-xs text-muted-foreground">Stage is full. Take someone off to add another.</p>}
-            </div>
+              </div>
+            )}
           </div>
-        )}
-
-        {/* standby clip */}
-        <div className="rounded-xl border border-border bg-muted/20 p-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Standby video</p>
-          <div className="grid gap-3 sm:grid-cols-[1fr_200px_auto]">
-            <div>
-              <Label className="text-xs">Video URL</Label>
-              <Input
-                className="mt-1"
-                placeholder="https://…  (mp4 or a stream URL)"
-                value={fallbackUrl ?? studio?.fallbackVideoUrl ?? ""}
-                onChange={(e) => setFallbackUrl(e.target.value)}
-                data-testid="input-studio-fallback-url"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Label</Label>
-              <Input
-                className="mt-1"
-                placeholder="Sponsor reel"
-                value={fallbackLabel ?? studio?.fallbackLabel ?? ""}
-                onChange={(e) => setFallbackLabel(e.target.value)}
-                data-testid="input-studio-fallback-label"
-              />
-            </div>
-            <div className="flex items-end">
-              <Button
-                variant="outline"
-                className="rounded-full"
-                disabled={fallbackUrl === null && fallbackLabel === null}
-                onClick={() => {
-                  patchStudio.mutate({
-                    fallbackVideoUrl: fallbackUrl ?? studio?.fallbackVideoUrl ?? "",
-                    fallbackLabel: fallbackLabel ?? studio?.fallbackLabel ?? "",
-                  });
-                  setFallbackUrl(null);
-                  setFallbackLabel(null);
-                }}
-                data-testid="button-studio-save-fallback"
-              >
-                Save
-              </Button>
-            </div>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            One button rolls this if something goes wrong. Keep something here at all times.
-          </p>
-        </div>
-
-        {stale.length > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {stale.length} {stale.length === 1 ? "person has" : "people have"} dropped off and stopped reporting in.
-          </p>
-        )}
+        </section>
       </CardContent>
     </Card>
   );

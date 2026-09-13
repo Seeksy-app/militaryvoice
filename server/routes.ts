@@ -1050,6 +1050,43 @@ export function registerRoutes(app: Express): void {
     res.json(await speakerState(found.event, found.studio, clientKey));
   });
 
+  /**
+   * A viewer's ticket to the room. No sign-in: this is the public broadcast,
+   * and the token can only subscribe — never publish, never see the green
+   * room's identities beyond what the stage already shows.
+   */
+  app.get("/api/watch/token", async (req, res) => {
+    noStore(res);
+    if (!isLiveKitConfigured()) {
+      res.json({ configured: false });
+      return;
+    }
+    const found = await studioForSlug(
+      typeof req.query.slug === "string" ? req.query.slug : undefined,
+      numParam(req.query.studioId),
+    );
+    if (!found) {
+      res.json({ configured: false });
+      return;
+    }
+    const { event, studio } = found;
+    const room = roomName(studio.id);
+    res.json({
+      configured: true,
+      url: publicLiveKitUrl(),
+      room,
+      eventName: event.name,
+      studioName: studio.name,
+      status: studio.status,
+      token: await studioToken({
+        room,
+        identity: `viewer-${Math.random().toString(36).slice(2, 12)}`,
+        name: "Viewer",
+        canPublish: false,
+      }),
+    });
+  });
+
   app.post("/api/studio/join", async (req, res) => {
     const parsed = studioJoinSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1284,7 +1321,14 @@ export function registerRoutes(app: Express): void {
       for (const d of await storage.listDestinations(eventId)) {
         if (d.live) await storage.updateDestination(d.id, { live: false });
       }
-      res.json(await storage.updateStudio(studio.id, { broadcastEgressId: "" }));
+      const off = await storage.updateStudio(studio.id, { broadcastEgressId: "", status: "Offline" });
+      await syncRoomMetadata(roomName(studio.id), {
+        status: "Offline",
+        fallbackPlaying: off?.fallbackPlaying ?? false,
+        fallbackVideoUrl: off?.fallbackVideoUrl ?? "",
+        fallbackLabel: off?.fallbackLabel ?? "",
+      });
+      res.json(off);
       return;
     }
     if (action !== "start") {
@@ -1295,20 +1339,31 @@ export function registerRoutes(app: Express): void {
       res.status(409).json({ message: "Already going out. Stop it first." });
       return;
     }
-    // House destinations only at the start; a podcaster's own is attached when
-    // their slot comes up.
+    // Our own watch page is always a destination — viewers subscribe to the
+    // room directly, no egress involved. An egress is only needed to push to
+    // somebody else's RTMP, so with no external destinations we simply go Live
+    // and the audience watches on our site.
     const rows = (await storage.listDestinations(eventId)).filter((d) => d.enabled && !d.signupId);
-    if (rows.length === 0) {
-      res.status(400).json({ message: "Add at least one destination before going out." });
-      return;
+    let egressId = "";
+    if (rows.length > 0) {
+      egressId = await startBroadcast(
+        roomName(studio.id),
+        rows.map((d) => ({ url: ingestUrl(d), label: d.label || d.platform })),
+        templateBaseUrl(req),
+      );
+      for (const d of rows) await storage.updateDestination(d.id, { live: true });
     }
-    const egressId = await startBroadcast(
-      roomName(studio.id),
-      rows.map((d) => ({ url: ingestUrl(d), label: d.label || d.platform })),
-      templateBaseUrl(req),
-    );
-    for (const d of rows) await storage.updateDestination(d.id, { live: true });
-    res.json(await storage.updateStudio(studio.id, { broadcastEgressId: egressId }));
+    const updated = await storage.updateStudio(studio.id, { broadcastEgressId: egressId, status: "Live" });
+    const ev = await storage.getEventById(eventId);
+    await syncRoomMetadata(roomName(studio.id), {
+      eventName: ev?.name ?? "",
+      studioName: updated?.name ?? "",
+      status: "Live",
+      fallbackPlaying: updated?.fallbackPlaying ?? false,
+      fallbackVideoUrl: updated?.fallbackVideoUrl ?? "",
+      fallbackLabel: updated?.fallbackLabel ?? "",
+    });
+    res.json(updated);
   });
 
   /** Add or drop one destination while the broadcast is already running. */
