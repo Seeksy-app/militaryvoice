@@ -2,9 +2,25 @@
   "buildCommand": "vite build",
   "outputDirectory": "dist/public",
   "installCommand": "npm install",
-  "regions": ["pdx1"],
+  "regions": [
+    "pdx1"
+  ],
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/api"
+    },
+    {
+      "source": "/((?!api/|assets/).*)",
+      "destination": "/index.html"
+    }
   ]
 }
