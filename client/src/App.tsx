@@ -19,6 +19,7 @@ import Platform from "@/pages/Platform";
 import Studio from "@/pages/Studio";
 import StudioComposite from "@/pages/StudioComposite";
 import Watch from "@/pages/Watch";
+import { PrivacyPolicy, TermsOfService } from "@/pages/Legal";
 
 /**
  * Client-side navigation keeps the old scroll position by default. Every
@@ -64,6 +65,11 @@ function AppRouter() {
       <Route path="/schedule">{() => <Home />}</Route>
       <Route path="/agenda">{() => <Agenda />}</Route>
       <Route path="/faq">{() => <Faq />}</Route>
+      {/* Registered on the Google OAuth consent screen — these URLs are
+          load-bearing for verification, so don't rename them. */}
+      <Route path="/policy">{() => <PrivacyPolicy />}</Route>
+      <Route path="/privacy">{() => <PrivacyPolicy />}</Route>
+      <Route path="/terms">{() => <TermsOfService />}</Route>
       <Route path="/prepare">{() => <Prepare />}</Route>
       <Route path="/platform">{() => <Platform />}</Route>
       <Route path="/studio/composite">{() => <StudioComposite />}</Route>
