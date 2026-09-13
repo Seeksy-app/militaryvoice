@@ -323,6 +323,56 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Public: event config (featured by default, or ?slug=) -----------------
+  // ---- Search engines -----------------------------------------------------------
+  //      Built from the real events rather than kept as a static file, so a new
+  //      event is discoverable the moment it's published.
+  app.get("/sitemap.xml", async (req, res) => {
+    const origin = `${req.protocol}://${req.get("host")}`;
+    const staticPaths = ["", "/schedule", "/agenda", "/faq", "/prepare", "/platform", "/events", "/policy", "/terms"];
+    let events: { slug: string }[] = [];
+    try {
+      events = (await storage.listEvents()).filter((e) => e.slug);
+    } catch {
+      /* a sitemap is worth serving even if the database is having a moment */
+    }
+    const urls = [
+      ...staticPaths.map((p) => ({ loc: `${origin}${p}`, priority: p === "" ? "1.0" : "0.7" })),
+      ...events.flatMap((e) => [
+        { loc: `${origin}/event/${e.slug}`, priority: "0.9" },
+        { loc: `${origin}/event/${e.slug}/agenda`, priority: "0.6" },
+        { loc: `${origin}/event/${e.slug}/schedule`, priority: "0.6" },
+      ]),
+    ];
+    const today = new Date().toISOString().slice(0, 10);
+    res.type("application/xml").send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+        urls
+          .map((u) => `  <url><loc>${u.loc}</loc><lastmod>${today}</lastmod><priority>${u.priority}</priority></url>`)
+          .join("\n") +
+        `\n</urlset>\n`,
+    );
+  });
+
+  app.get("/robots.txt", (req, res) => {
+    const origin = `${req.protocol}://${req.get("host")}`;
+    // The studio, the dashboards and the watch page are either private or
+    // meaningless without a session — no reason to spend crawl budget on them.
+    res.type("text/plain").send(
+      [
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /admin",
+        "Disallow: /host",
+        "Disallow: /studio",
+        "Disallow: /watch",
+        "Disallow: /api",
+        "",
+        `Sitemap: ${origin}/sitemap.xml`,
+        "",
+      ].join("\n"),
+    );
+  });
+
   app.get("/api/event", async (req, res) => {
     publicCache(res, 60);
     const slug = typeof req.query.slug === "string" ? req.query.slug : undefined;
