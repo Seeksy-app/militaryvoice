@@ -266,6 +266,9 @@ async function ensureSchema() {
     );
   `;
   await sql`CREATE INDEX IF NOT EXISTS scenes_studio_idx ON scenes (studio_id)`;
+  await sql`ALTER TABLE run_of_show ADD COLUMN IF NOT EXISTS media_url TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE run_of_show ADD COLUMN IF NOT EXISTS media_kind TEXT NOT NULL DEFAULT 'video'`;
+  await sql`ALTER TABLE run_of_show ADD COLUMN IF NOT EXISTS media_label TEXT NOT NULL DEFAULT ''`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS recordings (
@@ -416,7 +419,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "scenes", column: "media_url" };
+const SCHEMA_SENTINEL = { table: "run_of_show", column: "media_url" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();

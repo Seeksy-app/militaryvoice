@@ -293,11 +293,37 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                         onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))}
                       />
                     </div>
+                    {/* What this row puts on the stage. A row with something
+                        attached becomes one press during the show. */}
+                    <div className="mt-3">
+                      <Label className="text-xs">On the stage for this row</Label>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <Input
+                          className="min-w-[220px] flex-1 font-mono text-xs"
+                          placeholder="Paste a link, or leave empty for the cameras"
+                          value={draft.mediaUrl ?? it.mediaUrl}
+                          onChange={(e) => setDraft((d) => ({ ...d, mediaUrl: e.target.value }))}
+                          data-testid={`input-run-media-${it.id}`}
+                        />
+                        <Input
+                          className="w-[150px] text-xs"
+                          placeholder="Label on air"
+                          value={draft.mediaLabel ?? it.mediaLabel}
+                          onChange={(e) => setDraft((d) => ({ ...d, mediaLabel: e.target.value }))}
+                          data-testid={`input-run-media-label-${it.id}`}
+                        />
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Empty means this cue returns the stage to the cameras.
+                      </p>
+                    </div>
+
                     <div className="mt-3 flex items-center gap-2">
                       <Button
                         size="sm"
                         className="gap-1.5"
-                        onClick={() =>
+                        onClick={() => {
+                          const url = (draft.mediaUrl ?? it.mediaUrl).trim();
                           saveItem.mutate({
                             id: it.id,
                             patch: {
@@ -306,9 +332,12 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                               notes: draft.notes ?? it.notes,
                               durationMinutes: draft.durationMinutes ?? it.durationMinutes,
                               startAtUtc: it.startAtUtc,
+                              mediaUrl: url,
+                              mediaKind: /\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(url) ? "image" : "video",
+                              mediaLabel: (draft.mediaLabel ?? it.mediaLabel).trim(),
                             },
-                          })
-                        }
+                          });
+                        }}
                       >
                         <Check className="h-3.5 w-3.5" /> Save
                       </Button>

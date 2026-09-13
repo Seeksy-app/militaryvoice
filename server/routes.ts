@@ -1499,6 +1499,32 @@ export function registerRoutes(app: Express): void {
     res.json(updated);
   });
 
+  /**
+   * Take a run-of-show row: put whatever it carries on the stage, or clear the
+   * stage if it carries nothing. This is what makes the rundown the scene list
+   * — the producer follows it down and each row is one press.
+   */
+  app.post("/api/admin/run-of-show/:id/take", requireAdmin, async (req, res) => {
+    const items = await storage.listRunOfShow(Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id);
+    const row = items.find((r) => r.id === Number(req.params.id));
+    if (!row) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    const { studio } = await adminStudio(req);
+    const updated = await storage.updateStudio(studio.id, {
+      stageMediaUrl: row.mediaUrl,
+      stageMediaKind: row.mediaKind || "video",
+      stageMediaLabel: row.mediaLabel || row.title,
+      stageMediaPlaying: Boolean(row.mediaUrl),
+    });
+    if (updated) {
+      const ev = await storage.getEventById(studio.eventId);
+      await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated));
+    }
+    res.json(updated);
+  });
+
   /** Put something on the stage, or take it off. */
   app.post("/api/admin/studio/media", requireAdmin, async (req, res) => {
     const { studio } = await adminStudio(req);

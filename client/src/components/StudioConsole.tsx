@@ -52,6 +52,7 @@ import {
   Film,
   Image as ImageIcon,
   Clapperboard,
+  ListOrdered,
   Plus,
   Maximize2,
   Minimize2,
@@ -284,6 +285,12 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
   >({
     queryKey: ["/api/admin/scenes", studioId],
     queryFn: () => adminGet(`/api/admin/scenes${q}`),
+  });
+
+  const takeRow = useMutation({
+    mutationFn: async (id: number) => adminSend("POST", `/api/admin/run-of-show/${id}/take`, { studioId }),
+    onSuccess: () => refresh(),
+    onError: (e: Error) => toast({ title: "Couldn't take that cue", description: e.message, variant: "destructive" }),
   });
 
   const muteStage = useMutation({
@@ -897,6 +904,65 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
                 </span>
               )}
             </div>
+
+            {/* the rundown, driveable — a second person can sit on this alone */}
+            {isPrimary && (runItems ?? []).length > 0 && (
+              <aside className="hidden w-[280px] shrink-0 flex-col border-l border-white/10 xl:flex">
+                <div className="flex items-center justify-between px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">
+                  <span className="flex items-center gap-1.5">
+                    <ListOrdered className="h-3.5 w-3.5" /> Rundown
+                  </span>
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-white/80">{(runItems ?? []).length}</span>
+                </div>
+
+                <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2.5 pb-3">
+                  {(runItems ?? []).map((r) => {
+                    const isNow = current?.id === r.id;
+                    const onStageNow =
+                      Boolean(r.mediaUrl) && studio?.stageMediaPlaying && studio?.stageMediaUrl === r.mediaUrl;
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => takeRow.mutate(r.id)}
+                        disabled={takeRow.isPending}
+                        className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
+                          onStageNow
+                            ? "bg-[#F0A71F] text-[#1a1200]"
+                            : isNow
+                              ? "bg-white/12 text-white"
+                              : "text-white/65 hover:bg-white/8"
+                        }`}
+                        data-testid={`button-cue-${r.id}`}
+                      >
+                        <span className="pt-0.5 font-mono text-[10px] tabular-nums opacity-70">
+                          {r.startAtUtc ? formatTimeInZone(new Date(r.startAtUtc), zone) : "--:--"}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-medium">{r.title}</span>
+                          <span className="mt-0.5 flex items-center gap-1.5 text-[10px] opacity-70">
+                            {r.kind}
+                            {r.mediaUrl && (
+                              <>
+                                <Film className="h-2.5 w-2.5" />
+                                {r.mediaLabel || "media"}
+                              </>
+                            )}
+                          </span>
+                        </span>
+                        {isNow && !onStageNow && (
+                          <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#ED1C24]" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="border-t border-white/10 px-4 py-2 text-[10px] leading-snug text-white/35">
+                  Press a row to take it. A row with no media returns the stage to the cameras.
+                </p>
+              </aside>
+            )}
           </div>
 
           {/* scenes, one press each */}

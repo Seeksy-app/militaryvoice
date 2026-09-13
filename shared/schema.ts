@@ -493,6 +493,12 @@ export const runOfShow = pgTable("run_of_show", {
   // Stable identity for a generated row ("segment-14"), so a rebuild can find
   // and refresh it. Empty for rows an admin added by hand.
   sourceKey: text("source_key").notNull().default(""),
+  // A row can carry something for the stage — a sponsor reel, an intro, a
+  // slide. That makes the run of show the scene list: the producer follows it
+  // down and each row is one press.
+  mediaUrl: text("media_url").notNull().default(""),
+  mediaKind: text("media_kind").notNull().default("video"),
+  mediaLabel: text("media_label").notNull().default(""),
   // Set once an admin changes the wording; rebuild then leaves those fields be.
   edited: boolean("edited").notNull().default(false),
   createdAt: text("created_at").notNull(),
@@ -500,6 +506,9 @@ export const runOfShow = pgTable("run_of_show", {
 export type RunItemRow = typeof runOfShow.$inferSelect;
 
 export const runItemInputSchema = z.object({
+  mediaUrl: z.string().trim().max(600).optional(),
+  mediaKind: z.enum(["video", "image"]).optional(),
+  mediaLabel: z.string().trim().max(120).optional(),
   kind: z.enum(RUN_ITEM_KINDS),
   title: z.string().trim().max(200),
   notes: z.string().trim().max(2000),
