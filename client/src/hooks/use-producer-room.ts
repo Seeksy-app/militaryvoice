@@ -13,7 +13,11 @@ import {
 // room, so the producer can see someone's camera before bringing them on.
 
 export interface ProducerFeed {
+  identity: string;
   name: string;
+  /** Mirrored from our database onto the LiveKit participant by the server. */
+  state: string;
+  speaking: boolean;
   video: RemoteTrack | null;
   audio: RemoteTrack | null;
 }
@@ -46,7 +50,14 @@ export function useProducerRoom({ enabled, adminSend }: Args) {
           if (pub.kind === Track.Kind.Video) video = pub.track;
           if (pub.kind === Track.Kind.Audio) audio = pub.track;
         });
-        next.set(p.identity, { name: p.name || p.identity, video, audio });
+        next.set(p.identity, {
+          identity: p.identity,
+          name: p.name || p.identity,
+          state: p.attributes?.state ?? "Green room",
+          speaking: p.isSpeaking,
+          video,
+          audio,
+        });
       });
       setFeeds(next);
     };
@@ -76,6 +87,7 @@ export function useProducerRoom({ enabled, adminSend }: Args) {
         .on(RoomEvent.TrackSubscribed, refresh)
         .on(RoomEvent.TrackUnsubscribed, refresh)
         .on(RoomEvent.ParticipantAttributesChanged, refresh)
+        .on(RoomEvent.ActiveSpeakersChanged, refresh)
         .on(RoomEvent.Disconnected, () => !cancelled && setStatus("idle"));
 
       try {

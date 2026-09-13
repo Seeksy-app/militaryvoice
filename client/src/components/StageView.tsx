@@ -155,7 +155,10 @@ function Tile({ tile, muted }: { tile: StageTile; muted: boolean }) {
         tile.speaking ? "ring-4 ring-[#F0A71F]" : "ring-1 ring-white/10"
       }`}
     >
-      <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+      {/* contain, not cover: a camera that isn't exactly 16:9 gets letterboxed
+          rather than cropped. Losing the top of someone's head on air is worse
+          than a black bar. */}
+      <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-contain" />
       <audio ref={audioRef} autoPlay muted={muted} />
 
       {!tile.video && (
@@ -215,7 +218,7 @@ export function StageGrid({
     }
     return (
       <div className="absolute inset-0">
-        <video src={meta.fallbackVideoUrl} autoPlay loop playsInline muted={muted} className="h-full w-full object-cover" />
+        <video src={meta.fallbackVideoUrl} autoPlay loop playsInline muted={muted} className="h-full w-full object-contain" />
         {meta.fallbackLabel && (
           <div
             className="absolute bottom-8 left-8 rounded-lg bg-[#000741]/85 px-5 py-3 text-xl font-semibold text-white backdrop-blur-sm"

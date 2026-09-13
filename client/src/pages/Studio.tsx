@@ -285,7 +285,7 @@ export default function Studio({ slug }: { slug?: string }) {
                   onStage ? "border-[#ED1C24]" : "border-white/15"
                 }`}
               >
-                <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+                <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-contain" />
                 {!stream && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
                     <VideoOff className="h-8 w-8 text-white/40" />

@@ -20,7 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useProducerRoom, type ProducerFeed } from "@/hooks/use-producer-room";
 import { Destinations } from "@/components/Destinations";
-import { youtubeId } from "@/components/StageView";
+import { StageGrid, youtubeId, type StageTile } from "@/components/StageView";
 import { STUDIO_STATUSES, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow } from "@shared/schema";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
 import {
@@ -355,6 +355,13 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   }
   // What the producer should do next. A control room is a sequence, not a
   // wall of equal-weight panels, so the console says where you are in it.
+  // The programme monitor: exactly the people the audience can see, drawn from
+  // the same subscription that powers the green-room thumbnails.
+  const monitorTiles: StageTile[] = Array.from(feeds.values())
+    .filter((f) => f.state === "On stage")
+    .map((f) => ({ identity: f.identity, name: f.name, video: f.video, audio: f.audio, speaking: f.speaking }))
+    .sort((a, b) => a.identity.localeCompare(b.identity));
+
   const houseDests = (dests ?? []).filter((d) => d.enabled && !d.signupId).length;
   const steps = [
     { n: 1, label: "Get people in", done: present.length > 0, hint: "Send them the join link." },
@@ -676,6 +683,15 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
             <h3 className="text-sm font-bold uppercase tracking-[0.12em]" style={HEADLINE_FONT}>
               The room
             </h3>
+            <a
+              href={joinUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-full bg-[#053877] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#0a4a99]"
+              data-testid="link-join-as-host"
+            >
+              <Video className="h-3.5 w-3.5" /> Join as host
+            </a>
             <button
               type="button"
               className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
@@ -688,6 +704,35 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
             >
               {joinUrl.replace(/^https?:\/\//, "")} <Copy className="h-3 w-3" />
             </button>
+          </div>
+
+          {/* programme monitor — what the audience is seeing right now */}
+          <div className="mb-4 overflow-hidden rounded-2xl border border-border bg-[#000741]">
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-2">
+              <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/60">
+                <MonitorPlay className="h-3.5 w-3.5 text-[#F0A71F]" /> Programme monitor
+              </span>
+              <span className="text-[11px] text-white/45">
+                {monitorTiles.length > 0
+                  ? `${monitorTiles.length} on air`
+                  : studio?.fallbackPlaying
+                    ? "Standby clip"
+                    : "Holding card"}
+              </span>
+            </div>
+            <div className="relative aspect-video w-full">
+              <StageGrid
+                tiles={monitorTiles}
+                meta={{
+                  fallbackPlaying: studio?.fallbackPlaying,
+                  fallbackVideoUrl: studio?.fallbackVideoUrl,
+                  fallbackLabel: studio?.fallbackLabel,
+                  eventName: currentStudio?.name,
+                }}
+                muted
+                idleTitle={currentStudio?.name}
+              />
+            </div>
           </div>
 
           {isLoading ? (

@@ -1187,65 +1187,67 @@ export default function Admin() {
             </Button>
           </div>
 
-          {isMobile ? (
-            <Tabs defaultValue="setup">
-              <TabsList className="grid w-full grid-cols-6">
-                <TabsTrigger value="setup" data-testid="tab-admin-setup">
-                  Setup
-                </TabsTrigger>
-                <TabsTrigger value="signups" data-testid="tab-admin-signups">
-                  Signed up
-                </TabsTrigger>
-                <TabsTrigger value="sponsors" data-testid="tab-admin-sponsors">
-                  Sponsors
-                </TabsTrigger>
-                <TabsTrigger value="studio" data-testid="tab-admin-studio">
-                  Studio
-                </TabsTrigger>
-                <TabsTrigger value="run" data-testid="tab-admin-run">
-                  Run
-                </TabsTrigger>
-                <TabsTrigger value="team" data-testid="tab-admin-team">
-                  Team
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="setup" className="mt-6 flex flex-col gap-6">
-                <EventsManagementCard />
-                <EventSettingsCard />
-              </TabsContent>
-              <TabsContent value="signups" className="mt-6">
-                <SignupsCard />
-              </TabsContent>
-              <TabsContent value="sponsors" className="mt-6">
-                <SponsorsCard />
-              </TabsContent>
-              <TabsContent value="studio" className="mt-6">
-                <StudioConsole adminGet={adminGet} adminSend={adminSend} />
-              </TabsContent>
-              <TabsContent value="run" className="mt-6">
-                <RunOfShow adminGet={adminGet} adminSend={adminSend} />
-              </TabsContent>
-              <TabsContent value="team" className="mt-6">
-                <TeamCard />
-              </TabsContent>
-            </Tabs>
-          ) : (
-            <div className="flex flex-col gap-6">
+          <Tabs defaultValue="studio">
+            <TabsList className={`grid w-full ${isMobile ? "grid-cols-3" : "grid-cols-6"}`}>
+              <TabsTrigger value="studio" data-testid="tab-admin-studio">
+                Studio
+              </TabsTrigger>
+              <TabsTrigger value="run" data-testid="tab-admin-run">
+                Agenda
+              </TabsTrigger>
+              <TabsTrigger value="setup" data-testid="tab-admin-setup">
+                Event details
+              </TabsTrigger>
+              {!isMobile && (
+                <>
+                  <TabsTrigger value="signups" data-testid="tab-admin-signups">
+                    Podcasters
+                  </TabsTrigger>
+                  <TabsTrigger value="sponsors" data-testid="tab-admin-sponsors">
+                    Sponsors
+                  </TabsTrigger>
+                  <TabsTrigger value="team" data-testid="tab-admin-team">
+                    Team
+                  </TabsTrigger>
+                </>
+              )}
+            </TabsList>
+
+            <TabsContent value="studio" className="mt-6">
               <StudioConsole adminGet={adminGet} adminSend={adminSend} />
+            </TabsContent>
+
+            <TabsContent value="run" className="mt-6">
               <RunOfShow adminGet={adminGet} adminSend={adminSend} />
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
-              <div className="flex flex-col gap-6">
-                <EventsManagementCard />
-                <EventSettingsCard />
-                <SponsorsCard />
-                <TeamCard />
-              </div>
-              <div className="lg:sticky lg:top-6">
-                <SignupsCard />
-              </div>
-              </div>
-            </div>
-          )}
+            </TabsContent>
+
+            {/* On a phone everything that isn't show-day lives behind one tab. */}
+            <TabsContent value="setup" className="mt-6 flex flex-col gap-6">
+              <EventsManagementCard />
+              <EventSettingsCard />
+              {isMobile && (
+                <>
+                  <SignupsCard />
+                  <SponsorsCard />
+                  <TeamCard />
+                </>
+              )}
+            </TabsContent>
+
+            {!isMobile && (
+              <>
+                <TabsContent value="signups" className="mt-6">
+                  <SignupsCard />
+                </TabsContent>
+                <TabsContent value="sponsors" className="mt-6">
+                  <SponsorsCard />
+                </TabsContent>
+                <TabsContent value="team" className="mt-6">
+                  <TeamCard />
+                </TabsContent>
+              </>
+            )}
+          </Tabs>
         </div>
       )}
     </div>

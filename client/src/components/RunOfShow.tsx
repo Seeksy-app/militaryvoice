@@ -36,6 +36,8 @@ import {
   PlayCircle,
   Lock,
   RotateCcw,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 interface Props {
@@ -53,10 +55,15 @@ const KIND_STYLE: Record<string, string> = {
   Custom: "bg-muted text-foreground",
 };
 
+const COLLAPSED_ROWS = 8;
+
 export function RunOfShow({ adminGet, adminSend }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const zone = useMemo(detectLocalTimeZone, []);
+  // Forty-eight slots is a lot of page. Start folded and show the next few,
+  // because on show day what matters is what's coming, not the whole day.
+  const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState<Partial<RunItemRow>>({});
 
@@ -184,6 +191,18 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
             <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => addItem.mutate()} data-testid="button-run-add">
               <Plus className="h-3.5 w-3.5" /> Add row
             </Button>
+            {items && items.length > COLLAPSED_ROWS && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 rounded-full"
+                onClick={() => setExpanded((v) => !v)}
+                data-testid="button-run-expand"
+              >
+                {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                {expanded ? "Collapse" : `Show all ${items.length}`}
+              </Button>
+            )}
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button size="sm" className="gap-1.5 rounded-full" disabled={generate.isPending} data-testid="button-run-generate">
@@ -221,7 +240,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {items.map((it) => {
+            {(expanded ? items : items.slice(0, COLLAPSED_ROWS)).map((it) => {
               const s = it.signupId ? signupById.get(it.signupId) : undefined;
               const mats = s ? assetsByEmail.get(s.email.toLowerCase()) ?? [] : [];
               const isEditing = editing === it.id;
@@ -429,6 +448,16 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
               );
             })}
           </div>
+        )}
+        {!expanded && items && items.length > COLLAPSED_ROWS && (
+          <button
+            type="button"
+            className="mt-3 w-full rounded-xl border border-dashed border-border py-3 text-sm text-muted-foreground hover:bg-muted/40"
+            onClick={() => setExpanded(true)}
+            data-testid="button-run-expand-footer"
+          >
+            {items.length - COLLAPSED_ROWS} more rows · show the whole agenda
+          </button>
         )}
       </CardContent>
     </Card>
