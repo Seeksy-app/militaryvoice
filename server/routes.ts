@@ -197,6 +197,19 @@ async function resolveFeedUrl(raw: string): Promise<string | null> {
   }
 }
 
+/** "America/New_York" → "EDT" for the date in question. Falls back to the id. */
+function zoneAbbrev(date: Date, timeZone: string): string {
+  try {
+    return (
+      new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "short" })
+        .formatToParts(date)
+        .find((p) => p.type === "timeZoneName")?.value ?? timeZone
+    );
+  } catch {
+    return timeZone;
+  }
+}
+
 // ICS timestamp format: YYYYMMDDTHHMMSSZ
 function toIcsUtcStamp(date: Date): string {
   return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
@@ -649,7 +662,6 @@ export function registerRoutes(app: Express): void {
     (async () => {
       try {
         const blockStart = new Date(new Date(event.startAtUtc).getTime() + created.slotIndex * event.slotMinutes * 60000);
-        const blockEnd = new Date(blockStart.getTime() + event.slotMinutes * 60000);
         const tz = created.timezone || "America/New_York";
         const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
         const protocol = req.protocol;
@@ -660,13 +672,9 @@ export function registerRoutes(app: Express): void {
           hostName: created.hostName,
           podcastName: created.podcastName,
           eventName: event.name,
-          blockStartLabel: formatDateTimeInZone(blockStart, tz),
-          blockEndLabel: formatTimeInZone(blockEnd, tz),
           onAirStartLabel: formatDateTimeInZone(onAir.start, tz),
           onAirEndLabel: formatTimeInZone(onAir.end, tz),
-          bufferMinutes: event.bufferMinutes,
-          bufferPosition: (event.bufferPosition as "before" | "after") ?? "after",
-          timezoneLabel: tz,
+          timezoneLabel: zoneAbbrev(onAir.start, tz),
           agendaUrl,
           calendar: calendarLinksFor(created, event, `${protocol}://${host}`),
         });
@@ -745,7 +753,7 @@ export function registerRoutes(app: Express): void {
           hostName: signup.hostName,
           eventName: event.name,
           whenLabel: formatDateTimeInZone(onAir.start, tz),
-          timezoneLabel: tz,
+          timezoneLabel: zoneAbbrev(onAir.start, tz),
           agendaUrl: `${origin}/agenda`,
           calendar: calendarLinksFor(signup, event, origin),
           wantsText: !!parsed.data.phone,

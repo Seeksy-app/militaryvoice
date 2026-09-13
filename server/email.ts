@@ -52,7 +52,7 @@ function calendarButtonsHtml(c: CalendarLinks): string {
     `<a href="${href}" style="display:inline-block;margin:0 8px 8px 0;background:#ffffff;color:#053877;border:1px solid #cbd5e1;text-decoration:none;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9999px;">${label}</a>`;
   return `
     <p style="margin:20px 0 8px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Add to your calendar</p>
-    <div>${btn(c.google, "Google Calendar")}${btn(c.outlook, "Outlook")}${btn(c.ics, "Apple / .ics file")}</div>`;
+    <div>${btn(c.google, "Google Calendar")}&nbsp;&nbsp;${btn(c.outlook, "Outlook")}&nbsp;&nbsp;${btn(c.ics, "Apple / .ics file")}</div>`;
 }
 
 function calendarText(c: CalendarLinks): string {
@@ -65,12 +65,8 @@ export interface ConfirmationEmailInput {
   hostName: string;
   podcastName: string;
   eventName: string;
-  blockStartLabel: string; // e.g. "Sat, Sep 12, 4:00 PM"
-  blockEndLabel: string;
   onAirStartLabel: string;
   onAirEndLabel: string;
-  bufferMinutes: number;
-  bufferPosition: "before" | "after";
   timezoneLabel: string;
   agendaUrl: string;
 }
@@ -91,10 +87,6 @@ function buildHtml(rawInput: ConfirmationEmailInput): string {
     podcastName: escapeHtml(rawInput.podcastName),
     eventName: escapeHtml(rawInput.eventName),
   };
-  const bufferLine =
-    input.bufferMinutes > 0
-      ? `<p style="margin:0 0 16px;color:#4b5563;font-size:14px;line-height:1.6;">Your booked block runs <strong>${input.blockStartLabel} – ${input.blockEndLabel}</strong> (${input.timezoneLabel}), which includes a ${input.bufferMinutes}-minute buffer ${input.bufferPosition} your segment for a sponsor read and transition to the next show.</p>`
-      : "";
   return `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
     <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">${input.eventName}</p>
@@ -104,12 +96,11 @@ function buildHtml(rawInput: ConfirmationEmailInput): string {
     </p>
     <div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 16px;">
       <p style="margin:0 0 4px;color:#053877;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">You're on air</p>
-      <p style="margin:0;color:#1f2937;font-size:18px;font-weight:700;">${input.onAirStartLabel} – ${input.onAirEndLabel}</p>
-      <p style="margin:4px 0 0;color:#6b7280;font-size:13px;">${input.timezoneLabel}</p>
+      <p style="margin:0;color:#1f2937;font-size:18px;font-weight:700;">${input.onAirStartLabel} – ${input.onAirEndLabel} (${input.timezoneLabel})</p>
     </div>
-    ${bufferLine}
     <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
-      No login needed — just be ready to go live at your on-air start time. You can view or share the full agenda anytime.
+      We'll email you the studio details and how to log in ahead of the event. Please be ready and online
+      <strong>10 minutes before</strong> your go-live time.
     </p>
     <a href="${input.agendaUrl}" style="display:inline-block;background:#053877;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:9999px;">View the agenda</a>
     ${input.calendar ? calendarButtonsHtml(input.calendar) : ""}
@@ -118,11 +109,7 @@ function buildHtml(rawInput: ConfirmationEmailInput): string {
 }
 
 function buildText(input: ConfirmationEmailInput): string {
-  const bufferLine =
-    input.bufferMinutes > 0
-      ? `Your booked block runs ${input.blockStartLabel} - ${input.blockEndLabel} (${input.timezoneLabel}), including a ${input.bufferMinutes}-minute buffer ${input.bufferPosition} your segment for a sponsor read and transition.\n\n`
-      : "";
-  return `You're on the schedule, ${input.hostName}\n\n${input.podcastName} is confirmed for ${input.eventName}.\n\nYou're on air: ${input.onAirStartLabel} - ${input.onAirEndLabel} (${input.timezoneLabel})\n\n${bufferLine}No login needed - just be ready to go live at your on-air start time.\n\nView the agenda: ${input.agendaUrl}\n${input.calendar ? "\n" + calendarText(input.calendar) : ""}`;
+  return `You're on the schedule, ${input.hostName}\n\n${input.podcastName} is confirmed for ${input.eventName}.\n\nYou're on air: ${input.onAirStartLabel} - ${input.onAirEndLabel} (${input.timezoneLabel})\n\nWe'll email you the studio details and how to log in ahead of the event. Please be ready and online 10 minutes before your go-live time.\n\nView the agenda: ${input.agendaUrl}\n${input.calendar ? "\n" + calendarText(input.calendar) : ""}`;
 }
 
 /** Low-level Resend sender shared by every email type. Never throws — logs and
