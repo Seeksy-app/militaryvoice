@@ -1,9 +1,22 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import type { RecordingRow } from "@shared/schema";
-import { Disc, Download, Loader2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { PlatformIcon, platformLabel, parseSocialAccounts } from "@/components/SocialIcons";
+import type { RecordingRow, SocialPlatform } from "@shared/schema";
+import { Disc, Download, Loader2, Share2 } from "lucide-react";
 
 // A podcaster's own sessions. The studio writes them; nothing here is uploaded
 // by hand. The bucket is private, so every download is a fresh signed link.
@@ -22,7 +35,9 @@ function size(bytes: string): string {
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
 }
 
-export function MyRecordings() {
+export function MyRecordings({ socialAccounts }: { socialAccounts?: string | null }) {
+  const connected = parseSocialAccounts(socialAccounts).map((a) => a.platform);
+  const [publishing, setPublishing] = useState<RecordingRow | null>(null);
   const { toast } = useToast();
   const { data, isLoading } = useQuery<RecordingRow[]>({
     queryKey: ["/api/host/recordings"],
@@ -80,19 +95,137 @@ export function MyRecordings() {
             ) : r.status === "Failed" ? (
               <span className="text-xs font-medium text-destructive">Didn't save — tell us and we'll look</span>
             ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5 rounded-full"
-                onClick={() => void download(r.id)}
-                data-testid={`button-download-recording-${r.id}`}
-              >
-                <Download className="h-3.5 w-3.5" /> Download
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 rounded-full"
+                  onClick={() => void download(r.id)}
+                  data-testid={`button-download-recording-${r.id}`}
+                >
+                  <Download className="h-3.5 w-3.5" /> Download
+                </Button>
+                {connected.length > 0 && (
+                  <Button
+                    size="sm"
+                    className="gap-1.5 rounded-full"
+                    onClick={() => setPublishing(r)}
+                    data-testid={`button-publish-recording-${r.id}`}
+                  >
+                    <Share2 className="h-3.5 w-3.5" /> Post it
+                  </Button>
+                )}
+              </div>
             )}
           </li>
         ))}
       </ul>
+
+      <PublishDialog
+        recording={publishing}
+        platforms={connected}
+        onClose={() => setPublishing(null)}
+      />
     </section>
+  );
+}
+
+/** Sends one finished session out to the accounts they've already connected. */
+function PublishDialog({
+  recording,
+  platforms,
+  onClose,
+}: {
+  recording: RecordingRow | null;
+  platforms: SocialPlatform[];
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [picked, setPicked] = useState<SocialPlatform[]>([]);
+  const [title, setTitle] = useState("");
+  const [sending, setSending] = useState(false);
+
+  // Reset each time a different recording opens the dialog.
+  const key = recording?.id ?? 0;
+  const [seen, setSeen] = useState(0);
+  if (recording && key !== seen) {
+    setSeen(key);
+    setPicked(platforms);
+    setTitle(recording.title || "");
+  }
+
+  async function send() {
+    if (!recording) return;
+    setSending(true);
+    try {
+      await apiRequest("POST", `/api/host/recordings/${recording.id}/publish`, {
+        platforms: picked,
+        title: title.trim(),
+      });
+      toast({
+        title: "On its way",
+        description: "We've handed it to your accounts. Publishing can take a few minutes for a long session.",
+      });
+      onClose();
+    } catch (err) {
+      toast({ title: "Couldn't post that", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Dialog open={!!recording} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Post your session</DialogTitle>
+          <DialogDescription>
+            This goes out to the accounts you've connected, under your own name. Nothing is posted without you.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-4">
+          <div>
+            <Label htmlFor="publish-title">Title</Label>
+            <Input
+              id="publish-title"
+              className="mt-1"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="What to call it"
+              data-testid="input-publish-title"
+            />
+          </div>
+
+          <div>
+            <div className="text-sm font-medium">Where it goes</div>
+            <div className="mt-2 flex flex-col gap-2">
+              {platforms.map((p) => (
+                <label key={p} className="flex cursor-pointer items-center gap-2.5 text-sm">
+                  <Checkbox
+                    checked={picked.includes(p)}
+                    onCheckedChange={(v) =>
+                      setPicked((cur) => (v ? [...cur, p] : cur.filter((x) => x !== p)))
+                    }
+                    data-testid={`checkbox-publish-${p}`}
+                  />
+                  <PlatformIcon platform={p} className="h-4 w-4 text-muted-foreground" />
+                  {platformLabel(p)}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={sending}>
+            Cancel
+          </Button>
+          <Button onClick={() => void send()} disabled={sending || picked.length === 0} data-testid="button-publish-confirm">
+            {sending ? "Sending…" : "Post it"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

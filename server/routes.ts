@@ -53,6 +53,7 @@ import {
   fetchConnectedAccounts,
   enrichWithFollowers,
   parseSocialAccounts,
+  publishVideo,
 } from "./uploadPost.js";
 
 const upload = multer({
@@ -608,6 +609,49 @@ export function registerRoutes(app: Express): void {
       return;
     }
     res.json({ url: await signedRecordingUrl(row.url) });
+  });
+
+  /** Send a finished session to the podcaster's own connected accounts. */
+  app.post("/api/host/recordings/:id/publish", requireHostSession, async (req, res) => {
+    if (!isUploadPostConfigured()) {
+      res.status(503).json({ message: "Posting to socials isn't switched on yet." });
+      return;
+    }
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const row = await storage.getRecording(Number(req.params.id));
+    if (!row || row.email !== email || row.status !== "Ready" || !row.url) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    const profile = await storage.getProfileByEmail(email);
+    const username = profile?.uploadPostUsername;
+    if (!username) {
+      res.status(400).json({ message: "Connect your social accounts first." });
+      return;
+    }
+    const platforms = (Array.isArray(req.body?.platforms) ? req.body.platforms : [])
+      .map((p: unknown) => String(p).toLowerCase().trim())
+      .filter(Boolean);
+    if (platforms.length === 0) {
+      res.status(400).json({ message: "Pick at least one account to post to." });
+      return;
+    }
+    try {
+      // Six hours: long enough for Upload-Post to fetch a large file, short
+      // enough that the link is useless afterwards.
+      const videoUrl = await signedRecordingUrl(row.url, 21_600);
+      await publishVideo({
+        username,
+        platforms,
+        videoUrl,
+        title: String(req.body?.title ?? row.title ?? "").trim() || row.title || "My session",
+        description: String(req.body?.description ?? "").trim() || undefined,
+      });
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("Publishing a recording failed:", err);
+      res.status(502).json({ message: err?.message ?? "Couldn't post that right now." });
+    }
   });
 
   app.get("/api/admin/recordings/:id/download", requireAdmin, async (req, res) => {

@@ -1,8 +1,9 @@
-// Upload-Post integration (https://docs.upload-post.com). We use it only for
-// its hosted "connect your social accounts" flow: each podcaster gets an
-// Upload-Post *user profile*, we send them to a short-lived connect URL, and
-// when they come back we read which accounts they linked and show those on
-// their public cards. Nothing is ever posted on their behalf from here.
+// Upload-Post integration (https://docs.upload-post.com). Two things happen
+// here. First, the hosted "connect your social accounts" flow: each podcaster
+// gets an Upload-Post *user profile*, we send them to a short-lived connect
+// URL, and when they come back we read which accounts they linked and show
+// those on their public cards. Second, publishing a finished session to those
+// accounts — only ever when the podcaster themselves presses the button.
 //
 // Requires UPLOAD_POST_API_KEY. When it's unset every call reports
 // "not configured" and the UI hides the feature instead of erroring.
@@ -249,4 +250,55 @@ export async function enrichWithFollowers(username: string, accounts: SocialAcco
     console.warn("Upload-Post analytics failed (followers omitted):", (err as Error).message);
   }
   return out;
+}
+
+export interface PublishResult {
+  ok: boolean;
+  raw: unknown;
+}
+
+/**
+ * Publishes one video to the podcaster's own connected accounts.
+ *
+ * `videoUrl` is a signed link to the recording rather than the file itself:
+ * Upload-Post accepts a public URL in the same field as a binary upload, and
+ * that keeps a multi-gigabyte MP4 from being pulled through our server.
+ */
+export async function publishVideo(input: {
+  username: string;
+  platforms: string[];
+  videoUrl: string;
+  title: string;
+  description?: string;
+}): Promise<PublishResult> {
+  if (!API_KEY) throw new Error("Upload-Post is not configured (UPLOAD_POST_API_KEY missing).");
+  if (input.platforms.length === 0) throw new Error("Pick at least one account to post to.");
+
+  const form = new FormData();
+  form.set("user", input.username);
+  for (const p of input.platforms) form.append("platform[]", p);
+  form.set("video", input.videoUrl);
+  form.set("title", input.title.slice(0, 300));
+  if (input.description) form.set("description", input.description.slice(0, 4000));
+  // A full session can take a while to fetch and transcode; don't hold the
+  // request open waiting for it.
+  form.set("async_upload", "true");
+
+  const res = await fetch(`${BASE}/upload`, {
+    method: "POST",
+    headers: { Authorization: `Apikey ${API_KEY}` },
+    body: form,
+  });
+  const text = await res.text();
+  let json: unknown = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    /* non-JSON body */
+  }
+  if (!res.ok) {
+    const msg = (json as any)?.message || (json as any)?.error || text || res.statusText;
+    throw new Error(`Upload-Post couldn't post that (${res.status}): ${msg}`);
+  }
+  return { ok: true, raw: json };
 }

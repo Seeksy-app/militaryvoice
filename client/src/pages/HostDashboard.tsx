@@ -828,7 +828,7 @@ export default function HostDashboard() {
 
             {profile && data.mySignups.length > 0 && <ShowMaterials profile={profile} />}
 
-            <MyRecordings />
+            <MyRecordings socialAccounts={profile?.socialAccounts} />
 
             <section className="mt-8">
               <Link href="/prepare" data-testid="link-prepare-guide">
