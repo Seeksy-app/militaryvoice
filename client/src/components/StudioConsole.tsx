@@ -20,6 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useProducerRoom, type ProducerFeed } from "@/hooks/use-producer-room";
 import { Destinations } from "@/components/Destinations";
+import { youtubeId } from "@/components/StageView";
 import { STUDIO_STATUSES, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow } from "@shared/schema";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
 import {
@@ -43,6 +44,7 @@ import {
   Cable,
   Trash2,
   Check,
+  Upload,
 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -249,14 +251,36 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   function standbyProblem(url: string): string | null {
     const v = url.trim();
     if (!v) return null;
-    if (/^https?:\/\/(www\.)?(youtube\.com|youtu\.be|vimeo\.com|twitch\.tv)/i.test(v)) {
-      return "That's a page link, not a video file. The broadcast plays this with a video player, so it needs to end in .mp4 (or be an .m3u8 stream). Upload the clip and paste its direct link.";
-    }
+    if (youtubeId(v)) return null; // played as an embed
     if (!/^https?:\/\//i.test(v)) return "That needs to be a full https:// link.";
-    if (!/\.(mp4|m4v|mov|webm|m3u8)(\?|$)/i.test(v)) {
-      return "That doesn't look like a video file. It should end in .mp4 or .m3u8 — worth testing before you rely on it.";
+    if (/^https?:\/\/(www\.)?(vimeo\.com|twitch\.tv|facebook\.com|drive\.google\.com|dropbox\.com)/i.test(v)) {
+      return "That's a page link we can't play. Upload the clip instead, or use a YouTube link.";
+    }
+    if (!/\.(mp4|m4v|mov|webm|m3u8|mp3|m4a)(\?|$)/i.test(v)) {
+      return "That doesn't look like a media file. Upload the clip instead — it's the only way to be sure it rolls.";
     }
     return null;
+  }
+
+  const standbyFileRef = useRef<HTMLInputElement | null>(null);
+  const [standbyBusy, setStandbyBusy] = useState(false);
+
+  async function uploadStandby(file: File) {
+    setStandbyBusy(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("label", file.name.replace(/\.[^.]+$/, ""));
+      if (studioId) form.append("studioId", String(studioId));
+      const res = await fetch("/api/admin/studio/standby", { method: "POST", body: form, credentials: "include" });
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as any)?.message ?? "Upload failed");
+      refresh();
+      toast({ title: "Standby clip ready", description: file.name });
+    } catch (err) {
+      toast({ title: "Couldn't upload that", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setStandbyBusy(false);
+    }
   }
 
   function commitRename() {
@@ -846,9 +870,64 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                 <p className="mt-1 text-xs text-muted-foreground">
                   One button rolls this if something goes wrong. Keep something here at all times.
                 </p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_140px]">
+
+                {studio?.fallbackVideoUrl ? (
+                  <div className="mt-3 flex items-center gap-3 rounded-xl border border-border bg-background p-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#053877] text-white">
+                      <PlayCircle className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">
+                        {studio.fallbackLabel || "Standby clip"}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {youtubeId(studio.fallbackVideoUrl) ? "YouTube video" : studio.fallbackVideoUrl}
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => patchStudio.mutate({ fallbackVideoUrl: "", fallbackLabel: "" })}
+                      aria-label="Remove the standby clip"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded-xl border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
+                    Nothing queued. If the show falls over, the audience sees a holding card.
+                  </p>
+                )}
+
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <input
+                    ref={standbyFileRef}
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) uploadStandby(f);
+                      e.target.value = "";
+                    }}
+                    data-testid="input-standby-file"
+                  />
+                  <Button
+                    size="sm"
+                    className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]"
+                    disabled={standbyBusy}
+                    onClick={() => standbyFileRef.current?.click()}
+                    data-testid="button-standby-upload"
+                  >
+                    <Upload className="h-3.5 w-3.5" /> {standbyBusy ? "Uploading…" : "Upload a clip"}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">or paste a YouTube link</span>
+                </div>
+
+                <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_140px]">
                   <Input
-                    placeholder="https://…  (mp4 or a stream URL)"
+                    placeholder="https://youtu.be/…"
                     value={fallbackUrl ?? studio?.fallbackVideoUrl ?? ""}
                     onChange={(e) => setFallbackUrl(e.target.value)}
                     data-testid="input-studio-fallback-url"
@@ -866,6 +945,12 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                     {standbyProblem(fallbackUrl ?? studio?.fallbackVideoUrl ?? "")}
                   </p>
                 )}
+                {youtubeId(fallbackUrl ?? studio?.fallbackVideoUrl ?? "") && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    YouTube plays, but whether it carries sound is the browser's call. For a real emergency, upload the
+                    file.
+                  </p>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -881,7 +966,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                   }}
                   data-testid="button-studio-save-fallback"
                 >
-                  Save
+                  Save the link
                 </Button>
               </div>
             </div>

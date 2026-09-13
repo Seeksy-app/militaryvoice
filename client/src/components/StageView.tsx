@@ -111,6 +111,16 @@ export function useStageRoom(url: string | null, token: string | null, muted: bo
   return { tiles, meta, connected, failed };
 }
 
+/**
+ * A YouTube link is what people actually have, so play it rather than refusing
+ * it. Autoplay with sound is at the browser's discretion, which is why an
+ * uploaded file is still the safer choice for a real emergency.
+ */
+export function youtubeId(url: string): string | null {
+  const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|live\/|shorts\/))([A-Za-z0-9_-]{6,})/i);
+  return m ? m[1] : null;
+}
+
 function gridFor(n: number): string {
   if (n <= 1) return "grid-cols-1";
   if (n <= 4) return "grid-cols-2";
@@ -181,6 +191,28 @@ export function StageGrid({
   const standby = meta.fallbackPlaying && meta.fallbackVideoUrl;
 
   if (standby) {
+    const yt = youtubeId(meta.fallbackVideoUrl!);
+    if (yt) {
+      return (
+        <div className="absolute inset-0 bg-black">
+          <iframe
+            title={meta.fallbackLabel || "Standby"}
+            src={`https://www.youtube.com/embed/${yt}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1&loop=1&playlist=${yt}`}
+            allow="autoplay; encrypted-media; picture-in-picture"
+            allowFullScreen
+            className="h-full w-full border-0"
+          />
+          {meta.fallbackLabel && (
+            <div
+              className="pointer-events-none absolute bottom-8 left-8 rounded-lg bg-[#000741]/85 px-5 py-3 text-xl font-semibold text-white backdrop-blur-sm"
+              style={HEADLINE_FONT}
+            >
+              {meta.fallbackLabel}
+            </div>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="absolute inset-0">
         <video src={meta.fallbackVideoUrl} autoPlay loop playsInline muted={muted} className="h-full w-full object-cover" />

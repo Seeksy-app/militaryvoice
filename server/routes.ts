@@ -1308,6 +1308,54 @@ export function registerRoutes(app: Express): void {
   //      composite pushed to every destination at once; the recording is a
   //      short one per podcaster slot. Stopping a slot recording never touches
   //      what's on air.
+  /**
+   * Upload the standby clip straight into the show-assets bucket. Nobody has a
+   * bare .mp4 URL lying around — they have a file, or a YouTube link — so
+   * asking for one was never realistic.
+   */
+  app.post(
+    "/api/admin/studio/standby",
+    requireAdmin,
+    (req, res, next) => {
+      assetUpload.single("file")(req, res, (err: any) => {
+        if (err) {
+          res.status(400).json({
+            message:
+              err?.code === "LIMIT_FILE_SIZE"
+                ? "That clip is over 50MB. A standby reel only needs to be a minute or two — export it smaller."
+                : err.message || "Couldn't accept that file.",
+          });
+          return;
+        }
+        next();
+      });
+    },
+    async (req, res) => {
+      if (!req.file) {
+        res.status(400).json({ message: "Attach a video file." });
+        return;
+      }
+      const { studio } = await adminStudio(req);
+      const safe = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+      const key = `standby/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${safe}`;
+      let url = "";
+      try {
+        url = await uploadShowAsset(key, req.file.buffer, req.file.mimetype || "video/mp4");
+      } catch (err) {
+        console.error("Standby upload failed:", err);
+        res.status(502).json({ message: "Upload failed. Try again." });
+        return;
+      }
+      const label = String((req.body as Record<string, string>)?.label ?? "").trim().slice(0, 120);
+      res.status(201).json(
+        await storage.updateStudio(studio.id, {
+          fallbackVideoUrl: url,
+          fallbackLabel: label || req.file.originalname,
+        }),
+      );
+    },
+  );
+
   app.post("/api/admin/studio/broadcast", requireAdmin, async (req, res) => {
     if (!isLiveKitConfigured()) {
       res.status(503).json({ message: "No media layer configured for this event." });
