@@ -534,3 +534,71 @@ export const platformInterestSchema = z.object({
   eventTiming: z.string().trim().max(60),
   notes: z.string().trim().max(2000),
 });
+
+// ---------------------------------------------------------------------------
+// Studio — the live control room for an event. The media layer (WebRTC) plugs
+// in behind this; everything here is show control: who's waiting, who's on
+// stage, and the emergency video.
+// ---------------------------------------------------------------------------
+export const STUDIO_STATUSES = ["Offline", "Rehearsal", "Live"] as const;
+export type StudioStatus = (typeof STUDIO_STATUSES)[number];
+
+export const PARTICIPANT_ROLES = ["Host", "Speaker", "Producer"] as const;
+export const PARTICIPANT_STATES = ["Green room", "On stage", "Off stage"] as const;
+export type ParticipantRole = (typeof PARTICIPANT_ROLES)[number];
+export type ParticipantState = (typeof PARTICIPANT_STATES)[number];
+
+export const studios = pgTable("studios", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  name: text("name").notNull().default("Main studio"),
+  status: text("status").notNull().default("Offline"),
+  maxOnStage: integer("max_on_stage").notNull().default(5),
+  // Queued clip that covers a malfunction — one button and it rolls.
+  fallbackVideoUrl: text("fallback_video_url").notNull().default(""),
+  fallbackLabel: text("fallback_label").notNull().default(""),
+  fallbackPlaying: boolean("fallback_playing").notNull().default(false),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+export type StudioRow = typeof studios.$inferSelect;
+
+export const studioParticipants = pgTable("studio_participants", {
+  id: serial("id").primaryKey(),
+  studioId: integer("studio_id").notNull(),
+  // Browser-generated, stored client side, so a refresh rejoins as the same person.
+  clientKey: text("client_key").notNull(),
+  displayName: text("display_name").notNull().default(""),
+  email: text("email").notNull().default(""),
+  role: text("role").notNull().default("Speaker"),
+  state: text("state").notNull().default("Green room"),
+  camReady: boolean("cam_ready").notNull().default(false),
+  micReady: boolean("mic_ready").notNull().default(false),
+  lastSeenAt: text("last_seen_at").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+export type StudioParticipantRow = typeof studioParticipants.$inferSelect;
+
+export const studioJoinSchema = z.object({
+  clientKey: z.string().trim().min(8).max(64),
+  displayName: z.string().trim().min(1, "Tell us your name").max(80),
+  email: z.string().trim().max(200),
+});
+
+export const studioHeartbeatSchema = z.object({
+  clientKey: z.string().trim().min(8).max(64),
+  camReady: z.boolean(),
+  micReady: z.boolean(),
+});
+
+export const studioUpdateSchema = z.object({
+  name: z.string().trim().max(80).optional(),
+  status: z.enum(STUDIO_STATUSES).optional(),
+  maxOnStage: z.number().int().min(1).max(12).optional(),
+  fallbackVideoUrl: z.string().trim().max(500).optional(),
+  fallbackLabel: z.string().trim().max(120).optional(),
+  fallbackPlaying: z.boolean().optional(),
+});
+
+/** A participant counts as present if we heard from them recently. */
+export const PRESENCE_WINDOW_MS = 25_000;

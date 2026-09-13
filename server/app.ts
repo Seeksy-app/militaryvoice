@@ -63,6 +63,40 @@ app.use((req, res, next) => {
   next();
 });
 
+// Express 4 does not catch rejections from async handlers: one await that
+// throws — a slow query hitting Postgres' statement timeout, say — becomes an
+// unhandled rejection and takes the whole process down instead of failing that
+// one request. Wrap every handler and middleware we register on a verb so it
+// lands in the error middleware below. (requireAdmin does a DB lookup, so this
+// covers the admin routes too.)
+const ROUTE_VERBS = ["get", "post", "put", "patch", "delete"] as const;
+
+function catchAsync(fn: unknown): unknown {
+  if (typeof fn !== "function") return fn;
+  const handler = fn as (...a: any[]) => any;
+  if (handler.length >= 4) {
+    return function (this: unknown, err: any, req: any, res: any, next: any) {
+      try {
+        return Promise.resolve(handler.call(this, err, req, res, next)).catch(next);
+      } catch (e) {
+        return next(e);
+      }
+    };
+  }
+  return function (this: unknown, req: any, res: any, next: any) {
+    try {
+      return Promise.resolve(handler.call(this, req, res, next)).catch(next);
+    } catch (e) {
+      return next(e);
+    }
+  };
+}
+
+for (const verb of ROUTE_VERBS) {
+  const original = (app as any)[verb].bind(app);
+  (app as any)[verb] = (...args: unknown[]) => original(...args.map(catchAsync));
+}
+
 registerRoutes(app);
 
 app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

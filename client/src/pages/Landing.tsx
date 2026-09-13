@@ -6,12 +6,12 @@ import { NavBar } from "@/components/NavBar";
 import { LogoLockup } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
+import { SocialIconRow, PlatformIcon, platformLabel, parseSocialAccounts } from "@/components/SocialIcons";
 import { spotlightFromSignup, type SpotlightItem } from "@/components/SpotlightCard";
 import { SponsorDialog } from "@/components/SponsorDialog";
 import { useCountdown } from "@/hooks/use-countdown";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
-import type { PublicEvent, PublicSignup, PublicPodcaster, PublicSponsor } from "@shared/schema";
+import type { PublicEvent, PublicSignup, PublicPodcaster, PublicSponsor, SocialPlatform } from "@shared/schema";
 import {
   detectLocalTimeZone,
   slotStart,
@@ -71,6 +71,8 @@ const HERO_IMAGES = [
   "/hero-10.jpg",
 ];
 const HERO_ROTATE_MS = 6000;
+// Where every slot goes out live. Shown beside the hero waveform.
+const SIMULCAST: SocialPlatform[] = ["youtube", "instagram", "linkedin", "x"];
 const NAVY = "bg-[#053877] text-white";
 const FADE_UP = {
   hidden: { opacity: 0, y: 10 },
@@ -476,22 +478,51 @@ export default function Landing({ slug }: Props) {
           )}
         </div>
 
-        {/* decorative waveform strip along the bottom edge */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex items-end justify-center px-4 pb-4">
-          <div aria-hidden="true" className="flex h-[72px] items-end justify-center gap-[3px] opacity-80">
-            {Array.from({ length: 44 }).map((_, i) => {
-              const base = 14 + Math.abs(Math.sin(i * 0.55)) * 58;
-              return (
+        {/* waveform strip along the bottom edge, flanked by where we simulcast */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 pb-4">
+          <div className="mx-auto flex max-w-5xl items-end justify-center gap-3 sm:gap-6">
+            <div className="hidden flex-1 items-center justify-end gap-3 pb-3 sm:flex">
+              <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
+                Streaming live on
+              </span>
+              <span aria-hidden="true" className="h-px w-6 bg-[#F0A71F]/70" />
+            </div>
+
+            <div aria-hidden="true" className="flex h-[72px] flex-none items-end justify-center gap-[3px] opacity-80">
+              {Array.from({ length: 44 }).map((_, i) => {
+                const base = 14 + Math.abs(Math.sin(i * 0.55)) * 58;
+                return (
+                  <span
+                    key={i}
+                    // a phone only has room for the middle of the waveform
+                    className={`w-1 flex-none origin-bottom rounded-t-full bg-[#F0A71F]/75 ${
+                      i >= 24 ? "hidden sm:block" : ""
+                    }`}
+                    style={{
+                      height: `${base}px`,
+                      animation: `mvwave ${1.6 + (i % 7) * 0.14}s ease-in-out ${(i % 11) * 0.09}s infinite alternate`,
+                    }}
+                  />
+                );
+              })}
+            </div>
+
+            <div
+              className="flex flex-none items-center gap-1.5 pb-3 sm:flex-1 sm:justify-start sm:gap-2"
+              aria-label="Streaming live on YouTube, Instagram, LinkedIn and X"
+              data-testid="row-simulcast"
+            >
+              <span aria-hidden="true" className="hidden h-px w-6 bg-[#F0A71F]/70 sm:block" />
+              {SIMULCAST.map((p) => (
                 <span
-                  key={i}
-                  className="w-1 flex-none origin-bottom rounded-t-full bg-[#F0A71F]/75"
-                  style={{
-                    height: `${base}px`,
-                    animation: `mvwave ${1.6 + (i % 7) * 0.14}s ease-in-out ${(i % 11) * 0.09}s infinite alternate`,
-                  }}
-                />
-              );
-            })}
+                  key={p}
+                  title={platformLabel(p)}
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-white/85 ring-1 ring-white/15 backdrop-blur-sm"
+                >
+                  <PlatformIcon platform={p} className="h-3.5 w-3.5" />
+                </span>
+              ))}
+            </div>
           </div>
           <style>{`@keyframes mvwave { from { transform: scaleY(0.32); opacity:.55 } to { transform: scaleY(1); opacity:1 } }`}</style>
         </div>

@@ -12,6 +12,10 @@ import {
   insertProfileSchema,
   runItemInputSchema,
   platformInterestSchema,
+  studioJoinSchema,
+  studioHeartbeatSchema,
+  studioUpdateSchema,
+  PRESENCE_WINDOW_MS,
   ASSET_KINDS,
   type GeneratedRunItem,
   type ShowAssetRow,
@@ -26,7 +30,7 @@ import {
 } from "../shared/schema.js";
 import { fromError } from "zod-validation-error";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
-import { setSessionCookie, clearSessionCookie, requireHostSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
+import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   isUploadPostConfigured,
   ensureUploadPostProfile,
@@ -71,6 +75,13 @@ function toPublicEvent(event: EventRow): PublicEvent {
 // Public read endpoints are safe to serve from Vercel's CDN for a few seconds:
 // the homepage fires several in parallel and a cold instance costs ~2s each.
 // Writers invalidate client-side; a 10s window is invisible to visitors.
+/** Live studio state — never cache, at any layer. */
+function noStore(res: Response): void {
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("Vercel-CDN-Cache-Control", "no-store");
+  res.setHeader("CDN-Cache-Control", "no-store");
+}
+
 function publicCache(res: Response, seconds = 15): void {
   // Split the two caches deliberately:
   //  - Browsers must revalidate every time, so a visitor never sees a stale
@@ -708,6 +719,163 @@ export function registerRoutes(app: Express): void {
 
   app.delete("/api/admin/run-of-show/:id", requireAdmin, async (req, res) => {
     await storage.deleteRunItem(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // ---- Studio -----------------------------------------------------------------
+  //      Show control only: who's waiting, who's on stage, and the emergency
+  //      clip. The video layer plugs in behind this.
+  async function studioForSlug(slug?: string) {
+    const event = slug ? await storage.getEventBySlug(slug) : await storage.getFeaturedEvent();
+    if (!event) return null;
+    return { event, studio: await storage.getOrCreateStudio(event.id) };
+  }
+
+  function withPresence(p: { lastSeenAt: string }) {
+    return Date.now() - new Date(p.lastSeenAt).getTime() < PRESENCE_WINDOW_MS;
+  }
+
+  /** What a speaker sees: their own state plus whether the room is live. */
+  async function speakerState(
+    event: { name: string },
+    studio: { id: number; name: string; status: string; fallbackPlaying: boolean; maxOnStage: number },
+    clientKey: string,
+  ) {
+    const all = await storage.listStudioParticipants(studio.id);
+    return {
+      eventName: event.name,
+      studio: {
+        name: studio.name,
+        status: studio.status,
+        fallbackPlaying: studio.fallbackPlaying,
+        maxOnStage: studio.maxOnStage,
+      },
+      me: all.find((p) => p.clientKey === clientKey) ?? null,
+      onStageCount: all.filter((p) => p.state === "On stage" && withPresence(p)).length,
+      greenRoomCount: all.filter((p) => p.state === "Green room" && withPresence(p)).length,
+    };
+  }
+
+  app.get("/api/studio/state", async (req, res) => {
+    noStore(res);
+    const found = await studioForSlug(typeof req.query.slug === "string" ? req.query.slug : undefined);
+    if (!found) {
+      res.status(404).json({ message: "No event" });
+      return;
+    }
+    const clientKey = typeof req.query.clientKey === "string" ? req.query.clientKey : "";
+    res.json(await speakerState(found.event, found.studio, clientKey));
+  });
+
+  app.post("/api/studio/join", async (req, res) => {
+    const parsed = studioJoinSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined);
+    if (!found) {
+      res.status(404).json({ message: "No event" });
+      return;
+    }
+    // A signed-in podcaster is recognised and gets their show name automatically.
+    const hostEmail = getSessionEmail(req);
+    const profile = hostEmail ? await storage.getProfileByEmail(hostEmail) : undefined;
+    const row = await storage.upsertStudioParticipant(found.studio.id, parsed.data.clientKey, {
+      displayName: parsed.data.displayName || profile?.hostName || "",
+      email: hostEmail || parsed.data.email,
+      role: "Speaker",
+    });
+    res.status(201).json(row);
+  });
+
+  app.post("/api/studio/heartbeat", async (req, res) => {
+    noStore(res);
+    const parsed = studioHeartbeatSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined);
+    if (!found) {
+      res.status(404).json({ message: "No event" });
+      return;
+    }
+    const all = await storage.listStudioParticipants(found.studio.id);
+    if (!all.some((p) => p.clientKey === parsed.data.clientKey)) {
+      res.status(404).json({ message: "Join first" });
+      return;
+    }
+    await storage.upsertStudioParticipant(found.studio.id, parsed.data.clientKey, {
+      camReady: parsed.data.camReady,
+      micReady: parsed.data.micReady,
+    });
+    // Same shape as /state: one round trip per beat keeps the studio quiet on
+    // the database while still moving people between rooms promptly.
+    res.json(await speakerState(found.event, found.studio, parsed.data.clientKey));
+  });
+
+  app.post("/api/studio/leave", async (req, res) => {
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined);
+    const key = typeof req.body?.clientKey === "string" ? req.body.clientKey : "";
+    if (found && key) {
+      const me = (await storage.listStudioParticipants(found.studio.id)).find((p) => p.clientKey === key);
+      if (me) await storage.removeStudioParticipant(me.id);
+    }
+    res.json({ ok: true });
+  });
+
+  // ---- Studio: the control room -------------------------------------------------
+  app.get("/api/admin/studio", requireAdmin, async (req, res) => {
+    noStore(res);
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    const studio = await storage.getOrCreateStudio(eventId);
+    const participants = await storage.listStudioParticipants(studio.id);
+    res.json({
+      studio,
+      participants: participants.map((p) => ({ ...p, present: withPresence(p) })),
+    });
+  });
+
+  app.patch("/api/admin/studio", requireAdmin, async (req, res) => {
+    const parsed = studioUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const studio = await storage.getOrCreateStudio(eventId);
+    res.json(await storage.updateStudio(studio.id, parsed.data));
+  });
+
+  app.patch("/api/admin/studio/participants/:id", requireAdmin, async (req, res) => {
+    const state = String(req.body?.state ?? "");
+    if (!["Green room", "On stage", "Off stage"].includes(state)) {
+      res.status(400).json({ message: "Unknown state" });
+      return;
+    }
+    const id = Number(req.params.id);
+    if (state === "On stage") {
+      // Never exceed the stage size the producer set.
+      const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+      const studio = await storage.getOrCreateStudio(eventId);
+      const all = await storage.listStudioParticipants(studio.id);
+      const onStage = all.filter((p) => p.state === "On stage" && p.id !== id);
+      if (onStage.length >= studio.maxOnStage) {
+        res.status(409).json({ message: `The stage is full at ${studio.maxOnStage}. Take someone off first.` });
+        return;
+      }
+    }
+    const row = await storage.setParticipantState(id, state);
+    if (!row) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    res.json(row);
+  });
+
+  app.delete("/api/admin/studio/participants/:id", requireAdmin, async (req, res) => {
+    await storage.removeStudioParticipant(Number(req.params.id));
     res.json({ ok: true });
   });
 

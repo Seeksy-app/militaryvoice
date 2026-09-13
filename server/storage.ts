@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -18,6 +18,8 @@ import type {
   RunItemInput,
   GeneratedRunItem,
   PlatformInterestRow,
+  StudioRow,
+  StudioParticipantRow,
   SponsorInquiryRow,
   InsertSponsorInquiry,
 } from "../shared/schema.js";
@@ -208,6 +210,37 @@ async function ensureSchema() {
   await sql`ALTER TABLE run_of_show ADD COLUMN IF NOT EXISTS edited BOOLEAN NOT NULL DEFAULT false`;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS studios (
+      id SERIAL PRIMARY KEY,
+      event_id INTEGER NOT NULL,
+      name TEXT NOT NULL DEFAULT 'Main studio',
+      status TEXT NOT NULL DEFAULT 'Offline',
+      max_on_stage INTEGER NOT NULL DEFAULT 5,
+      fallback_video_url TEXT NOT NULL DEFAULT '',
+      fallback_label TEXT NOT NULL DEFAULT '',
+      fallback_playing BOOLEAN NOT NULL DEFAULT false,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS studio_participants (
+      id SERIAL PRIMARY KEY,
+      studio_id INTEGER NOT NULL,
+      client_key TEXT NOT NULL,
+      display_name TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL DEFAULT '',
+      role TEXT NOT NULL DEFAULT 'Speaker',
+      state TEXT NOT NULL DEFAULT 'Green room',
+      cam_ready BOOLEAN NOT NULL DEFAULT false,
+      mic_ready BOOLEAN NOT NULL DEFAULT false,
+      last_seen_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+  `;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS studio_participants_key_idx ON studio_participants (studio_id, client_key)`;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS platform_interest (
       id SERIAL PRIMARY KEY,
       intent TEXT NOT NULL DEFAULT 'beta',
@@ -390,6 +423,16 @@ export interface IStorage {
   deleteRunItem(id: number): Promise<void>;
   createPlatformInterest(v: Omit<PlatformInterestRow, "id" | "handled" | "createdAt">): Promise<PlatformInterestRow>;
   listPlatformInterest(): Promise<PlatformInterestRow[]>;
+  getOrCreateStudio(eventId: number): Promise<StudioRow>;
+  updateStudio(id: number, patch: Partial<StudioRow>): Promise<StudioRow | undefined>;
+  listStudioParticipants(studioId: number): Promise<StudioParticipantRow[]>;
+  upsertStudioParticipant(
+    studioId: number,
+    clientKey: string,
+    v: Partial<StudioParticipantRow>,
+  ): Promise<StudioParticipantRow>;
+  setParticipantState(id: number, state: string): Promise<StudioParticipantRow | undefined>;
+  removeStudioParticipant(id: number): Promise<void>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
 }
@@ -715,6 +758,86 @@ class DatabaseStorage implements IStorage {
   async listPlatformInterest(): Promise<PlatformInterestRow[]> {
     await ready();
     return db.select().from(platformInterest).orderBy(desc(platformInterest.id));
+  }
+
+  /** One studio per event, made on first use so admin never has to create it. */
+  async getOrCreateStudio(eventId: number): Promise<StudioRow> {
+    await ready();
+    const [found] = await db.select().from(studios).where(eq(studios.eventId, eventId));
+    if (found) return found;
+    const now = new Date().toISOString();
+    const [created] = await db
+      .insert(studios)
+      .values({ eventId, name: "Main studio", createdAt: now, updatedAt: now })
+      .returning();
+    return created;
+  }
+
+  async updateStudio(id: number, patch: Partial<StudioRow>): Promise<StudioRow | undefined> {
+    await ready();
+    const [row] = await db
+      .update(studios)
+      .set({ ...patch, updatedAt: new Date().toISOString() })
+      .where(eq(studios.id, id))
+      .returning();
+    return row;
+  }
+
+  async listStudioParticipants(studioId: number): Promise<StudioParticipantRow[]> {
+    await ready();
+    return db
+      .select()
+      .from(studioParticipants)
+      .where(eq(studioParticipants.studioId, studioId))
+      .orderBy(asc(studioParticipants.id));
+  }
+
+  async upsertStudioParticipant(
+    studioId: number,
+    clientKey: string,
+    v: Partial<StudioParticipantRow>,
+  ): Promise<StudioParticipantRow> {
+    await ready();
+    const now = new Date().toISOString();
+    const [existing] = await db
+      .select()
+      .from(studioParticipants)
+      .where(and(eq(studioParticipants.studioId, studioId), eq(studioParticipants.clientKey, clientKey)));
+    if (existing) {
+      const [row] = await db
+        .update(studioParticipants)
+        .set({ ...v, lastSeenAt: now })
+        .where(eq(studioParticipants.id, existing.id))
+        .returning();
+      return row;
+    }
+    const [row] = await db
+      .insert(studioParticipants)
+      .values({
+        studioId,
+        clientKey,
+        displayName: v.displayName ?? "",
+        email: v.email ?? "",
+        role: v.role ?? "Speaker",
+        state: v.state ?? "Green room",
+        camReady: v.camReady ?? false,
+        micReady: v.micReady ?? false,
+        lastSeenAt: now,
+        createdAt: now,
+      })
+      .returning();
+    return row;
+  }
+
+  async setParticipantState(id: number, state: string): Promise<StudioParticipantRow | undefined> {
+    await ready();
+    const [row] = await db.update(studioParticipants).set({ state }).where(eq(studioParticipants.id, id)).returning();
+    return row;
+  }
+
+  async removeStudioParticipant(id: number): Promise<void> {
+    await ready();
+    await db.delete(studioParticipants).where(eq(studioParticipants.id, id));
   }
 
   async getSetting(key: string): Promise<string | null> {
