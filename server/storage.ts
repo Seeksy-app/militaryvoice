@@ -465,6 +465,7 @@ export interface IStorage {
     email: string;
     title: string;
     egressId: string;
+    filepath: string;
   }): Promise<RecordingRow>;
   finishRecording(
     egressId: string,
@@ -888,6 +889,7 @@ class DatabaseStorage implements IStorage {
     email: string;
     title: string;
     egressId: string;
+    filepath: string;
   }): Promise<RecordingRow> {
     await ready();
     const [row] = await db
@@ -900,6 +902,9 @@ class DatabaseStorage implements IStorage {
         title: v.title,
         egressId: v.egressId,
         status: "Recording",
+        // Where we told LiveKit to put it. The webhook usually confirms the
+        // path back to us, but not always — and the file is there either way.
+        url: v.filepath,
         startedAt: new Date().toISOString(),
       })
       .returning();
@@ -912,11 +917,12 @@ class DatabaseStorage implements IStorage {
     v: { status: string; url?: string; durationSec?: number; sizeBytes?: string },
   ): Promise<RecordingRow | undefined> {
     await ready();
+    const [existing] = await db.select().from(recordings).where(eq(recordings.egressId, egressId));
     const [row] = await db
       .update(recordings)
       .set({
         status: v.status,
-        url: v.url ?? "",
+        url: v.url || existing?.url || "",
         durationSec: v.durationSec ?? 0,
         sizeBytes: v.sizeBytes ?? "0",
         endedAt: new Date().toISOString(),

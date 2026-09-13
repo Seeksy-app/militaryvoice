@@ -1110,6 +1110,7 @@ export function registerRoutes(app: Express): void {
       email: (signup?.email ?? "").toLowerCase().trim(),
       title: signup?.podcastName || studio.name,
       egressId,
+      filepath,
     });
     res.json(await storage.updateStudio(studio.id, { recordingEgressId: egressId, recordingSignupId: signup?.id ?? null }));
   });
@@ -1140,12 +1141,14 @@ export function registerRoutes(app: Express): void {
     if (event.event !== "egress_ended" || !event.egressInfo) return;
     const info = event.egressInfo;
     const file = info.fileResults?.[0];
-    // EGRESS_COMPLETE is 3 in the enum; anything else means it didn't land.
-    const ok = Number(info.status) === 3 && Boolean(file?.filename);
+    // EGRESS_COMPLETE is 3. Trust the status, not the file list: LiveKit
+    // sometimes reports a completed egress with fileResults empty even though
+    // the upload succeeded, so we fall back to the path we asked it to write.
+    const ok = Number(info.status) === 3;
     try {
       await storage.finishRecording(info.egressId, {
         status: ok ? "Ready" : "Failed",
-        url: ok ? String(file!.filename) : "",
+        url: ok && file?.filename ? String(file.filename) : "",
         // LiveKit reports duration in nanoseconds.
         durationSec: file?.duration ? Math.round(Number(file.duration) / 1_000_000_000) : 0,
         sizeBytes: file?.size ? String(file.size) : "0",

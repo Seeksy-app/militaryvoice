@@ -101,6 +101,10 @@ const S3_ACCESS_KEY = process.env.SUPABASE_S3_ACCESS_KEY_ID ?? "";
 const S3_SECRET = process.env.SUPABASE_S3_SECRET_ACCESS_KEY ?? "";
 const S3_REGION = process.env.SUPABASE_S3_REGION ?? "";
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
+// Supabase serves S3 on a dedicated *.storage.supabase.co host, which isn't
+// derivable from SUPABASE_URL — take it from the dashboard when it's given.
+const S3_ENDPOINT =
+  process.env.SUPABASE_S3_ENDPOINT || `${SUPABASE_URL.replace(/\/$/, "")}/storage/v1/s3`;
 
 export function isRecordingConfigured(): boolean {
   return Boolean(isLiveKitConfigured() && S3_ACCESS_KEY && S3_SECRET && S3_REGION && SUPABASE_URL);
@@ -116,7 +120,7 @@ function s3Upload() {
     secret: S3_SECRET,
     region: S3_REGION,
     bucket: S3_BUCKET,
-    endpoint: `${SUPABASE_URL.replace(/\/$/, "")}/storage/v1/s3`,
+    endpoint: S3_ENDPOINT,
     forcePathStyle: true,
   };
 }
