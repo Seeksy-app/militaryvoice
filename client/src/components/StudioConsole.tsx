@@ -53,6 +53,9 @@ import {
   Image as ImageIcon,
   Clapperboard,
   Plus,
+  Maximize2,
+  Minimize2,
+  LogOut,
 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -163,6 +166,22 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
   const [mediaPicker, setMediaPicker] = useState<null | "image" | "video" | "all">(null);
   const [sceneName, setSceneName] = useState("");
   const [stageMuted, setStageMuted] = useState(false);
+  // Full screen: the browser chrome, the site nav and the dashboard around it
+  // are all noise once you're running a show.
+  const [focus, setFocus] = useState(false);
+
+  useEffect(() => {
+    if (!focus) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFocus(false);
+    };
+    window.addEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
+  }, [focus]);
 
   const { data: studios } = useQuery<(StudioRow & { isPrimary: boolean })[]>({
     queryKey: ["/api/admin/studios"],
@@ -499,13 +518,19 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
   const step = steps.find((x) => !x.done && x.n !== 3) ?? steps.find((x) => !x.done);
 
   return (
-    <Card className="overflow-hidden">
+    <Card
+      className={
+        focus
+          ? "fixed inset-0 z-[60] flex flex-col overflow-hidden rounded-none border-0 bg-[#04102b]"
+          : "overflow-hidden"
+      }
+    >
       {/* ---------------------------------------------------- the control bar */}
-      <div className={`relative ${broadcasting || live ? "bg-[#3d0a0d]" : "bg-[#000741]"} px-5 py-4 text-white`}>
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_140%_at_15%_0%,rgba(240,167,31,0.16),transparent_60%)]"
-        />
+      <div
+        className={`relative bg-[#000741] px-5 py-4 text-white ${
+          broadcasting ? "border-t-[3px] border-[#ED1C24]" : ""
+        }`}
+      >
         <div className="relative flex flex-wrap items-center gap-x-4 gap-y-3">
           <div className="flex min-w-0 items-center gap-2.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10">
@@ -619,6 +644,39 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
               </Button>
             )}
 
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-white/60 hover:bg-white/10 hover:text-white"
+              title={focus ? "Leave full screen (Esc)" : "Full screen"}
+              onClick={() => {
+                const next = !focus;
+                setFocus(next);
+                // Real fullscreen too where the browser allows it; the overlay
+                // stands on its own if it refuses.
+                if (next) void document.documentElement.requestFullscreen?.().catch(() => {});
+                else if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
+              }}
+              data-testid="button-studio-fullscreen"
+            >
+              {focus ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
+
+            {focus && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 gap-1.5 rounded-full px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+                onClick={() => {
+                  setFocus(false);
+                  if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
+                }}
+                data-testid="button-studio-exit-focus"
+              >
+                <LogOut className="h-3.5 w-3.5" /> Dashboard
+              </Button>
+            )}
+
             <span className="mx-1 hidden h-7 w-px bg-white/15 sm:block" />
 
             <Button
@@ -697,7 +755,11 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
 
       {/* ------------------------------------------------- the live surface */}
       {isLive && (
-        <div className="flex h-[calc(100vh-15rem)] min-h-[520px] flex-col bg-[#04102b]">
+        <div
+          className={`flex flex-col bg-[#04102b] ${
+            focus ? "min-h-0 flex-1" : "h-[calc(100vh-15rem)] min-h-[520px]"
+          }`}
+        >
           {isPrimary && (current || next) && (
             <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-white/10 bg-[#000741] px-4 py-2 text-xs">
               <span className="flex min-w-0 items-center gap-2">
