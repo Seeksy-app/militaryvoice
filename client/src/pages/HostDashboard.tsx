@@ -715,9 +715,9 @@ export default function HostDashboard() {
                     )}
 
                     <div className="mt-4 border-t border-border pt-4" data-testid="section-your-slot">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your slot</p>
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your slot</p>
                       {data.mySignups.length === 0 ? (
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border bg-muted/30 px-4 py-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] px-4 py-3">
                           <p className="text-sm text-muted-foreground">You haven't claimed a time yet.</p>
                           <Button
                             size="sm"
@@ -789,7 +789,7 @@ export default function HostDashboard() {
                     {social?.configured && (
                       <div className="mt-4 border-t border-border pt-4" data-testid="section-social-accounts">
                         <div className="mb-2 flex items-center justify-between gap-3">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Social accounts</p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Social accounts</p>
                           <div className="flex items-center gap-1">
                             {social.accounts.length > 0 && (
                               <Button
@@ -836,7 +836,7 @@ export default function HostDashboard() {
               <Tabs defaultValue="showday" className="mt-8">
                 {/* Loud enough to read as navigation. The muted pill version
                     disappeared into the page and nobody found the other two. */}
-                <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-muted/60 p-1.5">
+                <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm">
                   {[
                     ["showday", "Show day", "What we need from you"],
                     ["going", "Where it goes", "Your channels"],
@@ -845,7 +845,7 @@ export default function HostDashboard() {
                     <TabsTrigger
                       key={value}
                       value={value}
-                      className="flex-col gap-0.5 rounded-xl px-2 py-2.5 data-[state=active]:bg-[#053877] data-[state=active]:text-white data-[state=active]:shadow-sm"
+                      className="flex-col gap-0.5 rounded-xl px-2 py-2.5 text-foreground data-[state=inactive]:bg-[#053877]/[0.05] hover:data-[state=inactive]:bg-[#053877]/10 data-[state=active]:bg-[#053877] data-[state=active]:text-white data-[state=active]:shadow-sm"
                       data-testid={`tab-host-${value}`}
                     >
                       <span className="text-sm font-semibold">{label}</span>
@@ -896,7 +896,7 @@ export default function HostDashboard() {
             {/* ------------------------------------------------- open slots (only until they hold one) */}
             {data.mySignups.length === 0 && (
               <section id="pick-slot" className="mt-8 scroll-mt-24">
-                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
                   <Radio className="h-4 w-4" />
                   Pick your slot on {data.event.name}
                   <span className="ml-1 font-normal normal-case tracking-normal text-muted-foreground">
@@ -916,7 +916,7 @@ export default function HostDashboard() {
                       const mine = !!s.signup && data.mySignups.some((m) => m.slotIndex === s.index);
                       const header = (
                         <>
-                          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          <div className="text-xs font-medium uppercase tracking-[0.08em] text-foreground">
                             {formatDateInZone(s.start, zone)}
                           </div>
                           <div className="tabular-nums font-semibold">
@@ -930,7 +930,7 @@ export default function HostDashboard() {
                           <div
                             key={s.index}
                             className={`rounded-lg border p-3 text-sm ${
-                              mine ? "border-primary/50 bg-primary/5" : "border-border bg-muted/40"
+                              mine ? "border-primary/50 bg-primary/5" : "border-border bg-card"
                             }`}
                             data-testid={`card-taken-slot-${s.index}`}
                           >
@@ -986,7 +986,7 @@ export default function HostDashboard() {
             {/* --------------------------------------------------- reminders */}
             <section className="mt-8">
               <div className="mb-3 flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
                   <Users className="h-4 w-4" />
                   Fans who want a reminder ({data.contacts.length})
                 </h2>
@@ -1008,7 +1008,7 @@ export default function HostDashboard() {
                 <div className="overflow-hidden rounded-xl border border-border bg-card">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <tr className="border-b border-border text-left text-xs uppercase tracking-[0.08em] text-foreground">
                         <th className="px-4 py-2.5 font-medium">Name</th>
                         <th className="px-4 py-2.5 font-medium">Email</th>
                         <th className="px-4 py-2.5 font-medium">Phone</th>

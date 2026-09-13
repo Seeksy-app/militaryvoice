@@ -139,7 +139,7 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
 
   return (
     <section className="mt-8" data-testid="section-show-materials">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
         <Paperclip className="h-4 w-4" />
         Show materials
       </h2>
@@ -148,11 +148,11 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
         <div className="bg-[#053877] px-5 py-3.5 text-white">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold">Everything the studio needs from you</p>
-            <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/80">
+            <span className="rounded-full bg-[#F0A71F] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#000741]">
               All optional
             </span>
           </div>
-          <p className="mt-0.5 text-xs text-white/70">
+          <p className="mt-0.5 text-xs text-white/85">
             Nothing here is required to hold your slot. Send what you have and it's attached
             automatically — you can come back and add the rest any time.
           </p>
@@ -168,15 +168,15 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
             data-testid="toggle-materials-files"
           >
             {openFiles ? (
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              <ChevronDown className="h-3.5 w-3.5 text-[#053877]" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              <ChevronRight className="h-3.5 w-3.5 text-[#053877]" />
             )}
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
               Files to play or show
             </span>
             {assets && assets.length > 0 && (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+              <span className="rounded-full bg-[#053877]/10 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">
                 {assets.length}
               </span>
             )}
@@ -189,7 +189,7 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
               {assets.map((a) => (
                 <li
                   key={a.id}
-                  className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-background px-3 py-2.5"
+                  className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5"
                   data-testid={`asset-${a.id}`}
                 >
                   <Badge variant="secondary" className="shrink-0 font-normal">
@@ -244,10 +244,10 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
             </ul>
           )}
 
-          <div className="rounded-xl border border-dashed border-border bg-muted/30 p-4">
+          <div className="rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] p-4">
             <div className="grid gap-3 sm:grid-cols-[150px_1fr]">
               <div>
-                <Label className="text-xs">What is it?</Label>
+                <Label className="text-xs font-semibold text-foreground">What is it?</Label>
                 <Select value={kind} onValueChange={setKind}>
                   <SelectTrigger className="mt-1" data-testid="select-asset-kind">
                     <SelectValue />
@@ -262,7 +262,7 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
                 </Select>
               </div>
               <div>
-                <Label className="text-xs">Name it (optional)</Label>
+                <Label className="text-xs font-semibold text-foreground">Name it (optional)</Label>
                 <Input
                   className="mt-1"
                   placeholder="e.g. Opening sizzle, 20 seconds"
@@ -275,7 +275,7 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
 
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div>
-                <Label className="text-xs">Upload a file</Label>
+                <Label className="text-xs font-semibold text-foreground">Upload a file</Label>
                 <div className="mt-1 flex items-center gap-2">
                   <input
                     ref={fileRef}
@@ -296,7 +296,7 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
                 <p className="mt-1 text-xs text-muted-foreground">Up to {MAX_MB}MB.</p>
               </div>
               <div>
-                <Label className="text-xs">…or paste a link</Label>
+                <Label className="text-xs font-semibold text-foreground">…or paste a link</Label>
                 <Input
                   className="mt-1"
                   placeholder="Drive, Dropbox, WeTransfer, YouTube"
@@ -341,11 +341,11 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
             data-testid="toggle-materials-details"
           >
             {openDetails ? (
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              <ChevronDown className="h-3.5 w-3.5 text-[#053877]" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+              <ChevronRight className="h-3.5 w-3.5 text-[#053877]" />
             )}
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Show details</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Show details</span>
           </button>
           {openDetails && (
           <>

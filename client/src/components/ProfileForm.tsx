@@ -713,9 +713,9 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
             >
               {/* Curiosity, not a requirement — it tells the crew what someone
                   is used to, and nothing downstream depends on the answer. */}
-              <div className="flex flex-col gap-4 rounded-xl border border-border bg-muted/20 p-4">
+              <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
                     How you normally work · optional
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -816,7 +816,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
               </div>
 
               {isPrerecorded ? (
-                <p className="rounded-xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+                <p className="rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] p-4 text-sm text-foreground">
                   Because you're playing a recorded episode, we don't need to know about intros, slides, or an
                   interviewer — it's all already in your file
                   {watchIntro === "virtual" ? ", and we'll cue you in for the live intro before it rolls" : ""}.
@@ -1007,7 +1007,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                   </p>
                 </div>
               ) : (
-                <div className="flex items-start gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-3.5 text-sm">
+                <div className="flex items-start gap-3 rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] p-3.5 text-sm">
                   <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                   <p className="text-muted-foreground">
                     <span className="font-medium text-foreground">Connect Instagram, TikTok, YouTube, X, Facebook and LinkedIn</span>{" "}
@@ -1026,7 +1026,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                   <CalendarClock className="h-3.5 w-3.5" /> Your slot is held
                 </div>
                 <div className="px-4 py-4">
-                  <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{pendingSlot.eventName.trim()}</div>
+                  <div className="text-xs font-medium uppercase tracking-[0.08em] text-foreground">{pendingSlot.eventName.trim()}</div>
                   <div className="mt-1 font-semibold">{formatDateInZone(pendingSlot.start, pendingSlot.zone)}</div>
                   <div className="tabular-nums text-lg font-bold text-primary">
                     {formatTimeInZone(pendingSlot.start, pendingSlot.zone)}–{formatTimeInZone(pendingSlot.end, pendingSlot.zone)}
@@ -1040,7 +1040,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
             )}
 
             <div className="rounded-2xl border border-border bg-card p-4" data-testid="card-profile-preview">
-              <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
                 <Sparkles className="h-3.5 w-3.5 text-primary" /> How you'll appear
               </div>
               <div className="flex flex-col items-center rounded-2xl border border-border bg-background p-5 text-center">
@@ -1085,7 +1085,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
             </div>
 
             {isSetup && (
-              <div className="rounded-2xl border border-border bg-muted/40 p-4 text-xs text-muted-foreground">
+              <div className="rounded-2xl border border-[#053877]/20 bg-[#053877]/[0.035] p-4 text-xs text-foreground">
                 <div className="mb-2 flex items-center gap-1.5 font-semibold uppercase tracking-wide">
                   <Radio className="h-3.5 w-3.5 text-primary" /> What happens next
                 </div>

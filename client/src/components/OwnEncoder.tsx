@@ -23,7 +23,7 @@ function CopyField({ label, value, secret = false }: { label: string; value: str
 
   return (
     <div>
-      <Label className="text-xs uppercase tracking-wide text-muted-foreground">{label}</Label>
+      <Label className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{label}</Label>
       <div className="mt-1 flex items-center gap-2">
         <Input
           readOnly
@@ -128,7 +128,7 @@ export function OwnEncoder() {
             <CopyField label="Stream key" value={ing.streamKey} secret />
           </div>
 
-          <div className="mt-4 rounded-xl border border-border bg-muted/40 p-4">
+          <div className="mt-4 rounded-xl border border-border bg-card p-4">
             <button
               type="button"
               className="text-sm font-medium text-primary hover:underline"
