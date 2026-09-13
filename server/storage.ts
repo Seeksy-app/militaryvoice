@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -21,12 +21,14 @@ import type {
   StudioRow,
   StudioParticipantRow,
   RecordingRow,
+  DestinationRow,
+  DestinationInput,
   SponsorInquiryRow,
   InsertSponsorInquiry,
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { and, eq, ne, asc, desc } from "drizzle-orm";
+import { and, eq, ne, asc, desc, isNull } from "drizzle-orm";
 
 // Resolve the Postgres connection string lazily (not at module load) so a
 // missing/bad value surfaces as a normal caught error on first request—
@@ -266,6 +268,23 @@ async function ensureSchema() {
   await sql`CREATE INDEX IF NOT EXISTS recordings_email_idx ON recordings (email)`;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS destinations (
+      id SERIAL PRIMARY KEY,
+      event_id INTEGER NOT NULL,
+      signup_id INTEGER,
+      owner_email TEXT NOT NULL DEFAULT '',
+      platform TEXT NOT NULL DEFAULT 'custom',
+      label TEXT NOT NULL DEFAULT '',
+      rtmp_url TEXT NOT NULL DEFAULT '',
+      stream_key TEXT NOT NULL DEFAULT '',
+      enabled BOOLEAN NOT NULL DEFAULT true,
+      live BOOLEAN NOT NULL DEFAULT false,
+      created_at TEXT NOT NULL
+    );
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS destinations_event_idx ON destinations (event_id)`;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS platform_interest (
       id SERIAL PRIMARY KEY,
       intent TEXT NOT NULL DEFAULT 'beta',
@@ -359,7 +378,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "studios", column: "recording_egress_id" };
+const SCHEMA_SENTINEL = { table: "destinations", column: "rtmp_url" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
@@ -418,6 +437,7 @@ export interface IStorage {
   createLoginToken(email: string, token: string, expiresAt: string): Promise<LoginTokenRow>;
   getLoginToken(email: string, token: string): Promise<LoginTokenRow | undefined>;
   markLoginTokenUsed(id: number): Promise<void>;
+  supersedeLoginTokens(email: string): Promise<void>;
   getProfileByEmail(email: string): Promise<ProfileRow | undefined>;
   upsertProfile(
     email: string,
@@ -474,6 +494,11 @@ export interface IStorage {
   listRecordingsByEmail(email: string): Promise<RecordingRow[]>;
   listRecordings(eventId?: number): Promise<RecordingRow[]>;
   getRecording(id: number): Promise<RecordingRow | undefined>;
+  listDestinations(eventId: number): Promise<DestinationRow[]>;
+  getDestination(id: number): Promise<DestinationRow | undefined>;
+  createDestination(eventId: number, ownerEmail: string, v: DestinationInput): Promise<DestinationRow>;
+  updateDestination(id: number, patch: Partial<DestinationRow>): Promise<DestinationRow | undefined>;
+  deleteDestination(id: number): Promise<void>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
 }
@@ -643,6 +668,20 @@ class DatabaseStorage implements IStorage {
   async markLoginTokenUsed(id: number): Promise<void> {
     await ready();
     await db.update(loginTokens).set({ usedAt: new Date().toISOString() }).where(eq(loginTokens.id, id));
+  }
+
+  /**
+   * Retires any code still outstanding for this address. Asking for a new code
+   * should make the old email useless — otherwise someone types the first code
+   * they find in their inbox and gets told it's invalid, which reads like the
+   * system is broken.
+   */
+  async supersedeLoginTokens(email: string): Promise<void> {
+    await ready();
+    await db
+      .update(loginTokens)
+      .set({ usedAt: new Date().toISOString() })
+      .where(and(eq(loginTokens.email, email), isNull(loginTokens.usedAt)));
   }
 
   async getProfileByEmail(email: string): Promise<ProfileRow | undefined> {
@@ -952,6 +991,48 @@ class DatabaseStorage implements IStorage {
     await ready();
     const [row] = await db.select().from(recordings).where(eq(recordings.id, id));
     return row;
+  }
+
+  // ---- Destinations ----------------------------------------------------------
+  async listDestinations(eventId: number): Promise<DestinationRow[]> {
+    await ready();
+    return db.select().from(destinations).where(eq(destinations.eventId, eventId)).orderBy(asc(destinations.id));
+  }
+
+  async getDestination(id: number): Promise<DestinationRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(destinations).where(eq(destinations.id, id));
+    return row;
+  }
+
+  async createDestination(eventId: number, ownerEmail: string, v: DestinationInput): Promise<DestinationRow> {
+    await ready();
+    const [row] = await db
+      .insert(destinations)
+      .values({
+        eventId,
+        signupId: v.signupId ?? null,
+        ownerEmail: ownerEmail.toLowerCase().trim(),
+        platform: v.platform,
+        label: v.label,
+        rtmpUrl: v.rtmpUrl,
+        streamKey: v.streamKey,
+        enabled: v.enabled,
+        createdAt: new Date().toISOString(),
+      })
+      .returning();
+    return row;
+  }
+
+  async updateDestination(id: number, patch: Partial<DestinationRow>): Promise<DestinationRow | undefined> {
+    await ready();
+    const [row] = await db.update(destinations).set(patch).where(eq(destinations.id, id)).returning();
+    return row;
+  }
+
+  async deleteDestination(id: number): Promise<void> {
+    await ready();
+    await db.delete(destinations).where(eq(destinations.id, id));
   }
 
   async getSetting(key: string): Promise<string | null> {

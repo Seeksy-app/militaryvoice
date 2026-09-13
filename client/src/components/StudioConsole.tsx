@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useProducerRoom, type ProducerFeed } from "@/hooks/use-producer-room";
-import { STUDIO_STATUSES, type StudioRow, type StudioParticipantRow, type RunItemRow } from "@shared/schema";
+import { Destinations } from "@/components/Destinations";
+import { STUDIO_STATUSES, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow } from "@shared/schema";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
 import {
   MonitorPlay,
@@ -38,6 +39,7 @@ import {
   Clock,
   Disc,
   Square,
+  Signal,
 } from "lucide-react";
 
 interface Props {
@@ -138,6 +140,20 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
     onError: (e: Error) => toast({ title: "Couldn't move them", description: e.message, variant: "destructive" }),
   });
 
+  const { data: signups } = useQuery<SignupRow[]>({
+    queryKey: ["/api/admin/signups"],
+    queryFn: () => adminGet<SignupRow[]>("/api/admin/signups"),
+  });
+
+  const broadcast = useMutation({
+    mutationFn: async (action: "start" | "stop") => adminSend("POST", "/api/admin/studio/broadcast", { action }),
+    onSuccess: () => {
+      refresh();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/destinations"] });
+    },
+    onError: (e: Error) => toast({ title: "Broadcast didn't change", description: e.message, variant: "destructive" }),
+  });
+
   const record = useMutation({
     mutationFn: async (body: { action: "start" | "stop"; signupId?: number }) =>
       adminSend("POST", "/api/admin/studio/record", body),
@@ -152,6 +168,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
 
   const live = studio?.status === "Live";
   const recording = Boolean(studio?.recordingEgressId);
+  const broadcasting = Boolean(studio?.broadcastEgressId);
   const stageFull = !!studio && onStage.length >= studio.maxOnStage;
   const joinUrl = typeof window !== "undefined" ? `${window.location.origin}/studio` : "/studio";
 
@@ -356,6 +373,38 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
             ))}
           </div>
         )}
+
+        <div
+          className={`flex flex-wrap items-center gap-3 rounded-xl border p-4 ${
+            broadcasting ? "border-[#ED1C24]/50 bg-[#ED1C24]/5" : "border-border bg-muted/30"
+          }`}
+        >
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Signal className={`h-3.5 w-3.5 ${broadcasting ? "text-[#ED1C24]" : "text-primary"}`} /> Broadcast
+          </div>
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+            {broadcasting
+              ? "The stage is going out to every destination switched on below."
+              : "One composite of the stage, sent to all your destinations at once."}
+          </p>
+          <Button
+            size="sm"
+            variant={broadcasting ? "outline" : "default"}
+            className={`gap-1.5 rounded-full ${broadcasting ? "" : "bg-[#ED1C24] text-white hover:bg-[#c81820]"}`}
+            disabled={broadcast.isPending}
+            onClick={() => broadcast.mutate(broadcasting ? "stop" : "start")}
+            data-testid="button-broadcast-toggle"
+          >
+            <Signal className="h-3.5 w-3.5" /> {broadcasting ? "Stop the broadcast" : "Go out live"}
+          </Button>
+        </div>
+
+        <Destinations
+          adminGet={adminGet}
+          adminSend={adminSend}
+          broadcasting={broadcasting}
+          signups={signups ?? []}
+        />
 
         {/* keeping the slot: a separate egress from whatever is going out, so
             stopping it never touches the broadcast */}

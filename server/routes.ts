@@ -16,6 +16,7 @@ import {
   studioJoinSchema,
   studioHeartbeatSchema,
   studioUpdateSchema,
+  destinationInputSchema,
   PRESENCE_WINDOW_MS,
   ASSET_KINDS,
   type GeneratedRunItem,
@@ -45,6 +46,7 @@ import {
 } from "./livekit.js";
 import { ensureRecordingsBucket, signedRecordingUrl } from "./recordingStorage.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
+import type { DestinationRow } from "../shared/schema.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   isUploadPostConfigured,
@@ -417,6 +419,7 @@ export function registerRoutes(app: Express): void {
     if (await storage.isAdminEmail(email)) {
       const code = crypto.randomInt(100000, 1000000).toString();
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      await storage.supersedeLoginTokens(`admin:${email}`);
       await storage.createLoginToken(`admin:${email}`, code, expiresAt);
       if (!process.env.RESEND_API_KEY && process.env.NODE_ENV !== "production") {
         console.log(`[dev] ADMIN login code for ${email}: ${code}`);
@@ -591,6 +594,62 @@ export function registerRoutes(app: Express): void {
       res.status(201).json(created);
     },
   );
+
+  // ---- A podcaster's own destinations -------------------------------------------
+  //      Their slot can go out to their own channel as well as ours. They add
+  //      the key; the control room attaches it when their slot comes up.
+  app.get("/api/host/destinations", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const eventId = (await storage.getFeaturedEvent()).id;
+    const mine = (await storage.listDestinations(eventId)).filter((d) => d.ownerEmail === email);
+    res.json(
+      mine.map((d) => ({
+        id: d.id,
+        platform: d.platform,
+        label: d.label,
+        rtmpUrl: d.rtmpUrl,
+        keyHint: d.streamKey ? `••••${d.streamKey.slice(-4)}` : "",
+        enabled: d.enabled,
+        live: d.live,
+      })),
+    );
+  });
+
+  app.post("/api/host/destinations", requireHostSession, async (req, res) => {
+    const parsed = destinationInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const event = await storage.getFeaturedEvent();
+    // Tie it to the slot they actually hold, so the control room knows when to
+    // switch it on.
+    const mySignup = (await storage.listSignups(event.id)).find(
+      (sg) => sg.email.toLowerCase().trim() === email && sg.status === "confirmed",
+    );
+    const row = await storage.createDestination(event.id, email, {
+      ...parsed.data,
+      signupId: mySignup?.id,
+    });
+    res.status(201).json({ id: row.id, platform: row.platform, label: row.label, rtmpUrl: row.rtmpUrl, keyHint: `••••${row.streamKey.slice(-4)}`, enabled: row.enabled, live: row.live });
+  });
+
+  app.delete("/api/host/destinations/:id", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const d = await storage.getDestination(Number(req.params.id));
+    if (!d || d.ownerEmail !== email) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    if (d.live) {
+      res.status(409).json({ message: "That's carrying your slot right now. Ask the producer to drop it first." });
+      return;
+    }
+    await storage.deleteDestination(d.id);
+    res.json({ ok: true });
+  });
 
   // ---- A podcaster's own recordings ---------------------------------------------
   //      Their session lands here on its own once the studio stops recording.
@@ -1039,6 +1098,9 @@ export function registerRoutes(app: Express): void {
 
     if (action === "stop") {
       if (studio.broadcastEgressId) await stopEgressById(studio.broadcastEgressId);
+      for (const d of await storage.listDestinations(eventId)) {
+        if (d.live) await storage.updateDestination(d.id, { live: false });
+      }
       res.json(await storage.updateStudio(studio.id, { broadcastEgressId: "" }));
       return;
     }
@@ -1050,12 +1112,18 @@ export function registerRoutes(app: Express): void {
       res.status(409).json({ message: "Already going out. Stop it first." });
       return;
     }
-    const targets = Array.isArray(req.body?.targets)
-      ? (req.body.targets as { url?: unknown; label?: unknown }[])
-          .map((t) => ({ url: String(t.url ?? "").trim(), label: String(t.label ?? "").trim() }))
-          .filter((t) => /^rtmps?:\/\//i.test(t.url))
-      : [];
-    const egressId = await startBroadcast(roomName(studio.id), targets);
+    // House destinations only at the start; a podcaster's own is attached when
+    // their slot comes up.
+    const rows = (await storage.listDestinations(eventId)).filter((d) => d.enabled && !d.signupId);
+    if (rows.length === 0) {
+      res.status(400).json({ message: "Add at least one destination before going out." });
+      return;
+    }
+    const egressId = await startBroadcast(
+      roomName(studio.id),
+      rows.map((d) => ({ url: ingestUrl(d), label: d.label || d.platform })),
+    );
+    for (const d of rows) await storage.updateDestination(d.id, { live: true });
     res.json(await storage.updateStudio(studio.id, { broadcastEgressId: egressId }));
   });
 
@@ -1070,6 +1138,118 @@ export function registerRoutes(app: Express): void {
     const clean = (v: unknown) =>
       (Array.isArray(v) ? v : []).map((u) => String(u).trim()).filter((u) => /^rtmps?:\/\//i.test(u));
     await updateBroadcastTargets(studio.broadcastEgressId, clean(req.body?.add), clean(req.body?.remove));
+    res.json({ ok: true });
+  });
+
+  // ---- Destinations -------------------------------------------------------------
+  //      A destination with no signupId is the house's own and carries the whole
+  //      event. One tied to a signup belongs to that podcaster and is attached
+  //      to the running broadcast for their slot only — which is how the event
+  //      borrows each speaker's audience and then hands it back.
+  function ingestUrl(d: { rtmpUrl: string; streamKey: string }): string {
+    return `${d.rtmpUrl.replace(/\/+$/, "")}/${d.streamKey}`;
+  }
+
+  /** Stream keys are credentials: a browser only ever sees the last four. */
+  function publicDestination(d: DestinationRow) {
+    return {
+      id: d.id,
+      signupId: d.signupId,
+      platform: d.platform,
+      label: d.label,
+      rtmpUrl: d.rtmpUrl,
+      keyHint: d.streamKey ? `••••${d.streamKey.slice(-4)}` : "",
+      enabled: d.enabled,
+      live: d.live,
+      ownerEmail: d.ownerEmail,
+    };
+  }
+
+  app.get("/api/admin/destinations", requireAdmin, async (req, res) => {
+    noStore(res);
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    res.json((await storage.listDestinations(eventId)).map(publicDestination));
+  });
+
+  app.post("/api/admin/destinations", requireAdmin, async (req, res) => {
+    const parsed = destinationInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    res.status(201).json(publicDestination(await storage.createDestination(eventId, "", parsed.data)));
+  });
+
+  app.patch("/api/admin/destinations/:id", requireAdmin, async (req, res) => {
+    const existing = await storage.getDestination(Number(req.params.id));
+    if (!existing) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    const patch: Record<string, unknown> = {};
+    if (typeof req.body?.enabled === "boolean") patch.enabled = req.body.enabled;
+    if (typeof req.body?.label === "string") patch.label = req.body.label.trim().slice(0, 80);
+    // An empty key means "leave it alone" — the browser never had the real one.
+    if (typeof req.body?.streamKey === "string" && req.body.streamKey.trim()) {
+      patch.streamKey = req.body.streamKey.trim();
+    }
+    if (typeof req.body?.rtmpUrl === "string" && req.body.rtmpUrl.trim()) {
+      patch.rtmpUrl = req.body.rtmpUrl.trim();
+    }
+
+    const updated = await storage.updateDestination(existing.id, patch);
+    if (!updated) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    res.json(publicDestination(updated));
+  });
+
+  /**
+   * Attach or drop one destination on the broadcast that's already running.
+   * Kept separate from editing on purpose: "enabled" means we're willing to
+   * use it, "live" means it is carrying the show right now, and on show day
+   * those must not be the same switch.
+   */
+  app.post("/api/admin/destinations/:id/live", requireAdmin, async (req, res) => {
+    const d = await storage.getDestination(Number(req.params.id));
+    if (!d) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    const studio = await storage.getOrCreateStudio(d.eventId);
+    if (!studio.broadcastEgressId) {
+      res.status(409).json({ message: "Nothing is going out yet." });
+      return;
+    }
+    const want = req.body?.live !== false;
+    if (want === d.live) {
+      res.json(publicDestination(d));
+      return;
+    }
+    try {
+      await updateBroadcastTargets(
+        studio.broadcastEgressId,
+        want ? [ingestUrl(d)] : [],
+        want ? [] : [ingestUrl(d)],
+      );
+    } catch (err: any) {
+      res.status(502).json({ message: err?.message ?? "The broadcast wouldn't take that change." });
+      return;
+    }
+    res.json(publicDestination((await storage.updateDestination(d.id, { live: want }))!));
+  });
+
+  app.delete("/api/admin/destinations/:id", requireAdmin, async (req, res) => {
+    const existing = await storage.getDestination(Number(req.params.id));
+    if (existing?.live) {
+      const studio = await storage.getOrCreateStudio(existing.eventId);
+      if (studio.broadcastEgressId) {
+        await updateBroadcastTargets(studio.broadcastEgressId, [], [ingestUrl(existing)]).catch(() => {});
+      }
+    }
+    await storage.deleteDestination(Number(req.params.id));
     res.json({ ok: true });
   });
 
@@ -1624,6 +1804,7 @@ export function registerRoutes(app: Express): void {
     }
     const code = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    await storage.supersedeLoginTokens(email);
     await storage.createLoginToken(email, code, expiresAt);
     if (!process.env.RESEND_API_KEY && process.env.NODE_ENV !== "production") {
       // Local dev without Resend: surface the code in the terminal so sign-in still works.
@@ -1642,8 +1823,16 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const row = await storage.getLoginToken(email, code);
-    if (!row || row.usedAt || new Date(row.expiresAt).getTime() < Date.now()) {
-      res.status(401).json({ message: "That code is invalid or expired. Request a new one." });
+    if (!row) {
+      res.status(401).json({ message: "We don't recognise that code. Check the newest email — an older code stops working once you ask for another." });
+      return;
+    }
+    if (row.usedAt) {
+      res.status(401).json({ message: "That code has already been used. Ask for a new one." });
+      return;
+    }
+    if (new Date(row.expiresAt).getTime() < Date.now()) {
+      res.status(401).json({ message: "That code has expired — they last 15 minutes. Ask for a new one." });
       return;
     }
     await storage.markLoginTokenUsed(row.id);

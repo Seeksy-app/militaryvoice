@@ -590,6 +590,57 @@ export const recordings = pgTable("recordings", {
   endedAt: text("ended_at"),
 });
 export type RecordingRow = typeof recordings.$inferSelect;
+
+// Where a broadcast goes. A destination with no signupId is the house's own —
+// it carries the whole event. One with a signupId belongs to that podcaster and
+// is added to the running broadcast for their slot only, then dropped, which is
+// how the event borrows each speaker's own audience.
+export const destinations = pgTable("destinations", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  signupId: integer("signup_id"),
+  // Set when a podcaster added it themselves, so we can show it back to them.
+  ownerEmail: text("owner_email").notNull().default(""),
+  platform: text("platform").notNull().default("custom"),
+  label: text("label").notNull().default(""),
+  // Ingest URL and key are kept apart so we can show the URL and mask the key.
+  rtmpUrl: text("rtmp_url").notNull().default(""),
+  streamKey: text("stream_key").notNull().default(""),
+  enabled: boolean("enabled").notNull().default(true),
+  // Set while this destination is attached to a running egress.
+  live: boolean("live").notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+export type DestinationRow = typeof destinations.$inferSelect;
+
+export const DESTINATION_PLATFORMS = ["youtube", "x", "linkedin", "instagram", "custom"] as const;
+
+export const destinationInputSchema = z.object({
+  platform: z.enum(DESTINATION_PLATFORMS).default("custom"),
+  label: z.string().trim().max(80).default(""),
+  rtmpUrl: z
+    .string()
+    .trim()
+    .min(1, "Paste the RTMP server URL")
+    .refine((v) => /^rtmps?:\/\/[^\s]+$/i.test(v), "That should start with rtmp:// or rtmps://"),
+  streamKey: z.string().trim().min(1, "Paste the stream key").max(500),
+  enabled: z.boolean().default(true),
+  signupId: z.number().int().positive().optional(),
+});
+export type DestinationInput = z.infer<typeof destinationInputSchema>;
+
+/** What a browser is allowed to see: never the key itself. */
+export interface PublicDestination {
+  id: number;
+  signupId: number | null;
+  platform: string;
+  label: string;
+  rtmpUrl: string;
+  keyHint: string;
+  enabled: boolean;
+  live: boolean;
+  ownerEmail: string;
+}
 export const RECORDING_STATUSES = ["Recording", "Ready", "Failed"] as const;
 
 export const studioParticipants = pgTable("studio_participants", {
