@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { NavBar } from "@/components/NavBar";
+import { StudioDemo } from "@/components/StudioDemo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -211,7 +212,7 @@ export default function Platform() {
         />
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.96)_0%,rgba(0,7,65,0.9)_42%,rgba(5,56,119,0.72)_72%,rgba(5,56,119,0.55)_100%)]"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.90)_0%,rgba(0,7,65,0.80)_44%,rgba(5,56,119,0.50)_74%,rgba(5,56,119,0.24)_100%)]"
         />
         <motion.div
           aria-hidden="true"
@@ -229,10 +230,11 @@ export default function Platform() {
               Stage a live, multi-speaker event
               <span className="block text-[#F0A71F]">without running it yourself</span>
             </h1>
-            <p className="mt-6 text-lg leading-relaxed text-white/85">
-              MilitaryVoice.ai is the software we built to put twenty-four hours of back-to-back shows on the air with one
-              small team. Scheduling, promotion, a studio, and a run of show the control room can actually follow. Now
-              any organization can use it for their own event.
+            <p className="mt-6 text-lg leading-relaxed text-white/90">
+              MilitaryVoice.ai is the software we built to put a twenty-four hour Podcastathon on the air with one small
+              team — and it doesn't care what shape your event is. Live, pre-recorded, or the two side by side. A single
+              session or a hundred across three days. Scheduling, promotion, a studio, and a run of show the control
+              room can actually follow.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -262,7 +264,7 @@ export default function Platform() {
                 }
               />
             </div>
-            <p className="mt-5 text-sm text-white/60">In private beta. No card, no commitment — we onboard in small groups.</p>
+            <p className="mt-5 text-sm text-white/75">In private beta. No card, no commitment — we onboard in small groups.</p>
           </div>
         </div>
       </section>
@@ -322,15 +324,55 @@ export default function Platform() {
         </div>
       </section>
 
+      {/* --------------------------------------------------------- the studio */}
+      <section className="relative overflow-hidden border-b border-border">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-[radial-gradient(70%_100%_at_50%_0%,rgba(5,56,119,0.10),transparent_70%)]"
+        />
+        <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6">
+          <div className="max-w-2xl">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">The studio</div>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
+              This is what the control room looks like
+            </h2>
+            <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+              Speakers arrive in a green room where you can see their camera and hear their mic before anyone is on air.
+              You bring them up when it's their turn — mid-broadcast, without stopping — and the run of show tells you
+              what's playing now and what's next. If something goes wrong, one button rolls the standby clip.
+            </p>
+          </div>
+
+          <div className="mt-8">
+            <StudioDemo />
+          </div>
+
+          <div className="mt-5 grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
+            <p>
+              <span className="font-semibold text-foreground">Up to five on stage.</span> Add and drop people while
+              you're live; nobody has to leave and rejoin.
+            </p>
+            <p>
+              <span className="font-semibold text-foreground">Files cued ahead.</span> Intros, outros, sponsor reels and
+              images are uploaded and labelled before the segment starts.
+            </p>
+            <p>
+              <span className="font-semibold text-foreground">Out to where your audience is.</span> One broadcast, sent
+              to every destination you've connected.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* -------------------------------------------------------- proof / who */}
-      <section className="bg-[#053877] text-white">
+      <section className="border-b border-border bg-muted/40">
         <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:py-20">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">Built in the open</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Built in the open</div>
             <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
               We use it ourselves, in public
             </h2>
-            <p className="mt-4 text-base leading-relaxed text-white/75">
+            <p className="mt-4 text-base leading-relaxed text-muted-foreground">
               The 24 Hour Podcastathon runs on this platform: forty-eight slots, speakers in every time zone, live shows
               and pre-recorded episodes side by side, all of it visible to anyone who visits. If you want to know whether
               it works, go and look at it.
@@ -346,19 +388,19 @@ export default function Platform() {
             </Link>
           </div>
 
-          <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-6 backdrop-blur">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/70">
+          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               <Users className="h-3.5 w-3.5 text-[#F0A71F]" /> Who it's for
             </div>
             <ul className="mt-4 flex flex-col gap-3">
               {AUDIENCES.map((a) => (
-                <li key={a} className="flex items-start gap-2.5 text-sm text-white/85">
+                <li key={a} className="flex items-start gap-2.5 text-sm text-foreground">
                   <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
                   {a}
                 </li>
               ))}
             </ul>
-            <p className="mt-5 text-sm text-white/60">
+            <p className="mt-5 text-sm text-muted-foreground">
               If it has a schedule, speakers and an audience, it fits. One slot or two hundred.
             </p>
           </div>
