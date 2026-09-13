@@ -728,7 +728,7 @@ export default function Landing({ slug }: Props) {
                   <div className="mt-2 font-mono text-xs text-primary">
                     {formatDateInZone(onAirStart, zone)} · {formatTimeInZone(onAirStart, zone)}
                   </div>
-                  <SocialIconRow accounts={parseSocialAccounts(signup.socialAccounts)} className="mt-3 justify-center" />
+                  <SocialIconRow accounts={parseSocialAccounts(signup.socialAccounts)} variant="filled" className="mt-3 justify-center" />
                 </motion.div>
               ))}
               {lineup.length > 12 && (

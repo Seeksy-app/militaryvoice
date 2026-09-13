@@ -42,6 +42,22 @@ export function platformColor(p: SocialPlatform): string {
   return BRAND[p];
 }
 
+// Instagram's mark is a gradient, not a flat colour — anything else reads as
+// an approximation of their logo rather than their logo.
+const BRAND_BG: Record<SocialPlatform, string> = {
+  instagram: "linear-gradient(45deg,#F58529 0%,#DD2A7B 45%,#8134AF 70%,#515BD4 100%)",
+  tiktok: "#000000",
+  youtube: "#FF0000",
+  x: "#000000",
+  linkedin: "#0A66C2",
+  facebook: "#1877F2",
+  threads: "#000000",
+};
+
+export function platformBackground(p: SocialPlatform): string {
+  return BRAND_BG[p];
+}
+
 export function formatFollowers(n?: number): string | null {
   if (typeof n !== "number" || !Number.isFinite(n)) return null;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(/\.0$/, "")}M`;
@@ -75,23 +91,33 @@ export function parseSocialAccounts(json: string | null | undefined): SocialAcco
 
 interface RowProps {
   accounts: SocialAccount[];
-  size?: "sm" | "md";
+  size?: "sm" | "md" | "lg";
   className?: string;
+  /** "filled" is the real badge — brand ground, white glyph. */
+  variant?: "outline" | "filled";
 }
 
 /** Compact icon row for public cards. Renders nothing when there's nothing to show. */
-export function SocialIconRow({ accounts, size = "sm", className = "" }: RowProps) {
+export function SocialIconRow({ accounts, size = "sm", className = "", variant = "outline" }: RowProps) {
   if (!accounts.length) return null;
-  const dim = size === "sm" ? "h-6 w-6" : "h-8 w-8";
-  const icon = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
+  const dim = size === "lg" ? "h-10 w-10" : size === "md" ? "h-8 w-8" : "h-6 w-6";
+  const icon = size === "lg" ? "h-5 w-5" : size === "md" ? "h-4 w-4" : "h-3.5 w-3.5";
+  const filled = variant === "filled";
+
   return (
-    <div className={`flex flex-wrap items-center gap-1 ${className}`} data-testid="social-icon-row">
+    <div className={`flex flex-wrap items-center gap-1.5 ${className}`} data-testid="social-icon-row">
       {accounts.map((a) => {
         const f = formatFollowers(a.followers);
         const handle = a.username && !/^\d+$/.test(a.username) ? `@${a.username}` : a.displayName;
         const title = `${platformLabel(a.platform)}${handle ? ` · ${handle}` : ""}${f ? ` · ${f} followers` : ""}`;
-        const cls = `inline-flex ${dim} items-center justify-center rounded-full border border-border bg-white shadow-sm transition-transform hover:scale-110 dark:bg-white/95`;
-        const style = { color: platformColor(a.platform) };
+        const cls = filled
+          ? `inline-flex ${dim} items-center justify-center rounded-full text-white shadow-sm transition-transform hover:scale-110`
+          : `inline-flex ${dim} items-center justify-center rounded-full border border-border bg-white shadow-sm transition-transform hover:scale-110 dark:bg-white/95`;
+        const style = filled
+          ? { background: platformBackground(a.platform) }
+          : { color: platformColor(a.platform) };
+        const glyph = <PlatformIcon platform={a.platform} className={icon} />;
+
         return a.url ? (
           <a
             key={a.platform}
@@ -104,11 +130,11 @@ export function SocialIconRow({ accounts, size = "sm", className = "" }: RowProp
             style={style}
             onClick={(e) => e.stopPropagation()}
           >
-            <PlatformIcon platform={a.platform} className={icon} />
+            {glyph}
           </a>
         ) : (
           <span key={a.platform} title={title} aria-label={title} className={cls} style={style}>
-            <PlatformIcon platform={a.platform} className={icon} />
+            {glyph}
           </span>
         );
       })}

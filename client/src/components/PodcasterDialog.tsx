@@ -141,7 +141,7 @@ export function PodcasterDialog({ signup, onAirStart, onAirEnd, zone, shareText,
           {(socials.length > 0 || hasLinks) && (
             <div>
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Follow the show</div>
-              <SocialIconRow accounts={socials} size="md" />
+              <SocialIconRow accounts={socials} size="md" variant="filled" />
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {signup.socialLinks && (
                   <a

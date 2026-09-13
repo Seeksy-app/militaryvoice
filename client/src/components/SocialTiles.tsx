@@ -1,5 +1,5 @@
 import type { SocialAccount } from "@shared/schema";
-import { PlatformIcon, platformLabel, platformColor, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
+import { PlatformIcon, platformLabel, platformBackground, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
 
 interface Props {
   accounts: SocialAccount[];
@@ -19,7 +19,7 @@ export function SocialTiles({ accounts, onConnect, connecting = false, className
     <div className={`grid grid-cols-3 gap-2 sm:grid-cols-4 xl:grid-cols-7 ${className}`}>
       {ALL_PLATFORMS.map((platform) => {
         const a = accounts.find((x) => x.platform === platform);
-        const color = platformColor(platform);
+        const brand = platformBackground(platform);
         if (!a) {
           return (
             <button
@@ -28,11 +28,14 @@ export function SocialTiles({ accounts, onConnect, connecting = false, className
               onClick={onConnect}
               disabled={!onConnect || connecting}
               title={`Connect ${platformLabel(platform)}`}
-              className="flex flex-col items-center rounded-xl border border-dashed border-border p-3 text-center opacity-60 transition-opacity hover:opacity-100 disabled:cursor-default disabled:hover:opacity-60"
+              className="group flex flex-col items-center rounded-xl border border-dashed border-border p-3 text-center transition-colors hover:border-primary/40 disabled:cursor-default"
               data-testid={`tile-social-${platform}`}
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <PlatformIcon platform={platform} className="h-5 w-5 grayscale" />
+              <span
+                className="flex h-12 w-12 items-center justify-center rounded-full text-white opacity-45 transition-opacity group-hover:opacity-100"
+                style={{ background: brand }}
+              >
+                <PlatformIcon platform={platform} className="h-5 w-5" />
               </span>
               <span className="mt-2 w-full truncate text-xs font-medium text-muted-foreground">{platformLabel(platform)}</span>
               <span className="whitespace-nowrap text-[11px] text-muted-foreground/70">{connecting ? "Opening…" : "Not connected"}</span>
@@ -53,8 +56,8 @@ export function SocialTiles({ accounts, onConnect, connecting = false, className
                 </span>
               )}
               <span
-                className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-white shadow ring-1 ring-black/5"
-                style={{ color }}
+                className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full text-white shadow ring-2 ring-background"
+                style={{ background: brand }}
               >
                 <PlatformIcon platform={platform} className="h-3.5 w-3.5" />
               </span>

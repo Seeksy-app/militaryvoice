@@ -52,12 +52,16 @@ export function ConnectYoutube() {
   if (!data?.configured) return null;
 
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-muted/40 p-4">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#053877] text-white">
-        <PlatformIcon platform="youtube" className="h-4 w-4" />
+    <section className="rounded-2xl border border-border bg-card p-6">
+      <div className="flex flex-wrap items-center gap-3">
+      <div
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white"
+        style={{ background: "#FF0000" }}
+      >
+        <PlatformIcon platform="youtube" className="h-5 w-5" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-semibold text-card-foreground">
+        <div className="text-base font-semibold text-card-foreground">
           {data.connected ? `Connected — ${data.channelTitle}` : "Send your slot to your own YouTube"}
         </div>
         <p className="text-xs text-muted-foreground">
@@ -89,6 +93,7 @@ export function ConnectYoutube() {
           <Check className="h-3.5 w-3.5" /> Connect YouTube
         </Button>
       )}
-    </div>
+      </div>
+    </section>
   );
 }

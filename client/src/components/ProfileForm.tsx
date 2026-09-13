@@ -1053,7 +1053,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                     ? `${formatDateInZone(pendingSlot.start, pendingSlot.zone)} · ${formatTimeInZone(pendingSlot.start, pendingSlot.zone)}`
                     : "Time coming soon"}
                 </div>
-                <SocialIconRow accounts={connectedAccounts} className="mt-3 justify-center" />
+                <SocialIconRow accounts={connectedAccounts} size="md" variant="filled" className="mt-3 justify-center" />
               </div>
               <ul className="mt-4 space-y-2 text-xs">
                 {[

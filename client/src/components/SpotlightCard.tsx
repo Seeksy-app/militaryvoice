@@ -143,7 +143,7 @@ export function SpotlightCard({ items, zone, agendaHref, intervalMs = 6000 }: Pr
 
             {(socials.length > 0 || signup.youtubeUrl || signup.rssUrl) && (
               <div className="mt-5 flex flex-wrap items-center gap-2">
-                <SocialIconRow accounts={socials} size="md" />
+                <SocialIconRow accounts={socials} size="md" variant="filled" />
                 {signup.youtubeUrl && (
                   <a
                     href={signup.youtubeUrl}

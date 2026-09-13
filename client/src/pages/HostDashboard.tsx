@@ -46,6 +46,8 @@ import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
 import { ShowMaterials } from "@/components/ShowMaterials";
 import { MyRecordings } from "@/components/MyRecordings";
 import { OwnEncoder } from "@/components/OwnEncoder";
+import { ConnectYoutube } from "@/components/ConnectYoutube";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SocialTiles } from "@/components/SocialTiles";
 import { apiRequest, API_BASE, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, ProfileRow, SocialAccount } from "@shared/schema";
@@ -827,11 +829,40 @@ export default function HostDashboard() {
               </div>
             </section>
 
-            {profile && data.mySignups.length > 0 && <ShowMaterials profile={profile} />}
+            {/* One long scroll made everything read as the same thing. The work
+                actually falls into three moments: before the day, on the day,
+                and after — so the dashboard says so. */}
+            {profile && data.mySignups.length > 0 && (
+              <Tabs defaultValue="showday" className="mt-8">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="showday" data-testid="tab-host-showday">
+                    Show day
+                  </TabsTrigger>
+                  <TabsTrigger value="going" data-testid="tab-host-going">
+                    Where it goes
+                  </TabsTrigger>
+                  <TabsTrigger value="after" data-testid="tab-host-after">
+                    Afterwards
+                  </TabsTrigger>
+                </TabsList>
 
-            {profile && data.mySignups.length > 0 && <OwnEncoder />}
+                <TabsContent value="showday" className="mt-6 flex flex-col gap-6">
+                  <ShowMaterials profile={profile} />
+                </TabsContent>
 
-            <MyRecordings socialAccounts={profile?.socialAccounts} />
+                <TabsContent value="going" className="mt-6 flex flex-col gap-6">
+                  <ConnectYoutube />
+                  <OwnEncoder />
+                </TabsContent>
+
+                <TabsContent value="after" className="mt-6 flex flex-col gap-6">
+                  <MyRecordings socialAccounts={profile?.socialAccounts} />
+                  <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                    Your recordings appear here once your slot has been on air.
+                  </p>
+                </TabsContent>
+              </Tabs>
+            )}
 
             <section className="mt-8">
               <Link href="/prepare" data-testid="link-prepare-guide">
