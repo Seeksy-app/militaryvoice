@@ -91,6 +91,20 @@ export async function studioToken({ room, identity, name, canPublish, admin, att
  * composite layout and every other client can see it without polling us.
  * Never throws: the participant may not have connected yet.
  */
+/**
+ * Puts the studio's own state on the room itself, so the broadcast template
+ * (and every client) learns about it without asking us. This is what turns
+ * "Start video now" into a real hard cut on air rather than a flag in our UI.
+ */
+export async function syncRoomMetadata(room: string, data: Record<string, unknown>): Promise<void> {
+  if (!isLiveKitConfigured()) return;
+  try {
+    await rooms().updateRoomMetadata(room, JSON.stringify(data));
+  } catch {
+    /* the room may not exist until someone joins; the template reads it on join */
+  }
+}
+
 export async function syncParticipantState(room: string, identity: string, state: string): Promise<void> {
   if (!isLiveKitConfigured()) return;
   try {
@@ -152,12 +166,28 @@ function mp4Output(filepath: string): EncodedFileOutput {
  * at once, running for the whole event. Returns the egress id, which is what
  * later add/remove calls need.
  */
-export async function startBroadcast(room: string, targets: BroadcastTarget[]): Promise<string> {
+export async function startBroadcast(
+  room: string,
+  targets: BroadcastTarget[],
+  templateBaseUrl?: string,
+): Promise<string> {
   const stream: StreamOutput | undefined = targets.length
     ? ({ protocol: 1 /* RTMP */, urls: targets.map((t) => t.url) } as StreamOutput)
     : undefined;
-  const info = await egress().startRoomCompositeEgress(room, { stream }, { layout: "grid" });
+  const info = await egress().startRoomCompositeEgress(room, { stream }, compositeOptions(templateBaseUrl));
   return info.egressId;
+}
+
+/**
+ * Our own page renders the broadcast when we can reach it publicly; otherwise
+ * LiveKit's stock grid. Egress runs on LiveKit's servers, so a localhost
+ * template would just be a blank screen — hence the fallback rather than a
+ * hard requirement.
+ */
+function compositeOptions(templateBaseUrl?: string) {
+  return templateBaseUrl
+    ? { layout: "stage", customBaseUrl: templateBaseUrl }
+    : { layout: "grid" };
 }
 
 /**
@@ -165,8 +195,16 @@ export async function startBroadcast(room: string, targets: BroadcastTarget[]): 
  * podcaster's slot. Runs alongside the broadcast, so stopping it never touches
  * what's going out.
  */
-export async function startSegmentRecording(room: string, filepath: string): Promise<string> {
-  const info = await egress().startRoomCompositeEgress(room, { file: mp4Output(filepath) }, { layout: "grid" });
+export async function startSegmentRecording(
+  room: string,
+  filepath: string,
+  templateBaseUrl?: string,
+): Promise<string> {
+  const info = await egress().startRoomCompositeEgress(
+    room,
+    { file: mp4Output(filepath) },
+    compositeOptions(templateBaseUrl),
+  );
   return info.egressId;
 }
 

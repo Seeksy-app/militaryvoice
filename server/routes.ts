@@ -41,6 +41,7 @@ import {
   stopEgressById,
   studioToken,
   syncParticipantState,
+  syncRoomMetadata,
   updateBroadcastTargets,
   createRtmpIngress,
   deleteIngress,
@@ -1165,8 +1166,22 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const event = await storage.getEventById(eventId);
     const studio = await storage.getOrCreateStudio(eventId);
-    res.json(await storage.updateStudio(studio.id, parsed.data));
+    const updated = await storage.updateStudio(studio.id, parsed.data);
+    if (updated) {
+      // The broadcast layout watches the room, not us — this is what makes the
+      // standby clip a real cut on air.
+      await syncRoomMetadata(roomName(studio.id), {
+        eventName: event?.name ?? "",
+        studioName: updated.name,
+        status: updated.status,
+        fallbackPlaying: updated.fallbackPlaying,
+        fallbackVideoUrl: updated.fallbackVideoUrl,
+        fallbackLabel: updated.fallbackLabel,
+      });
+    }
+    res.json(updated);
   });
 
   app.patch("/api/admin/studio/participants/:id", requireAdmin, async (req, res) => {
@@ -1236,6 +1251,7 @@ export function registerRoutes(app: Express): void {
     const egressId = await startBroadcast(
       roomName(studio.id),
       rows.map((d) => ({ url: ingestUrl(d), label: d.label || d.platform })),
+      templateBaseUrl(req),
     );
     for (const d of rows) await storage.updateDestination(d.id, { live: true });
     res.json(await storage.updateStudio(studio.id, { broadcastEgressId: egressId }));
@@ -1260,6 +1276,17 @@ export function registerRoutes(app: Express): void {
   //      event. One tied to a signup belongs to that podcaster and is attached
   //      to the running broadcast for their slot only — which is how the event
   //      borrows each speaker's audience and then hands it back.
+  /**
+   * Where LiveKit's recorder should load the broadcast layout from. Egress runs
+   * on LiveKit's machines, so this has to be publicly reachable — on localhost
+   * we return nothing and fall back to LiveKit's stock grid.
+   */
+  function templateBaseUrl(req: Request): string | undefined {
+    const host = req.get("host") ?? "";
+    if (!host || /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/i.test(host)) return undefined;
+    return `${req.protocol}://${host}/studio/composite`;
+  }
+
   function ingestUrl(d: { rtmpUrl: string; streamKey: string }): string {
     return `${d.rtmpUrl.replace(/\/+$/, "")}/${d.streamKey}`;
   }
@@ -1395,7 +1422,7 @@ export function registerRoutes(app: Express): void {
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filepath = `event-${eventId}/${signup ? `slot-${signup.slotIndex}-` : ""}${stamp}.mp4`;
-    const egressId = await startSegmentRecording(roomName(studio.id), filepath);
+    const egressId = await startSegmentRecording(roomName(studio.id), filepath, templateBaseUrl(req));
 
     await storage.createRecording({
       eventId,

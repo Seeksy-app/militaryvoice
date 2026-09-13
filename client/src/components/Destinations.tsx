@@ -29,6 +29,7 @@ export interface Destination {
 const PLATFORMS = [
   { value: "youtube", label: "YouTube", hint: "rtmp://a.rtmp.youtube.com/live2" },
   { value: "x", label: "X", hint: "rtmp://va.pscp.tv:80/x" },
+  { value: "twitch", label: "Twitch", hint: "rtmp://live.twitch.tv/app" },
   { value: "linkedin", label: "LinkedIn", hint: "" },
   { value: "instagram", label: "Instagram", hint: "rtmps://live-upload.instagram.com:443/rtmp" },
   { value: "custom", label: "Other RTMP", hint: "" },

@@ -17,6 +17,7 @@ import Faq from "@/pages/Faq";
 import Prepare from "@/pages/Prepare";
 import Platform from "@/pages/Platform";
 import Studio from "@/pages/Studio";
+import StudioComposite from "@/pages/StudioComposite";
 
 /**
  * Client-side navigation keeps the old scroll position by default. Every
@@ -64,6 +65,7 @@ function AppRouter() {
       <Route path="/faq">{() => <Faq />}</Route>
       <Route path="/prepare">{() => <Prepare />}</Route>
       <Route path="/platform">{() => <Platform />}</Route>
+      <Route path="/studio/composite">{() => <StudioComposite />}</Route>
       <Route path="/studio">{() => <Studio />}</Route>
       <Route path="/event/:slug/studio">{(params) => <Studio slug={params.slug} />}</Route>
       <Route path="/admin">{() => <Admin />}</Route>

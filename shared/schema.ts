@@ -631,7 +631,7 @@ export const ingresses = pgTable("ingresses", {
 });
 export type IngressRow = typeof ingresses.$inferSelect;
 
-export const DESTINATION_PLATFORMS = ["youtube", "x", "linkedin", "instagram", "custom"] as const;
+export const DESTINATION_PLATFORMS = ["youtube", "x", "twitch", "linkedin", "instagram", "custom"] as const;
 
 export const destinationInputSchema = z.object({
   platform: z.enum(DESTINATION_PLATFORMS).default("custom"),
