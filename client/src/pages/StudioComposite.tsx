@@ -37,7 +37,7 @@ export default function StudioComposite() {
       <StageGrid tiles={tiles} meta={meta} caption={caption} />
 
       <img
-        src="/logo-wave.png"
+        src="/logo-wave.png?v=2"
         alt=""
         className="pointer-events-none absolute right-6 top-5 h-10 w-auto opacity-90 drop-shadow-lg"
       />

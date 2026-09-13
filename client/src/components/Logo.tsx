@@ -1,7 +1,7 @@
 // Brand mark: the amber waveform lifted from the official MilitaryVoice.ai
 // logo file. It's a wide mark (roughly 2.2:1), so callers size it by height.
 export function LogoMark({ className = "h-8" }: { className?: string }) {
-  return <img src="/logo-wave.png" alt="" aria-hidden="true" className={`w-auto ${className}`} />;
+  return <img src="/logo-wave.png?v=2" alt="" aria-hidden="true" className={`w-auto ${className}`} />;
 }
 
 export function Wordmark({ className = "" }: { className?: string }) {

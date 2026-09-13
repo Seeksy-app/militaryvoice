@@ -95,7 +95,7 @@ export default function Watch({ slug }: { slug?: string }) {
         <div className="relative mt-5 aspect-video w-full overflow-hidden rounded-2xl border border-white/12 bg-[#000741] shadow-2xl">
           {data && !data.configured ? (
             <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center">
-              <img src="/logo-wave.png" alt="" className="h-16 w-auto opacity-80" />
+              <img src="/logo-wave.png?v=2" alt="" className="h-16 w-auto opacity-80" />
               <p className="text-xl font-semibold text-white/85" style={HEADLINE_FONT}>
                 Nothing on air right now
               </p>

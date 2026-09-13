@@ -277,7 +277,7 @@ export function StageGrid({
   if (tiles.length === 0) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-5 px-6 text-center">
-        <img src="/logo-wave.png" alt="" className="h-20 w-auto opacity-90" />
+        <img src="/logo-wave.png?v=2" alt="" className="h-20 w-auto opacity-90" />
         <p className="text-2xl font-semibold text-white/85 sm:text-3xl" style={HEADLINE_FONT}>
           {idleTitle ?? meta.eventName ?? "Back shortly"}
         </p>
