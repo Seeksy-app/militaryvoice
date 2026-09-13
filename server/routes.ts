@@ -43,6 +43,7 @@ import {
   syncParticipantState,
   syncRoomMetadata,
   updateBroadcastTargets,
+  rooms,
   createRtmpIngress,
   deleteIngress,
   listIngressForRoom,
@@ -1408,6 +1409,37 @@ export function registerRoutes(app: Express): void {
           };
         }),
     );
+  });
+
+  /**
+   * Kill the sound coming off the stage without taking anyone off it. The
+   * classic use is a guest whose dog starts barking mid-answer: you want them
+   * silent on air in one press, not removed from the show.
+   */
+  app.post("/api/admin/studio/mute-stage", requireAdmin, async (req, res) => {
+    if (!isLiveKitConfigured()) {
+      res.status(503).json({ message: "No media layer for this event." });
+      return;
+    }
+    const { studio } = await adminStudio(req);
+    const muted = req.body?.muted !== false;
+    const onStage = (await storage.listStudioParticipants(studio.id)).filter((p) => p.state === "On stage");
+    const room = roomName(studio.id);
+    let changed = 0;
+    for (const p of onStage) {
+      try {
+        const info = await rooms().getParticipant(room, `p-${p.id}`);
+        for (const t of info.tracks) {
+          if (t.type === 0 /* AUDIO */) {
+            await rooms().mutePublishedTrack(room, `p-${p.id}`, t.sid, muted);
+            changed += 1;
+          }
+        }
+      } catch {
+        /* they may have dropped between the list and the call */
+      }
+    }
+    res.json({ ok: true, muted, changed });
   });
 
   // ---- Scenes ---------------------------------------------------------------

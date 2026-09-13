@@ -1188,9 +1188,12 @@ export default function Admin() {
           </div>
 
           <Tabs defaultValue="studio">
-            <TabsList className={`grid w-full ${isMobile ? "grid-cols-3" : "grid-cols-6"}`}>
+            <TabsList className={`grid w-full ${isMobile ? "grid-cols-4" : "grid-cols-7"}`}>
               <TabsTrigger value="studio" data-testid="tab-admin-studio">
                 Studio
+              </TabsTrigger>
+              <TabsTrigger value="studioset" data-testid="tab-admin-studioset">
+                Studio set
               </TabsTrigger>
               <TabsTrigger value="run" data-testid="tab-admin-run">
                 Agenda
@@ -1214,7 +1217,11 @@ export default function Admin() {
             </TabsList>
 
             <TabsContent value="studio" className="mt-6">
-              <StudioConsole adminGet={adminGet} adminSend={adminSend} />
+              <StudioConsole adminGet={adminGet} adminSend={adminSend} view="live" />
+            </TabsContent>
+
+            <TabsContent value="studioset" className="mt-6">
+              <StudioConsole adminGet={adminGet} adminSend={adminSend} view="set" />
             </TabsContent>
 
             <TabsContent value="run" className="mt-6">

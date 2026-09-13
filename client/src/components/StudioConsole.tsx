@@ -60,6 +60,12 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 interface Props {
   adminGet: <T>(path: string) => Promise<T>;
   adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
+  /**
+   * "live" is the control surface you use on air — one frame, never scrolls.
+   * "set" is everything you decide beforehand. They're separate tabs because
+   * mid-show is the worst possible time to be scrolling for a button.
+   */
+  view: "live" | "set";
 }
 
 type Participant = StudioParticipantRow & { present: boolean };
@@ -136,7 +142,7 @@ function DeckButton({
   );
 }
 
-export function StudioConsole({ adminGet, adminSend }: Props) {
+export function StudioConsole({ adminGet, adminSend, view }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const zone = useMemo(detectLocalTimeZone, []);
@@ -152,10 +158,11 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   const [renaming, setRenaming] = useState<string | null>(null);
   // Setup is a form you scroll. Live is a control surface that must never
   // scroll — once you're on air you can't go hunting for a button.
-  const [mode, setMode] = useState<"setup" | "live">("setup");
+  const isLive = view === "live";
   const [monitorMuted, setMonitorMuted] = useState(true);
   const [mediaPicker, setMediaPicker] = useState<null | "image" | "video" | "all">(null);
   const [sceneName, setSceneName] = useState("");
+  const [stageMuted, setStageMuted] = useState(false);
 
   const { data: studios } = useQuery<(StudioRow & { isPrimary: boolean })[]>({
     queryKey: ["/api/admin/studios"],
@@ -191,7 +198,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
     toggleCam,
     toggleMic,
     selfKey,
-  } = useProducerRoom({ enabled: true, adminSend, studioId, publish: onCamera, displayName: "Host" });
+  } = useProducerRoom({ enabled: isLive, adminSend, studioId, publish: onCamera, displayName: "Host" });
 
   const studio = data?.studio;
   const present = (data?.participants ?? []).filter((p) => p.present);
@@ -257,6 +264,15 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   >({
     queryKey: ["/api/admin/scenes", studioId],
     queryFn: () => adminGet(`/api/admin/scenes${q}`),
+  });
+
+  const muteStage = useMutation({
+    mutationFn: async (muted: boolean) => adminSend("POST", "/api/admin/studio/mute-stage", { muted, studioId }),
+    onSuccess: (_r, muted) => {
+      setStageMuted(muted);
+      refresh();
+    },
+    onError: (e: Error) => toast({ title: "Couldn't mute the stage", description: e.message, variant: "destructive" }),
   });
 
   const applyScene = useMutation({
@@ -450,10 +466,6 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
     .map((f) => ({ identity: f.identity, name: f.name, video: f.video, audio: f.audio, speaking: f.speaking }))
     .sort((a, b) => a.identity.localeCompare(b.identity));
 
-  useEffect(() => {
-    if (broadcasting) setMode("live");
-  }, [broadcasting]);
-
   // Presence is what keeps the host in the room lists; without a heartbeat
   // they'd vanish after twenty-five seconds like anyone who closed their laptop.
   useEffect(() => {
@@ -607,22 +619,6 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
               </Button>
             )}
 
-            <div className="flex overflow-hidden rounded-full border border-white/20 bg-white/5">
-              {(["setup", "live"] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  className={`px-3.5 py-1.5 text-xs font-semibold capitalize transition-colors ${
-                    mode === m ? "bg-white text-[#000741]" : "text-white/65 hover:text-white"
-                  }`}
-                  onClick={() => setMode(m)}
-                  data-testid={`button-mode-${m}`}
-                >
-                  {m === "setup" ? "Set up" : "Live"}
-                </button>
-              ))}
-            </div>
-
             <span className="mx-1 hidden h-7 w-px bg-white/15 sm:block" />
 
             <Button
@@ -636,53 +632,14 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
               onClick={() => broadcast.mutate(broadcasting ? "stop" : "start")}
               data-testid="button-broadcast-toggle"
             >
-              <Signal className="h-3.5 w-3.5" /> {broadcasting ? "Stop the broadcast" : "Go out live"}
+              <Signal className="h-3.5 w-3.5" /> {broadcasting ? "Stop the live stream" : "Start live stream"}
             </Button>
 
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  size="sm"
-                  className={`h-9 gap-1.5 rounded-full px-4 font-semibold ${
-                    studio?.fallbackPlaying
-                      ? "bg-[#ED1C24] text-white hover:bg-[#c81820]"
-                      : "bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b944]"
-                  }`}
-                  data-testid="button-studio-fallback"
-                >
-                  <PlayCircle className="h-3.5 w-3.5" />
-                  {studio?.fallbackPlaying ? "Stop standby" : "Start video now"}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    {studio?.fallbackPlaying ? "Stop the standby video?" : "Roll the standby video?"}
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {studio?.fallbackPlaying
-                      ? "The broadcast goes back to the stage. Make sure someone is ready before you cut back."
-                      : studio?.fallbackVideoUrl
-                        ? `"${studio.fallbackLabel || studio.fallbackVideoUrl}" starts immediately and everyone in the green room is told to hold.`
-                        : "No standby clip is set yet. Add one below first, otherwise there's nothing to roll."}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    disabled={!studio?.fallbackPlaying && !studio?.fallbackVideoUrl}
-                    onClick={() => patchStudio.mutate({ fallbackPlaying: !studio?.fallbackPlaying })}
-                  >
-                    {studio?.fallbackPlaying ? "Stop it" : "Roll it"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
           </div>
         </div>
 
         {/* ------------------------------------------------ where you are in it */}
-        {mode === "setup" && (
+        {!isLive && (
         <div className="relative mt-4 flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-white/10 pt-3">
           {steps.map((x, i) => {
             const isNow = step?.n === x.n;
@@ -711,7 +668,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
       </div>
 
       {/* --------------------------------------------------- what to do next */}
-      {mode === "setup" && step && (
+      {!isLive && step && (
         <div className="flex flex-wrap items-center gap-3 border-b border-border bg-[#F0A71F]/10 px-5 py-3">
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#F0A71F] text-xs font-bold text-[#1a1200]">
             {step.n}
@@ -739,8 +696,25 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
       )}
 
       {/* ------------------------------------------------- the live surface */}
-      {mode === "live" && (
+      {isLive && (
         <div className="flex h-[calc(100vh-15rem)] min-h-[520px] flex-col bg-[#04102b]">
+          {isPrimary && (current || next) && (
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-white/10 bg-[#000741] px-4 py-2 text-xs">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="font-bold uppercase tracking-[0.14em] text-[#ED1C24]">On air</span>
+                <span className="truncate text-white/85">{current?.title ?? "Nothing scheduled"}</span>
+              </span>
+              {next && (
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="font-bold uppercase tracking-[0.14em] text-white/40">Next</span>
+                  <span className="truncate text-white/60">
+                    {formatTimeInZone(new Date(next.startAtUtc), zone)} · {next.title}
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
+
           <div className="flex min-h-0 flex-1">
             {/* green room, down the left, where a producer's eye already is */}
             <aside className="flex w-[248px] shrink-0 flex-col border-r border-white/10">
@@ -889,6 +863,13 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
               testId="button-deck-volume"
             />
             <DeckButton
+              icon={stageMuted ? MicOff : Mic}
+              label={stageMuted ? "Stage muted" : "Mute the stage"}
+              active={stageMuted}
+              onClick={() => muteStage.mutate(!stageMuted)}
+              testId="button-deck-mute-stage"
+            />
+            <DeckButton
               icon={Disc}
               label={recording ? "Stop and save" : "Record"}
               active={recording}
@@ -901,7 +882,13 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
             />
             <DeckButton
               icon={PlayCircle}
-              label={studio?.fallbackPlaying ? "Stop standby" : "Roll standby"}
+              label={
+                studio?.fallbackPlaying
+                  ? "Stop standby"
+                  : studio?.fallbackVideoUrl
+                    ? "Roll standby"
+                    : "No standby set"
+              }
               active={studio?.fallbackPlaying}
               amber
               onClick={() => patchStudio.mutate({ fallbackPlaying: !studio?.fallbackPlaying })}
@@ -972,7 +959,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                 onClick={() => broadcast.mutate(broadcasting ? "stop" : "start")}
                 data-testid="button-deck-broadcast"
               >
-                <Signal className="h-3.5 w-3.5" /> {broadcasting ? "Stop the broadcast" : "Go out live"}
+                <Signal className="h-3.5 w-3.5" /> {broadcasting ? "Stop the live stream" : "Start live stream"}
               </Button>
             </div>
           </div>
@@ -1000,7 +987,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
         </DialogContent>
       </Dialog>
 
-      {mode === "setup" && (
+      {!isLive && (
       <CardContent className="flex flex-col gap-6 pt-6">
         {studio?.fallbackPlaying && (
           <div
