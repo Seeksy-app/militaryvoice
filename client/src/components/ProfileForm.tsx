@@ -711,8 +711,17 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                   : "Helps us plan transitions and line up support. You can change any of this later."
               }
             >
+              {/* Curiosity, not a requirement — it tells the crew what someone
+                  is used to, and nothing downstream depends on the answer. */}
               <div className="flex flex-col gap-4 rounded-xl border border-border bg-muted/20 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your usual setup</p>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    How you normally work · optional
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Just so we know what you're used to. It changes nothing about your slot.
+                  </p>
+                </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <FormField
                     control={form.control}

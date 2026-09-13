@@ -20,7 +20,18 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUpload } from "@/lib/queryClient";
 import { ASSET_KINDS, type ShowAssetRow, type ProfileRow } from "@shared/schema";
-import { Upload, Link2, Trash2, FileVideo, ImageIcon, Paperclip, Save, ExternalLink } from "lucide-react";
+import {
+  Upload,
+  Link2,
+  Trash2,
+  FileVideo,
+  ImageIcon,
+  Paperclip,
+  Save,
+  ExternalLink,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 
 const MAX_MB = 50;
 
@@ -121,6 +132,11 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
     onError: (err: Error) => toast({ title: "Couldn't save", description: err.message, variant: "destructive" }),
   });
 
+  // Everything in here is optional. It defaults open so nobody misses it, and
+  // folds away once they've sent what they're sending.
+  const [openFiles, setOpenFiles] = useState(true);
+  const [openDetails, setOpenDetails] = useState(true);
+
   return (
     <section className="mt-8" data-testid="section-show-materials">
       <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -129,16 +145,44 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
       </h2>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="bg-[#053877] px-5 py-3 text-white">
-          <p className="text-sm font-semibold">Everything the studio needs from you</p>
+        <div className="bg-[#053877] px-5 py-3.5 text-white">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold">Everything the studio needs from you</p>
+            <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-white/80">
+              All optional
+            </span>
+          </div>
           <p className="mt-0.5 text-xs text-white/70">
-            Send it here rather than by email and it's attached to your slot automatically.
+            Nothing here is required to hold your slot. Send what you have and it's attached
+            automatically — you can come back and add the rest any time.
           </p>
         </div>
 
         {/* ---------------------------------------------------------- files */}
         <div className="border-b border-border p-5">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Files to play or show</p>
+          <button
+            type="button"
+            className="mb-3 flex w-full items-center gap-2 text-left"
+            onClick={() => setOpenFiles((v) => !v)}
+            aria-expanded={openFiles}
+            data-testid="toggle-materials-files"
+          >
+            {openFiles ? (
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Files to play or show
+            </span>
+            {assets && assets.length > 0 && (
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                {assets.length}
+              </span>
+            )}
+          </button>
+          {openFiles && (
+          <>
 
           {assets && assets.length > 0 && (
             <ul className="mb-4 flex flex-col gap-2">
@@ -283,11 +327,28 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
             Pick the right type for each file. It's what tells the studio whether to roll it before you start, part-way
             through, or at the end.
           </p>
+          </>
+          )}
         </div>
 
         {/* -------------------------------------------------------- details */}
         <div className="flex flex-col gap-4 p-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Show details</p>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 text-left"
+            onClick={() => setOpenDetails((v) => !v)}
+            aria-expanded={openDetails}
+            data-testid="toggle-materials-details"
+          >
+            {openDetails ? (
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Show details</span>
+          </button>
+          {openDetails && (
+          <>
 
           <div>
             <Label htmlFor="guests">Who's appearing with you</Label>
@@ -341,6 +402,8 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
             </Button>
             {detailsDirty && <span className="text-xs text-muted-foreground">Unsaved changes.</span>}
           </div>
+          </>
+          )}
         </div>
       </div>
     </section>

@@ -834,16 +834,24 @@ export default function HostDashboard() {
                 and after — so the dashboard says so. */}
             {profile && data.mySignups.length > 0 && (
               <Tabs defaultValue="showday" className="mt-8">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="showday" data-testid="tab-host-showday">
-                    Show day
-                  </TabsTrigger>
-                  <TabsTrigger value="going" data-testid="tab-host-going">
-                    Where it goes
-                  </TabsTrigger>
-                  <TabsTrigger value="after" data-testid="tab-host-after">
-                    Afterwards
-                  </TabsTrigger>
+                {/* Loud enough to read as navigation. The muted pill version
+                    disappeared into the page and nobody found the other two. */}
+                <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-muted/60 p-1.5">
+                  {[
+                    ["showday", "Show day", "What we need from you"],
+                    ["going", "Where it goes", "Your channels"],
+                    ["after", "Afterwards", "Your recording"],
+                  ].map(([value, label, hint]) => (
+                    <TabsTrigger
+                      key={value}
+                      value={value}
+                      className="flex-col gap-0.5 rounded-xl px-2 py-2.5 data-[state=active]:bg-[#053877] data-[state=active]:text-white data-[state=active]:shadow-sm"
+                      data-testid={`tab-host-${value}`}
+                    >
+                      <span className="text-sm font-semibold">{label}</span>
+                      <span className="hidden text-[11px] font-normal opacity-70 sm:block">{hint}</span>
+                    </TabsTrigger>
+                  ))}
                 </TabsList>
 
                 <TabsContent value="showday" className="mt-6 flex flex-col gap-6">
