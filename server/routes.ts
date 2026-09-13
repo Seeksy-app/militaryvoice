@@ -50,6 +50,14 @@ import {
   webhooks,
 } from "./livekit.js";
 import { ensureRecordingsBucket, signedRecordingUrl } from "./recordingStorage.js";
+import {
+  isYoutubeConfigured,
+  consentUrl,
+  exchangeCode,
+  refreshAccessToken,
+  myChannel,
+  createBroadcast,
+} from "./youtube.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, StudioRow } from "../shared/schema.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -709,6 +717,135 @@ export function registerRoutes(app: Express): void {
       await storage.deleteIngressRow(row.id);
     }
     res.json({ ok: true });
+  });
+
+  // ---- A podcaster's own YouTube ------------------------------------------------
+  //      Connect once, and at their slot we open a broadcast on their channel
+  //      rather than asking them to find a stream key.
+  function youtubeRedirect(req: Request): string {
+    return `${req.protocol}://${req.get("host")}/api/youtube/callback`;
+  }
+
+  /** A live access token, refreshed if the cached one has aged out. */
+  async function youtubeToken(email: string): Promise<string | null> {
+    const acct = await storage.getYoutubeAccount(email);
+    if (!acct) return null;
+    const stillGood = acct.accessToken && acct.expiresAt && new Date(acct.expiresAt).getTime() > Date.now() + 60_000;
+    if (stillGood) return acct.accessToken;
+    try {
+      const t = await refreshAccessToken(acct.refreshToken);
+      await storage.upsertYoutubeAccount(email, {
+        refreshToken: acct.refreshToken,
+        accessToken: t.access_token,
+        expiresAt: new Date(Date.now() + t.expires_in * 1000).toISOString(),
+      });
+      return t.access_token;
+    } catch (err) {
+      console.error("YouTube refresh failed for", email, err);
+      return null;
+    }
+  }
+
+  app.get("/api/host/youtube", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const acct = await storage.getYoutubeAccount(email);
+    res.json({
+      configured: isYoutubeConfigured(),
+      connected: Boolean(acct),
+      channelTitle: acct?.channelTitle ?? "",
+    });
+  });
+
+  app.get("/api/host/youtube/start", requireHostSession, async (req, res) => {
+    if (!isYoutubeConfigured()) {
+      res.status(503).json({ message: "YouTube connecting isn't switched on yet." });
+      return;
+    }
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    // The session cookie won't survive Google's redirect chain reliably, so the
+    // address rides along in state and is checked against the session on return.
+    res.redirect(consentUrl(youtubeRedirect(req), Buffer.from(email).toString("base64url")));
+  });
+
+  app.get("/api/youtube/callback", async (req, res) => {
+    const code = typeof req.query.code === "string" ? req.query.code : "";
+    const state = typeof req.query.state === "string" ? req.query.state : "";
+    const email = state ? Buffer.from(state, "base64url").toString("utf8").toLowerCase().trim() : "";
+    const sessionEmail = (getSessionEmail(req) ?? "").toLowerCase().trim();
+
+    if (!code || !email || email !== sessionEmail) {
+      res.redirect("/host/dashboard?youtube=failed");
+      return;
+    }
+    try {
+      const t = await exchangeCode(code, youtubeRedirect(req));
+      if (!t.refresh_token) {
+        // Google only returns one on first consent; we forced prompt=consent,
+        // so this means something is wrong rather than "already connected".
+        res.redirect("/host/dashboard?youtube=noRefresh");
+        return;
+      }
+      const channel = await myChannel(t.access_token);
+      await storage.upsertYoutubeAccount(email, {
+        refreshToken: t.refresh_token,
+        accessToken: t.access_token,
+        expiresAt: new Date(Date.now() + t.expires_in * 1000).toISOString(),
+        channelId: channel.id,
+        channelTitle: channel.title,
+      });
+      res.redirect("/host/dashboard?youtube=connected");
+    } catch (err) {
+      console.error("YouTube connect failed:", err);
+      res.redirect("/host/dashboard?youtube=failed");
+    }
+  });
+
+  app.delete("/api/host/youtube", requireHostSession, async (req, res) => {
+    await storage.deleteYoutubeAccount((getSessionEmail(req) ?? "").toLowerCase().trim());
+    res.json({ ok: true });
+  });
+
+  /**
+   * Open a broadcast on a podcaster's channel and add it to the destinations
+   * for their slot. The producer presses this when their segment comes up.
+   */
+  app.post("/api/admin/youtube/broadcast", requireAdmin, async (req, res) => {
+    if (!isYoutubeConfigured()) {
+      res.status(503).json({ message: "YouTube connecting isn't switched on yet." });
+      return;
+    }
+    const signupId = Number(req.body?.signupId) || 0;
+    const signup = signupId ? await storage.getSignupById(signupId) : undefined;
+    if (!signup) {
+      res.status(404).json({ message: "No such booking" });
+      return;
+    }
+    const token = await youtubeToken(signup.email.toLowerCase().trim());
+    if (!token) {
+      res.status(409).json({ message: `${signup.hostName} hasn't connected their YouTube.` });
+      return;
+    }
+    try {
+      const event = await storage.getEventById(signup.eventId);
+      const b = await createBroadcast(token, {
+        title: signup.podcastName || signup.hostName,
+        description: `Live from ${event?.name ?? "MilitaryVoice.ai"}.`,
+        startAtIso: new Date().toISOString(),
+      });
+      const created = await storage.createDestination(signup.eventId, signup.email, {
+        platform: "youtube",
+        label: `${signup.podcastName} · YouTube`,
+        rtmpUrl: b.ingestAddress,
+        streamKey: b.streamName,
+        enabled: true,
+        signupId: signup.id,
+      });
+      res.status(201).json({ ...publicDestination(created), watchUrl: b.watchUrl });
+    } catch (err: any) {
+      console.error("Couldn't open a YouTube broadcast:", err);
+      res.status(502).json({ message: err?.message ?? "YouTube wouldn't open that broadcast." });
+    }
   });
 
   // ---- A podcaster's own destinations -------------------------------------------

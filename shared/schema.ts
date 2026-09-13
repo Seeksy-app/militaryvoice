@@ -665,6 +665,21 @@ export const ingresses = pgTable("ingresses", {
 });
 export type IngressRow = typeof ingresses.$inferSelect;
 
+// A podcaster's own YouTube channel, connected once so we can open a broadcast
+// on it at their slot time instead of asking them to dig out a stream key.
+export const youtubeAccounts = pgTable("youtube_accounts", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  channelId: text("channel_id").notNull().default(""),
+  channelTitle: text("channel_title").notNull().default(""),
+  // The refresh token is the durable credential; the access token is a cache.
+  refreshToken: text("refresh_token").notNull(),
+  accessToken: text("access_token").notNull().default(""),
+  expiresAt: text("expires_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});
+export type YoutubeAccountRow = typeof youtubeAccounts.$inferSelect;
+
 export const DESTINATION_PLATFORMS = ["youtube", "x", "twitch", "linkedin", "instagram", "custom"] as const;
 
 export const destinationInputSchema = z.object({

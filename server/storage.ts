@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -25,6 +25,7 @@ import type {
   DestinationInput,
   IngressRow,
   SceneRow,
+  YoutubeAccountRow,
   SponsorInquiryRow,
   InsertSponsorInquiry,
 } from "../shared/schema.js";
@@ -271,6 +272,20 @@ async function ensureSchema() {
   await sql`ALTER TABLE run_of_show ADD COLUMN IF NOT EXISTS media_label TEXT NOT NULL DEFAULT ''`;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS youtube_accounts (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      channel_id TEXT NOT NULL DEFAULT '',
+      channel_title TEXT NOT NULL DEFAULT '',
+      refresh_token TEXT NOT NULL,
+      access_token TEXT NOT NULL DEFAULT '',
+      expires_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+  `;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS youtube_accounts_email_idx ON youtube_accounts (email)`;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS recordings (
       id SERIAL PRIMARY KEY,
       event_id INTEGER NOT NULL,
@@ -419,7 +434,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "run_of_show", column: "media_url" };
+const SCHEMA_SENTINEL = { table: "youtube_accounts", column: "refresh_token" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
@@ -518,6 +533,9 @@ export interface IStorage {
   getScene(id: number): Promise<SceneRow | undefined>;
   createScene(v: Omit<SceneRow, "id" | "createdAt">): Promise<SceneRow>;
   deleteScene(id: number): Promise<void>;
+  getYoutubeAccount(email: string): Promise<YoutubeAccountRow | undefined>;
+  upsertYoutubeAccount(email: string, v: Partial<YoutubeAccountRow> & { refreshToken: string }): Promise<YoutubeAccountRow>;
+  deleteYoutubeAccount(email: string): Promise<void>;
   updateStudio(id: number, patch: Partial<StudioRow>): Promise<StudioRow | undefined>;
   listStudioParticipants(studioId: number): Promise<StudioParticipantRow[]>;
   upsertStudioParticipant(
@@ -960,6 +978,40 @@ class DatabaseStorage implements IStorage {
   async deleteScene(id: number): Promise<void> {
     await ready();
     await db.delete(scenes).where(eq(scenes.id, id));
+  }
+
+  // ---- YouTube ------------------------------------------------------------
+  async getYoutubeAccount(email: string): Promise<YoutubeAccountRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(youtubeAccounts).where(eq(youtubeAccounts.email, email.toLowerCase().trim()));
+    return row;
+  }
+
+  async upsertYoutubeAccount(
+    email: string,
+    v: Partial<YoutubeAccountRow> & { refreshToken: string },
+  ): Promise<YoutubeAccountRow> {
+    await ready();
+    const key = email.toLowerCase().trim();
+    const existing = await this.getYoutubeAccount(key);
+    if (existing) {
+      const [row] = await db
+        .update(youtubeAccounts)
+        .set({ ...v, email: key })
+        .where(eq(youtubeAccounts.id, existing.id))
+        .returning();
+      return row;
+    }
+    const [row] = await db
+      .insert(youtubeAccounts)
+      .values({ ...v, email: key, createdAt: new Date().toISOString() })
+      .returning();
+    return row;
+  }
+
+  async deleteYoutubeAccount(email: string): Promise<void> {
+    await ready();
+    await db.delete(youtubeAccounts).where(eq(youtubeAccounts.email, email.toLowerCase().trim()));
   }
 
   async updateStudio(id: number, patch: Partial<StudioRow>): Promise<StudioRow | undefined> {

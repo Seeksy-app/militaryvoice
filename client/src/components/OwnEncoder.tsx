@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Cable, Copy, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { ConnectYoutube } from "@/components/ConnectYoutube";
 
 // For podcasters who already run OBS, StreamYard, Riverside or similar and
 // would rather push their own produced feed than use our studio page. We give
@@ -120,6 +121,8 @@ export function OwnEncoder() {
           </Button>
         )}
       </div>
+
+      <ConnectYoutube />
 
       {ing && (
         <>
