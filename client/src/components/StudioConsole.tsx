@@ -616,6 +616,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
               </SelectContent>
             </Select>
 
+            {isLive && (
             <Select value={studio?.status ?? "Offline"} onValueChange={(v) => patchStudio.mutate({ status: v })}>
               <SelectTrigger
                 className="h-9 w-[124px] border-white/20 bg-white/10 text-white hover:bg-white/15"
@@ -631,6 +632,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
                 ))}
               </SelectContent>
             </Select>
+            )}
 
             {!isPrimary && currentStudio && (
               <Button
@@ -645,6 +647,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
               </Button>
             )}
 
+            {isLive && (
             <Button
               variant="ghost"
               size="icon"
@@ -662,6 +665,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
             >
               {focus ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </Button>
+            )}
 
             {focus && (
               <Button
@@ -678,21 +682,24 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
               </Button>
             )}
 
-            <span className="mx-1 hidden h-7 w-px bg-white/15 sm:block" />
-
-            <Button
-              size="sm"
-              className={`h-9 gap-1.5 rounded-full px-4 font-semibold ${
-                broadcasting
-                  ? "bg-white/15 text-white hover:bg-white/25"
-                  : "bg-[#ED1C24] text-white shadow-[0_6px_20px_rgba(237,28,36,0.45)] hover:bg-[#c81820]"
-              }`}
-              disabled={broadcast.isPending}
-              onClick={() => broadcast.mutate(broadcasting ? "stop" : "start")}
-              data-testid="button-broadcast-toggle"
-            >
-              <Signal className="h-3.5 w-3.5" /> {broadcasting ? "Stop the live stream" : "Start live stream"}
-            </Button>
+            {isLive && (
+              <>
+                <span className="mx-1 hidden h-7 w-px bg-white/15 sm:block" />
+                <Button
+                  size="sm"
+                  className={`h-9 gap-1.5 rounded-full px-4 font-semibold ${
+                    broadcasting
+                      ? "bg-white/15 text-white hover:bg-white/25"
+                      : "bg-[#ED1C24] text-white shadow-[0_6px_20px_rgba(237,28,36,0.45)] hover:bg-[#c81820]"
+                  }`}
+                  disabled={broadcast.isPending}
+                  onClick={() => broadcast.mutate(broadcasting ? "stop" : "start")}
+                  data-testid="button-broadcast-toggle"
+                >
+                  <Signal className="h-3.5 w-3.5" /> {broadcasting ? "Stop the live stream" : "Start live stream"}
+                </Button>
+              </>
+            )}
 
           </div>
         </div>
@@ -1127,151 +1134,30 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
           </div>
         )}
 
-        {/* ------------------------------------------------------------ people */}
-        <section>
-          <div className="mb-3 flex flex-wrap items-center gap-3">
-            <h3 className="text-sm font-bold uppercase tracking-[0.12em]" style={HEADLINE_FONT}>
-              The room
-            </h3>
-            <a
-              href={joinUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-full bg-[#053877] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#0a4a99]"
-              data-testid="link-join-as-host"
-            >
-              <Video className="h-3.5 w-3.5" /> Join as host
-            </a>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-              onClick={() =>
-                navigator.clipboard.writeText(joinUrl).then(
-                  () => toast({ title: "Join link copied", description: joinUrl }),
-                  () => {},
-                )
-              }
-            >
-              {joinUrl.replace(/^https?:\/\//, "")} <Copy className="h-3 w-3" />
-            </button>
+        {/* Capacity is the one thing about the room you decide beforehand. */}
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-muted/25 p-4">
+          <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+            <Radio className="h-3.5 w-3.5 text-primary" /> Stage size
           </div>
-
-          {/* programme monitor — what the audience is seeing right now */}
-          <div className="mb-4 overflow-hidden rounded-2xl border border-border bg-[#000741]">
-            <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-2">
-              <span className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/60">
-                <MonitorPlay className="h-3.5 w-3.5 text-[#F0A71F]" /> Programme monitor
-              </span>
-              <span className="text-[11px] text-white/45">
-                {monitorTiles.length > 0
-                  ? `${monitorTiles.length} on air`
-                  : studio?.fallbackPlaying
-                    ? "Standby clip"
-                    : "Holding card"}
-              </span>
-            </div>
-            <div className="relative aspect-video w-full">
-              <StageGrid
-                tiles={monitorTiles}
-                meta={{
-                  fallbackPlaying: studio?.fallbackPlaying,
-                  fallbackVideoUrl: studio?.fallbackVideoUrl,
-                  fallbackLabel: studio?.fallbackLabel,
-                  stageMediaPlaying: studio?.stageMediaPlaying,
-                  stageMediaUrl: studio?.stageMediaUrl,
-                  stageMediaKind: studio?.stageMediaKind,
-                  stageMediaLabel: studio?.stageMediaLabel,
-                  eventName: currentStudio?.name,
-                }}
-                muted
-                idleTitle={currentStudio?.name}
-              />
-            </div>
-          </div>
-
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-2xl border border-border bg-muted/25 p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                    <Users className="h-3.5 w-3.5" /> Green room
-                    <span className="rounded-full bg-background px-2 py-0.5 text-[11px] font-semibold">
-                      {greenRoom.length}
-                    </span>
-                  </h4>
-                </div>
-                {greenRoom.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border p-6 text-center">
-                    <Users className="mx-auto h-5 w-5 text-muted-foreground/40" />
-                    <p className="mt-2 text-sm text-muted-foreground">Nobody waiting yet.</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">Send them the join link above.</p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {greenRoom.map((p) => (
-                      <Tile key={p.id} p={p} stage={false} />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div
-                className={`rounded-2xl border p-4 ${
-                  onStage.length > 0 ? "border-[#ED1C24]/40 bg-[#ED1C24]/5" : "border-border bg-muted/25"
-                }`}
-              >
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                    <Radio className="h-3.5 w-3.5" /> On stage
-                    <span className="rounded-full bg-background px-2 py-0.5 text-[11px] font-semibold">
-                      {onStage.length}/{studio?.maxOnStage ?? 5}
-                    </span>
-                  </h4>
-                  <Select
-                    value={String(studio?.maxOnStage ?? 5)}
-                    onValueChange={(v) => patchStudio.mutate({ maxOnStage: Number(v) })}
-                  >
-                    <SelectTrigger className="h-7 w-[104px] text-xs" data-testid="select-studio-capacity">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[2, 3, 4, 5, 6, 8].map((n) => (
-                        <SelectItem key={n} value={String(n)}>
-                          Max {n}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {onStage.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-border p-6 text-center">
-                    <Radio className="mx-auto h-5 w-5 text-muted-foreground/40" />
-                    <p className="mt-2 text-sm text-muted-foreground">Nobody on air.</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Press <strong>On</strong> beside a name to bring them up.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {onStage.map((p) => (
-                      <Tile key={p.id} p={p} stage />
-                    ))}
-                  </div>
-                )}
-                {stageFull && (
-                  <p className="mt-2 text-xs text-muted-foreground">Stage is full. Take someone off to add another.</p>
-                )}
-              </div>
-            </div>
-          )}
-          {stale.length > 0 && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              {stale.length} {stale.length === 1 ? "person has" : "people have"} dropped off and stopped reporting in.
-            </p>
-          )}
-        </section>
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+            How many people can be on air at once. The producer can't exceed this mid-show.
+          </p>
+          <Select
+            value={String(studio?.maxOnStage ?? 5)}
+            onValueChange={(v) => patchStudio.mutate({ maxOnStage: Number(v) })}
+          >
+            <SelectTrigger className="h-9 w-[112px] text-sm" data-testid="select-studio-capacity">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {[2, 3, 4, 5, 6, 8].map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  Max {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* ------------------------------------------------------------ output */}
         <section>
@@ -1322,46 +1208,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
               signups={signups ?? []}
             />
 
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div
-                className={`flex flex-col gap-3 rounded-2xl border p-4 ${
-                  recording ? "border-[#ED1C24]/50 bg-[#ED1C24]/5" : "border-border bg-muted/25"
-                }`}
-              >
-                <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                  <Disc className={`h-3.5 w-3.5 ${recording ? "text-[#ED1C24]" : "text-primary"}`} /> Recording
-                </div>
-                <p className="flex-1 text-sm text-muted-foreground">
-                  {recording
-                    ? "This slot is being kept. It lands in the podcaster's dashboard when you stop."
-                    : current?.title
-                      ? `Ready to keep "${current.title}".`
-                      : "Records the room to one file for the slot that's on air."}
-                </p>
-                {recording ? (
-                  <Button
-                    size="sm"
-                    className="w-fit gap-1.5 rounded-full bg-[#ED1C24] text-white hover:bg-[#c81820]"
-                    disabled={record.isPending}
-                    onClick={() => record.mutate({ action: "stop" })}
-                    data-testid="button-studio-record-stop"
-                  >
-                    <Square className="h-3.5 w-3.5" /> Stop and save
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-fit gap-1.5 rounded-full"
-                    disabled={record.isPending}
-                    onClick={() => record.mutate({ action: "start", signupId: current?.signupId ?? undefined })}
-                    data-testid="button-studio-record-start"
-                  >
-                    <Disc className="h-3.5 w-3.5" /> Record this slot
-                  </Button>
-                )}
-              </div>
-
+            <div className="grid gap-4">
               <div className="rounded-2xl border border-border bg-muted/25 p-4">
                 <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
                   <PlayCircle className="h-3.5 w-3.5 text-[#F0A71F]" /> Standby video

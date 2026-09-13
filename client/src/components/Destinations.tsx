@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PlatformIcon } from "@/components/SocialIcons";
 import type { SocialPlatform, SignupRow } from "@shared/schema";
 import { Radio, Plus, Trash2, Signal, SignalHigh } from "lucide-react";
+import { StreamKeyHelp } from "@/components/StreamKeyHelp";
 
 // Where the show goes out. House destinations carry the whole event; one tied
 // to a podcaster carries their slot only, and the producer attaches it when
@@ -154,9 +155,12 @@ export function Destinations({ adminGet, adminSend, broadcasting, signups }: Pro
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           <Radio className="h-3.5 w-3.5 text-primary" /> Going out to
         </div>
-        <Button size="sm" variant="outline" className="h-8 gap-1.5 rounded-full text-xs" onClick={() => setAdding((v) => !v)}>
-          <Plus className="h-3 w-3" /> Add destination
-        </Button>
+        <div className="flex items-center gap-4">
+          <StreamKeyHelp />
+          <Button size="sm" variant="outline" className="h-8 gap-1.5 rounded-full text-xs" onClick={() => setAdding((v) => !v)}>
+            <Plus className="h-3 w-3" /> Add destination
+          </Button>
+        </div>
       </div>
 
       {all.length === 0 && !adding && (
