@@ -24,13 +24,16 @@ function toGoogleStamp(d: Date): string {
  *  Outlook.com open in the browser; the .ics covers Apple Calendar, Outlook
  *  desktop, and everything else. */
 export function buildCalendarLinks(input: { title: string; details: string; start: Date; end: Date; icsUrl: string; location?: string }): CalendarLinks {
+  // Google's `dates` param is documented with a literal slash between the two
+  // stamps. URLSearchParams would percent-encode it; build this one by hand so
+  // the URL matches the documented form exactly.
   const g = new URLSearchParams({
     action: "TEMPLATE",
     text: input.title,
-    dates: `${toGoogleStamp(input.start)}/${toGoogleStamp(input.end)}`,
     details: input.details,
     ...(input.location ? { location: input.location } : {}),
   });
+  const googleDates = `${toGoogleStamp(input.start)}/${toGoogleStamp(input.end)}`;
   const o = new URLSearchParams({
     path: "/calendar/action/compose",
     rru: "addevent",
@@ -41,7 +44,7 @@ export function buildCalendarLinks(input: { title: string; details: string; star
     ...(input.location ? { location: input.location } : {}),
   });
   return {
-    google: `https://calendar.google.com/calendar/render?${g.toString()}`,
+    google: `https://calendar.google.com/calendar/render?${g.toString()}&dates=${googleDates}`,
     outlook: `https://outlook.live.com/calendar/0/deeplink/compose?${o.toString()}`,
     ics: input.icsUrl,
   };
