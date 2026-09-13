@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
@@ -78,6 +78,12 @@ function PeerTile({ peer }: { peer: RoomPeer }) {
 
 export default function Studio({ slug }: { slug?: string }) {
   const { toast } = useToast();
+  // A link can name which room to walk into; without one you land in the
+  // event's own studio, which is what every link issued so far means.
+  const studioId = useMemo(() => {
+    const v = Number(new URLSearchParams(window.location.search).get("studioId"));
+    return Number.isFinite(v) && v > 0 ? v : undefined;
+  }, []);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -93,14 +99,14 @@ export default function Studio({ slug }: { slug?: string }) {
   const [stream, setStream] = useState<MediaStream | null>(null);
 
   const queryClient = useQueryClient();
-  const stateKey = ["/api/studio/state", slug ?? "featured", key];
+  const stateKey = ["/api/studio/state", slug ?? "featured", studioId ?? 0, key];
 
   // Once we're in the room the heartbeat carries the state back with it, so
   // this poll only runs while we're still on the join screen.
   const { data: state } = useQuery<StudioState>({
     queryKey: stateKey,
     queryFn: async () => {
-      const q = new URLSearchParams({ clientKey: key, ...(slug ? { slug } : {}) });
+      const q = new URLSearchParams({ clientKey: key, ...(slug ? { slug } : {}), ...(studioId ? { studioId: String(studioId) } : {}) });
       const res = await apiRequest("GET", `/api/studio/state?${q}`);
       return res.json();
     },
@@ -165,6 +171,7 @@ export default function Studio({ slug }: { slug?: string }) {
           camReady: camOn,
           micReady: micOn,
           slug,
+          studioId,
         });
         queryClient.setQueryData(stateKey, (await res.json()) as StudioState);
       } catch {
@@ -175,11 +182,11 @@ export default function Studio({ slug }: { slug?: string }) {
     const id = setInterval(() => void beat(), HEARTBEAT_MS);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [joined, camOn, micOn, key, slug]);
+  }, [joined, camOn, micOn, key, slug, studioId]);
 
   async function join() {
     try {
-      await apiRequest("POST", "/api/studio/join", { clientKey: key, displayName: name.trim(), email: "", slug });
+      await apiRequest("POST", "/api/studio/join", { clientKey: key, displayName: name.trim(), email: "", slug, studioId });
       setJoined(true);
       if (!streamRef.current) void startMedia();
     } catch (err) {
@@ -203,6 +210,7 @@ export default function Studio({ slug }: { slug?: string }) {
     enabled: joined,
     clientKey: key,
     slug,
+    studioId,
     stream,
   });
   const onAirPeers = peers.filter((p) => p.state === "On stage");
@@ -343,7 +351,7 @@ export default function Studio({ slug }: { slug?: string }) {
                   size="sm"
                   className="ml-auto gap-1.5 text-white/60 hover:text-white"
                   onClick={async () => {
-                    await apiRequest("POST", "/api/studio/leave", { clientKey: key, slug }).catch(() => {});
+                    await apiRequest("POST", "/api/studio/leave", { clientKey: key, slug, studioId }).catch(() => {});
                     streamRef.current?.getTracks().forEach((t) => t.stop());
                     streamRef.current = null;
                     setStream(null);

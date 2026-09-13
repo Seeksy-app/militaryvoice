@@ -28,12 +28,13 @@ interface Args {
   enabled: boolean;
   clientKey: string;
   slug?: string;
+  studioId?: number;
   stream: MediaStream | null;
 }
 
 type Status = "idle" | "connecting" | "connected" | "unavailable" | "error";
 
-export function useStudioRoom({ enabled, clientKey, slug, stream }: Args) {
+export function useStudioRoom({ enabled, clientKey, slug, studioId, stream }: Args) {
   const roomRef = useRef<Room | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [peers, setPeers] = useState<RoomPeer[]>([]);
@@ -68,7 +69,7 @@ export function useStudioRoom({ enabled, clientKey, slug, stream }: Args) {
       setStatus("connecting");
       let cfg: { configured: boolean; url?: string; token?: string };
       try {
-        const res = await apiRequest("POST", "/api/studio/token", { clientKey, slug });
+        const res = await apiRequest("POST", "/api/studio/token", { clientKey, slug, studioId });
         cfg = await res.json();
       } catch {
         if (!cancelled) setStatus("error");
@@ -112,7 +113,7 @@ export function useStudioRoom({ enabled, clientKey, slug, stream }: Args) {
       roomRef.current = null;
     };
     // stream identity is what matters here, not its contents
-  }, [enabled, clientKey, slug, stream]);
+  }, [enabled, clientKey, slug, studioId, stream]);
 
   return { status, peers };
 }

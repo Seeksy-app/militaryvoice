@@ -41,6 +41,7 @@ import {
   Square,
   Signal,
   Cable,
+  Trash2,
 } from "lucide-react";
 
 interface Props {
@@ -88,9 +89,31 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
   const [fallbackLabel, setFallbackLabel] = useState<string | null>(null);
 
+  // Which room we're looking at. Remembered per browser so a refresh mid-show
+  // doesn't drop you back into the wrong studio.
+  const [studioId, setStudioId] = useState<number | null>(() => {
+    const v = Number(localStorage.getItem("mv_admin_studio"));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  });
+  const [renaming, setRenaming] = useState<string | null>(null);
+
+  const { data: studios } = useQuery<(StudioRow & { isPrimary: boolean })[]>({
+    queryKey: ["/api/admin/studios"],
+    queryFn: () => adminGet("/api/admin/studios"),
+  });
+
+  const pick = (id: number | null) => {
+    setStudioId(id);
+    if (id) localStorage.setItem("mv_admin_studio", String(id));
+    else localStorage.removeItem("mv_admin_studio");
+    queryClient.removeQueries({ queryKey: ["/api/admin/studio"] });
+  };
+
+  const q = studioId ? `?studioId=${studioId}` : "";
+
   const { data, isLoading } = useQuery<StudioPayload>({
-    queryKey: ["/api/admin/studio"],
-    queryFn: () => adminGet<StudioPayload>("/api/admin/studio"),
+    queryKey: ["/api/admin/studio", studioId],
+    queryFn: () => adminGet<StudioPayload>(`/api/admin/studio${q}`),
     refetchInterval: 4000,
   });
   const { data: runItems } = useQuery<RunItemRow[]>({
@@ -125,18 +148,22 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   }, [runItems]);
 
   function refresh() {
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/studio"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/studio", studioId] });
   }
 
   const patchStudio = useMutation({
-    mutationFn: async (patch: Record<string, unknown>) => adminSend("PATCH", "/api/admin/studio", patch),
-    onSuccess: () => refresh(),
+    mutationFn: async (patch: Record<string, unknown>) => adminSend("PATCH", "/api/admin/studio", { ...patch, studioId }),
+    onSuccess: () => {
+      refresh();
+      // The picker reads names from its own query; a rename has to reach it too.
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/studios"] });
+    },
     onError: (e: Error) => toast({ title: "Couldn't update the studio", description: e.message, variant: "destructive" }),
   });
 
   const setState = useMutation({
     mutationFn: async ({ id, state }: { id: number; state: string }) =>
-      adminSend("PATCH", `/api/admin/studio/participants/${id}`, { state }),
+      adminSend("PATCH", `/api/admin/studio/participants/${id}`, { state, studioId }),
     onSuccess: () => refresh(),
     onError: (e: Error) => toast({ title: "Couldn't move them", description: e.message, variant: "destructive" }),
   });
@@ -161,7 +188,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   });
 
   const broadcast = useMutation({
-    mutationFn: async (action: "start" | "stop") => adminSend("POST", "/api/admin/studio/broadcast", { action }),
+    mutationFn: async (action: "start" | "stop") => adminSend("POST", "/api/admin/studio/broadcast", { action, studioId }),
     onSuccess: () => {
       refresh();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/destinations"] });
@@ -171,9 +198,28 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
 
   const record = useMutation({
     mutationFn: async (body: { action: "start" | "stop"; signupId?: number }) =>
-      adminSend("POST", "/api/admin/studio/record", body),
+      adminSend("POST", "/api/admin/studio/record", { ...body, studioId }),
     onSuccess: () => refresh(),
     onError: (e: Error) => toast({ title: "Recording didn't change", description: e.message, variant: "destructive" }),
+  });
+
+  const makeStudio = useMutation({
+    mutationFn: async (name: string) => adminSend("POST", "/api/admin/studios", { name }),
+    onSuccess: async (res) => {
+      const created = (await res.json()) as StudioRow;
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/studios"] });
+      pick(created.id);
+    },
+    onError: (e: Error) => toast({ title: "Couldn't make that studio", description: e.message, variant: "destructive" }),
+  });
+
+  const removeStudio = useMutation({
+    mutationFn: async (id: number) => adminSend("DELETE", `/api/admin/studios/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/studios"] });
+      pick(null);
+    },
+    onError: (e: Error) => toast({ title: "Couldn't remove it", description: e.message, variant: "destructive" }),
   });
 
   const drop = useMutation({
@@ -185,7 +231,18 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   const recording = Boolean(studio?.recordingEgressId);
   const broadcasting = Boolean(studio?.broadcastEgressId);
   const stageFull = !!studio && onStage.length >= studio.maxOnStage;
-  const joinUrl = typeof window !== "undefined" ? `${window.location.origin}/studio` : "/studio";
+  function commitRename() {
+    const next = (renaming ?? "").trim();
+    if (next && next !== currentStudio?.name) patchStudio.mutate({ name: next });
+    setRenaming(null);
+  }
+
+  const currentStudio = (studios ?? []).find((x) => x.id === (studioId ?? studios?.[0]?.id));
+  const isPrimary = currentStudio?.isPrimary !== false;
+  const joinUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/studio${currentStudio && !currentStudio.isPrimary ? `?studioId=${currentStudio.id}` : ""}`
+      : "/studio";
 
   function Tile({ p, stage }: { p: Participant; stage: boolean }) {
     return (
@@ -248,7 +305,34 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
               <MonitorPlay className="h-4 w-4" />
-              Studio
+              {renaming === null ? (
+                <button
+                  type="button"
+                  className="rounded px-1 -mx-1 hover:bg-muted"
+                  title="Rename this studio"
+                  onClick={() => setRenaming(currentStudio?.name ?? "")}
+                  data-testid="button-rename-studio"
+                >
+                  {currentStudio?.name ?? "Studio"}
+                </button>
+              ) : (
+                <Input
+                  autoFocus
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="h-7 w-48 text-base"
+                  value={renaming}
+                  onChange={(e) => setRenaming(e.target.value)}
+                  onBlur={() => commitRename()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitRename();
+                    }
+                    if (e.key === "Escape") setRenaming(null);
+                  }}
+                  data-testid="input-studio-name"
+                />
+              )}
               {live && (
                 <Badge className="gap-1 bg-[#ED1C24] text-white hover:bg-[#ED1C24]">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> Live
@@ -290,6 +374,24 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={String(currentStudio?.id ?? "")}
+              onValueChange={(v) => (v === "new" ? makeStudio.mutate("New studio") : pick(Number(v)))}
+            >
+              <SelectTrigger className="h-9 w-[190px]" data-testid="select-studio">
+                <SelectValue placeholder="Studio" />
+              </SelectTrigger>
+              <SelectContent>
+                {(studios ?? []).map((st) => (
+                  <SelectItem key={st.id} value={String(st.id)}>
+                    {st.name}
+                    {st.isPrimary ? " · event studio" : ""}
+                  </SelectItem>
+                ))}
+                <SelectItem value="new">+ New studio…</SelectItem>
+              </SelectContent>
+            </Select>
+
             <Select value={studio?.status ?? "Offline"} onValueChange={(v) => patchStudio.mutate({ status: v })}>
               <SelectTrigger className="h-9 w-[130px]" data-testid="select-studio-status">
                 <SelectValue />
@@ -302,6 +404,19 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                 ))}
               </SelectContent>
             </Select>
+
+            {!isPrimary && currentStudio && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-muted-foreground hover:text-destructive"
+                title="Remove this studio"
+                onClick={() => removeStudio.mutate(currentStudio.id)}
+                data-testid="button-delete-studio"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
 
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -360,7 +475,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
         )}
 
         {/* what the run of show says is happening now */}
-        {(current || next) && (
+        {isPrimary && (current || next) && (
           <div className="grid gap-3 sm:grid-cols-2">
             {[
               ["On air now", current],

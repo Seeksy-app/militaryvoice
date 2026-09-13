@@ -986,10 +986,32 @@ export function registerRoutes(app: Express): void {
   // ---- Studio -----------------------------------------------------------------
   //      Show control only: who's waiting, who's on stage, and the emergency
   //      clip. The video layer plugs in behind this.
-  async function studioForSlug(slug?: string) {
+  async function studioForSlug(slug?: string, studioId?: number) {
     const event = slug ? await storage.getEventBySlug(slug) : await storage.getFeaturedEvent();
     if (!event) return null;
+    // A speaker's link can name the room; without one they land in the event's
+    // own studio, which is what every existing link already means.
+    if (studioId) {
+      const picked = await storage.getStudioById(studioId);
+      if (picked && picked.eventId === event.id) return { event, studio: picked };
+    }
     return { event, studio: await storage.getOrCreateStudio(event.id) };
+  }
+
+  /** The studio an admin request is talking about, defaulting to the event's own. */
+  async function adminStudio(req: Request) {
+    const eventId = Number(req.query.eventId) || Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const wanted = Number(req.query.studioId) || Number(req.body?.studioId) || 0;
+    if (wanted) {
+      const picked = await storage.getStudioById(wanted);
+      if (picked) return { eventId: picked.eventId, studio: picked };
+    }
+    return { eventId, studio: await storage.getOrCreateStudio(eventId) };
+  }
+
+  function numParam(v: unknown): number | undefined {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
   }
 
   function withPresence(p: { lastSeenAt: string }) {
@@ -1019,7 +1041,7 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/studio/state", async (req, res) => {
     noStore(res);
-    const found = await studioForSlug(typeof req.query.slug === "string" ? req.query.slug : undefined);
+    const found = await studioForSlug(typeof req.query.slug === "string" ? req.query.slug : undefined, numParam(req.query.studioId));
     if (!found) {
       res.status(404).json({ message: "No event" });
       return;
@@ -1034,7 +1056,7 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
-    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined);
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId));
     if (!found) {
       res.status(404).json({ message: "No event" });
       return;
@@ -1057,7 +1079,7 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
-    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined);
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId));
     if (!found) {
       res.status(404).json({ message: "No event" });
       return;
@@ -1085,7 +1107,7 @@ export function registerRoutes(app: Express): void {
       res.json({ configured: false });
       return;
     }
-    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined);
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId));
     const key = typeof req.body?.clientKey === "string" ? req.body.clientKey : "";
     if (!found || !key) {
       res.status(404).json({ message: "No event" });
@@ -1113,7 +1135,7 @@ export function registerRoutes(app: Express): void {
   });
 
   app.post("/api/studio/leave", async (req, res) => {
-    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined);
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId));
     const key = typeof req.body?.clientKey === "string" ? req.body.clientKey : "";
     if (found && key) {
       const me = (await storage.listStudioParticipants(found.studio.id)).find((p) => p.clientKey === key);
@@ -1123,10 +1145,46 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Studio: the control room -------------------------------------------------
-  app.get("/api/admin/studio", requireAdmin, async (req, res) => {
+  /** Every studio for the event. The first is the event's own; the rest are
+   *  side rooms — a rehearsal, a test, a second stage running in parallel. */
+  app.get("/api/admin/studios", requireAdmin, async (req, res) => {
     noStore(res);
     const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
-    const studio = await storage.getOrCreateStudio(eventId);
+    // Make sure the event always has at least its own.
+    await storage.getOrCreateStudio(eventId);
+    const rows = await storage.listStudios(eventId);
+    res.json(rows.map((r, i) => ({ ...r, isPrimary: i === 0 })));
+  });
+
+  app.post("/api/admin/studios", requireAdmin, async (req, res) => {
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const name = String(req.body?.name ?? "").trim().slice(0, 80);
+    res.status(201).json(await storage.createStudio(eventId, name));
+  });
+
+  app.delete("/api/admin/studios/:id", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const studio = await storage.getStudioById(id);
+    if (!studio) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    const all = await storage.listStudios(studio.eventId);
+    if (all[0]?.id === id) {
+      res.status(409).json({ message: "That's the event's own studio. It can be renamed, but not removed." });
+      return;
+    }
+    if (studio.broadcastEgressId || studio.recordingEgressId) {
+      res.status(409).json({ message: "Stop the broadcast and the recording first." });
+      return;
+    }
+    await storage.deleteStudio(id);
+    res.json({ ok: true });
+  });
+
+  app.get("/api/admin/studio", requireAdmin, async (req, res) => {
+    noStore(res);
+    const { studio } = await adminStudio(req);
     const participants = await storage.listStudioParticipants(studio.id);
     res.json({
       studio,
@@ -1142,8 +1200,7 @@ export function registerRoutes(app: Express): void {
       res.json({ configured: false });
       return;
     }
-    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
-    const studio = await storage.getOrCreateStudio(eventId);
+    const { studio } = await adminStudio(req);
     const room = roomName(studio.id);
     res.json({
       configured: true,
@@ -1165,9 +1222,8 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
-    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const { eventId, studio } = await adminStudio(req);
     const event = await storage.getEventById(eventId);
-    const studio = await storage.getOrCreateStudio(eventId);
     const updated = await storage.updateStudio(studio.id, parsed.data);
     if (updated) {
       // The broadcast layout watches the room, not us — this is what makes the
@@ -1193,8 +1249,7 @@ export function registerRoutes(app: Express): void {
     const id = Number(req.params.id);
     if (state === "On stage") {
       // Never exceed the stage size the producer set.
-      const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
-      const studio = await storage.getOrCreateStudio(eventId);
+      const { studio } = await adminStudio(req);
       const all = await storage.listStudioParticipants(studio.id);
       const onStage = all.filter((p) => p.state === "On stage" && p.id !== id);
       if (onStage.length >= studio.maxOnStage) {
@@ -1221,8 +1276,7 @@ export function registerRoutes(app: Express): void {
       res.status(503).json({ message: "No media layer configured for this event." });
       return;
     }
-    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
-    const studio = await storage.getOrCreateStudio(eventId);
+    const { eventId, studio } = await adminStudio(req);
     const action = String(req.body?.action ?? "");
 
     if (action === "stop") {
@@ -1259,8 +1313,7 @@ export function registerRoutes(app: Express): void {
 
   /** Add or drop one destination while the broadcast is already running. */
   app.patch("/api/admin/studio/broadcast", requireAdmin, async (req, res) => {
-    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
-    const studio = await storage.getOrCreateStudio(eventId);
+    const { studio } = await adminStudio(req);
     if (!studio.broadcastEgressId) {
       res.status(409).json({ message: "Nothing is going out yet." });
       return;
@@ -1399,8 +1452,7 @@ export function registerRoutes(app: Express): void {
       res.status(503).json({ message: "Recording storage isn't set up yet." });
       return;
     }
-    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
-    const studio = await storage.getOrCreateStudio(eventId);
+    const { eventId, studio } = await adminStudio(req);
     const action = String(req.body?.action ?? "");
 
     if (action === "stop") {

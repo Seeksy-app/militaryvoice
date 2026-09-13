@@ -487,6 +487,10 @@ export interface IStorage {
   createPlatformInterest(v: Omit<PlatformInterestRow, "id" | "handled" | "createdAt">): Promise<PlatformInterestRow>;
   listPlatformInterest(): Promise<PlatformInterestRow[]>;
   getOrCreateStudio(eventId: number): Promise<StudioRow>;
+  listStudios(eventId: number): Promise<StudioRow[]>;
+  getStudioById(id: number): Promise<StudioRow | undefined>;
+  createStudio(eventId: number, name: string): Promise<StudioRow>;
+  deleteStudio(id: number): Promise<void>;
   updateStudio(id: number, patch: Partial<StudioRow>): Promise<StudioRow | undefined>;
   listStudioParticipants(studioId: number): Promise<StudioParticipantRow[]>;
   upsertStudioParticipant(
@@ -874,6 +878,38 @@ class DatabaseStorage implements IStorage {
       .values({ eventId, name: "Main studio", createdAt: now, updatedAt: now })
       .returning();
     return created;
+  }
+
+  /**
+   * Every studio for an event, oldest first. The oldest is the event's own —
+   * the one the schedule and run of show belong to. Anything after it is a
+   * side room someone made on purpose.
+   */
+  async listStudios(eventId: number): Promise<StudioRow[]> {
+    await ready();
+    return db.select().from(studios).where(eq(studios.eventId, eventId)).orderBy(asc(studios.id));
+  }
+
+  async getStudioById(id: number): Promise<StudioRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(studios).where(eq(studios.id, id));
+    return row;
+  }
+
+  async createStudio(eventId: number, name: string): Promise<StudioRow> {
+    await ready();
+    const now = new Date().toISOString();
+    const [row] = await db
+      .insert(studios)
+      .values({ eventId, name: name.trim() || "New studio", createdAt: now, updatedAt: now })
+      .returning();
+    return row;
+  }
+
+  async deleteStudio(id: number): Promise<void> {
+    await ready();
+    await db.delete(studioParticipants).where(eq(studioParticipants.studioId, id));
+    await db.delete(studios).where(eq(studios.id, id));
   }
 
   async updateStudio(id: number, patch: Partial<StudioRow>): Promise<StudioRow | undefined> {
