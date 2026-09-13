@@ -43,6 +43,9 @@ export interface StageTile {
 export function useStageRoom(url: string | null, token: string | null, muted: boolean) {
   const [tiles, setTiles] = useState<StageTile[]>([]);
   const [meta, setMeta] = useState<RoomMeta>({});
+  // Captions arrive as data messages from a transcription agent sitting in the
+  // room. Nothing here knows or cares which model produced them.
+  const [caption, setCaption] = useState<{ speaker: string; text: string } | null>(null);
   const [connected, setConnected] = useState(false);
   const [failed, setFailed] = useState(false);
   const roomRef = useRef<Room | null>(null);
@@ -87,6 +90,22 @@ export function useStageRoom(url: string | null, token: string | null, muted: bo
       .on(RoomEvent.ParticipantAttributesChanged, snapshot)
       .on(RoomEvent.ActiveSpeakersChanged, snapshot)
       .on(RoomEvent.RoomMetadataChanged, readMeta)
+      .on(RoomEvent.DataReceived, (payload: Uint8Array, _p, _k, topic?: string) => {
+        if (topic && topic !== "captions") return;
+        try {
+          const msg = JSON.parse(new TextDecoder().decode(payload)) as {
+            type?: string;
+            speaker?: string;
+            text?: string;
+            final?: boolean;
+          };
+          if (msg.type !== "caption") return;
+          const text = (msg.text ?? "").trim();
+          setCaption(text ? { speaker: msg.speaker ?? "", text } : null);
+        } catch {
+          /* anything unparseable on this topic isn't ours */
+        }
+      })
       .on(RoomEvent.Disconnected, () => !cancelled && setConnected(false));
 
     void room
@@ -112,7 +131,7 @@ export function useStageRoom(url: string | null, token: string | null, muted: bo
     if (room && connected && !muted) void room.startAudio().catch(() => {});
   }, [muted, connected]);
 
-  return { tiles, meta, connected, failed };
+  return { tiles, meta, connected, failed, caption };
 }
 
 /**
@@ -229,11 +248,13 @@ export function StageGrid({
   meta,
   muted = false,
   idleTitle,
+  caption,
 }: {
   tiles: StageTile[];
   meta: RoomMeta;
   muted?: boolean;
   idleTitle?: string;
+  caption?: { speaker: string; text: string } | null;
 }) {
   // Standby is the emergency, so it outranks anything chosen deliberately.
   if (meta.fallbackPlaying && meta.fallbackVideoUrl) {
@@ -266,10 +287,26 @@ export function StageGrid({
   }
 
   return (
-    <div className={`grid h-full w-full gap-3 p-3 ${gridFor(tiles.length)}`}>
-      {tiles.map((t) => (
-        <Tile key={t.identity} tile={t} muted={muted} />
-      ))}
+    <>
+      <div className={`grid h-full w-full gap-3 p-3 ${gridFor(tiles.length)}`}>
+        {tiles.map((t) => (
+          <Tile key={t.identity} tile={t} muted={muted} />
+        ))}
+      </div>
+      <Captions caption={caption} />
+    </>
+  );
+}
+
+/** Burned into the frame, so they reach the recording and every destination. */
+function Captions({ caption }: { caption?: { speaker: string; text: string } | null }) {
+  if (!caption?.text) return null;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-6 pb-6">
+      <p className="max-w-4xl rounded-xl bg-black/75 px-5 py-2.5 text-center text-lg leading-snug text-white backdrop-blur-sm sm:text-xl">
+        {caption.speaker && <span className="mr-2 font-semibold text-[#F0A71F]">{caption.speaker}:</span>}
+        {caption.text}
+      </p>
     </div>
   );
 }

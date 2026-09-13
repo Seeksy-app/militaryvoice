@@ -18,7 +18,7 @@ export default function StudioComposite() {
 
   // Headless Chrome has no speakers to protect, so the composite is unmuted —
   // this is the one place audio must actually flow.
-  const { tiles, meta, connected, failed } = useStageRoom(url, token, false);
+  const { tiles, meta, connected, failed, caption } = useStageRoom(url, token, false);
 
   const started = useRef(false);
   useEffect(() => {
@@ -34,7 +34,7 @@ export default function StudioComposite() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#000741]">
-      <StageGrid tiles={tiles} meta={meta} />
+      <StageGrid tiles={tiles} meta={meta} caption={caption} />
 
       <img
         src="/logo-wave.png"

@@ -166,9 +166,10 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
   const [mediaPicker, setMediaPicker] = useState<null | "image" | "video" | "all">(null);
   const [sceneName, setSceneName] = useState("");
   const [stageMuted, setStageMuted] = useState(false);
-  // Full screen: the browser chrome, the site nav and the dashboard around it
-  // are all noise once you're running a show.
-  const [focus, setFocus] = useState(false);
+  // The studio takes the whole window by default. Site nav, the logo, the
+  // sign-in, the dashboard heading and the tabs are all noise when you're
+  // running a show, and the padding around them was costing the stage width.
+  const [focus, setFocus] = useState(view === "live");
 
   useEffect(() => {
     if (!focus) return;
@@ -673,7 +674,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
                 }}
                 data-testid="button-studio-exit-focus"
               >
-                <LogOut className="h-3.5 w-3.5" /> Dashboard
+                <LogOut className="h-3.5 w-3.5" /> Leave the studio
               </Button>
             )}
 

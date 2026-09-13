@@ -45,7 +45,7 @@ export default function Watch({ slug }: { slug?: string }) {
     refetchInterval: (q) => (q.state.data?.configured ? false : 20_000),
   });
 
-  const { tiles, meta, connected } = useStageRoom(data?.url ?? null, data?.token ?? null, muted);
+  const { tiles, meta, connected, caption } = useStageRoom(data?.url ?? null, data?.token ?? null, muted);
   const live = (meta.status ?? data?.status) === "Live";
   const onAir = tiles.length > 0 || meta.fallbackPlaying;
 
@@ -104,7 +104,7 @@ export default function Watch({ slug }: { slug?: string }) {
               </p>
             </div>
           ) : (
-            <StageGrid tiles={tiles} meta={meta} muted={muted} idleTitle={data?.eventName} />
+            <StageGrid tiles={tiles} meta={meta} muted={muted} idleTitle={data?.eventName} caption={caption} />
           )}
 
           {muted && onAir && (
