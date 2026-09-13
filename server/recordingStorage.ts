@@ -1,13 +1,14 @@
+import crypto from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { recordingsBucket } from "./livekit.js";
+import { recordingsBucket, storageTarget, usingR2 } from "./livekit.js";
 
-// The recordings bucket. LiveKit's egress writes straight into it over the
-// S3-compatible endpoint; we only ever read from it, and we keep it private so
-// a podcaster's unedited session isn't sitting on a guessable public URL.
+// Reading recordings back. LiveKit writes them over S3; we only ever hand out
+// short-lived links, because an unedited session shouldn't sit on a guessable
+// public URL. Supabase has its own signing call; R2 needs real SigV4, which is
+// forty lines of well-specified hashing and saves pulling in the AWS SDK.
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_SECRET_KEY =
-  process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 let client: SupabaseClient | null = null;
 let bucketReady: Promise<void> | null = null;
@@ -18,7 +19,9 @@ function getClient(): SupabaseClient {
   return client;
 }
 
+/** R2 buckets are made through the Cloudflare API, so this only has to run for Supabase. */
 export async function ensureRecordingsBucket(): Promise<void> {
+  if (usingR2()) return;
   if (!bucketReady) {
     bucketReady = (async () => {
       const supabase = getClient();
@@ -34,8 +37,68 @@ export async function ensureRecordingsBucket(): Promise<void> {
   return bucketReady;
 }
 
+const sha256 = (v: string | Buffer) => crypto.createHash("sha256").update(v).digest("hex");
+const hmac = (key: crypto.BinaryLike, v: string) => crypto.createHmac("sha256", key).update(v).digest();
+
+/** Percent-encoding per AWS's rules, which differ from encodeURIComponent. */
+function uriEncode(v: string, encodeSlash: boolean): string {
+  return v
+    .split("")
+    .map((c) => {
+      if (/[A-Za-z0-9._~-]/.test(c)) return c;
+      if (c === "/") return encodeSlash ? "%2F" : "/";
+      return "%" + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0");
+    })
+    .join("");
+}
+
+/** A presigned GET, signed by hand so we don't carry the AWS SDK for one call. */
+function presignS3Get(path: string, expiresInSeconds: number): string {
+  const t = storageTarget();
+  if (!t) throw new Error("No recording storage configured.");
+
+  const url = new URL(t.endpoint);
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
+  const dateStamp = amzDate.slice(0, 8);
+  const scope = `${dateStamp}/${t.region}/s3/aws4_request`;
+  // The endpoint can carry a path of its own — Supabase serves S3 under
+  // /storage/v1/s3, R2 serves it at the root — and it has to be signed too.
+  const prefix = url.pathname.replace(/\/+$/, "");
+  const canonicalUri = `${prefix}/${uriEncode(t.bucket, true)}/${uriEncode(path, false)}`;
+
+  const params: Record<string, string> = {
+    "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+    "X-Amz-Credential": `${t.accessKey}/${scope}`,
+    "X-Amz-Date": amzDate,
+    "X-Amz-Expires": String(expiresInSeconds),
+    "X-Amz-SignedHeaders": "host",
+  };
+  const canonicalQuery = Object.keys(params)
+    .sort()
+    .map((k) => `${uriEncode(k, true)}=${uriEncode(params[k], true)}`)
+    .join("&");
+
+  const canonicalRequest = [
+    "GET",
+    canonicalUri,
+    canonicalQuery,
+    `host:${url.host}\n`,
+    "host",
+    "UNSIGNED-PAYLOAD",
+  ].join("\n");
+
+  const toSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256(canonicalRequest)].join("\n");
+  const signingKey = hmac(hmac(hmac(hmac(`AWS4${t.secret}`, dateStamp), t.region), "s3"), "aws4_request");
+  const signature = crypto.createHmac("sha256", signingKey).update(toSign).digest("hex");
+
+  return `${url.origin}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
+}
+
 /** A time-limited download link. Default two hours, plenty for a big MP4. */
 export async function signedRecordingUrl(path: string, expiresInSeconds = 7_200): Promise<string> {
+  if (usingR2()) return presignS3Get(path, expiresInSeconds);
+
   const supabase = getClient();
   const { data, error } = await supabase.storage
     .from(recordingsBucket())

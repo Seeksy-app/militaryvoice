@@ -124,31 +124,78 @@ export interface BroadcastTarget {
 // over its S3-compatible endpoint, so the file never passes through us. The S3
 // access keys are separate from the service-role key: Supabase dashboard →
 // Storage → S3 Access Keys.
-const S3_BUCKET = process.env.RECORDINGS_BUCKET || "recordings";
-const S3_ACCESS_KEY = process.env.SUPABASE_S3_ACCESS_KEY_ID ?? "";
-const S3_SECRET = process.env.SUPABASE_S3_SECRET_ACCESS_KEY ?? "";
-const S3_REGION = process.env.SUPABASE_S3_REGION ?? "";
+// Where recordings land. Two options, because Supabase's project-wide upload
+// ceiling (50MB on the free plan) is far below a 25-minute slot: point
+// R2_* at a Cloudflare R2 bucket and it wins, otherwise we fall back to
+// Supabase's S3 endpoint. Same protocol either way — only the credentials
+// differ, so nothing above this line has to know.
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID ?? "";
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID ?? "";
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY ?? "";
+const R2_BUCKET = process.env.R2_BUCKET || "militaryvoice-recordings";
+
+const SB_BUCKET = process.env.RECORDINGS_BUCKET || "recordings";
+const SB_ACCESS_KEY = process.env.SUPABASE_S3_ACCESS_KEY_ID ?? "";
+const SB_SECRET = process.env.SUPABASE_S3_SECRET_ACCESS_KEY ?? "";
+const SB_REGION = process.env.SUPABASE_S3_REGION ?? "";
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
-// Supabase serves S3 on a dedicated *.storage.supabase.co host, which isn't
-// derivable from SUPABASE_URL — take it from the dashboard when it's given.
-const S3_ENDPOINT =
+const SB_ENDPOINT =
   process.env.SUPABASE_S3_ENDPOINT || `${SUPABASE_URL.replace(/\/$/, "")}/storage/v1/s3`;
 
+export function usingR2(): boolean {
+  return Boolean(R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY);
+}
+
+export interface StorageTarget {
+  provider: "r2" | "supabase";
+  bucket: string;
+  endpoint: string;
+  region: string;
+  accessKey: string;
+  secret: string;
+}
+
+export function storageTarget(): StorageTarget | null {
+  if (usingR2()) {
+    return {
+      provider: "r2",
+      bucket: R2_BUCKET,
+      endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      region: "auto",
+      accessKey: R2_ACCESS_KEY_ID,
+      secret: R2_SECRET_ACCESS_KEY,
+    };
+  }
+  if (SB_ACCESS_KEY && SB_SECRET && SB_REGION && SUPABASE_URL) {
+    return {
+      provider: "supabase",
+      bucket: SB_BUCKET,
+      endpoint: SB_ENDPOINT,
+      region: SB_REGION,
+      accessKey: SB_ACCESS_KEY,
+      secret: SB_SECRET,
+    };
+  }
+  return null;
+}
+
 export function isRecordingConfigured(): boolean {
-  return Boolean(isLiveKitConfigured() && S3_ACCESS_KEY && S3_SECRET && S3_REGION && SUPABASE_URL);
+  return Boolean(isLiveKitConfigured() && storageTarget());
 }
 
 export function recordingsBucket(): string {
-  return S3_BUCKET;
+  return storageTarget()?.bucket ?? SB_BUCKET;
 }
 
 function s3Upload() {
+  const t = storageTarget();
+  if (!t) throw new Error("No recording storage configured.");
   return {
-    accessKey: S3_ACCESS_KEY,
-    secret: S3_SECRET,
-    region: S3_REGION,
-    bucket: S3_BUCKET,
-    endpoint: S3_ENDPOINT,
+    accessKey: t.accessKey,
+    secret: t.secret,
+    region: t.region,
+    bucket: t.bucket,
+    endpoint: t.endpoint,
     forcePathStyle: true,
   };
 }
