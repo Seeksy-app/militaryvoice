@@ -22,6 +22,10 @@ export interface RoomMeta {
   fallbackPlaying?: boolean;
   fallbackVideoUrl?: string;
   fallbackLabel?: string;
+  stageMediaPlaying?: boolean;
+  stageMediaUrl?: string;
+  stageMediaKind?: string;
+  stageMediaLabel?: string;
 }
 
 export interface StageTile {
@@ -179,7 +183,47 @@ function Tile({ tile, muted }: { tile: StageTile; muted: boolean }) {
   );
 }
 
-/** The frame itself: standby clip, the stage, or a branded holding card. */
+/** A clip, a slide or a sponsor card, filling the frame. */
+function FullFrameMedia({
+  url,
+  kind,
+  label,
+  muted,
+}: {
+  url: string;
+  kind: string;
+  label?: string;
+  muted: boolean;
+}) {
+  const yt = youtubeId(url);
+  return (
+    <div className="absolute inset-0 bg-black">
+      {kind === "image" ? (
+        <img src={url} alt={label ?? ""} className="h-full w-full object-contain" />
+      ) : yt ? (
+        <iframe
+          title={label || "On stage"}
+          src={`https://www.youtube.com/embed/${yt}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1`}
+          allow="autoplay; encrypted-media; picture-in-picture"
+          allowFullScreen
+          className="h-full w-full border-0"
+        />
+      ) : (
+        <video src={url} autoPlay playsInline muted={muted} className="h-full w-full object-contain" />
+      )}
+      {label && (
+        <div
+          className="pointer-events-none absolute bottom-8 left-8 rounded-lg bg-[#000741]/85 px-5 py-3 text-xl font-semibold text-white backdrop-blur-sm"
+          style={HEADLINE_FONT}
+        >
+          {label}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The frame itself: standby clip, played media, the stage, or a holding card. */
 export function StageGrid({
   tiles,
   meta,
@@ -191,43 +235,21 @@ export function StageGrid({
   muted?: boolean;
   idleTitle?: string;
 }) {
-  const standby = meta.fallbackPlaying && meta.fallbackVideoUrl;
-
-  if (standby) {
-    const yt = youtubeId(meta.fallbackVideoUrl!);
-    if (yt) {
-      return (
-        <div className="absolute inset-0 bg-black">
-          <iframe
-            title={meta.fallbackLabel || "Standby"}
-            src={`https://www.youtube.com/embed/${yt}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1&loop=1&playlist=${yt}`}
-            allow="autoplay; encrypted-media; picture-in-picture"
-            allowFullScreen
-            className="h-full w-full border-0"
-          />
-          {meta.fallbackLabel && (
-            <div
-              className="pointer-events-none absolute bottom-8 left-8 rounded-lg bg-[#000741]/85 px-5 py-3 text-xl font-semibold text-white backdrop-blur-sm"
-              style={HEADLINE_FONT}
-            >
-              {meta.fallbackLabel}
-            </div>
-          )}
-        </div>
-      );
-    }
+  // Standby is the emergency, so it outranks anything chosen deliberately.
+  if (meta.fallbackPlaying && meta.fallbackVideoUrl) {
     return (
-      <div className="absolute inset-0">
-        <video src={meta.fallbackVideoUrl} autoPlay loop playsInline muted={muted} className="h-full w-full object-contain" />
-        {meta.fallbackLabel && (
-          <div
-            className="absolute bottom-8 left-8 rounded-lg bg-[#000741]/85 px-5 py-3 text-xl font-semibold text-white backdrop-blur-sm"
-            style={HEADLINE_FONT}
-          >
-            {meta.fallbackLabel}
-          </div>
-        )}
-      </div>
+      <FullFrameMedia url={meta.fallbackVideoUrl} kind="video" label={meta.fallbackLabel} muted={muted} />
+    );
+  }
+
+  if (meta.stageMediaPlaying && meta.stageMediaUrl) {
+    return (
+      <FullFrameMedia
+        url={meta.stageMediaUrl}
+        kind={meta.stageMediaKind ?? "video"}
+        label={meta.stageMediaLabel}
+        muted={muted}
+      />
     );
   }
 

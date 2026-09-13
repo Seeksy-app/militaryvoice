@@ -558,6 +558,13 @@ export const studios = pgTable("studios", {
   fallbackVideoUrl: text("fallback_video_url").notNull().default(""),
   fallbackLabel: text("fallback_label").notNull().default(""),
   fallbackPlaying: boolean("fallback_playing").notNull().default(false),
+  // Anything the producer puts on the stage itself: a podcaster's intro reel,
+  // a sponsor card, a slide. Same mechanism as the standby clip, but chosen
+  // deliberately rather than in an emergency — so standby always wins.
+  stageMediaUrl: text("stage_media_url").notNull().default(""),
+  stageMediaKind: text("stage_media_kind").notNull().default("video"),
+  stageMediaLabel: text("stage_media_label").notNull().default(""),
+  stageMediaPlaying: boolean("stage_media_playing").notNull().default(false),
   // Two separate egresses run off the same room: one long broadcast that goes
   // out to every destination for the whole event, and one short recording per
   // slot so each podcaster gets their own file.
@@ -699,6 +706,10 @@ export const studioUpdateSchema = z.object({
   fallbackVideoUrl: z.string().trim().max(500).optional(),
   fallbackLabel: z.string().trim().max(120).optional(),
   fallbackPlaying: z.boolean().optional(),
+  stageMediaUrl: z.string().trim().max(600).optional(),
+  stageMediaKind: z.enum(["video", "image"]).optional(),
+  stageMediaLabel: z.string().trim().max(120).optional(),
+  stageMediaPlaying: z.boolean().optional(),
 });
 
 /** A participant counts as present if we heard from them recently. */

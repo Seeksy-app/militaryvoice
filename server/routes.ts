@@ -50,7 +50,7 @@ import {
 } from "./livekit.js";
 import { ensureRecordingsBucket, signedRecordingUrl } from "./recordingStorage.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
-import type { DestinationRow } from "../shared/schema.js";
+import type { DestinationRow, StudioRow } from "../shared/schema.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   isUploadPostConfigured,
@@ -1265,14 +1265,7 @@ export function registerRoutes(app: Express): void {
     if (updated) {
       // The broadcast layout watches the room, not us — this is what makes the
       // standby clip a real cut on air.
-      await syncRoomMetadata(roomName(studio.id), {
-        eventName: event?.name ?? "",
-        studioName: updated.name,
-        status: updated.status,
-        fallbackPlaying: updated.fallbackPlaying,
-        fallbackVideoUrl: updated.fallbackVideoUrl,
-        fallbackLabel: updated.fallbackLabel,
-      });
+      await syncRoomMetadata(roomName(studio.id), studioMeta(event?.name ?? "", updated));
     }
     res.json(updated);
   });
@@ -1356,6 +1349,60 @@ export function registerRoutes(app: Express): void {
     },
   );
 
+  /**
+   * Everything the producer could put on the stage: clips the podcasters
+   * uploaded for their own slots, plus anything admin has added. This is the
+   * point of asking them to upload ahead of time.
+   */
+  app.get("/api/admin/media", requireAdmin, async (req, res) => {
+    noStore(res);
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    const signups = await storage.listSignups(eventId);
+    const byEmail = new Map(signups.map((sg) => [sg.email.toLowerCase().trim(), sg]));
+    const assets = await storage.listAllAssets();
+    res.json(
+      assets
+        .filter((a) => a.fileUrl || a.linkUrl)
+        .map((a) => {
+          const url = a.fileUrl || a.linkUrl;
+          const sg = byEmail.get(a.email.toLowerCase().trim());
+          return {
+            id: a.id,
+            label: a.label || a.fileName || a.kind,
+            kind: /\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(url) ? "image" : "video",
+            url,
+            owner: sg?.podcastName ?? a.email,
+            assetKind: a.kind,
+          };
+        }),
+    );
+  });
+
+  /** Put something on the stage, or take it off. */
+  app.post("/api/admin/studio/media", requireAdmin, async (req, res) => {
+    const { studio } = await adminStudio(req);
+    const action = String(req.body?.action ?? "");
+    const patch =
+      action === "stop"
+        ? { stageMediaPlaying: false }
+        : {
+            stageMediaUrl: String(req.body?.url ?? "").trim().slice(0, 600),
+            stageMediaKind: req.body?.kind === "image" ? "image" : "video",
+            stageMediaLabel: String(req.body?.label ?? "").trim().slice(0, 120),
+            stageMediaPlaying: true,
+          };
+    if (action !== "stop" && !/^https?:\/\//i.test(String(patch.stageMediaUrl ?? ""))) {
+      res.status(400).json({ message: "That needs a full https:// link." });
+      return;
+    }
+    const updated = await storage.updateStudio(studio.id, patch);
+    if (updated) {
+      const ev = await storage.getEventById(studio.eventId);
+      await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated));
+    }
+    res.json(updated);
+  });
+
   app.post("/api/admin/studio/broadcast", requireAdmin, async (req, res) => {
     if (!isLiveKitConfigured()) {
       res.status(503).json({ message: "No media layer configured for this event." });
@@ -1370,12 +1417,8 @@ export function registerRoutes(app: Express): void {
         if (d.live) await storage.updateDestination(d.id, { live: false });
       }
       const off = await storage.updateStudio(studio.id, { broadcastEgressId: "", status: "Offline" });
-      await syncRoomMetadata(roomName(studio.id), {
-        status: "Offline",
-        fallbackPlaying: off?.fallbackPlaying ?? false,
-        fallbackVideoUrl: off?.fallbackVideoUrl ?? "",
-        fallbackLabel: off?.fallbackLabel ?? "",
-      });
+      const ev0 = await storage.getEventById(eventId);
+      if (off) await syncRoomMetadata(roomName(studio.id), studioMeta(ev0?.name ?? "", off));
       res.json(off);
       return;
     }
@@ -1403,14 +1446,7 @@ export function registerRoutes(app: Express): void {
     }
     const updated = await storage.updateStudio(studio.id, { broadcastEgressId: egressId, status: "Live" });
     const ev = await storage.getEventById(eventId);
-    await syncRoomMetadata(roomName(studio.id), {
-      eventName: ev?.name ?? "",
-      studioName: updated?.name ?? "",
-      status: "Live",
-      fallbackPlaying: updated?.fallbackPlaying ?? false,
-      fallbackVideoUrl: updated?.fallbackVideoUrl ?? "",
-      fallbackLabel: updated?.fallbackLabel ?? "",
-    });
+    if (updated) await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated));
     res.json(updated);
   });
 
@@ -1441,6 +1477,22 @@ export function registerRoutes(app: Express): void {
     const host = req.get("host") ?? "";
     if (!host || /^(localhost|127\.0\.0\.1|\[::1\])(:|$)/i.test(host)) return undefined;
     return `${req.protocol}://${host}/studio/composite`;
+  }
+
+  /** Everything the broadcast layout needs, in one shape. */
+  function studioMeta(eventName: string, st: StudioRow) {
+    return {
+      eventName,
+      studioName: st.name,
+      status: st.status,
+      fallbackPlaying: st.fallbackPlaying,
+      fallbackVideoUrl: st.fallbackVideoUrl,
+      fallbackLabel: st.fallbackLabel,
+      stageMediaPlaying: st.stageMediaPlaying,
+      stageMediaUrl: st.stageMediaUrl,
+      stageMediaKind: st.stageMediaKind,
+      stageMediaLabel: st.stageMediaLabel,
+    };
   }
 
   function ingestUrl(d: { rtmpUrl: string; streamKey: string }): string {

@@ -21,6 +21,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useProducerRoom, type ProducerFeed } from "@/hooks/use-producer-room";
 import { Destinations } from "@/components/Destinations";
 import { StageGrid, youtubeId, type StageTile } from "@/components/StageView";
+import { MediaLibrary } from "@/components/MediaLibrary";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { STUDIO_STATUSES, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow } from "@shared/schema";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
 import {
@@ -47,6 +49,8 @@ import {
   Upload,
   Volume2,
   VolumeX,
+  Film,
+  Image as ImageIcon,
 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -148,6 +152,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
   // scroll — once you're on air you can't go hunting for a button.
   const [mode, setMode] = useState<"setup" | "live">("setup");
   const [monitorMuted, setMonitorMuted] = useState(true);
+  const [mediaPicker, setMediaPicker] = useState<null | "image" | "video" | "all">(null);
 
   const { data: studios } = useQuery<(StudioRow & { isPrimary: boolean })[]>({
     queryKey: ["/api/admin/studios"],
@@ -776,6 +781,10 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                   fallbackPlaying: studio?.fallbackPlaying,
                   fallbackVideoUrl: studio?.fallbackVideoUrl,
                   fallbackLabel: studio?.fallbackLabel,
+                  stageMediaPlaying: studio?.stageMediaPlaying,
+                  stageMediaUrl: studio?.stageMediaUrl,
+                  stageMediaKind: studio?.stageMediaKind,
+                  stageMediaLabel: studio?.stageMediaLabel,
                   eventName: currentStudio?.name,
                 }}
                 muted={monitorMuted}
@@ -822,6 +831,20 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
               testId="button-deck-standby"
             />
 
+            <DeckButton
+              icon={ImageIcon}
+              label="Share image"
+              onClick={() => setMediaPicker("image")}
+              testId="button-deck-image"
+            />
+            <DeckButton
+              icon={Film}
+              label="Share video"
+              active={studio?.stageMediaPlaying}
+              onClick={() => setMediaPicker("video")}
+              testId="button-deck-video"
+            />
+
             <span className="mx-1 h-8 w-px bg-white/15" />
 
             <a
@@ -844,9 +867,6 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
             </a>
 
             <div className="ml-auto flex items-center gap-2">
-              <span className="hidden text-[11px] text-white/40 sm:block">
-                Sharing images and video to the stage is the next build.
-              </span>
               <Button
                 size="sm"
                 className={`h-9 gap-1.5 rounded-full px-4 font-semibold ${
@@ -864,6 +884,27 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
           </div>
         </div>
       )}
+
+      <Dialog open={mediaPicker !== null} onOpenChange={(o) => !o && setMediaPicker(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Put something on the stage</DialogTitle>
+            <DialogDescription>
+              This replaces the cameras on air until you stop it. The standby clip still overrides everything.
+            </DialogDescription>
+          </DialogHeader>
+          <MediaLibrary
+            adminGet={adminGet}
+            adminSend={adminSend}
+            studioId={studioId}
+            playingUrl={studio?.stageMediaUrl ?? ""}
+            isPlaying={Boolean(studio?.stageMediaPlaying)}
+            onChanged={refresh}
+            only={mediaPicker === "all" ? undefined : (mediaPicker ?? undefined)}
+            compact
+          />
+        </DialogContent>
+      </Dialog>
 
       {mode === "setup" && (
       <CardContent className="flex flex-col gap-6 pt-6">
@@ -981,6 +1022,10 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                   fallbackPlaying: studio?.fallbackPlaying,
                   fallbackVideoUrl: studio?.fallbackVideoUrl,
                   fallbackLabel: studio?.fallbackLabel,
+                  stageMediaPlaying: studio?.stageMediaPlaying,
+                  stageMediaUrl: studio?.stageMediaUrl,
+                  stageMediaKind: studio?.stageMediaKind,
+                  stageMediaLabel: studio?.stageMediaLabel,
                   eventName: currentStudio?.name,
                 }}
                 muted
@@ -1268,6 +1313,23 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
                   Save the link
                 </Button>
               </div>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-muted/25 p-4">
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                <Film className="h-3.5 w-3.5 text-primary" /> Media you can put on the stage
+              </div>
+              <p className="mb-3 mt-1 text-xs text-muted-foreground">
+                Intros, outros and sponsor reels the podcasters uploaded, ready to roll on air.
+              </p>
+              <MediaLibrary
+                adminGet={adminGet}
+                adminSend={adminSend}
+                studioId={studioId}
+                playingUrl={studio?.stageMediaUrl ?? ""}
+                isPlaying={Boolean(studio?.stageMediaPlaying)}
+                onChanged={refresh}
+              />
             </div>
 
             {(feeds2 ?? []).length > 0 && (
