@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -20,6 +20,7 @@ import type {
   PlatformInterestRow,
   StudioRow,
   StudioParticipantRow,
+  RecordingRow,
   SponsorInquiryRow,
   InsertSponsorInquiry,
 } from "../shared/schema.js";
@@ -240,6 +241,30 @@ async function ensureSchema() {
   `;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS studio_participants_key_idx ON studio_participants (studio_id, client_key)`;
 
+  await sql`ALTER TABLE studios ADD COLUMN IF NOT EXISTS broadcast_egress_id TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE studios ADD COLUMN IF NOT EXISTS recording_egress_id TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE studios ADD COLUMN IF NOT EXISTS recording_signup_id INTEGER`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS recordings (
+      id SERIAL PRIMARY KEY,
+      event_id INTEGER NOT NULL,
+      studio_id INTEGER NOT NULL,
+      signup_id INTEGER,
+      email TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL DEFAULT '',
+      egress_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'Recording',
+      url TEXT NOT NULL DEFAULT '',
+      duration_sec INTEGER NOT NULL DEFAULT 0,
+      size_bytes TEXT NOT NULL DEFAULT '0',
+      started_at TEXT NOT NULL,
+      ended_at TEXT
+    );
+  `;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS recordings_egress_idx ON recordings (egress_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS recordings_email_idx ON recordings (email)`;
+
   await sql`
     CREATE TABLE IF NOT EXISTS platform_interest (
       id SERIAL PRIMARY KEY,
@@ -334,7 +359,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "podcaster_profiles", column: "promo_notes" };
+const SCHEMA_SENTINEL = { table: "studios", column: "recording_egress_id" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
@@ -433,6 +458,21 @@ export interface IStorage {
   ): Promise<StudioParticipantRow>;
   setParticipantState(id: number, state: string): Promise<StudioParticipantRow | undefined>;
   removeStudioParticipant(id: number): Promise<void>;
+  createRecording(v: {
+    eventId: number;
+    studioId: number;
+    signupId?: number | null;
+    email: string;
+    title: string;
+    egressId: string;
+  }): Promise<RecordingRow>;
+  finishRecording(
+    egressId: string,
+    v: { status: string; url?: string; durationSec?: number; sizeBytes?: string },
+  ): Promise<RecordingRow | undefined>;
+  listRecordingsByEmail(email: string): Promise<RecordingRow[]>;
+  listRecordings(eventId?: number): Promise<RecordingRow[]>;
+  getRecording(id: number): Promise<RecordingRow | undefined>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
 }
@@ -838,6 +878,74 @@ class DatabaseStorage implements IStorage {
   async removeStudioParticipant(id: number): Promise<void> {
     await ready();
     await db.delete(studioParticipants).where(eq(studioParticipants.id, id));
+  }
+
+  // ---- Recordings ------------------------------------------------------------
+  async createRecording(v: {
+    eventId: number;
+    studioId: number;
+    signupId?: number | null;
+    email: string;
+    title: string;
+    egressId: string;
+  }): Promise<RecordingRow> {
+    await ready();
+    const [row] = await db
+      .insert(recordings)
+      .values({
+        eventId: v.eventId,
+        studioId: v.studioId,
+        signupId: v.signupId ?? null,
+        email: v.email,
+        title: v.title,
+        egressId: v.egressId,
+        status: "Recording",
+        startedAt: new Date().toISOString(),
+      })
+      .returning();
+    return row;
+  }
+
+  /** Called from the LiveKit webhook, so it has to be safe to run twice. */
+  async finishRecording(
+    egressId: string,
+    v: { status: string; url?: string; durationSec?: number; sizeBytes?: string },
+  ): Promise<RecordingRow | undefined> {
+    await ready();
+    const [row] = await db
+      .update(recordings)
+      .set({
+        status: v.status,
+        url: v.url ?? "",
+        durationSec: v.durationSec ?? 0,
+        sizeBytes: v.sizeBytes ?? "0",
+        endedAt: new Date().toISOString(),
+      })
+      .where(eq(recordings.egressId, egressId))
+      .returning();
+    return row;
+  }
+
+  async listRecordingsByEmail(email: string): Promise<RecordingRow[]> {
+    await ready();
+    return db
+      .select()
+      .from(recordings)
+      .where(eq(recordings.email, email.toLowerCase().trim()))
+      .orderBy(desc(recordings.startedAt));
+  }
+
+  async listRecordings(eventId?: number): Promise<RecordingRow[]> {
+    await ready();
+    const q = db.select().from(recordings);
+    const rows = eventId ? await q.where(eq(recordings.eventId, eventId)) : await q;
+    return rows.sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
+  }
+
+  async getRecording(id: number): Promise<RecordingRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(recordings).where(eq(recordings.id, id));
+    return row;
   }
 
   async getSetting(key: string): Promise<string | null> {

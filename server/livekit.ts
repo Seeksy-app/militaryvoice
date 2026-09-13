@@ -1,4 +1,4 @@
-import { AccessToken, RoomServiceClient, EgressClient, EncodedFileType } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient, EgressClient, EncodedFileType, WebhookReceiver } from "livekit-server-sdk";
 import type { EncodedFileOutput, StreamOutput } from "livekit-server-sdk";
 
 // The media layer. Everything in here is optional: without LIVEKIT_* set the
@@ -92,24 +92,63 @@ export interface BroadcastTarget {
   label: string;
 }
 
+// Recordings are written straight from LiveKit's egress into Supabase Storage
+// over its S3-compatible endpoint, so the file never passes through us. The S3
+// access keys are separate from the service-role key: Supabase dashboard →
+// Storage → S3 Access Keys.
+const S3_BUCKET = process.env.RECORDINGS_BUCKET || "recordings";
+const S3_ACCESS_KEY = process.env.SUPABASE_S3_ACCESS_KEY_ID ?? "";
+const S3_SECRET = process.env.SUPABASE_S3_SECRET_ACCESS_KEY ?? "";
+const S3_REGION = process.env.SUPABASE_S3_REGION ?? "";
+const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
+
+export function isRecordingConfigured(): boolean {
+  return Boolean(isLiveKitConfigured() && S3_ACCESS_KEY && S3_SECRET && S3_REGION && SUPABASE_URL);
+}
+
+export function recordingsBucket(): string {
+  return S3_BUCKET;
+}
+
+function s3Upload() {
+  return {
+    accessKey: S3_ACCESS_KEY,
+    secret: S3_SECRET,
+    region: S3_REGION,
+    bucket: S3_BUCKET,
+    endpoint: `${SUPABASE_URL.replace(/\/$/, "")}/storage/v1/s3`,
+    forcePathStyle: true,
+  };
+}
+
+function mp4Output(filepath: string): EncodedFileOutput {
+  return {
+    fileType: EncodedFileType.MP4,
+    filepath,
+    output: { case: "s3", value: s3Upload() },
+  } as unknown as EncodedFileOutput;
+}
+
 /**
- * Starts one composite of the stage and pushes it to every destination at
- * once, optionally writing the recording at the same time. Returns the egress
- * id, which is what later add/remove calls need.
+ * The long broadcast: one composite of the stage pushed to every destination
+ * at once, running for the whole event. Returns the egress id, which is what
+ * later add/remove calls need.
  */
-export async function startBroadcast(
-  room: string,
-  targets: BroadcastTarget[],
-  recordingFilepath?: string,
-): Promise<string> {
+export async function startBroadcast(room: string, targets: BroadcastTarget[]): Promise<string> {
   const stream: StreamOutput | undefined = targets.length
     ? ({ protocol: 1 /* RTMP */, urls: targets.map((t) => t.url) } as StreamOutput)
     : undefined;
-  const file: EncodedFileOutput | undefined = recordingFilepath
-    ? ({ fileType: EncodedFileType.MP4, filepath: recordingFilepath } as EncodedFileOutput)
-    : undefined;
+  const info = await egress().startRoomCompositeEgress(room, { stream }, { layout: "grid" });
+  return info.egressId;
+}
 
-  const info = await egress().startRoomCompositeEgress(room, { stream, file }, { layout: "grid" });
+/**
+ * The short one: a separate composite recorded to a single MP4 for one
+ * podcaster's slot. Runs alongside the broadcast, so stopping it never touches
+ * what's going out.
+ */
+export async function startSegmentRecording(room: string, filepath: string): Promise<string> {
+  const info = await egress().startRoomCompositeEgress(room, { file: mp4Output(filepath) }, { layout: "grid" });
   return info.egressId;
 }
 
@@ -122,6 +161,13 @@ export async function updateBroadcastTargets(
   await egress().updateStream(egressId, add, remove);
 }
 
-export async function stopBroadcast(egressId: string): Promise<void> {
+export async function stopEgressById(egressId: string): Promise<void> {
   await egress().stopEgress(egressId);
+}
+
+let _hooks: WebhookReceiver | null = null;
+/** Verifies the Authorization header LiveKit signs its webhooks with. */
+export function webhooks(): WebhookReceiver {
+  if (!_hooks) _hooks = new WebhookReceiver(LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+  return _hooks;
 }

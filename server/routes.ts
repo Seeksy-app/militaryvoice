@@ -1,3 +1,4 @@
+import express from "express";
 import type { Express, Request, Response, NextFunction } from "express";
 import crypto from "node:crypto";
 import multer from "multer";
@@ -31,11 +32,18 @@ import {
 import { fromError } from "zod-validation-error";
 import {
   isLiveKitConfigured,
+  isRecordingConfigured,
   publicLiveKitUrl,
   roomName,
+  startBroadcast,
+  startSegmentRecording,
+  stopEgressById,
   studioToken,
   syncParticipantState,
+  updateBroadcastTargets,
+  webhooks,
 } from "./livekit.js";
+import { ensureRecordingsBucket, signedRecordingUrl } from "./recordingStorage.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
@@ -583,6 +591,34 @@ export function registerRoutes(app: Express): void {
     },
   );
 
+  // ---- A podcaster's own recordings ---------------------------------------------
+  //      Their session lands here on its own once the studio stops recording.
+  app.get("/api/host/recordings", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = getSessionEmail(req) ?? "";
+    res.json(await storage.listRecordingsByEmail(email));
+  });
+
+  /** A short-lived signed link, made on demand — the bucket itself is private. */
+  app.get("/api/host/recordings/:id/download", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const row = await storage.getRecording(Number(req.params.id));
+    if (!row || row.email !== email || row.status !== "Ready" || !row.url) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    res.json({ url: await signedRecordingUrl(row.url) });
+  });
+
+  app.get("/api/admin/recordings/:id/download", requireAdmin, async (req, res) => {
+    const row = await storage.getRecording(Number(req.params.id));
+    if (!row || row.status !== "Ready" || !row.url) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    res.json({ url: await signedRecordingUrl(row.url) });
+  });
+
   app.delete("/api/host/assets/:id", requireHostSession, async (req, res) => {
     const email = (req as any).hostEmail as string;
     const id = Number(req.params.id);
@@ -941,6 +977,138 @@ export function registerRoutes(app: Express): void {
     }
     await syncParticipantState(roomName(row.studioId), `p-${row.id}`, state);
     res.json(row);
+  });
+
+  // ---- Studio: going out, and being kept ---------------------------------------
+  //      Two egresses run off the same room. The broadcast is one long
+  //      composite pushed to every destination at once; the recording is a
+  //      short one per podcaster slot. Stopping a slot recording never touches
+  //      what's on air.
+  app.post("/api/admin/studio/broadcast", requireAdmin, async (req, res) => {
+    if (!isLiveKitConfigured()) {
+      res.status(503).json({ message: "No media layer configured for this event." });
+      return;
+    }
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const studio = await storage.getOrCreateStudio(eventId);
+    const action = String(req.body?.action ?? "");
+
+    if (action === "stop") {
+      if (studio.broadcastEgressId) await stopEgressById(studio.broadcastEgressId);
+      res.json(await storage.updateStudio(studio.id, { broadcastEgressId: "" }));
+      return;
+    }
+    if (action !== "start") {
+      res.status(400).json({ message: "Unknown action" });
+      return;
+    }
+    if (studio.broadcastEgressId) {
+      res.status(409).json({ message: "Already going out. Stop it first." });
+      return;
+    }
+    const targets = Array.isArray(req.body?.targets)
+      ? (req.body.targets as { url?: unknown; label?: unknown }[])
+          .map((t) => ({ url: String(t.url ?? "").trim(), label: String(t.label ?? "").trim() }))
+          .filter((t) => /^rtmps?:\/\//i.test(t.url))
+      : [];
+    const egressId = await startBroadcast(roomName(studio.id), targets);
+    res.json(await storage.updateStudio(studio.id, { broadcastEgressId: egressId }));
+  });
+
+  /** Add or drop one destination while the broadcast is already running. */
+  app.patch("/api/admin/studio/broadcast", requireAdmin, async (req, res) => {
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const studio = await storage.getOrCreateStudio(eventId);
+    if (!studio.broadcastEgressId) {
+      res.status(409).json({ message: "Nothing is going out yet." });
+      return;
+    }
+    const clean = (v: unknown) =>
+      (Array.isArray(v) ? v : []).map((u) => String(u).trim()).filter((u) => /^rtmps?:\/\//i.test(u));
+    await updateBroadcastTargets(studio.broadcastEgressId, clean(req.body?.add), clean(req.body?.remove));
+    res.json({ ok: true });
+  });
+
+  app.post("/api/admin/studio/record", requireAdmin, async (req, res) => {
+    if (!isRecordingConfigured()) {
+      res.status(503).json({ message: "Recording storage isn't set up yet." });
+      return;
+    }
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const studio = await storage.getOrCreateStudio(eventId);
+    const action = String(req.body?.action ?? "");
+
+    if (action === "stop") {
+      if (studio.recordingEgressId) await stopEgressById(studio.recordingEgressId);
+      res.json(await storage.updateStudio(studio.id, { recordingEgressId: "", recordingSignupId: null }));
+      return;
+    }
+    if (action !== "start") {
+      res.status(400).json({ message: "Unknown action" });
+      return;
+    }
+    if (studio.recordingEgressId) {
+      res.status(409).json({ message: "Already recording this slot." });
+      return;
+    }
+    const signupId = Number(req.body?.signupId) || 0;
+    const signup = signupId ? await storage.getSignupById(signupId) : undefined;
+    await ensureRecordingsBucket();
+
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const filepath = `event-${eventId}/${signup ? `slot-${signup.slotIndex}-` : ""}${stamp}.mp4`;
+    const egressId = await startSegmentRecording(roomName(studio.id), filepath);
+
+    await storage.createRecording({
+      eventId,
+      studioId: studio.id,
+      signupId: signup?.id ?? null,
+      email: (signup?.email ?? "").toLowerCase().trim(),
+      title: signup?.podcastName || studio.name,
+      egressId,
+    });
+    res.json(await storage.updateStudio(studio.id, { recordingEgressId: egressId, recordingSignupId: signup?.id ?? null }));
+  });
+
+  app.get("/api/admin/recordings", requireAdmin, async (req, res) => {
+    noStore(res);
+    const eventId = Number(req.query.eventId) || undefined;
+    res.json(await storage.listRecordings(eventId));
+  });
+
+  // ---- LiveKit webhook ----------------------------------------------------------
+  //      LiveKit signs this with the same API key pair, and sends it as
+  //      application/webhook+json — which express.json() leaves alone, so the
+  //      raw body is still here to verify against.
+  app.post("/api/livekit/webhook", express.raw({ type: "*/*" }), async (req, res) => {
+    let event;
+    try {
+      const raw = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body ?? "");
+      event = await webhooks().receive(raw, req.get("Authorization"));
+    } catch {
+      res.status(401).json({ message: "Bad signature" });
+      return;
+    }
+    // Always 200 once it's verified: LiveKit retries, and a retry storm on a
+    // bug of ours would be worse than a missed row.
+    res.json({ ok: true });
+
+    if (event.event !== "egress_ended" || !event.egressInfo) return;
+    const info = event.egressInfo;
+    const file = info.fileResults?.[0];
+    // EGRESS_COMPLETE is 3 in the enum; anything else means it didn't land.
+    const ok = Number(info.status) === 3 && Boolean(file?.filename);
+    try {
+      await storage.finishRecording(info.egressId, {
+        status: ok ? "Ready" : "Failed",
+        url: ok ? String(file!.filename) : "",
+        // LiveKit reports duration in nanoseconds.
+        durationSec: file?.duration ? Math.round(Number(file.duration) / 1_000_000_000) : 0,
+        sizeBytes: file?.size ? String(file.size) : "0",
+      });
+    } catch (err) {
+      console.error("Couldn't record the end of egress", info.egressId, err);
+    }
   });
 
   app.delete("/api/admin/studio/participants/:id", requireAdmin, async (req, res) => {

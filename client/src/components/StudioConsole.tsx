@@ -36,6 +36,8 @@ import {
   Copy,
   AlertTriangle,
   Clock,
+  Disc,
+  Square,
 } from "lucide-react";
 
 interface Props {
@@ -136,12 +138,20 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
     onError: (e: Error) => toast({ title: "Couldn't move them", description: e.message, variant: "destructive" }),
   });
 
+  const record = useMutation({
+    mutationFn: async (body: { action: "start" | "stop"; signupId?: number }) =>
+      adminSend("POST", "/api/admin/studio/record", body),
+    onSuccess: () => refresh(),
+    onError: (e: Error) => toast({ title: "Recording didn't change", description: e.message, variant: "destructive" }),
+  });
+
   const drop = useMutation({
     mutationFn: async (id: number) => adminSend("DELETE", `/api/admin/studio/participants/${id}`),
     onSuccess: () => refresh(),
   });
 
   const live = studio?.status === "Live";
+  const recording = Boolean(studio?.recordingEgressId);
   const stageFull = !!studio && onStage.length >= studio.maxOnStage;
   const joinUrl = typeof window !== "undefined" ? `${window.location.origin}/studio` : "/studio";
 
@@ -346,6 +356,47 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
             ))}
           </div>
         )}
+
+        {/* keeping the slot: a separate egress from whatever is going out, so
+            stopping it never touches the broadcast */}
+        <div
+          className={`flex flex-wrap items-center gap-3 rounded-xl border p-4 ${
+            recording ? "border-[#ED1C24]/50 bg-[#ED1C24]/5" : "border-border bg-muted/30"
+          }`}
+        >
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Disc className={`h-3.5 w-3.5 ${recording ? "text-[#ED1C24]" : "text-primary"}`} /> Recording
+          </div>
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+            {recording
+              ? "This slot is being kept. It lands in the podcaster's dashboard when you stop."
+              : current?.title
+                ? `Ready to keep "${current.title}".`
+                : "Records the room to one file for the slot that's on air."}
+          </p>
+          {recording ? (
+            <Button
+              size="sm"
+              className="gap-1.5 rounded-full bg-[#ED1C24] text-white hover:bg-[#c81820]"
+              disabled={record.isPending}
+              onClick={() => record.mutate({ action: "stop" })}
+              data-testid="button-studio-record-stop"
+            >
+              <Square className="h-3.5 w-3.5" /> Stop and save
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 rounded-full"
+              disabled={record.isPending}
+              onClick={() => record.mutate({ action: "start", signupId: current?.signupId ?? undefined })}
+              data-testid="button-studio-record-start"
+            >
+              <Disc className="h-3.5 w-3.5" /> Record this slot
+            </Button>
+          )}
+        </div>
 
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>

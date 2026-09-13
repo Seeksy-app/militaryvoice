@@ -558,10 +558,39 @@ export const studios = pgTable("studios", {
   fallbackVideoUrl: text("fallback_video_url").notNull().default(""),
   fallbackLabel: text("fallback_label").notNull().default(""),
   fallbackPlaying: boolean("fallback_playing").notNull().default(false),
+  // Two separate egresses run off the same room: one long broadcast that goes
+  // out to every destination for the whole event, and one short recording per
+  // slot so each podcaster gets their own file.
+  broadcastEgressId: text("broadcast_egress_id").notNull().default(""),
+  recordingEgressId: text("recording_egress_id").notNull().default(""),
+  // Whose slot the current recording belongs to.
+  recordingSignupId: integer("recording_signup_id"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
 export type StudioRow = typeof studios.$inferSelect;
+
+// One finished file per podcaster slot. Written when LiveKit tells us the
+// egress ended, so the row always points at something that actually exists.
+export const recordings = pgTable("recordings", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  studioId: integer("studio_id").notNull(),
+  signupId: integer("signup_id"),
+  // Who it belongs to, kept flat so a podcaster's dashboard can find it even
+  // if the signup is later moved or cancelled.
+  email: text("email").notNull().default(""),
+  title: text("title").notNull().default(""),
+  egressId: text("egress_id").notNull(),
+  status: text("status").notNull().default("Recording"),
+  url: text("url").notNull().default(""),
+  durationSec: integer("duration_sec").notNull().default(0),
+  sizeBytes: text("size_bytes").notNull().default("0"),
+  startedAt: text("started_at").notNull(),
+  endedAt: text("ended_at"),
+});
+export type RecordingRow = typeof recordings.$inferSelect;
+export const RECORDING_STATUSES = ["Recording", "Ready", "Failed"] as const;
 
 export const studioParticipants = pgTable("studio_participants", {
   id: serial("id").primaryKey(),
