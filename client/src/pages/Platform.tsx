@@ -31,35 +31,47 @@ import {
   Sparkles,
   Users,
   Radio,
+  RefreshCw,
 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
 const CAPABILITIES = [
   {
-    icon: Megaphone,
-    title: "Promotion",
-    body: "A public event page, a live lineup, and a speaker card for everyone taking part — each with their own links, socials and episode player. Reminder sign-ups and share text are built in, so your speakers do the promoting for you.",
+    icon: CalendarClock,
+    title: "Scheduling",
+    body: "Publish your slots and let speakers claim their own time, shown in their own zone. They fill in their details once and every slot they take reuses them. A cancellation puts the time straight back on the board.",
+    saves: "No more back-and-forth over time zones",
+  },
+  {
+    icon: RefreshCw,
+    title: "Everyone in sync",
+    body: "One change updates everywhere at once. A speaker renames their show or swaps their time and the public page, the lineup, the run of show and the studio all follow immediately. Confirmations and reminders go out on their own.",
+    saves: "One source of truth, never a stale document",
   },
   {
     icon: ListOrdered,
     title: "Run of show",
-    body: "A minute-by-minute plan generated from your schedule: pre-roll, sponsor reads, intros, every segment and every handoff. Edit any line, add your own, export it for the control room. Rebuild when the lineup changes and your edits stay put.",
-  },
-  {
-    icon: CalendarClock,
-    title: "Scheduling",
-    body: "Publish open slots and let speakers claim their own time in their own zone. Profiles are entered once and reused, cancellations return the slot to the board, and the public agenda updates itself.",
+    body: "A minute-by-minute plan generated from your real schedule: pre-roll, sponsor reads, intros, every segment and handoff. Edit any line, add your own, export it for the control room. Rebuild when the lineup shifts and your edits stay put.",
+    saves: "Hours of rebuilding a spreadsheet by hand",
   },
   {
     icon: MonitorPlay,
     title: "Studio",
-    body: "A place for speakers to arrive, get checked and go live. They upload intros, outros, mid-rolls and images ahead of time, labelled, so the operator has everything cued before the segment starts.",
+    body: "A place for speakers to arrive, get checked and go live. Intros, outros, mid-rolls and images are uploaded ahead of time and labelled, so the operator has everything cued before the segment starts.",
+    saves: "No scrambling for a file mid-broadcast",
+  },
+  {
+    icon: Megaphone,
+    title: "Promotion",
+    body: "A public event page and live lineup that build themselves as speakers sign up, each with their own card, links, socials and episode player. Reminder sign-ups and ready-made share text are built in.",
+    saves: "Your speakers do the promoting for you",
   },
   {
     icon: Plug,
     title: "Integrations",
-    body: "Zoom, and any RTMP destination you already stream to. Bring the tools your team knows rather than learning ours.",
+    body: "Zoom, and any RTMP destination you already stream to. Bring the tools your team already knows instead of learning ours, and point the output wherever your audience already is.",
+    saves: "Nothing new for your crew to learn",
   },
 ];
 
@@ -192,14 +204,14 @@ export default function Platform() {
       {/* ------------------------------------------------------------- hero */}
       <section className="relative overflow-hidden bg-[#053877] text-white">
         <img
-          src="/hero-2.jpg"
+          src="/platform-hero.jpg"
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover object-[65%_center] opacity-90"
+          className="absolute inset-0 h-full w-full object-cover object-[center_42%]"
         />
         <div
           aria-hidden="true"
-          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.95)_0%,rgba(0,7,65,0.84)_40%,rgba(5,56,119,0.5)_70%,rgba(5,56,119,0.28)_100%)]"
+          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.96)_0%,rgba(0,7,65,0.9)_42%,rgba(5,56,119,0.72)_72%,rgba(5,56,119,0.55)_100%)]"
         />
         <motion.div
           aria-hidden="true"
@@ -214,7 +226,7 @@ export default function Platform() {
               <Sparkles className="h-3.5 w-3.5 text-[#F0A71F]" /> The platform behind the Podcastathon
             </div>
             <h1 className="text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl" style={HEADLINE_FONT}>
-              Run a live, multi-speaker event
+              Stage a live, multi-speaker event
               <span className="block text-[#F0A71F]">without running it yourself</span>
             </h1>
             <p className="mt-6 text-lg leading-relaxed text-white/85">
@@ -264,26 +276,47 @@ export default function Platform() {
               One place for everyone taking part, and everyone watching
             </h2>
             <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-              Most live events are held together by a spreadsheet, a group chat and someone's memory. Speakers email
+              Most live events are held together by a spreadsheet, a group chat and somebody's memory. Speakers email
               their files. Times get confused across zones. The person in the control room is reading a document that
               went out of date two days ago.
             </p>
             <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-              This replaces that. Speakers claim their own slot and fill in their own details. The public page builds
-              itself as they do. The run of show is generated from the real schedule, and it changes when the schedule
-              changes.
+              The cost of that is time, and it's nearly all spent chasing people and re-writing the same information.
+              Here, speakers enter their own details and the whole event updates itself around them. Change one thing
+              and the public page, the lineup, the run of show and the studio all agree, instantly.
             </p>
           </div>
 
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {CAPABILITIES.map(({ icon: Icon, title, body }) => (
-              <div key={title} className="flex h-full flex-col rounded-2xl border border-border bg-card p-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Icon className="h-5 w-5" />
+          <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {CAPABILITIES.map(({ icon: Icon, title, body, saves }, i) => (
+              <motion.div
+                key={title}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-60px" }}
+                transition={{ duration: 0.4, delay: Math.min(i, 5) * 0.06 }}
+                className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-lg"
+              >
+                <div className="h-1 bg-[#F0A71F]" />
+                <div className="flex flex-1 flex-col p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#053877] text-[#F0A71F]">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <span className="font-mono text-xs font-bold text-muted-foreground/50">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                  </div>
+                  <h3 className="mt-4 text-lg font-semibold tracking-tight" style={HEADLINE_FONT}>
+                    {title}
+                  </h3>
+                  <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">{body}</p>
+                  <p className="mt-4 flex items-start gap-2 border-t border-border pt-3 text-sm font-medium text-primary">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
+                    {saves}
+                  </p>
                 </div>
-                <h3 className="mt-4 text-base font-semibold">{title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{body}</p>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
