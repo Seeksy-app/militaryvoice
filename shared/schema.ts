@@ -586,6 +586,9 @@ export const recordings = pgTable("recordings", {
   url: text("url").notNull().default(""),
   durationSec: integer("duration_sec").notNull().default(0),
   sizeBytes: text("size_bytes").notNull().default("0"),
+  // Why it failed, straight from LiveKit, so a producer can see it without
+  // anyone digging through logs.
+  error: text("error").notNull().default(""),
   startedAt: text("started_at").notNull(),
   endedAt: text("ended_at"),
 });

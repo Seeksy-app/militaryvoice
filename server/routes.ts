@@ -1628,6 +1628,7 @@ export function registerRoutes(app: Express): void {
         // LiveKit reports duration in nanoseconds.
         durationSec: file?.duration ? Math.round(Number(file.duration) / 1_000_000_000) : 0,
         sizeBytes: file?.size ? String(file.size) : "0",
+        error: ok ? "" : String(info.error ?? "The recorder stopped without saving."),
       });
     } catch (err) {
       console.error("Couldn't record the end of egress", info.egressId, err);

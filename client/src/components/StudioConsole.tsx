@@ -45,6 +45,8 @@ import {
   Trash2,
   Check,
   Upload,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -64,7 +66,7 @@ interface StudioPayload {
 /** Live camera thumbnail for one participant, or their initials if they
  *  haven't published yet. Muted: the control room monitors on the stage feed,
  *  not by playing every green-room mic at once. */
-function FeedThumb({ feed, initials }: { feed?: ProducerFeed; initials: string }) {
+function FeedThumb({ feed, initials, fill }: { feed?: ProducerFeed; initials: string; fill?: boolean }) {
   const ref = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
@@ -77,13 +79,54 @@ function FeedThumb({ feed, initials }: { feed?: ProducerFeed; initials: string }
   }, [feed?.video]);
 
   return (
-    <div className="relative h-11 w-[74px] shrink-0 overflow-hidden rounded-lg bg-[#053877]">
+    <div
+      className={
+        fill
+          ? "absolute inset-0 overflow-hidden bg-[#053877]"
+          : "relative h-11 w-[74px] shrink-0 overflow-hidden rounded-lg bg-[#053877]"
+      }
+    >
       {feed?.video ? (
-        <video ref={ref} autoPlay playsInline muted className="h-full w-full object-cover" />
+        <video ref={ref} autoPlay playsInline muted className="h-full w-full object-contain" />
       ) : (
         <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white">{initials}</div>
       )}
     </div>
+  );
+}
+
+/** One control on the live deck. Icon over label, so the row scans at a glance. */
+function DeckButton({
+  icon: Icon,
+  label,
+  onClick,
+  active,
+  amber,
+  testId,
+}: {
+  icon: typeof Disc;
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+  amber?: boolean;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors ${
+        active
+          ? amber
+            ? "bg-[#F0A71F] text-[#1a1200]"
+            : "bg-[#ED1C24] text-white"
+          : "bg-white/8 text-white/80 hover:bg-white/15"
+      }`}
+      data-testid={testId}
+    >
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
   );
 }
 
@@ -101,6 +144,10 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
     return Number.isFinite(v) && v > 0 ? v : null;
   });
   const [renaming, setRenaming] = useState<string | null>(null);
+  // Setup is a form you scroll. Live is a control surface that must never
+  // scroll — once you're on air you can't go hunting for a button.
+  const [mode, setMode] = useState<"setup" | "live">("setup");
+  const [monitorMuted, setMonitorMuted] = useState(true);
 
   const { data: studios } = useQuery<(StudioRow & { isPrimary: boolean })[]>({
     queryKey: ["/api/admin/studios"],
@@ -362,6 +409,10 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
     .map((f) => ({ identity: f.identity, name: f.name, video: f.video, audio: f.audio, speaking: f.speaking }))
     .sort((a, b) => a.identity.localeCompare(b.identity));
 
+  useEffect(() => {
+    if (broadcasting) setMode("live");
+  }, [broadcasting]);
+
   const houseDests = (dests ?? []).filter((d) => d.enabled && !d.signupId).length;
   const steps = [
     { n: 1, label: "Get people in", done: present.length > 0, hint: "Send them the join link." },
@@ -499,6 +550,22 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
               </Button>
             )}
 
+            <div className="flex overflow-hidden rounded-full border border-white/20 bg-white/5">
+              {(["setup", "live"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`px-3.5 py-1.5 text-xs font-semibold capitalize transition-colors ${
+                    mode === m ? "bg-white text-[#000741]" : "text-white/65 hover:text-white"
+                  }`}
+                  onClick={() => setMode(m)}
+                  data-testid={`button-mode-${m}`}
+                >
+                  {m === "setup" ? "Set up" : "Live"}
+                </button>
+              ))}
+            </div>
+
             <span className="mx-1 hidden h-7 w-px bg-white/15 sm:block" />
 
             <Button
@@ -558,6 +625,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
         </div>
 
         {/* ------------------------------------------------ where you are in it */}
+        {mode === "setup" && (
         <div className="relative mt-4 flex flex-wrap items-center gap-x-2 gap-y-2 border-t border-white/10 pt-3">
           {steps.map((x, i) => {
             const isNow = step?.n === x.n;
@@ -582,10 +650,11 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
             );
           })}
         </div>
+        )}
       </div>
 
       {/* --------------------------------------------------- what to do next */}
-      {step && (
+      {mode === "setup" && step && (
         <div className="flex flex-wrap items-center gap-3 border-b border-border bg-[#F0A71F]/10 px-5 py-3">
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#F0A71F] text-xs font-bold text-[#1a1200]">
             {step.n}
@@ -612,6 +681,191 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
         </div>
       )}
 
+      {/* ------------------------------------------------- the live surface */}
+      {mode === "live" && (
+        <div className="flex h-[calc(100vh-15rem)] min-h-[520px] flex-col bg-[#04102b]">
+          <div className="flex min-h-0 flex-1">
+            {/* green room, down the left, where a producer's eye already is */}
+            <aside className="flex w-[248px] shrink-0 flex-col border-r border-white/10">
+              <div className="flex items-center justify-between px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">
+                <span className="flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5" /> Green room
+                </span>
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-white/80">{greenRoom.length}</span>
+              </div>
+
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3">
+                {greenRoom.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-white/15 p-4 text-center text-xs text-white/45">
+                    Nobody waiting.
+                  </p>
+                ) : (
+                  greenRoom.map((p) => (
+                    <div key={p.id} className="overflow-hidden rounded-xl bg-white/[0.06]">
+                      <div className="relative aspect-video bg-black">
+                        <FeedThumb
+                          feed={feeds.get(`p-${p.id}`)}
+                          initials={(p.displayName || "?").slice(0, 2).toUpperCase()}
+                          fill
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 p-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-xs font-semibold text-white">{p.displayName || "Unnamed"}</div>
+                          <div className="flex items-center gap-1.5 text-white/45">
+                            {p.camReady ? (
+                              <Video className="h-3 w-3 text-emerald-400" />
+                            ) : (
+                              <VideoOff className="h-3 w-3 text-[#ED1C24]" />
+                            )}
+                            {p.micReady ? (
+                              <Mic className="h-3 w-3 text-emerald-400" />
+                            ) : (
+                              <MicOff className="h-3 w-3 text-[#ED1C24]" />
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="h-7 gap-1 rounded-full px-2.5 text-[11px]"
+                          disabled={stageFull}
+                          title={stageFull ? `Stage is full at ${studio?.maxOnStage}` : "Bring them on stage"}
+                          onClick={() => setState.mutate({ id: p.id, state: "On stage" })}
+                          data-testid={`button-live-up-${p.id}`}
+                        >
+                          <ArrowUp className="h-3 w-3" /> On
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {onStage.length > 0 && (
+                <div className="border-t border-white/10 px-3 py-2.5">
+                  <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">
+                    On stage · {onStage.length}/{studio?.maxOnStage ?? 5}
+                  </div>
+                  <div className="space-y-1.5">
+                    {onStage.map((p) => (
+                      <div key={p.id} className="flex items-center gap-2 rounded-lg bg-[#ED1C24]/15 px-2 py-1.5">
+                        <span className="min-w-0 flex-1 truncate text-xs font-medium text-white">
+                          {p.displayName || "Unnamed"}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 gap-1 rounded-full px-2 text-[11px] text-white/70 hover:bg-white/10 hover:text-white"
+                          onClick={() => setState.mutate({ id: p.id, state: "Green room" })}
+                          data-testid={`button-live-down-${p.id}`}
+                        >
+                          <ArrowDown className="h-3 w-3" /> Off
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </aside>
+
+            {/* the programme, filling whatever is left */}
+            <div className="relative min-w-0 flex-1 bg-black">
+              <StageGrid
+                tiles={monitorTiles}
+                meta={{
+                  fallbackPlaying: studio?.fallbackPlaying,
+                  fallbackVideoUrl: studio?.fallbackVideoUrl,
+                  fallbackLabel: studio?.fallbackLabel,
+                  eventName: currentStudio?.name,
+                }}
+                muted={monitorMuted}
+                idleTitle={currentStudio?.name}
+              />
+              {broadcasting && (
+                <span className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> On air
+                </span>
+              )}
+              {recording && (
+                <span className="pointer-events-none absolute right-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-[11px] font-semibold text-white">
+                  <Disc className="h-3 w-3 text-[#ED1C24]" /> Recording
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* the deck */}
+          <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-[#000741] px-4 py-3">
+            <DeckButton
+              icon={monitorMuted ? VolumeX : Volume2}
+              label={monitorMuted ? "Monitor muted" : "Monitor on"}
+              onClick={() => setMonitorMuted((v) => !v)}
+              testId="button-deck-volume"
+            />
+            <DeckButton
+              icon={Disc}
+              label={recording ? "Stop and save" : "Record"}
+              active={recording}
+              onClick={() =>
+                record.mutate(
+                  recording ? { action: "stop" } : { action: "start", signupId: current?.signupId ?? undefined },
+                )
+              }
+              testId="button-deck-record"
+            />
+            <DeckButton
+              icon={PlayCircle}
+              label={studio?.fallbackPlaying ? "Stop standby" : "Roll standby"}
+              active={studio?.fallbackPlaying}
+              amber
+              onClick={() => patchStudio.mutate({ fallbackPlaying: !studio?.fallbackPlaying })}
+              testId="button-deck-standby"
+            />
+
+            <span className="mx-1 h-8 w-px bg-white/15" />
+
+            <a
+              href={joinUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/15"
+              data-testid="link-deck-join"
+            >
+              <Video className="h-4 w-4" /> Join as host
+            </a>
+            <a
+              href={watchUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/15"
+              data-testid="link-deck-watch"
+            >
+              <Radio className="h-4 w-4" /> Watch page
+            </a>
+
+            <div className="ml-auto flex items-center gap-2">
+              <span className="hidden text-[11px] text-white/40 sm:block">
+                Sharing images and video to the stage is the next build.
+              </span>
+              <Button
+                size="sm"
+                className={`h-9 gap-1.5 rounded-full px-4 font-semibold ${
+                  broadcasting
+                    ? "bg-white/15 text-white hover:bg-white/25"
+                    : "bg-[#ED1C24] text-white hover:bg-[#c81820]"
+                }`}
+                disabled={broadcast.isPending}
+                onClick={() => broadcast.mutate(broadcasting ? "stop" : "start")}
+                data-testid="button-deck-broadcast"
+              >
+                <Signal className="h-3.5 w-3.5" /> {broadcasting ? "Stop the broadcast" : "Go out live"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mode === "setup" && (
       <CardContent className="flex flex-col gap-6 pt-6">
         {studio?.fallbackPlaying && (
           <div
@@ -1055,6 +1309,7 @@ export function StudioConsole({ adminGet, adminSend }: Props) {
           </div>
         </section>
       </CardContent>
+      )}
     </Card>
   );
 }

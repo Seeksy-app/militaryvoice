@@ -9,7 +9,19 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useStudioRoom, type RoomPeer } from "@/hooks/use-studio-room";
 import type { StudioParticipantRow } from "@shared/schema";
-import { Mic, MicOff, Video, VideoOff, Radio, Users, CheckCircle2, AlertTriangle, LogOut } from "lucide-react";
+import {
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  Radio,
+  Users,
+  CheckCircle2,
+  AlertTriangle,
+  LogOut,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const KEY_STORAGE = "mv_studio_key";
@@ -38,7 +50,7 @@ function clientKey(): string {
 }
 
 /** Attaches a subscribed LiveKit track to a real media element. */
-function PeerTile({ peer }: { peer: RoomPeer }) {
+function PeerTile({ peer, muted = false }: { peer: RoomPeer; muted?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -63,7 +75,7 @@ function PeerTile({ peer }: { peer: RoomPeer }) {
   return (
     <div className="relative aspect-video overflow-hidden rounded-xl border border-white/15 bg-black">
       <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
-      <audio ref={audioRef} autoPlay />
+      <audio ref={audioRef} autoPlay muted={muted} />
       {!peer.videoTrack && (
         <div className="absolute inset-0 flex items-center justify-center">
           <VideoOff className="h-5 w-5 text-white/30" />
@@ -214,6 +226,11 @@ export default function Studio({ slug }: { slug?: string }) {
     stream,
   });
   const onAirPeers = peers.filter((p) => p.state === "On stage");
+  const greenRoomPeers = peers.filter((p) => p.state !== "On stage");
+  // Whether we're listening to the programme while we wait. Off by default:
+  // hearing the show and the room at once is a mess, and the show is what
+  // you'd be talking over.
+  const [listenToShow, setListenToShow] = useState(false);
 
   const onStage = state?.me?.state === "On stage";
   const live = state?.studio.status === "Live";
@@ -382,16 +399,57 @@ export default function Studio({ slug }: { slug?: string }) {
                 </p>
               </div>
 
-              {onAirPeers.length > 0 && (
+              {/* On air. When you're waiting this is a monitor you can watch;
+                  when you're up there it's the people beside you. */}
+              {(onAirPeers.length > 0 || state?.studio.fallbackPlaying) && (
                 <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-5">
-                  <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/60">
-                    Also on stage
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/60">
+                      <Radio className="h-3.5 w-3.5 text-[#ED1C24]" />
+                      {onStage ? "Also on stage" : "On air now"}
+                    </div>
+                    {!onStage && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 gap-1.5 px-2 text-xs text-white/60 hover:text-white"
+                        onClick={() => setListenToShow((v) => !v)}
+                        data-testid="button-listen-show"
+                      >
+                        {listenToShow ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+                        {listenToShow ? "Listening" : "Listen in"}
+                      </Button>
+                    )}
+                  </div>
+                  <div className={`grid gap-2 ${onAirPeers.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                    {onAirPeers.map((p) => (
+                      // On stage you hear them. Waiting, only if you asked to.
+                      <PeerTile key={p.identity} peer={p} muted={!onStage && !listenToShow} />
+                    ))}
+                  </div>
+                  {!onStage && (
+                    <p className="mt-2 text-xs text-white/45">
+                      They can't hear the green room. Nothing said here reaches the broadcast.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* The green room as an actual room: everyone waiting can see and
+                  hear each other, and none of it goes out. */}
+              {!onStage && greenRoomPeers.length > 0 && (
+                <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-5">
+                  <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/60">
+                    <Users className="h-3.5 w-3.5 text-[#F0A71F]" /> In here with you ({greenRoomPeers.length})
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    {onAirPeers.map((p) => (
+                    {greenRoomPeers.map((p) => (
                       <PeerTile key={p.identity} peer={p} />
                     ))}
                   </div>
+                  <p className="mt-2 text-xs text-white/45">
+                    Talk freely — this is off air.
+                  </p>
                 </div>
               )}
 

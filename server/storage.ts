@@ -267,6 +267,7 @@ async function ensureSchema() {
   `;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS recordings_egress_idx ON recordings (egress_id)`;
   await sql`CREATE INDEX IF NOT EXISTS recordings_email_idx ON recordings (email)`;
+  await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS error TEXT NOT NULL DEFAULT ''`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS destinations (
@@ -396,7 +397,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "ingresses", column: "stream_key" };
+const SCHEMA_SENTINEL = { table: "recordings", column: "error" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
@@ -511,7 +512,7 @@ export interface IStorage {
   }): Promise<RecordingRow>;
   finishRecording(
     egressId: string,
-    v: { status: string; url?: string; durationSec?: number; sizeBytes?: string },
+    v: { status: string; url?: string; durationSec?: number; sizeBytes?: string; error?: string },
   ): Promise<RecordingRow | undefined>;
   listRecordingsByEmail(email: string): Promise<RecordingRow[]>;
   listRecordings(eventId?: number): Promise<RecordingRow[]>;
@@ -1012,7 +1013,7 @@ class DatabaseStorage implements IStorage {
   /** Called from the LiveKit webhook, so it has to be safe to run twice. */
   async finishRecording(
     egressId: string,
-    v: { status: string; url?: string; durationSec?: number; sizeBytes?: string },
+    v: { status: string; url?: string; durationSec?: number; sizeBytes?: string; error?: string },
   ): Promise<RecordingRow | undefined> {
     await ready();
     const [existing] = await db.select().from(recordings).where(eq(recordings.egressId, egressId));
@@ -1023,6 +1024,7 @@ class DatabaseStorage implements IStorage {
         url: v.url || existing?.url || "",
         durationSec: v.durationSec ?? 0,
         sizeBytes: v.sizeBytes ?? "0",
+        error: (v.error ?? "").slice(0, 500),
         endedAt: new Date().toISOString(),
       })
       .where(eq(recordings.egressId, egressId))
