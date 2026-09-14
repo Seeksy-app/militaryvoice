@@ -542,8 +542,8 @@ export default function HostDashboard() {
           <section className="mt-6">
             {inSetup && (
               <p className="mb-6 max-w-2xl text-sm text-muted-foreground">
-                Tell us about your show once. Every slot you claim from here on reuses these details, and your card on
-                the public lineup is built from them.
+                Tell us about your show once. Your card on the public lineup is built from these details, and they
+                move with you if you switch to a different time.
               </p>
             )}
             <ProfileForm

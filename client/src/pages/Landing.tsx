@@ -633,8 +633,8 @@ export default function Landing({ slug }: Props) {
                 Claiming a slot takes about two minutes.
               </h2>
               <p className="mt-4 text-lg leading-relaxed text-white/80">
-                Pick a time, drop your email, tell us about your show once. Every slot you claim after that reuses your
-                photo, show details, and connected socials, so there's nothing to re-enter.
+                Pick a time, drop your email, tell us about your show once. It's one slot per show — and if your plans
+                change, you can move to any open time without re-entering a thing.
               </p>
               <Link href={openSlotsHref}>
                 <Button

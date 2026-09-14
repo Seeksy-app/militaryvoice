@@ -342,8 +342,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
       toast({
         title: isSetup ? "You're set up" : "Profile saved",
         description: isSetup
-          ? "Your show details are saved and will be reused for every slot you claim."
-          : "Your changes apply to every slot you hold.",
+          ? "Your show details are saved. They'll follow you if you move to a different time."
+          : "Your changes apply to the slot you hold.",
       });
       onSaved();
     },

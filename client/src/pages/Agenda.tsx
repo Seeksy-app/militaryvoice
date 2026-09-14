@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
@@ -7,7 +7,7 @@ import { AgendaSignupActions } from "@/components/AgendaSignupActions";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
 import { PodcasterDialog } from "@/components/PodcasterDialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Mic2, ArrowRight, CalendarDays, Radio } from "lucide-react";
+import { Mic2, ArrowRight, CalendarDays, Radio, Play, Check } from "lucide-react";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import {
@@ -23,6 +23,46 @@ import {
 
 interface Props {
   slug?: string;
+}
+
+/**
+ * What the strip on a slot actually says. It used to read "Live" on every
+ * claimed slot regardless of the clock or the format, so a pre-recorded
+ * episode three weeks out announced itself as on air. Amber is reserved for
+ * a show that is genuinely on right now; everything else states the format
+ * or that it has been and gone.
+ */
+function SlotBadge({ start, end, showFormat, now }: { start: Date; end: Date; showFormat?: string; now: number }) {
+  const recorded = showFormat === "prerecorded";
+  const onAir = now >= start.getTime() && now < end.getTime();
+  const over = now >= end.getTime();
+
+  if (onAir) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#1a1200]">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#1a1200] opacity-75" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#1a1200]" />
+        </span>
+        On air
+      </span>
+    );
+  }
+
+  const quiet = "inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/85";
+  if (over) {
+    return (
+      <span className={quiet}>
+        <Check className="h-3 w-3" /> Aired
+      </span>
+    );
+  }
+  return (
+    <span className={quiet}>
+      {recorded ? <Play className="h-3 w-3" /> : <Radio className="h-3 w-3" />}
+      {recorded ? "Recorded" : "Live"}
+    </span>
+  );
 }
 
 export default function Agenda({ slug }: Props) {
@@ -46,6 +86,15 @@ export default function Agenda({ slug }: Props) {
   // Podcaster whose bio popup is open, plus their block start so the dialog can
   // show the on-air window.
   const [selected, setSelected] = useState<{ signup: PublicSignup; start: Date } | null>(null);
+
+  // A slot goes on air and comes off it while the page is open — on the day
+  // this page sits on a screen for 24 hours, so the badges have to move
+  // without a reload. Half a minute is plenty for 30-minute slots.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
   const localZone = useMemo(detectLocalTimeZone, []);
 
   const onAirSettings = event
@@ -201,9 +250,7 @@ export default function Agenda({ slug }: Props) {
                             {formatTimeInZone(s.start, viewZone)}
                             <span className="text-white/60"> – {formatTimeInZone(s.end, viewZone)}</span>
                           </span>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#1a1200]">
-                            <Radio className="h-3 w-3" /> Live
-                          </span>
+                          <SlotBadge start={s.start} end={s.end} showFormat={signup.showFormat} now={now} />
                         </div>
 
                         <button
