@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
 import type { SocialAccount } from "@shared/schema";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Send, Square, RectangleVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -152,94 +152,10 @@ export function ShareYourSlot({
                 ))}
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                Instagram and TikTok have no share-by-link — copy the post above and paste it there, or let us post
-                the card for you below.
+                Instagram and TikTok have no share-by-link — copy the post above and paste it there, or have us post
+                it for you below.
               </p>
             </div>
-
-            {connected.length > 0 && (
-              <div className="rounded-xl border border-[#053877]/20 bg-[#053877]/[0.05] p-4">
-                <p className="text-sm font-semibold text-foreground">Or let us post it for you</p>
-                <p className="text-xs text-muted-foreground">
-                  We send the card above, with your caption, straight to the accounts you pick.
-                </p>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {connected.map((a) => {
-                    const on = picked.includes(a.platform);
-                    return (
-                      <button
-                        key={a.platform}
-                        type="button"
-                        aria-pressed={on}
-                        onClick={() =>
-                          setPicked((p) => (on ? p.filter((x) => x !== a.platform) : [...p, a.platform]))
-                        }
-                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
-                          on ? "border-primary bg-primary/10 text-primary" : "border-border bg-card hover:bg-[#053877]/[0.04]"
-                        }`}
-                        data-testid={`pick-platform-${a.platform}`}
-                      >
-                        <span
-                          className="flex h-5 w-5 items-center justify-center rounded-full text-white"
-                          style={{ background: platformBackground(a.platform) }}
-                        >
-                          <PlatformIcon platform={a.platform} className="h-3 w-3" />
-                        </span>
-                        {platformLabel(a.platform)}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-3 flex items-center gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    {(["square", "story"] as const).map((v) => (
-                      <button
-                        key={v}
-                        type="button"
-                        aria-pressed={variant === v}
-                        onClick={() => setVariant(v)}
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                          variant === v ? "border-primary bg-primary/10 text-primary" : "border-border bg-card"
-                        }`}
-                        data-testid={`pick-size-${v}`}
-                      >
-                        {v === "square" ? "Square (feed)" : "Tall (stories)"}
-                      </button>
-                    ))}
-                  </div>
-                  {/* The exact image that goes out — no surprises after they press post. */}
-                  <img
-                    key={variant}
-                    src={`/og/slot/${signupId}.jpg?size=${variant}`}
-                    alt={`Your ${variant} card`}
-                    className={`shrink-0 rounded-lg border border-border object-cover ${
-                      variant === "square" ? "h-16 w-16" : "h-16 w-9"
-                    }`}
-                  />
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <Button
-                    type="button"
-                    className="gap-1.5 rounded-full"
-                    disabled={picked.length === 0 || publish.isPending}
-                    variant={picked.length === 0 ? "outline" : "default"}
-                    onClick={() => publish.mutate()}
-                    data-testid="button-publish-card"
-                  >
-                    {publish.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    {publish.isPending ? "Posting…" : "Post it for me"}
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    {picked.length === 0
-                      ? "Pick an account first."
-                      : `Posting to ${picked.length} account${picked.length === 1 ? "" : "s"}.`}
-                  </span>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* The card itself, because nobody trusts a link they can't see. */}
@@ -271,6 +187,114 @@ export function ShareYourSlot({
             </p>
           </div>
         </div>
+
+        {connected.length > 0 && (
+          <div className="border-t border-border bg-[#053877]/[0.035] px-5 py-6">
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_240px]">
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-foreground">Or let us post it for you</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Pick the accounts, pick a shape, and we post the card with your ready-made caption. Nothing to
+                  download or paste.
+                </p>
+
+                <div className="mt-5 grid gap-y-5 sm:grid-cols-[96px_minmax(0,1fr)] sm:items-center sm:gap-x-4">
+                  <span className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Accounts</span>
+                  <div className="flex flex-wrap gap-2">
+                    {connected.map((a) => {
+                      const on = picked.includes(a.platform);
+                      return (
+                        <button
+                          key={a.platform}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() =>
+                            setPicked((p) => (on ? p.filter((x) => x !== a.platform) : [...p, a.platform]))
+                          }
+                          className={`inline-flex items-center gap-2 rounded-full border-2 py-2 pl-2 pr-4 text-sm font-semibold transition-colors ${
+                            on
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-border bg-card text-foreground hover:border-primary/50"
+                          }`}
+                          data-testid={`pick-platform-${a.platform}`}
+                        >
+                          <span
+                            className="flex h-6 w-6 items-center justify-center rounded-full text-white"
+                            style={{ background: platformBackground(a.platform) }}
+                          >
+                            <PlatformIcon platform={a.platform} className="h-3.5 w-3.5" />
+                          </span>
+                          {platformLabel(a.platform)}
+                          {on && <Check className="h-4 w-4" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <span className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Shape</span>
+                  <div className="inline-flex w-fit rounded-full border border-border bg-card p-1" role="radiogroup">
+                    {(
+                      [
+                        { v: "square", label: "Square", hint: "feed posts", Icon: Square },
+                        { v: "story", label: "Tall", hint: "stories & reels", Icon: RectangleVertical },
+                      ] as const
+                    ).map(({ v, label, hint, Icon }) => (
+                      <button
+                        key={v}
+                        type="button"
+                        role="radio"
+                        aria-checked={variant === v}
+                        onClick={() => setVariant(v)}
+                        className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${
+                          variant === v ? "bg-[#053877] text-white" : "text-foreground hover:bg-[#053877]/[0.06]"
+                        }`}
+                        data-testid={`pick-size-${v}`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {label}
+                        <span className={`text-xs font-normal ${variant === v ? "text-white/75" : "text-muted-foreground"}`}>
+                          {hint}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-6 flex flex-wrap items-center gap-4">
+                  <Button
+                    type="button"
+                    size="lg"
+                    className="gap-2 rounded-full px-6"
+                    disabled={picked.length === 0 || publish.isPending}
+                    onClick={() => publish.mutate()}
+                    data-testid="button-publish-card"
+                  >
+                    {publish.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    {publish.isPending ? "Posting…" : "Post it for me"}
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    {picked.length === 0
+                      ? "Choose at least one account."
+                      : `Goes to ${picked.map((p) => platformLabel(p as SocialAccount["platform"])).join(" and ")}.`}
+                  </span>
+                </div>
+              </div>
+
+              {/* The exact image that goes out, at a size you can actually read. */}
+              <div className="flex flex-col items-center lg:items-start">
+                <p className="self-start text-xs font-semibold uppercase tracking-[0.08em] text-foreground">What goes out</p>
+                <div className="mt-2 flex h-[240px] w-full items-center justify-center rounded-xl border border-border bg-card">
+                  <img
+                    key={variant}
+                    src={`/og/slot/${signupId}.jpg?size=${variant}`}
+                    alt={`Your ${variant === "square" ? "square" : "tall"} card`}
+                    className={`rounded-lg shadow-md ${variant === "square" ? "h-[208px] w-[208px]" : "h-[208px] w-[117px]"}`}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );
