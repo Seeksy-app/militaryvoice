@@ -31,6 +31,9 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronRight,
+  Video,
+  Presentation,
+  Check,
 } from "lucide-react";
 
 const MAX_MB = 50;
@@ -55,11 +58,29 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
   const [linkUrl, setLinkUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
+  // What the segment contains, and whether they want an interviewer. These
+  // describe one slot, so they belong here next to the files rather than in
+  // the permanent profile.
+  const [bringing, setBringing] = useState({
+    hasVideoIntro: profile.hasVideoIntro,
+    hasVideoOutro: profile.hasVideoOutro,
+    hasSlides: profile.hasSlides,
+    hasImages: profile.hasImages,
+  });
+  const [needsInterviewer, setNeedsInterviewer] = useState(profile.needsInterviewer);
+
   const [guests, setGuests] = useState(profile.guests ?? "");
   const [questions, setQuestions] = useState(profile.interviewQuestions ?? "");
   const [promo, setPromo] = useState(profile.promoNotes ?? "");
   const detailsDirty =
-    guests !== (profile.guests ?? "") || questions !== (profile.interviewQuestions ?? "") || promo !== (profile.promoNotes ?? "");
+    guests !== (profile.guests ?? "") ||
+    questions !== (profile.interviewQuestions ?? "") ||
+    promo !== (profile.promoNotes ?? "") ||
+    needsInterviewer !== profile.needsInterviewer ||
+    bringing.hasVideoIntro !== profile.hasVideoIntro ||
+    bringing.hasVideoOutro !== profile.hasVideoOutro ||
+    bringing.hasSlides !== profile.hasSlides ||
+    bringing.hasImages !== profile.hasImages;
 
   const { data: assets } = useQuery<ShowAssetRow[]>({ queryKey: ["/api/host/assets"] });
 
@@ -101,11 +122,11 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
       fd.append("hostName", profile.hostName);
       fd.append("phone", profile.phone ?? "");
       fd.append("numPeople", String(profile.numPeople ?? 1));
-      fd.append("hasVideoIntro", String(profile.hasVideoIntro));
-      fd.append("hasVideoOutro", String(profile.hasVideoOutro));
-      fd.append("hasSlides", String(profile.hasSlides));
-      fd.append("hasImages", String(profile.hasImages));
-      fd.append("needsInterviewer", String(profile.needsInterviewer));
+      fd.append("hasVideoIntro", String(bringing.hasVideoIntro));
+      fd.append("hasVideoOutro", String(bringing.hasVideoOutro));
+      fd.append("hasSlides", String(bringing.hasSlides));
+      fd.append("hasImages", String(bringing.hasImages));
+      fd.append("needsInterviewer", String(needsInterviewer));
       fd.append("socialLinks", profile.socialLinks ?? "");
       fd.append("rssUrl", profile.rssUrl ?? "");
       fd.append("youtubeUrl", profile.youtubeUrl ?? "");
@@ -347,6 +368,84 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
           </button>
           {openDetails && (
           <>
+
+          {profile.showFormat === "prerecorded" ? (
+            <p className="rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] p-4 text-sm text-foreground">
+              You're playing a recorded episode, so there's nothing to plan around intros, slides or an interviewer —
+              it's all already in your file.
+            </p>
+          ) : (
+            <>
+              <div>
+                <Label className="text-sm font-semibold text-foreground">What are you bringing?</Label>
+                <p className="text-xs text-muted-foreground">Tick anything we should have cued up for your segment.</p>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {(
+                    [
+                      ["hasVideoIntro", "Video intro", Video],
+                      ["hasVideoOutro", "Video outro", Video],
+                      ["hasSlides", "Slides", Presentation],
+                      ["hasImages", "Images", ImageIcon],
+                    ] as const
+                  ).map(([key, label, Icon]) => {
+                    const on = bringing[key];
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => setBringing((b) => ({ ...b, [key]: !b[key] }))}
+                        className={`flex flex-col items-start gap-2 rounded-xl border p-3 text-left text-sm transition-colors ${
+                          on ? "border-primary bg-primary/5 font-medium" : "border-border hover:bg-muted/50"
+                        }`}
+                        data-testid={`toggle-${key}`}
+                      >
+                        <div className="flex w-full items-center justify-between">
+                          <Icon className={`h-4 w-4 ${on ? "text-primary" : "text-muted-foreground"}`} />
+                          <span
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                              on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card"
+                            }`}
+                          >
+                            {on && <Check className="h-3 w-3" />}
+                          </span>
+                        </div>
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm font-semibold text-foreground">Interview help</Label>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {(
+                    [
+                      [false, "We're good on our own", "You run your own show start to finish."],
+                      [true, "Pair us with an interviewer", "We'll line someone up before air time."],
+                    ] as const
+                  ).map(([v, label, hint]) => (
+                    <button
+                      key={String(v)}
+                      type="button"
+                      aria-pressed={needsInterviewer === v}
+                      onClick={() => setNeedsInterviewer(v)}
+                      className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
+                        needsInterviewer === v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                      }`}
+                      data-testid={`radio-interviewer-${v ? "yes" : "no"}`}
+                    >
+                      <span>
+                        <span className="block text-sm">{label}</span>
+                        <span className="block text-xs text-muted-foreground">{hint}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           <div>
             <Label htmlFor="guests">Who's appearing with you</Label>

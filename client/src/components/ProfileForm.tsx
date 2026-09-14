@@ -728,15 +728,23 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
             <SectionCard
               step={4}
               icon={Clapperboard}
-              title="For the production team"
+              // During setup this section is just the notes box — the
+              // how-you-work questions only appear in Profile Settings — so
+              // don't promise transitions and support that aren't asked here.
+              title={isSetup ? "Anything else" : "For the production team"}
               description={
-                isPrerecorded
-                  ? "We're rolling your finished episode, so there's almost nothing to plan."
-                  : "Helps us plan transitions and line up support. You can change any of this later."
+                isSetup
+                  ? "Optional. Anything you'd like the crew to know before your slot."
+                  : isPrerecorded
+                    ? "We're rolling your finished episode, so there's almost nothing to plan."
+                    : "How you normally work, plus anything else the crew should know."
               }
             >
-              {/* Curiosity, not a requirement — it tells the crew what someone
-                  is used to, and nothing downstream depends on the answer. */}
+              {/* Permanent facts about how this person works, not setup for
+                  the event — what they normally use has no bearing on claiming
+                  a slot. So it lives in Profile Settings and stays out of the
+                  way while someone is trying to get booked. */}
+              {!isSetup && (
               <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
@@ -858,97 +866,12 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                   )}
                 </div>
               </div>
-
-              {isPrerecorded ? (
-                <p className="rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] p-4 text-sm text-foreground">
-                  Because you're playing a recorded episode, we don't need to know about intros, slides, or an
-                  interviewer — it's all already in your file
-                  {watchIntro === "virtual" ? ", and we'll cue you in for the live intro before it rolls" : ""}.
-                </p>
-              ) : (
-                <>
-              <div>
-                <FormLabel>What are you bringing?</FormLabel>
-                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {(
-                    [
-                      ["hasVideoIntro", "Video intro", Video],
-                      ["hasVideoOutro", "Video outro", Video],
-                      ["hasSlides", "Slides", Presentation],
-                      ["hasImages", "Images", ImageIcon],
-                    ] as const
-                  ).map(([name, label, Icon]) => (
-                    <FormField
-                      key={name}
-                      control={form.control}
-                      name={name}
-                      render={({ field }) => (
-                        <FormItem className="space-y-0">
-                          <FormLabel
-                            className={`flex cursor-pointer flex-col items-start gap-2 rounded-xl border p-3 text-sm font-normal transition-colors ${
-                              field.value ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-                            }`}
-                          >
-                            <div className="flex w-full items-center justify-between">
-                              <Icon className={`h-4 w-4 ${field.value ? "text-primary" : "text-muted-foreground"}`} />
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value as boolean}
-                                  onCheckedChange={field.onChange}
-                                  data-testid={`checkbox-${name}`}
-                                />
-                              </FormControl>
-                            </div>
-                            {label}
-                          </FormLabel>
-                        </FormItem>
-                      )}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <FormField
-                control={form.control}
-                name="needsInterviewer"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Interview help</FormLabel>
-                    <FormControl>
-                      <RadioGroup
-                        value={field.value ? "yes" : "no"}
-                        onValueChange={(v) => field.onChange(v === "yes")}
-                        className="grid grid-cols-1 gap-2 sm:grid-cols-2"
-                      >
-                        {[
-                          ["no", "We're good on our own", "You run your own show start to finish."],
-                          ["yes", "Pair us with an interviewer", "We'll line someone up before air time."],
-                        ].map(([v, label, hint]) => (
-                          <FormItem key={v} className="space-y-0">
-                            <FormLabel
-                              className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 font-normal transition-colors ${
-                                (field.value ? "yes" : "no") === v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-                              }`}
-                            >
-                              <FormControl>
-                                <RadioGroupItem value={v} className="mt-0.5" data-testid={`radio-interviewer-${v}`} />
-                              </FormControl>
-                              <span>
-                                <span className="block text-sm">{label}</span>
-                                <span className="block text-xs text-muted-foreground">{hint}</span>
-                              </span>
-                            </FormLabel>
-                          </FormItem>
-                        ))}
-                      </RadioGroup>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-                </>
               )}
+
+              {/* "What are you bringing?" and the interviewer question are
+                  about one segment, not about the person, so they now live on
+                  the Show materials tab beside the files they describe. The
+                  values still round-trip through this form's defaults. */}
 
               <FormField
                 control={form.control}
