@@ -47,6 +47,7 @@ const EVENT_FALLBACK: PublicEvent = {
   id: 0,
   slug: "marathon",
   isFeatured: true,
+  imageUrl: "/event-marathon.jpg",
   name: "24 Hour Podcastathon",
   tagline: "Twenty-four hours of live and ‘Best of MilVet’ podcasting for National Military Podcast Day.",
   description:

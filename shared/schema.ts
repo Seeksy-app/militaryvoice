@@ -13,6 +13,9 @@ export const events = pgTable("events", {
   name: text("name").notNull(),
   tagline: text("tagline").notNull().default(""),
   description: text("description").notNull().default(""),
+  // Card artwork. A path under /public or an absolute URL; empty falls back to
+  // a plain tile, so a new event without one still renders.
+  imageUrl: text("image_url").notNull().default(""),
   startAtUtc: text("start_at_utc").notNull(), // ISO 8601 UTC string
   durationHours: integer("duration_hours").notNull().default(24),
   slotMinutes: integer("slot_minutes").notNull().default(60),

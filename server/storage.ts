@@ -323,6 +323,10 @@ async function ensureSchema() {
   // rather than politely deciding not to send.
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS nudges_signup_kind_idx ON nudges (signup_id, kind)`;
 
+  await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT ''`;
+  // Give the marathon its card artwork once, without clobbering a later choice.
+  await sql`UPDATE events SET image_url = '/event-marathon.jpg' WHERE slug = 'marathon' AND image_url = ''`;
+
   // Backfill: everyone who already has a profile keeps their show on the
   // featured event, so nobody logs in to find their booked show missing.
   await sql`
@@ -490,7 +494,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "nudges", column: "emailed" };
+const SCHEMA_SENTINEL = { table: "events", column: "image_url" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();

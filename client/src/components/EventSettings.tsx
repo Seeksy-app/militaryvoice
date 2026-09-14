@@ -1,14 +1,26 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EventShowForm, type EventShow } from "@/components/EventShowForm";
 import { EventSlotPicker } from "@/components/EventSlotPicker";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { ShareYourSlot } from "@/components/ShareYourSlot";
 import { apiRequest } from "@/lib/queryClient";
-import { formatDateInZone, formatTimeInZone, detectLocalTimeZone, slotStart, onAirWindow } from "@/lib/schedule";
+import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, onAirWindow } from "@/lib/schedule";
 import type { PublicEvent } from "@shared/schema";
-import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock } from "lucide-react";
+import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2 } from "lucide-react";
 
 // Choose an event, then set up the show you're bringing to it. Everything
 // about one event lives behind its own card, so a podcaster in two events
@@ -34,6 +46,8 @@ export function EventSettings({
 }) {
   const [openId, setOpenId] = useState<number | null>(null);
   const zone = detectLocalTimeZone();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: entries, isLoading } = useQuery<EventEntry[]>({
     queryKey: ["/api/host/events"],
@@ -46,6 +60,18 @@ export function EventSettings({
     enabled: openId != null,
   });
 
+  const removeSlot = useMutation({
+    mutationFn: async (signupId: number) => apiRequest("DELETE", `/api/host/signups/${signupId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/host/events"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/host/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/signups"] });
+      toast({ title: "Time released", description: "That slot is back on the open schedule." });
+    },
+    onError: (err: Error) =>
+      toast({ title: "Couldn't release that time", description: err.message, variant: "destructive" }),
+  });
+
   if (isLoading) {
     return (
       <div className="mt-6 space-y-3">
@@ -56,6 +82,18 @@ export function EventSettings({
   }
 
   const open = entries?.find((e) => e.event.id === openId) ?? null;
+
+  const onAirLabel =
+    open?.slotIndex != null
+      ? (() => {
+          const air = onAirWindow(slotStart(open.event.startAtUtc, open.event.slotMinutes, open.slotIndex), {
+            onAirMinutes: open.event.onAirMinutes,
+            bufferMinutes: open.event.bufferMinutes,
+            bufferPosition: open.event.bufferPosition,
+          });
+          return `${formatDateInZone(air.start, zone)} · ${formatTimeInZone(air.start, zone)}–${formatTimeInZone(air.end, zone)}`;
+        })()
+      : "";
 
   // ------------------------------------------------------------ chooser
   if (!open) {
@@ -73,9 +111,18 @@ export function EventSettings({
                 key={entry.event.id}
                 type="button"
                 onClick={() => setOpenId(entry.event.id)}
-                className="group flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/40 hover:shadow-md"
+                className="group flex items-stretch gap-0 overflow-hidden rounded-2xl border border-border bg-card text-left transition-colors hover:border-primary/40 hover:shadow-md"
                 data-testid={`button-choose-event-${entry.event.id}`}
               >
+                {entry.event.imageUrl && (
+                  <img
+                    src={entry.event.imageUrl}
+                    alt=""
+                    className="hidden h-auto w-40 shrink-0 self-stretch object-cover sm:block"
+                    loading="lazy"
+                  />
+                )}
+                <div className="flex min-w-0 flex-1 items-center justify-between gap-4 p-5">
                 <div className="min-w-0">
                   <div className="text-base font-semibold group-hover:text-primary">{entry.event.name}</div>
                   <div className="mt-0.5 text-sm text-muted-foreground">
@@ -113,6 +160,7 @@ export function EventSettings({
                   </div>
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground group-hover:text-primary" />
+                </div>
               </button>
       );
     };
@@ -172,30 +220,44 @@ export function EventSettings({
 
       {/* ------------------------------------------------ time slot */}
       <div className="mt-6 rounded-2xl border border-border bg-card p-5">
-        <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">Your time slot</h3>
+        <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+          {open.slotIndex != null ? "Your time slot" : "Choose a time"}
+        </h3>
         {open.slotIndex != null ? (
-          <p className="mt-2 text-sm">
-            <span className="font-semibold">
-              {formatDateInZone(
-                onAirWindow(slotStart(open.event.startAtUtc, open.event.slotMinutes, open.slotIndex), {
-                  onAirMinutes: open.event.onAirMinutes,
-                  bufferMinutes: open.event.bufferMinutes,
-                  bufferPosition: open.event.bufferPosition,
-                }).start,
-                zone,
-              )}{" "}
-              ·{" "}
-              {formatTimeInZone(
-                onAirWindow(slotStart(open.event.startAtUtc, open.event.slotMinutes, open.slotIndex), {
-                  onAirMinutes: open.event.onAirMinutes,
-                  bufferMinutes: open.event.bufferMinutes,
-                  bufferPosition: open.event.bufferPosition,
-                }).start,
-                zone,
-              )}
-            </span>{" "}
-            <span className="text-muted-foreground">— you're on the schedule.</span>
-          </p>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#053877]/20 bg-[#053877]/[0.05] px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-lg font-bold leading-tight text-[#053877]">{onAirLabel}</p>
+              <p className="text-xs text-muted-foreground">
+                {zoneLabel(zone)} · you're on the schedule for {open.event.name}.
+              </p>
+            </div>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive">
+                  <Trash2 className="h-3.5 w-3.5" /> Remove this time
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Give up this time?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {onAirLabel} goes back on the open schedule for anyone to claim, and you can pick a different
+                    time straight after. Anyone who set a reminder for this slot won't be notified.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep it</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={() => open.signupId != null && removeSlot.mutate(open.signupId)}
+                    data-testid="button-remove-slot"
+                  >
+                    {removeSlot.isPending ? "Removing…" : "Remove it"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
         ) : (
           <>
             <p className="mb-3 mt-1 text-sm text-muted-foreground">
@@ -212,21 +274,7 @@ export function EventSettings({
         <ShareYourSlot
           signupId={open.signupId}
           podcastName={open.show?.showName || open.event.name}
-          whenLabel={`${formatDateInZone(
-            onAirWindow(slotStart(open.event.startAtUtc, open.event.slotMinutes, open.slotIndex), {
-              onAirMinutes: open.event.onAirMinutes,
-              bufferMinutes: open.event.bufferMinutes,
-              bufferPosition: open.event.bufferPosition,
-            }).start,
-            zone,
-          )} at ${formatTimeInZone(
-            onAirWindow(slotStart(open.event.startAtUtc, open.event.slotMinutes, open.slotIndex), {
-              onAirMinutes: open.event.onAirMinutes,
-              bufferMinutes: open.event.bufferMinutes,
-              bufferPosition: open.event.bufferPosition,
-            }).start,
-            zone,
-          )}`}
+          whenLabel={onAirLabel}
         />
       )}
 
