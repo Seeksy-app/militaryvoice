@@ -84,7 +84,10 @@ export interface PendingSlotSummary {
 interface Props {
   email: string;
   profile: ProfileRow | null;
-  onSaved: () => void;
+  /** Where to go once it saves. Setup offers a choice; editing just closes. */
+  onSaved: (next?: "events" | "dashboard") => void;
+  /** So the page can stop nav-bar clicks from throwing away unsaved work. */
+  onDirtyChange?: (dirty: boolean) => void;
   onCancel?: () => void;
   /** Slot the podcaster picked before signing in; shown pinned in the sidebar. */
   pendingSlot?: PendingSlotSummary | null;
@@ -146,7 +149,7 @@ function SectionCard({
   );
 }
 
-export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, variant = "setup" }: Props) {
+export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, variant = "setup", onDirtyChange }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -157,6 +160,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
   const [cropOpen, setCropOpen] = useState(false);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const bypassGuard = useRef(false);
+  const nextAfterSave = useRef<"events" | "dashboard">("events");
   const isSetup = !profile;
 
   const { data: social } = useQuery<{ configured: boolean; accounts: SocialAccount[] }>({
@@ -275,6 +279,11 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
   const existingPhotoUrl = profile?.photoUrl ? resolveUploadUrl(profile.photoUrl) : null;
   const shownPhoto = photoPreview ?? existingPhotoUrl;
   const dirty = form.formState.isDirty || !!photoFile;
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    // Never leave a stale "unsaved" flag behind when the form unmounts.
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
 
   // "Save before you leave": browser prompt on close/reload, and a confirm on
   // in-app links while there are unsaved changes.
@@ -361,7 +370,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
           ? "Your show details are saved. They'll follow you if you move to a different time."
           : "Your changes apply to the slot you hold.",
       });
-      onSaved();
+      onSaved(nextAfterSave.current);
     },
     onError: (err: Error) => {
       toast({ title: "Couldn't save your profile", description: err.message, variant: "destructive" });
@@ -381,10 +390,9 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
   const photoDone = !!shownPhoto;
   const basicsDone = !!watchPodcast?.trim() && !!watchHost?.trim();
 
-  return (
-    <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit(handleSubmit, (errors) => {
+  // Shared by the form's submit and by each save button, so both routes get
+  // the same field-naming behaviour.
+  const onInvalid = (errors: Record<string, unknown>) => {
           // Name the fields. A generic "check the form" with nothing marked
           // sends people hunting for a mistake that may not be on screen at
           // all, which is exactly how the missing-defaults bug stayed hidden.
@@ -402,7 +410,12 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
           });
           const first = onScreen[0] ?? names[0];
           if (first) form.setFocus(first as keyof FormValues);
-        })}
+        };
+
+  return (
+    <Form {...form}>
+      <form
+        onSubmit={form.handleSubmit(handleSubmit, onInvalid)}
         data-testid="form-profile"
       >
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
@@ -1093,16 +1106,37 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                 </span>
               )}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Saving the profile is only half of getting on air, so setup's
+                  primary action carries on to the event rather than leaving
+                  someone on a dashboard with nothing obvious to do next. */}
+              {isSetup && !pendingSlot && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={mutation.isPending}
+                  onClick={() => {
+                    nextAfterSave.current = "dashboard";
+                    void form.handleSubmit(handleSubmit, onInvalid)();
+                  }}
+                  data-testid="button-save-close"
+                >
+                  Save &amp; close
+                </Button>
+              )}
               {onCancel && (
                 <Button type="button" variant="outline" onClick={onCancel} disabled={mutation.isPending}>
                   Cancel
                 </Button>
               )}
               <Button
-                type="submit"
+                type="button"
                 size="lg"
                 disabled={mutation.isPending}
+                onClick={() => {
+                  nextAfterSave.current = pendingSlot ? "dashboard" : "events";
+                  void form.handleSubmit(handleSubmit, onInvalid)();
+                }}
                 className="gap-2 rounded-full bg-[#F0A71F] px-6 text-base font-semibold text-[#1a1200] hover:bg-[#f5b944]"
                 data-testid="button-save-profile"
               >
@@ -1110,11 +1144,11 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                   "Saving…"
                 ) : pendingSlot ? (
                   <>
-                    <Users className="h-4 w-4" /> Save & claim my slot
+                    <Users className="h-4 w-4" /> Save &amp; claim my slot
                   </>
                 ) : isSetup ? (
                   <>
-                    <Save className="h-4 w-4" /> Save & continue
+                    <Save className="h-4 w-4" /> Save &amp; continue to Event settings
                   </>
                 ) : (
                   <>

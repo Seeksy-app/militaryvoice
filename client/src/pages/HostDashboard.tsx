@@ -348,6 +348,16 @@ export default function HostDashboard() {
   const queryClient = useQueryClient();
   const search = useSearch();
   const [screen, setScreen] = useState<"dashboard" | "editProfile" | "events" | "integrations" | "fans" | "claim">("dashboard");
+  const [profileDirty, setProfileDirty] = useState(false);
+  const [remindEventSetup, setRemindEventSetup] = useState(false);
+
+  // The nav is buttons, not links, so ProfileForm's own leave-guard (which
+  // watches anchors and page unload) never sees these clicks.
+  function goTo(next: typeof screen) {
+    if (profileDirty && !window.confirm("You have unsaved changes to your profile. Leave without saving?")) return;
+    setProfileDirty(false);
+    setScreen(next);
+  }
   const [claimIndex, setClaimIndex] = useState<number | null>(null);
   const [pending, setPending] = useState<PendingSlot | null>(() => readPending(search));
   const zone = useMemo(detectLocalTimeZone, []);
@@ -609,7 +619,7 @@ export default function HostDashboard() {
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setScreen(value)}
+                  onClick={() => goTo(value)}
                   aria-current={active ? "page" : undefined}
                   className={`flex flex-col gap-0.5 rounded-xl px-2 py-2.5 transition-colors ${
                     active
@@ -644,7 +654,8 @@ export default function HostDashboard() {
               variant={inSetup ? "setup" : "profile"}
               profile={hasProfile ? (profile ?? null) : null}
               pendingSlot={inSetup ? pendingSummary : null}
-              onSaved={async () => {
+              onDirtyChange={setProfileDirty}
+              onSaved={async (next) => {
                 if (inSetup && pending) {
                   // Setup asks about the show in the same pass, but the show
                   // belongs to the event — so write that record before
@@ -667,6 +678,16 @@ export default function HostDashboard() {
                     return;
                   }
                   claim.mutate({ slotIndex: pending.slotIndex, eventId: pending.eventId || undefined });
+                  return;
+                }
+                setProfileDirty(false);
+                if (inSetup && next === "events") {
+                  setScreen("events");
+                } else if (inSetup) {
+                  // They chose to stop here, but a profile alone gets nobody
+                  // on air — say so once, with the way there.
+                  setScreen("dashboard");
+                  setRemindEventSetup(true);
                 } else {
                   setScreen("dashboard");
                 }
@@ -1037,6 +1058,32 @@ export default function HostDashboard() {
           </>
         )}
       </div>
+
+      {/* Half-finished is the failure mode here: a profile and no show means
+          no slot, and nobody chases it. Ask once, with the door open. */}
+      <AlertDialog open={remindEventSetup} onOpenChange={setRemindEventSetup}>
+        <AlertDialogContent data-testid="dialog-finish-event-setup">
+          <AlertDialogHeader>
+            <AlertDialogTitle>One more step to get on air</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your profile is saved. It doesn't hold a time yet — for that, set your show up for an event and pick
+              when you want to be on. It takes a minute.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-remind-later">I'll do it later</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setRemindEventSetup(false);
+                setScreen("events");
+              }}
+              data-testid="button-remind-go-events"
+            >
+              Go to Event settings
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
