@@ -63,7 +63,7 @@ import {
   createBroadcast,
 } from "./youtube.js";
 import { buildShareCard } from "./shareCard.js";
-import { sendPrepNudge, sendFinalNudge, sendOnAirNudge } from "./email.js";
+import { sendPrepNudge, sendFinalNudge, sendOnAirNudge, sendBookingAlert } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, StudioRow } from "../shared/schema.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -2475,6 +2475,41 @@ export function registerRoutes(app: Express): void {
     }
   }
 
+  /**
+   * Tell the organiser a slot went. Never throws and never blocks the booking:
+   * a podcaster's confirmation matters more than our own notification.
+   */
+  async function notifyOrganiserOfBooking(
+    signup: SignupRow,
+    event: EventRow,
+    origin: string,
+    taken: number,
+    total: number,
+  ): Promise<void> {
+    const to = (process.env.SIGNUP_NOTIFY_EMAIL || "appletonab@gmail.com").trim();
+    if (!to) return;
+    try {
+      const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
+      const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+      const tz = signup.timezone || "America/New_York";
+      await sendBookingAlert({
+        to,
+        podcastName: signup.podcastName,
+        hostName: signup.hostName,
+        podcasterEmail: signup.email,
+        eventName: event.name,
+        onAirLabel: `${formatDateTimeInZone(onAir.start, tz)} ${zoneAbbrev(onAir.start, tz)}`,
+        format: signup.showFormat,
+        needsInterviewer: signup.needsInterviewer,
+        taken,
+        total,
+        adminUrl: `${origin}/admin`,
+      });
+    } catch (err) {
+      console.error("Failed to send the booking alert:", err);
+    }
+  }
+
   app.post("/api/signups", requireHostSession, async (req, res) => {
     const email = (req as any).hostEmail as string;
     const profile = await storage.getProfileByEmail(email);
@@ -2571,9 +2606,17 @@ export function registerRoutes(app: Express): void {
     }
 
     const created = await storage.createSignup(parsed.data);
+    const origin = `${req.protocol}://${req.get("host")}`;
+
     // Send before responding: see the note on /api/reminders. Work started
     // after the response is flushed is not guaranteed to run on serverless.
-    await sendSignupConfirmation(created, event, `${req.protocol}://${req.get("host")}`);
+    // Both together, so telling the organiser costs no extra wait.
+    const totalSlotCount = Math.floor((event.durationHours * 60) / event.slotMinutes);
+    const takenCount = (await storage.listSignups(event.id)).filter((x) => x.status !== "cancelled").length;
+    await Promise.allSettled([
+      sendSignupConfirmation(created, event, origin),
+      notifyOrganiserOfBooking(created, event, origin, takenCount, totalSlotCount),
+    ]);
 
     res.status(201).json(toPublicSignup(created));
   });

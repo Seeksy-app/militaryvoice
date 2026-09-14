@@ -408,3 +408,61 @@ export async function sendOnAirNudge(v: NudgeInput): Promise<boolean> {
     text: `${v.podcastName} is on air at ${v.onAirLabel}.\n\nJoin the green room: ${v.studioUrl}`,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Organiser notification. Sent when a slot is claimed, so nobody has to watch
+// the dashboard to know the lineup moved.
+// ---------------------------------------------------------------------------
+
+export interface BookingAlertInput {
+  to: string;
+  podcastName: string;
+  hostName: string;
+  podcasterEmail: string;
+  eventName: string;
+  onAirLabel: string;
+  format: string;
+  needsInterviewer: boolean;
+  taken: number;
+  total: number;
+  adminUrl: string;
+}
+
+export async function sendBookingAlert(v: BookingAlertInput): Promise<boolean> {
+  const row = (label: string, value: string) =>
+    `<tr>
+       <td style="padding:6px 14px 6px 0;color:#6b7280;font-size:13px;white-space:nowrap;">${escapeHtml(label)}</td>
+       <td style="padding:6px 0;color:#111827;font-size:15px;font-weight:600;">${escapeHtml(value)}</td>
+     </tr>`;
+
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
+    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">${escapeHtml(v.eventName)}</p>
+    <h1 style="margin:0 0 18px;color:#111827;font-size:22px;font-weight:700;">${escapeHtml(v.podcastName)} just booked a slot</h1>
+    <table style="border-collapse:collapse;margin:0 0 20px;">
+      ${row("On air", v.onAirLabel)}
+      ${row("Host", v.hostName)}
+      ${row("Email", v.podcasterEmail)}
+      ${row("Format", v.format === "prerecorded" ? "Pre-recorded episode" : "Live")}
+      ${v.needsInterviewer ? row("Needs", "An interviewer — someone has to be assigned") : ""}
+      ${row("Lineup", `${v.taken} of ${v.total} slots taken`)}
+    </table>
+    <p style="margin:0 0 8px;">
+      <a href="${v.adminUrl}" style="display:inline-block;background:#F0A71F;color:#1a1200;text-decoration:none;font-size:15px;font-weight:700;padding:12px 22px;border-radius:9999px;">Open the admin dashboard</a>
+    </p>
+  </div>`;
+
+  const text =
+    `${v.podcastName} just booked a slot on ${v.eventName}.\n\n` +
+    `On air: ${v.onAirLabel}\nHost: ${v.hostName}\nEmail: ${v.podcasterEmail}\n` +
+    `Format: ${v.format === "prerecorded" ? "Pre-recorded episode" : "Live"}\n` +
+    (v.needsInterviewer ? "Needs: an interviewer\n" : "") +
+    `Lineup: ${v.taken} of ${v.total} slots taken\n\n${v.adminUrl}`;
+
+  return sendRawEmail({
+    to: v.to,
+    subject: `New booking: ${v.podcastName} — ${v.onAirLabel}`,
+    html,
+    text,
+  });
+}

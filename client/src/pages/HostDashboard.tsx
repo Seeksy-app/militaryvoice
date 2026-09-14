@@ -49,6 +49,7 @@ import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
 import { ShowMaterials } from "@/components/ShowMaterials";
 import { EventSettings } from "@/components/EventSettings";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
+import { NextSteps } from "@/components/NextSteps";
 import { OwnEncoder } from "@/components/OwnEncoder";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -377,6 +378,17 @@ export default function HostDashboard() {
   const { data: profile, isLoading: profileLoading } = useQuery<ProfileRow | null>({
     queryKey: ["/api/host/profile"],
     retry: false,
+    enabled: !!data,
+  });
+
+  // Just enough to know what's still outstanding for the checklist.
+  const { data: hostEvents } = useQuery<{ show: { showName?: string } | null; slotIndex: number | null }[]>({
+    queryKey: ["/api/host/events"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/events")).json(),
+    enabled: !!data,
+  });
+  const { data: hostAssets } = useQuery<unknown[]>({
+    queryKey: ["/api/host/assets"],
     enabled: !!data,
   });
 
@@ -1069,6 +1081,17 @@ export default function HostDashboard() {
                 </div>
               </div>
             </section>
+
+            <NextSteps
+              state={{
+                hasShow: !!hostEvents?.some((e) => !!e.show?.showName),
+                hasSlot: data.mySignups.length > 0,
+                hasAccounts: (social?.accounts?.length ?? 0) > 0,
+                hasMaterials: (hostAssets?.length ?? 0) > 0,
+              }}
+              onGoEvents={() => goTo("events")}
+              onGoIntegrations={() => goTo("integrations")}
+            />
 
 
           </>
