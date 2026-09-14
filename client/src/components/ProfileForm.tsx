@@ -88,6 +88,12 @@ interface Props {
   onCancel?: () => void;
   /** Slot the podcaster picked before signing in; shown pinned in the sidebar. */
   pendingSlot?: PendingSlotSummary | null;
+  /**
+   * "setup" is the one-pass form someone fills to get booked, and asks about
+   * their show as well as themselves. "profile" is Profile Settings, which is
+   * only ever about the person.
+   */
+  variant?: "setup" | "profile";
 }
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -130,7 +136,7 @@ function SectionCard({
   );
 }
 
-export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: Props) {
+export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, variant = "setup" }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -569,6 +575,12 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
               </div>
             </SectionCard>
 
+            {/* The show and its format belong to an event, not to the
+                person, so Profile Settings does not carry them — they live in
+                Event settings. First-time setup still asks, because you cannot
+                book a slot without them and we are not making that two trips. */}
+            {variant === "setup" && (
+              <>
             <SectionCard
               id="section-show"
               step={2}
@@ -724,6 +736,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                 </div>
               )}
             </SectionCard>
+              </>
+            )}
 
             <SectionCard
               step={4}

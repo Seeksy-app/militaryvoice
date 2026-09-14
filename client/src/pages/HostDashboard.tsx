@@ -44,12 +44,13 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
 import { ShowMaterials } from "@/components/ShowMaterials";
+import { EventSettings } from "@/components/EventSettings";
 import { MyRecordings } from "@/components/MyRecordings";
 import { OwnEncoder } from "@/components/OwnEncoder";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SocialTiles } from "@/components/SocialTiles";
-import { apiRequest, API_BASE, resolveUploadUrl } from "@/lib/queryClient";
+import { apiRequest, apiUpload, API_BASE, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, ProfileRow, SocialAccount } from "@shared/schema";
 import {
   detectLocalTimeZone,
@@ -303,7 +304,7 @@ export default function HostDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const search = useSearch();
-  const [screen, setScreen] = useState<"dashboard" | "editProfile" | "claim">("dashboard");
+  const [screen, setScreen] = useState<"dashboard" | "editProfile" | "events" | "claim">("dashboard");
   const [claimIndex, setClaimIndex] = useState<number | null>(null);
   const [pending, setPending] = useState<PendingSlot | null>(() => readPending(search));
   const zone = useMemo(detectLocalTimeZone, []);
@@ -509,7 +510,13 @@ export default function HostDashboard() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              {inSetup ? "Set up your show" : screen === "editProfile" ? "Profile Settings" : "Podcaster Dashboard"}
+              {inSetup
+                ? "Set up your show"
+                : screen === "editProfile"
+                  ? "Profile settings"
+                  : screen === "events"
+                    ? "Event settings"
+                    : "Podcaster Dashboard"}
             </h1>
             {data && (
               <p className="mt-1 text-sm text-muted-foreground">
@@ -533,6 +540,40 @@ export default function HostDashboard() {
           )}
         </div>
 
+        {/* Two places to be, said plainly: one about them, one about an
+            event. Everything else hangs off those. Hidden during first-time
+            setup, where there is only one thing to do. */}
+        {data && hasProfile && !inSetup && (
+          <nav className="mt-6 grid grid-cols-3 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm">
+            {(
+              [
+                ["dashboard", "Dashboard", "Your card and slot"],
+                ["editProfile", "Profile settings", "About you"],
+                ["events", "Event settings", "Your shows and times"],
+              ] as const
+            ).map(([value, label, hint]) => {
+              const active = screen === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setScreen(value)}
+                  aria-current={active ? "page" : undefined}
+                  className={`flex flex-col gap-0.5 rounded-xl px-2 py-2.5 transition-colors ${
+                    active
+                      ? "bg-[#053877] text-white shadow-sm"
+                      : "bg-[#053877]/[0.05] text-foreground hover:bg-[#053877]/10"
+                  }`}
+                  data-testid={`nav-host-${value}`}
+                >
+                  <span className="text-sm font-semibold">{label}</span>
+                  <span className="hidden text-[11px] font-normal opacity-70 sm:block">{hint}</span>
+                </button>
+              );
+            })}
+          </nav>
+        )}
+
         {loadingProfile ? (
           <div className="mt-8 space-y-4">
             <Skeleton className="h-24 w-full rounded-xl" />
@@ -548,10 +589,31 @@ export default function HostDashboard() {
             )}
             <ProfileForm
               email={data.email}
+              variant={inSetup ? "setup" : "profile"}
               profile={hasProfile ? (profile ?? null) : null}
               pendingSlot={inSetup ? pendingSummary : null}
-              onSaved={() => {
+              onSaved={async () => {
                 if (inSetup && pending) {
+                  // Setup asks about the show in the same pass, but the show
+                  // belongs to the event — so write that record before
+                  // claiming, or the claim has no show to attach to.
+                  try {
+                    const fresh = await (await apiRequest("GET", "/api/host/profile")).json();
+                    const eventId = pending.eventId || (await (await apiRequest("GET", "/api/events")).json())[0]?.id;
+                    const fd = new FormData();
+                    fd.append("showName", fresh?.podcastName ?? "");
+                    fd.append("showFormat", fresh?.showFormat || "live");
+                    fd.append("recordingUrl", fresh?.recordingUrl ?? "");
+                    fd.append("introStyle", fresh?.introStyle || "virtual");
+                    await apiUpload("PUT", `/api/host/shows/${eventId}`, fd);
+                  } catch (err) {
+                    toast({
+                      title: "Couldn't set up your show",
+                      description: (err as Error).message,
+                      variant: "destructive",
+                    });
+                    return;
+                  }
                   claim.mutate({ slotIndex: pending.slotIndex, eventId: pending.eventId || undefined });
                 } else {
                   setScreen("dashboard");
@@ -560,6 +622,64 @@ export default function HostDashboard() {
               onCancel={hasProfile ? () => setScreen("dashboard") : undefined}
             />
           </section>
+        ) : screen === "events" ? (
+          <EventSettings
+            profilePhotoUrl={profile?.photoUrl}
+            onPickSlot={() => {
+              setScreen("dashboard");
+              setTimeout(
+                () => document.getElementById("pick-slot")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+                60,
+              );
+            }}
+          >
+            {(entry) => (
+              <>
+            {/* One long scroll made everything read as the same thing. The work
+                actually falls into three moments: before the day, on the day,
+                and after — so the dashboard says so. */}
+            {profile && entry.slotIndex != null && (
+              <Tabs defaultValue="showday" className="mt-6">
+                {/* Loud enough to read as navigation. The muted pill version
+                    disappeared into the page and nobody found the other two. */}
+                <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm">
+                  {[
+                    ["showday", "Show materials", "Files and show details"],
+                    ["going", "Stream", "Where it goes out"],
+                    ["after", "Recordings", "Yours after the show"],
+                  ].map(([value, label, hint]) => (
+                    <TabsTrigger
+                      key={value}
+                      value={value}
+                      className="flex-col gap-0.5 rounded-xl px-2 py-2.5 text-foreground data-[state=inactive]:bg-[#053877]/[0.05] hover:data-[state=inactive]:bg-[#053877]/10 data-[state=active]:bg-[#053877] data-[state=active]:text-white data-[state=active]:shadow-sm"
+                      data-testid={`tab-host-${value}`}
+                    >
+                      <span className="text-sm font-semibold">{label}</span>
+                      <span className="hidden text-[11px] font-normal opacity-70 sm:block">{hint}</span>
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+
+                <TabsContent value="showday" className="mt-6 flex flex-col gap-6">
+                  <ShowMaterials profile={profile} />
+                </TabsContent>
+
+                <TabsContent value="going" className="mt-6 flex flex-col gap-6">
+                  <ConnectYoutube />
+                  <OwnEncoder />
+                </TabsContent>
+
+                <TabsContent value="after" className="mt-6 flex flex-col gap-6">
+                  <MyRecordings socialAccounts={profile?.socialAccounts} />
+                  <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                    Your recordings appear here once your slot has been on air.
+                  </p>
+                </TabsContent>
+              </Tabs>
+            )}
+              </>
+            )}
+          </EventSettings>
         ) : screen === "claim" && selectedSlot ? (
           <section className="mt-8 max-w-xl">
             <button
@@ -834,48 +954,6 @@ export default function HostDashboard() {
               </div>
             </section>
 
-            {/* One long scroll made everything read as the same thing. The work
-                actually falls into three moments: before the day, on the day,
-                and after — so the dashboard says so. */}
-            {profile && data.mySignups.length > 0 && (
-              <Tabs defaultValue="showday" className="mt-8">
-                {/* Loud enough to read as navigation. The muted pill version
-                    disappeared into the page and nobody found the other two. */}
-                <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm">
-                  {[
-                    ["showday", "Show materials", "Files and show details"],
-                    ["going", "Stream", "Where it goes out"],
-                    ["after", "Recordings", "Yours after the show"],
-                  ].map(([value, label, hint]) => (
-                    <TabsTrigger
-                      key={value}
-                      value={value}
-                      className="flex-col gap-0.5 rounded-xl px-2 py-2.5 text-foreground data-[state=inactive]:bg-[#053877]/[0.05] hover:data-[state=inactive]:bg-[#053877]/10 data-[state=active]:bg-[#053877] data-[state=active]:text-white data-[state=active]:shadow-sm"
-                      data-testid={`tab-host-${value}`}
-                    >
-                      <span className="text-sm font-semibold">{label}</span>
-                      <span className="hidden text-[11px] font-normal opacity-70 sm:block">{hint}</span>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-
-                <TabsContent value="showday" className="mt-6 flex flex-col gap-6">
-                  <ShowMaterials profile={profile} />
-                </TabsContent>
-
-                <TabsContent value="going" className="mt-6 flex flex-col gap-6">
-                  <ConnectYoutube />
-                  <OwnEncoder />
-                </TabsContent>
-
-                <TabsContent value="after" className="mt-6 flex flex-col gap-6">
-                  <MyRecordings socialAccounts={profile?.socialAccounts} />
-                  <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                    Your recordings appear here once your slot has been on air.
-                  </p>
-                </TabsContent>
-              </Tabs>
-            )}
 
             <section className="mt-8">
               <Link href="/prepare" data-testid="link-prepare-guide">

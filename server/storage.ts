@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -26,6 +26,7 @@ import type {
   IngressRow,
   SceneRow,
   YoutubeAccountRow,
+  EventShowRow,
   SponsorInquiryRow,
   InsertSponsorInquiry,
 } from "../shared/schema.js";
@@ -286,6 +287,37 @@ async function ensureSchema() {
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS youtube_accounts_email_idx ON youtube_accounts (email)`;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS event_shows (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      event_id INTEGER NOT NULL,
+      show_name TEXT NOT NULL DEFAULT '',
+      show_format TEXT NOT NULL DEFAULT 'live',
+      recording_url TEXT NOT NULL DEFAULT '',
+      intro_style TEXT NOT NULL DEFAULT 'virtual',
+      image_url TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
+  `;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS event_shows_email_event_idx ON event_shows (email, event_id)`;
+  // CREATE TABLE IF NOT EXISTS will not add a column to a table that already
+  // exists, so anything added to event_shows later needs its own ALTER here.
+  await sql`ALTER TABLE event_shows ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE event_shows ADD COLUMN IF NOT EXISTS updated_at TEXT NOT NULL DEFAULT ''`;
+
+  // Backfill: everyone who already has a profile keeps their show on the
+  // featured event, so nobody logs in to find their booked show missing.
+  await sql`
+    INSERT INTO event_shows (email, event_id, show_name, show_format, recording_url, intro_style, image_url, created_at)
+    SELECT p.email, e.id, p.podcast_name, p.show_format, p.recording_url, p.intro_style, '', NOW()::text
+    FROM podcaster_profiles p
+    CROSS JOIN (SELECT id FROM events WHERE is_featured = true ORDER BY id LIMIT 1) e
+    WHERE p.podcast_name <> ''
+    ON CONFLICT (email, event_id) DO NOTHING
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS recordings (
       id SERIAL PRIMARY KEY,
       event_id INTEGER NOT NULL,
@@ -403,6 +435,13 @@ async function ensureSchema() {
     await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS guests TEXT NOT NULL DEFAULT ''`);
     await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS interview_questions TEXT NOT NULL DEFAULT ''`);
     await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS promo_notes TEXT NOT NULL DEFAULT ''`);
+    // These three live in the drizzle schema and in the deployed database
+    // (drizzle-kit push put them there) but were never in this migration, so
+    // a database created by the server alone was missing them and every
+    // signups query failed. Kept here so the migration stands on its own.
+    await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS rss_url TEXT NOT NULL DEFAULT ''`);
+    await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS youtube_url TEXT NOT NULL DEFAULT ''`);
+    await sql.unsafe(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS social_accounts TEXT NOT NULL DEFAULT ''`);
   }
 
   // Migrate older databases created before these columns existed.
@@ -434,7 +473,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "youtube_accounts", column: "refresh_token" };
+const SCHEMA_SENTINEL = { table: "event_shows", column: "image_url" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
@@ -501,6 +540,7 @@ export interface IStorage {
   ): Promise<ProfileRow>;
   updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void>;
   syncSignupsFromProfile(email: string, profile: ProfileRow): Promise<number>;
+  syncSignupsFromEventShow(email: string, eventId: number, show: EventShowRow): Promise<number>;
   listCompleteProfiles(): Promise<ProfileRow[]>;
   listSponsors(activeOnly: boolean): Promise<SponsorRow[]>;
   createSponsor(data: { name: string; url: string; logoUrl: string }): Promise<SponsorRow>;
@@ -533,6 +573,9 @@ export interface IStorage {
   getScene(id: number): Promise<SceneRow | undefined>;
   createScene(v: Omit<SceneRow, "id" | "createdAt">): Promise<SceneRow>;
   deleteScene(id: number): Promise<void>;
+  getEventShow(email: string, eventId: number): Promise<EventShowRow | undefined>;
+  listEventShows(email: string): Promise<EventShowRow[]>;
+  upsertEventShow(email: string, eventId: number, v: Partial<EventShowRow>): Promise<EventShowRow>;
   getYoutubeAccount(email: string): Promise<YoutubeAccountRow | undefined>;
   upsertYoutubeAccount(email: string, v: Partial<YoutubeAccountRow> & { refreshToken: string }): Promise<YoutubeAccountRow>;
   deleteYoutubeAccount(email: string): Promise<void>;
@@ -981,6 +1024,50 @@ class DatabaseStorage implements IStorage {
   }
 
   // ---- YouTube ------------------------------------------------------------
+  async getEventShow(email: string, eventId: number): Promise<EventShowRow | undefined> {
+    await ready();
+    const [row] = await db
+      .select()
+      .from(eventShows)
+      .where(and(eq(eventShows.email, email.toLowerCase().trim()), eq(eventShows.eventId, eventId)));
+    return row;
+  }
+
+  async listEventShows(email: string): Promise<EventShowRow[]> {
+    await ready();
+    return db.select().from(eventShows).where(eq(eventShows.email, email.toLowerCase().trim()));
+  }
+
+  async upsertEventShow(email: string, eventId: number, v: Partial<EventShowRow>): Promise<EventShowRow> {
+    await ready();
+    const key = email.toLowerCase().trim();
+    const now = new Date().toISOString();
+    const existing = await this.getEventShow(key, eventId);
+    if (existing) {
+      const [row] = await db
+        .update(eventShows)
+        .set({ ...v, email: key, eventId, updatedAt: now })
+        .where(eq(eventShows.id, existing.id))
+        .returning();
+      return row;
+    }
+    const [row] = await db
+      .insert(eventShows)
+      .values({
+        email: key,
+        eventId,
+        showName: v.showName ?? "",
+        showFormat: v.showFormat ?? "live",
+        recordingUrl: v.recordingUrl ?? "",
+        introStyle: v.introStyle ?? "virtual",
+        imageUrl: v.imageUrl ?? "",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    return row;
+  }
+
   async getYoutubeAccount(email: string): Promise<YoutubeAccountRow | undefined> {
     await ready();
     const [row] = await db.select().from(youtubeAccounts).where(eq(youtubeAccounts.email, email.toLowerCase().trim()));
@@ -1337,10 +1424,14 @@ class DatabaseStorage implements IStorage {
    */
   async syncSignupsFromProfile(email: string, profile: ProfileRow): Promise<number> {
     await ready();
+    const key = email.trim().toLowerCase();
+    // Everything here is about the person, so it flows to every slot they
+    // hold. What the show is called, its format and its artwork belong to the
+    // event now — writing them from the profile would undo the per-event
+    // setup, so they are deliberately absent.
     const rows = await db
       .update(signups)
       .set({
-        podcastName: profile.podcastName,
         hostName: profile.hostName,
         phone: profile.phone,
         numPeople: profile.numPeople,
@@ -1353,9 +1444,6 @@ class DatabaseStorage implements IStorage {
         rssUrl: profile.rssUrl,
         youtubeUrl: profile.youtubeUrl,
         socialAccounts: profile.socialAccounts,
-        showFormat: profile.showFormat,
-        recordingUrl: profile.recordingUrl,
-        introStyle: profile.introStyle,
         branch: profile.branch,
         serviceStatus: profile.serviceStatus,
         recordingMode: profile.recordingMode,
@@ -1366,9 +1454,39 @@ class DatabaseStorage implements IStorage {
         interviewQuestions: profile.interviewQuestions,
         promoNotes: profile.promoNotes,
         notes: profile.notes,
-        photoUrl: profile.photoUrl,
       })
-      .where(and(eq(signups.email, email.trim().toLowerCase()), ne(signups.status, "cancelled")))
+      .where(and(eq(signups.email, key), ne(signups.status, "cancelled")))
+      .returning({ id: signups.id, eventId: signups.eventId });
+
+    // The lineup photo is the show's artwork where there is one, and the
+    // person's own photo otherwise — so a changed profile photo still reaches
+    // the slots that have no artwork of their own.
+    const shows = await this.listEventShows(key);
+    for (const row of rows) {
+      const art = shows.find((sh) => sh.eventId === row.eventId)?.imageUrl;
+      await db
+        .update(signups)
+        .set({ photoUrl: art || profile.photoUrl })
+        .where(eq(signups.id, row.id));
+    }
+    return rows.length;
+  }
+
+  /** Push one event's show record onto the slot held for that event. */
+  async syncSignupsFromEventShow(email: string, eventId: number, show: EventShowRow): Promise<number> {
+    await ready();
+    const key = email.trim().toLowerCase();
+    const profile = await this.getProfileByEmail(key);
+    const rows = await db
+      .update(signups)
+      .set({
+        podcastName: show.showName,
+        showFormat: show.showFormat,
+        recordingUrl: show.recordingUrl,
+        introStyle: show.introStyle,
+        photoUrl: show.imageUrl || profile?.photoUrl || "",
+      })
+      .where(and(eq(signups.email, key), eq(signups.eventId, eventId), ne(signups.status, "cancelled")))
       .returning({ id: signups.id });
     return rows.length;
   }

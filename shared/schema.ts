@@ -687,6 +687,50 @@ export type IngressRow = typeof ingresses.$inferSelect;
 
 // A podcaster's own YouTube channel, connected once so we can open a broadcast
 // on it at their slot time instead of asking them to dig out a stream key.
+/**
+ * One podcaster's show, for one event.
+ *
+ * The profile is about the person and never changes between events; this is
+ * what they are bringing to a particular one. Somebody can join the marathon
+ * with one show and a later event with another, and neither overwrites the
+ * other — which the single set of columns on the profile could not do.
+ *
+ * The profile still carries a show name and format: those are the defaults
+ * a new event's setup starts from, not the record of what was booked.
+ */
+export const eventShows = pgTable("event_shows", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  eventId: integer("event_id").notNull(),
+  showName: text("show_name").notNull().default(""),
+  showFormat: text("show_format").notNull().default("live"),
+  recordingUrl: text("recording_url").notNull().default(""),
+  introStyle: text("intro_style").notNull().default("virtual"),
+  // Artwork for this show. Separate from the person's own photo, and what
+  // the public lineup prefers when it is set.
+  imageUrl: text("image_url").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull().default(""),
+});
+export type EventShowRow = typeof eventShows.$inferSelect;
+
+export const eventShowFieldsSchema = z.object({
+  showName: z.string().trim().min(1, "Give your show a name").max(120, "Keep it under 120 characters"),
+  showFormat: z.enum(["live", "prerecorded"]),
+  recordingUrl: optionalUrl("episode"),
+  introStyle: z.enum(["virtual", "straight"]),
+});
+export const insertEventShowSchema = eventShowFieldsSchema.superRefine((v, ctx) => {
+  // Same rule the profile had: we cannot air a pre-recorded slot without the file.
+  if (v.showFormat === "prerecorded" && !v.recordingUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["recordingUrl"],
+      message: "Add a link to the episode you want us to play",
+    });
+  }
+});
+
 export const youtubeAccounts = pgTable("youtube_accounts", {
   id: serial("id").primaryKey(),
   email: text("email").notNull(),

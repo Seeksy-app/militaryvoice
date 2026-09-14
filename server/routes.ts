@@ -29,6 +29,7 @@ import {
   type PublicSettings,
   type EventRow,
   updateSponsorSchema,
+  insertEventShowSchema,
 } from "../shared/schema.js";
 import { fromError } from "zod-validation-error";
 import {
@@ -2144,7 +2145,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/signups", requireHostSession, async (req, res) => {
     const email = (req as any).hostEmail as string;
     const profile = await storage.getProfileByEmail(email);
-    if (!profile || !profile.podcastName || !profile.hostName || !profile.photoUrl) {
+    if (!profile || !profile.hostName || !profile.photoUrl) {
       res.status(400).json({ message: "Set up your podcaster profile before claiming a slot." });
       return;
     }
@@ -2152,10 +2153,19 @@ export function registerRoutes(app: Express): void {
     const body = req.body as Record<string, unknown>;
     const featured = await storage.getFeaturedEvent();
     const eventId = body.eventId ? Number(body.eventId) : featured.id;
+
+    // The show belongs to the event, so that is where the name, the format
+    // and the artwork come from — not the profile.
+    const show = await storage.getEventShow(email, eventId);
+    if (!show || !show.showName) {
+      res.status(400).json({ message: "Set up your show for this event before claiming a slot." });
+      return;
+    }
+
     const raw = {
       eventId,
       slotIndex: Number(body.slotIndex),
-      podcastName: profile.podcastName,
+      podcastName: show.showName,
       hostName: profile.hostName,
       email,
       phone: profile.phone,
@@ -2169,9 +2179,9 @@ export function registerRoutes(app: Express): void {
       rssUrl: profile.rssUrl,
       youtubeUrl: profile.youtubeUrl,
       socialAccounts: profile.socialAccounts,
-      showFormat: profile.showFormat,
-      recordingUrl: profile.recordingUrl,
-      introStyle: profile.introStyle,
+      showFormat: show.showFormat,
+      recordingUrl: show.recordingUrl,
+      introStyle: show.introStyle,
       branch: profile.branch,
       serviceStatus: profile.serviceStatus,
       recordingMode: profile.recordingMode,
@@ -2180,7 +2190,7 @@ export function registerRoutes(app: Express): void {
       streamPlatformOther: profile.streamPlatformOther,
       notes: profile.notes,
       timezone: typeof body.timezone === "string" ? body.timezone : "",
-      photoUrl: profile.photoUrl,
+      photoUrl: show.imageUrl || profile.photoUrl,
     };
 
     const parsed = insertSignupSchema.safeParse(raw);
@@ -2613,6 +2623,112 @@ export function registerRoutes(app: Express): void {
     await storage.syncSignupsFromProfile(email, updated);
     res.json(updated);
   });
+
+  // ---- Host: per-event shows ---------------------------------------------------
+  //      A show belongs to an event, not to the person. These read and write
+  //      that record; the profile stays about them.
+
+  /** Every event, with what this podcaster has done on each. */
+  app.get("/api/host/events", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const events = await storage.listEvents();
+    const shows = await storage.listEventShows(email);
+    const out = [];
+    for (const event of events) {
+      const show = shows.find((s) => s.eventId === event.id) ?? null;
+      const signups = (await storage.listSignups(event.id)).filter(
+        (s) => s.status !== "cancelled" && s.email.trim().toLowerCase() === email,
+      );
+      out.push({
+        event: toPublicEvent(event),
+        show,
+        slotIndex: signups[0]?.slotIndex ?? null,
+        signupId: signups[0]?.id ?? null,
+      });
+    }
+    res.json(out);
+  });
+
+  app.get("/api/host/shows/:eventId", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const eventId = Number(req.params.eventId);
+    const event = await storage.getEventById(eventId);
+    if (!event) {
+      res.status(404).json({ message: "That event no longer exists." });
+      return;
+    }
+    const show = await storage.getEventShow(email, eventId);
+    if (show) {
+      res.json(show);
+      return;
+    }
+    // Nothing set up yet — hand back the profile's values as the starting
+    // point rather than an empty form.
+    const profile = await storage.getProfileByEmail(email);
+    res.json({
+      eventId,
+      showName: profile?.podcastName ?? "",
+      showFormat: profile?.showFormat || "live",
+      recordingUrl: profile?.recordingUrl ?? "",
+      introStyle: profile?.introStyle || "virtual",
+      imageUrl: "",
+      isNew: true,
+    });
+  });
+
+  app.put(
+    "/api/host/shows/:eventId",
+    requireHostSession,
+    (req, res, next) => {
+      upload.single("image")(req, res, (err) => {
+        if (err) {
+          res.status(400).json({ message: err.message || "Couldn't process that image." });
+          return;
+        }
+        next();
+      });
+    },
+    async (req, res) => {
+      const email = (req as any).hostEmail as string;
+      const eventId = Number(req.params.eventId);
+      const event = await storage.getEventById(eventId);
+      if (!event) {
+        res.status(404).json({ message: "That event no longer exists." });
+        return;
+      }
+      const body = req.body as Record<string, string>;
+      const parsed = insertEventShowSchema.safeParse({
+        showName: body.showName ?? "",
+        showFormat: body.showFormat || "live",
+        recordingUrl: body.recordingUrl ?? "",
+        introStyle: body.introStyle || "virtual",
+      });
+      if (!parsed.success) {
+        res.status(400).json({ message: fromError(parsed.error).toString() });
+        return;
+      }
+
+      let imageUrl: string | undefined;
+      if (req.file) {
+        try {
+          imageUrl = await enhanceAndSavePhoto(req.file.buffer);
+        } catch {
+          res.status(400).json({ message: "That image couldn't be processed — try a different file." });
+          return;
+        }
+      } else if (body.clearImage === "true") {
+        imageUrl = "";
+      }
+
+      const saved = await storage.upsertEventShow(email, eventId, {
+        ...parsed.data,
+        ...(imageUrl === undefined ? {} : { imageUrl }),
+      });
+      // A slot already claimed for this event follows the show it belongs to.
+      await storage.syncSignupsFromEventShow(email, eventId, saved);
+      res.json(saved);
+    },
+  );
 
   // ---- Host: social accounts via Upload-Post -----------------------------------
   //      GET    → is the feature on, and what's connected right now
