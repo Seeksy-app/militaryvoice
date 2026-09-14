@@ -400,7 +400,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
           <div className="flex flex-col gap-6">
             <SectionCard
               id="section-about"
-              step={1}
+              step={variant === "setup" ? 1 : undefined}
               icon={User}
               title="About you"
               description="Who's behind the mic. Your photo goes on the public lineup; contact details stay with the production team."
@@ -740,18 +740,16 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
             )}
 
             <SectionCard
-              step={4}
+              step={variant === "setup" ? 4 : undefined}
               icon={Clapperboard}
               // During setup this section is just the notes box — the
               // how-you-work questions only appear in Profile Settings — so
               // don't promise transitions and support that aren't asked here.
-              title={isSetup ? "Anything else" : "For the production team"}
+              title={isSetup ? "Anything else" : "How you normally work"}
               description={
                 isSetup
                   ? "Optional. Anything you'd like the crew to know before your slot."
-                  : isPrerecorded
-                    ? "We're rolling your finished episode, so there's almost nothing to plan."
-                    : "How you normally work, plus anything else the crew should know."
+                  : "All optional. Just so we know what you're used to — it changes nothing about your slot."
               }
             >
               {/* Permanent facts about how this person works, not setup for
@@ -759,15 +757,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                   a slot. So it lives in Profile Settings and stays out of the
                   way while someone is trying to get booked. */}
               {!isSetup && (
-              <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
-                    How you normally work · optional
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Just so we know what you're used to. It changes nothing about your slot.
-                  </p>
-                </div>
+              <div className="flex flex-col gap-4">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <FormField
                     control={form.control}
@@ -908,7 +898,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
             </SectionCard>
 
             <SectionCard
-              step={5}
+              step={variant === "setup" ? 5 : undefined}
               icon={Headphones}
               title="Where people can listen"
               description="Both optional — add whichever you have, or skip this and come back later."
@@ -953,7 +943,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
             </SectionCard>
 
             <SectionCard
-              step={6}
+              step={variant === "setup" ? 6 : undefined}
               icon={Globe}
               title="Connect your social media"
               description="So listeners can find and follow you after your slot. Everything here shows on your public card."
