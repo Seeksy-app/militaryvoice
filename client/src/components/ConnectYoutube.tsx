@@ -69,6 +69,12 @@ export function ConnectYoutube() {
             ? "We'll open a broadcast on your channel when your slot starts. Your audience watches you there."
             : "Connect once and your segment goes out to your channel as well as ours. No stream key to find."}
         </p>
+        {/* Say why there is only one button here. Without this it reads as a
+            half-finished list and people go looking for the others. */}
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          YouTube is the only channel we can send to directly. Facebook, LinkedIn and X don't allow it without a
+          third-party tool — ask us and we'll set one up with you.
+        </p>
       </div>
       {data.connected ? (
         <Button

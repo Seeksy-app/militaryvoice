@@ -276,6 +276,10 @@ export function EventSettings({
         </div>
       )}
 
+      {children?.(open)}
+
+      {/* Promotion comes after the work. Sharing matters, but not before
+          they've set the show up and sent us what we need. */}
       {open.slotIndex != null && open.signupId != null && (
         <ShareYourSlot
           signupId={open.signupId}
@@ -283,8 +287,6 @@ export function EventSettings({
           whenLabel={onAirLabel}
         />
       )}
-
-      {children?.(open)}
     </section>
   );
 }

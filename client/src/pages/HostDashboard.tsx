@@ -823,8 +823,15 @@ export default function HostDashboard() {
                     </EventPanel>
 
                     <EventPanel title="Stream" hint="Where it goes out">
+                      <p className="text-[15px] text-foreground">
+                        Do you want your slot to go out on your own channels as well as ours? Optional — it airs on
+                        MilitaryVoice.ai either way.
+                      </p>
                       <ConnectYoutube />
-                      <OwnEncoder />
+                      {/* Pushing your own live feed in is meaningless for a
+                          pre-recorded slot: we're rolling your file, there is no
+                          feed to send. Only offer it when the slot is live. */}
+                      {entry.show?.showFormat !== "prerecorded" && <OwnEncoder />}
                     </EventPanel>
 
                   </div>
