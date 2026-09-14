@@ -302,3 +302,44 @@ export async function publishVideo(input: {
   }
   return { ok: true, raw: json };
 }
+
+/**
+ * Post an image to the networks they've connected. Same shape as publishVideo
+ * but hits /upload_photos, which takes photos[] instead of video.
+ */
+export async function publishPhoto(input: {
+  username: string;
+  platforms: string[];
+  photoUrl: string;
+  title: string;
+  description?: string;
+}): Promise<PublishResult> {
+  if (!API_KEY) throw new Error("Upload-Post is not configured (UPLOAD_POST_API_KEY missing).");
+  if (input.platforms.length === 0) throw new Error("Pick at least one account to post to.");
+
+  const form = new FormData();
+  form.set("user", input.username);
+  for (const p of input.platforms) form.append("platform[]", p);
+  form.append("photos[]", input.photoUrl);
+  // Several networks use the title as the caption, so it carries the post.
+  form.set("title", input.title.slice(0, 300));
+  if (input.description) form.set("description", input.description.slice(0, 4000));
+
+  const res = await fetch(`${BASE}/upload_photos`, {
+    method: "POST",
+    headers: { Authorization: `Apikey ${API_KEY}` },
+    body: form,
+  });
+  const text = await res.text();
+  let json: unknown = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    /* non-JSON body */
+  }
+  if (!res.ok) {
+    const msg = (json as any)?.message || (json as any)?.error || text || res.statusText;
+    throw new Error(String(msg));
+  }
+  return (json ?? { success: true }) as PublishResult;
+}

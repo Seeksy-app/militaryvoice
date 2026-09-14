@@ -62,12 +62,13 @@ import {
   myChannel,
   createBroadcast,
 } from "./youtube.js";
-import { buildShareCard } from "./shareCard.js";
+import { buildShareCard, CARD_SIZES, type CardSize } from "./shareCard.js";
 import { sendPrepNudge, sendFinalNudge, sendOnAirNudge, sendBookingAlert } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, StudioRow } from "../shared/schema.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
+  publishPhoto,
   isUploadPostConfigured,
   ensureUploadPostProfile,
   createConnectUrl,
@@ -332,6 +333,74 @@ export function registerRoutes(app: Express): void {
   // ---- Search engines -----------------------------------------------------------
   //      Built from the real events rather than kept as a static file, so a new
   //      event is discoverable the moment it's published.
+  /**
+   * Post the podcaster's own promo card to the accounts they've connected.
+   * The image is the one we generate for them, so there is nothing to make
+   * and nothing to upload — they pick the accounts and press the button.
+   */
+  app.post("/api/host/share/publish", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    if (!isUploadPostConfigured()) {
+      res.status(400).json({ message: "Posting isn't switched on yet." });
+      return;
+    }
+    const profile = await storage.getProfileByEmail(email);
+    if (!profile?.uploadPostUsername) {
+      res.status(400).json({ message: "Connect an account first, on the Integrations tab." });
+      return;
+    }
+
+    // YouTube takes videos, not stills — offering it here would only produce a
+    // failure at the far end.
+    const PHOTO_PLATFORMS = ["instagram", "tiktok", "x", "linkedin", "facebook", "threads", "pinterest"];
+    const platforms = (Array.isArray(req.body?.platforms) ? req.body.platforms.map(String) : []).filter((p: string) =>
+      PHOTO_PLATFORMS.includes(p),
+    );
+    if (platforms.length === 0) {
+      res.status(400).json({ message: "Pick at least one account that takes images." });
+      return;
+    }
+    const requested = String(req.body?.size ?? "square");
+    const size: CardSize = requested in CARD_SIZES ? (requested as CardSize) : "square";
+
+    const featured = await storage.getFeaturedEvent();
+    const signup = (await storage.listSignups(featured.id)).find(
+      (x) => x.status !== "cancelled" && x.email.trim().toLowerCase() === email.toLowerCase(),
+    );
+    if (!signup) {
+      res.status(400).json({ message: "Claim a time slot first — there's nothing to announce yet." });
+      return;
+    }
+
+    const origin = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "");
+    const blockStart = new Date(
+      new Date(featured.startAtUtc).getTime() + signup.slotIndex * featured.slotMinutes * 60000,
+    );
+    const onAir = onAirWindowServer(blockStart, featured.onAirMinutes, featured.bufferMinutes, featured.bufferPosition);
+    const tz = signup.timezone || "America/New_York";
+    const whenLabel = `${formatDateTimeInZone(onAir.start, tz)} ${zoneAbbrev(onAir.start, tz)}`;
+
+    const caption =
+      typeof req.body?.caption === "string" && req.body.caption.trim()
+        ? String(req.body.caption)
+        : `I'm live on National Military Podcast Day. ${signup.podcastName} — ${whenLabel}. ` +
+          `Set a reminder and tune in: ${origin}/s/${signup.id}`;
+
+    try {
+      // Upload-Post fetches the image itself, so hand it the generated card's
+      // public URL rather than shipping bytes through this request.
+      const result = await publishPhoto({
+        username: profile.uploadPostUsername,
+        platforms,
+        photoUrl: `${origin}/og/slot/${signup.id}.jpg?size=${size}`,
+        title: caption,
+      });
+      res.json({ ok: true, platforms, result });
+    } catch (err) {
+      res.status(502).json({ message: (err as Error).message });
+    }
+  });
+
   // ---- Scheduled nudges --------------------------------------------------------
   //      One hourly pass. Idempotent: every send is claimed in the database
   //      first, so a double-fired cron, a retry or a mid-run redeploy cannot
@@ -542,12 +611,12 @@ export function registerRoutes(app: Express): void {
         ? signup.photoUrl
         : `${origin}${signup.photoUrl}`
       : undefined;
-    const jpg = await buildShareCard({
-      podcastName: signup.podcastName,
-      hostName: signup.hostName,
-      whenLabel,
-      photoUrl: photo,
-    });
+    const requested = String(req.query.size ?? "wide");
+    const size: CardSize = requested in CARD_SIZES ? (requested as CardSize) : "wide";
+    const jpg = await buildShareCard(
+      { podcastName: signup.podcastName, hostName: signup.hostName, whenLabel, photoUrl: photo },
+      size,
+    );
     // Scrapers fetch this once and cache hard; so should the CDN.
     res.setHeader("Content-Type", "image/jpeg");
     res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");

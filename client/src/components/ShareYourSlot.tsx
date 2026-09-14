@@ -1,4 +1,9 @@
 import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
+import type { SocialAccount } from "@shared/schema";
+import { Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -58,8 +63,33 @@ export function ShareYourSlot({
   podcastName: string;
   whenLabel: string;
 }) {
+  const { toast } = useToast();
   const origin = typeof window === "undefined" ? "https://www.militaryvoice.ai" : window.location.origin;
   const url = `${origin}/s/${signupId}`;
+
+  // Post it for them: they pick accounts, we send the card we already made.
+  const { data: social } = useQuery<{ configured: boolean; accounts: SocialAccount[] }>({
+    queryKey: ["/api/host/social"],
+    retry: false,
+  });
+  // Only the networks Upload-Post can post a still to; YouTube wants video.
+  const PHOTO_PLATFORMS = ["instagram", "tiktok", "x", "linkedin", "facebook", "threads"];
+  const connected = (social?.accounts ?? []).filter((a) => PHOTO_PLATFORMS.includes(a.platform));
+  const [picked, setPicked] = useState<string[]>([]);
+  const [variant, setVariant] = useState<"square" | "story">("square");
+
+  const publish = useMutation({
+    mutationFn: async () =>
+      (await apiRequest("POST", "/api/host/share/publish", { platforms: picked, size: variant, caption })).json(),
+    onSuccess: () => {
+      setPicked([]);
+      toast({
+        title: "Sent to your accounts",
+        description: "It can take a minute to appear. Check the post before you share it on.",
+      });
+    },
+    onError: (err: Error) => toast({ title: "Couldn't post that", description: err.message, variant: "destructive" }),
+  });
 
   const caption =
     `I'm live on National Military Podcast Day.\n\n` +
@@ -122,9 +152,94 @@ export function ShareYourSlot({
                 ))}
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                Instagram and TikTok have no share-by-link — copy the post above and paste it there.
+                Instagram and TikTok have no share-by-link — copy the post above and paste it there, or let us post
+                the card for you below.
               </p>
             </div>
+
+            {connected.length > 0 && (
+              <div className="rounded-xl border border-[#053877]/20 bg-[#053877]/[0.05] p-4">
+                <p className="text-sm font-semibold text-foreground">Or let us post it for you</p>
+                <p className="text-xs text-muted-foreground">
+                  We send the card above, with your caption, straight to the accounts you pick.
+                </p>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {connected.map((a) => {
+                    const on = picked.includes(a.platform);
+                    return (
+                      <button
+                        key={a.platform}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() =>
+                          setPicked((p) => (on ? p.filter((x) => x !== a.platform) : [...p, a.platform]))
+                        }
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                          on ? "border-primary bg-primary/10 text-primary" : "border-border bg-card hover:bg-[#053877]/[0.04]"
+                        }`}
+                        data-testid={`pick-platform-${a.platform}`}
+                      >
+                        <span
+                          className="flex h-5 w-5 items-center justify-center rounded-full text-white"
+                          style={{ background: platformBackground(a.platform) }}
+                        >
+                          <PlatformIcon platform={a.platform} className="h-3 w-3" />
+                        </span>
+                        {platformLabel(a.platform)}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="mt-3 flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(["square", "story"] as const).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        aria-pressed={variant === v}
+                        onClick={() => setVariant(v)}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                          variant === v ? "border-primary bg-primary/10 text-primary" : "border-border bg-card"
+                        }`}
+                        data-testid={`pick-size-${v}`}
+                      >
+                        {v === "square" ? "Square (feed)" : "Tall (stories)"}
+                      </button>
+                    ))}
+                  </div>
+                  {/* The exact image that goes out — no surprises after they press post. */}
+                  <img
+                    key={variant}
+                    src={`/og/slot/${signupId}.jpg?size=${variant}`}
+                    alt={`Your ${variant} card`}
+                    className={`shrink-0 rounded-lg border border-border object-cover ${
+                      variant === "square" ? "h-16 w-16" : "h-16 w-9"
+                    }`}
+                  />
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    className="gap-1.5 rounded-full"
+                    disabled={picked.length === 0 || publish.isPending}
+                    variant={picked.length === 0 ? "outline" : "default"}
+                    onClick={() => publish.mutate()}
+                    data-testid="button-publish-card"
+                  >
+                    {publish.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    {publish.isPending ? "Posting…" : "Post it for me"}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {picked.length === 0
+                      ? "Pick an account first."
+                      : `Posting to ${picked.length} account${picked.length === 1 ? "" : "s"}.`}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* The card itself, because nobody trusts a link they can't see. */}
