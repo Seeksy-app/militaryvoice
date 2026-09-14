@@ -41,7 +41,7 @@ const CAPABILITIES = [
   {
     icon: CalendarClock,
     title: "Scheduling",
-    body: "Publish your slots and let speakers claim their own time, shown in their own zone. They fill in their details once and every slot they take reuses them. A cancellation puts the time straight back on the board.",
+    body: "Publish your slots and let speakers claim their own time, shown in their own zone. They fill in their details once, hold one slot each, and can move to any open time without re-entering a thing. A cancellation puts the time straight back on the board.",
     saves: "No more back-and-forth over time zones",
   },
   {
