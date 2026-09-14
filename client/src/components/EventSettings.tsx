@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EventShowForm, type EventShow } from "@/components/EventShowForm";
 import { EventSlotPicker } from "@/components/EventSlotPicker";
+import { ShareYourSlot } from "@/components/ShareYourSlot";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone, detectLocalTimeZone, slotStart, onAirWindow } from "@/lib/schedule";
 import type { PublicEvent } from "@shared/schema";
@@ -206,6 +207,28 @@ export function EventSettings({
           </>
         )}
       </div>
+
+      {open.slotIndex != null && open.signupId != null && (
+        <ShareYourSlot
+          signupId={open.signupId}
+          podcastName={open.show?.showName || open.event.name}
+          whenLabel={`${formatDateInZone(
+            onAirWindow(slotStart(open.event.startAtUtc, open.event.slotMinutes, open.slotIndex), {
+              onAirMinutes: open.event.onAirMinutes,
+              bufferMinutes: open.event.bufferMinutes,
+              bufferPosition: open.event.bufferPosition,
+            }).start,
+            zone,
+          )} at ${formatTimeInZone(
+            onAirWindow(slotStart(open.event.startAtUtc, open.event.slotMinutes, open.slotIndex), {
+              onAirMinutes: open.event.onAirMinutes,
+              bufferMinutes: open.event.bufferMinutes,
+              bufferPosition: open.event.bufferPosition,
+            }).start,
+            zone,
+          )}`}
+        />
+      )}
 
       {children?.(open)}
     </section>

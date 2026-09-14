@@ -60,6 +60,7 @@ import {
   myChannel,
   createBroadcast,
 } from "./youtube.js";
+import { buildShareCard } from "./shareCard.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, StudioRow } from "../shared/schema.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -328,6 +329,105 @@ export function registerRoutes(app: Express): void {
   // ---- Search engines -----------------------------------------------------------
   //      Built from the real events rather than kept as a static file, so a new
   //      event is discoverable the moment it's published.
+  // ---- A podcaster's own share link -------------------------------------------
+  //      /s/:id unfurls with their artwork and their time, then sends the
+  //      reader to their card on the agenda. Static tags in index.html can't
+  //      vary per podcaster, so this route serves its own HTML.
+
+  /** Everything both share routes need, or null if the slot isn't live. */
+  async function shareSubject(id: number) {
+    const signup = await storage.getSignupById(id);
+    if (!signup || signup.status === "cancelled") return null;
+    const event = await storage.getEventById(signup.eventId);
+    if (!event) return null;
+    const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
+    const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+    const tz = signup.timezone || "America/New_York";
+    return {
+      signup,
+      event,
+      whenLabel: `${formatDateTimeInZone(onAir.start, tz)} ${zoneAbbrev(onAir.start, tz)}`,
+    };
+  }
+
+  app.get("/og/slot/:id.jpg", async (req, res) => {
+    const found = await shareSubject(Number(req.params.id));
+    if (!found) {
+      res.status(404).end();
+      return;
+    }
+    const { signup, whenLabel } = found;
+    const origin = `${req.protocol}://${req.get("host")}`;
+    const photo = signup.photoUrl
+      ? signup.photoUrl.startsWith("http")
+        ? signup.photoUrl
+        : `${origin}${signup.photoUrl}`
+      : undefined;
+    const jpg = await buildShareCard({
+      podcastName: signup.podcastName,
+      hostName: signup.hostName,
+      whenLabel,
+      photoUrl: photo,
+    });
+    // Scrapers fetch this once and cache hard; so should the CDN.
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
+    res.end(jpg);
+  });
+
+  app.get("/s/:id", async (req, res) => {
+    const id = Number(req.params.id);
+    const found = await shareSubject(id);
+    if (!found) {
+      res.redirect(302, "/agenda");
+      return;
+    }
+    const { signup, event, whenLabel } = found;
+    const origin = `${req.protocol}://${req.get("host")}`;
+    const target = `/agenda?slot=${signup.slotIndex}`;
+    const title = `${signup.podcastName} · ${whenLabel}`;
+    const desc = `${signup.hostName} is live on ${event.name} for National Military Podcast Day. Tune in, or set a reminder.`;
+    const img = `${origin}/og/slot/${id}.jpg`;
+    const esc = (v: string) =>
+      v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=3600");
+    res.end(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="MilitaryVoice.ai" />
+<meta property="og:title" content="${esc(title)}" />
+<meta property="og:description" content="${esc(desc)}" />
+<meta property="og:url" content="${origin}/s/${id}" />
+<meta property="og:image" content="${img}" />
+<meta property="og:image:secure_url" content="${img}" />
+<meta property="og:image:type" content="image/jpeg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="${esc(title)}" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${esc(title)}" />
+<meta name="twitter:description" content="${esc(desc)}" />
+<meta name="twitter:image" content="${img}" />
+<link rel="canonical" href="${origin}${target}" />
+<meta http-equiv="refresh" content="0; url=${target}" />
+</head>
+<body style="margin:0;background:#000741;color:#fff;font:16px/1.5 system-ui,sans-serif">
+<div style="max-width:640px;margin:12vh auto;padding:0 24px;text-align:center">
+  <p style="opacity:.75">Taking you to the lineup…</p>
+  <p><a href="${target}" style="color:#F0A71F;font-weight:600">${esc(signup.podcastName)} — ${esc(whenLabel)}</a></p>
+</div>
+<script>location.replace(${JSON.stringify(target)});</script>
+</body>
+</html>`);
+  });
+
   app.get("/sitemap.xml", async (req, res) => {
     const origin = `${req.protocol}://${req.get("host")}`;
     const staticPaths = ["", "/schedule", "/agenda", "/faq", "/prepare", "/platform", "/events", "/policy", "/terms"];

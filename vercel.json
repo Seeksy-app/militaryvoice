@@ -19,7 +19,15 @@
       "destination": "/api"
     },
     {
-      "source": "/((?!api/|assets/).*)",
+      "source": "/s/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/og/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/((?!api/|assets/|s/|og/).*)",
       "destination": "/index.html"
     }
   ]

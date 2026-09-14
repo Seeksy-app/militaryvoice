@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { NavBar } from "@/components/NavBar";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { AgendaSignupActions } from "@/components/AgendaSignupActions";
@@ -87,6 +87,17 @@ export default function Agenda({ slug }: Props) {
   // show the on-air window.
   const [selected, setSelected] = useState<{ signup: PublicSignup; start: Date } | null>(null);
 
+  // /agenda?slot=N is where a podcaster's share link lands. Scroll to their
+  // card and open it, so the reader sees the show they were promised rather
+  // than the top of a 48-row list.
+  const search = useSearch();
+  const deepLinkSlot = (() => {
+    const v = new URLSearchParams(search).get("slot");
+    const n = v == null ? NaN : Number(v);
+    return Number.isInteger(n) && n >= 0 ? n : null;
+  })();
+  const deepLinked = useRef(false);
+
   // A slot goes on air and comes off it while the page is open — on the day
   // this page sits on a screen for 24 hours, so the badges have to move
   // without a reload. Half a minute is plenty for 30-minute slots.
@@ -115,6 +126,22 @@ export default function Agenda({ slug }: Props) {
       return { index: i, start, end, showDate, dateLabel, signup };
     });
   }, [event, signups, viewZone]);
+
+  // Once the slots exist, scroll the shared card into view and open it. Runs
+  // once — reopening every render would trap someone who closed the dialog.
+  useEffect(() => {
+    if (deepLinked.current || deepLinkSlot == null || slots.length === 0) return;
+    const hit = slots.find((s) => s.index === deepLinkSlot && s.signup);
+    if (!hit?.signup) return;
+    deepLinked.current = true;
+    setSelected({ signup: hit.signup, start: hit.start });
+    // Let the row paint before scrolling to it.
+    requestAnimationFrame(() => {
+      document
+        .querySelector(`[data-testid="row-agenda-${deepLinkSlot}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [deepLinkSlot, slots]);
 
   const groups = useMemo(() => {
     const out: { dateLabel: string; items: typeof slots }[] = [];
