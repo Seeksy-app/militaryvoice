@@ -1,5 +1,5 @@
 import sharp, { type OverlayOptions } from "sharp";
-import { fitSize, textPath, textWidth } from "./textPath";
+import { fitSize, textPath, textWidth } from "./textPath.js";
 
 // The card a podcaster's share link unfurls with, and the image we post to
 // their accounts. Their artwork and their on-air time, not the generic event

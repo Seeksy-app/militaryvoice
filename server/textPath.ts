@@ -1,5 +1,5 @@
 import opentype from "opentype.js";
-import { INTER_BOLD_B64, INTER_REGULAR_B64 } from "./assets/fonts";
+import { INTER_BOLD_B64, INTER_REGULAR_B64 } from "./assets/fonts.js";
 
 // Draw text as vector outlines instead of asking the renderer for a font.
 //
