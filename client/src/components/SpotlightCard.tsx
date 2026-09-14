@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "wouter";
-import { Mic2, ArrowRight, Radio, Rss, Youtube } from "lucide-react";
+import { Mic2, ArrowRight, Radio, Youtube } from "lucide-react";
 import type { PublicSignup } from "@shared/schema";
 import { Clock } from "lucide-react";
 import { resolveUploadUrl } from "@/lib/queryClient";
@@ -152,16 +152,6 @@ export function SpotlightCard({ items, zone, agendaHref, intervalMs = 6000 }: Pr
                     className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium hover-elevate"
                   >
                     <Youtube className="h-3.5 w-3.5 text-primary" /> YouTube
-                  </a>
-                )}
-                {signup.rssUrl && (
-                  <a
-                    href={signup.rssUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium hover-elevate"
-                  >
-                    <Rss className="h-3.5 w-3.5 text-primary" /> Subscribe
                   </a>
                 )}
               </div>

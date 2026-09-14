@@ -8,7 +8,7 @@ import { AgendaSignupActions } from "@/components/AgendaSignupActions";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import type { PublicSignup } from "@shared/schema";
 import { formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
-import { Mic2, Globe, Rss, Youtube, Radio, PlayCircle, CalendarClock } from "lucide-react";
+import { Mic2, Globe, Youtube, Radio, PlayCircle, CalendarClock } from "lucide-react";
 
 interface LatestEpisode {
   title: string;
@@ -162,16 +162,6 @@ export function PodcasterDialog({ signup, onAirStart, onAirEnd, zone, shareText,
                     className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium hover-elevate"
                   >
                     <Youtube className="h-3.5 w-3.5 text-[#FF0000]" /> YouTube
-                  </a>
-                )}
-                {signup.rssUrl && (
-                  <a
-                    href={toHref(signup.rssUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium hover-elevate"
-                  >
-                    <Rss className="h-3.5 w-3.5 text-[#F0A71F]" /> Subscribe
                   </a>
                 )}
               </div>

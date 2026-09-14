@@ -58,7 +58,7 @@ export function EventSlotPicker({ event, disabled }: { event: PublicEvent; disab
         {open.length} open · {slots.length - open.length} taken. Every half hour in order, so you can see who's on
         before and after you.
       </p>
-      <div className="grid max-h-[26rem] grid-cols-1 items-start gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {slots.map((s) => {
           const air = onAirWindow(s.start, {
             onAirMinutes: event.onAirMinutes,
