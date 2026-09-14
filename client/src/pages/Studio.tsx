@@ -81,7 +81,7 @@ function PeerTile({ peer, muted = false }: { peer: RoomPeer; muted?: boolean }) 
           <VideoOff className="h-5 w-5 text-white/30" />
         </div>
       )}
-      <span className="absolute inset-x-1.5 bottom-1.5 truncate rounded bg-black/60 px-1.5 py-0.5 text-[11px] text-white">
+      <span className="absolute inset-x-1.5 bottom-1.5 truncate rounded bg-black/60 px-1.5 py-0.5 text-[12px] text-white">
         {peer.name}
       </span>
     </div>

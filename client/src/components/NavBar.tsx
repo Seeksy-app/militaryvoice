@@ -40,7 +40,7 @@ export function NavBar() {
   const signedIn = me !== null && me !== undefined;
 
   const linkCls = (active: boolean) =>
-    `whitespace-nowrap rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors hover-elevate ${
+    `whitespace-nowrap rounded-md px-2.5 py-2 text-[15px] font-medium transition-colors hover-elevate ${
       active ? "text-primary" : "text-muted-foreground"
     }`;
 

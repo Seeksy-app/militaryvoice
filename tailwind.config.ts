@@ -99,6 +99,19 @@ export default {
           offline: "rgb(156 163 175)",
         },
       },
+      // The interface ran on 12-14px almost everywhere, which reads as small
+      // on a laptop and is genuinely hard work for an audience that skews
+      // older. Lifting the scale once here moves ~500 usages at a stroke and
+      // keeps the steps between sizes intact.
+      fontSize: {
+        xs: ["0.8125rem", { lineHeight: "1.125rem" }], // 13px, was 12
+        sm: ["0.9375rem", { lineHeight: "1.375rem" }], // 15px, was 14
+        base: ["1.0625rem", { lineHeight: "1.6rem" }], // 17px, was 16
+        lg: ["1.1875rem", { lineHeight: "1.75rem" }], // 19px, was 18
+        xl: ["1.3125rem", { lineHeight: "1.8rem" }], // 21px, was 20
+        "2xl": ["1.5625rem", { lineHeight: "2rem" }], // 25px, was 24
+        "3xl": ["1.9375rem", { lineHeight: "2.35rem" }], // 31px, was 30
+      },
       fontFamily: {
         sans: ["var(--font-sans)"],
         serif: ["var(--font-serif)"],

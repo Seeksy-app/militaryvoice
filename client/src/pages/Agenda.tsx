@@ -39,7 +39,7 @@ function SlotBadge({ start, end, showFormat, now }: { start: Date; end: Date; sh
 
   if (onAir) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#1a1200]">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[12px] font-semibold uppercase tracking-wide text-[#1a1200]">
         <span className="relative flex h-1.5 w-1.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#1a1200] opacity-75" />
           <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#1a1200]" />
@@ -49,7 +49,7 @@ function SlotBadge({ start, end, showFormat, now }: { start: Date; end: Date; sh
     );
   }
 
-  const quiet = "inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/85";
+  const quiet = "inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[12px] font-semibold uppercase tracking-wide text-white/85";
   if (over) {
     return (
       <span className={quiet}>
@@ -242,7 +242,7 @@ export default function Agenda({ slug }: Props) {
                               {formatTimeInZone(s.start, viewZone)}
                               <span className="opacity-60"> – {formatTimeInZone(s.end, viewZone)}</span>
                             </span>
-                            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <span className="rounded-full border border-border px-2 py-0.5 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
                               Open
                             </span>
                           </div>

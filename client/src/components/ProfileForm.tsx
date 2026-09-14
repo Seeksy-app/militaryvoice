@@ -131,7 +131,7 @@ function SectionCard({
         <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[#F0A71F]">
           <Icon className="h-5 w-5" />
           {step !== undefined && (
-            <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#F0A71F] font-mono text-[11px] font-bold text-[#1a1200]">
+            <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#F0A71F] font-mono text-[12px] font-bold text-[#1a1200]">
               {step}
             </span>
           )}

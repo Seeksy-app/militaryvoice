@@ -632,7 +632,7 @@ export default function HostDashboard() {
                   data-testid={`nav-host-${value}`}
                 >
                   <span className="text-sm font-semibold">{label}</span>
-                  <span className="hidden text-[11px] font-normal opacity-70 sm:block">{hint}</span>
+                  <span className="hidden text-[12px] font-normal opacity-70 sm:block">{hint}</span>
                 </button>
               );
             })}

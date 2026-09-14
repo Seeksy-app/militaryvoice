@@ -574,7 +574,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
                   data-testid="input-studio-name"
                 />
               )}
-              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-white/55">
+              <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-white/55">
                 <span
                   className={`h-1.5 w-1.5 rounded-full ${
                     roomStatus === "connected"
@@ -724,7 +724,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
                   }`}
                 >
                   <span
-                    className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                    className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${
                       isNow ? "bg-[#1a1200] text-[#F0A71F]" : x.done ? "bg-emerald-500/25 text-emerald-300" : "bg-white/10"
                     }`}
                   >
@@ -795,7 +795,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
           <div className="flex min-h-0 flex-1">
             {/* green room, down the left, where a producer's eye already is */}
             <aside className="flex w-[248px] shrink-0 flex-col border-r border-white/10">
-              <div className="flex items-center justify-between px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">
+              <div className="flex items-center justify-between px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
                 <span className="flex items-center gap-1.5">
                   <Users className="h-3.5 w-3.5" /> Green room
                 </span>
@@ -835,7 +835,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
                         </div>
                         <Button
                           size="sm"
-                          className="h-7 gap-1 rounded-full px-2.5 text-[11px]"
+                          className="h-7 gap-1 rounded-full px-2.5 text-[12px]"
                           disabled={stageFull}
                           title={stageFull ? `Stage is full at ${studio?.maxOnStage}` : "Bring them on stage"}
                           onClick={() => setState.mutate({ id: p.id, state: "On stage" })}
@@ -851,7 +851,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
 
               {onStage.length > 0 && (
                 <div className="border-t border-white/10 px-3 py-2.5">
-                  <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">
+                  <div className="mb-2 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
                     On stage · {onStage.length}/{studio?.maxOnStage ?? 5}
                   </div>
                   <div className="space-y-1.5">
@@ -863,7 +863,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 gap-1 rounded-full px-2 text-[11px] text-white/70 hover:bg-white/10 hover:text-white"
+                          className="h-6 gap-1 rounded-full px-2 text-[12px] text-white/70 hover:bg-white/10 hover:text-white"
                           onClick={() => setState.mutate({ id: p.id, state: "Green room" })}
                           data-testid={`button-live-down-${p.id}`}
                         >
@@ -894,12 +894,12 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
                 idleTitle={currentStudio?.name}
               />
               {broadcasting && (
-                <span className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white">
+                <span className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.14em] text-white">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> On air
                 </span>
               )}
               {recording && (
-                <span className="pointer-events-none absolute right-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-[11px] font-semibold text-white">
+                <span className="pointer-events-none absolute right-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-[12px] font-semibold text-white">
                   <Disc className="h-3 w-3 text-[#ED1C24]" /> Recording
                 </span>
               )}
@@ -908,7 +908,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
             {/* the rundown, driveable — a second person can sit on this alone */}
             {isPrimary && (runItems ?? []).length > 0 && (
               <aside className="hidden w-[280px] shrink-0 flex-col border-l border-white/10 xl:flex">
-                <div className="flex items-center justify-between px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">
+                <div className="flex items-center justify-between px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
                   <span className="flex items-center gap-1.5">
                     <ListOrdered className="h-3.5 w-3.5" /> Rundown
                   </span>
@@ -935,12 +935,12 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
                         }`}
                         data-testid={`button-cue-${r.id}`}
                       >
-                        <span className="pt-0.5 text-[10px] tabular-nums opacity-70">
+                        <span className="pt-0.5 text-[11px] tabular-nums opacity-70">
                           {r.startAtUtc ? formatTimeInZone(new Date(r.startAtUtc), zone) : "--:--"}
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-xs font-medium">{r.title}</span>
-                          <span className="mt-0.5 flex items-center gap-1.5 text-[10px] opacity-70">
+                          <span className="mt-0.5 flex items-center gap-1.5 text-[11px] opacity-70">
                             {r.kind}
                             {r.mediaUrl && (
                               <>
@@ -958,7 +958,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
                   })}
                 </div>
 
-                <p className="border-t border-white/10 px-4 py-2 text-[10px] leading-snug text-white/35">
+                <p className="border-t border-white/10 px-4 py-2 text-[11px] leading-snug text-white/35">
                   Press a row to take it. A row with no media returns the stage to the cameras.
                 </p>
               </aside>
@@ -968,7 +968,7 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
           {/* scenes, one press each */}
           {(scenes ?? []).length > 0 && (
             <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-[#04102b] px-4 py-2.5">
-              <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/40">Scenes</span>
+              <span className="text-[12px] font-bold uppercase tracking-[0.14em] text-white/40">Scenes</span>
               {(scenes ?? []).map((sc) => {
                 const on = sc.mediaUrl
                   ? studio?.stageMediaPlaying && studio?.stageMediaUrl === sc.mediaUrl

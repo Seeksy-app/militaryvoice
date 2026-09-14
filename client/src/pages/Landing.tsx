@@ -372,7 +372,7 @@ export default function Landing({ slug }: Props) {
                       </>
                     )}
                   </span>
-                  <span className="tabular-nums text-[11px] uppercase tracking-wide text-white/50">{zoneLabel(zone)}</span>
+                  <span className="tabular-nums text-[12px] uppercase tracking-wide text-white/50">{zoneLabel(zone)}</span>
                 </div>
 
                 {countdown.phase === "upcoming" ? (
@@ -398,7 +398,7 @@ export default function Landing({ slug }: Props) {
                             </motion.div>
                           </AnimatePresence>
                         </div>
-                        <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/55 sm:text-[11px]">{label}</div>
+                        <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55 sm:text-[12px]">{label}</div>
                       </div>
                     ))}
                   </div>
@@ -417,7 +417,7 @@ export default function Landing({ slug }: Props) {
                 </div>
 
                 <div className="mt-4">
-                  <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-white/55">
+                  <div className="mb-1.5 flex items-center justify-between text-[12px] font-semibold uppercase tracking-wide text-white/55">
                     <span>Lineup filling</span>
                     <span className="tabular-nums">{dataReady ? `${booked.length}/${slotCount}` : "…"}</span>
                   </div>
@@ -472,7 +472,7 @@ export default function Landing({ slug }: Props) {
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold leading-tight">{it.podcastName}</div>
                             <div className="truncate text-xs text-white/70">{it.hostName}</div>
-                            <div className="mt-0.5 truncate tabular-nums text-[11px] text-[#F0A71F]">
+                            <div className="mt-0.5 truncate tabular-nums text-[12px] text-[#F0A71F]">
                               {it.start ? `${formatDateInZone(it.start, zone)} · ${formatTimeInZone(it.start, zone)}` : "Time coming soon"}
                             </div>
                           </div>
@@ -490,7 +490,7 @@ export default function Landing({ slug }: Props) {
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 px-4 pb-4">
           <div className="mx-auto flex max-w-5xl items-end justify-center gap-3 sm:gap-6">
             <div className="hidden flex-1 items-center justify-end gap-3 pb-3 sm:flex">
-              <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
+              <span className="whitespace-nowrap text-[12px] font-semibold uppercase tracking-[0.18em] text-white/70">
                 Streaming live on
               </span>
               <span aria-hidden="true" className="h-px w-6 bg-[#F0A71F]/70" />
@@ -747,7 +747,7 @@ export default function Landing({ slug }: Props) {
                     <div className="mt-2 tabular-nums text-xs text-primary">
                       {formatDateInZone(onAirStart, zone)} · {formatTimeInZone(onAirStart, zone)}
                     </div>
-                    <span className="mt-2 text-[11px] font-medium text-muted-foreground group-hover:text-primary">
+                    <span className="mt-2 text-[12px] font-medium text-muted-foreground group-hover:text-primary">
                       View profile
                     </span>
                   </button>

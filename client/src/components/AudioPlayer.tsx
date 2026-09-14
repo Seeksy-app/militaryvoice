@@ -170,7 +170,7 @@ export function AudioToggle({
       aria-label={playing ? `Turn off the ${TITLE} trailer` : `Play the ${TITLE} trailer`}
       title={playing ? "Sound on — tap to turn it off" : "Sound off — tap to listen"}
       aria-pressed={playing}
-      className={`inline-flex h-7 items-center justify-center gap-1 rounded-full border px-2 text-[11px] font-medium leading-none transition-colors ${base} ${className}`}
+      className={`inline-flex h-7 items-center justify-center gap-1 rounded-full border px-2 text-[12px] font-medium leading-none transition-colors ${base} ${className}`}
       data-testid="button-audio-mute"
     >
       {playing ? <Volume2 className="h-3.5 w-3.5 text-[#F0A71F]" /> : <VolumeX className="h-3.5 w-3.5" />}

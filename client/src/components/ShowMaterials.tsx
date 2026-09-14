@@ -179,7 +179,7 @@ export function ShowMaterials({
       <h2 className="mb-3 flex flex-wrap items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
         <Paperclip className="h-4 w-4" />
         Show materials
-        <span className="rounded-full bg-[#F0A71F] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#000741]">
+        <span className="rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#000741]">
           All optional
         </span>
       </h2>
@@ -208,7 +208,7 @@ export function ShowMaterials({
               <span className="block text-xs text-muted-foreground">Intros, outros, slides — anything we roll for you.</span>
             </span>
             {assets && assets.length > 0 && (
-              <span className="shrink-0 rounded-full bg-[#053877] px-2.5 py-0.5 text-[11px] font-bold text-white">
+              <span className="shrink-0 rounded-full bg-[#053877] px-2.5 py-0.5 text-[12px] font-bold text-white">
                 {assets.length}
               </span>
             )}

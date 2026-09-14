@@ -377,7 +377,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                 >
                   <div className="w-[104px] shrink-0">
                     <div className="text-sm font-bold tabular-nums">{when ? formatTimeInZone(when, zone) : "—"}</div>
-                    <div className="text-[11px] text-muted-foreground">
+                    <div className="text-[12px] text-muted-foreground">
                       {when ? formatDateInZone(when, zone) : ""}
                       {it.durationMinutes ? ` · ${it.durationMinutes}m` : ""}
                     </div>
@@ -386,7 +386,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                   <div className="flex shrink-0 flex-col items-start gap-1">
                     <Badge className={`font-normal hover:opacity-100 ${KIND_STYLE[it.kind] ?? KIND_STYLE.Custom}`}>{it.kind}</Badge>
                     {it.edited && (
-                      <Badge variant="outline" className="gap-1 border-primary/40 text-[10px] font-normal text-primary" title="Rebuild won't overwrite this row's wording">
+                      <Badge variant="outline" className="gap-1 border-primary/40 text-[11px] font-normal text-primary" title="Rebuild won't overwrite this row's wording">
                         <Lock className="h-2.5 w-2.5" /> Edited
                       </Badge>
                     )}
@@ -397,7 +397,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                       <span className="text-sm font-semibold text-card-foreground">{it.title}</span>
                       {s?.needsInterviewer && (
                         <span
-                          className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#1a1200]"
+                          className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[#1a1200]"
                           title="This podcaster asked to be interviewed"
                           data-testid={`badge-needs-interviewer-${it.id}`}
                         >
@@ -421,7 +421,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                             href={a.fileUrl || a.linkUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-[11px] font-medium hover-elevate"
+                            className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-[12px] font-medium hover-elevate"
                             title={a.label || a.fileName}
                           >
                             <Paperclip className="h-3 w-3 text-primary" />
@@ -435,7 +435,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
 
                     {s && (s.guests || s.interviewQuestions || s.promoNotes || s.needsInterviewer) && (
                       <details className="mt-2">
-                        <summary className="cursor-pointer text-[11px] font-medium text-primary">Show details from the podcaster</summary>
+                        <summary className="cursor-pointer text-[12px] font-medium text-primary">Show details from the podcaster</summary>
                         <div className="mt-1.5 space-y-1.5 rounded-lg bg-muted/40 p-2.5 text-xs text-muted-foreground">
                           {s.guests && (
                             <p>

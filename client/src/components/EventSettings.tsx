@@ -141,11 +141,11 @@ export function EventSettings({
               <div className="truncate text-[15px] font-bold leading-tight text-foreground group-hover:text-primary">
                 {entry.event.name}
               </div>
-              <div className="mt-0.5 text-[13px] text-muted-foreground">
+              <div className="mt-0.5 text-[15px] text-muted-foreground">
                 {formatDateInZone(new Date(entry.event.startAtUtc), zone)} · {entry.event.durationHours} hours
               </div>
 
-              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px]">
                 <span
                   className={`inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 font-semibold ${
                     ready ? "bg-primary/10 text-primary" : "border border-dashed border-border text-muted-foreground"
@@ -212,20 +212,8 @@ export function EventSettings({
 
       <h2 className="text-xl font-bold tracking-tight">{open.event.name}</h2>
 
-      {openShow && (
-        <div className="mt-4">
-          <EventShowForm
-            eventId={open.event.id}
-            eventName={open.event.name}
-            show={openShow}
-            profilePhotoUrl={profilePhotoUrl}
-            onSaved={() => {}}
-          />
-        </div>
-      )}
-
       {/* ------------------------------------------------ time slot */}
-      <div className="mt-6 rounded-2xl border border-border bg-card p-5">
+      <div className="mt-4 rounded-2xl border border-border bg-card p-5">
         <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
           {open.slotIndex != null ? "Your time slot" : "Choose a time"}
         </h3>
@@ -275,6 +263,18 @@ export function EventSettings({
           </>
         )}
       </div>
+
+      {openShow && (
+        <div className="mt-6">
+          <EventShowForm
+            eventId={open.event.id}
+            eventName={open.event.name}
+            show={openShow}
+            profilePhotoUrl={profilePhotoUrl}
+            onSaved={() => {}}
+          />
+        </div>
+      )}
 
       {open.slotIndex != null && open.signupId != null && (
         <ShareYourSlot

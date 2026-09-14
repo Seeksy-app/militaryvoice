@@ -149,7 +149,7 @@ export function AgendaSignupActions({ signup, shareText }: Props) {
                 </>
               )}
             </Button>
-            <p className="text-[11px] text-muted-foreground">One email before the show. No lists, no spam.</p>
+            <p className="text-[12px] text-muted-foreground">One email before the show. No lists, no spam.</p>
           </form>
         </PopoverContent>
       </Popover>

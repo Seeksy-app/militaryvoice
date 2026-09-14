@@ -104,31 +104,31 @@ export function StudioDemo() {
           <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
           <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
         </span>
-        <span className="truncate font-mono text-[11px] text-white/45">
+        <span className="truncate font-mono text-[12px] text-white/45">
           militaryvoice.ai/studio — Main studio
         </span>
         <span className="ml-auto flex items-center gap-2">
-          <span className="flex items-center gap-1.5 rounded-full bg-[#ED1C24] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-white">
+          <span className="flex items-center gap-1.5 rounded-full bg-[#ED1C24] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-white">
             <span className="h-1.5 w-1.5 rounded-full bg-white" style={{ animation: "mvdemopulse 1.6s infinite" }} />
             On air
           </span>
-          <span className="text-[11px] tabular-nums text-white/60">{clock}</span>
+          <span className="text-[12px] tabular-nums text-white/60">{clock}</span>
         </span>
       </div>
 
       <div className="grid gap-px bg-white/[0.06] sm:grid-cols-[190px_1fr]">
         {/* green room rail */}
         <div className="bg-[#0b1226] p-3">
-          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
             <Users className="h-3 w-3" /> Green room ({waiting.length})
           </div>
           <div className="mt-3 space-y-2">
             {waiting.map((p) => (
               <div key={p.name} className="flex items-center gap-2.5 rounded-lg bg-white/[0.05] p-2">
-                <Avatar p={p} className="h-8 w-8 text-[11px]" />
+                <Avatar p={p} className="h-8 w-8 text-[12px]" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-medium text-white/90">{p.name}</div>
-                  <div className="truncate text-[10px] text-white/45">{p.show}</div>
+                  <div className="truncate text-[11px] text-white/45">{p.show}</div>
                 </div>
                 <span className="flex flex-col gap-1" aria-hidden="true">
                   <Video className={`h-3 w-3 ${p.cam ? "text-[#2fa37a]" : "text-white/25"}`} />
@@ -143,10 +143,10 @@ export function StudioDemo() {
           </div>
 
           <div className="mt-4 rounded-lg border border-[#F0A71F]/40 bg-[#F0A71F]/10 p-2.5">
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#F0A71F]">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#F0A71F]">
               <PlayCircle className="h-3 w-3" /> Standby
             </div>
-            <p className="mt-1 text-[10px] leading-snug text-white/55">
+            <p className="mt-1 text-[11px] leading-snug text-white/55">
               Sponsor reel is loaded. One button rolls it if anything goes wrong.
             </p>
           </div>
@@ -155,11 +155,11 @@ export function StudioDemo() {
         {/* stage */}
         <div className="bg-[#080d20] p-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
               <Radio className="h-3 w-3" /> On stage ({stage.length}/5)
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-[0.12em] text-white/35">Going out to</span>
+              <span className="text-[11px] uppercase tracking-[0.12em] text-white/35">Going out to</span>
               {DESTINATIONS.map((d) => (
                 <span
                   key={d}
@@ -192,7 +192,7 @@ export function StudioDemo() {
                   </div>
                   <div className="absolute inset-x-1.5 bottom-1.5 flex items-center gap-1.5 rounded-md bg-black/55 px-1.5 py-1 backdrop-blur-sm">
                     <Level active={live} />
-                    <span className="min-w-0 flex-1 truncate text-[10px] font-medium text-white">{p.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-white">{p.name}</span>
                     {!p.mic && <MicOff className="h-2.5 w-2.5 shrink-0 text-[#ED1C24]" />}
                   </div>
                   {live && (
@@ -207,7 +207,7 @@ export function StudioDemo() {
 
           {/* run of show */}
           <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
               <ListOrdered className="h-3 w-3" /> Run of show
             </div>
             <div className="mt-2 space-y-1">
@@ -218,8 +218,8 @@ export function StudioDemo() {
                     i === 1 ? "bg-[#F0A71F]/15" : ""
                   }`}
                 >
-                  <span className="text-[10px] tabular-nums text-white/45">{c.at}</span>
-                  <span className={`min-w-0 flex-1 truncate text-[11px] ${i === 1 ? "text-white" : "text-white/60"}`}>
+                  <span className="text-[11px] tabular-nums text-white/45">{c.at}</span>
+                  <span className={`min-w-0 flex-1 truncate text-[12px] ${i === 1 ? "text-white" : "text-white/60"}`}>
                     {c.label}
                   </span>
                   <span
@@ -238,12 +238,12 @@ export function StudioDemo() {
 
       {/* operator bar */}
       <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-white/[0.04] px-3 py-2.5">
-        <span className="rounded-full bg-[#F0A71F] px-3 py-1.5 text-[11px] font-semibold text-[#1a1200]">
+        <span className="rounded-full bg-[#F0A71F] px-3 py-1.5 text-[12px] font-semibold text-[#1a1200]">
           Start video now
         </span>
-        <span className="rounded-full bg-white/10 px-3 py-1.5 text-[11px] text-white/70">Bring up next speaker</span>
-        <span className="rounded-full bg-white/10 px-3 py-1.5 text-[11px] text-white/70">Roll sponsor</span>
-        <span className="ml-auto font-mono text-[10px] uppercase tracking-[0.12em] text-white/35">
+        <span className="rounded-full bg-white/10 px-3 py-1.5 text-[12px] text-white/70">Bring up next speaker</span>
+        <span className="rounded-full bg-white/10 px-3 py-1.5 text-[12px] text-white/70">Roll sponsor</span>
+        <span className="ml-auto font-mono text-[11px] uppercase tracking-[0.12em] text-white/35">
           Demo — nothing here is recording
         </span>
       </div>

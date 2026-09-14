@@ -208,8 +208,8 @@ function TeamCard() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="truncate text-sm font-semibold">{m.name || m.email}</span>
-                    {m.isOwner && <Badge variant="secondary" className="text-[10px]">Owner</Badge>}
-                    {admin?.email === m.email && <Badge variant="outline" className="text-[10px]">You</Badge>}
+                    {m.isOwner && <Badge variant="secondary" className="text-[11px]">Owner</Badge>}
+                    {admin?.email === m.email && <Badge variant="outline" className="text-[11px]">You</Badge>}
                   </div>
                   {m.name && <div className="truncate text-xs text-muted-foreground">{m.email}</div>}
                 </div>

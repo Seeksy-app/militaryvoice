@@ -38,7 +38,7 @@ export function SocialTiles({ accounts, onConnect, connecting = false, className
                 <PlatformIcon platform={platform} className="h-5 w-5" />
               </span>
               <span className="mt-2 w-full truncate text-xs font-medium text-muted-foreground">{platformLabel(platform)}</span>
-              <span className="whitespace-nowrap text-[11px] text-muted-foreground/70">{connecting ? "Opening…" : "Not connected"}</span>
+              <span className="whitespace-nowrap text-[12px] text-muted-foreground/70">{connecting ? "Opening…" : "Not connected"}</span>
             </button>
           );
         }
@@ -65,7 +65,7 @@ export function SocialTiles({ accounts, onConnect, connecting = false, className
             <span className="mt-2 w-full truncate text-xs font-semibold text-card-foreground" title={label}>
               {label}
             </span>
-            <span className="whitespace-nowrap text-[11px] text-muted-foreground">{followers ? `${followers} followers` : platformLabel(platform)}</span>
+            <span className="whitespace-nowrap text-[12px] text-muted-foreground">{followers ? `${followers} followers` : platformLabel(platform)}</span>
           </>
         );
         const cls = "flex flex-col items-center rounded-xl border border-border bg-background p-3 text-center transition-colors hover:border-primary/40";

@@ -122,7 +122,7 @@ export function StreamKeyHelp() {
               </ol>
 
               <div className="mt-3 rounded-lg bg-muted/60 px-3 py-2">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   Server URL
                 </div>
                 <code className="font-mono text-xs">{g.server}</code>
