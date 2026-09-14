@@ -680,6 +680,11 @@ export default function HostDashboard() {
               Link the accounts you post from. Connected ones show as follow buttons on your card in the public
               lineup, and are where we can send clips after your slot.
             </p>
+            {social?.accounts && social.accounts.length > 0 && (
+              <div className="mb-6 rounded-2xl border border-border bg-card p-5">
+                <ConnectedAccountsStrip accounts={social.accounts} />
+              </div>
+            )}
             {social?.configured && (
               <div className="mt-4 border-t border-border pt-4" data-testid="section-social-accounts">
                 <div className="mb-2 flex items-center justify-between gap-3">
@@ -1021,30 +1026,8 @@ export default function HostDashboard() {
                       )}
                     </div>
 
-                    {social?.configured && social.accounts.length > 0 && (
-                      <div className="mt-4 border-t border-border pt-4" data-testid="section-social-accounts">
-                        <ConnectedAccountsStrip
-                          accounts={social.accounts}
-                          onManage={() => setScreen("integrations")}
-                        />
-                      </div>
-                    )}
-                    {social?.configured && social.accounts.length === 0 && (
-                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-                        <p className="text-sm text-muted-foreground">
-                          No accounts linked yet — connect them and they show as follow buttons on your lineup card.
-                        </p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 rounded-full"
-                          onClick={() => setScreen("integrations")}
-                          data-testid="button-go-integrations"
-                        >
-                          <Link2 className="h-3.5 w-3.5" /> Integrations
-                        </Button>
-                      </div>
-                    )}
+                    {/* Social accounts live on the Integrations tab. The
+                        dashboard card is who you are and when you're on. */}
                   </div>
                 </div>
               </div>
