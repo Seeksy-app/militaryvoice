@@ -28,6 +28,7 @@ import {
   type PublicSponsor,
   type PublicSettings,
   type EventRow,
+  type SignupRow,
   updateSponsorSchema,
   insertEventShowSchema,
 } from "../shared/schema.js";
@@ -2168,6 +2169,33 @@ export function registerRoutes(app: Express): void {
   // ---- Host (podcaster, logged in): claim a slot. Reuses their saved profile
   //      (name, photo, etc.) instead of asking for it again — a plain JSON
   //      body with just eventId + slotIndex is all that's needed here now.
+  /**
+   * The "you're on the schedule" email for one signup. Shared by booking and
+   * by the admin resend, so the two can never drift apart. Returns whether
+   * Resend accepted it, and never throws.
+   */
+  async function sendSignupConfirmation(signup: SignupRow, event: EventRow, origin: string): Promise<boolean> {
+    try {
+      const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
+      const tz = signup.timezone || "America/New_York";
+      const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+      return await sendConfirmationEmail({
+        to: signup.email,
+        hostName: signup.hostName,
+        podcastName: signup.podcastName,
+        eventName: event.name,
+        onAirStartLabel: formatDateTimeInZone(onAir.start, tz),
+        onAirEndLabel: formatTimeInZone(onAir.end, tz),
+        timezoneLabel: zoneAbbrev(onAir.start, tz),
+        agendaUrl: `${origin}/agenda`,
+        calendar: calendarLinksFor(signup, event, origin),
+      });
+    } catch (err) {
+      console.error("Failed to send signup confirmation email:", err);
+      return false;
+    }
+  }
+
   app.post("/api/signups", requireHostSession, async (req, res) => {
     const email = (req as any).hostEmail as string;
     const profile = await storage.getProfileByEmail(email);
@@ -2263,29 +2291,26 @@ export function registerRoutes(app: Express): void {
     const created = await storage.createSignup(parsed.data);
     // Send before responding: see the note on /api/reminders. Work started
     // after the response is flushed is not guaranteed to run on serverless.
-    try {
-      const blockStart = new Date(new Date(event.startAtUtc).getTime() + created.slotIndex * event.slotMinutes * 60000);
-      const tz = created.timezone || "America/New_York";
-      const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
-      const protocol = req.protocol;
-      const host = req.get("host");
-      const agendaUrl = `${protocol}://${host}/agenda`;
-      await sendConfirmationEmail({
-        to: created.email,
-        hostName: created.hostName,
-        podcastName: created.podcastName,
-        eventName: event.name,
-        onAirStartLabel: formatDateTimeInZone(onAir.start, tz),
-        onAirEndLabel: formatTimeInZone(onAir.end, tz),
-        timezoneLabel: zoneAbbrev(onAir.start, tz),
-        agendaUrl,
-        calendar: calendarLinksFor(created, event, `${protocol}://${host}`),
-      });
-    } catch (err) {
-      console.error("Failed to send signup confirmation email:", err);
-    }
+    await sendSignupConfirmation(created, event, `${req.protocol}://${req.get("host")}`);
 
     res.status(201).json(toPublicSignup(created));
+  });
+
+  /** Resend a booking confirmation. For "I never got the email", which will
+   *  happen regardless of how well delivery works. */
+  app.post("/api/admin/signups/:id/resend-confirmation", requireAdmin, async (req, res) => {
+    const signup = await storage.getSignupById(Number(req.params.id));
+    if (!signup || signup.status === "cancelled") {
+      res.status(404).json({ message: "No such booking." });
+      return;
+    }
+    const event = await storage.getEventById(signup.eventId);
+    if (!event) {
+      res.status(404).json({ message: "That event no longer exists." });
+      return;
+    }
+    const sent = await sendSignupConfirmation(signup, event, `${req.protocol}://${req.get("host")}`);
+    res.json({ sent, to: signup.email, podcastName: signup.podcastName });
   });
 
   // ---- Public: download a personal calendar reminder for a slot --------------
