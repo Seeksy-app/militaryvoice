@@ -82,7 +82,7 @@ export function EventSettings({
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                     <span
                       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${
-                        ready ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                        ready ? "bg-primary/10 text-primary" : "border border-border bg-card text-muted-foreground"
                       }`}
                     >
                       {ready ? <Check className="h-3 w-3" /> : null}
@@ -90,7 +90,7 @@ export function EventSettings({
                     </span>
                     <span
                       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${
-                        booked ? "bg-[#F0A71F]/20 text-[#8a5d00]" : "bg-muted text-muted-foreground"
+                        booked ? "bg-[#F0A71F]/20 text-[#8a5d00]" : "border border-border bg-card text-muted-foreground"
                       }`}
                     >
                       <Clock className="h-3 w-3" />

@@ -21,6 +21,8 @@ import {
   Trash2,
   Shield,
   BookOpen,
+  ChevronDown,
+  ChevronRight,
   ArrowRight,
 } from "lucide-react";
 import {
@@ -300,11 +302,50 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
 // ---------------------------------------------------------------------------
 // Dashboard
 // ---------------------------------------------------------------------------
+/**
+ * One section of Event settings. Everything for an event reads as a single
+ * scroll — tabs hid two thirds of it behind a click — but each part folds
+ * away so the page stays walkable.
+ */
+function EventPanel({
+  title,
+  hint,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-[#053877]/[0.04]"
+        data-testid={`panel-${title.toLowerCase().replace(/\s+/g, "-")}`}
+      >
+        {open ? (
+          <ChevronDown className="h-4 w-4 shrink-0 text-[#053877]" />
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0 text-[#053877]" />
+        )}
+        <span className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">{title}</span>
+        {hint && <span className="hidden text-xs text-muted-foreground sm:inline">{hint}</span>}
+      </button>
+      {open && <div className="flex flex-col gap-6 border-t border-border bg-card px-5 pb-6 pt-5">{children}</div>}
+    </section>
+  );
+}
+
 export default function HostDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const search = useSearch();
-  const [screen, setScreen] = useState<"dashboard" | "editProfile" | "events" | "claim">("dashboard");
+  const [screen, setScreen] = useState<"dashboard" | "editProfile" | "events" | "fans" | "claim">("dashboard");
   const [claimIndex, setClaimIndex] = useState<number | null>(null);
   const [pending, setPending] = useState<PendingSlot | null>(() => readPending(search));
   const zone = useMemo(detectLocalTimeZone, []);
@@ -516,7 +557,9 @@ export default function HostDashboard() {
                   ? "Profile settings"
                   : screen === "events"
                     ? "Event settings"
-                    : "Podcaster Dashboard"}
+                    : screen === "fans"
+                      ? "Fans & contacts"
+                      : "Podcaster Dashboard"}
             </h1>
             {data && (
               <p className="mt-1 text-sm text-muted-foreground">
@@ -544,12 +587,13 @@ export default function HostDashboard() {
             event. Everything else hangs off those. Hidden during first-time
             setup, where there is only one thing to do. */}
         {data && hasProfile && !inSetup && (
-          <nav className="mt-6 grid grid-cols-3 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm">
+          <nav className="mt-6 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm sm:grid-cols-4">
             {(
               [
                 ["dashboard", "Dashboard", "Your card and slot"],
                 ["editProfile", "Profile settings", "About you"],
                 ["events", "Event settings", "Your shows and times"],
+                ["fans", "Fans & contacts", "Who asked for a reminder"],
               ] as const
             ).map(([value, label, hint]) => {
               const active = screen === value;
@@ -622,6 +666,55 @@ export default function HostDashboard() {
               onCancel={hasProfile ? () => setScreen("dashboard") : undefined}
             />
           </section>
+        ) : screen === "fans" ? (
+          <>
+            {/* --------------------------------------------------- reminders */}
+            <section className="mt-8">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+                  <Users className="h-4 w-4" />
+                  Fans who want a reminder ({data.contacts.length})
+                </h2>
+                {data.contacts.length > 0 && (
+                  <a href={`${API_BASE}/api/host/export.csv`} data-testid="link-host-export-csv">
+                    <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
+                      <Download className="h-3.5 w-3.5" />
+                      Export CSV
+                    </Button>
+                  </a>
+                )}
+              </div>
+
+              {data.contacts.length === 0 ? (
+                <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
+                  No fans have asked for a reminder yet. Share your agenda link to get the word out.
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-border bg-card">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-left text-xs uppercase tracking-[0.08em] text-foreground">
+                        <th className="px-4 py-2.5 font-medium">Name</th>
+                        <th className="px-4 py-2.5 font-medium">Email</th>
+                        <th className="px-4 py-2.5 font-medium">Phone</th>
+                        <th className="px-4 py-2.5 font-medium">Signed up</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.contacts.map((c) => (
+                        <tr key={c.id} className="border-b border-border last:border-0" data-testid={`row-contact-${c.id}`}>
+                          <td className="px-4 py-2.5 font-medium text-card-foreground">{c.name || "—"}</td>
+                          <td className="px-4 py-2.5 text-card-foreground">{c.email}</td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{c.phone || "—"}</td>
+                          <td className="px-4 py-2.5 text-muted-foreground">{new Date(c.createdAt).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </>
         ) : screen === "events" ? (
           <EventSettings
             profilePhotoUrl={profile?.photoUrl}
@@ -638,45 +731,48 @@ export default function HostDashboard() {
             {/* One long scroll made everything read as the same thing. The work
                 actually falls into three moments: before the day, on the day,
                 and after — so the dashboard says so. */}
-            {profile && entry.slotIndex != null && (
-              <Tabs defaultValue="showday" className="mt-6">
-                {/* Loud enough to read as navigation. The muted pill version
-                    disappeared into the page and nobody found the other two. */}
-                <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm">
-                  {[
-                    ["showday", "Show materials", "Files and show details"],
-                    ["going", "Stream", "Where it goes out"],
-                    ["after", "Recordings", "Yours after the show"],
-                  ].map(([value, label, hint]) => (
-                    <TabsTrigger
-                      key={value}
-                      value={value}
-                      className="flex-col gap-0.5 rounded-xl px-2 py-2.5 text-foreground data-[state=inactive]:bg-[#053877]/[0.05] hover:data-[state=inactive]:bg-[#053877]/10 data-[state=active]:bg-[#053877] data-[state=active]:text-white data-[state=active]:shadow-sm"
-                      data-testid={`tab-host-${value}`}
-                    >
-                      <span className="text-sm font-semibold">{label}</span>
-                      <span className="hidden text-[11px] font-normal opacity-70 sm:block">{hint}</span>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
+                {profile && entry.slotIndex != null && (
+                  <div className="mt-6 flex flex-col gap-4">
+                    <EventPanel title="Show materials" hint="Files and show details" defaultOpen>
+                      <ShowMaterials profile={profile} />
+                    </EventPanel>
 
-                <TabsContent value="showday" className="mt-6 flex flex-col gap-6">
-                  <ShowMaterials profile={profile} />
-                </TabsContent>
+                    <EventPanel title="Stream" hint="Where it goes out">
+                      <ConnectYoutube />
+                      <OwnEncoder />
+                    </EventPanel>
 
-                <TabsContent value="going" className="mt-6 flex flex-col gap-6">
-                  <ConnectYoutube />
-                  <OwnEncoder />
-                </TabsContent>
+                    <EventPanel title="Recordings" hint="Yours after the show">
+                      <MyRecordings socialAccounts={profile?.socialAccounts} />
+                      <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                        Your recordings appear here once your slot has been on air.
+                      </p>
+                    </EventPanel>
+                  </div>
+                )}
 
-                <TabsContent value="after" className="mt-6 flex flex-col gap-6">
-                  <MyRecordings socialAccounts={profile?.socialAccounts} />
-                  <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                    Your recordings appear here once your slot has been on air.
-                  </p>
-                </TabsContent>
-              </Tabs>
-            )}
+                {/* The guide is about getting ready for an event, so it reads
+                    here rather than on the dashboard home. */}
+                <section className="mt-2">
+              <Link href="/prepare" data-testid="link-prepare-guide">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-5 transition-colors hover-elevate">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <BookOpen className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-card-foreground">Getting ready for your slot</p>
+                      <p className="mt-0.5 text-sm text-muted-foreground">
+                        What to send us beforehand, how show day runs, and when to be in the studio.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
+                    Read the guide <ArrowRight className="h-3.5 w-3.5" />
+                  </span>
+                </div>
+              </Link>
+                </section>
               </>
             )}
           </EventSettings>
@@ -767,29 +863,13 @@ export default function HostDashboard() {
                           Hosted by <span className="font-medium text-card-foreground">{profile?.hostName}</span>
                         </p>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 rounded-full"
-                        onClick={() => setScreen("editProfile")}
-                        data-testid="button-profile-settings"
-                      >
-                        <Settings className="h-3.5 w-3.5" />
-                        Profile Settings
-                      </Button>
                     </div>
 
-                    <dl className="mt-4 grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+                    <dl className="mt-4 flex flex-col gap-1.5 text-sm">
                       <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
                         <Mail className="h-3.5 w-3.5 shrink-0 text-primary" />
                         <dd className="truncate">{data.email}</dd>
                       </div>
-                      {profile?.phone && (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Phone className="h-3.5 w-3.5 shrink-0 text-primary" />
-                          <dd>{profile.phone}</dd>
-                        </div>
-                      )}
                       {(profile?.serviceStatus || profile?.branch) && (
                         <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
                           <Shield className="h-3.5 w-3.5 shrink-0 text-primary" />
@@ -798,46 +878,17 @@ export default function HostDashboard() {
                           </dd>
                         </div>
                       )}
+                      {profile?.phone && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Phone className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <dd>{profile.phone}</dd>
+                        </div>
+                      )}
                     </dl>
 
-                    {(profile?.socialLinks || profile?.rssUrl || profile?.youtubeUrl) && (
-                      <div className="mt-4 flex flex-wrap gap-1.5">
-                        {profile?.socialLinks && (
-                          <a
-                            href={toHref(profile.socialLinks)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground hover-elevate"
-                            data-testid="link-profile-website"
-                          >
-                            <Globe className="h-3 w-3 text-primary" />
-                            <span className="truncate">{linkLabel(profile.socialLinks)}</span>
-                          </a>
-                        )}
-                        {profile?.youtubeUrl && (
-                          <a
-                            href={profile.youtubeUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground hover-elevate"
-                            data-testid="link-profile-youtube"
-                          >
-                            <Youtube className="h-3 w-3 text-primary" /> YouTube
-                          </a>
-                        )}
-                        {profile?.rssUrl && (
-                          <a
-                            href={profile.rssUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground hover-elevate"
-                            data-testid="link-profile-rss"
-                          >
-                            <Rss className="h-3 w-3 text-primary" /> RSS feed
-                          </a>
-                        )}
-                      </div>
-                    )}
+                    {/* The website / YouTube / RSS pills lived here, but
+                        "where people can listen" is a Profile settings thing
+                        now and they made the card read as a link dump. */}
 
                     <div className="mt-4 border-t border-border pt-4" data-testid="section-your-slot">
                       <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your slot</p>
@@ -955,26 +1006,6 @@ export default function HostDashboard() {
             </section>
 
 
-            <section className="mt-8">
-              <Link href="/prepare" data-testid="link-prepare-guide">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-5 transition-colors hover-elevate">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <BookOpen className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-card-foreground">Getting ready for your slot</p>
-                      <p className="mt-0.5 text-sm text-muted-foreground">
-                        What to send us beforehand, how show day runs, and when to be in the studio.
-                      </p>
-                    </div>
-                  </div>
-                  <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
-                    Read the guide <ArrowRight className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-              </Link>
-            </section>
 
             {/* ------------------------------------------------- open slots (only until they hold one) */}
             {data.mySignups.length === 0 && (
@@ -1066,52 +1097,6 @@ export default function HostDashboard() {
               </section>
             )}
 
-            {/* --------------------------------------------------- reminders */}
-            <section className="mt-8">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-                  <Users className="h-4 w-4" />
-                  Fans who want a reminder ({data.contacts.length})
-                </h2>
-                {data.contacts.length > 0 && (
-                  <a href={`${API_BASE}/api/host/export.csv`} data-testid="link-host-export-csv">
-                    <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
-                      <Download className="h-3.5 w-3.5" />
-                      Export CSV
-                    </Button>
-                  </a>
-                )}
-              </div>
-
-              {data.contacts.length === 0 ? (
-                <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-                  No fans have asked for a reminder yet. Share your agenda link to get the word out.
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-border bg-card">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-left text-xs uppercase tracking-[0.08em] text-foreground">
-                        <th className="px-4 py-2.5 font-medium">Name</th>
-                        <th className="px-4 py-2.5 font-medium">Email</th>
-                        <th className="px-4 py-2.5 font-medium">Phone</th>
-                        <th className="px-4 py-2.5 font-medium">Signed up</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.contacts.map((c) => (
-                        <tr key={c.id} className="border-b border-border last:border-0" data-testid={`row-contact-${c.id}`}>
-                          <td className="px-4 py-2.5 font-medium text-card-foreground">{c.name || "—"}</td>
-                          <td className="px-4 py-2.5 text-card-foreground">{c.email}</td>
-                          <td className="px-4 py-2.5 text-muted-foreground">{c.phone || "—"}</td>
-                          <td className="px-4 py-2.5 text-muted-foreground">{new Date(c.createdAt).toLocaleDateString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
           </>
         )}
       </div>

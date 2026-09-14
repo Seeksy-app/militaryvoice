@@ -149,7 +149,7 @@ export function EventShowForm({
                   aria-pressed={format === v}
                   onClick={() => setFormat(v)}
                   className={`flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-colors ${
-                    format === v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                    format === v ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-[#053877]/[0.04]"
                   }`}
                   data-testid={`radio-show-format-${v}`}
                 >
@@ -192,7 +192,7 @@ export function EventShowForm({
                       aria-pressed={introStyle === v}
                       onClick={() => setIntroStyle(v)}
                       className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-colors ${
-                        introStyle === v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                        introStyle === v ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-[#053877]/[0.04]"
                       }`}
                       data-testid={`radio-intro-style-${v}`}
                     >
