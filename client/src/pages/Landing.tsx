@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, PlatformIcon, platformLabel, parseSocialAccounts } from "@/components/SocialIcons";
 import { spotlightFromSignup, type SpotlightItem } from "@/components/SpotlightCard";
 import { SponsorDialog } from "@/components/SponsorDialog";
+import { PodcasterDialog } from "@/components/PodcasterDialog";
 import { useCountdown } from "@/hooks/use-countdown";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, PublicPodcaster, PublicSponsor, SocialPlatform } from "@shared/schema";
@@ -133,6 +134,12 @@ export default function Landing({ slug }: Props) {
   const zone = useMemo(detectLocalTimeZone, []);
   const countdown = useCountdown(event?.startAtUtc, event?.durationHours);
 
+  // Same bio popup the agenda uses. A face on the lineup is the most
+  // clickable thing on the page; it used to do nothing.
+  const [selectedPodcaster, setSelectedPodcaster] = useState<
+    { signup: PublicSignup; start: Date; end: Date } | null
+  >(null);
+
   const start = event ? new Date(event.startAtUtc) : null;
   const end = event && start ? new Date(start.getTime() + event.durationHours * 3600000) : null;
   const slotCount = event ? totalSlots(event.durationHours, event.slotMinutes) : 0;
@@ -150,7 +157,7 @@ export default function Landing({ slug }: Props) {
           bufferMinutes: event.bufferMinutes,
           bufferPosition: event.bufferPosition,
         });
-        return { signup: s, start: onAir.start };
+        return { signup: s, start: onAir.start, end: onAir.end };
       });
   }, [booked, event]);
 
@@ -702,32 +709,47 @@ export default function Landing({ slug }: Props) {
             </div>
           ) : (
             <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {lineup.slice(0, 12).map(({ signup, start: onAirStart }, i) => (
+              {lineup.slice(0, 12).map(({ signup, start: onAirStart, end: onAirEnd }, i) => (
                 <motion.div
                   key={signup.id}
                   initial={{ opacity: 0, y: 16 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-40px" }}
                   transition={{ duration: 0.45, delay: Math.min(i, 6) * 0.06 }}
-                  className="flex flex-col items-center rounded-2xl border border-border bg-card p-5 text-center"
+                  className="group flex flex-col items-center rounded-2xl border border-border bg-card p-5 text-center transition-shadow hover:border-primary/40 hover:shadow-md"
                   data-testid={`card-lineup-${signup.id}`}
                 >
-                  {signup.photoUrl ? (
-                    <img
-                      src={resolveUploadUrl(signup.photoUrl)}
-                      alt={signup.hostName}
-                      className="h-20 w-20 rounded-full object-cover ring-4 ring-primary/10"
-                    />
-                  ) : (
-                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                      <Mic2 className="h-7 w-7" />
+                  {/* The socials below are real links, so only this part is the
+                      button — an anchor inside a button is invalid markup. */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPodcaster({ signup, start: onAirStart, end: onAirEnd })}
+                    className="flex w-full flex-col items-center rounded-xl text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    aria-label={`About ${signup.podcastName}`}
+                    data-testid={`button-lineup-profile-${signup.id}`}
+                  >
+                    {signup.photoUrl ? (
+                      <img
+                        src={resolveUploadUrl(signup.photoUrl)}
+                        alt={signup.hostName}
+                        className="h-20 w-20 rounded-full object-cover ring-4 ring-primary/10 transition-all group-hover:ring-primary/30"
+                      />
+                    ) : (
+                      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                        <Mic2 className="h-7 w-7" />
+                      </div>
+                    )}
+                    <div className="mt-3 line-clamp-2 text-sm font-semibold leading-tight group-hover:text-primary">
+                      {signup.podcastName}
                     </div>
-                  )}
-                  <div className="mt-3 line-clamp-2 text-sm font-semibold leading-tight">{signup.podcastName}</div>
-                  <div className="mt-0.5 truncate text-xs text-muted-foreground">{signup.hostName}</div>
-                  <div className="mt-2 tabular-nums text-xs text-primary">
-                    {formatDateInZone(onAirStart, zone)} · {formatTimeInZone(onAirStart, zone)}
-                  </div>
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">{signup.hostName}</div>
+                    <div className="mt-2 tabular-nums text-xs text-primary">
+                      {formatDateInZone(onAirStart, zone)} · {formatTimeInZone(onAirStart, zone)}
+                    </div>
+                    <span className="mt-2 text-[11px] font-medium text-muted-foreground group-hover:text-primary">
+                      View profile
+                    </span>
+                  </button>
                   <SocialIconRow accounts={parseSocialAccounts(signup.socialAccounts)} variant="filled" className="mt-3 justify-center" />
                 </motion.div>
               ))}
@@ -869,6 +891,22 @@ export default function Landing({ slug }: Props) {
           </nav>
         </div>
       </footer>
+
+      <PodcasterDialog
+        signup={selectedPodcaster?.signup ?? null}
+        onAirStart={selectedPodcaster?.start}
+        onAirEnd={selectedPodcaster?.end}
+        zone={zone}
+        shareText={
+          selectedPodcaster
+            ? `I'm tuning in to ${selectedPodcaster.signup.hostName} on ${selectedPodcaster.signup.podcastName} during the MilitaryVoice.ai 24 Hour Podcastathon! ${
+                typeof window !== "undefined" ? window.location.href : ""
+              }`
+            : undefined
+        }
+        open={!!selectedPodcaster}
+        onOpenChange={(o) => !o && setSelectedPodcaster(null)}
+      />
     </div>
   );
 }
