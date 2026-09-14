@@ -35,6 +35,7 @@ import type {
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { and, eq, ne, asc, desc, isNull, inArray } from "drizzle-orm";
+import { ensureSchema as syncSchemaFromDefinitions, schemaFingerprint } from "./schemaSync.js";
 
 // Resolve the Postgres connection string lazily (not at module load) so a
 // missing/bad value surfaces as a normal caught error on first request—
@@ -97,6 +98,11 @@ const DEFAULT_EVENT_SLUG = "marathon";
 // Create tables on boot if they don't exist yet (no migration tooling needed for MVP)
 async function ensureSchema() {
   const { sql } = getConnection();
+  // Every table, column and index the code declares, derived from
+  // shared/schema.ts. The hand-written DDL below is now only for data
+  // backfills and the few things the schema can't express — structure comes
+  // from one source, so it can't drift again.
+  await syncSchemaFromDefinitions(sql as unknown as { unsafe: (q: string) => Promise<unknown> });
   await sql`
     CREATE TABLE IF NOT EXISTS events (
       id SERIAL PRIMARY KEY,
@@ -494,22 +500,34 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "events", column: "image_url" };
-
+/**
+ * Skip the whole bootstrap when the database already matches the code. The
+ * marker is a fingerprint of the schema's own shape rather than one
+ * hand-chosen column, so adding a column invalidates it automatically. The
+ * old sentinel had to be bumped by hand and silently skipped migrations
+ * whenever it wasn't — which is how events.slug and signups.rss_url ended up
+ * missing from a database the migration claimed to build.
+ */
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
-  const rows = await sql`
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_name = ${SCHEMA_SENTINEL.table} AND column_name = ${SCHEMA_SENTINEL.column}
-    LIMIT 1`;
-  return rows.length > 0;
+  await sql`CREATE TABLE IF NOT EXISTS schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`;
+  const rows = await sql`SELECT value FROM schema_meta WHERE key = 'fingerprint' LIMIT 1`;
+  return rows.length > 0 && rows[0].value === schemaFingerprint();
+}
+
+async function recordSchemaFingerprint(): Promise<void> {
+  const { sql } = getConnection();
+  const fp = schemaFingerprint();
+  await sql`
+    INSERT INTO schema_meta (key, value) VALUES ('fingerprint', ${fp})
+    ON CONFLICT (key) DO UPDATE SET value = ${fp}`;
 }
 
 async function ensureSchemaSafe(attempt = 0): Promise<void> {
   try {
     if (await schemaAlreadyPresent()) return;
     await ensureSchema();
+    await recordSchemaFingerprint();
   } catch (err: any) {
     const code = String(err?.code ?? "");
     if (BENIGN_SCHEMA_ERRORS.has(code)) {
