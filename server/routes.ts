@@ -563,23 +563,23 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const created = await storage.createSponsorInquiry(parsed.data);
-    res.status(201).json({ id: created.id });
+    // Send before responding: see the note on /api/reminders. Work started
+    // after the response is flushed is not guaranteed to run on serverless.
+    try {
+      const admins = await storage.listAdmins();
+      await sendSponsorInquiryEmail({
+        to: admins.map((a) => a.email),
+        name: parsed.data.name,
+        company: parsed.data.company ?? "",
+        email: parsed.data.email,
+        phone: parsed.data.phone ?? "",
+        message: parsed.data.message ?? "",
+      });
+    } catch (err) {
+      console.error("Failed to send sponsor inquiry email:", err);
+    }
 
-    (async () => {
-      try {
-        const admins = await storage.listAdmins();
-        await sendSponsorInquiryEmail({
-          to: admins.map((a) => a.email),
-          name: parsed.data.name,
-          company: parsed.data.company ?? "",
-          email: parsed.data.email,
-          phone: parsed.data.phone ?? "",
-          message: parsed.data.message ?? "",
-        });
-      } catch (err) {
-        console.error("Failed to send sponsor inquiry email:", err);
-      }
-    })();
+    res.status(201).json({ id: created.id });
   });
 
   app.get("/api/admin/sponsor-inquiries", requireAdmin, async (_req, res) => {
@@ -1209,11 +1209,36 @@ export function registerRoutes(app: Express): void {
 
   /** What a speaker sees: their own state plus whether the room is live. */
   async function speakerState(
-    event: { name: string },
+    event: EventRow,
     studio: { id: number; name: string; status: string; fallbackPlaying: boolean; maxOnStage: number },
     clientKey: string,
   ) {
     const all = await storage.listStudioParticipants(studio.id);
+    const me = all.find((p) => p.clientKey === clientKey) ?? null;
+
+    // Someone waiting wants two things the counts alone can't tell them: who is
+    // on air right now, and how long until it's their turn.
+    const onStage = all
+      .filter((p) => p.state === "On stage" && withPresence(p))
+      .map((p) => ({ name: p.displayName }));
+
+    let mySlot: { startsAtUtc: string; endsAtUtc: string; label: string } | null = null;
+    const email = (me?.email ?? "").trim().toLowerCase();
+    if (email) {
+      const mine = (await storage.listSignups(event.id)).find(
+        (sgn) => sgn.status !== "cancelled" && sgn.email.trim().toLowerCase() === email,
+      );
+      if (mine) {
+        const blockStart = new Date(new Date(event.startAtUtc).getTime() + mine.slotIndex * event.slotMinutes * 60000);
+        const air = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+        mySlot = {
+          startsAtUtc: air.start.toISOString(),
+          endsAtUtc: air.end.toISOString(),
+          label: mine.podcastName,
+        };
+      }
+    }
+
     return {
       eventName: event.name,
       studio: {
@@ -1222,8 +1247,10 @@ export function registerRoutes(app: Express): void {
         fallbackPlaying: studio.fallbackPlaying,
         maxOnStage: studio.maxOnStage,
       },
-      me: all.find((p) => p.clientKey === clientKey) ?? null,
-      onStageCount: all.filter((p) => p.state === "On stage" && withPresence(p)).length,
+      me,
+      onStage,
+      mySlot,
+      onStageCount: onStage.length,
       greenRoomCount: all.filter((p) => p.state === "Green room" && withPresence(p)).length,
     };
   }
@@ -2035,16 +2062,15 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const row = await storage.createPlatformInterest(parsed.data);
-    res.status(201).json({ ok: true, id: row.id });
+    // Send before responding: see the note on /api/reminders. Work started
+    // after the response is flushed is not guaranteed to run on serverless.
+    try {
+      await sendPlatformInterestEmail(parsed.data);
+    } catch (err) {
+      console.error("Platform interest notification failed:", err);
+    }
 
-    // Tell the team, but never let a flaky mailer fail the submission.
-    (async () => {
-      try {
-        await sendPlatformInterestEmail(parsed.data);
-      } catch (err) {
-        console.error("Platform interest notification failed:", err);
-      }
-    })();
+    res.status(201).json({ ok: true, id: row.id });
   });
 
   app.get("/api/admin/platform-interest", requireAdmin, async (_req, res) => {
@@ -2235,33 +2261,31 @@ export function registerRoutes(app: Express): void {
     }
 
     const created = await storage.createSignup(parsed.data);
-    res.status(201).json(toPublicSignup(created));
+    // Send before responding: see the note on /api/reminders. Work started
+    // after the response is flushed is not guaranteed to run on serverless.
+    try {
+      const blockStart = new Date(new Date(event.startAtUtc).getTime() + created.slotIndex * event.slotMinutes * 60000);
+      const tz = created.timezone || "America/New_York";
+      const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+      const protocol = req.protocol;
+      const host = req.get("host");
+      const agendaUrl = `${protocol}://${host}/agenda`;
+      await sendConfirmationEmail({
+        to: created.email,
+        hostName: created.hostName,
+        podcastName: created.podcastName,
+        eventName: event.name,
+        onAirStartLabel: formatDateTimeInZone(onAir.start, tz),
+        onAirEndLabel: formatTimeInZone(onAir.end, tz),
+        timezoneLabel: zoneAbbrev(onAir.start, tz),
+        agendaUrl,
+        calendar: calendarLinksFor(created, event, `${protocol}://${host}`),
+      });
+    } catch (err) {
+      console.error("Failed to send signup confirmation email:", err);
+    }
 
-    // Send the confirmation email in the background — never block or fail the
-    // signup response on email delivery.
-    (async () => {
-      try {
-        const blockStart = new Date(new Date(event.startAtUtc).getTime() + created.slotIndex * event.slotMinutes * 60000);
-        const tz = created.timezone || "America/New_York";
-        const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
-        const protocol = req.protocol;
-        const host = req.get("host");
-        const agendaUrl = `${protocol}://${host}/agenda`;
-        await sendConfirmationEmail({
-          to: created.email,
-          hostName: created.hostName,
-          podcastName: created.podcastName,
-          eventName: event.name,
-          onAirStartLabel: formatDateTimeInZone(onAir.start, tz),
-          onAirEndLabel: formatTimeInZone(onAir.end, tz),
-          timezoneLabel: zoneAbbrev(onAir.start, tz),
-          agendaUrl,
-          calendar: calendarLinksFor(created, event, `${protocol}://${host}`),
-        });
-      } catch (err) {
-        console.error("Failed to send signup confirmation email:", err);
-      }
-    })();
+    res.status(201).json(toPublicSignup(created));
   });
 
   // ---- Public: download a personal calendar reminder for a slot --------------
@@ -2316,32 +2340,33 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const created = await storage.createReminder(parsed.data);
-    res.status(201).json({ id: created.id });
+    // Send before responding. On serverless the function can be frozen the
+    // instant the response is flushed, so work started after res.json() is not
+    // guaranteed to run — which is exactly why awaited login codes arrived and
+    // these never did. Still non-fatal: a mail failure must not fail the action.
+    try {
+      const event = (await storage.getEventById(signup.eventId)) ?? (await storage.getFeaturedEvent());
+      const tz = parsed.data.timezone || "America/New_York";
+      const { start } = slotWindow(event, signup.slotIndex);
+      const onAir = onAirWindowServer(start, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+      const origin = `${req.protocol}://${req.get("host")}`;
+      await sendReminderConfirmationEmail({
+        to: parsed.data.email,
+        name: parsed.data.name,
+        podcastName: signup.podcastName,
+        hostName: signup.hostName,
+        eventName: event.name,
+        whenLabel: formatDateTimeInZone(onAir.start, tz),
+        timezoneLabel: zoneAbbrev(onAir.start, tz),
+        agendaUrl: `${origin}/agenda`,
+        calendar: calendarLinksFor(signup, event, origin),
+        wantsText: !!parsed.data.phone,
+      });
+    } catch (err) {
+      console.error("Failed to send reminder confirmation email:", err);
+    }
 
-    // Confirmation with add-to-calendar links, in the background.
-    (async () => {
-      try {
-        const event = (await storage.getEventById(signup.eventId)) ?? (await storage.getFeaturedEvent());
-        const tz = parsed.data.timezone || "America/New_York";
-        const { start } = slotWindow(event, signup.slotIndex);
-        const onAir = onAirWindowServer(start, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
-        const origin = `${req.protocol}://${req.get("host")}`;
-        await sendReminderConfirmationEmail({
-          to: parsed.data.email,
-          name: parsed.data.name,
-          podcastName: signup.podcastName,
-          hostName: signup.hostName,
-          eventName: event.name,
-          whenLabel: formatDateTimeInZone(onAir.start, tz),
-          timezoneLabel: zoneAbbrev(onAir.start, tz),
-          agendaUrl: `${origin}/agenda`,
-          calendar: calendarLinksFor(signup, event, origin),
-          wantsText: !!parsed.data.phone,
-        });
-      } catch (err) {
-        console.error("Failed to send reminder confirmation email:", err);
-      }
-    })();
+    res.status(201).json({ id: created.id });
   });
 
   // ---- Admin: auth check ------------------------------------------------------
