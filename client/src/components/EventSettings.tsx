@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EventShowForm, type EventShow } from "@/components/EventShowForm";
+import { EventSlotPicker } from "@/components/EventSlotPicker";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone, detectLocalTimeZone, slotStart, onAirWindow } from "@/lib/schedule";
 import type { PublicEvent } from "@shared/schema";
@@ -57,16 +58,16 @@ export function EventSettings({
 
   // ------------------------------------------------------------ chooser
   if (!open) {
-    return (
-      <section className="mt-6">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-          <CalendarDays className="h-4 w-4" /> Choose event
-        </h2>
-        <div className="flex flex-col gap-3">
-          {(entries ?? []).map((entry) => {
-            const ready = !!entry.show?.showName;
-            const booked = entry.slotIndex != null;
-            return (
+    const all = entries ?? [];
+    // Setting up a show for an event is what joining it means — there is no
+    // separate registration to keep in step with anything.
+    const mine = all.filter((e) => !!e.show?.showName);
+    const joinable = all.filter((e) => !e.show?.showName);
+
+    const card = (entry: EventEntry) => {
+      const ready = !!entry.show?.showName;
+      const booked = entry.slotIndex != null;
+      return (
               <button
                 key={entry.event.id}
                 type="button"
@@ -112,9 +113,32 @@ export function EventSettings({
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground group-hover:text-primary" />
               </button>
-            );
-          })}
+      );
+    };
+
+    return (
+      <section className="mt-6 flex flex-col gap-8">
+        <div>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+            <CalendarDays className="h-4 w-4" /> Your events
+          </h2>
+          {mine.length === 0 ? (
+            <p className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground">
+              You haven't joined an event yet. Pick one below and set your show up for it.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3">{mine.map(card)}</div>
+          )}
         </div>
+
+        {joinable.length > 0 && (
+          <div>
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+              <CalendarDays className="h-4 w-4" /> Events you can join
+            </h2>
+            <div className="flex flex-col gap-3">{joinable.map(card)}</div>
+          </div>
+        )}
       </section>
     );
   }
@@ -173,20 +197,12 @@ export function EventSettings({
           </p>
         ) : (
           <>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mb-3 mt-1 text-sm text-muted-foreground">
               {open.show?.showName
-                ? "Your show is set up. Pick the time you want to be on air."
-                : "Save your show above first, then pick a time."}
+                ? "Tap any open time to take it."
+                : "Save your show above first — a slot needs a show attached to it."}
             </p>
-            <Button
-              size="sm"
-              className="mt-3 gap-1.5 rounded-full"
-              disabled={!open.show?.showName}
-              onClick={() => onPickSlot(open.event.id)}
-              data-testid="button-pick-slot-for-event"
-            >
-              <Clock className="h-3.5 w-3.5" /> Set up your time slot
-            </Button>
+            <EventSlotPicker event={open.event} disabled={!open.show?.showName} />
           </>
         )}
       </div>

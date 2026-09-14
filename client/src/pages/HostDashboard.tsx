@@ -21,6 +21,7 @@ import {
   Trash2,
   Shield,
   BookOpen,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   ArrowRight,
@@ -503,7 +504,10 @@ export default function HostDashboard() {
   });
 
   const loadingProfile = isLoading || (!!data && profileLoading);
-  const hasProfile = !!profile && !!profile.podcastName && !!profile.hostName && !!profile.photoUrl;
+  // A profile is about the person, so a name and a photo are what make it
+  // complete. The show name moved to the event, and testing for it here sent
+  // anyone without one back through first-time setup forever.
+  const hasProfile = !!profile && !!profile.hostName && !!profile.photoUrl;
 
   // Signed in with a finished profile and a held slot → jump to confirmation.
   useEffect(() => {
@@ -944,14 +948,19 @@ export default function HostDashboard() {
                       <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your slot</p>
                       {data.mySignups.length === 0 ? (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] px-4 py-3">
-                          <p className="text-sm text-muted-foreground">You haven't claimed a time yet.</p>
+                          {/* A time belongs to an event and needs a show
+                              attached to it, so the way in is the event, not a
+                              list of times floating on the dashboard. */}
+                          <p className="text-sm text-muted-foreground">
+                            No time yet. Join an event and set your show up, then pick when you're on air.
+                          </p>
                           <Button
                             size="sm"
                             className="gap-1.5 rounded-full"
-                            onClick={() => document.getElementById("pick-slot")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                            data-testid="button-jump-to-slots"
+                            onClick={() => setScreen("events")}
+                            data-testid="button-jump-to-events"
                           >
-                            <Radio className="h-3.5 w-3.5" /> Pick a slot
+                            <CalendarDays className="h-3.5 w-3.5" /> Event settings
                           </Button>
                         </div>
                       ) : (
@@ -1041,97 +1050,6 @@ export default function HostDashboard() {
               </div>
             </section>
 
-
-
-            {/* ------------------------------------------------- open slots (only until they hold one) */}
-            {data.mySignups.length === 0 && (
-              <section id="pick-slot" className="mt-8 scroll-mt-24">
-                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-                  <Radio className="h-4 w-4" />
-                  Pick your slot on {data.event.name}
-                  <span className="ml-1 font-normal normal-case tracking-normal text-muted-foreground">
-                    · {openSlots.length} open · {slots.length - openSlots.length} taken
-                  </span>
-                </h2>
-                <p className="mb-3 text-sm text-muted-foreground">
-                  Every half hour in order, so you can see who's on before and after you. Tap any open time to take it.
-                </p>
-                {slots.length === 0 ? (
-                  <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-                    The schedule isn't published yet — check back shortly.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {slots.map((s) => {
-                      const mine = !!s.signup && data.mySignups.some((m) => m.slotIndex === s.index);
-                      const header = (
-                        <>
-                          <div className="text-xs font-medium uppercase tracking-[0.08em] text-foreground">
-                            {formatDateInZone(s.start, zone)}
-                          </div>
-                          <div className="tabular-nums font-semibold">
-                            {formatTimeInZone(s.start, zone)}–{formatTimeInZone(s.end, zone)}
-                          </div>
-                        </>
-                      );
-
-                      if (s.signup) {
-                        return (
-                          <div
-                            key={s.index}
-                            className={`rounded-lg border p-3 text-sm ${
-                              mine ? "border-primary/50 bg-primary/5" : "border-border bg-card"
-                            }`}
-                            data-testid={`card-taken-slot-${s.index}`}
-                          >
-                            {header}
-                            <div className="mt-2 flex items-center gap-2">
-                              {s.signup.photoUrl ? (
-                                <img
-                                  src={resolveUploadUrl(s.signup.photoUrl)}
-                                  alt={s.signup.hostName}
-                                  className="h-8 w-8 shrink-0 rounded-full object-cover ring-2 ring-[#F0A71F]/50"
-                                />
-                              ) : (
-                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                                  <Mic2 className="h-3.5 w-3.5" />
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <div className="truncate text-xs font-semibold leading-tight text-card-foreground">
-                                  {s.signup.podcastName}
-                                </div>
-                                <div className="truncate text-[11px] text-muted-foreground">
-                                  {mine ? "That's you" : s.signup.hostName}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <button
-                          key={s.index}
-                          type="button"
-                          onClick={() => {
-                            setClaimIndex(s.index);
-                            setScreen("claim");
-                          }}
-                          className="rounded-lg border border-border bg-card p-3 text-left text-sm transition-colors hover-elevate"
-                          data-testid={`button-pick-slot-${s.index}`}
-                        >
-                          {header}
-                          <Badge variant="outline" className="mt-2 text-primary border-primary/40">
-                            Open
-                          </Badge>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            )}
 
           </>
         )}
