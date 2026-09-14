@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, serial, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -741,6 +741,31 @@ export const insertEventShowSchema = eventShowFieldsSchema.superRefine((v, ctx) 
     });
   }
 });
+
+/**
+ * One row per nudge actually sent. The whole safety of a scheduled sender
+ * rests on this: the sender is idempotent because it checks here first, so a
+ * cron that fires twice, or a redeploy mid-run, cannot email anyone twice.
+ */
+export const nudges = pgTable("nudges", {
+  id: serial("id").primaryKey(),
+  signupId: integer("signup_id").notNull(),
+  kind: text("kind").notNull(),
+  // False when the stage was passed over rather than emailed — a late booking
+  // shouldn't get "two weeks to go" after it has already had "you're on soon".
+  emailed: boolean("emailed").notNull().default(true),
+  sentAt: text("sent_at").notNull(),
+}, (t) => ({
+  // Declared here, not only in the migration, so drizzle-kit push produces it
+  // too. This constraint is the thing that actually prevents a double send —
+  // it must exist however the schema was created.
+  signupKind: uniqueIndex("nudges_signup_kind_idx").on(t.signupId, t.kind),
+}));
+export type NudgeRow = typeof nudges.$inferSelect;
+
+/** In order. A later stage suppresses every earlier one. */
+export const NUDGE_KINDS = ["prep", "final", "onair"] as const;
+export type NudgeKind = (typeof NUDGE_KINDS)[number];
 
 export const youtubeAccounts = pgTable("youtube_accounts", {
   id: serial("id").primaryKey(),

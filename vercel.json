@@ -30,5 +30,11 @@
       "source": "/((?!api/|assets/|s/|og/).*)",
       "destination": "/index.html"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/nudges",
+      "schedule": "0 * * * *"
+    }
   ]
 }

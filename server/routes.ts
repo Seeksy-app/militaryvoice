@@ -1,5 +1,5 @@
 import express from "express";
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import crypto from "node:crypto";
 import multer from "multer";
 import sharp from "sharp";
@@ -31,6 +31,8 @@ import {
   type SignupRow,
   updateSponsorSchema,
   insertEventShowSchema,
+  NUDGE_KINDS,
+  type NudgeKind,
 } from "../shared/schema.js";
 import { fromError } from "zod-validation-error";
 import {
@@ -61,6 +63,7 @@ import {
   createBroadcast,
 } from "./youtube.js";
 import { buildShareCard } from "./shareCard.js";
+import { sendPrepNudge, sendFinalNudge, sendOnAirNudge } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, StudioRow } from "../shared/schema.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -329,6 +332,135 @@ export function registerRoutes(app: Express): void {
   // ---- Search engines -----------------------------------------------------------
   //      Built from the real events rather than kept as a static file, so a new
   //      event is discoverable the moment it's published.
+  // ---- Scheduled nudges --------------------------------------------------------
+  //      One hourly pass. Idempotent: every send is claimed in the database
+  //      first, so a double-fired cron, a retry or a mid-run redeploy cannot
+  //      email anyone twice.
+
+  const NUDGE_LEAD_MS: Record<NudgeKind, number> = {
+    prep: 14 * 24 * 3600_000,
+    final: 2 * 24 * 3600_000,
+    onair: 60 * 60_000,
+  };
+
+  /** Work out and send whatever is due. Safe to call as often as you like. */
+  async function runNudges(opts: { dryRun?: boolean } = {}) {
+    const now = Date.now();
+    const events = await storage.listEvents();
+    const out: { signupId: number; to: string; kind: NudgeKind; sent: boolean; suppressed: NudgeKind[] }[] = [];
+
+    for (const event of events) {
+      const signups = (await storage.listSignups(event.id)).filter((x) => x.status !== "cancelled");
+      if (signups.length === 0) continue;
+      const shows = await Promise.all(
+        signups.map((sg) => storage.getEventShow(sg.email, event.id).catch(() => undefined)),
+      );
+      const already = await storage.listNudgesForSignups(signups.map((x) => x.id));
+      const sentKeys = new Set(already.map((n) => `${n.signupId}:${n.kind}`));
+
+      for (let i = 0; i < signups.length; i++) {
+        const signup = signups[i];
+        const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
+        const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+        // Nothing to nudge about once they're on.
+        if (onAir.start.getTime() <= now) continue;
+
+        const due = NUDGE_KINDS.filter(
+          (k) => now >= onAir.start.getTime() - NUDGE_LEAD_MS[k] && !sentKeys.has(`${signup.id}:${k}`),
+        );
+        if (due.length === 0) continue;
+
+        // Only the most urgent one goes out. Somebody who books three days
+        // before their slot should not receive "two weeks to go".
+        const kind = due[due.length - 1];
+        const suppressed = due.slice(0, -1);
+
+        if (opts.dryRun) {
+          out.push({ signupId: signup.id, to: signup.email, kind, sent: false, suppressed });
+          continue;
+        }
+
+        for (const k of suppressed) await storage.claimNudge(signup.id, k, false);
+        // Claim before sending: a missed nudge beats a duplicate.
+        if (!(await storage.claimNudge(signup.id, kind, true))) continue;
+
+        const tz = signup.timezone || "America/New_York";
+        // A cron run has no request to read a host from.
+        const origin = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "");
+        const show = shows[i];
+        const outstanding: string[] = [];
+        if (!(await storage.listAssetsByEmail(signup.email)).length) {
+          outstanding.push("Nothing uploaded yet — intro, outro, slides or images.");
+        }
+        if (!signup.socialAccounts || signup.socialAccounts === "[]") {
+          outstanding.push("No social accounts connected, so no follow buttons on your card.");
+        }
+        if (show?.showFormat === "prerecorded" && !show.recordingUrl) {
+          outstanding.push("We still need the file for your recorded episode.");
+        }
+
+        const payload = {
+          to: signup.email,
+          hostName: signup.hostName,
+          podcastName: signup.podcastName,
+          eventName: event.name,
+          onAirLabel: `${formatDateTimeInZone(onAir.start, tz)} ${zoneAbbrev(onAir.start, tz)}`,
+          dashboardUrl: `${origin}/host/dashboard`,
+          studioUrl: `${origin}/studio`,
+          shareUrl: `${origin}/s/${signup.id}`,
+          outstanding,
+        };
+
+        const send = kind === "prep" ? sendPrepNudge : kind === "final" ? sendFinalNudge : sendOnAirNudge;
+        let sent = false;
+        try {
+          sent = await send(payload);
+          if (!sent) {
+            // A definite rejection from Resend — nothing was delivered, so
+            // hand the claim back and let the next hour try again. A thrown
+            // error is ambiguous (it may have arrived), so that one keeps the
+            // claim and stays missed rather than risking a duplicate.
+            await storage.releaseNudge(signup.id, kind);
+          }
+        } catch (err) {
+          console.error(`Nudge ${kind} failed for signup ${signup.id}:`, err);
+        }
+        out.push({ signupId: signup.id, to: signup.email, kind, sent, suppressed });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Vercel's scheduler calls this. It sends the bearer token from CRON_SECRET
+   * when that is set; an admin can also call it by hand. Without a secret set
+   * we refuse in production rather than leave a mailer open to the internet.
+   */
+  //      Vercel's scheduler issues GET, so both verbs are accepted — a
+  //      POST-only route here would simply never have fired.
+  const nudgeHandler: RequestHandler = async (req, res) => {
+    const secret = process.env.CRON_SECRET;
+    const bearer = (req.header("authorization") || "").replace(/^Bearer /i, "");
+    const isCron = !!secret && bearer === secret;
+    let isAdmin = false;
+    const sessionEmail = getAdminEmail(req);
+    if (sessionEmail && (await storage.isAdminEmail(sessionEmail))) isAdmin = true;
+    if (!isAdmin) {
+      const pw = (req.header("x-admin-password") || "").trim();
+      const featured = await storage.getFeaturedEvent();
+      if (pw && pw === featured.adminPassword) isAdmin = true;
+    }
+    if (!isCron && !isAdmin) {
+      res.status(401).json({ message: "Not authorised." });
+      return;
+    }
+    const dryRun = req.query.dryRun === "1" || req.body?.dryRun === true;
+    const results = await runNudges({ dryRun });
+    res.json({ dryRun, considered: results.length, results });
+  };
+  app.get("/api/cron/nudges", nudgeHandler);
+  app.post("/api/cron/nudges", nudgeHandler);
+
   // ---- A podcaster's own share link -------------------------------------------
   //      /s/:id unfurls with their artwork and their time, then sends the
   //      reader to their card on the agenda. Static tags in index.html can't

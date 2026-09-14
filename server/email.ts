@@ -293,3 +293,118 @@ export async function sendPlatformInterestEmail(v: PlatformInterestInput): Promi
   const text = `${heading}\n\n` + rows.map(([k, val]) => `${k}: ${val}`).join("\n") + "\n";
   return sendRawEmail({ to: "hello@militaryvoice.ai", subject: `${heading}: ${v.name}`, html, text });
 }
+
+// ---------------------------------------------------------------------------
+// Show-day nudges. Three, sent once each by the scheduled sender. Every one
+// has to earn its place in an inbox, so each names what this particular
+// podcaster still hasn't done rather than repeating the same reminder.
+// ---------------------------------------------------------------------------
+
+export interface NudgeInput {
+  to: string;
+  hostName: string;
+  podcastName: string;
+  eventName: string;
+  onAirLabel: string;
+  dashboardUrl: string;
+  studioUrl: string;
+  shareUrl: string;
+  /** What's still missing, in plain words. Empty when they're all set. */
+  outstanding: string[];
+}
+
+function nudgeShell(opts: { eyebrow: string; heading: string; body: string; cta?: { href: string; label: string } }): string {
+  const cta = opts.cta
+    ? `<p style="margin:0 0 8px;"><a href="${opts.cta.href}" style="display:inline-block;background:#F0A71F;color:#1a1200;text-decoration:none;font-size:15px;font-weight:700;padding:12px 22px;border-radius:9999px;">${opts.cta.label}</a></p>`
+    : "";
+  return `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
+    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">${escapeHtml(opts.eyebrow)}</p>
+    <h1 style="margin:0 0 18px;color:#111827;font-size:22px;font-weight:700;">${escapeHtml(opts.heading)}</h1>
+    ${opts.body}
+    ${cta}
+    <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;line-height:1.6;">
+      You're getting this because you hold a slot on MilitaryVoice.ai. Reply to this email and a human will read it.
+    </p>
+  </div>`;
+}
+
+function outstandingHtml(items: string[]): string {
+  if (items.length === 0) {
+    return `<p style="margin:0 0 20px;color:#166534;font-size:15px;line-height:1.6;">Everything we need is in. Nothing for you to do.</p>`;
+  }
+  const lis = items.map((i) => `<li style="margin:0 0 6px;">${escapeHtml(i)}</li>`).join("");
+  return `<p style="margin:0 0 8px;color:#374151;font-size:15px;line-height:1.6;">Still outstanding:</p>
+    <ul style="margin:0 0 20px;padding-left:20px;color:#374151;font-size:15px;line-height:1.6;">${lis}</ul>`;
+}
+
+/** Two weeks out: time to send us things. */
+export async function sendPrepNudge(v: NudgeInput): Promise<boolean> {
+  const html = nudgeShell({
+    eyebrow: v.eventName,
+    heading: `Your slot is coming up, ${v.hostName}`,
+    body: `<p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+        <strong>${escapeHtml(v.podcastName)}</strong> is on air <strong>${escapeHtml(v.onAirLabel)}</strong>.
+        Now's a good time to get your side ready.
+      </p>
+      ${outstandingHtml(v.outstanding)}
+      <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">
+        Your share link — it shows your artwork and your time wherever you post it:<br />
+        <a href="${v.shareUrl}" style="color:#053877;">${escapeHtml(v.shareUrl)}</a>
+      </p>`,
+    cta: { href: v.dashboardUrl, label: "Open your dashboard" },
+  });
+  return sendRawEmail({
+    to: v.to,
+    subject: `${v.podcastName}: your slot is ${v.onAirLabel}`,
+    html,
+    text: `${v.podcastName} is on air ${v.onAirLabel}.\n\n${
+      v.outstanding.length ? `Still outstanding:\n- ${v.outstanding.join("\n- ")}\n\n` : "Everything we need is in.\n\n"
+    }Share link: ${v.shareUrl}\nYour dashboard: ${v.dashboardUrl}`,
+  });
+}
+
+/** Two days out: the practical details. */
+export async function sendFinalNudge(v: NudgeInput): Promise<boolean> {
+  const html = nudgeShell({
+    eyebrow: v.eventName,
+    heading: `You're on in two days`,
+    body: `<div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 16px;">
+        <p style="margin:0 0 4px;color:#053877;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">You're on air</p>
+        <p style="margin:0;color:#1f2937;font-size:18px;font-weight:700;">${escapeHtml(v.onAirLabel)}</p>
+      </div>
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+        Join the green room <strong>ten minutes before</strong> and we'll check your camera and sound. The producer
+        brings you on when it's your turn.
+      </p>
+      ${outstandingHtml(v.outstanding)}`,
+    cta: { href: v.studioUrl, label: "Your studio link" },
+  });
+  return sendRawEmail({
+    to: v.to,
+    subject: `Two days: ${v.podcastName} at ${v.onAirLabel}`,
+    html,
+    text: `You're on air ${v.onAirLabel}.\n\nJoin the green room ten minutes before: ${v.studioUrl}\n\n${
+      v.outstanding.length ? `Still outstanding:\n- ${v.outstanding.join("\n- ")}\n` : ""
+    }`,
+  });
+}
+
+/** An hour out: one link, nothing else. */
+export async function sendOnAirNudge(v: NudgeInput): Promise<boolean> {
+  const html = nudgeShell({
+    eyebrow: v.eventName,
+    heading: `You're on in about an hour`,
+    body: `<p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+        <strong>${escapeHtml(v.podcastName)}</strong> is on air at <strong>${escapeHtml(v.onAirLabel)}</strong>.
+        Join the green room now — we'll check your camera and sound before you go on.
+      </p>`,
+    cta: { href: v.studioUrl, label: "Join the green room" },
+  });
+  return sendRawEmail({
+    to: v.to,
+    subject: `You're on soon: ${v.podcastName} at ${v.onAirLabel}`,
+    html,
+    text: `${v.podcastName} is on air at ${v.onAirLabel}.\n\nJoin the green room: ${v.studioUrl}`,
+  });
+}

@@ -1,4 +1,4 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges } from "../shared/schema.js";
 import type {
   EventRow,
   InsertEvent,
@@ -27,12 +27,14 @@ import type {
   SceneRow,
   YoutubeAccountRow,
   EventShowRow,
+  NudgeRow,
+  NudgeKind,
   SponsorInquiryRow,
   InsertSponsorInquiry,
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { and, eq, ne, asc, desc, isNull } from "drizzle-orm";
+import { and, eq, ne, asc, desc, isNull, inArray } from "drizzle-orm";
 
 // Resolve the Postgres connection string lazily (not at module load) so a
 // missing/bad value surfaces as a normal caught error on first request—
@@ -307,6 +309,20 @@ async function ensureSchema() {
   await sql`ALTER TABLE event_shows ADD COLUMN IF NOT EXISTS updated_at TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE event_shows ADD COLUMN IF NOT EXISTS interview_need TEXT NOT NULL DEFAULT 'none'`;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS nudges (
+      id SERIAL PRIMARY KEY,
+      signup_id INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      emailed BOOLEAN NOT NULL DEFAULT true,
+      sent_at TEXT NOT NULL
+    );
+  `;
+  // The unique index is what actually stops a double send: two overlapping
+  // cron runs race to insert, and the loser is rejected by the database
+  // rather than politely deciding not to send.
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS nudges_signup_kind_idx ON nudges (signup_id, kind)`;
+
   // Backfill: everyone who already has a profile keeps their show on the
   // featured event, so nobody logs in to find their booked show missing.
   await sql`
@@ -474,7 +490,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "event_shows", column: "interview_need" };
+const SCHEMA_SENTINEL = { table: "nudges", column: "emailed" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
@@ -574,6 +590,11 @@ export interface IStorage {
   getScene(id: number): Promise<SceneRow | undefined>;
   createScene(v: Omit<SceneRow, "id" | "createdAt">): Promise<SceneRow>;
   deleteScene(id: number): Promise<void>;
+  listNudgesForSignups(signupIds: number[]): Promise<NudgeRow[]>;
+  /** Insert-if-absent. Returns false when this nudge was already recorded. */
+  claimNudge(signupId: number, kind: NudgeKind, emailed: boolean): Promise<boolean>;
+  /** Give a claim back so the next run retries it. */
+  releaseNudge(signupId: number, kind: NudgeKind): Promise<void>;
   getEventShow(email: string, eventId: number): Promise<EventShowRow | undefined>;
   listEventShows(email: string): Promise<EventShowRow[]>;
   upsertEventShow(email: string, eventId: number, v: Partial<EventShowRow>): Promise<EventShowRow>;
@@ -1025,6 +1046,29 @@ class DatabaseStorage implements IStorage {
   }
 
   // ---- YouTube ------------------------------------------------------------
+  async listNudgesForSignups(signupIds: number[]): Promise<NudgeRow[]> {
+    await ready();
+    if (signupIds.length === 0) return [];
+    return db.select().from(nudges).where(inArray(nudges.signupId, signupIds));
+  }
+
+  async claimNudge(signupId: number, kind: NudgeKind, emailed: boolean): Promise<boolean> {
+    await ready();
+    // Claim it before sending, not after: if the send then fails we would
+    // rather miss one nudge than send it twice on the next run.
+    const rows = await db
+      .insert(nudges)
+      .values({ signupId, kind, emailed, sentAt: new Date().toISOString() })
+      .onConflictDoNothing({ target: [nudges.signupId, nudges.kind] })
+      .returning({ id: nudges.id });
+    return rows.length > 0;
+  }
+
+  async releaseNudge(signupId: number, kind: NudgeKind): Promise<void> {
+    await ready();
+    await db.delete(nudges).where(and(eq(nudges.signupId, signupId), eq(nudges.kind, kind)));
+  }
+
   async getEventShow(email: string, eventId: number): Promise<EventShowRow | undefined> {
     await ready();
     const [row] = await db
