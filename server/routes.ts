@@ -2507,7 +2507,10 @@ export function registerRoutes(app: Express): void {
       hasVideoOutro: profile.hasVideoOutro,
       hasSlides: profile.hasSlides,
       hasImages: profile.hasImages,
-      needsInterviewer: profile.needsInterviewer,
+      // From the show, not the profile: the interview need belongs to this
+      // event, and the flow sets the show up before claiming — reading the
+      // profile here wrote a stale false over what they had just chosen.
+      needsInterviewer: show.showFormat === "live" && show.interviewNeed === "interview_me",
       socialLinks: profile.socialLinks,
       rssUrl: profile.rssUrl,
       youtubeUrl: profile.youtubeUrl,

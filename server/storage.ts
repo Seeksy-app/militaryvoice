@@ -1103,6 +1103,10 @@ class DatabaseStorage implements IStorage {
     const [row] = await db
       .insert(eventShows)
       .values({
+        // Spread first: enumerating the columns here meant every field added
+        // later was silently dropped on create and only stuck on a second
+        // save. interviewNeed was lost exactly that way.
+        ...v,
         email: key,
         eventId,
         showName: v.showName ?? "",
