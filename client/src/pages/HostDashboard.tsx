@@ -52,6 +52,7 @@ import { OwnEncoder } from "@/components/OwnEncoder";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SocialTiles } from "@/components/SocialTiles";
+import { ConnectedAccountsStrip } from "@/components/ConnectedAccountsStrip";
 import { apiRequest, apiUpload, API_BASE, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, ProfileRow, SocialAccount } from "@shared/schema";
 import {
@@ -345,7 +346,7 @@ export default function HostDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const search = useSearch();
-  const [screen, setScreen] = useState<"dashboard" | "editProfile" | "events" | "fans" | "claim">("dashboard");
+  const [screen, setScreen] = useState<"dashboard" | "editProfile" | "events" | "integrations" | "fans" | "claim">("dashboard");
   const [claimIndex, setClaimIndex] = useState<number | null>(null);
   const [pending, setPending] = useState<PendingSlot | null>(() => readPending(search));
   const zone = useMemo(detectLocalTimeZone, []);
@@ -557,8 +558,10 @@ export default function HostDashboard() {
                   ? "Profile settings"
                   : screen === "events"
                     ? "Event settings"
-                    : screen === "fans"
-                      ? "Fans & contacts"
+                    : screen === "integrations"
+                      ? "Integrations"
+                      : screen === "fans"
+                        ? "Fans & contacts"
                       : "Podcaster Dashboard"}
             </h1>
             {data && (
@@ -587,12 +590,13 @@ export default function HostDashboard() {
             event. Everything else hangs off those. Hidden during first-time
             setup, where there is only one thing to do. */}
         {data && hasProfile && !inSetup && (
-          <nav className="mt-6 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm sm:grid-cols-4">
+          <nav className="mt-6 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm sm:grid-cols-5">
             {(
               [
                 ["dashboard", "Dashboard", "Your card and slot"],
                 ["editProfile", "Profile settings", "About you"],
                 ["events", "Event settings", "Your shows and times"],
+                ["integrations", "Integrations", "Your connected accounts"],
                 ["fans", "Fans & contacts", "Who asked for a reminder"],
               ] as const
             ).map(([value, label, hint]) => {
@@ -665,6 +669,52 @@ export default function HostDashboard() {
               }}
               onCancel={hasProfile ? () => setScreen("dashboard") : undefined}
             />
+          </section>
+        ) : screen === "integrations" ? (
+          <section className="mt-6">
+            <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
+              Link the accounts you post from. Connected ones show as follow buttons on your card in the public
+              lineup, and are where we can send clips after your slot.
+            </p>
+            {social?.configured && (
+              <div className="mt-4 border-t border-border pt-4" data-testid="section-social-accounts">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Social accounts</p>
+                  <div className="flex items-center gap-1">
+                    {social.accounts.length > 0 && (
+                      <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={() => refreshSocial.mutate()}
+                disabled={refreshSocial.isPending}
+                data-testid="button-social-refresh"
+                      >
+                <RefreshCw className={`h-3 w-3 ${refreshSocial.isPending ? "animate-spin" : ""}`} /> Refresh
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 rounded-full px-2.5 text-xs"
+                      onClick={() => connectSocial.mutate()}
+                      disabled={connectSocial.isPending}
+                      data-testid="button-social-connect"
+                    >
+                      <Link2 className="h-3 w-3" />
+                      {connectSocial.isPending ? "Opening…" : social.accounts.length ? "Manage" : "Connect accounts"}
+                    </Button>
+                  </div>
+                </div>
+                <SocialTiles accounts={social.accounts} onConnect={() => connectSocial.mutate()} connecting={connectSocial.isPending} />
+                {social.accounts.length === 0 && (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Nothing linked yet. Connected accounts light up here and show as follow buttons on your card in the lineup.
+                  </p>
+                )}
+              </div>
+                    )}
+
           </section>
         ) : screen === "fans" ? (
           <>
@@ -962,42 +1012,28 @@ export default function HostDashboard() {
                       )}
                     </div>
 
-                    {social?.configured && (
+                    {social?.configured && social.accounts.length > 0 && (
                       <div className="mt-4 border-t border-border pt-4" data-testid="section-social-accounts">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Social accounts</p>
-                          <div className="flex items-center gap-1">
-                            {social.accounts.length > 0 && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 gap-1 px-2 text-xs"
-                                onClick={() => refreshSocial.mutate()}
-                                disabled={refreshSocial.isPending}
-                                data-testid="button-social-refresh"
-                              >
-                                <RefreshCw className={`h-3 w-3 ${refreshSocial.isPending ? "animate-spin" : ""}`} /> Refresh
-                              </Button>
-                            )}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-7 gap-1 rounded-full px-2.5 text-xs"
-                              onClick={() => connectSocial.mutate()}
-                              disabled={connectSocial.isPending}
-                              data-testid="button-social-connect"
-                            >
-                              <Link2 className="h-3 w-3" />
-                              {connectSocial.isPending ? "Opening…" : social.accounts.length ? "Manage" : "Connect accounts"}
-                            </Button>
-                          </div>
-                        </div>
-                        <SocialTiles accounts={social.accounts} onConnect={() => connectSocial.mutate()} connecting={connectSocial.isPending} />
-                        {social.accounts.length === 0 && (
-                          <p className="mt-2 text-sm text-muted-foreground">
-                            Nothing linked yet. Connected accounts light up here and show as follow buttons on your card in the lineup.
-                          </p>
-                        )}
+                        <ConnectedAccountsStrip
+                          accounts={social.accounts}
+                          onManage={() => setScreen("integrations")}
+                        />
+                      </div>
+                    )}
+                    {social?.configured && social.accounts.length === 0 && (
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+                        <p className="text-sm text-muted-foreground">
+                          No accounts linked yet — connect them and they show as follow buttons on your lineup card.
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 rounded-full"
+                          onClick={() => setScreen("integrations")}
+                          data-testid="button-go-integrations"
+                        >
+                          <Link2 className="h-3.5 w-3.5" /> Integrations
+                        </Button>
                       </div>
                     )}
                   </div>
