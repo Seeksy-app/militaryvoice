@@ -819,7 +819,7 @@ export default function HostDashboard() {
                 {profile && entry.slotIndex != null && (
                   <div className="mt-6 flex flex-col gap-4">
                     <EventPanel title="Show materials" hint="Files and show details" defaultOpen>
-                      <ShowMaterials profile={profile} />
+                      <ShowMaterials profile={profile} showFormat={entry.show?.showFormat} interviewNeed={entry.show?.interviewNeed} />
                     </EventPanel>
 
                     <EventPanel title="Stream" hint="Where it goes out">

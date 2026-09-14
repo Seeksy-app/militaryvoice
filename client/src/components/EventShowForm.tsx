@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiUpload } from "@/lib/queryClient";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { Radio, PlayCircle, ImagePlus, Save, Mic2 } from "lucide-react";
+import { INTERVIEW_NEEDS } from "@shared/schema";
 
 // What a podcaster is bringing to one event: its name, whether it airs live or
 // rolls from a file, and its artwork. Separate from the profile because the
@@ -19,6 +20,7 @@ export interface EventShow {
   recordingUrl: string;
   introStyle: string;
   imageUrl: string;
+  interviewNeed?: string;
   isNew?: boolean;
 }
 
@@ -43,6 +45,7 @@ export function EventShowForm({
   const [format, setFormat] = useState(show.showFormat || "live");
   const [recordingUrl, setRecordingUrl] = useState(show.recordingUrl ?? "");
   const [introStyle, setIntroStyle] = useState(show.introStyle || "virtual");
+  const [interviewNeed, setInterviewNeed] = useState(show.interviewNeed || "none");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
@@ -53,6 +56,7 @@ export function EventShowForm({
       fd.append("showFormat", format);
       fd.append("recordingUrl", recordingUrl.trim());
       fd.append("introStyle", introStyle);
+      fd.append("interviewNeed", format === "live" ? interviewNeed : "none");
       if (imageFile) fd.append("image", imageFile);
       const res = await apiUpload("PUT", `/api/host/shows/${eventId}`, fd);
       return res.json();
@@ -160,6 +164,34 @@ export function EventShowForm({
               ))}
             </div>
           </div>
+
+          {/* Only a live slot can want an interviewer — a finished episode is
+              already made. Asked here because it decides how the slot runs. */}
+          {format === "live" && (
+            <div>
+              <Label className="text-sm font-semibold text-foreground">Do you need someone to interview you?</Label>
+              <p className="text-xs text-muted-foreground">We can pair you with a host, or find you a guest.</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {INTERVIEW_NEEDS.map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    aria-pressed={interviewNeed === o.value}
+                    onClick={() => setInterviewNeed(o.value)}
+                    className={`flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-colors ${
+                      interviewNeed === o.value
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-card hover:bg-[#053877]/[0.04]"
+                    }`}
+                    data-testid={`radio-interview-need-${o.value}`}
+                  >
+                    <span className="text-sm font-medium">{o.label}</span>
+                    <span className="text-xs text-muted-foreground">{o.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {format === "prerecorded" && (
             <>

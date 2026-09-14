@@ -145,7 +145,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
   });
 
   function exportCsv() {
-    const rows = [["Time", "Type", "Title", "Duration (min)", "Notes", "Podcaster", "Materials"]];
+    const rows = [["Time", "Type", "Title", "Duration (min)", "Notes", "Podcaster", "Interviewer", "Materials"]];
     for (const it of items ?? []) {
       const s = it.signupId ? signupById.get(it.signupId) : undefined;
       const mats = s ? (assetsByEmail.get(s.email.toLowerCase()) ?? []).map((a) => `${a.kind}: ${a.fileUrl || a.linkUrl}`).join(" | ") : "";
@@ -156,6 +156,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
         String(it.durationMinutes),
         it.notes.replace(/\n/g, " "),
         s ? `${s.podcastName} (${s.hostName})` : "",
+        s?.needsInterviewer ? "Needs interviewer" : "",
         mats,
       ]);
     }
@@ -392,7 +393,18 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                   </div>
 
                   <div className="min-w-[200px] flex-1">
-                    <div className="text-sm font-semibold text-card-foreground">{it.title}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-card-foreground">{it.title}</span>
+                      {s?.needsInterviewer && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#1a1200]"
+                          title="This podcaster asked to be interviewed"
+                          data-testid={`badge-needs-interviewer-${it.id}`}
+                        >
+                          Needs interviewer
+                        </span>
+                      )}
+                    </div>
                     {it.notes && <div className="mt-0.5 whitespace-pre-line text-xs text-muted-foreground">{it.notes}</div>}
 
                     {s?.showFormat === "prerecorded" && (
@@ -421,7 +433,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                       </div>
                     )}
 
-                    {s && (s.guests || s.interviewQuestions || s.promoNotes) && (
+                    {s && (s.guests || s.interviewQuestions || s.promoNotes || s.needsInterviewer) && (
                       <details className="mt-2">
                         <summary className="cursor-pointer text-[11px] font-medium text-primary">Show details from the podcaster</summary>
                         <div className="mt-1.5 space-y-1.5 rounded-lg bg-muted/40 p-2.5 text-xs text-muted-foreground">
@@ -429,6 +441,12 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                             <p>
                               <span className="font-medium text-foreground">Appearing: </span>
                               <span className="whitespace-pre-line">{s.guests}</span>
+                            </p>
+                          )}
+                          {s.needsInterviewer && (
+                            <p>
+                              <span className="font-medium text-foreground">Interviewer: </span>
+                              asked us to pair them with a host.
                             </p>
                           )}
                           {s.interviewQuestions && (

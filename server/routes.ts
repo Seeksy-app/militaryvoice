@@ -2822,6 +2822,7 @@ export function registerRoutes(app: Express): void {
       recordingUrl: profile?.recordingUrl ?? "",
       introStyle: profile?.introStyle || "virtual",
       imageUrl: "",
+      interviewNeed: "none",
       isNew: true,
     });
   });
@@ -2852,6 +2853,7 @@ export function registerRoutes(app: Express): void {
         showFormat: body.showFormat || "live",
         recordingUrl: body.recordingUrl ?? "",
         introStyle: body.introStyle || "virtual",
+        interviewNeed: body.interviewNeed || "none",
       });
       if (!parsed.success) {
         res.status(400).json({ message: fromError(parsed.error).toString() });

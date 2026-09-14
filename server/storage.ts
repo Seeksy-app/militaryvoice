@@ -305,6 +305,7 @@ async function ensureSchema() {
   // exists, so anything added to event_shows later needs its own ALTER here.
   await sql`ALTER TABLE event_shows ADD COLUMN IF NOT EXISTS image_url TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE event_shows ADD COLUMN IF NOT EXISTS updated_at TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE event_shows ADD COLUMN IF NOT EXISTS interview_need TEXT NOT NULL DEFAULT 'none'`;
 
   // Backfill: everyone who already has a profile keeps their show on the
   // featured event, so nobody logs in to find their booked show missing.
@@ -473,7 +474,7 @@ const BENIGN_SCHEMA_ERRORS = new Set(["23505", "42P07", "42701", "42710"]);
 // SCHEMA_SENTINEL at something that migration creates. The fast path below
 // skips ~12 DDL round-trips on every cold start, so a stale sentinel silently
 // skips new migrations — which is exactly how show_format went missing once.
-const SCHEMA_SENTINEL = { table: "event_shows", column: "image_url" };
+const SCHEMA_SENTINEL = { table: "event_shows", column: "interview_need" };
 
 async function schemaAlreadyPresent(): Promise<boolean> {
   const { sql } = getConnection();
@@ -1485,6 +1486,9 @@ class DatabaseStorage implements IStorage {
         recordingUrl: show.recordingUrl,
         introStyle: show.introStyle,
         photoUrl: show.imageUrl || profile?.photoUrl || "",
+        // Keep the boolean the run of show and the admin views already read.
+        // Only a live slot can want an interviewer.
+        needsInterviewer: show.showFormat === "live" && show.interviewNeed === "interview_me",
       })
       .where(and(eq(signups.email, key), eq(signups.eventId, eventId), ne(signups.status, "cancelled")))
       .returning({ id: signups.id });

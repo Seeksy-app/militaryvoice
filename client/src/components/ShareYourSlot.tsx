@@ -29,7 +29,7 @@ function CopyRow({ label, value, testId, multiline = false }: { label: string; v
       <Label className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">{label}</Label>
       <div className={`mt-1 flex gap-2 ${multiline ? "items-start" : "items-center"}`}>
         {multiline ? (
-          <Textarea readOnly rows={4} value={value} className="text-sm" data-testid={testId} />
+          <Textarea readOnly rows={5} value={value} className="text-sm leading-snug" data-testid={testId} />
         ) : (
           <Input readOnly value={value} className="font-mono text-xs" onFocus={(e) => e.currentTarget.select()} data-testid={testId} />
         )}
@@ -66,13 +66,24 @@ export function ShareYourSlot({
     `${podcastName} — ${whenLabel}, as part of the 24 Hour Podcastathon on MilitaryVoice.ai.\n\n` +
     `Set a reminder and tune in: ${url}`;
 
-  async function nativeShare() {
-    if (navigator.share) {
-      await navigator.share({ title: podcastName, text: caption, url }).catch(() => {});
-    } else {
-      await navigator.clipboard.writeText(caption).catch(() => {});
-    }
-  }
+  const targets = [
+    {
+      key: "x",
+      label: "X",
+      href: `https://x.com/intent/tweet?text=${encodeURIComponent(caption)}`,
+    },
+    {
+      key: "linkedin",
+      label: "LinkedIn",
+      // LinkedIn ignores prefilled text now; it reads the page's own tags.
+      href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`,
+    },
+    {
+      key: "facebook",
+      label: "Facebook",
+      href: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`,
+    },
+  ];
 
   return (
     <section className="mt-6">
@@ -89,29 +100,61 @@ export function ShareYourSlot({
           </p>
         </div>
 
-        <div className="flex flex-col gap-5 p-5">
-          <CopyRow label="Your share link" value={url} testId="input-share-link" />
-          <CopyRow label="Ready-made post" value={caption} testId="input-share-caption" multiline />
+        <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="flex min-w-0 flex-col gap-4">
+            <CopyRow label="Your share link" value={url} testId="input-share-link" />
+            <CopyRow label="Ready-made post" value={caption} testId="input-share-caption" multiline />
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" className="gap-1.5 rounded-full" onClick={nativeShare} data-testid="button-share-slot">
-              <Share2 className="h-4 w-4" /> Share
-            </Button>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Post it</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {targets.map((t) => (
+                  <a
+                    key={t.key}
+                    href={t.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-[#053877] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#06498f]"
+                    data-testid={`button-share-${t.key}`}
+                  >
+                    <Share2 className="h-3.5 w-3.5" /> {t.label}
+                  </a>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Instagram and TikTok have no share-by-link — copy the post above and paste it there.
+              </p>
+            </div>
+          </div>
+
+          {/* The card itself, because nobody trusts a link they can't see. */}
+          <div className="lg:border-l lg:border-border lg:pl-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">How it looks</p>
             <a
               href={url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-medium hover:bg-[#053877]/[0.04]"
+              className="mt-2 block overflow-hidden rounded-xl border border-border transition-colors hover:border-primary/40"
               data-testid="link-preview-share"
             >
-              Preview it <ExternalLink className="h-3.5 w-3.5" />
+              <img
+                src={`/og/slot/${signupId}.jpg`}
+                alt="Your link preview"
+                width={1200}
+                height={630}
+                className="block w-full"
+                loading="lazy"
+              />
+              <span className="flex items-center justify-between gap-2 bg-card px-3 py-2 text-xs text-muted-foreground">
+                militaryvoice.ai
+                <ExternalLink className="h-3 w-3" />
+              </span>
             </a>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Facebook, LinkedIn and X cache previews. If you posted this before today and it looks plain, run it
+              through that platform's post inspector once.
+            </p>
           </div>
-
-          <p className="text-xs text-muted-foreground">
-            Facebook, LinkedIn and X cache link previews. If you posted this link before today and it looks plain,
-            re-share it or run it through that platform's post inspector once.
-          </p>
         </div>
       </div>
     </section>

@@ -280,6 +280,13 @@ export const SERVICE_STATUSES = [
   "Supporter of the military",
 ] as const;
 
+export const INTERVIEW_NEEDS = [
+  { value: "none", label: "We've got this ourselves", hint: "You run the whole segment." },
+  { value: "interview_me", label: "Please interview me", hint: "We'll line up a host to ask the questions." },
+  { value: "find_guest", label: "Find me someone to interview", hint: "We'll bring you a guest from the community." },
+] as const;
+export type InterviewNeed = (typeof INTERVIEW_NEEDS)[number]["value"];
+
 export const RECORDING_MODES = ["Record and edit", "Live stream", "Both"] as const;
 export const POST_EDIT_ANSWERS = ["Yes", "No"] as const;
 export const STREAM_PLATFORMS = [
@@ -709,6 +716,9 @@ export const eventShows = pgTable("event_shows", {
   // Artwork for this show. Separate from the person's own photo, and what
   // the public lineup prefers when it is set.
   imageUrl: text("image_url").notNull().default(""),
+  // Whether they want an interviewer, or a guest found for them. Only asked of
+  // a live slot — a pre-recorded episode is already made.
+  interviewNeed: text("interview_need").notNull().default("none"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull().default(""),
 });
@@ -719,6 +729,7 @@ export const eventShowFieldsSchema = z.object({
   showFormat: z.enum(["live", "prerecorded"]),
   recordingUrl: optionalUrl("episode"),
   introStyle: z.enum(["virtual", "straight"]),
+  interviewNeed: z.enum(["none", "interview_me", "find_guest"]).default("none"),
 });
 export const insertEventShowSchema = eventShowFieldsSchema.superRefine((v, ctx) => {
   // Same rule the profile had: we cannot air a pre-recorded slot without the file.

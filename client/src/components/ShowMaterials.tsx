@@ -48,12 +48,22 @@ function prettySize(bytes: number): string {
  * Everything a podcaster hands to the studio before their slot: files to play
  * on screen, and the written details the run of show is built from.
  */
-export function ShowMaterials({ profile }: { profile: ProfileRow }) {
+export function ShowMaterials({
+  profile,
+  showFormat,
+  interviewNeed,
+}: {
+  profile: ProfileRow;
+  /** The event's show format — the profile's is only a default for new events. */
+  showFormat?: string;
+  /** What they asked for in Event settings under how the slot runs. */
+  interviewNeed?: string;
+}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [kind, setKind] = useState<string>("Intro");
+  const [kind, setKind] = useState<string>("");
   const [label, setLabel] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -67,7 +77,12 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
     hasSlides: profile.hasSlides,
     hasImages: profile.hasImages,
   });
-  const [needsInterviewer, setNeedsInterviewer] = useState(profile.needsInterviewer);
+  const [needsInterviewer] = useState(profile.needsInterviewer);
+
+  // Both of these belong to the event's show, not the profile — the profile
+  // only carries defaults for a brand new event.
+  const isPrerecorded = (showFormat ?? profile.showFormat) === "prerecorded";
+  const wantsInterviewer = !isPrerecorded && interviewNeed === "interview_me";
 
   const [guests, setGuests] = useState(profile.guests ?? "");
   const [questions, setQuestions] = useState(profile.interviewQuestions ?? "");
@@ -96,6 +111,7 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/host/assets"] });
+      setKind("");
       setLabel("");
       setLinkUrl("");
       setFile(null);
@@ -269,9 +285,9 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
             <div className="grid gap-3 sm:grid-cols-[150px_1fr]">
               <div>
                 <Label className="text-xs font-semibold text-foreground">What is it?</Label>
-                <Select value={kind} onValueChange={setKind}>
+                <Select value={kind || undefined} onValueChange={setKind}>
                   <SelectTrigger className="mt-1" data-testid="select-asset-kind">
-                    <SelectValue />
+                    <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
                     {ASSET_KINDS.map((k) => (
@@ -333,17 +349,19 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
             <Button
               type="button"
               size="sm"
-              variant={!file && !linkUrl.trim() ? "outline" : "default"}
+              variant={!kind || (!file && !linkUrl.trim()) ? "outline" : "default"}
               className="mt-4 gap-1.5 rounded-full"
-              disabled={add.isPending || (!file && !linkUrl.trim())}
+              disabled={add.isPending || !kind || (!file && !linkUrl.trim())}
               onClick={() => add.mutate()}
               data-testid="button-add-asset"
             >
               {file ? <Upload className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
               {add.isPending ? "Adding…" : "Add to my slot"}
             </Button>
-            {!file && !linkUrl.trim() && (
-              <span className="ml-3 text-xs text-muted-foreground">Choose a file or paste a link first.</span>
+            {(!kind || (!file && !linkUrl.trim())) && (
+              <span className="ml-3 text-xs text-muted-foreground">
+                {!kind ? "Pick what it is first." : "Choose a file or paste a link first."}
+              </span>
             )}
           </div>
 
@@ -379,87 +397,56 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
           {openDetails && (
           <>
 
-          {profile.showFormat === "prerecorded" ? (
-            <p className="rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] p-4 text-sm text-foreground">
-              You're playing a recorded episode, so there's nothing to plan around intros, slides or an interviewer —
-              it's all already in your file.
-            </p>
-          ) : (
-            <>
-              <div>
-                <Label className="text-sm font-semibold text-foreground">What are you bringing?</Label>
-                <p className="text-xs text-muted-foreground">Tick anything we should have cued up for your segment.</p>
-                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {(
-                    [
-                      ["hasVideoIntro", "Video intro", Video],
-                      ["hasVideoOutro", "Video outro", Video],
-                      ["hasSlides", "Slides", Presentation],
-                      ["hasImages", "Images", ImageIcon],
-                    ] as const
-                  ).map(([key, label, Icon]) => {
-                    const on = bringing[key];
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        aria-pressed={on}
-                        onClick={() => setBringing((b) => ({ ...b, [key]: !b[key] }))}
-                        className={`flex flex-col items-start gap-2 rounded-xl border p-3 text-left text-sm transition-colors ${
-                          on ? "border-primary bg-primary/5 font-medium" : "border-border hover:bg-muted/50"
-                        }`}
-                        data-testid={`toggle-${key}`}
-                      >
-                        <div className="flex w-full items-center justify-between">
-                          <Icon className={`h-4 w-4 ${on ? "text-primary" : "text-muted-foreground"}`} />
-                          <span
-                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                              on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card"
-                            }`}
-                          >
-                            {on && <Check className="h-3 w-3" />}
-                          </span>
-                        </div>
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-sm font-semibold text-foreground">Interview help</Label>
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {(
-                    [
-                      [false, "We're good on our own", "You run your own show start to finish."],
-                      [true, "Pair us with an interviewer", "We'll line someone up before air time."],
-                    ] as const
-                  ).map(([v, label, hint]) => (
+          {/* Only what still needs answering. A pre-recorded episode has its
+              intros and guests baked in, so none of this applies to it, and
+              telling someone what they don't have to do is just more to read. */}
+          {!isPrerecorded && (
+            <div>
+              <Label className="text-sm font-semibold text-foreground">What are you bringing?</Label>
+              <p className="text-xs text-muted-foreground">Tick anything we should have cued up for your segment.</p>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {(
+                  [
+                    ["hasVideoIntro", "Video intro", Video],
+                    ["hasVideoOutro", "Video outro", Video],
+                    ["hasSlides", "Slides", Presentation],
+                    ["hasImages", "Images", ImageIcon],
+                  ] as const
+                ).map(([key, label, Icon]) => {
+                  const on = bringing[key];
+                  return (
                     <button
-                      key={String(v)}
+                      key={key}
                       type="button"
-                      aria-pressed={needsInterviewer === v}
-                      onClick={() => setNeedsInterviewer(v)}
-                      className={`flex items-start gap-3 rounded-xl border p-3 text-left transition-colors ${
-                        needsInterviewer === v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                      aria-pressed={on}
+                      onClick={() => setBringing((b) => ({ ...b, [key]: !b[key] }))}
+                      className={`flex flex-col items-start gap-2 rounded-xl border p-3 text-left text-sm transition-colors ${
+                        on ? "border-primary bg-primary/5 font-medium" : "border-border bg-card hover:bg-[#053877]/[0.04]"
                       }`}
-                      data-testid={`radio-interviewer-${v ? "yes" : "no"}`}
+                      data-testid={`toggle-${key}`}
                     >
-                      <span>
-                        <span className="block text-sm">{label}</span>
-                        <span className="block text-xs text-muted-foreground">{hint}</span>
-                      </span>
+                      <div className="flex w-full items-center justify-between">
+                        <Icon className={`h-4 w-4 ${on ? "text-primary" : "text-muted-foreground"}`} />
+                        <span
+                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                            on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card"
+                          }`}
+                        >
+                          {on && <Check className="h-3 w-3" />}
+                        </span>
+                      </div>
+                      {label}
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-            </>
+            </div>
           )}
 
+          {!isPrerecorded && (
           <div>
             <Label htmlFor="guests" className="text-sm font-semibold text-foreground">
-              Who's appearing with you
+              Who's appearing with you <span className="font-normal text-muted-foreground">— leave blank if it's just you</span>
             </Label>
             <Textarea
               id="guests"
@@ -474,10 +461,12 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
               Full names and titles, one per line, exactly as you want them read on air.
             </p>
           </div>
+          )}
 
+          {wantsInterviewer && (
           <div>
             <Label htmlFor="questions" className="text-sm font-semibold text-foreground">
-              If you're being interviewed, your questions
+              Questions for your interviewer
             </Label>
             <Textarea
               id="questions"
@@ -489,9 +478,10 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
               data-testid="input-interview-questions"
             />
             <p className="mt-1.5 text-xs text-muted-foreground">
-              Only if you want an interviewer. Add a short note on the topic too.
+              You asked us to pair you with a host — this is what they'll work from.
             </p>
           </div>
+          )}
 
           <div>
             <Label htmlFor="promo" className="text-sm font-semibold text-foreground">
