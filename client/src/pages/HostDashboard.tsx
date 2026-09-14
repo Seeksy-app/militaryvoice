@@ -1046,8 +1046,18 @@ export default function HostDashboard() {
                       )}
                     </div>
 
-                    {/* Social accounts live on the Integrations tab. The
-                        dashboard card is who you are and when you're on. */}
+                    {/* Only once something is actually connected. The seven
+                        grey "Not connected" tiles that used to sit here were a
+                        third of the card saying nothing; three real accounts
+                        with faces and follower counts earn the space. */}
+                    {social?.configured && social.accounts.length > 0 && (
+                      <div className="mt-4 border-t border-border pt-4" data-testid="section-social-accounts">
+                        <ConnectedAccountsStrip
+                          accounts={social.accounts}
+                          onManage={() => goTo("integrations")}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

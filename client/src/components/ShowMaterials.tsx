@@ -181,23 +181,25 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
         <div className="border-b border-border p-5">
           <button
             type="button"
-            className="mb-3 flex w-full items-center gap-2 text-left"
+            className="group mb-4 flex w-full items-center gap-3 text-left"
             onClick={() => setOpenFiles((v) => !v)}
             aria-expanded={openFiles}
             data-testid="toggle-materials-files"
           >
-            {openFiles ? (
-              <ChevronDown className="h-3.5 w-3.5 text-[#053877]" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-[#053877]" />
-            )}
-            <span className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
-              Files to play or show
+            <span className="h-8 w-1 shrink-0 rounded-full bg-[#F0A71F]" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-bold leading-tight text-[#053877]">Files to play or show</span>
+              <span className="block text-xs text-muted-foreground">Intros, outros, slides — anything we roll for you.</span>
             </span>
             {assets && assets.length > 0 && (
-              <span className="rounded-full bg-[#053877]/10 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">
+              <span className="shrink-0 rounded-full bg-[#053877] px-2.5 py-0.5 text-[11px] font-bold text-white">
                 {assets.length}
               </span>
+            )}
+            {openFiles ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-[#053877]" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-[#053877]" />
             )}
           </button>
           {openFiles && (
@@ -263,7 +265,7 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
             </ul>
           )}
 
-          <div className="rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] p-4">
+          <div className="rounded-xl border border-[#053877]/25 bg-[#053877]/[0.05] p-4 sm:p-5">
             <div className="grid gap-3 sm:grid-cols-[150px_1fr]">
               <div>
                 <Label className="text-xs font-semibold text-foreground">What is it?</Label>
@@ -331,7 +333,8 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
             <Button
               type="button"
               size="sm"
-              className="mt-3 gap-1.5 rounded-full"
+              variant={!file && !linkUrl.trim() ? "outline" : "default"}
+              className="mt-4 gap-1.5 rounded-full"
               disabled={add.isPending || (!file && !linkUrl.trim())}
               onClick={() => add.mutate()}
               data-testid="button-add-asset"
@@ -339,6 +342,9 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
               {file ? <Upload className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
               {add.isPending ? "Adding…" : "Add to my slot"}
             </Button>
+            {!file && !linkUrl.trim() && (
+              <span className="ml-3 text-xs text-muted-foreground">Choose a file or paste a link first.</span>
+            )}
           </div>
 
           <p className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
@@ -354,17 +360,21 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
         <div className="flex flex-col gap-4 p-5">
           <button
             type="button"
-            className="flex w-full items-center gap-2 text-left"
+            className="flex w-full items-center gap-3 text-left"
             onClick={() => setOpenDetails((v) => !v)}
             aria-expanded={openDetails}
             data-testid="toggle-materials-details"
           >
+            <span className="h-8 w-1 shrink-0 rounded-full bg-[#F0A71F]" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-bold leading-tight text-[#053877]">Show details</span>
+              <span className="block text-xs text-muted-foreground">What the crew reads out and plans around.</span>
+            </span>
             {openDetails ? (
-              <ChevronDown className="h-3.5 w-3.5 text-[#053877]" />
+              <ChevronDown className="h-4 w-4 shrink-0 text-[#053877]" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-[#053877]" />
+              <ChevronRight className="h-4 w-4 shrink-0 text-[#053877]" />
             )}
-            <span className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Show details</span>
           </button>
           {openDetails && (
           <>
@@ -448,47 +458,63 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
           )}
 
           <div>
-            <Label htmlFor="guests">Who's appearing with you</Label>
+            <Label htmlFor="guests" className="text-sm font-semibold text-foreground">
+              Who's appearing with you
+            </Label>
             <Textarea
               id="guests"
               rows={3}
-              className="mt-1"
-              placeholder={"Full names and titles, one per line, exactly as you want them read on air.\nJane Doe — Founder, Veterans First"}
+              className="mt-1.5"
+              placeholder="Jane Doe — Founder, Veterans First"
               value={guests}
               onChange={(e) => setGuests(e.target.value)}
               data-testid="input-guests"
             />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Full names and titles, one per line, exactly as you want them read on air.
+            </p>
           </div>
 
           <div>
-            <Label htmlFor="questions">If you're being interviewed, your questions</Label>
+            <Label htmlFor="questions" className="text-sm font-semibold text-foreground">
+              If you're being interviewed, your questions
+            </Label>
             <Textarea
               id="questions"
-              rows={4}
-              className="mt-1"
-              placeholder="The questions you'd like to be asked, and a short note on the topic."
+              rows={3}
+              className="mt-1.5"
+              placeholder="What would you like to be asked?"
               value={questions}
               onChange={(e) => setQuestions(e.target.value)}
               data-testid="input-interview-questions"
             />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Only if you want an interviewer. Add a short note on the topic too.
+            </p>
           </div>
 
           <div>
-            <Label htmlFor="promo">Anything we can help promote</Label>
+            <Label htmlFor="promo" className="text-sm font-semibold text-foreground">
+              Anything we can help promote
+            </Label>
             <Textarea
               id="promo"
               rows={3}
-              className="mt-1"
-              placeholder="Your podcast's goals or mission, a launch, a campaign, a cause."
+              className="mt-1.5"
+              placeholder="A launch, a campaign, a cause"
               value={promo}
               onChange={(e) => setPromo(e.target.value)}
               data-testid="input-promo-notes"
             />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Your show’s mission or anything you’d like the host to mention.
+            </p>
           </div>
 
           <div className="flex items-center gap-3">
             <Button
               type="button"
+              variant={detailsDirty ? "default" : "outline"}
               className="gap-1.5 rounded-full"
               disabled={!detailsDirty || saveDetails.isPending}
               onClick={() => saveDetails.mutate()}
@@ -497,7 +523,9 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
               <Save className="h-4 w-4" />
               {saveDetails.isPending ? "Saving…" : "Save details"}
             </Button>
-            {detailsDirty && <span className="text-xs text-muted-foreground">Unsaved changes.</span>}
+            <span className="text-xs text-muted-foreground">
+              {detailsDirty ? "Unsaved changes." : "Everything here is saved."}
+            </span>
           </div>
           </>
           )}
