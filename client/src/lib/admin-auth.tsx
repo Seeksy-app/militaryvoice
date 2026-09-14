@@ -39,8 +39,13 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       await apiRequest("POST", "/api/admin/verify-code", { email, code });
       // Admin panels mount before sign-in and their queries 401. staleTime is
       // Infinity, so those failures would stick and the cards would never load.
-      // Drop every admin query so they refetch as the signed-in admin.
-      queryClient.removeQueries({
+      //
+      // resetQueries, not removeQueries: removing drops the cache entry but
+      // leaves mounted observers as they were, so /api/admin/me kept its
+      // signed-out error, isAuthenticated stayed false, and the screen never
+      // moved. People then re-sent a code that had already been consumed and
+      // were told it was invalid — while in fact they were signed in.
+      await queryClient.resetQueries({
         predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/admin"),
       });
     },
