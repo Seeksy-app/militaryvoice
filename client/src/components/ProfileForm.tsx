@@ -206,6 +206,14 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
       streamPlatform: profile?.streamPlatform ?? "",
       streamPlatformOther: profile?.streamPlatformOther ?? "",
       notes: profile?.notes ?? "",
+      // These three live on the dashboard's Show materials panel, not on this
+      // form — but the shared schema requires them as strings. Leaving them
+      // undefined failed validation on fields with no control to fix, so the
+      // form could never be submitted at all. Any field the schema requires
+      // needs a default here, rendered or not.
+      guests: profile?.guests ?? "",
+      interviewQuestions: profile?.interviewQuestions ?? "",
+      promoNotes: profile?.promoNotes ?? "",
     },
   });
 
@@ -360,8 +368,24 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit(handleSubmit, () => {
-          toast({ title: "Check the form", description: "A few fields still need your attention.", variant: "destructive" });
+        onSubmit={form.handleSubmit(handleSubmit, (errors) => {
+          // Name the fields. A generic "check the form" with nothing marked
+          // sends people hunting for a mistake that may not be on screen at
+          // all, which is exactly how the missing-defaults bug stayed hidden.
+          const names = Object.keys(errors);
+          const onScreen = names.filter((n) => document.getElementsByName(n).length > 0);
+          if (onScreen.length !== names.length) {
+            console.warn("Profile form blocked by fields with no control:", names.filter((n) => !onScreen.includes(n)), errors);
+          }
+          toast({
+            title: "Check the form",
+            description: names.length
+              ? `Still needed: ${names.slice(0, 4).join(", ")}${names.length > 4 ? "…" : ""}.`
+              : "A few fields still need your attention.",
+            variant: "destructive",
+          });
+          const first = onScreen[0] ?? names[0];
+          if (first) form.setFocus(first as keyof FormValues);
         })}
         data-testid="form-profile"
       >

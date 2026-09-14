@@ -2202,7 +2202,15 @@ export function registerRoutes(app: Express): void {
 
     const existing = await storage.getSignupBySlot(parsed.data.eventId, parsed.data.slotIndex);
     if (existing && existing.status !== "cancelled") {
-      res.status(409).json({ message: "That slot was just claimed by someone else. Pick another." });
+      // Tell them apart. Posting the slot you already hold is a double-submit
+      // or a stale tab, not a race — saying "someone else took it" sends
+      // someone off hunting for a new time they don't need.
+      const mine = existing.email.trim().toLowerCase() === email;
+      res.status(409).json({
+        message: mine
+          ? "You already hold this slot — it's yours. Refresh your dashboard to see it."
+          : "That slot was just claimed by someone else. Pick another.",
+      });
       return;
     }
 

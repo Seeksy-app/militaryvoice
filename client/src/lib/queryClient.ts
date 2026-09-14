@@ -3,10 +3,24 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 export const API_BASE = "__PORT_5000__".startsWith("__") ? "" : "__PORT_5000__";
 
 async function throwIfResNotOk(res: Response) {
-  if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+  if (res.ok) return;
+  const text = (await res.text()) || res.statusText;
+  // The server already writes a sentence meant for the person reading it.
+  // Surface that, not the HTTP envelope around it — a podcaster who mistypes
+  // a login code should see "check the newest email", not
+  // `401: {"message":"..."}`, which reads like a crash.
+  let message = text;
+  try {
+    const body = JSON.parse(text);
+    if (body && typeof body.message === "string" && body.message.trim()) message = body.message;
+  } catch {
+    // Not JSON — an HTML error page or a bare string. Keep the status so the
+    // failure is still diagnosable rather than silently blank.
+    message = `${res.status}: ${text}`;
   }
+  const err = new Error(message) as Error & { status?: number };
+  err.status = res.status;
+  throw err;
 }
 
 export async function apiRequest(

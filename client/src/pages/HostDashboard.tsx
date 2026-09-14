@@ -169,8 +169,13 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
       // signed out (returning null). Without clearing those, a returning
       // podcaster lands on the "Set up your show" form instead of their
       // dashboard. Drop every per-account query so they refetch as this user.
+      // resetQueries, not removeQueries: removing drops the cache entry but
+      // leaves the mounted observers as they were, so /api/host/dashboard kept
+      // its signed-out error state, `enabled: !!data` never flipped, and a
+      // correct code left you sitting on the code screen until you reloaded.
+      // resetQueries refetches the active ones.
       for (const key of ["/api/host/dashboard", "/api/host/profile", "/api/host/social"]) {
-        queryClient.removeQueries({ queryKey: [key] });
+        queryClient.resetQueries({ queryKey: [key] });
       }
     },
     onError: (err: Error) => toast({ title: "That code didn't work", description: err.message, variant: "destructive" }),
