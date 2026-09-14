@@ -49,6 +49,18 @@ export function EventShowForm({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
+  // Matches the Show materials save exactly: solid and enabled only when
+  // there is something to save, outline and disabled when there isn't, with
+  // the state said in words either way. Two saves on one page are fine; two
+  // saves that behave differently are not.
+  const dirty =
+    name !== (show.showName ?? "") ||
+    format !== (show.showFormat || "live") ||
+    recordingUrl !== (show.recordingUrl ?? "") ||
+    introStyle !== (show.introStyle || "virtual") ||
+    interviewNeed !== (show.interviewNeed || "none") ||
+    !!imageFile;
+
   const save = useMutation({
     mutationFn: async () => {
       const fd = new FormData();
@@ -62,6 +74,10 @@ export function EventShowForm({
       return res.json();
     },
     onSuccess: () => {
+      // The form reads its saved values from this query. Without refreshing
+      // it, the just-saved values still look different from what's on screen
+      // and the button would sit on "Unsaved changes" forever.
+      queryClient.invalidateQueries({ queryKey: ["/api/host/shows"] });
       queryClient.invalidateQueries({ queryKey: ["/api/host/events"] });
       queryClient.invalidateQueries({ queryKey: ["/api/host/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/signups"] });
@@ -240,14 +256,17 @@ export function EventShowForm({
           <div className="flex items-center gap-3">
             <Button
               type="button"
+              variant={dirty && name.trim() ? "default" : "outline"}
               className="gap-1.5 rounded-full"
-              disabled={save.isPending || !name.trim()}
+              disabled={save.isPending || !name.trim() || !dirty}
               onClick={() => save.mutate()}
               data-testid="button-save-show"
             >
               <Save className="h-4 w-4" /> {save.isPending ? "Saving…" : "Save show"}
             </Button>
-            {!name.trim() && <span className="text-xs text-muted-foreground">A show name is needed first.</span>}
+            <span className="text-xs text-muted-foreground">
+              {!name.trim() ? "A show name is needed first." : dirty ? "Unsaved changes." : "Everything here is saved."}
+            </span>
           </div>
         </div>
       </div>
