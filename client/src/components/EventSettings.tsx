@@ -106,62 +106,68 @@ export function EventSettings({
     const card = (entry: EventEntry) => {
       const ready = !!entry.show?.showName;
       const booked = entry.slotIndex != null;
+      const timeLabel = booked
+        ? formatTimeInZone(
+            onAirWindow(slotStart(entry.event.startAtUtc, entry.event.slotMinutes, entry.slotIndex!), {
+              onAirMinutes: entry.event.onAirMinutes,
+              bufferMinutes: entry.event.bufferMinutes,
+              bufferPosition: entry.event.bufferPosition,
+            }).start,
+            zone,
+          )
+        : null;
+
       return (
-              <button
-                key={entry.event.id}
-                type="button"
-                onClick={() => setOpenId(entry.event.id)}
-                className="group flex items-stretch gap-0 overflow-hidden rounded-2xl border border-border bg-card text-left transition-colors hover:border-primary/40 hover:shadow-md"
-                data-testid={`button-choose-event-${entry.event.id}`}
-              >
-                {entry.event.imageUrl && (
-                  <img
-                    src={entry.event.imageUrl}
-                    alt=""
-                    className="hidden h-auto w-40 shrink-0 self-stretch object-cover sm:block"
-                    loading="lazy"
-                  />
-                )}
-                <div className="flex min-w-0 flex-1 items-center justify-between gap-4 p-5">
-                <div className="min-w-0">
-                  <div className="text-base font-semibold group-hover:text-primary">{entry.event.name}</div>
-                  <div className="mt-0.5 text-sm text-muted-foreground">
-                    {formatDateInZone(new Date(entry.event.startAtUtc), zone)} · {entry.event.durationHours} hours
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${
-                        ready ? "bg-primary/10 text-primary" : "border border-border bg-card text-muted-foreground"
-                      }`}
-                    >
-                      {ready ? <Check className="h-3 w-3" /> : null}
-                      {ready ? `Show: ${entry.show!.showName}` : "Show not set up"}
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${
-                        booked ? "bg-[#F0A71F]/20 text-[#8a5d00]" : "border border-border bg-card text-muted-foreground"
-                      }`}
-                    >
-                      <Clock className="h-3 w-3" />
-                      {booked
-                        ? formatTimeInZone(
-                            onAirWindow(
-                              slotStart(entry.event.startAtUtc, entry.event.slotMinutes, entry.slotIndex!),
-                              {
-                                onAirMinutes: entry.event.onAirMinutes,
-                                bufferMinutes: entry.event.bufferMinutes,
-                                bufferPosition: entry.event.bufferPosition,
-                              },
-                            ).start,
-                            zone,
-                          )
-                        : "No time yet"}
-                    </span>
-                  </div>
-                </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground group-hover:text-primary" />
-                </div>
-              </button>
+        <button
+          key={entry.event.id}
+          type="button"
+          onClick={() => setOpenId(entry.event.id)}
+          // A row, not a poster. One event or six, it reads the same.
+          className="group flex w-full items-stretch overflow-hidden rounded-xl border border-border bg-card text-left transition-colors hover:border-primary/50 hover:bg-[#053877]/[0.02]"
+          data-testid={`button-choose-event-${entry.event.id}`}
+        >
+          {entry.event.imageUrl && (
+            <img
+              src={entry.event.imageUrl}
+              alt=""
+              // Fixed 4:3 so the mark is never sliced by an odd container height.
+              className="hidden aspect-[4/3] w-[132px] shrink-0 object-cover sm:block"
+              loading="lazy"
+            />
+          )}
+
+          <div className="flex min-w-0 flex-1 items-center gap-4 px-4 py-3.5">
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[15px] font-bold leading-tight text-foreground group-hover:text-primary">
+                {entry.event.name}
+              </div>
+              <div className="mt-0.5 text-[13px] text-muted-foreground">
+                {formatDateInZone(new Date(entry.event.startAtUtc), zone)} · {entry.event.durationHours} hours
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span
+                  className={`inline-flex max-w-full items-center gap-1 truncate rounded-full px-2 py-0.5 font-semibold ${
+                    ready ? "bg-primary/10 text-primary" : "border border-dashed border-border text-muted-foreground"
+                  }`}
+                >
+                  {ready && <Check className="h-3 w-3 shrink-0" />}
+                  <span className="truncate">{ready ? entry.show!.showName : "Show not set up"}</span>
+                </span>
+                <span
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-semibold ${
+                    booked ? "bg-[#F0A71F]/25 text-[#7a5200]" : "border border-dashed border-border text-muted-foreground"
+                  }`}
+                >
+                  <Clock className="h-3 w-3" />
+                  {timeLabel ?? "No time yet"}
+                </span>
+              </div>
+            </div>
+
+            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+          </div>
+        </button>
       );
     };
 
