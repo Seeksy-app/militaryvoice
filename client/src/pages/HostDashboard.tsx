@@ -505,7 +505,7 @@ export default function HostDashboard() {
   return (
     <div className="min-h-screen">
       <NavBar />
-      <div className={`mx-auto px-4 py-10 sm:px-6 ${inSetup || screen === "editProfile" ? "max-w-6xl" : "max-w-4xl"}`}>
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
@@ -843,9 +843,9 @@ export default function HostDashboard() {
                     disappeared into the page and nobody found the other two. */}
                 <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm">
                   {[
-                    ["showday", "Show day", "What we need from you"],
-                    ["going", "Where it goes", "Your channels"],
-                    ["after", "Afterwards", "Your recording"],
+                    ["showday", "Show materials", "Files and show details"],
+                    ["going", "Stream", "Where it goes out"],
+                    ["after", "Recordings", "Yours after the show"],
                   ].map(([value, label, hint]) => (
                     <TabsTrigger
                       key={value}

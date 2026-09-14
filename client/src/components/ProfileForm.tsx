@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiUpload, apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { SocialTiles } from "@/components/SocialTiles";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
-import { insertProfileSchema, SERVICE_BRANCHES, SERVICE_STATUSES, RECORDING_MODES, POST_EDIT_ANSWERS, STREAM_PLATFORMS, type ProfileRow, type SocialAccount } from "@shared/schema";
+import { insertProfileSchema, SERVICE_BRANCHES, SERVICE_STATUSES, RECORDING_MODES, POST_EDIT_ANSWERS, STREAM_PLATFORMS, parseChoices, joinChoices, type ProfileRow, type SocialAccount } from "@shared/schema";
 import { PhotoCropDialog } from "@/components/PhotoCropDialog";
 import { formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
 import {
@@ -800,28 +800,48 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot }: 
                   <FormField
                     control={form.control}
                     name="streamPlatform"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>What do you use?</FormLabel>
-                        <Select value={field.value || undefined} onValueChange={field.onChange}>
-                          <FormControl>
-                            <SelectTrigger data-testid="select-stream-platform">
-                              <SelectValue placeholder="Select a platform" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {STREAM_PLATFORMS.map((o) => (
-                              <SelectItem key={o} value={o}>
-                                {o}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    render={({ field }) => {
+                      const picked = parseChoices(field.value);
+                      const toggle = (o: string) =>
+                        field.onChange(
+                          joinChoices(picked.includes(o) ? picked.filter((p) => p !== o) : [...picked, o]),
+                        );
+                      return (
+                        <FormItem>
+                          <FormLabel>What do you use?</FormLabel>
+                          <p className="text-xs text-muted-foreground">Tick as many as apply.</p>
+                          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            {STREAM_PLATFORMS.map((o) => {
+                              const on = picked.includes(o);
+                              return (
+                                <button
+                                  key={o}
+                                  type="button"
+                                  onClick={() => toggle(o)}
+                                  aria-pressed={on}
+                                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                                    on ? "border-primary bg-primary/5 font-medium" : "border-border hover:bg-muted/50"
+                                  }`}
+                                  data-testid={`toggle-stream-platform-${o.toLowerCase()}`}
+                                >
+                                  <span
+                                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                                      on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card"
+                                    }`}
+                                  >
+                                    {on && <Check className="h-3 w-3" />}
+                                  </span>
+                                  {o}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
                   />
-                  {watchPlatform === "Other" && (
+                  {parseChoices(watchPlatform).includes("Other") && (
                     <FormField
                       control={form.control}
                       name="streamPlatformOther"

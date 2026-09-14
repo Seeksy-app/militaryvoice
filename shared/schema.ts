@@ -300,6 +300,26 @@ export type ServiceStatus = (typeof SERVICE_STATUSES)[number];
 const optionalChoice = (options: readonly string[], label: string) =>
   z.string().trim().refine((v) => v === "" || options.includes(v), { message: `Pick a ${label} from the list` });
 
+/**
+ * Empty, or several of the listed options as a comma-separated string.
+ * People use more than one tool — Riverside to record and StreamYard to go
+ * live is an ordinary answer — so the question takes checkboxes. Stored in
+ * the same text column rather than a new table; the set is small and fixed.
+ */
+const optionalChoices = (options: readonly string[], label: string) =>
+  z.string().trim().refine(
+    (v) => v === "" || v.split(",").map((p) => p.trim()).filter(Boolean).every((p) => options.includes(p)),
+    { message: `Pick your ${label} from the list` },
+  );
+
+/** The stored comma-separated string as a list, and back. */
+export function parseChoices(v: string | null | undefined): string[] {
+  return (v ?? "").split(",").map((p) => p.trim()).filter(Boolean);
+}
+export function joinChoices(v: string[]): string {
+  return v.join(", ");
+}
+
 export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
   .omit({
     id: true,
@@ -324,7 +344,7 @@ export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
     serviceStatus: optionalChoice(SERVICE_STATUSES, "status"),
     recordingMode: optionalChoice(RECORDING_MODES, "recording style"),
     postEdits: optionalChoice(POST_EDIT_ANSWERS, "yes or no"),
-    streamPlatform: optionalChoice(STREAM_PLATFORMS, "platform"),
+    streamPlatform: optionalChoices(STREAM_PLATFORMS, "platforms"),
     streamPlatformOther: z.string().trim().max(80, "Keep it under 80 characters"),
     guests: z.string().trim().max(2000, "Keep it under 2000 characters"),
     interviewQuestions: z.string().trim().max(4000, "Keep it under 4000 characters"),

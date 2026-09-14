@@ -139,19 +139,17 @@ export function ShowMaterials({ profile }: { profile: ProfileRow }) {
 
   return (
     <section className="mt-8" data-testid="section-show-materials">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+      <h2 className="mb-3 flex flex-wrap items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
         <Paperclip className="h-4 w-4" />
         Show materials
+        <span className="rounded-full bg-[#F0A71F] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#000741]">
+          All optional
+        </span>
       </h2>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
         <div className="bg-[#053877] px-5 py-3.5 text-white">
-          <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold">Everything the studio needs from you</p>
-            <span className="rounded-full bg-[#F0A71F] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#000741]">
-              All optional
-            </span>
-          </div>
+          <p className="text-sm font-semibold">Everything the studio needs from you</p>
           <p className="mt-0.5 text-xs text-white/85">
             Nothing here is required to hold your slot. Send what you have and it's attached
             automatically — you can come back and add the rest any time.
