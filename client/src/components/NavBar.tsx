@@ -23,7 +23,7 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/schedule", label: "Schedule" },
   { href: "/agenda", label: "Agenda" },
   { href: "/faq", label: "FAQ" },
-  { href: "/platform", label: "What is MilitaryVoice.ai?" },
+  { href: "/platform", label: "About Us" },
 ];
 
 export function NavBar() {
