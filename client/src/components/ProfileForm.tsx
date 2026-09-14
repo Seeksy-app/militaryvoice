@@ -6,7 +6,6 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiUpload, apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { SocialTiles } from "@/components/SocialTiles";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
-import { insertProfileSchema, SERVICE_BRANCHES, SERVICE_STATUSES, RECORDING_MODES, POST_EDIT_ANSWERS, STREAM_PLATFORMS, type ProfileRow, type SocialAccount } from "@shared/schema";
+import { insertProfileSchema, SERVICE_BRANCHES, SERVICE_STATUSES, RECORDING_MODES, STREAM_PLATFORMS, type ProfileRow, type SocialAccount } from "@shared/schema";
 import { PhotoCropDialog } from "@/components/PhotoCropDialog";
 import { formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
 import {
@@ -320,9 +319,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
   const watchFormat = form.watch("showFormat");
   const isPrerecorded = watchFormat === "prerecorded";
   const watchIntro = form.watch("introStyle");
-  const watchRecordingMode = form.watch("recordingMode");
   const watchPlatform = form.watch("streamPlatform");
-  const streams = watchRecordingMode === "Live stream" || watchRecordingMode === "Both";
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
@@ -771,19 +768,15 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
               </>
             )}
 
+            {/* Only Profile settings carries this now: everything left in it is
+                about how the person normally works, which has no bearing on
+                getting booked. During setup the card was rendering empty. */}
+            {variant === "profile" && (
             <SectionCard
-              plain={variant === "profile"}
-              step={variant === "setup" ? 4 : undefined}
+              plain
               icon={Clapperboard}
-              // During setup this section is just the notes box — the
-              // how-you-work questions only appear in Profile Settings — so
-              // don't promise transitions and support that aren't asked here.
-              title={isSetup ? "Anything else" : "How you normally work"}
-              description={
-                isSetup
-                  ? "Optional. Anything you'd like the crew to know before your slot."
-                  : "All optional. Just so we know what you're used to — it changes nothing about your slot."
-              }
+              title="How you normally work"
+              description="All optional. Just so we know what you're used to — it changes nothing about your slot."
             >
               {/* Permanent facts about how this person works, not setup for
                   the event — what they normally use has no bearing on claiming
@@ -816,32 +809,6 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                       </FormItem>
                     )}
                   />
-                  {streams && (
-                    <FormField
-                      control={form.control}
-                      name="postEdits"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Do you edit after the stream?</FormLabel>
-                          <Select value={field.value || undefined} onValueChange={field.onChange}>
-                            <FormControl>
-                              <SelectTrigger data-testid="select-post-edits">
-                                <SelectValue placeholder="Select one" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {POST_EDIT_ANSWERS.map((o) => (
-                                <SelectItem key={o} value={o}>
-                                  {o}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  )}
                   <FormField
                     control={form.control}
                     name="streamPlatform"
@@ -890,29 +857,12 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                   the Show materials tab beside the files they describe. The
                   values still round-trip through this form's defaults. */}
 
-              <FormField
-                control={form.control}
-                name="notes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Anything else? (optional)</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        rows={3}
-                        placeholder="Guests you're bringing, how you like to open, tech quirks we should know about…"
-                        {...field}
-                        data-testid="input-notes"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </SectionCard>
+            )}
 
             <SectionCard
               plain={variant === "profile"}
-              step={variant === "setup" ? 5 : undefined}
+              step={variant === "setup" ? 4 : undefined}
               icon={Headphones}
               title="Where people can listen"
               description="Both optional — add whichever you have, or skip this and come back later."
@@ -958,7 +908,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
 
             <SectionCard
               plain={variant === "profile"}
-              step={variant === "setup" ? 6 : undefined}
+              step={variant === "setup" ? 5 : undefined}
               icon={Globe}
               title="Connect your social media"
               description="So listeners can find and follow you after your slot. Everything here shows on your public card."
