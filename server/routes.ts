@@ -337,6 +337,40 @@ export function registerRoutes(app: Express): void {
   //      first, so a double-fired cron, a retry or a mid-run redeploy cannot
   //      email anyone twice.
 
+  /** Everything a nudge says about one booking. Shared by the sender and the
+   *  admin preview so what you review is what actually goes out. */
+  async function buildNudgePayload(signup: SignupRow, event: EventRow) {
+    const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
+    const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+    const tz = signup.timezone || "America/New_York";
+    // A cron run has no request to read a host from.
+    const origin = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "");
+    const show = await storage.getEventShow(signup.email, event.id).catch(() => undefined);
+
+    const outstanding: string[] = [];
+    if (!(await storage.listAssetsByEmail(signup.email)).length) {
+      outstanding.push("Nothing uploaded yet — intro, outro, slides or images.");
+    }
+    if (!signup.socialAccounts || signup.socialAccounts === "[]") {
+      outstanding.push("No social accounts connected, so no follow buttons on your card.");
+    }
+    if (show?.showFormat === "prerecorded" && !show.recordingUrl) {
+      outstanding.push("We still need the file for your recorded episode.");
+    }
+
+    return {
+      to: signup.email,
+      hostName: signup.hostName,
+      podcastName: signup.podcastName,
+      eventName: event.name,
+      onAirLabel: `${formatDateTimeInZone(onAir.start, tz)} ${zoneAbbrev(onAir.start, tz)}`,
+      dashboardUrl: `${origin}/host/dashboard`,
+      studioUrl: `${origin}/studio`,
+      shareUrl: `${origin}/s/${signup.id}`,
+      outstanding,
+    };
+  }
+
   const NUDGE_LEAD_MS: Record<NudgeKind, number> = {
     prep: 14 * 24 * 3600_000,
     final: 2 * 24 * 3600_000,
@@ -384,32 +418,7 @@ export function registerRoutes(app: Express): void {
         // Claim before sending: a missed nudge beats a duplicate.
         if (!(await storage.claimNudge(signup.id, kind, true))) continue;
 
-        const tz = signup.timezone || "America/New_York";
-        // A cron run has no request to read a host from.
-        const origin = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "");
-        const show = shows[i];
-        const outstanding: string[] = [];
-        if (!(await storage.listAssetsByEmail(signup.email)).length) {
-          outstanding.push("Nothing uploaded yet — intro, outro, slides or images.");
-        }
-        if (!signup.socialAccounts || signup.socialAccounts === "[]") {
-          outstanding.push("No social accounts connected, so no follow buttons on your card.");
-        }
-        if (show?.showFormat === "prerecorded" && !show.recordingUrl) {
-          outstanding.push("We still need the file for your recorded episode.");
-        }
-
-        const payload = {
-          to: signup.email,
-          hostName: signup.hostName,
-          podcastName: signup.podcastName,
-          eventName: event.name,
-          onAirLabel: `${formatDateTimeInZone(onAir.start, tz)} ${zoneAbbrev(onAir.start, tz)}`,
-          dashboardUrl: `${origin}/host/dashboard`,
-          studioUrl: `${origin}/studio`,
-          shareUrl: `${origin}/s/${signup.id}`,
-          outstanding,
-        };
+        const payload = await buildNudgePayload(signup, event);
 
         const send = kind === "prep" ? sendPrepNudge : kind === "final" ? sendFinalNudge : sendOnAirNudge;
         let sent = false;
@@ -436,6 +445,44 @@ export function registerRoutes(app: Express): void {
    * when that is set; an admin can also call it by hand. Without a secret set
    * we refuse in production rather than leave a mailer open to the internet.
    */
+  /**
+   * Send all three nudges to one address, so the copy can be read the way a
+   * podcaster will read it. Records nothing, so it can't stop a real nudge
+   * going out later, and it only ever mails the address you name.
+   */
+  app.post("/api/admin/nudges/preview", requireAdmin, async (req, res) => {
+    const to = String(req.body?.to || "").trim();
+    if (!to.includes("@")) {
+      res.status(400).json({ message: "Give me an address to send to." });
+      return;
+    }
+    const explicit = Number(req.body?.signupId) || null;
+    const featured = await storage.getFeaturedEvent();
+    const active = (await storage.listSignups(featured.id)).filter((x) => x.status !== "cancelled");
+    const signup = explicit ? active.find((x) => x.id === explicit) : active[active.length - 1];
+    if (!signup) {
+      res.status(404).json({ message: "No booking to build a preview from." });
+      return;
+    }
+
+    const base = await buildNudgePayload(signup, featured);
+    const payload = { ...base, to };
+    const sent: Record<string, boolean> = {};
+    for (const [kind, send] of [
+      ["prep", sendPrepNudge],
+      ["final", sendFinalNudge],
+      ["onair", sendOnAirNudge],
+    ] as const) {
+      try {
+        sent[kind] = await send(payload);
+      } catch (err) {
+        console.error(`Preview ${kind} failed:`, err);
+        sent[kind] = false;
+      }
+    }
+    res.json({ to, basedOn: signup.podcastName, sent });
+  });
+
   //      Vercel's scheduler issues GET, so both verbs are accepted — a
   //      POST-only route here would simply never have fired.
   const nudgeHandler: RequestHandler = async (req, res) => {
