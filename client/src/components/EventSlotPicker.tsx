@@ -55,8 +55,7 @@ export function EventSlotPicker({ event, disabled }: { event: PublicEvent; disab
   return (
     <div>
       <p className="mb-3 text-sm text-muted-foreground">
-        {open.length} open · {slots.length - open.length} taken. Every half hour in order, so you can see who's on
-        before and after you.
+        {open.length} open · {slots.length - open.length} taken.
       </p>
       <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {slots.map((s) => {

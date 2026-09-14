@@ -188,10 +188,9 @@ export default function Home({ slug }: Props) {
       <section id="schedule" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-8 sm:px-6">
         <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Pick your slot</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Every half hour in order, so you can see who's on before and after you. Taken slots show who has them.
-            </p>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Choose your time slot
+            </h2>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1">

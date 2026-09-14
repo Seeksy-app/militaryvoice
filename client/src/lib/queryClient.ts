@@ -81,7 +81,16 @@ export const queryClient = new QueryClient({
       staleTime: Infinity,
       // A cold serverless start can throw one 500; retry those briefly. Never
       // retry 4xx (401 drives the sign-in screen, 404s are real).
-      retry: (count, err) => count < 2 && !/^4\d\d:/.test(String((err as Error)?.message ?? "")),
+      //
+      // Read the status off the error rather than sniffing the message: the
+      // message stopped carrying a "401: " prefix once errors started showing
+      // the server's own sentence, which silently turned every 401 into three
+      // requests and a slower sign-in screen.
+      retry: (count, err) => {
+        const status = (err as Error & { status?: number })?.status;
+        if (status !== undefined) return status >= 500 && count < 2;
+        return count < 2 && !/^4\d\d:/.test(String((err as Error)?.message ?? ""));
+      },
       retryDelay: (attempt) => 600 * (attempt + 1),
     },
     mutations: {
