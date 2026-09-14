@@ -48,7 +48,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
 import { ShowMaterials } from "@/components/ShowMaterials";
 import { EventSettings } from "@/components/EventSettings";
-import { MyRecordings } from "@/components/MyRecordings";
+import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { OwnEncoder } from "@/components/OwnEncoder";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -347,7 +347,7 @@ export default function HostDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const search = useSearch();
-  const [screen, setScreen] = useState<"dashboard" | "editProfile" | "events" | "integrations" | "fans" | "claim">("dashboard");
+  const [screen, setScreen] = useState<"dashboard" | "editProfile" | "events" | "recordings" | "integrations" | "fans" | "claim">("dashboard");
   const [profileDirty, setProfileDirty] = useState(false);
   const [remindEventSetup, setRemindEventSetup] = useState(false);
 
@@ -572,8 +572,10 @@ export default function HostDashboard() {
                   ? "Profile settings"
                   : screen === "events"
                     ? "Event settings"
-                    : screen === "integrations"
-                      ? "Integrations"
+                    : screen === "recordings"
+                      ? "Recordings"
+                      : screen === "integrations"
+                        ? "Integrations"
                       : screen === "fans"
                         ? "Fans & contacts"
                       : "Podcaster Dashboard"}
@@ -604,12 +606,13 @@ export default function HostDashboard() {
             event. Everything else hangs off those. Hidden during first-time
             setup, where there is only one thing to do. */}
         {data && hasProfile && !inSetup && (
-          <nav className="mt-6 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm sm:grid-cols-5">
+          <nav className="mt-6 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm sm:grid-cols-3 lg:grid-cols-6">
             {(
               [
                 ["dashboard", "Dashboard", "Your card and slot"],
                 ["editProfile", "Profile settings", "About you"],
                 ["events", "Event settings", "Your shows and times"],
+                ["recordings", "Recordings", "Yours after the show"],
                 ["integrations", "Integrations", "Your connected accounts"],
                 ["fans", "Fans & contacts", "Who asked for a reminder"],
               ] as const
@@ -695,6 +698,8 @@ export default function HostDashboard() {
               onCancel={hasProfile ? () => setScreen("dashboard") : undefined}
             />
           </section>
+        ) : screen === "recordings" ? (
+          <RecordingsScreen socialAccounts={profile?.socialAccounts} />
         ) : screen === "integrations" ? (
           <section className="mt-6">
             <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
@@ -822,12 +827,6 @@ export default function HostDashboard() {
                       <OwnEncoder />
                     </EventPanel>
 
-                    <EventPanel title="Recordings" hint="Yours after the show">
-                      <MyRecordings socialAccounts={profile?.socialAccounts} />
-                      <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                        Your recordings appear here once your slot has been on air.
-                      </p>
-                    </EventPanel>
                   </div>
                 )}
 

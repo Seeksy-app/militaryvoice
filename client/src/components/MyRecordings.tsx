@@ -35,19 +35,38 @@ function size(bytes: string): string {
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
 }
 
-export function MyRecordings({ socialAccounts }: { socialAccounts?: string | null }) {
+export function MyRecordings({
+  socialAccounts,
+  eventId,
+  showEmpty = false,
+}: {
+  socialAccounts?: string | null;
+  /** Only this event's sessions. Omit for every event. */
+  eventId?: number | null;
+  /** Say so when there is nothing, instead of rendering nothing at all. */
+  showEmpty?: boolean;
+}) {
   const connected = parseSocialAccounts(socialAccounts).map((a) => a.platform);
   const [publishing, setPublishing] = useState<RecordingRow | null>(null);
   const { toast } = useToast();
-  const { data, isLoading } = useQuery<RecordingRow[]>({
+  const { data: all, isLoading } = useQuery<RecordingRow[]>({
     queryKey: ["/api/host/recordings"],
     queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(),
     // A session that's still being written turns up shortly after it stops.
     refetchInterval: (q) =>
       (q.state.data ?? []).some((r) => r.status === "Recording") ? 15_000 : false,
   });
+  const data = eventId == null ? all : (all ?? []).filter((r) => r.eventId === eventId);
 
-  if (isLoading || !data || data.length === 0) return null;
+  if (isLoading) return null;
+  if (!data || data.length === 0) {
+    if (!showEmpty) return null;
+    return (
+      <p className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
+        Nothing here yet. Your session appears once your slot has been on air.
+      </p>
+    );
+  }
 
   async function download(id: number) {
     try {
