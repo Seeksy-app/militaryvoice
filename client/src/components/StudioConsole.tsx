@@ -62,8 +62,13 @@ import {
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
 interface Props {
-  /** Limit to one event's studios (the event dashboard); omit for every studio (Sessions). */
+  /** Limit to one event's studios (the event dashboard); omit for every studio. */
   eventId?: number;
+  /**
+   * "event": only the event's own studio is offered. "room": only rooms (the
+   * one-off spaces), never an event studio. Omit for the old everything list.
+   */
+  kind?: "event" | "room";
   adminGet: <T>(path: string) => Promise<T>;
   adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
   /**
@@ -148,7 +153,7 @@ function DeckButton({
   );
 }
 
-export function StudioConsole({ adminGet, adminSend, view, eventId }: Props) {
+export function StudioConsole({ adminGet, adminSend, view, eventId, kind }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const zone = useMemo(detectLocalTimeZone, []);
@@ -424,7 +429,14 @@ export function StudioConsole({ adminGet, adminSend, view, eventId }: Props) {
     setRenaming(null);
   }
 
-  const currentStudio = (studios ?? []).find((x) => x.id === (studioId ?? studios?.[0]?.id));
+  const visibleStudios = (studios ?? []).filter((x) => (kind === "event" ? x.isPrimary : kind === "room" ? !x.isPrimary : true));
+  // Keep the selection inside what this surface is allowed to show.
+  useEffect(() => {
+    if (!kind || visibleStudios.length === 0) return;
+    if (!studioId || !visibleStudios.some((x) => x.id === studioId)) pick(visibleStudios[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, studioId, studios]);
+  const currentStudio = visibleStudios.find((x) => x.id === (studioId ?? visibleStudios[0]?.id));
   const isPrimary = currentStudio?.isPrimary !== false;
   const watchUrl =
     typeof window !== "undefined"
@@ -606,26 +618,30 @@ export function StudioConsole({ adminGet, adminSend, view, eventId }: Props) {
           )}
 
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Select
-              value={String(currentStudio?.id ?? "")}
-              onValueChange={(v) => (v === "new" ? makeStudio.mutate("New studio") : pick(Number(v)))}
-            >
-              <SelectTrigger
-                className="h-9 w-[180px] border-white/20 bg-white/10 text-white hover:bg-white/15"
-                data-testid="select-studio"
+            {/* The event studio stands alone; rooms pick among rooms. Only the
+                legacy everything-view still offers "new" here. */}
+            {(kind !== "event" || visibleStudios.length > 1) && (
+              <Select
+                value={String(currentStudio?.id ?? "")}
+                onValueChange={(v) => (v === "new" ? makeStudio.mutate("New studio") : pick(Number(v)))}
               >
-                <SelectValue placeholder="Studio" />
-              </SelectTrigger>
-              <SelectContent>
-                {(studios ?? []).map((st) => (
-                  <SelectItem key={st.id} value={String(st.id)}>
-                    {st.name}
-                    {st.isPrimary ? " · event studio" : ""}
-                  </SelectItem>
-                ))}
-                <SelectItem value="new">+ New studio…</SelectItem>
-              </SelectContent>
-            </Select>
+                <SelectTrigger
+                  className="h-9 w-[200px] border-white/20 bg-white/10 text-white hover:bg-white/15"
+                  data-testid="select-studio"
+                >
+                  <SelectValue placeholder={kind === "room" ? "Room" : "Studio"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {visibleStudios.map((st) => (
+                    <SelectItem key={st.id} value={String(st.id)}>
+                      {st.name}
+                      {!kind && st.isPrimary ? " · event studio" : ""}
+                    </SelectItem>
+                  ))}
+                  {!kind && <SelectItem value="new">+ New studio…</SelectItem>}
+                </SelectContent>
+              </Select>
+            )}
 
             {isLive && (
             <Select value={studio?.status ?? "Offline"} onValueChange={(v) => patchStudio.mutate({ status: v })}>

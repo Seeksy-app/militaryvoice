@@ -1229,7 +1229,7 @@ function EventPicker({ onOpen }: { onOpen: (id: number) => void }) {
   );
 }
 
-function RoomsPanel() {
+function RoomsPanel({ onOpen }: { onOpen: (id: number) => void }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: studios } = useQuery<(StudioRowLite & { isPrimary: boolean; eventName?: string })[]>({
@@ -1240,18 +1240,20 @@ function RoomsPanel() {
     queryKey: ["/api/admin/events"],
     queryFn: () => adminGet<PublicEvent[]>("/api/admin/events"),
   });
-  const [view, setView] = useState<"live" | "set">("live");
-  const [consoleKey, setConsoleKey] = useState(0);
   const [name, setName] = useState("");
   const origin = typeof window === "undefined" ? "https://www.militaryvoice.ai" : window.location.origin;
+  // Rooms only. Event studios live inside their event.
+  const rooms = (studios ?? []).filter((st) => !st.isPrimary);
 
   async function create() {
     const featured = events?.find((e) => e.isFeatured) ?? events?.[0];
     if (!featured) return;
-    await adminSend("POST", "/api/admin/studios", { eventId: featured.id, name: name.trim() || "Room" });
+    const res = await adminSend("POST", "/api/admin/studios", { eventId: featured.id, name: name.trim() || "Room" });
+    const made = (await res.json()) as { id: number };
     setName("");
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/studios"] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/admin/studios"] });
     toast({ title: "Room ready", description: "Send the join link to whoever's joining you." });
+    if (made?.id) onOpen(made.id);
   }
   async function remove(id: number) {
     try {
@@ -1261,12 +1263,6 @@ function RoomsPanel() {
       toast({ title: "Can't remove that one", description: (err as Error).message, variant: "destructive" });
     }
   }
-  function openConsole(id: number) {
-    localStorage.setItem("mv_admin_studio", String(id));
-    queryClient.removeQueries({ queryKey: ["/api/admin/studio"] });
-    setConsoleKey((k) => k + 1);
-    setView("live");
-  }
   function copy(text: string) {
     navigator.clipboard.writeText(text).then(
       () => toast({ title: "Link copied" }),
@@ -1275,75 +1271,147 @@ function RoomsPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Rooms</CardTitle>
-          <CardDescription>
-            A room is a quick place to meet — a host and a guest, a rehearsal, a chat that doesn't need the full
-            studio — with its own join link. Studios are for recording, broadcasting and production; each event
-            runs in its own, and rooms never touch it.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {(studios ?? []).map((st) => {
-            const join = `${origin}/studio?studioId=${st.id}`;
-            return (
-              <div key={st.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border p-3" data-testid={`studio-row-${st.id}`}>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-card-foreground">{st.name || "Studio"}</span>
-                    {st.isPrimary && <Badge variant="outline" className="text-[11px] font-normal">event studio</Badge>}
-                    {!st.isPrimary && <Badge variant="outline" className="text-[11px] font-normal">room</Badge>}
-                    <Badge variant="outline" className="text-[11px] font-normal">{st.status}</Badge>
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">{st.eventName}</div>
-                  <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{join}</div>
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Rooms</CardTitle>
+        <CardDescription>
+          A room is a quick place to meet — a host and a guest, a rehearsal, a chat that doesn't need the full studio —
+          with its own join link and green room. No run of show, no broadcast. The event's studio lives inside the event.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {rooms.length === 0 && <p className="text-sm text-muted-foreground">No rooms yet. Make one below.</p>}
+        {rooms.map((st) => {
+          const join = `${origin}/studio?studioId=${st.id}`;
+          return (
+            <div key={st.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border p-3" data-testid={`room-row-${st.id}`}>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-card-foreground">{st.name || "Room"}</span>
+                  <Badge variant="outline" className="text-[11px] font-normal">{st.status}</Badge>
                 </div>
-                <Button size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => copy(join)} data-testid={`studio-copy-${st.id}`}>
-                  <Copy className="h-3.5 w-3.5" /> Copy join link
-                </Button>
-                <Button size="sm" className="rounded-full" onClick={() => openConsole(st.id)} data-testid={`studio-console-${st.id}`}>
-                  Open console
-                </Button>
-                {!st.isPrimary && (
-                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => remove(st.id)} aria-label="Remove room">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                )}
+                <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{join}</div>
               </div>
-            );
-          })}
-          <form
-            className="mt-1 flex flex-wrap items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              create();
-            }}
-          >
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Riccoh + Andrew" className="h-9 max-w-xs" data-testid="input-new-studio" />
-            <Button type="submit" size="sm" className="gap-1.5 rounded-full" data-testid="button-new-studio">
-              <Plus className="h-3.5 w-3.5" /> New room
-            </Button>
-            <span className="text-xs text-muted-foreground">Anyone with the join link lands in the room's green room; you bring them on from its console.</span>
-          </form>
-        </CardContent>
-      </Card>
+              <Button size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => copy(join)} data-testid={`room-copy-${st.id}`}>
+                <Copy className="h-3.5 w-3.5" /> Copy join link
+              </Button>
+              <Button size="sm" className="rounded-full" onClick={() => onOpen(st.id)} data-testid={`room-open-${st.id}`}>
+                Open room
+              </Button>
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => remove(st.id)} aria-label="Remove room">
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          );
+        })}
+        <form
+          className="mt-1 flex flex-wrap items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            create();
+          }}
+        >
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Riccoh + Andrew" className="h-9 max-w-xs" data-testid="input-new-room" />
+          <Button type="submit" size="sm" className="gap-1.5 rounded-full" data-testid="button-new-room">
+            <Plus className="h-3.5 w-3.5" /> New room
+          </Button>
+          <span className="text-xs text-muted-foreground">Anyone with the join link lands in the room's green room; you bring them on from inside it.</span>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
 
-      <div className="inline-flex w-fit rounded-full border border-border bg-card p-1">
-        {(["live", "set"] as const).map((v) => (
-          <button
-            key={v}
-            type="button"
-            onClick={() => setView(v)}
-            className={`rounded-full px-4 py-1.5 text-sm font-semibold ${view === v ? "bg-[#053877] text-white" : "text-foreground"}`}
-            data-testid={`studio-view-${v}`}
-          >
-            {v === "live" ? "Console" : "Studio set"}
+/** One room, opened. The console without the run of show. */
+function RoomView({ roomId, onBack }: { roomId: number; onBack: () => void }) {
+  const { data: studios } = useQuery<(StudioRowLite & { isPrimary: boolean })[]>({
+    queryKey: ["/api/admin/studios", "all"],
+    queryFn: () => adminGet("/api/admin/studios?all=1"),
+  });
+  const room = studios?.find((s) => s.id === roomId);
+  const [view, setView] = useState<"live" | "set">("live");
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <button type="button" onClick={onBack} className="mb-1 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline" data-testid="button-all-rooms">
+            ← All rooms
           </button>
-        ))}
+          <h2 className="text-2xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
+            {room?.name || "Room"}
+          </h2>
+        </div>
+        <div className="inline-flex w-fit rounded-full border border-border bg-card p-1">
+          {(["live", "set"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={`rounded-full px-4 py-1.5 text-sm font-semibold ${view === v ? "bg-[#053877] text-white" : "text-foreground"}`}
+              data-testid={`room-view-${v}`}
+            >
+              {v === "live" ? "Room" : "Room set"}
+            </button>
+          ))}
+        </div>
       </div>
-      <StudioConsole key={`${view}-${consoleKey}`} adminGet={adminGet} adminSend={adminSend} view={view} />
+      <StudioConsole key={`room-${roomId}-${view}`} adminGet={adminGet} adminSend={adminSend} view={view} kind="room" />
+    </div>
+  );
+}
+
+/** Where you land when you open an event: the numbers, then the tabs. */
+function EventOverview({ eventId, event, go }: { eventId: number; event: PublicEvent; go: (tab: string) => void }) {
+  const { data: signups } = useQuery<SignupRow[]>({
+    queryKey: ["/api/admin/signups", eventId],
+    queryFn: () => adminGet<SignupRow[]>(`/api/admin/signups?eventId=${eventId}`),
+  });
+  const { data: assets } = useQuery<ShowAssetRow[]>({
+    queryKey: ["/api/admin/assets"],
+    queryFn: () => adminGet<ShowAssetRow[]>("/api/admin/assets"),
+  });
+  const { data: sponsors } = useQuery<SponsorRow[]>({
+    queryKey: ["/api/admin/sponsors", eventId],
+    queryFn: () => adminGet<SponsorRow[]>(`/api/admin/sponsors?eventId=${eventId}`),
+  });
+  const zone = useMemo(detectLocalTimeZone, []);
+  const active = (signups ?? []).filter((s) => s.status !== "cancelled");
+  const total = Math.floor((event.durationHours * 60) / event.slotMinutes);
+  const emailsWithAssets = new Set((assets ?? []).map((a) => a.email.toLowerCase()));
+  const withMaterials = active.filter((s) => emailsWithAssets.has(s.email.trim().toLowerCase())).length;
+  const prerecorded = active.filter((s) => s.showFormat === "prerecorded").length;
+  const needInterviewer = active.filter((s) => s.needsInterviewer).length;
+  const start = new Date(event.startAtUtc);
+  const daysToGo = Math.max(0, Math.ceil((start.getTime() - Date.now()) / 86400000));
+
+  const tile = (label: string, value: string | number, hint: string, tab?: string) => (
+    <button
+      type="button"
+      onClick={() => tab && go(tab)}
+      className={`rounded-2xl border border-border bg-card p-4 text-left ${tab ? "transition-colors hover:border-primary/50" : "cursor-default"}`}
+    >
+      <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">{label}</div>
+      <div className="mt-1 text-3xl font-bold tabular-nums text-card-foreground">{value}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
+    </button>
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {tile("Days to go", daysToGo, `${formatDateInZone(start, zone)} · ${formatTimeInZone(start, zone)}`)}
+        {tile("Slots booked", `${active.length} / ${total}`, `${total - active.length} still open`, "signups")}
+        {tile("Sent materials", `${withMaterials} / ${active.length}`, `${prerecorded} pre-recorded · ${needInterviewer} want an interviewer`, "signups")}
+        {tile("Sponsors", (sponsors ?? []).length, "Logos in the strip and read on air", "sponsors")}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button className="rounded-full" onClick={() => go("studio")} data-testid="overview-open-studio">Open the studio</Button>
+        <Button variant="outline" className="rounded-full" onClick={() => go("run")}>Run of show</Button>
+        <Button variant="outline" className="rounded-full" onClick={() => go("setup")}>Event details</Button>
+        <Button variant="outline" className="rounded-full" asChild>
+          <a href={`/event/${event.slug || "marathon"}/agenda`} target="_blank" rel="noreferrer">Public agenda ↗</a>
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1370,6 +1438,14 @@ export default function Admin() {
     enabled: isAuthenticated,
   });
   const selectedEvent = adminEvents?.find((e) => e.id === selectedEventId) ?? null;
+  const [eventTab, setEventTab] = useState("overview");
+  const [openRoomId, setOpenRoomId] = useState<number | null>(null);
+  const openRoom = (id: number | null) => {
+    if (id) {
+      localStorage.setItem("mv_admin_studio", String(id));
+    }
+    setOpenRoomId(id);
+  };
   const queryClientTop = useQueryClient();
   const { toast: toastTop } = useToast();
   async function makeLive(id: number) {
@@ -1437,35 +1513,40 @@ export default function Admin() {
                   </Button>
                 )}
               </div>
-              <Tabs defaultValue="studio">
-                <TabsList className={`grid w-full ${isMobile ? "grid-cols-3" : "grid-cols-5"}`}>
+              <Tabs value={eventTab} onValueChange={setEventTab}>
+                <TabsList className={`grid w-full ${isMobile ? "grid-cols-3" : "grid-cols-6"}`}>
+                  <TabsTrigger value="overview" data-testid="tab-admin-overview">Overview</TabsTrigger>
                   <TabsTrigger value="studio" data-testid="tab-admin-studio">Studio</TabsTrigger>
                   <TabsTrigger value="run" data-testid="tab-admin-run">Run of show</TabsTrigger>
-                  <TabsTrigger value="setup" data-testid="tab-admin-setup">Event details</TabsTrigger>
                   {!isMobile && (
                     <>
+                      <TabsTrigger value="setup" data-testid="tab-admin-setup">Event details</TabsTrigger>
                       <TabsTrigger value="signups" data-testid="tab-admin-signups">Podcasters</TabsTrigger>
                       <TabsTrigger value="sponsors" data-testid="tab-admin-sponsors">Sponsors</TabsTrigger>
                     </>
                   )}
                 </TabsList>
+                <TabsContent value="overview" className="mt-6">
+                  <EventOverview eventId={selectedEventId} event={selectedEvent} go={setEventTab} />
+                  {isMobile && (
+                    <div className="mt-6 flex flex-col gap-6">
+                      <EventSettingsCard eventId={selectedEventId} />
+                      <SignupsCard eventId={selectedEventId} />
+                      <SponsorsCard eventId={selectedEventId} />
+                    </div>
+                  )}
+                </TabsContent>
                 <TabsContent value="studio" className="mt-6">
-                  <StudioConsole key={`ev-${selectedEventId}`} adminGet={adminGet} adminSend={adminSend} view="live" eventId={selectedEventId} />
+                  <StudioConsole key={`ev-${selectedEventId}`} adminGet={adminGet} adminSend={adminSend} view="live" eventId={selectedEventId} kind="event" />
                 </TabsContent>
                 <TabsContent value="run" className="mt-6">
                   <RunOfShow adminGet={adminGet} adminSend={adminSend} eventId={selectedEventId} />
                 </TabsContent>
-                <TabsContent value="setup" className="mt-6 flex flex-col gap-6">
-                  <EventSettingsCard eventId={selectedEventId} />
-                  {isMobile && (
-                    <>
-                      <SignupsCard eventId={selectedEventId} />
-                      <SponsorsCard eventId={selectedEventId} />
-                    </>
-                  )}
-                </TabsContent>
                 {!isMobile && (
                   <>
+                    <TabsContent value="setup" className="mt-6">
+                      <EventSettingsCard eventId={selectedEventId} />
+                    </TabsContent>
                     <TabsContent value="signups" className="mt-6">
                       <SignupsCard eventId={selectedEventId} />
                     </TabsContent>
@@ -1476,6 +1557,8 @@ export default function Admin() {
                 )}
               </Tabs>
             </>
+          ) : openRoomId ? (
+            <RoomView roomId={openRoomId} onBack={() => openRoom(null)} />
           ) : (
             <Tabs defaultValue="events">
               <TabsList className="grid w-full grid-cols-3">
@@ -1484,11 +1567,11 @@ export default function Admin() {
                 <TabsTrigger value="team" data-testid="tab-admin-team">Team</TabsTrigger>
               </TabsList>
               <TabsContent value="events" className="mt-6 flex flex-col gap-8">
-                <EventPicker onOpen={pickEvent} />
+                <EventPicker onOpen={(id) => { setEventTab("overview"); pickEvent(id); }} />
                 <NewEventCard />
               </TabsContent>
               <TabsContent value="rooms" className="mt-6">
-                <RoomsPanel />
+                <RoomsPanel onOpen={openRoom} />
               </TabsContent>
               <TabsContent value="team" className="mt-6">
                 <TeamCard />
