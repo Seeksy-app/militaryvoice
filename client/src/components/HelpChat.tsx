@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,45 @@ import { MessageCircle, X, Send, User, Check, Loader2 } from "lucide-react";
 // the way.
 
 type Msg = { role: "user" | "assistant"; content: string };
+
+// Site paths and full URLs in an answer become links. The assistant is told to
+// name pages as paths ("/schedule"), so this is what makes them tappable.
+const LINK_RE = /(https?:\/\/[^\s)]+|(?<![\w/])\/(?:schedule|agenda|prepare|faq|platform|about|sponsors|host\/dashboard|studio|watch|s\/\d+|event\/[\w-]+(?:\/[\w-]+)?)(?![\w/-]))/g;
+
+function linkify(text: string) {
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  for (const m of text.matchAll(LINK_RE)) {
+    const start = m.index ?? 0;
+    const raw = m[0];
+    // Trailing punctuation belongs to the sentence, not the link.
+    const trimmed = raw.replace(/[.,;:!?]+$/, "");
+    const trail = raw.slice(trimmed.length);
+    if (start > last) out.push(text.slice(last, start));
+    const cls = "font-medium underline underline-offset-2 text-primary hover:opacity-80";
+    if (/^https?:\/\//.test(trimmed)) {
+      let internal = false;
+      try {
+        internal = new URL(trimmed).host.replace(/^www\./, "") === window.location.host.replace(/^www\./, "");
+      } catch {
+        /* leave external */
+      }
+      out.push(
+        internal ? (
+          <Link key={start} href={new URL(trimmed).pathname + new URL(trimmed).search} className={cls}>{trimmed}</Link>
+        ) : (
+          <a key={start} href={trimmed} target="_blank" rel="noopener noreferrer" className={cls}>{trimmed}</a>
+        ),
+      );
+    } else {
+      out.push(<Link key={start} href={trimmed} className={cls}>{trimmed}</Link>);
+    }
+    if (trail) out.push(trail);
+    last = start + raw.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
 
 const HIDDEN_ON = ["/studio", "/watch", "/admin"];
 
@@ -131,7 +170,7 @@ export function HelpChat() {
                         m.role === "user" ? "bg-[#053877] text-white" : "bg-muted text-foreground"
                       }`}
                     >
-                      {m.content}
+                      {m.role === "assistant" ? linkify(m.content) : m.content}
                     </div>
                   </div>
                 ))}
