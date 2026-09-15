@@ -224,7 +224,7 @@ export default function Studio({ slug }: { slug?: string }) {
 
   // Real audio and video, when the event has a media layer configured. Without
   // it the page still works as a green room; it just doesn't carry sound.
-  const { status: roomStatus, peers } = useStudioRoom({
+  const { status: roomStatus, peers, reconnect } = useStudioRoom({
     enabled: joined,
     clientKey: key,
     slug,
@@ -465,9 +465,23 @@ export default function Studio({ slug }: { slug?: string }) {
                 </p>
               )}
               {roomStatus === "error" && (
-                <p className="rounded-2xl border border-[#ED1C24]/50 bg-[#ED1C24]/10 p-4 text-sm text-white/85">
-                  We couldn't connect you to the live room. Refresh, and tell the producer if it happens again.
-                </p>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#ED1C24]/50 bg-[#ED1C24]/10 p-4 text-sm text-white/85">
+                  <span>We couldn't connect you to the live room. Trying again shortly.</span>
+                  <Button size="sm" className="rounded-full" onClick={reconnect} data-testid="button-studio-reconnect">
+                    Reconnect now
+                  </Button>
+                </div>
+              )}
+              {roomStatus === "idle" && stream && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#F0A71F]/50 bg-[#F0A71F]/10 p-4 text-sm text-white/85">
+                  <span>You dropped out of the room — reconnecting. Keep this tab in front.</span>
+                  <Button size="sm" className="rounded-full" onClick={reconnect} data-testid="button-studio-reconnect">
+                    Reconnect now
+                  </Button>
+                </div>
+              )}
+              {roomStatus === "connecting" && (
+                <p className="rounded-2xl border border-white/15 bg-white/[0.06] p-4 text-sm text-white/60">Connecting you to the room…</p>
               )}
 
               <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-5">

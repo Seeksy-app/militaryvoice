@@ -1116,6 +1116,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                       <div key={p.id} className="flex items-center gap-2 rounded-lg bg-[#ED1C24]/15 px-2 py-1.5">
                         <span className="min-w-0 flex-1 truncate text-xs font-medium text-white">
                           {p.displayName || "Unnamed"}
+                          {roomStatus === "connected" && !feeds.has(`p-${p.id}`) && (
+                            <span className="block truncate text-[11px] font-normal text-[#F0A71F]" title="They're on the page but not in the media room. Ask them to reload the link.">
+                              {p.camReady ? "Not in the room — ask them to reload" : "Camera not on yet"}
+                            </span>
+                          )}
                         </span>
                         <Button
                           variant="ghost"
@@ -1167,9 +1172,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                             ) : (
                               <MicOff className="h-3 w-3 text-[#ED1C24]" />
                             )}
-                            {!p.camReady && !p.micReady && (
+                            {!p.camReady && !p.micReady ? (
                               <span className="truncate text-[11px] text-[#F0A71F]">Camera not on yet</span>
-                            )}
+                            ) : roomStatus === "connected" && !feeds.has(`p-${p.id}`) ? (
+                              <span className="truncate text-[11px] text-[#F0A71F]" title="Ask them to reload the link">Not in the room</span>
+                            ) : null}
                           </div>
                         </div>
                         <Button
