@@ -37,6 +37,16 @@ const OFFERED: SocialPlatform[] = ["instagram", "facebook", "linkedin", "x"];
 function dateLabel(iso: string): string {
   return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(new Date(iso));
 }
+function timeLabel(d: Date): string {
+  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(d);
+}
+/** Posts go out on the hourly run, so "right away" really means the next :00. */
+function nextRun(): Date {
+  const d = new Date();
+  d.setMinutes(0, 0, 0);
+  d.setHours(d.getHours() + 1);
+  return d;
+}
 
 export function CampaignPlanner({ signupId }: { signupId: number }) {
   const { toast } = useToast();
@@ -45,6 +55,10 @@ export function CampaignPlanner({ signupId }: { signupId: number }) {
   const { data, isLoading } = useQuery<Plan>({
     queryKey: key,
     queryFn: async () => (await apiRequest("GET", `/api/host/campaign?signupId=${signupId}`)).json(),
+    // While something is queued for the next hourly run, keep looking so the
+    // card flips to "Posted" on its own instead of after a reload.
+    refetchInterval: (q) =>
+      q.state.data?.posts.some((p) => p.status === "posting" || (p.status === "planned" && p.past)) ? 60_000 : false,
   });
 
   const [kinds, setKinds] = useState<string[]>([]);
@@ -162,6 +176,8 @@ export function CampaignPlanner({ signupId }: { signupId: number }) {
               const on = kinds.includes(p.kind);
               const done = p.status === "posted";
               const failed = p.status === "failed";
+              const posting = p.status === "posting";
+              const queued = p.status === "planned" && p.selected && !dirty;
               return (
                 <div
                   key={p.kind}
@@ -183,12 +199,26 @@ export function CampaignPlanner({ signupId }: { signupId: number }) {
                             ? "bg-emerald-500/15 text-emerald-700"
                             : failed
                               ? "bg-destructive/10 text-destructive"
-                              : p.past
-                                ? "bg-[#F0A71F]/20 text-[#7a4e00]"
-                                : "bg-[#053877]/[0.08] text-[#053877]"
+                              : posting || (queued && p.past)
+                                ? "bg-[#F0A71F]/25 text-[#7a4e00]"
+                                : p.past
+                                  ? "bg-[#F0A71F]/20 text-[#7a4e00]"
+                                  : "bg-[#053877]/[0.08] text-[#053877]"
                         }`}
                       >
-                        {done ? `Posted ${dateLabel(p.postedAt!)}` : failed ? "Failed" : p.past ? "Right away" : dateLabel(p.scheduledFor)}
+                        {done
+                          ? `Posted ${dateLabel(p.postedAt!)} ${timeLabel(new Date(p.postedAt!))}`
+                          : failed
+                            ? "Failed"
+                            : posting
+                              ? "Posting now…"
+                              : queued
+                                ? p.past
+                                  ? `Queued · goes out by ${timeLabel(nextRun())}`
+                                  : `Scheduled · ${dateLabel(p.scheduledFor)}`
+                                : p.past
+                                  ? "Right away"
+                                  : dateLabel(p.scheduledFor)}
                       </span>
                     </div>
                     {failed && p.error && (
@@ -205,7 +235,15 @@ export function CampaignPlanner({ signupId }: { signupId: number }) {
                         onChange={() => toggleKind(p.kind)}
                         data-testid={`campaign-pick-${p.kind}`}
                       />
-                      {done ? "Already posted" : failed ? "Try again" : "Post this one for me"}
+                      {done
+                        ? "Posted — check your feed"
+                        : failed
+                          ? "Try again"
+                          : posting
+                            ? "Posting…"
+                            : queued
+                              ? "Scheduled — untick to cancel"
+                              : "Post this one for me"}
                     </label>
                   </div>
                 </div>
@@ -213,28 +251,53 @@ export function CampaignPlanner({ signupId }: { signupId: number }) {
             })}
           </div>
 
-          {canPost && (
-            <div className="mt-5 flex flex-wrap items-center gap-4">
-              <Button
-                type="button"
-                size="lg"
-                className="gap-2 rounded-full px-6"
-                disabled={!dirty || needsAccount || save.isPending}
-                onClick={() => save.mutate()}
-                data-testid="button-save-campaign"
-              >
-                {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
-                {save.isPending ? "Saving…" : "Save my plan"}
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {needsAccount
-                  ? "Pick at least one account to post from."
-                  : picked.length === 0
-                    ? "Nothing ticked — nothing gets posted."
-                    : `${picked.length} post${picked.length === 1 ? "" : "s"} to ${platforms.map((p) => platformLabel(p as SocialPlatform)).join(", ")}.`}
-              </span>
-            </div>
-          )}
+          {canPost && (() => {
+            const scheduled = data.posts.filter((p) => p.status === "planned" || p.status === "posting");
+            const posted = data.posts.filter((p) => p.status === "posted");
+            const failed = data.posts.filter((p) => p.status === "failed");
+            const dueNow = scheduled.filter((p) => p.past);
+            const upcoming = scheduled.filter((p) => !p.past).sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor));
+            const saved = !dirty && (scheduled.length > 0 || posted.length > 0 || failed.length > 0);
+            return (
+              <div className="mt-5 flex flex-wrap items-center gap-4">
+                {saved ? (
+                  <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-800" data-testid="campaign-saved">
+                    <Check className="h-4 w-4" /> Plan saved
+                  </span>
+                ) : (
+                  <Button
+                    type="button"
+                    size="lg"
+                    className="gap-2 rounded-full px-6"
+                    disabled={!dirty || needsAccount || save.isPending}
+                    onClick={() => save.mutate()}
+                    data-testid="button-save-campaign"
+                  >
+                    {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarCheck className="h-4 w-4" />}
+                    {save.isPending ? "Saving…" : "Save my plan"}
+                  </Button>
+                )}
+                <span className="text-sm text-muted-foreground">
+                  {dirty
+                    ? needsAccount
+                      ? "Pick at least one account to post from."
+                      : picked.length === 0
+                        ? "Nothing ticked — nothing gets posted. Save to clear the plan."
+                        : `${picked.length} post${picked.length === 1 ? "" : "s"} to ${platforms.map((p) => platformLabel(p as SocialPlatform)).join(", ")} — save to schedule.`
+                    : saved
+                      ? [
+                          posted.length ? `${posted.length} posted` : "",
+                          dueNow.length ? `${dueNow.length} going out by ${timeLabel(nextRun())}` : "",
+                          upcoming.length ? `next scheduled ${dateLabel(upcoming[0].scheduledFor)}` : "",
+                          failed.length ? `${failed.length} failed — see the card` : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") + ". You're done here; tick another any time."
+                      : "Tick the posts you want, then save."}
+                </span>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </section>
