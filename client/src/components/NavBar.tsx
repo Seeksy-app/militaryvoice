@@ -45,13 +45,13 @@ export function NavBar() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-2.5 sm:px-6">
         <Link href="/" className="shrink-0" data-testid="link-home-logo">
           <LogoLockup />
         </Link>
 
         {/* Desktop links */}
-        <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Primary">
+        <nav className="hidden items-center gap-3 lg:flex xl:gap-5" aria-label="Primary">
           {LINKS.map((link) => {
             const active = !link.anchor && (location === link.href || (location.startsWith("/event/") && location.endsWith(link.href)));
             return link.anchor ? (

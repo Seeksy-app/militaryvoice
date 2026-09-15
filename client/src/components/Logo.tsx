@@ -13,12 +13,16 @@ export function Wordmark({ className = "" }: { className?: string }) {
   );
 }
 
-/** Stacked lockup: waveform above the wordmark, as in the source logo. */
-export function LogoLockup({ className = "" }: { className?: string }) {
+/**
+ * The actual logo file — waveform over the stacked MILITARY VOICE.AI — not a
+ * rebuild of it in web type. Sized by height (it's about 1.5:1). The dark
+ * variant swaps the near-black letters for white; the amber stays.
+ */
+export function LogoLockup({ className = "h-14 sm:h-16" }: { className?: string }) {
   return (
-    <span className={`inline-flex flex-col items-center ${className}`}>
-      <LogoMark className="h-6 sm:h-7" />
-      <Wordmark className="-mt-1 text-xl sm:text-2xl" />
-    </span>
+    <>
+      <img src="/logo-lockup.png?v=3" alt="MilitaryVoice.ai" className={`w-auto dark:hidden ${className}`} />
+      <img src="/logo-lockup-dark.png?v=3" alt="MilitaryVoice.ai" className={`hidden w-auto dark:block ${className}`} />
+    </>
   );
 }
