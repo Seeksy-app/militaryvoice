@@ -413,6 +413,8 @@ export interface SocialAccount {
 // ---------------------------------------------------------------------------
 export const sponsors = pgTable("sponsors", {
   id: serial("id").primaryKey(),
+  // 0 = created before sponsors were per-event; treated as the featured event's.
+  eventId: integer("event_id").notNull().default(0),
   name: text("name").notNull(),
   url: text("url").notNull().default(""),
   logoUrl: text("logo_url").notNull(),

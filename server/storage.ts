@@ -582,8 +582,8 @@ export interface IStorage {
   syncSignupsFromProfile(email: string, profile: ProfileRow): Promise<number>;
   syncSignupsFromEventShow(email: string, eventId: number, show: EventShowRow): Promise<number>;
   listCompleteProfiles(): Promise<ProfileRow[]>;
-  listSponsors(activeOnly: boolean): Promise<SponsorRow[]>;
-  createSponsor(data: { name: string; url: string; logoUrl: string }): Promise<SponsorRow>;
+  listSponsors(activeOnly: boolean, eventIds?: number[]): Promise<SponsorRow[]>;
+  createSponsor(data: { name: string; url: string; logoUrl: string; eventId: number }): Promise<SponsorRow>;
   updateSponsor(id: number, patch: UpdateSponsor): Promise<SponsorRow | undefined>;
   deleteSponsor(id: number): Promise<void>;
   listAdmins(): Promise<AdminUserRow[]>;
@@ -1533,16 +1533,21 @@ class DatabaseStorage implements IStorage {
     return { removed: true };
   }
 
-  async listSponsors(activeOnly: boolean): Promise<SponsorRow[]> {
+  async listSponsors(activeOnly: boolean, eventIds?: number[]): Promise<SponsorRow[]> {
     await ready();
+    const conds = [];
+    if (activeOnly) conds.push(eq(sponsors.active, true));
+    if (eventIds && eventIds.length) conds.push(inArray(sponsors.eventId, eventIds));
     const q = db.select().from(sponsors);
-    const rows = activeOnly ? await q.where(eq(sponsors.active, true)).orderBy(asc(sponsors.sortOrder), asc(sponsors.id)) : await q.orderBy(asc(sponsors.sortOrder), asc(sponsors.id));
+    const rows = conds.length
+      ? await q.where(and(...conds)).orderBy(asc(sponsors.sortOrder), asc(sponsors.id))
+      : await q.orderBy(asc(sponsors.sortOrder), asc(sponsors.id));
     return rows;
   }
 
-  async createSponsor(data: { name: string; url: string; logoUrl: string }): Promise<SponsorRow> {
+  async createSponsor(data: { name: string; url: string; logoUrl: string; eventId: number }): Promise<SponsorRow> {
     await ready();
-    const existing = await this.listSponsors(false);
+    const existing = await this.listSponsors(false, [data.eventId, 0]);
     const sortOrder = existing.length ? Math.max(...existing.map((s) => s.sortOrder)) + 1 : 0;
     const [created] = await db
       .insert(sponsors)

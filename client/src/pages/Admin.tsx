@@ -319,20 +319,13 @@ function EventFormFields({
   );
 }
 
-function EventsManagementCard() {
+function NewEventCard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const zone = useMemo(detectLocalTimeZone, []);
-  const { data: events, isLoading } = useQuery<PublicEvent[]>({
-    queryKey: ["/api/admin/events"],
-    queryFn: () => adminGet<PublicEvent[]>("/api/admin/events"),
-  });
-
   const [creating, setCreating] = useState(false);
   const [newForm, setNewForm] = useState<EventFormState>(() => blankEventForm(zone));
   const [saving, setSaving] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState<EventFormState | null>(null);
 
   async function refreshEverything() {
     await Promise.all([
@@ -376,58 +369,18 @@ function EventsManagementCard() {
     }
   }
 
-  async function handleSetFeatured(id: number) {
-    try {
-      await adminSend("PUT", `/api/admin/events/${id}`, { isFeatured: true } as UpdateEvent);
-      await refreshEverything();
-      toast({ title: "Featured event updated" });
-    } catch (err) {
-      toast({ title: "Couldn't update", description: (err as Error).message, variant: "destructive" });
-    }
-  }
 
-  function startEdit(event: PublicEvent) {
-    setEditingId(event.id);
-    setEditForm({
-      name: event.name,
-      slug: event.slug,
-      tagline: event.tagline,
-      startLocal: utcToDateTimeLocalValue(new Date(event.startAtUtc), zone),
-      durationHours: event.durationHours,
-      slotMinutes: event.slotMinutes,
-    });
-  }
 
-  async function handleSaveEdit() {
-    if (!editingId || !editForm) return;
-    setSaving(true);
-    try {
-      const patch: UpdateEvent = {
-        name: editForm.name,
-        slug: editForm.slug,
-        tagline: editForm.tagline,
-        startAtUtc: dateTimeLocalToUtc(editForm.startLocal, zone).toISOString(),
-        durationHours: editForm.durationHours,
-        slotMinutes: editForm.slotMinutes,
-      };
-      await adminSend("PUT", `/api/admin/events/${editingId}`, patch);
-      await refreshEverything();
-      toast({ title: "Event updated" });
-      setEditingId(null);
-      setEditForm(null);
-    } catch (err) {
-      toast({ title: "Couldn't save", description: (err as Error).message, variant: "destructive" });
-    } finally {
-      setSaving(false);
-    }
-  }
+
+
+
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
         <div>
-          <CardTitle className="text-base">Events</CardTitle>
-          <CardDescription>Add new marathons and choose which one is featured on the homepage.</CardDescription>
+          <CardTitle className="text-base">New event</CardTitle>
+          <CardDescription>Another marathon, another day, another tenant. It gets its own studio, agenda and sponsors.</CardDescription>
         </div>
         {!creating && (
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)} data-testid="button-new-event">
@@ -450,63 +403,6 @@ function EventsManagementCard() {
           </div>
         )}
 
-        {isLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-14 w-full" />
-            <Skeleton className="h-14 w-full" />
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {(events ?? []).map((event) => (
-              <div key={event.id} className="rounded-lg border border-border p-3" data-testid={`card-admin-event-${event.id}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-card-foreground">{event.name}</span>
-                      {event.isFeatured && (
-                        <Badge className="gap-1 bg-primary/15 text-xs font-normal text-primary hover:bg-primary/15">
-                          <Star className="h-3 w-3" /> Featured
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      /event/{event.slug} · {formatDateInZone(new Date(event.startAtUtc), zone)} {formatTimeInZone(new Date(event.startAtUtc), zone)}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-1.5">
-                    {!event.isFeatured && (
-                      <Button variant="outline" size="sm" onClick={() => handleSetFeatured(event.id)} data-testid={`button-feature-${event.id}`}>
-                        Set as featured
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => (editingId === event.id ? setEditingId(null) : startEdit(event))}
-                      aria-label="Edit event"
-                      data-testid={`button-edit-event-${event.id}`}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-                {editingId === event.id && editForm && (
-                  <div className="mt-3 border-t border-border pt-3">
-                    <EventFormFields form={editForm} onChange={setEditForm} />
-                    <div className="mt-3 flex gap-2">
-                      <Button size="sm" onClick={handleSaveEdit} disabled={saving} data-testid={`button-save-event-${event.id}`}>
-                        {saving ? "Saving…" : "Save"}
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)} disabled={saving}>
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
       </CardContent>
     </Card>
   );
@@ -1043,12 +939,12 @@ function SignupsCard({ eventId }: { eventId: number }) {
 // ---------------------------------------------------------------------------
 // Sponsors — logo strip shown on the homepage as "Friends of the Podcastathon"
 // ---------------------------------------------------------------------------
-function SponsorsCard() {
+function SponsorsCard({ eventId }: { eventId: number }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: sponsors, isLoading } = useQuery<SponsorRow[]>({
-    queryKey: ["/api/admin/sponsors"],
-    queryFn: () => adminGet<SponsorRow[]>("/api/admin/sponsors"),
+    queryKey: ["/api/admin/sponsors", eventId],
+    queryFn: () => adminGet<SponsorRow[]>(`/api/admin/sponsors?eventId=${eventId}`),
   });
   const { data: settings } = useQuery<PublicSettings>({
     queryKey: ["/api/admin/settings"],
@@ -1090,6 +986,7 @@ function SponsorsCard() {
       const fd = new FormData();
       fd.append("name", name.trim());
       fd.append("url", url.trim());
+      fd.append("eventId", String(eventId));
       fd.append("logo", logo);
       await adminUpload("/api/admin/sponsors", fd);
       setName("");
@@ -1332,7 +1229,7 @@ function EventPicker({ onOpen }: { onOpen: (id: number) => void }) {
   );
 }
 
-function StudiosPanel() {
+function SessionsPanel() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: studios } = useQuery<(StudioRowLite & { isPrimary: boolean; eventName?: string })[]>({
@@ -1351,10 +1248,10 @@ function StudiosPanel() {
   async function create() {
     const featured = events?.find((e) => e.isFeatured) ?? events?.[0];
     if (!featured) return;
-    await adminSend("POST", "/api/admin/studios", { eventId: featured.id, name: name.trim() || "Rehearsal studio" });
+    await adminSend("POST", "/api/admin/studios", { eventId: featured.id, name: name.trim() || "Rehearsal session" });
     setName("");
     queryClient.invalidateQueries({ queryKey: ["/api/admin/studios"] });
-    toast({ title: "Studio created", description: "Send the join link to whoever's rehearsing with you." });
+    toast({ title: "Session created", description: "Send the join link to whoever's joining you." });
   }
   async function remove(id: number) {
     try {
@@ -1381,10 +1278,10 @@ function StudiosPanel() {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Studios</CardTitle>
+          <CardTitle className="text-base">Sessions</CardTitle>
           <CardDescription>
-            Each studio is its own room with its own green room and stage. The event's studio is where the show
-            happens; make another one to rehearse in without touching it.
+            A session is a one-off room — rehearse, record, meet — with its own green room, stage and join link.
+            The live event runs in its own studio; sessions never touch it.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -1396,6 +1293,7 @@ function StudiosPanel() {
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-card-foreground">{st.name || "Studio"}</span>
                     {st.isPrimary && <Badge variant="outline" className="text-[11px] font-normal">event studio</Badge>}
+                    {!st.isPrimary && <Badge variant="outline" className="text-[11px] font-normal">session</Badge>}
                     <Badge variant="outline" className="text-[11px] font-normal">{st.status}</Badge>
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">{st.eventName}</div>
@@ -1422,9 +1320,9 @@ function StudiosPanel() {
               create();
             }}
           >
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Rehearsal studio" className="h-9 max-w-xs" data-testid="input-new-studio" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Rehearsal with Riccoh" className="h-9 max-w-xs" data-testid="input-new-studio" />
             <Button type="submit" size="sm" className="gap-1.5 rounded-full" data-testid="button-new-studio">
-              <Plus className="h-3.5 w-3.5" /> New studio
+              <Plus className="h-3.5 w-3.5" /> New session
             </Button>
             <span className="text-xs text-muted-foreground">Anyone with the join link lands in its green room; you bring them on from the console.</span>
           </form>
@@ -1471,6 +1369,21 @@ export default function Admin() {
     enabled: isAuthenticated,
   });
   const selectedEvent = adminEvents?.find((e) => e.id === selectedEventId) ?? null;
+  const queryClientTop = useQueryClient();
+  const { toast: toastTop } = useToast();
+  async function makeLive(id: number) {
+    try {
+      await adminSend("PUT", `/api/admin/events/${id}`, { isFeatured: true } as UpdateEvent);
+      await Promise.all(
+        ["/api/admin/events", "/api/admin/event", "/api/event", "/api/events", "/api/signups", "/api/sponsors"].map((k) =>
+          queryClientTop.invalidateQueries({ queryKey: [k] }),
+        ),
+      );
+      toastTop({ title: "This is now the live-site event", description: "The homepage, agenda and sponsor strip follow it." });
+    } catch (err) {
+      toastTop({ title: "Couldn't switch", description: (err as Error).message, variant: "destructive" });
+    }
+  }
 
   return (
     <div className="min-h-screen">
@@ -1502,70 +1415,83 @@ export default function Admin() {
 
           {selectedEventId && selectedEvent ? (
             <>
-              <button
-                type="button"
-                onClick={() => pickEvent(null)}
-                className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                data-testid="button-all-events"
-              >
-                ← All events
-              </button>
-              <h2 className="mb-4 text-2xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
-                {selectedEvent.name}
-                {selectedEvent.isFeatured && <Badge className="ml-3 bg-[#F0A71F] align-middle text-[#1a1200] hover:bg-[#F0A71F]">Live site</Badge>}
-              </h2>
-              <Tabs defaultValue="run">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="run" data-testid="tab-admin-run">Agenda</TabsTrigger>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => pickEvent(null)}
+                    className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                    data-testid="button-all-events"
+                  >
+                    ← All events
+                  </button>
+                  <h2 className="text-2xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
+                    {selectedEvent.name}
+                    {selectedEvent.isFeatured && <Badge className="ml-3 bg-[#F0A71F] align-middle text-[#1a1200] hover:bg-[#F0A71F]">Live site</Badge>}
+                  </h2>
+                </div>
+                {!selectedEvent.isFeatured && (
+                  <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => makeLive(selectedEvent.id)} data-testid="button-make-live">
+                    <Star className="h-3.5 w-3.5" /> Make this the live-site event
+                  </Button>
+                )}
+              </div>
+              <Tabs defaultValue="studio">
+                <TabsList className={`grid w-full ${isMobile ? "grid-cols-3" : "grid-cols-5"}`}>
+                  <TabsTrigger value="studio" data-testid="tab-admin-studio">Studio</TabsTrigger>
+                  <TabsTrigger value="run" data-testid="tab-admin-run">Run of show</TabsTrigger>
                   <TabsTrigger value="setup" data-testid="tab-admin-setup">Event details</TabsTrigger>
-                  <TabsTrigger value="signups" data-testid="tab-admin-signups">Podcasters</TabsTrigger>
+                  {!isMobile && (
+                    <>
+                      <TabsTrigger value="signups" data-testid="tab-admin-signups">Podcasters</TabsTrigger>
+                      <TabsTrigger value="sponsors" data-testid="tab-admin-sponsors">Sponsors</TabsTrigger>
+                    </>
+                  )}
                 </TabsList>
+                <TabsContent value="studio" className="mt-6">
+                  <StudioConsole key={`ev-${selectedEventId}`} adminGet={adminGet} adminSend={adminSend} view="live" eventId={selectedEventId} />
+                </TabsContent>
                 <TabsContent value="run" className="mt-6">
                   <RunOfShow adminGet={adminGet} adminSend={adminSend} eventId={selectedEventId} />
                 </TabsContent>
-                <TabsContent value="setup" className="mt-6">
+                <TabsContent value="setup" className="mt-6 flex flex-col gap-6">
                   <EventSettingsCard eventId={selectedEventId} />
+                  {isMobile && (
+                    <>
+                      <SignupsCard eventId={selectedEventId} />
+                      <SponsorsCard eventId={selectedEventId} />
+                    </>
+                  )}
                 </TabsContent>
-                <TabsContent value="signups" className="mt-6">
-                  <SignupsCard eventId={selectedEventId} />
-                </TabsContent>
+                {!isMobile && (
+                  <>
+                    <TabsContent value="signups" className="mt-6">
+                      <SignupsCard eventId={selectedEventId} />
+                    </TabsContent>
+                    <TabsContent value="sponsors" className="mt-6">
+                      <SponsorsCard eventId={selectedEventId} />
+                    </TabsContent>
+                  </>
+                )}
               </Tabs>
             </>
           ) : (
             <Tabs defaultValue="events">
-              <TabsList className={`grid w-full ${isMobile ? "grid-cols-2" : "grid-cols-4"}`}>
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="events" data-testid="tab-admin-events">Events</TabsTrigger>
-                <TabsTrigger value="studios" data-testid="tab-admin-studios">Studios</TabsTrigger>
-                {!isMobile && (
-                  <>
-                    <TabsTrigger value="sponsors" data-testid="tab-admin-sponsors">Sponsors</TabsTrigger>
-                    <TabsTrigger value="team" data-testid="tab-admin-team">Team</TabsTrigger>
-                  </>
-                )}
+                <TabsTrigger value="sessions" data-testid="tab-admin-sessions">Sessions</TabsTrigger>
+                <TabsTrigger value="team" data-testid="tab-admin-team">Team</TabsTrigger>
               </TabsList>
               <TabsContent value="events" className="mt-6 flex flex-col gap-8">
                 <EventPicker onOpen={pickEvent} />
-                <EventsManagementCard />
-                {isMobile && (
-                  <>
-                    <SponsorsCard />
-                    <TeamCard />
-                  </>
-                )}
+                <NewEventCard />
               </TabsContent>
-              <TabsContent value="studios" className="mt-6">
-                <StudiosPanel />
+              <TabsContent value="sessions" className="mt-6">
+                <SessionsPanel />
               </TabsContent>
-              {!isMobile && (
-                <>
-                  <TabsContent value="sponsors" className="mt-6">
-                    <SponsorsCard />
-                  </TabsContent>
-                  <TabsContent value="team" className="mt-6">
-                    <TeamCard />
-                  </TabsContent>
-                </>
-              )}
+              <TabsContent value="team" className="mt-6">
+                <TeamCard />
+              </TabsContent>
             </Tabs>
           )}
         </div>

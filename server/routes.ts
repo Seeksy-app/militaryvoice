@@ -1109,7 +1109,9 @@ export function registerRoutes(app: Express): void {
       res.json([]);
       return;
     }
-    const rows = await storage.listSponsors(true);
+    // The homepage strip is the live-site event's sponsors (legacy rows count as its).
+    const featured = await storage.getFeaturedEvent();
+    const rows = await storage.listSponsors(true, [featured.id, 0]);
     const out: PublicSponsor[] = rows.map((r) => ({ id: r.id, name: r.name, url: r.url, logoUrl: r.logoUrl, sortOrder: r.sortOrder }));
     res.json(out);
   });
@@ -2674,8 +2676,10 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Admin: sponsors CRUD ------------------------------------------------------
-  app.get("/api/admin/sponsors", requireAdmin, async (_req, res) => {
-    res.json(await storage.listSponsors(false));
+  app.get("/api/admin/sponsors", requireAdmin, async (req, res) => {
+    const featured = await storage.getFeaturedEvent();
+    const eventId = Number(req.query.eventId) || featured.id;
+    res.json(await storage.listSponsors(false, eventId === featured.id ? [eventId, 0] : [eventId]));
   });
 
   app.post("/api/admin/sponsors", requireAdmin, (req, res, next) => {
@@ -2703,7 +2707,8 @@ export function registerRoutes(app: Express): void {
       const ext = (req.file.mimetype.split("/")[1] || "png").replace("svg+xml", "svg").replace("jpeg", "jpg");
       const filename = `sponsors/${Date.now()}-${crypto.randomBytes(5).toString("hex")}.${ext}`;
       const logoUrl = await uploadPhoto(filename, req.file.buffer, req.file.mimetype);
-      const created = await storage.createSponsor({ name, url, logoUrl });
+      const eventId = Number(body.eventId) || (await storage.getFeaturedEvent()).id;
+      const created = await storage.createSponsor({ name, url, logoUrl, eventId });
       res.status(201).json(created);
     } catch (err) {
       console.error("Sponsor logo upload failed:", err);

@@ -62,6 +62,8 @@ import {
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
 interface Props {
+  /** Limit to one event's studios (the event dashboard); omit for every studio (Sessions). */
+  eventId?: number;
   adminGet: <T>(path: string) => Promise<T>;
   adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
   /**
@@ -146,7 +148,7 @@ function DeckButton({
   );
 }
 
-export function StudioConsole({ adminGet, adminSend, view }: Props) {
+export function StudioConsole({ adminGet, adminSend, view, eventId }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const zone = useMemo(detectLocalTimeZone, []);
@@ -188,8 +190,8 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
   const { data: studios } = useQuery<(StudioRow & { isPrimary: boolean; eventName?: string })[]>({
     // Every studio, whatever event it belongs to — a rehearsal room shows up
     // next to the live one.
-    queryKey: ["/api/admin/studios", "all"],
-    queryFn: () => adminGet("/api/admin/studios?all=1"),
+    queryKey: ["/api/admin/studios", eventId ?? "all"],
+    queryFn: () => adminGet(eventId ? `/api/admin/studios?eventId=${eventId}` : "/api/admin/studios?all=1"),
   });
 
   const pick = (id: number | null) => {
@@ -207,8 +209,8 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
     refetchInterval: 4000,
   });
   const { data: runItems } = useQuery<RunItemRow[]>({
-    queryKey: ["/api/admin/run-of-show"],
-    queryFn: () => adminGet<RunItemRow[]>("/api/admin/run-of-show"),
+    queryKey: ["/api/admin/run-of-show", eventId ?? "featured"],
+    queryFn: () => adminGet<RunItemRow[]>(eventId ? `/api/admin/run-of-show?eventId=${eventId}` : "/api/admin/run-of-show"),
   });
 
   // Live pictures for the green room, when the event has a media layer.
