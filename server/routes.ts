@@ -5,6 +5,7 @@ import multer from "multer";
 import sharp from "sharp";
 import { storage } from "./storage.js";
 import { requireHuman, turnstileSiteKey } from "./turnstile.js";
+import { answerHelp, isHelpAgentConfigured, type HelpTurn } from "./help.js";
 import { KINDS, effectiveSchedule, cardInput, caption as campaignCaption, isKind, type CampaignContext } from "./campaign.js";
 import { uploadPhoto, uploadShowAsset, deleteShowAsset } from "./photoStorage.js";
 import {
@@ -70,7 +71,8 @@ import {
   sendFinalNudge,
   sendOnAirNudge,
   sendBookingAlert,
-  sendScheduleReference
+  sendScheduleReference,
+  sendHelpRequestAlert,
 } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, StudioRow } from "../shared/schema.js";
@@ -3174,6 +3176,76 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Host: request a typed sign-in code -------------------------------------
+  // ---- Help chat -----------------------------------------------------------------
+  //      One route answers from the knowledge in server/help.ts; the other
+  //      hands the visitor to a person by email. Both are public, so: a per-IP
+  //      cap on the model route, Turnstile on the email route.
+  const helpHits = new Map<string, number[]>();
+  function helpRateLimited(req: Request): boolean {
+    const ip = (String(req.headers["x-forwarded-for"] || "").split(",")[0] || req.ip || "?").trim();
+    const now = Date.now();
+    const recent = (helpHits.get(ip) ?? []).filter((t) => now - t < 10 * 60_000);
+    recent.push(now);
+    helpHits.set(ip, recent);
+    return recent.length > 25;
+  }
+
+  app.get("/api/help/config", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ agent: isHelpAgentConfigured() });
+  });
+
+  app.post("/api/help/chat", async (req, res) => {
+    if (!isHelpAgentConfigured()) {
+      res.json({ text: "Our helper is offline at the moment — leave your question and we'll email you back.", handoff: true });
+      return;
+    }
+    if (helpRateLimited(req)) {
+      res.status(429).json({ message: "That's a lot of questions at once — give it a few minutes, or ask for a person." });
+      return;
+    }
+    const raw = Array.isArray(req.body?.messages) ? req.body.messages : [];
+    const turns: HelpTurn[] = raw
+      .slice(-12)
+      .map((m: any) => ({ role: m?.role === "assistant" ? "assistant" : "user", content: String(m?.content ?? "").slice(0, 1500).trim() }))
+      .filter((m: HelpTurn) => m.content.length > 0);
+    if (turns.length === 0 || turns[turns.length - 1].role !== "user") {
+      res.status(400).json({ message: "Ask something first." });
+      return;
+    }
+    try {
+      const event = await storage.getFeaturedEvent();
+      const taken = (await storage.listSignups(event.id)).filter((x) => x.status !== "cancelled").length;
+      const total = Math.floor((event.durationHours * 60) / event.slotMinutes);
+      const out = await answerHelp(turns, { event, taken, total });
+      res.json(out);
+    } catch (err) {
+      console.error("help chat failed:", (err as Error).message);
+      res.json({ text: "I couldn't reach my notes just now. Want me to get a person for you?", handoff: true });
+    }
+  });
+
+  app.post("/api/help/handoff", async (req, res) => {
+    const name = String(req.body?.name ?? "").trim().slice(0, 120);
+    const email = String(req.body?.email ?? "").trim().toLowerCase().slice(0, 200);
+    const question = String(req.body?.question ?? "").trim().slice(0, 2000);
+    const transcript = String(req.body?.transcript ?? "").trim().slice(0, 8000);
+    const page = String(req.body?.page ?? "").trim().slice(0, 300);
+    if (!email.includes("@") || !question) {
+      res.status(400).json({ message: "We need your email and the question." });
+      return;
+    }
+    if (!(await requireHuman(req, res))) return;
+    const row = await storage.createHelpRequest({ name, email, question, transcript, page });
+    const to = (process.env.SIGNUP_NOTIFY_EMAIL || "appletonab@gmail.com").trim();
+    const sent = await sendHelpRequestAlert({ to, name, email, question, transcript, page });
+    res.json({ ok: true, id: row.id, sent });
+  });
+
+  app.get("/api/admin/help-requests", requireAdmin, async (_req, res) => {
+    res.json(await storage.listHelpRequests());
+  });
+
   // Whether the public forms should show the Cloudflare check, and with which
   // key. Served rather than baked into the bundle so the two keys live in one
   // place and a stale client can never disagree with the server.

@@ -167,7 +167,7 @@ function buildText(input: ConfirmationEmailInput): string {
 
 /** Low-level Resend sender shared by every email type. Never throws — logs and
  *  returns false on failure so a flaky email provider never blocks a user flow. */
-async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string }): Promise<boolean> {
+async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string }): Promise<boolean> {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (RESEND_API_KEY) {
@@ -184,6 +184,7 @@ async function sendRawEmail(opts: { to: string; subject: string; html: string; t
         subject: opts.subject,
         html: opts.html,
         text: opts.text,
+        ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
       }),
     });
     if (!res.ok) {
@@ -559,5 +560,41 @@ export async function sendScheduleReference(to: string): Promise<boolean> {
       footerNote: "Internal reference for the organiser. Dates are US Eastern.",
     }),
     text,
+  });
+}
+
+
+/** Someone on the site asked to talk to a person. Reply-To is them, so
+ *  answering from your inbox answers them directly. */
+export async function sendHelpRequestAlert(v: {
+  to: string;
+  name: string;
+  email: string;
+  question: string;
+  transcript: string;
+  page: string;
+}): Promise<boolean> {
+  const lines = v.transcript
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => `<p style="margin:0 0 6px;">${escapeHtml(l)}</p>`)
+    .join("");
+  return sendRawEmail({
+    to: v.to,
+    replyTo: v.email,
+    subject: `Help request from ${v.name || v.email}: ${v.question.slice(0, 60)}`,
+    html: emailShell({
+      banner: EMAIL_BANNERS.podcasters,
+      eyebrow: "Help chat · wants a person",
+      heading: `${v.name || "A visitor"} asked to talk to someone`,
+      body: `
+        <p style="margin:0 0 10px;"><strong>Email:</strong> ${escapeHtml(v.email)}<br><strong>On page:</strong> ${escapeHtml(v.page || "unknown")}</p>
+        <p style="margin:0 0 6px;font-weight:700;">Their question</p>
+        <p style="margin:0 0 16px;padding:12px 16px;background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;">${escapeHtml(v.question)}</p>
+        ${lines ? `<p style="margin:0 0 6px;font-weight:700;">What the assistant and they said first</p><div style="padding:12px 16px;background:#f3f4f6;border-radius:12px;font-size:14px;color:#374151;">${lines}</div>` : ""}`,
+      cta: { href: `mailto:${v.email}?subject=${encodeURIComponent("Re: your question on MilitaryVoice.ai")}`, label: "Reply to them" },
+      footerNote: "Hit reply on this email and it goes straight to them.",
+    }),
+    text: `${v.name || "A visitor"} (${v.email}) asked to talk to a person.\nPage: ${v.page}\n\nQuestion:\n${v.question}\n\nTranscript:\n${v.transcript}\n\nReply to this email to answer them.`,
   });
 }

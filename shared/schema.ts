@@ -799,6 +799,19 @@ export const campaignPosts = pgTable("campaign_posts", {
 }));
 export type CampaignPostRow = typeof campaignPosts.$inferSelect;
 
+// A visitor who asked the help chat to talk to a person.
+export const helpRequests = pgTable("help_requests", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().default(""),
+  email: text("email").notNull(),
+  question: text("question").notNull().default(""),
+  transcript: text("transcript").notNull().default(""),
+  page: text("page").notNull().default(""),
+  status: text("status").notNull().default("open"), // open | answered
+  createdAt: text("created_at").notNull().default(""),
+});
+export type HelpRequestRow = typeof helpRequests.$inferSelect;
+
 /** In order. A later stage suppresses every earlier one. */
 export const NUDGE_KINDS = ["prep", "final", "onair"] as const;
 export type NudgeKind = (typeof NUDGE_KINDS)[number];

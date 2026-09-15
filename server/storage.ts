@@ -1,6 +1,7 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests } from "../shared/schema.js";
 import type {
   CampaignPostRow,
+  HelpRequestRow,
   EventRow,
   InsertEvent,
   UpdateEvent,
@@ -620,6 +621,8 @@ export interface IStorage {
   releaseNudge(signupId: number, kind: NudgeKind): Promise<void>;
   listCampaignPosts(signupId: number): Promise<CampaignPostRow[]>;
   listAllStudios(): Promise<StudioRow[]>;
+  createHelpRequest(v: { name: string; email: string; question: string; transcript: string; page: string }): Promise<HelpRequestRow>;
+  listHelpRequests(): Promise<HelpRequestRow[]>;
   /** Make the stored plan match `picks`; posts already sent are left alone. */
   replaceCampaignPlan(
     signupId: number,
@@ -1101,6 +1104,17 @@ class DatabaseStorage implements IStorage {
   async releaseNudge(signupId: number, kind: NudgeKind): Promise<void> {
     await ready();
     await db.delete(nudges).where(and(eq(nudges.signupId, signupId), eq(nudges.kind, kind)));
+  }
+
+  async createHelpRequest(v: { name: string; email: string; question: string; transcript: string; page: string }): Promise<HelpRequestRow> {
+    await ready();
+    const [row] = await db.insert(helpRequests).values({ ...v, status: "open", createdAt: new Date().toISOString() }).returning();
+    return row;
+  }
+
+  async listHelpRequests(): Promise<HelpRequestRow[]> {
+    await ready();
+    return db.select().from(helpRequests).orderBy(desc(helpRequests.id));
   }
 
   async listAllStudios(): Promise<StudioRow[]> {
