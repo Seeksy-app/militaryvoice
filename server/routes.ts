@@ -3174,8 +3174,18 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
-    const created = await storage.createEvent(parsed.data);
-    res.status(201).json(toPublicEvent(created));
+    try {
+      const created = await storage.createEvent(parsed.data);
+      res.status(201).json(toPublicEvent(created));
+    } catch (err: any) {
+      console.error("Couldn't create event:", err);
+      const dup = /duplicate key|unique/i.test(String(err?.message ?? ""));
+      res.status(dup ? 409 : 500).json({
+        message: dup
+          ? "That slug is already taken, or the save collided with another. Change the slug or try once more."
+          : "The event didn't save. Try once more; if it fails again, tell us.",
+      });
+    }
   });
 
   app.put("/api/admin/events/:id", requireAdmin, async (req, res) => {

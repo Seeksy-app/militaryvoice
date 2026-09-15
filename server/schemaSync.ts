@@ -16,7 +16,7 @@ import * as schema from "../shared/schema.js";
  * is already correct.
  */
 
-type Sql = { unsafe: (q: string) => Promise<unknown> };
+type Sql = { unsafe: (q: string) => Promise<any> };
 
 /** SQL literal for a column default drizzle gives us as a JS value. */
 function defaultLiteral(v: unknown): string | null {
@@ -78,6 +78,9 @@ export function schemaFingerprint(): string {
     parts.push(`${config.name}(${cols})[${idx}]`);
   }
   parts.sort();
+  // Bootstrap steps that aren't visible in the table shapes still need to run
+  // once on every database. Bump this when one is added.
+  parts.push("bootstrap:sequences-v1");
   return createHash("sha1").update(parts.join("|")).digest("hex").slice(0, 16);
 }
 
@@ -133,5 +136,41 @@ export async function ensureSchema(sql: Sql): Promise<SchemaSyncReport> {
     }
   }
 
+  await realignSequences(sql);
   return report;
+}
+
+/**
+ * A row inserted with an explicit id (a seed, a restore, a hand fix) does not
+ * advance the serial's sequence, so the next plain insert tries to reuse that
+ * id and fails on the primary key — which is exactly what "the first save
+ * failed, the second worked" looks like. Push every id sequence past the
+ * largest id its table already holds. Only ever moves forward.
+ */
+async function realignSequences(sql: Sql): Promise<void> {
+  for (const value of Object.values(schema)) {
+    let config: ReturnType<typeof getTableConfig>;
+    try {
+      config = getTableConfig(value as never);
+    } catch {
+      continue;
+    }
+    const id = config.columns.find((c) => c.primary && /serial/i.test(c.getSQLType()));
+    if (!id) continue;
+    try {
+      const rows = (await sql.unsafe(
+        `SELECT pg_get_serial_sequence('"${config.name}"', '${id.name}') AS seq, COALESCE(MAX("${id.name}"), 0)::bigint AS max FROM "${config.name}"`,
+      )) as { seq: string | null; max: string | number }[];
+      const seq = rows?.[0]?.seq;
+      const max = Number(rows?.[0]?.max ?? 0);
+      if (!seq || max <= 0) continue;
+      const cur = (await sql.unsafe(`SELECT last_value, is_called FROM ${seq}`)) as { last_value: string | number; is_called: boolean }[];
+      const last = Number(cur?.[0]?.last_value ?? 0);
+      const next = cur?.[0]?.is_called ? last + 1 : last;
+      if (next > max) continue;
+      await sql.unsafe(`SELECT setval('${seq}', ${max}, true)`);
+    } catch (err) {
+      console.warn(`Couldn't realign the id sequence for ${config.name}:`, (err as Error).message);
+    }
+  }
 }

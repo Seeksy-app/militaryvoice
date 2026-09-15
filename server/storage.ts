@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests } from "../shared/schema.js";
 import type {
   CampaignPostRow,
@@ -747,9 +748,12 @@ class DatabaseStorage implements IStorage {
     if (data.isFeatured) {
       await db.update(events).set({ isFeatured: false }).where(eq(events.isFeatured, true));
     }
+    // Every event carries its own legacy admin password, and the schema default
+    // is a known string — so a new event must never keep it.
+    const adminPassword = data.adminPassword?.trim() || randomBytes(18).toString("base64url");
     const [created] = await db
       .insert(events)
-      .values({ ...data, createdAt: new Date().toISOString() })
+      .values({ ...data, adminPassword, createdAt: new Date().toISOString() })
       .returning();
     return created;
   }
