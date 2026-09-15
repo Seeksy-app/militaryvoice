@@ -48,9 +48,12 @@ export function effectiveSchedule(event: EventRow, onAirStart: Date, now = new D
   const ceiling = future.length ? Math.min(...future.map((p) => p.at.getTime())) - 12 * 3600000 : Infinity;
   const out = new Map<CampaignKind, Date>();
   for (const p of future) out.set(p.def.kind, p.at);
+  // Two days apart when there's room; otherwise spread evenly across the room
+  // there is, so a very late booking still never posts twice in one hour.
+  const room = Number.isFinite(ceiling) ? Math.max(0, ceiling - now.getTime()) : Infinity;
+  const step = Math.min(2 * DAY, room / Math.max(1, overdue.length - 1));
   overdue.forEach((p, i) => {
-    const spaced = now.getTime() + i * 2 * DAY;
-    out.set(p.def.kind, new Date(Math.max(now.getTime(), Math.min(spaced, ceiling))));
+    out.set(p.def.kind, new Date(now.getTime() + i * step));
   });
   return out;
 }
