@@ -190,9 +190,10 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
       // its signed-out error state, `enabled: !!data` never flipped, and a
       // correct code left you sitting on the code screen until you reloaded.
       // resetQueries refetches the active ones.
-      for (const key of ["/api/host/dashboard", "/api/host/profile", "/api/host/social"]) {
-        queryClient.resetQueries({ queryKey: [key] });
-      }
+      // Every per-account query, not a hand-kept list: the events tab kept the
+      // previous account's slots after a sign-out/sign-in and showed the wrong
+      // person "Choose a time" for a slot they already held.
+      queryClient.resetQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/host") });
     },
     onError: (err: Error) => toast({ title: "That code didn't work", description: err.message, variant: "destructive" }),
   });
@@ -486,9 +487,7 @@ export default function HostDashboard() {
   const logout = useMutation({
     mutationFn: async () => apiRequest("POST", "/api/host/logout"),
     onSuccess: () => {
-      queryClient.removeQueries({ queryKey: ["/api/host/dashboard"] });
-      queryClient.removeQueries({ queryKey: ["/api/host/profile"] });
-      queryClient.removeQueries({ queryKey: ["/api/host/social"] });
+      queryClient.removeQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/host") });
       setScreen("dashboard");
       clearPending();
     },
