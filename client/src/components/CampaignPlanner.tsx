@@ -19,6 +19,8 @@ interface PlannedPost {
   past: boolean;
   selected: boolean;
   status: "planned" | "posting" | "posted" | "failed" | null;
+  /** Where this one goes (or went). */
+  platforms: string[];
   postedAt: string | null;
   error: string | null;
   caption: string;
@@ -33,6 +35,25 @@ interface Plan {
 
 /** Always shown, connected or not — the greyed ones say where to add them. */
 const OFFERED: SocialPlatform[] = ["instagram", "facebook", "linkedin", "x"];
+
+/** The networks a post goes to, as small badges — so "Posted" says where. */
+function PlatformDots({ platforms, muted = false }: { platforms: string[]; muted?: boolean }) {
+  if (platforms.length === 0) return null;
+  return (
+    <span className="inline-flex items-center gap-1" title={platforms.map((p) => platformLabel(p as SocialPlatform)).join(", ")}>
+      {platforms.map((p) => (
+        <span
+          key={p}
+          className={`flex h-5 w-5 items-center justify-center rounded-full text-white ${muted ? "opacity-70" : ""}`}
+          style={{ background: platformBackground(p as SocialPlatform) }}
+          aria-label={platformLabel(p as SocialPlatform)}
+        >
+          <PlatformIcon platform={p as SocialPlatform} className="h-3 w-3" />
+        </span>
+      ))}
+    </span>
+  );
+}
 
 function dateLabel(iso: string): string {
   return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(new Date(iso));
@@ -225,6 +246,12 @@ export function CampaignPlanner({ signupId }: { signupId: number }) {
                       <p className="flex items-start gap-1 text-xs text-destructive">
                         <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" /> {p.error}
                       </p>
+                    )}
+                    {(done || posting || queued || failed) && p.platforms.length > 0 && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{done ? "Posted to" : failed ? "Was going to" : "Goes to"}</span>
+                        <PlatformDots platforms={p.platforms} muted={!done} />
+                      </div>
                     )}
                     <label className={`flex cursor-pointer items-center gap-2 text-sm font-medium ${done ? "text-muted-foreground" : "text-foreground"}`}>
                       <input

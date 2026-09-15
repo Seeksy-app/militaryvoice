@@ -711,6 +711,7 @@ export function registerRoutes(app: Express): void {
         past: when.getTime() <= now + 3600000,
         selected: Boolean(row),
         status: row?.status ?? null,
+        platforms: row ? row.platforms.split(",").filter(Boolean) : [],
         postedAt: row?.postedAt || null,
         error: row?.error || null,
         caption: campaignCaption(def.kind, ctx),
