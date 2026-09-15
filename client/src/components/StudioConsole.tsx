@@ -185,9 +185,11 @@ export function StudioConsole({ adminGet, adminSend, view }: Props) {
     };
   }, [focus]);
 
-  const { data: studios } = useQuery<(StudioRow & { isPrimary: boolean })[]>({
-    queryKey: ["/api/admin/studios"],
-    queryFn: () => adminGet("/api/admin/studios"),
+  const { data: studios } = useQuery<(StudioRow & { isPrimary: boolean; eventName?: string })[]>({
+    // Every studio, whatever event it belongs to — a rehearsal room shows up
+    // next to the live one.
+    queryKey: ["/api/admin/studios", "all"],
+    queryFn: () => adminGet("/api/admin/studios?all=1"),
   });
 
   const pick = (id: number | null) => {

@@ -619,6 +619,7 @@ export interface IStorage {
   /** Give a claim back so the next run retries it. */
   releaseNudge(signupId: number, kind: NudgeKind): Promise<void>;
   listCampaignPosts(signupId: number): Promise<CampaignPostRow[]>;
+  listAllStudios(): Promise<StudioRow[]>;
   /** Make the stored plan match `picks`; posts already sent are left alone. */
   replaceCampaignPlan(
     signupId: number,
@@ -1100,6 +1101,11 @@ class DatabaseStorage implements IStorage {
   async releaseNudge(signupId: number, kind: NudgeKind): Promise<void> {
     await ready();
     await db.delete(nudges).where(and(eq(nudges.signupId, signupId), eq(nudges.kind, kind)));
+  }
+
+  async listAllStudios(): Promise<StudioRow[]> {
+    await ready();
+    return db.select().from(studios).orderBy(asc(studios.id));
   }
 
   async listCampaignPosts(signupId: number): Promise<CampaignPostRow[]> {

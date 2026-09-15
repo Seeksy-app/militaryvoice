@@ -41,6 +41,8 @@ import {
 } from "lucide-react";
 
 interface Props {
+  /** Which event's agenda. */
+  eventId: number;
   adminGet: <T>(path: string) => Promise<T>;
   adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
 }
@@ -57,7 +59,7 @@ const KIND_STYLE: Record<string, string> = {
 
 const COLLAPSED_ROWS = 8;
 
-export function RunOfShow({ adminGet, adminSend }: Props) {
+export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const zone = useMemo(detectLocalTimeZone, []);
@@ -69,14 +71,15 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState<Partial<RunItemRow>>({});
 
-  const { data: event } = useQuery<EventRow>({ queryKey: ["/api/admin/event"], queryFn: () => adminGet<EventRow>("/api/admin/event") });
+  const { data: events } = useQuery<EventRow[]>({ queryKey: ["/api/admin/events"], queryFn: () => adminGet<EventRow[]>("/api/admin/events") });
+  const event = events?.find((e) => e.id === eventId);
   const { data: items, isLoading } = useQuery<RunItemRow[]>({
-    queryKey: ["/api/admin/run-of-show"],
-    queryFn: () => adminGet<RunItemRow[]>("/api/admin/run-of-show"),
+    queryKey: ["/api/admin/run-of-show", eventId],
+    queryFn: () => adminGet<RunItemRow[]>(`/api/admin/run-of-show?eventId=${eventId}`),
   });
   const { data: signups } = useQuery<SignupRow[]>({
-    queryKey: ["/api/admin/signups"],
-    queryFn: () => adminGet<SignupRow[]>("/api/admin/signups"),
+    queryKey: ["/api/admin/signups", eventId],
+    queryFn: () => adminGet<SignupRow[]>(`/api/admin/signups?eventId=${eventId}`),
   });
   const { data: assets } = useQuery<ShowAssetRow[]>({
     queryKey: ["/api/admin/assets"],
@@ -109,7 +112,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
   }
 
   const generate = useMutation({
-    mutationFn: async () => adminSend("POST", "/api/admin/run-of-show/generate", {}),
+    mutationFn: async () => adminSend("POST", "/api/admin/run-of-show/generate", { eventId }),
     onSuccess: () => {
       refresh();
       toast({ title: "Run of show rebuilt", description: "Generated from the current schedule and bookings." });
@@ -120,6 +123,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
   const addItem = useMutation({
     mutationFn: async () =>
       adminSend("POST", "/api/admin/run-of-show", {
+        eventId,
         item: { kind: "Custom", title: "New item", notes: "", startAtUtc: "", durationMinutes: 0, signupId: null },
       }),
     onSuccess: () => {

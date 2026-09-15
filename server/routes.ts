@@ -65,7 +65,13 @@ import {
   createBroadcast,
 } from "./youtube.js";
 import { buildShareCard, CARD_SIZES, type CardSize } from "./shareCard.js";
-import { sendPrepNudge, sendFinalNudge, sendOnAirNudge, sendBookingAlert } from "./email.js";
+import {
+  sendPrepNudge,
+  sendFinalNudge,
+  sendOnAirNudge,
+  sendBookingAlert,
+  sendScheduleReference
+} from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, StudioRow } from "../shared/schema.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -521,6 +527,35 @@ export function registerRoutes(app: Express): void {
    * podcaster will read it. Records nothing, so it can't stop a real nudge
    * going out later, and it only ever mails the address you name.
    */
+  // Send one of the outward emails to an address you name, to see the design.
+  app.post("/api/admin/emails/preview", requireAdmin, async (req, res) => {
+    const to = String(req.body?.to || "").trim();
+    const kind = String(req.body?.kind || "welcome");
+    if (!to.includes("@")) {
+      res.status(400).json({ message: "Give me an address to send to." });
+      return;
+    }
+    let sent = false;
+    if (kind === "schedule") {
+      sent = await sendScheduleReference(to);
+    } else {
+      const featured = await storage.getFeaturedEvent();
+      const active = (await storage.listSignups(featured.id)).filter((x) => x.status !== "cancelled");
+      const signup = active[active.length - 1];
+      sent = await sendConfirmationEmail({
+        to,
+        hostName: signup?.hostName || "Riccoh",
+        podcastName: signup?.podcastName || "The Devil Dawg Podcast",
+        eventName: featured.name,
+        onAirStartLabel: "Mon, Oct 5 · 9:30 AM",
+        onAirEndLabel: "9:55 AM",
+        timezoneLabel: "US Eastern (EDT)",
+        agendaUrl: `${PUBLIC_ORIGIN}/agenda`,
+      });
+    }
+    res.json({ to, kind, sent });
+  });
+
   app.post("/api/admin/nudges/preview", requireAdmin, async (req, res) => {
     const to = String(req.body?.to || "").trim();
     if (!to.includes("@")) {
@@ -1927,6 +1962,21 @@ export function registerRoutes(app: Express): void {
    *  side rooms — a rehearsal, a test, a second stage running in parallel. */
   app.get("/api/admin/studios", requireAdmin, async (req, res) => {
     noStore(res);
+    if (req.query.all === "1") {
+      // Every studio across every event, for the Studios tab.
+      const events = await storage.listEvents();
+      const rows = await storage.listAllStudios();
+      const firstByEvent = new Map<number, number>();
+      for (const r of rows) if (!firstByEvent.has(r.eventId)) firstByEvent.set(r.eventId, r.id);
+      res.json(
+        rows.map((r) => ({
+          ...r,
+          isPrimary: firstByEvent.get(r.eventId) === r.id,
+          eventName: events.find((e) => e.id === r.eventId)?.name ?? "",
+        })),
+      );
+      return;
+    }
     const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
     // Make sure the event always has at least its own.
     await storage.getOrCreateStudio(eventId);

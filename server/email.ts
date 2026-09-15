@@ -512,3 +512,52 @@ export async function sendBookingAlert(v: BookingAlertInput): Promise<boolean> {
     text,
   });
 }
+
+
+/** The organiser's reference: when every automatic email and post goes out. */
+export async function sendScheduleReference(to: string): Promise<boolean> {
+  const row = (a: string, b: string, c: string) =>
+    `<tr><td style="padding:8px 12px 8px 0;font-weight:700;color:#0b1220;white-space:nowrap;vertical-align:top;">${a}</td><td style="padding:8px 12px 8px 0;color:#053877;font-weight:600;white-space:nowrap;vertical-align:top;">${b}</td><td style="padding:8px 0;color:#374151;vertical-align:top;">${c}</td></tr>`;
+  const head = (t: string) =>
+    `<tr><td colspan="3" style="padding:16px 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;border-bottom:1px solid #e5e7eb;">${t}</td></tr>`;
+  const body = `
+<p style="margin:0 0 12px;">Everything below is automatic. One cron runs <strong>every hour on the hour</strong>; anything due goes out on that pass.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;font-size:15px;line-height:1.5;">
+  ${head("Podcaster nudges — relative to each slot")}
+  ${row("Get ready", "14 days before", "What to send us, how the day runs. Oct 5 slots → Mon Sep 21; Oct 6 early-hours slots → Tue Sep 22.")}
+  ${row("Two days to go", "2 days before", "Final checklist and their exact time. Oct 3 or Oct 4.")}
+  ${row("You're on in an hour", "60 min before", "Studio link. Within the hour before their slot.")}
+  ${row("Rule", "", "Only the most urgent one goes out. Someone booking three days out never gets “two weeks to go”.")}
+  ${head("Posting plan — per podcaster, only the posts they tick")}
+  ${row("Join me", "Mon Aug 31", "Already past → goes out at the next hourly run after they save.")}
+  ${row("Share this", "Mon Sep 7", "Past → 2 days after the first.")}
+  ${row("What is the day?", "Mon Sep 14", "Past → 4 days after the first. Links to the About page.")}
+  ${row("Two weeks to go", "Mon Sep 21", "10:00 AM ET.")}
+  ${row("This week", "Mon Sep 28", "10:00 AM ET.")}
+  ${row("I'm on today", "Show day", "3 hours before their slot.")}
+  ${row("Rule", "", "Anchored to the event, not the booking date. Overdue posts are spaced so nobody's followers get three in one hour.")}
+  ${head("Listeners")}
+  ${row("Remind me", "On tap", "Confirmation with Google / Outlook / Apple calendar links. There is no pre-show email to listeners yet — see note.")}
+</table>
+<p style="margin:16px 0 0;padding:12px 16px;background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;font-size:14px;">
+  <strong>Note:</strong> the homepage tells listeners “We nudge you before the show starts.” Today they only get the
+  calendar links at sign-up; the pre-show email itself isn't built yet. Say the word and it rides the same hourly cron.
+</p>`;
+  const text =
+    "Podcaster nudges (relative to each slot): Get ready 14 days before; Two days to go 2 days before; You're on in an hour 60 min before. Only the most urgent goes out.\n" +
+    "Posting plan (only what they tick): Join me Aug 31 (past, next run); Share this Sep 7 (past, +2d); What is the day? Sep 14 (past, +4d); Two weeks Sep 21 10am ET; This week Sep 28 10am ET; I'm on today 3h before slot.\n" +
+    "Listeners: calendar links at sign-up; no pre-show email yet.\nCron: every hour on the hour.";
+  return sendRawEmail({
+    to,
+    subject: "Your automatic sends: nudges and posting plan dates",
+    html: emailShell({
+      banner: EMAIL_BANNERS.podcasters,
+      eyebrow: "24 Hour Podcastathon · reference",
+      heading: "When every automatic email and post goes out",
+      body,
+      cta: { href: `${SITE}/admin`, label: "Open the admin dashboard" },
+      footerNote: "Internal reference for the organiser. Dates are US Eastern.",
+    }),
+    text,
+  });
+}

@@ -24,7 +24,7 @@ import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi
 import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
-import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle } from "lucide-react";
+import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy } from "lucide-react";
 import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
@@ -512,13 +512,14 @@ function EventsManagementCard() {
   );
 }
 
-function EventSettingsCard() {
+function EventSettingsCard({ eventId }: { eventId: number }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { data: event } = useQuery<EventRow>({
-    queryKey: ["/api/admin/event"],
-    queryFn: () => adminGet<EventRow>("/api/admin/event"),
+  const { data: events } = useQuery<PublicEvent[]>({
+    queryKey: ["/api/admin/events"],
+    queryFn: () => adminGet<PublicEvent[]>("/api/admin/events"),
   });
+  const event = events?.find((e) => e.id === eventId);
 
   const [zone, setZone] = useState(detectLocalTimeZone);
   const localZone = useMemo(detectLocalTimeZone, []);
@@ -583,10 +584,12 @@ function EventSettingsCard() {
         bufferMinutes: form.bufferMinutes,
         bufferPosition: form.bufferPosition,
       };
-      await adminSend("PUT", "/api/admin/event", patch);
+      await adminSend("PUT", `/api/admin/events/${eventId}`, patch);
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/events"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/admin/event"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/event"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/events"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/signups"] }),
         queryClient.invalidateQueries({ queryKey: ["/api/admin/signups"] }),
       ]);
@@ -782,16 +785,17 @@ function EventSettingsCard() {
   );
 }
 
-function SignupsCard() {
+function SignupsCard({ eventId }: { eventId: number }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { data: event } = useQuery<EventRow>({
-    queryKey: ["/api/admin/event"],
-    queryFn: () => adminGet<EventRow>("/api/admin/event"),
+  const { data: events } = useQuery<PublicEvent[]>({
+    queryKey: ["/api/admin/events"],
+    queryFn: () => adminGet<PublicEvent[]>("/api/admin/events"),
   });
+  const event = events?.find((e) => e.id === eventId);
   const { data: signups, isLoading } = useQuery<SignupRow[]>({
-    queryKey: ["/api/admin/signups"],
-    queryFn: () => adminGet<SignupRow[]>("/api/admin/signups"),
+    queryKey: ["/api/admin/signups", eventId],
+    queryFn: () => adminGet<SignupRow[]>(`/api/admin/signups?eventId=${eventId}`),
   });
   // What each podcaster has actually sent us, keyed by email.
   const { data: assets } = useQuery<ShowAssetRow[]>({
@@ -1277,9 +1281,196 @@ function SponsorsCard() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Events first. Admin is a home for many events; you pick one and get its
+// dashboard. Studios, sponsors and the team are shared across all of them.
+// ---------------------------------------------------------------------------
+function EventPicker({ onOpen }: { onOpen: (id: number) => void }) {
+  const { data: events, isLoading } = useQuery<PublicEvent[]>({
+    queryKey: ["/api/admin/events"],
+    queryFn: () => adminGet<PublicEvent[]>("/api/admin/events"),
+  });
+  const { data: signups } = useQuery<SignupRow[]>({
+    queryKey: ["/api/admin/signups"],
+    queryFn: () => adminGet<SignupRow[]>("/api/admin/signups"),
+  });
+  const zone = useMemo(detectLocalTimeZone, []);
+  if (isLoading || !events) return <Skeleton className="h-32 w-full rounded-xl" />;
+  return (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {events.map((e) => {
+        const start = new Date(e.startAtUtc);
+        const booked = (signups ?? []).filter((s) => s.eventId === e.id && s.status !== "cancelled").length;
+        const total = Math.floor((e.durationHours * 60) / e.slotMinutes);
+        return (
+          <button
+            key={e.id}
+            type="button"
+            onClick={() => onOpen(e.id)}
+            className="group overflow-hidden rounded-2xl border border-border bg-card text-left transition-colors hover:border-primary/50"
+            data-testid={`event-open-${e.id}`}
+          >
+            <div className="h-28 bg-[#053877] bg-cover bg-center" style={e.imageUrl ? { backgroundImage: `url(${e.imageUrl})` } : undefined} />
+            <div className="p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-base font-semibold text-card-foreground">{e.name}</div>
+                  <div className="text-xs text-muted-foreground">{e.occasion || e.tagline}</div>
+                </div>
+                {e.isFeatured && <Badge className="shrink-0 bg-[#F0A71F] text-[#1a1200] hover:bg-[#F0A71F]">Live site</Badge>}
+              </div>
+              <div className="mt-3 text-sm text-muted-foreground">
+                {formatDateInZone(start, zone)} · {formatTimeInZone(start, zone)} · {e.durationHours}h
+              </div>
+              <div className="mt-1 text-sm font-medium text-foreground">{booked} of {total} slots booked</div>
+              <div className="mt-3 text-sm font-semibold text-primary group-hover:underline">Open dashboard →</div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function StudiosPanel() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: studios } = useQuery<(StudioRowLite & { isPrimary: boolean; eventName?: string })[]>({
+    queryKey: ["/api/admin/studios", "all"],
+    queryFn: () => adminGet("/api/admin/studios?all=1"),
+  });
+  const { data: events } = useQuery<PublicEvent[]>({
+    queryKey: ["/api/admin/events"],
+    queryFn: () => adminGet<PublicEvent[]>("/api/admin/events"),
+  });
+  const [view, setView] = useState<"live" | "set">("live");
+  const [consoleKey, setConsoleKey] = useState(0);
+  const [name, setName] = useState("");
+  const origin = typeof window === "undefined" ? "https://www.militaryvoice.ai" : window.location.origin;
+
+  async function create() {
+    const featured = events?.find((e) => e.isFeatured) ?? events?.[0];
+    if (!featured) return;
+    await adminSend("POST", "/api/admin/studios", { eventId: featured.id, name: name.trim() || "Rehearsal studio" });
+    setName("");
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/studios"] });
+    toast({ title: "Studio created", description: "Send the join link to whoever's rehearsing with you." });
+  }
+  async function remove(id: number) {
+    try {
+      await adminSend("DELETE", `/api/admin/studios/${id}`);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/studios"] });
+    } catch (err) {
+      toast({ title: "Can't remove that one", description: (err as Error).message, variant: "destructive" });
+    }
+  }
+  function openConsole(id: number) {
+    localStorage.setItem("mv_admin_studio", String(id));
+    queryClient.removeQueries({ queryKey: ["/api/admin/studio"] });
+    setConsoleKey((k) => k + 1);
+    setView("live");
+  }
+  function copy(text: string) {
+    navigator.clipboard.writeText(text).then(
+      () => toast({ title: "Link copied" }),
+      () => toast({ title: "Couldn't copy", variant: "destructive" }),
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Studios</CardTitle>
+          <CardDescription>
+            Each studio is its own room with its own green room and stage. The event's studio is where the show
+            happens; make another one to rehearse in without touching it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {(studios ?? []).map((st) => {
+            const join = `${origin}/studio?studioId=${st.id}`;
+            return (
+              <div key={st.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border p-3" data-testid={`studio-row-${st.id}`}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-card-foreground">{st.name || "Studio"}</span>
+                    {st.isPrimary && <Badge variant="outline" className="text-[11px] font-normal">event studio</Badge>}
+                    <Badge variant="outline" className="text-[11px] font-normal">{st.status}</Badge>
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{st.eventName}</div>
+                  <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{join}</div>
+                </div>
+                <Button size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={() => copy(join)} data-testid={`studio-copy-${st.id}`}>
+                  <Copy className="h-3.5 w-3.5" /> Copy join link
+                </Button>
+                <Button size="sm" className="rounded-full" onClick={() => openConsole(st.id)} data-testid={`studio-console-${st.id}`}>
+                  Open console
+                </Button>
+                {!st.isPrimary && (
+                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => remove(st.id)} aria-label="Remove studio">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            );
+          })}
+          <form
+            className="mt-1 flex flex-wrap items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              create();
+            }}
+          >
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Rehearsal studio" className="h-9 max-w-xs" data-testid="input-new-studio" />
+            <Button type="submit" size="sm" className="gap-1.5 rounded-full" data-testid="button-new-studio">
+              <Plus className="h-3.5 w-3.5" /> New studio
+            </Button>
+            <span className="text-xs text-muted-foreground">Anyone with the join link lands in its green room; you bring them on from the console.</span>
+          </form>
+        </CardContent>
+      </Card>
+
+      <div className="inline-flex w-fit rounded-full border border-border bg-card p-1">
+        {(["live", "set"] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setView(v)}
+            className={`rounded-full px-4 py-1.5 text-sm font-semibold ${view === v ? "bg-[#053877] text-white" : "text-foreground"}`}
+            data-testid={`studio-view-${v}`}
+          >
+            {v === "live" ? "Console" : "Studio set"}
+          </button>
+        ))}
+      </div>
+      <StudioConsole key={`${view}-${consoleKey}`} adminGet={adminGet} adminSend={adminSend} view={view} />
+    </div>
+  );
+}
+
+type StudioRowLite = { id: number; eventId: number; name: string; status: string };
+
 export default function Admin() {
   const { isAuthenticated, isLoading, admin, logout } = useAdminAuth();
   const isMobile = useIsMobile();
+  // Which event's dashboard is open. Remembered so a refresh doesn't bounce
+  // you back to the list mid-show.
+  const [selectedEventId, setSelectedEventId] = useState<number | null>(() => {
+    const v = Number(localStorage.getItem("mv_admin_event"));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  });
+  const pickEvent = (id: number | null) => {
+    setSelectedEventId(id);
+    if (id) localStorage.setItem("mv_admin_event", String(id));
+    else localStorage.removeItem("mv_admin_event");
+  };
+  const { data: adminEvents } = useQuery<PublicEvent[]>({
+    queryKey: ["/api/admin/events"],
+    queryFn: () => adminGet<PublicEvent[]>("/api/admin/events"),
+    enabled: isAuthenticated,
+  });
+  const selectedEvent = adminEvents?.find((e) => e.id === selectedEventId) ?? null;
 
   return (
     <div className="min-h-screen">
@@ -1309,74 +1500,74 @@ export default function Admin() {
             </Button>
           </div>
 
-          <Tabs defaultValue="studio">
-            <TabsList className={`grid w-full ${isMobile ? "grid-cols-4" : "grid-cols-7"}`}>
-              <TabsTrigger value="studio" data-testid="tab-admin-studio">
-                Studio
-              </TabsTrigger>
-              <TabsTrigger value="studioset" data-testid="tab-admin-studioset">
-                Studio set
-              </TabsTrigger>
-              <TabsTrigger value="run" data-testid="tab-admin-run">
-                Agenda
-              </TabsTrigger>
-              <TabsTrigger value="setup" data-testid="tab-admin-setup">
-                Event details
-              </TabsTrigger>
+          {selectedEventId && selectedEvent ? (
+            <>
+              <button
+                type="button"
+                onClick={() => pickEvent(null)}
+                className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                data-testid="button-all-events"
+              >
+                ← All events
+              </button>
+              <h2 className="mb-4 text-2xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
+                {selectedEvent.name}
+                {selectedEvent.isFeatured && <Badge className="ml-3 bg-[#F0A71F] align-middle text-[#1a1200] hover:bg-[#F0A71F]">Live site</Badge>}
+              </h2>
+              <Tabs defaultValue="run">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="run" data-testid="tab-admin-run">Agenda</TabsTrigger>
+                  <TabsTrigger value="setup" data-testid="tab-admin-setup">Event details</TabsTrigger>
+                  <TabsTrigger value="signups" data-testid="tab-admin-signups">Podcasters</TabsTrigger>
+                </TabsList>
+                <TabsContent value="run" className="mt-6">
+                  <RunOfShow adminGet={adminGet} adminSend={adminSend} eventId={selectedEventId} />
+                </TabsContent>
+                <TabsContent value="setup" className="mt-6">
+                  <EventSettingsCard eventId={selectedEventId} />
+                </TabsContent>
+                <TabsContent value="signups" className="mt-6">
+                  <SignupsCard eventId={selectedEventId} />
+                </TabsContent>
+              </Tabs>
+            </>
+          ) : (
+            <Tabs defaultValue="events">
+              <TabsList className={`grid w-full ${isMobile ? "grid-cols-2" : "grid-cols-4"}`}>
+                <TabsTrigger value="events" data-testid="tab-admin-events">Events</TabsTrigger>
+                <TabsTrigger value="studios" data-testid="tab-admin-studios">Studios</TabsTrigger>
+                {!isMobile && (
+                  <>
+                    <TabsTrigger value="sponsors" data-testid="tab-admin-sponsors">Sponsors</TabsTrigger>
+                    <TabsTrigger value="team" data-testid="tab-admin-team">Team</TabsTrigger>
+                  </>
+                )}
+              </TabsList>
+              <TabsContent value="events" className="mt-6 flex flex-col gap-8">
+                <EventPicker onOpen={pickEvent} />
+                <EventsManagementCard />
+                {isMobile && (
+                  <>
+                    <SponsorsCard />
+                    <TeamCard />
+                  </>
+                )}
+              </TabsContent>
+              <TabsContent value="studios" className="mt-6">
+                <StudiosPanel />
+              </TabsContent>
               {!isMobile && (
                 <>
-                  <TabsTrigger value="signups" data-testid="tab-admin-signups">
-                    Podcasters
-                  </TabsTrigger>
-                  <TabsTrigger value="sponsors" data-testid="tab-admin-sponsors">
-                    Sponsors
-                  </TabsTrigger>
-                  <TabsTrigger value="team" data-testid="tab-admin-team">
-                    Team
-                  </TabsTrigger>
+                  <TabsContent value="sponsors" className="mt-6">
+                    <SponsorsCard />
+                  </TabsContent>
+                  <TabsContent value="team" className="mt-6">
+                    <TeamCard />
+                  </TabsContent>
                 </>
               )}
-            </TabsList>
-
-            <TabsContent value="studio" className="mt-6">
-              <StudioConsole adminGet={adminGet} adminSend={adminSend} view="live" />
-            </TabsContent>
-
-            <TabsContent value="studioset" className="mt-6">
-              <StudioConsole adminGet={adminGet} adminSend={adminSend} view="set" />
-            </TabsContent>
-
-            <TabsContent value="run" className="mt-6">
-              <RunOfShow adminGet={adminGet} adminSend={adminSend} />
-            </TabsContent>
-
-            {/* On a phone everything that isn't show-day lives behind one tab. */}
-            <TabsContent value="setup" className="mt-6 flex flex-col gap-6">
-              <EventsManagementCard />
-              <EventSettingsCard />
-              {isMobile && (
-                <>
-                  <SignupsCard />
-                  <SponsorsCard />
-                  <TeamCard />
-                </>
-              )}
-            </TabsContent>
-
-            {!isMobile && (
-              <>
-                <TabsContent value="signups" className="mt-6">
-                  <SignupsCard />
-                </TabsContent>
-                <TabsContent value="sponsors" className="mt-6">
-                  <SponsorsCard />
-                </TabsContent>
-                <TabsContent value="team" className="mt-6">
-                  <TeamCard />
-                </TabsContent>
-              </>
-            )}
-          </Tabs>
+            </Tabs>
+          )}
         </div>
       )}
     </div>
