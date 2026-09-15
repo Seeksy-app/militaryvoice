@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Room,
-  RoomEvent,
-  Track,
-  type RemoteParticipant,
-  type RemoteTrack,
-  type RemoteTrackPublication,
-} from "livekit-client";
+import { Room, RoomEvent, Track, type Participant, type TrackPublication } from "livekit-client";
 
 // The control room's view of the LiveKit room: subscribe to everyone, publish
 // nothing. This is what puts a live thumbnail next to each name in the green
@@ -18,8 +11,9 @@ export interface ProducerFeed {
   /** Mirrored from our database onto the LiveKit participant by the server. */
   state: string;
   speaking: boolean;
-  video: RemoteTrack | null;
-  audio: RemoteTrack | null;
+  /** Remote tracks for everyone else; the producer's own local tracks when on camera. */
+  video: Track | null;
+  audio: Track | null;
 }
 
 type Status = "idle" | "connecting" | "connected" | "unavailable" | "error";
@@ -50,10 +44,10 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
 
     const snapshot = (r: Room) => {
       const next = new Map<string, ProducerFeed>();
-      r.remoteParticipants.forEach((p: RemoteParticipant) => {
-        let video: RemoteTrack | null = null;
-        let audio: RemoteTrack | null = null;
-        p.trackPublications.forEach((pub: RemoteTrackPublication) => {
+      const add = (p: Participant) => {
+        let video: Track | null = null;
+        let audio: Track | null = null;
+        p.trackPublications.forEach((pub: TrackPublication) => {
           if (!pub.track) return;
           if (pub.kind === Track.Kind.Video) video = pub.track;
           if (pub.kind === Track.Kind.Audio) audio = pub.track;
@@ -66,7 +60,11 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
           video,
           audio,
         });
-      });
+      };
+      r.remoteParticipants.forEach(add);
+      // The producer on camera is a participant too. Leaving them out is why
+      // the Host tile showed initials and the host could never be put on stage.
+      if (publish && r.localParticipant.trackPublications.size > 0) add(r.localParticipant);
       setFeeds(next);
     };
 
@@ -100,6 +98,10 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
         .on(RoomEvent.TrackUnsubscribed, refresh)
         .on(RoomEvent.ParticipantAttributesChanged, refresh)
         .on(RoomEvent.ActiveSpeakersChanged, refresh)
+        .on(RoomEvent.LocalTrackPublished, refresh)
+        .on(RoomEvent.LocalTrackUnpublished, refresh)
+        .on(RoomEvent.TrackMuted, refresh)
+        .on(RoomEvent.TrackUnmuted, refresh)
         .on(RoomEvent.Disconnected, () => !cancelled && setStatus("idle"));
 
       try {

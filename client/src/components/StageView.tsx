@@ -31,8 +31,9 @@ export interface RoomMeta {
 export interface StageTile {
   identity: string;
   name: string;
-  video: RemoteTrack | null;
-  audio: RemoteTrack | null;
+  /** A remote participant's track, or the producer's own local one when they're on camera. */
+  video: Track | null;
+  audio: Track | null;
   speaking: boolean;
 }
 

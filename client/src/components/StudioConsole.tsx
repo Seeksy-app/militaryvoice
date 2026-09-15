@@ -69,6 +69,10 @@ interface Props {
    * one-off spaces), never an event studio. Omit for the old everything list.
    */
   kind?: "event" | "room";
+  /** Pin the console to one studio/room; the picker is hidden and nothing can drift it. */
+  fixedStudioId?: number;
+  /** In a room: "Leave the room" takes you back to the list. */
+  onLeave?: () => void;
   adminGet: <T>(path: string) => Promise<T>;
   adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
   /**
@@ -153,7 +157,7 @@ function DeckButton({
   );
 }
 
-export function StudioConsole({ adminGet, adminSend, view, eventId, kind }: Props) {
+export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedStudioId, onLeave }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const zone = useMemo(detectLocalTimeZone, []);
@@ -163,6 +167,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind }: Prop
   // Which room we're looking at. Remembered per browser so a refresh mid-show
   // doesn't drop you back into the wrong studio.
   const [studioId, setStudioId] = useState<number | null>(() => {
+    if (fixedStudioId) return fixedStudioId;
     const v = Number(localStorage.getItem("mv_admin_studio"));
     return Number.isFinite(v) && v > 0 ? v : null;
   });
@@ -200,6 +205,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind }: Prop
   });
 
   const pick = (id: number | null) => {
+    if (fixedStudioId) return;
     setStudioId(id);
     if (id) localStorage.setItem("mv_admin_studio", String(id));
     else localStorage.removeItem("mv_admin_studio");
@@ -380,7 +386,10 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind }: Prop
 
   const live = studio?.status === "Live";
   const recording = Boolean(studio?.recordingEgressId);
-  const broadcasting = Boolean(studio?.broadcastEgressId);
+  // "Live" without external destinations has no egress at all — the audience
+  // watches on our page — so the button has to read the status, not the egress.
+  const broadcasting = Boolean(studio?.broadcastEgressId) || studio?.status === "Live";
+  const isRoom = kind === "room";
   const stageFull = !!studio && onStage.length >= studio.maxOnStage;
   /**
    * The standby clip is played by a <video> tag on the broadcast, so it has to
@@ -620,7 +629,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind }: Prop
           <div className="ml-auto flex flex-wrap items-center gap-2">
             {/* The event studio stands alone; rooms pick among rooms. Only the
                 legacy everything-view still offers "new" here. */}
-            {(kind !== "event" || visibleStudios.length > 1) && (
+            {!fixedStudioId && (kind !== "event" || visibleStudios.length > 1) && (
               <Select
                 value={String(currentStudio?.id ?? "")}
                 onValueChange={(v) => (v === "new" ? makeStudio.mutate("New studio") : pick(Number(v)))}
@@ -702,10 +711,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind }: Prop
                 onClick={() => {
                   setFocus(false);
                   if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
+                  onLeave?.();
                 }}
                 data-testid="button-studio-exit-focus"
               >
-                <LogOut className="h-3.5 w-3.5" /> Leave the studio
+                <LogOut className="h-3.5 w-3.5" /> {onLeave ? "Leave the room" : "Leave the studio"}
               </Button>
             )}
 
@@ -719,11 +729,16 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind }: Prop
                       ? "bg-white/15 text-white hover:bg-white/25"
                       : "bg-[#ED1C24] text-white shadow-[0_6px_20px_rgba(237,28,36,0.45)] hover:bg-[#c81820]"
                   }`}
-                  disabled={broadcast.isPending}
-                  onClick={() => broadcast.mutate(broadcasting ? "stop" : "start")}
+                  disabled={isRoom ? record.isPending : broadcast.isPending}
+                  onClick={() =>
+                    isRoom
+                      ? record.mutate(recording ? { action: "stop" } : { action: "start" })
+                      : broadcast.mutate(broadcasting ? "stop" : "start")
+                  }
                   data-testid="button-broadcast-toggle"
                 >
-                  <Signal className="h-3.5 w-3.5" /> {broadcasting ? "Stop the live stream" : "Start live stream"}
+                  {isRoom ? <Disc className="h-3.5 w-3.5" /> : <Signal className="h-3.5 w-3.5" />}{" "}
+                  {isRoom ? (recording ? "Stop & save recording" : "Start recording") : broadcasting ? "End the live stream" : "Start live stream"}
                 </Button>
               </>
             )}
@@ -815,6 +830,31 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind }: Prop
           <div className="flex min-h-0 flex-1">
             {/* green room, down the left, where a producer's eye already is */}
             <aside className="flex w-[248px] shrink-0 flex-col border-r border-white/10">
+              {onStage.length > 0 && (
+                <div className="border-b border-white/10 px-3 py-2.5">
+                  <div className="mb-2 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
+                    On stage · {onStage.length}/{studio?.maxOnStage ?? 5}
+                  </div>
+                  <div className="space-y-1.5">
+                    {onStage.map((p) => (
+                      <div key={p.id} className="flex items-center gap-2 rounded-lg bg-[#ED1C24]/15 px-2 py-1.5">
+                        <span className="min-w-0 flex-1 truncate text-xs font-medium text-white">
+                          {p.displayName || "Unnamed"}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 gap-1 rounded-full px-2 text-[12px] text-white/70 hover:bg-white/10 hover:text-white"
+                          onClick={() => setState.mutate({ id: p.id, state: "Green room" })}
+                          data-testid={`button-live-down-${p.id}`}
+                        >
+                          <ArrowDown className="h-3 w-3" /> Off
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center justify-between px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
                 <span className="flex items-center gap-1.5">
                   <Users className="h-3.5 w-3.5" /> Green room
@@ -869,31 +909,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind }: Prop
                 )}
               </div>
 
-              {onStage.length > 0 && (
-                <div className="border-t border-white/10 px-3 py-2.5">
-                  <div className="mb-2 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
-                    On stage · {onStage.length}/{studio?.maxOnStage ?? 5}
-                  </div>
-                  <div className="space-y-1.5">
-                    {onStage.map((p) => (
-                      <div key={p.id} className="flex items-center gap-2 rounded-lg bg-[#ED1C24]/15 px-2 py-1.5">
-                        <span className="min-w-0 flex-1 truncate text-xs font-medium text-white">
-                          {p.displayName || "Unnamed"}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 gap-1 rounded-full px-2 text-[12px] text-white/70 hover:bg-white/10 hover:text-white"
-                          onClick={() => setState.mutate({ id: p.id, state: "Green room" })}
-                          data-testid={`button-live-down-${p.id}`}
-                        >
-                          <ArrowDown className="h-3 w-3" /> Off
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </aside>
 
             {/* the programme, filling whatever is left */}
@@ -1118,15 +1133,26 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind }: Prop
               <Button
                 size="sm"
                 className={`h-9 gap-1.5 rounded-full px-4 font-semibold ${
-                  broadcasting
+                  (isRoom ? recording : broadcasting)
                     ? "bg-white/15 text-white hover:bg-white/25"
                     : "bg-[#ED1C24] text-white hover:bg-[#c81820]"
                 }`}
-                disabled={broadcast.isPending}
-                onClick={() => broadcast.mutate(broadcasting ? "stop" : "start")}
+                disabled={isRoom ? record.isPending : broadcast.isPending}
+                onClick={() =>
+                  isRoom
+                    ? record.mutate(recording ? { action: "stop" } : { action: "start" })
+                    : broadcast.mutate(broadcasting ? "stop" : "start")
+                }
                 data-testid="button-deck-broadcast"
               >
-                <Signal className="h-3.5 w-3.5" /> {broadcasting ? "Stop the live stream" : "Start live stream"}
+                {isRoom ? <Disc className="h-3.5 w-3.5" /> : <Signal className="h-3.5 w-3.5" />}{" "}
+                {isRoom
+                  ? recording
+                    ? "Stop & save recording"
+                    : "Start recording"
+                  : broadcasting
+                    ? "End the live stream"
+                    : "Start live stream"}
               </Button>
             </div>
           </div>

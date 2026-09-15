@@ -1355,7 +1355,7 @@ function RoomView({ roomId, onBack }: { roomId: number; onBack: () => void }) {
           ))}
         </div>
       </div>
-      <StudioConsole key={`room-${roomId}-${view}`} adminGet={adminGet} adminSend={adminSend} view={view} kind="room" />
+      <StudioConsole key={`room-${roomId}-${view}`} adminGet={adminGet} adminSend={adminSend} view={view} kind="room" fixedStudioId={roomId} onLeave={onBack} />
     </div>
   );
 }
