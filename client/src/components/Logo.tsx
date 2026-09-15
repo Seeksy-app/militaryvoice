@@ -18,7 +18,7 @@ export function Wordmark({ className = "" }: { className?: string }) {
  * rebuild of it in web type. Sized by height (it's about 1.5:1). The dark
  * variant swaps the near-black letters for white; the amber stays.
  */
-export function LogoLockup({ className = "h-14 sm:h-16" }: { className?: string }) {
+export function LogoLockup({ className = "h-14 lg:h-[72px]" }: { className?: string }) {
   return (
     <>
       <img src="/logo-lockup.png?v=3" alt="MilitaryVoice.ai" className={`w-auto dark:hidden ${className}`} />
