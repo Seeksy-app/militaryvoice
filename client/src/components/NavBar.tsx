@@ -20,7 +20,6 @@ import type { ProfileRow } from "@shared/schema";
 const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/#podcasters", label: "Podcasters", anchor: true },
   { href: "/#listeners", label: "Listeners", anchor: true },
-  { href: "/schedule", label: "Schedule" },
   { href: "/agenda", label: "Agenda" },
   { href: "/faq", label: "FAQ" },
   { href: "/platform", label: "About Us" },
