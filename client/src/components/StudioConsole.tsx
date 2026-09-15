@@ -6,6 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
+import type { PublicDestination, SocialPlatform } from "@shared/schema";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,6 +62,8 @@ import {
   Maximize2,
   Minimize2,
   LogOut,
+  ChevronDown,
+  Settings2,
 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -93,6 +100,24 @@ interface StudioPayload {
 /** Live camera thumbnail for one participant, or their initials if they
  *  haven't published yet. Muted: the control room monitors on the stage feed,
  *  not by playing every green-room mic at once. */
+const SOCIAL: SocialPlatform[] = ["instagram", "tiktok", "youtube", "x", "linkedin", "facebook", "threads"];
+/** A destination's badge: the network's own mark when we have one, a signal icon otherwise. */
+function DestIcon({ platform }: { platform: string }) {
+  const p = platform.toLowerCase() as SocialPlatform;
+  if (SOCIAL.includes(p)) {
+    return (
+      <span className="flex h-5 w-5 items-center justify-center rounded-full text-white" style={{ background: platformBackground(p) }} title={platform}>
+        <PlatformIcon platform={p} className="h-3 w-3" />
+      </span>
+    );
+  }
+  return (
+    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-white" title={platform}>
+      <Signal className="h-3 w-3" />
+    </span>
+  );
+}
+
 function FeedThumb({ feed, initials, fill }: { feed?: ProducerFeed; initials: string; fill?: boolean }) {
   const ref = useRef<HTMLVideoElement | null>(null);
 
@@ -334,7 +359,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/scenes", studioId] }),
   });
 
-  const { data: dests } = useQuery<{ id: number; enabled: boolean; signupId: number | null }[]>({
+  const { data: dests } = useQuery<PublicDestination[]>({
     queryKey: ["/api/admin/destinations"],
     queryFn: () => adminGet("/api/admin/destinations"),
   });
@@ -351,6 +376,12 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
       queryClient.invalidateQueries({ queryKey: ["/api/admin/destinations"] });
     },
     onError: (e: Error) => toast({ title: "Broadcast didn't change", description: e.message, variant: "destructive" }),
+  });
+
+  const toggleDest = useMutation({
+    mutationFn: async (d: { id: number; enabled: boolean }) => adminSend("PATCH", `/api/admin/destinations/${d.id}`, { enabled: d.enabled }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/destinations"] }),
+    onError: (e: Error) => toast({ title: "Couldn't change that destination", description: e.message, variant: "destructive" }),
   });
 
   const record = useMutation({
@@ -534,7 +565,8 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     return () => clearInterval(id);
   }, [onCamera, selfKey, camOn, micOn, studioId]);
 
-  const houseDests = (dests ?? []).filter((d) => d.enabled && !d.signupId).length;
+  const houseDestRows = (dests ?? []).filter((d) => !d.signupId);
+  const houseDests = houseDestRows.filter((d) => d.enabled).length;
   const steps = [
     { n: 1, label: "Get people in", done: present.length > 0, hint: "Send them the join link." },
     { n: 2, label: "Put someone on stage", done: onStage.length > 0, hint: "Press On beside a name in the green room." },
@@ -652,23 +684,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               </Select>
             )}
 
-            {isLive && (
-            <Select value={studio?.status ?? "Offline"} onValueChange={(v) => patchStudio.mutate({ status: v })}>
-              <SelectTrigger
-                className="h-9 w-[124px] border-white/20 bg-white/10 text-white hover:bg-white/15"
-                data-testid="select-studio-status"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {STUDIO_STATUSES.map((v) => (
-                  <SelectItem key={v} value={v}>
-                    {v}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            )}
 
             {!isPrimary && currentStudio && (
               <Button
@@ -722,24 +737,134 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             {isLive && (
               <>
                 <span className="mx-1 hidden h-7 w-px bg-white/15 sm:block" />
-                <Button
-                  size="sm"
-                  className={`h-9 gap-1.5 rounded-full px-4 font-semibold ${
-                    broadcasting
-                      ? "bg-white/15 text-white hover:bg-white/25"
-                      : "bg-[#ED1C24] text-white shadow-[0_6px_20px_rgba(237,28,36,0.45)] hover:bg-[#c81820]"
-                  }`}
-                  disabled={isRoom ? record.isPending : broadcast.isPending}
-                  onClick={() =>
-                    isRoom
-                      ? record.mutate(recording ? { action: "stop" } : { action: "start" })
-                      : broadcast.mutate(broadcasting ? "stop" : "start")
-                  }
-                  data-testid="button-broadcast-toggle"
-                >
-                  {isRoom ? <Disc className="h-3.5 w-3.5" /> : <Signal className="h-3.5 w-3.5" />}{" "}
-                  {isRoom ? (recording ? "Stop & save recording" : "Start recording") : broadcasting ? "End the live stream" : "Start live stream"}
-                </Button>
+
+                {/* Where the stream goes. Icons for what's on; tap to switch any on or off. */}
+                {!isRoom && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex h-9 items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 text-xs font-medium text-white/85 hover:bg-white/15"
+                        title="Where the live stream goes"
+                        data-testid="button-destinations"
+                      >
+                        <span className="text-white/55">To</span>
+                        {houseDestRows.filter((d) => d.enabled).length === 0 ? (
+                          <span>our watch page</span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            {houseDestRows
+                              .filter((d) => d.enabled)
+                              .map((d) => (
+                                <DestIcon key={d.id} platform={d.platform} />
+                              ))}
+                          </span>
+                        )}
+                        <ChevronDown className="h-3 w-3 text-white/60" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-80 p-3">
+                      <p className="text-sm font-semibold">Streaming to</p>
+                      <p className="text-xs text-muted-foreground">Our watch page is always on. Switch the others on or off here.</p>
+                      <div className="mt-3 flex flex-col gap-2">
+                        {houseDestRows.length === 0 && (
+                          <p className="text-xs text-muted-foreground">No external destinations yet — add YouTube, X or a custom RTMP under Studio set.</p>
+                        )}
+                        {houseDestRows.map((d) => (
+                          <label key={d.id} className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-sm">
+                            <DestIcon platform={d.platform} />
+                            <span className="min-w-0 flex-1 truncate">{d.label || d.platform}</span>
+                            {d.live && <span className="text-[11px] font-semibold text-[#ED1C24]">live</span>}
+                            <Switch checked={d.enabled} onCheckedChange={(v) => toggleDest.mutate({ id: d.id, enabled: v })} />
+                          </label>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+
+                {/* One control for going on: live stream, record, or both. */}
+                {broadcasting || recording ? (
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white">
+                      {broadcasting && (
+                        <span className="flex items-center gap-1.5">
+                          <span className="h-2 w-2 animate-pulse rounded-full bg-[#ED1C24]" /> Live
+                        </span>
+                      )}
+                      {broadcasting && recording && <span className="text-white/40">·</span>}
+                      {recording && (
+                        <span className="flex items-center gap-1.5">
+                          <Disc className="h-3 w-3 text-[#ED1C24]" /> Recording
+                        </span>
+                      )}
+                    </span>
+                    <Button
+                      size="sm"
+                      className="h-9 gap-1.5 rounded-full bg-white/15 px-4 font-semibold text-white hover:bg-white/25"
+                      disabled={broadcast.isPending || record.isPending}
+                      onClick={() => {
+                        if (recording) record.mutate({ action: "stop" });
+                        if (broadcasting) broadcast.mutate("stop");
+                      }}
+                      data-testid="button-end-all"
+                    >
+                      <Square className="h-3.5 w-3.5" /> End
+                    </Button>
+                  </div>
+                ) : isRoom ? (
+                  <Button
+                    size="sm"
+                    className="h-9 gap-1.5 rounded-full bg-[#ED1C24] px-4 font-semibold text-white shadow-[0_6px_20px_rgba(237,28,36,0.45)] hover:bg-[#c81820]"
+                    disabled={record.isPending}
+                    onClick={() => record.mutate({ action: "start" })}
+                    data-testid="button-broadcast-toggle"
+                  >
+                    <Disc className="h-3.5 w-3.5" /> Start recording
+                  </Button>
+                ) : (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        className="h-9 gap-1.5 rounded-full bg-[#ED1C24] px-4 font-semibold text-white shadow-[0_6px_20px_rgba(237,28,36,0.45)] hover:bg-[#c81820]"
+                        disabled={broadcast.isPending || record.isPending}
+                        data-testid="button-broadcast-toggle"
+                      >
+                        <Signal className="h-3.5 w-3.5" /> Go on air <ChevronDown className="h-3.5 w-3.5 opacity-80" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-64">
+                      <DropdownMenuItem onClick={() => broadcast.mutate("start")} data-testid="menu-go-live">
+                        <Signal className="mr-2 h-4 w-4" />
+                        <span>
+                          <span className="block font-semibold">Live stream</span>
+                          <span className="block text-xs text-muted-foreground">Watch page and the destinations above</span>
+                        </span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => record.mutate({ action: "start", signupId: current?.signupId ?? undefined })} data-testid="menu-record">
+                        <Disc className="mr-2 h-4 w-4" />
+                        <span>
+                          <span className="block font-semibold">Record only</span>
+                          <span className="block text-xs text-muted-foreground">Nothing goes out; the file is saved</span>
+                        </span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          broadcast.mutate("start");
+                          record.mutate({ action: "start", signupId: current?.signupId ?? undefined });
+                        }}
+                        data-testid="menu-live-record"
+                      >
+                        <Radio className="mr-2 h-4 w-4" />
+                        <span>
+                          <span className="block font-semibold">Live stream + record</span>
+                          <span className="block text-xs text-muted-foreground">Go out and keep a copy</span>
+                        </span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
               </>
             )}
 
@@ -827,9 +952,34 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             </div>
           )}
 
+          {/* What you can put on the stage, and where to look at it — above the picture, out of the deck. */}
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-white/10 bg-[#04102b] px-3 py-1.5">
+            <span className="mr-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/40">Stage</span>
+            <DeckButton icon={ImageIcon} label="Share image" onClick={() => setMediaPicker("image")} testId="button-deck-image" />
+            <DeckButton icon={Film} label="Share video" active={studio?.stageMediaPlaying} onClick={() => setMediaPicker("video")} testId="button-deck-video" />
+            {!isRoom && (
+              <DeckButton
+                icon={PlayCircle}
+                label={studio?.fallbackPlaying ? "Stop standby" : studio?.fallbackVideoUrl ? "Roll standby" : "No standby set"}
+                active={studio?.fallbackPlaying}
+                amber
+                onClick={() => patchStudio.mutate({ fallbackPlaying: !studio?.fallbackPlaying })}
+                testId="button-deck-standby"
+              />
+            )}
+            <span className="ml-auto flex items-center gap-1.5">
+              <a href={joinUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/15" data-testid="link-deck-greenroom">
+                <Users className="h-4 w-4" /> Green room link
+              </a>
+              <a href={watchUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/15" data-testid="link-deck-watch">
+                <Radio className="h-4 w-4" /> Watch page
+              </a>
+            </span>
+          </div>
+
           <div className="flex min-h-0 flex-1">
             {/* green room, down the left, where a producer's eye already is */}
-            <aside className="flex w-[248px] shrink-0 flex-col border-r border-white/10">
+            <aside className="flex w-[204px] shrink-0 flex-col border-r border-white/10">
               {onStage.length > 0 && (
                 <div className="border-b border-white/10 px-3 py-2.5">
                   <div className="mb-2 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
@@ -928,11 +1078,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 muted={monitorMuted}
                 idleTitle={currentStudio?.name}
               />
-              {broadcasting && (
-                <span className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.14em] text-white">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> On air
-                </span>
-              )}
               {recording && (
                 <span className="pointer-events-none absolute right-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-[12px] font-semibold text-white">
                   <Disc className="h-3 w-3 text-[#ED1C24]" /> Recording
@@ -942,7 +1087,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
 
             {/* the rundown, driveable — a second person can sit on this alone */}
             {isPrimary && (runItems ?? []).length > 0 && (
-              <aside className="hidden w-[280px] shrink-0 flex-col border-l border-white/10 xl:flex">
+              <aside className="hidden w-[236px] shrink-0 flex-col border-l border-white/10 xl:flex">
                 <div className="flex items-center justify-between px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
                   <span className="flex items-center gap-1.5">
                     <ListOrdered className="h-3.5 w-3.5" /> Rundown
@@ -1025,135 +1170,89 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             </div>
           )}
 
-          {/* the deck */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-[#000741] px-4 py-3">
-            <DeckButton
-              icon={monitorMuted ? VolumeX : Volume2}
-              label={monitorMuted ? "Monitor muted" : "Monitor on"}
-              onClick={() => setMonitorMuted((v) => !v)}
-              testId="button-deck-volume"
-            />
-            <DeckButton
-              icon={stageMuted ? MicOff : Mic}
-              label={stageMuted ? "Stage muted" : "Mute the stage"}
-              active={stageMuted}
-              onClick={() => muteStage.mutate(!stageMuted)}
-              testId="button-deck-mute-stage"
-            />
-            <DeckButton
-              icon={Disc}
-              label={recording ? "Stop and save" : "Record"}
-              active={recording}
-              onClick={() =>
-                record.mutate(
-                  recording ? { action: "stop" } : { action: "start", signupId: current?.signupId ?? undefined },
-                )
-              }
-              testId="button-deck-record"
-            />
-            <DeckButton
-              icon={PlayCircle}
-              label={
-                studio?.fallbackPlaying
-                  ? "Stop standby"
-                  : studio?.fallbackVideoUrl
-                    ? "Roll standby"
-                    : "No standby set"
-              }
-              active={studio?.fallbackPlaying}
-              amber
-              onClick={() => patchStudio.mutate({ fallbackPlaying: !studio?.fallbackPlaying })}
-              testId="button-deck-standby"
-            />
+          {/* the deck: the room's sound on the left, YOU in the middle, like Zoom */}
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-white/10 bg-[#000741] px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <DeckButton
+                icon={stageMuted ? MicOff : Mic}
+                label={stageMuted ? "Stage muted" : "Mute the stage"}
+                active={stageMuted}
+                onClick={() => muteStage.mutate(!stageMuted)}
+                testId="button-deck-mute-stage"
+              />
+            </div>
 
-            <DeckButton
-              icon={onCamera ? Video : VideoOff}
-              label={onCamera ? "You're in the room" : "Go on camera"}
-              active={onCamera}
-              onClick={() => setOnCamera((v) => !v)}
-              testId="button-deck-oncamera"
-            />
-            {onCamera && (
-              <>
-                {/* Zoom's wording, because that's the muscle memory everyone
-                    arrives with. The label says what pressing it will do. */}
-                <DeckButton
-                  icon={micOn ? Mic : MicOff}
-                  label={micOn ? "Mute myself" : "Unmute myself"}
-                  active={!micOn}
-                  onClick={() => void toggleMic()}
-                  testId="button-deck-mic"
-                />
-                <DeckButton
-                  icon={camOn ? Video : VideoOff}
-                  label={camOn ? "Stop my video" : "Start my video"}
-                  active={!camOn}
-                  onClick={() => void toggleCam()}
-                  testId="button-deck-cam"
-                />
-              </>
-            )}
-
-            <DeckButton
-              icon={ImageIcon}
-              label="Share image"
-              onClick={() => setMediaPicker("image")}
-              testId="button-deck-image"
-            />
-            <DeckButton
-              icon={Film}
-              label="Share video"
-              active={studio?.stageMediaPlaying}
-              onClick={() => setMediaPicker("video")}
-              testId="button-deck-video"
-            />
-
-            <span className="mx-1 h-8 w-px bg-white/15" />
-
-            <a
-              href={joinUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/15"
-              data-testid="link-deck-greenroom"
+            <div
+              className={`flex items-center gap-1.5 rounded-2xl border-2 px-2 py-1.5 ${
+                onCamera ? "border-emerald-500/70 bg-emerald-500/10" : "border-white/15 bg-white/5"
+              }`}
+              data-testid="deck-you"
             >
-              <Users className="h-4 w-4" /> Green room
-            </a>
-            <a
-              href={watchUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/15"
-              data-testid="link-deck-watch"
-            >
-              <Radio className="h-4 w-4" /> Watch page
-            </a>
+              <span className="px-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">You</span>
+              {!onCamera ? (
+                <button
+                  type="button"
+                  onClick={() => setOnCamera(true)}
+                  className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400"
+                  data-testid="button-deck-oncamera"
+                >
+                  <Video className="h-4 w-4" /> Go on camera
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void toggleCam()}
+                    className={`flex flex-col items-center gap-0.5 rounded-xl px-4 py-1.5 text-xs font-medium ${
+                      camOn ? "bg-white/10 text-white hover:bg-white/15" : "bg-[#ED1C24] text-white"
+                    }`}
+                    data-testid="button-deck-cam"
+                  >
+                    {camOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                    {camOn ? "Camera" : "Camera off"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void toggleMic()}
+                    className={`flex flex-col items-center gap-0.5 rounded-xl px-4 py-1.5 text-xs font-medium ${
+                      micOn ? "bg-white/10 text-white hover:bg-white/15" : "bg-[#ED1C24] text-white"
+                    }`}
+                    data-testid="button-deck-mic"
+                  >
+                    {micOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+                    {micOn ? "Mic" : "Muted"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMonitorMuted((v) => !v)}
+                    className="flex flex-col items-center gap-0.5 rounded-xl bg-white/10 px-4 py-1.5 text-xs font-medium text-white hover:bg-white/15"
+                    title="Whether you hear the stage in this browser"
+                    data-testid="button-deck-volume"
+                  >
+                    {monitorMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+                    {monitorMuted ? "Hear stage" : "Hearing stage"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOnCamera(false)}
+                    className="ml-1 rounded-xl px-3 py-2 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
+                    data-testid="button-deck-offcamera"
+                  >
+                    Leave camera
+                  </button>
+                </>
+              )}
+            </div>
 
-            <div className="ml-auto flex items-center gap-2">
-              <Button
-                size="sm"
-                className={`h-9 gap-1.5 rounded-full px-4 font-semibold ${
-                  (isRoom ? recording : broadcasting)
-                    ? "bg-white/15 text-white hover:bg-white/25"
-                    : "bg-[#ED1C24] text-white hover:bg-[#c81820]"
-                }`}
-                disabled={isRoom ? record.isPending : broadcast.isPending}
-                onClick={() =>
-                  isRoom
-                    ? record.mutate(recording ? { action: "stop" } : { action: "start" })
-                    : broadcast.mutate(broadcasting ? "stop" : "start")
-                }
-                data-testid="button-deck-broadcast"
-              >
-                {isRoom ? <Disc className="h-3.5 w-3.5" /> : <Signal className="h-3.5 w-3.5" />}{" "}
-                {isRoom
-                  ? recording
-                    ? "Stop & save recording"
-                    : "Start recording"
-                  : broadcasting
-                    ? "End the live stream"
-                    : "Start live stream"}
-              </Button>
+            <div className="flex items-center justify-end gap-2">
+              {!onCamera && (
+                <DeckButton
+                  icon={monitorMuted ? VolumeX : Volume2}
+                  label={monitorMuted ? "Hear the stage" : "Hearing the stage"}
+                  onClick={() => setMonitorMuted((v) => !v)}
+                  testId="button-deck-volume"
+                />
+              )}
             </div>
           </div>
         </div>
