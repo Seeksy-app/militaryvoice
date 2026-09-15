@@ -9,6 +9,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { detectLocalTimeZone } from "@/lib/schedule";
 import { Share2, BellRing, Check, CalendarPlus, Youtube } from "lucide-react";
 import type { PublicSignup } from "@shared/schema";
+import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 
 interface Props {
   signup: PublicSignup;
@@ -27,6 +28,10 @@ export function AgendaSignupActions({ signup, shareText }: Props) {
   const [phone, setPhone] = useState("");
   const [popoverOpen, setPopoverOpen] = useState(false);
 
+  const siteKey = useTurnstileSiteKey();
+  const [human, setHuman] = useState<string | null>(null);
+  const [humanReset, setHumanReset] = useState(0);
+
   const reminderMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/reminders", {
@@ -35,9 +40,11 @@ export function AgendaSignupActions({ signup, shareText }: Props) {
         email,
         phone,
         timezone: detectLocalTimeZone(),
+        turnstileToken: human,
       });
       return res.json();
     },
+    onSettled: () => setHumanReset((n) => n + 1),
     onSuccess: () => {
       toast({
         title: "You're set",
@@ -65,7 +72,7 @@ export function AgendaSignupActions({ signup, shareText }: Props) {
     );
   }
 
-  const canSubmit = name.trim().length > 0 && /\S+@\S+\.\S+/.test(email);
+  const canSubmit = name.trim().length > 0 && /\S+@\S+\.\S+/.test(email) && (!siteKey || Boolean(human));
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -75,7 +82,7 @@ export function AgendaSignupActions({ signup, shareText }: Props) {
             <BellRing className="h-3.5 w-3.5" /> Remind me
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-80" align="start">
+        <PopoverContent className="w-[22rem]" align="start">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -136,6 +143,7 @@ export function AgendaSignupActions({ signup, shareText }: Props) {
                 />
               </div>
             </div>
+            {siteKey && <Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={humanReset} />}
             <Button type="submit" size="sm" disabled={reminderMutation.isPending || !canSubmit} className="gap-1.5 rounded-full">
               {reminderMutation.isSuccess ? (
                 <>

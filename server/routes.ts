@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import multer from "multer";
 import sharp from "sharp";
 import { storage } from "./storage.js";
+import { requireHuman, turnstileSiteKey } from "./turnstile.js";
 import { uploadPhoto, uploadShowAsset, deleteShowAsset } from "./photoStorage.js";
 import {
   insertSignupSchema,
@@ -2753,6 +2754,7 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
+    if (!(await requireHuman(req, res))) return;
     const signup = await storage.getSignupById(parsed.data.signupId);
     if (!signup || signup.status === "cancelled") {
       res.status(404).json({ message: "That slot couldn't be found." });
@@ -2941,12 +2943,21 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Host: request a typed sign-in code -------------------------------------
+  // Whether the public forms should show the Cloudflare check, and with which
+  // key. Served rather than baked into the bundle so the two keys live in one
+  // place and a stale client can never disagree with the server.
+  app.get("/api/turnstile", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ siteKey: turnstileSiteKey() });
+  });
+
   app.post("/api/host/request-code", async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     if (!email || !email.includes("@")) {
       res.status(400).json({ message: "Enter a valid email" });
       return;
     }
+    if (!(await requireHuman(req, res))) return;
     const code = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
     await storage.supersedeLoginTokens(email);

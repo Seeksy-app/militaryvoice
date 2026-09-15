@@ -45,6 +45,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
 import { ShowMaterials } from "@/components/ShowMaterials";
 import { EventSettings } from "@/components/EventSettings";
@@ -153,9 +154,16 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
 
+  // Cloudflare check on the code request — the one form a bot can use to
+  // make us send email. Off entirely when the server has no keys.
+  const siteKey = useTurnstileSiteKey();
+  const [human, setHuman] = useState<string | null>(null);
+  const [humanReset, setHumanReset] = useState(0);
+  const needsHuman = Boolean(siteKey);
+
   const requestCode = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/host/request-code", { email });
+      const res = await apiRequest("POST", "/api/host/request-code", { email, turnstileToken: human });
       return res.json();
     },
     onSuccess: () => {
@@ -163,6 +171,8 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
       toast({ title: "Check your email", description: "We sent a 6-digit code to sign you in." });
     },
     onError: (err: Error) => toast({ title: "Couldn't send that", description: err.message, variant: "destructive" }),
+    // Tokens are single-use, so the widget has to issue a fresh one either way.
+    onSettled: () => setHumanReset((n) => n + 1),
   });
 
   const verifyCode = useMutation({
@@ -246,7 +256,12 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
                 onChange={(e) => setEmail(e.target.value)}
                 data-testid="input-host-email"
               />
-              <Button type="submit" disabled={requestCode.isPending || !email.trim()} data-testid="button-request-code">
+              {siteKey && <Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={humanReset} />}
+              <Button
+                type="submit"
+                disabled={requestCode.isPending || !email.trim() || (needsHuman && !human)}
+                data-testid="button-request-code"
+              >
                 {requestCode.isPending ? "Sending…" : pending ? "Send my code & hold the slot" : "Send me a code"}
               </Button>
             </form>
