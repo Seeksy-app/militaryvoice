@@ -866,9 +866,10 @@ function SignupsCard() {
                 return (
                   <div
                     key={s.id}
-                    className="rounded-lg border border-border p-3"
+                    className="relative rounded-lg border border-border p-3 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)] lg:gap-x-6"
                     data-testid={`row-signup-${s.id}`}
                   >
+                  <div className="min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         {s.photoUrl && (
@@ -883,7 +884,7 @@ function SignupsCard() {
                           <div className="truncate text-xs text-muted-foreground">{s.hostName}</div>
                         </div>
                       </div>
-                      <div className="flex shrink-0 gap-1">
+                      <div className="flex shrink-0 gap-1 lg:absolute lg:right-3 lg:top-3">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -947,8 +948,10 @@ function SignupsCard() {
                       {s.phone && <div className="truncate">{s.phone}</div>}
                       {s.socialLinks && <div className="truncate">{s.socialLinks}</div>}
                     </div>
+                  </div>
 
-                    {/* What we're actually holding for them, and what they told us. */}
+                    {/* What we're actually holding for them, and what they told us —
+                        two more columns on a wide screen, stacked underneath on a phone. */}
                     {(() => {
                       const mats = assetsByEmail.get(s.email.trim().toLowerCase()) ?? [];
                       const promised = [
@@ -968,8 +971,8 @@ function SignupsCard() {
                         { label: "Records with", value: recordsWith },
                       ].filter((f) => f.value && f.value.trim());
                       return (
-                        <div className="mt-3 grid gap-3 border-t border-border pt-3 lg:grid-cols-2">
-                          <div>
+                        <div className="mt-3 grid gap-3 border-t border-border pt-3 lg:contents">
+                          <div className="lg:border-l lg:border-border lg:pl-5">
                             <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">Materials</div>
                             {s.showFormat === "prerecorded" && (
                               <div className="mt-1 text-xs">
@@ -1004,7 +1007,7 @@ function SignupsCard() {
                               </div>
                             )}
                           </div>
-                          <div>
+                          <div className="lg:border-l lg:border-border lg:pl-5 lg:pr-16">
                             <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">From them</div>
                             {facts.length === 0 ? (
                               <div className="mt-1 text-xs text-muted-foreground">No guests, questions or notes given.</div>
