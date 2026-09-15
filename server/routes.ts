@@ -5,6 +5,7 @@ import multer from "multer";
 import sharp from "sharp";
 import { storage } from "./storage.js";
 import { requireHuman, turnstileSiteKey } from "./turnstile.js";
+import { KINDS, scheduleFor, cardInput, caption as campaignCaption, isKind, type CampaignContext } from "./campaign.js";
 import { uploadPhoto, uploadShowAsset, deleteShowAsset } from "./photoStorage.js";
 import {
   insertSignupSchema,
@@ -573,7 +574,8 @@ export function registerRoutes(app: Express): void {
     }
     const dryRun = req.query.dryRun === "1" || req.body?.dryRun === true;
     const results = await runNudges({ dryRun });
-    res.json({ dryRun, considered: results.length, results });
+    const posts = dryRun ? [] : await runCampaign();
+    res.json({ dryRun, considered: results.length, results, posts });
   };
   app.get("/api/cron/nudges", nudgeHandler);
   app.post("/api/cron/nudges", nudgeHandler);
@@ -623,6 +625,168 @@ export function registerRoutes(app: Express): void {
     res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
     res.end(jpg);
   });
+
+  // ---- Posting plan: six designed posts we publish from their accounts ------
+  const PUBLIC_ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "");
+  const CAMPAIGN_PLATFORMS = ["instagram", "tiktok", "x", "linkedin", "facebook", "threads"];
+
+  async function campaignContext(signupId: number): Promise<(CampaignContext & { onAirStart: Date }) | null> {
+    const found = await shareSubject(signupId);
+    if (!found) return null;
+    const { signup, event } = found;
+    const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
+    const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+    const tz = signup.timezone || "America/New_York";
+    const eventDateLabel = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })
+      .format(new Date(event.startAtUtc));
+    return {
+      event,
+      signup,
+      onAirStart: onAir.start,
+      whenLabel: found.whenLabel,
+      timeLabel: `${formatTimeInZone(onAir.start, tz)} ${zoneAbbrev(onAir.start, tz)}`,
+      eventDateLabel,
+      shareUrl: `${PUBLIC_ORIGIN}/s/${signup.id}`,
+      aboutUrl: `${PUBLIC_ORIGIN}/event/${event.slug || "marathon"}/about`,
+    };
+  }
+
+  // The creative itself. Public, because Upload-Post fetches it by URL.
+  app.get("/og/campaign/:signupId/:kind.jpg", async (req, res) => {
+    const kind = req.params.kind;
+    if (!isKind(kind)) {
+      res.status(404).end();
+      return;
+    }
+    const ctx = await campaignContext(Number(req.params.signupId));
+    if (!ctx) {
+      res.status(404).end();
+      return;
+    }
+    const requested = String(req.query.size ?? "square");
+    const size: CardSize = requested in CARD_SIZES ? (requested as CardSize) : "square";
+    const input = cardInput(kind, ctx);
+    if (input.photoUrl && !input.photoUrl.startsWith("http")) input.photoUrl = `${PUBLIC_ORIGIN}${input.photoUrl}`;
+    const jpg = await buildShareCard(input, size);
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=600, s-maxage=3600");
+    res.end(jpg);
+  });
+
+  async function ownSignup(req: Request, res: Response, signupId: number) {
+    const email = ((req as any).hostEmail as string).toLowerCase();
+    const signup = await storage.getSignupById(signupId);
+    if (!signup || signup.status === "cancelled" || signup.email.trim().toLowerCase() !== email) {
+      res.status(404).json({ message: "That booking isn't yours, or it no longer exists." });
+      return null;
+    }
+    return signup;
+  }
+
+  app.get("/api/host/campaign", requireHostSession, async (req, res) => {
+    const signupId = Number(req.query.signupId);
+    const signup = await ownSignup(req, res, signupId);
+    if (!signup) return;
+    const ctx = await campaignContext(signupId);
+    if (!ctx) {
+      res.status(404).json({ message: "No slot to plan around yet." });
+      return;
+    }
+    const profile = await storage.getProfileByEmail(signup.email);
+    const connected = parseSocialAccounts(profile?.socialAccounts)
+      .map((a) => a.platform)
+      .filter((p) => CAMPAIGN_PLATFORMS.includes(p));
+    const rows = await storage.listCampaignPosts(signupId);
+    const now = Date.now();
+    const posts = KINDS.map((def) => {
+      const row = rows.find((r) => r.kind === def.kind);
+      const when = scheduleFor(def, ctx.event, ctx.onAirStart);
+      return {
+        kind: def.kind,
+        label: def.label,
+        blurb: def.blurb,
+        scheduledFor: (row?.scheduledFor ?? when.toISOString()),
+        past: when.getTime() <= now,
+        selected: Boolean(row),
+        status: row?.status ?? null,
+        postedAt: row?.postedAt || null,
+        error: row?.error || null,
+        caption: campaignCaption(def.kind, ctx),
+        imageUrl: `/og/campaign/${signupId}/${def.kind}.jpg?size=square`,
+      };
+    });
+    const saved = rows.find((r) => r.platforms)?.platforms.split(",").filter(Boolean) ?? [];
+    res.setHeader("Cache-Control", "no-store");
+    res.json({
+      configured: isUploadPostConfigured() && Boolean(profile?.uploadPostUsername),
+      connected,
+      platforms: saved,
+      posts,
+    });
+  });
+
+  app.put("/api/host/campaign", requireHostSession, async (req, res) => {
+    const signupId = Number(req.body?.signupId);
+    const signup = await ownSignup(req, res, signupId);
+    if (!signup) return;
+    const ctx = await campaignContext(signupId);
+    if (!ctx) {
+      res.status(404).json({ message: "Claim a time slot first." });
+      return;
+    }
+    const kinds = (Array.isArray(req.body?.kinds) ? req.body.kinds : []).filter(isKind);
+    const platforms = (Array.isArray(req.body?.platforms) ? req.body.platforms.map(String) : [])
+      .filter((p: string) => CAMPAIGN_PLATFORMS.includes(p));
+    if (kinds.length > 0) {
+      const profile = await storage.getProfileByEmail(signup.email);
+      if (!isUploadPostConfigured() || !profile?.uploadPostUsername) {
+        res.status(400).json({ message: "Connect a social account on the Integrations tab first." });
+        return;
+      }
+      if (platforms.length === 0) {
+        res.status(400).json({ message: "Pick at least one account to post from." });
+        return;
+      }
+    }
+    const picks = KINDS.filter((d) => kinds.includes(d.kind)).map((d) => ({
+      kind: d.kind,
+      platforms,
+      scheduledFor: scheduleFor(d, ctx.event, ctx.onAirStart).toISOString(),
+    }));
+    const rows = await storage.replaceCampaignPlan(signupId, picks);
+    res.json({ ok: true, planned: rows.filter((r) => r.status === "planned").length });
+  });
+
+  /** Hourly, from the same cron as the nudges. Claim, post, record. */
+  async function runCampaign() {
+    const due = await storage.listDueCampaignPosts(new Date().toISOString());
+    const out: { id: number; signupId: number; kind: string; ok: boolean; error?: string }[] = [];
+    for (const row of due) {
+      if (!(await storage.claimCampaignPost(row.id))) continue;
+      const ctx = isKind(row.kind) ? await campaignContext(row.signupId) : null;
+      const profile = ctx ? await storage.getProfileByEmail(ctx.signup.email) : undefined;
+      if (!ctx || !profile?.uploadPostUsername) {
+        await storage.finishCampaignPost(row.id, false, "No connected account to post from.");
+        out.push({ id: row.id, signupId: row.signupId, kind: row.kind, ok: false, error: "no account" });
+        continue;
+      }
+      try {
+        await publishPhoto({
+          username: profile.uploadPostUsername,
+          platforms: row.platforms.split(",").filter(Boolean),
+          photoUrl: `${PUBLIC_ORIGIN}/og/campaign/${row.signupId}/${row.kind}.jpg?size=square`,
+          title: campaignCaption(row.kind as any, ctx),
+        });
+        await storage.finishCampaignPost(row.id, true);
+        out.push({ id: row.id, signupId: row.signupId, kind: row.kind, ok: true });
+      } catch (err) {
+        const msg = (err as Error).message;
+        await storage.finishCampaignPost(row.id, false, msg);
+        out.push({ id: row.id, signupId: row.signupId, kind: row.kind, ok: false, error: msg });
+      }
+    }
+    return out;
+  }
 
   app.get("/s/:id", async (req, res) => {
     const id = Number(req.params.id);

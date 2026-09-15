@@ -28,6 +28,12 @@ export const events = pgTable("events", {
   bufferPosition: text("buffer_position").notNull().default("after"), // "before" | "after"
   adminPassword: text("admin_password").notNull().default("militaryvoice2026"),
   createdAt: text("created_at").notNull().default(""),
+  // The day the event celebrates ("National Military Podcast Day"). Cards,
+  // captions and the About page read it, so a second tenant changes one field.
+  occasion: text("occasion").notNull().default("National Military Podcast Day"),
+  // Public About page body. Blank paragraphs separate sections; a line
+  // starting with "## " is a heading. Edited in Admin.
+  about: text("about").notNull().default(""),
 });
 
 export const insertEventSchema = createInsertSchema(events)
@@ -765,6 +771,31 @@ export const nudges = pgTable("nudges", {
   signupKind: uniqueIndex("nudges_signup_kind_idx").on(t.signupId, t.kind),
 }));
 export type NudgeRow = typeof nudges.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Campaign posts — the pre-designed social posts a podcaster ticks, which we
+// then publish from their own accounts on schedule.
+// ---------------------------------------------------------------------------
+export const CAMPAIGN_KINDS = ["join", "share", "about", "twoweeks", "thisweek", "today"] as const;
+export type CampaignKind = (typeof CAMPAIGN_KINDS)[number];
+export const CAMPAIGN_STATUSES = ["planned", "posting", "posted", "failed"] as const;
+export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
+
+export const campaignPosts = pgTable("campaign_posts", {
+  id: serial("id").primaryKey(),
+  signupId: integer("signup_id").notNull(),
+  kind: text("kind").notNull(),
+  platforms: text("platforms").notNull().default(""), // comma-joined
+  scheduledFor: text("scheduled_for").notNull(), // ISO
+  status: text("status").notNull().default("planned"),
+  postedAt: text("posted_at").notNull().default(""),
+  error: text("error").notNull().default(""),
+  createdAt: text("created_at").notNull().default(""),
+  updatedAt: text("updated_at").notNull().default(""),
+}, (t) => ({
+  signupKind: uniqueIndex("campaign_posts_signup_kind_idx").on(t.signupId, t.kind),
+}));
+export type CampaignPostRow = typeof campaignPosts.$inferSelect;
 
 /** In order. A later stage suppresses every earlier one. */
 export const NUDGE_KINDS = ["prep", "final", "onair"] as const;

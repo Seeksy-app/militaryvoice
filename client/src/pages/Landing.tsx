@@ -58,6 +58,8 @@ const EVENT_FALLBACK: PublicEvent = {
   onAirMinutes: 25,
   bufferMinutes: 5,
   bufferPosition: "after",
+  occasion: "National Military Podcast Day",
+  about: "",
   createdAt: "",
 };
 const HERO_IMAGES = [

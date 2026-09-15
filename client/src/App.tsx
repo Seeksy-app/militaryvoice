@@ -16,6 +16,7 @@ import Landing from "@/pages/Landing";
 import Faq from "@/pages/Faq";
 import Prepare from "@/pages/Prepare";
 import Platform from "@/pages/Platform";
+import EventAbout from "@/pages/EventAbout";
 import Studio from "@/pages/Studio";
 import StudioComposite from "@/pages/StudioComposite";
 import Watch from "@/pages/Watch";
@@ -72,6 +73,8 @@ function AppRouter() {
       <Route path="/terms">{() => <TermsOfService />}</Route>
       <Route path="/prepare">{() => <Prepare />}</Route>
       <Route path="/platform">{() => <Platform />}</Route>
+      <Route path="/about">{() => <EventAbout />}</Route>
+      <Route path="/event/:slug/about">{(params) => <EventAbout slug={params.slug} />}</Route>
       <Route path="/studio/composite">{() => <StudioComposite />}</Route>
       <Route path="/watch">{() => <Watch />}</Route>
       <Route path="/event/:slug/watch">{(params) => <Watch slug={params.slug} />}</Route>

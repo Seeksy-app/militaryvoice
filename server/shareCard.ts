@@ -22,8 +22,8 @@ export const CARD_SIZES = {
 } as const;
 export type CardSize = keyof typeof CARD_SIZES;
 
-const EYEBROW = "LIVE ON NATIONAL MILITARY PODCAST DAY";
-const FOOTER = "24 Hour Podcastathon · militaryvoice.ai";
+const DEFAULT_EYEBROW = "LIVE ON NATIONAL MILITARY PODCAST DAY";
+const DEFAULT_FOOTER = "24 Hour Podcastathon · militaryvoice.ai";
 
 /** Trim to fit the card without wrapping — the card has one line for each. */
 function fit(v: string, max: number): string {
@@ -57,10 +57,20 @@ function ring(av: number): Buffer {
   );
 }
 
-export async function buildShareCard(
-  input: { podcastName: string; hostName: string; whenLabel: string; photoUrl?: string },
-  size: CardSize = "wide",
-): Promise<Buffer> {
+export interface CardInput {
+  podcastName: string;
+  hostName: string;
+  whenLabel: string;
+  photoUrl?: string;
+  /** Campaign cards swap the lines; the share card keeps the defaults. */
+  eyebrow?: string;
+  subline?: string;
+  footer?: string;
+}
+
+export async function buildShareCard(input: CardInput, size: CardSize = "wide"): Promise<Buffer> {
+  const EYEBROW = (input.eyebrow ?? DEFAULT_EYEBROW).toUpperCase();
+  const FOOTER = input.footer ?? DEFAULT_FOOTER;
   const { w: W, h: H } = CARD_SIZES[size];
   // Wide is a link preview and reads left-to-right. Square and story are the
   // image itself in a phone feed, where a centred stack reads far better.
@@ -83,8 +93,9 @@ export async function buildShareCard(
   const AV = Math.round(vertical ? W * 0.34 : 260);
   const avatar = input.photoUrl ? await circularAvatar(input.photoUrl, AV) : null;
 
-  const name = fit(input.podcastName, vertical ? 34 : 42);
-  const host = `with ${fit(input.hostName, vertical ? 42 : 54)}`;
+  // Generous: fitSize shrinks the type to the box before this ever cuts.
+  const name = fit(input.podcastName, vertical ? 46 : 48);
+  const host = input.subline ?? `with ${fit(input.hostName, vertical ? 42 : 54)}`;
   const when = fit(input.whenLabel, 30);
 
   const layers: OverlayOptions[] = [];
@@ -94,8 +105,8 @@ export async function buildShareCard(
     const cx = W / 2;
     const box = W - Math.round(W * 0.12) * 2;
 
-    const s1 = Math.round(30 * k);
     const ls1 = 2.4 * k;
+    const s1 = fitSize(EYEBROW, "bold", Math.round(30 * k), Math.round(20 * k), box - ls1 * EYEBROW.length);
     const s2 = fitSize(name, "bold", Math.round(74 * k), Math.round(34 * k), box);
     const s3 = Math.round(34 * k);
     const s4 = Math.round(36 * k);

@@ -1,5 +1,6 @@
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts } from "../shared/schema.js";
 import type {
+  CampaignPostRow,
   EventRow,
   InsertEvent,
   UpdateEvent,
@@ -617,6 +618,16 @@ export interface IStorage {
   claimNudge(signupId: number, kind: NudgeKind, emailed: boolean): Promise<boolean>;
   /** Give a claim back so the next run retries it. */
   releaseNudge(signupId: number, kind: NudgeKind): Promise<void>;
+  listCampaignPosts(signupId: number): Promise<CampaignPostRow[]>;
+  /** Make the stored plan match `picks`; posts already sent are left alone. */
+  replaceCampaignPlan(
+    signupId: number,
+    picks: { kind: string; platforms: string[]; scheduledFor: string }[],
+  ): Promise<CampaignPostRow[]>;
+  listDueCampaignPosts(nowIso: string): Promise<CampaignPostRow[]>;
+  /** planned -> posting, atomically; false if someone else got it. */
+  claimCampaignPost(id: number): Promise<boolean>;
+  finishCampaignPost(id: number, ok: boolean, error?: string): Promise<void>;
   getEventShow(email: string, eventId: number): Promise<EventShowRow | undefined>;
   listEventShows(email: string): Promise<EventShowRow[]>;
   upsertEventShow(email: string, eventId: number, v: Partial<EventShowRow>): Promise<EventShowRow>;
@@ -1089,6 +1100,65 @@ class DatabaseStorage implements IStorage {
   async releaseNudge(signupId: number, kind: NudgeKind): Promise<void> {
     await ready();
     await db.delete(nudges).where(and(eq(nudges.signupId, signupId), eq(nudges.kind, kind)));
+  }
+
+  async listCampaignPosts(signupId: number): Promise<CampaignPostRow[]> {
+    await ready();
+    return db.select().from(campaignPosts).where(eq(campaignPosts.signupId, signupId));
+  }
+
+  async replaceCampaignPlan(
+    signupId: number,
+    picks: { kind: string; platforms: string[]; scheduledFor: string }[],
+  ): Promise<CampaignPostRow[]> {
+    await ready();
+    const now = new Date().toISOString();
+    const existing = await this.listCampaignPosts(signupId);
+    const wanted = new Set(picks.map((p) => p.kind));
+    // Unticked: drop it unless it has already gone out (that's history, not a plan).
+    for (const row of existing) {
+      if (!wanted.has(row.kind) && row.status !== "posted" && row.status !== "posting") {
+        await db.delete(campaignPosts).where(eq(campaignPosts.id, row.id));
+      }
+    }
+    for (const pick of picks) {
+      const row = existing.find((r) => r.kind === pick.kind);
+      const platforms = pick.platforms.join(",");
+      if (!row) {
+        await db.insert(campaignPosts).values({
+          signupId, kind: pick.kind, platforms, scheduledFor: pick.scheduledFor,
+          status: "planned", createdAt: now, updatedAt: now,
+        });
+      } else if (row.status === "planned" || row.status === "failed") {
+        await db.update(campaignPosts)
+          .set({ platforms, scheduledFor: pick.scheduledFor, status: "planned", error: "", updatedAt: now })
+          .where(eq(campaignPosts.id, row.id));
+      }
+    }
+    return this.listCampaignPosts(signupId);
+  }
+
+  async listDueCampaignPosts(nowIso: string): Promise<CampaignPostRow[]> {
+    await ready();
+    const rows = await db.select().from(campaignPosts).where(eq(campaignPosts.status, "planned"));
+    return rows.filter((r) => r.scheduledFor <= nowIso);
+  }
+
+  async claimCampaignPost(id: number): Promise<boolean> {
+    await ready();
+    const rows = await db.update(campaignPosts)
+      .set({ status: "posting", updatedAt: new Date().toISOString() })
+      .where(and(eq(campaignPosts.id, id), eq(campaignPosts.status, "planned")))
+      .returning({ id: campaignPosts.id });
+    return rows.length > 0;
+  }
+
+  async finishCampaignPost(id: number, ok: boolean, error = ""): Promise<void> {
+    await ready();
+    const now = new Date().toISOString();
+    await db.update(campaignPosts)
+      .set(ok ? { status: "posted", postedAt: now, error: "", updatedAt: now } : { status: "failed", error: error.slice(0, 500), updatedAt: now })
+      .where(eq(campaignPosts.id, id));
   }
 
   async getEventShow(email: string, eventId: number): Promise<EventShowRow | undefined> {

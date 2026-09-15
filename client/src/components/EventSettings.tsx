@@ -17,6 +17,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ShareYourSlot } from "@/components/ShareYourSlot";
+import { CampaignPlanner } from "@/components/CampaignPlanner";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, onAirWindow } from "@/lib/schedule";
 import type { PublicEvent } from "@shared/schema";
@@ -281,11 +282,14 @@ export function EventSettings({
       {/* Promotion comes after the work. Sharing matters, but not before
           they've set the show up and sent us what we need. */}
       {open.slotIndex != null && open.signupId != null && (
-        <ShareYourSlot
-          signupId={open.signupId}
-          podcastName={open.show?.showName || open.event.name}
-          whenLabel={onAirLabel}
-        />
+        <>
+          <ShareYourSlot
+            signupId={open.signupId}
+            podcastName={open.show?.showName || open.event.name}
+            whenLabel={onAirLabel}
+          />
+          <CampaignPlanner signupId={open.signupId} />
+        </>
       )}
     </section>
   );

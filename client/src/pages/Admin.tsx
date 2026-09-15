@@ -526,6 +526,8 @@ function EventSettingsCard() {
     name: string;
     tagline: string;
     description: string;
+    occasion: string;
+    about: string;
     startLocal: string;
     durationHours: number;
     slotMinutes: number;
@@ -541,6 +543,8 @@ function EventSettingsCard() {
         name: event.name,
         tagline: event.tagline,
         description: event.description,
+        occasion: event.occasion ?? "",
+        about: event.about ?? "",
         startLocal: utcToDateTimeLocalValue(new Date(event.startAtUtc), zone),
         durationHours: event.durationHours,
         slotMinutes: event.slotMinutes,
@@ -570,6 +574,8 @@ function EventSettingsCard() {
         name: form.name,
         tagline: form.tagline,
         description: form.description,
+        occasion: form.occasion,
+        about: form.about,
         startAtUtc: dateTimeLocalToUtc(form.startLocal, zone).toISOString(),
         durationHours: form.durationHours,
         slotMinutes: form.slotMinutes,
@@ -633,6 +639,32 @@ function EventSettingsCard() {
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             data-testid="input-event-description"
           />
+        </div>
+        <div>
+          <Label htmlFor="event-occasion">The day it celebrates</Label>
+          <Input
+            id="event-occasion"
+            value={form.occasion}
+            onChange={(e) => setForm({ ...form, occasion: e.target.value })}
+            placeholder="National Military Podcast Day"
+            data-testid="input-event-occasion"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">Used on podcasters' social cards, captions and the About page.</p>
+        </div>
+        <div>
+          <Label htmlFor="event-about">About page</Label>
+          <Textarea
+            id="event-about"
+            rows={12}
+            value={form.about}
+            onChange={(e) => setForm({ ...form, about: e.target.value })}
+            placeholder={"## How it started\n\nA paragraph...\n\n## How to take part\n\nAnother paragraph..."}
+            data-testid="input-event-about"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Public at /event/&lt;slug&gt;/about. Blank line between paragraphs; start a line with "## " for a heading.
+            Leave empty to show the built-in text.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
