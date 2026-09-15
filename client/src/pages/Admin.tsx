@@ -1229,7 +1229,7 @@ function EventPicker({ onOpen }: { onOpen: (id: number) => void }) {
   );
 }
 
-function SessionsPanel() {
+function RoomsPanel() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: studios } = useQuery<(StudioRowLite & { isPrimary: boolean; eventName?: string })[]>({
@@ -1248,10 +1248,10 @@ function SessionsPanel() {
   async function create() {
     const featured = events?.find((e) => e.isFeatured) ?? events?.[0];
     if (!featured) return;
-    await adminSend("POST", "/api/admin/studios", { eventId: featured.id, name: name.trim() || "Rehearsal session" });
+    await adminSend("POST", "/api/admin/studios", { eventId: featured.id, name: name.trim() || "Room" });
     setName("");
     queryClient.invalidateQueries({ queryKey: ["/api/admin/studios"] });
-    toast({ title: "Session created", description: "Send the join link to whoever's joining you." });
+    toast({ title: "Room ready", description: "Send the join link to whoever's joining you." });
   }
   async function remove(id: number) {
     try {
@@ -1278,10 +1278,11 @@ function SessionsPanel() {
     <div className="flex flex-col gap-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Sessions</CardTitle>
+          <CardTitle className="text-base">Rooms</CardTitle>
           <CardDescription>
-            A session is a one-off room — rehearse, record, meet — with its own green room, stage and join link.
-            The live event runs in its own studio; sessions never touch it.
+            A room is a quick place to meet — a host and a guest, a rehearsal, a chat that doesn't need the full
+            studio — with its own join link. Studios are for recording, broadcasting and production; each event
+            runs in its own, and rooms never touch it.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -1293,7 +1294,7 @@ function SessionsPanel() {
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-card-foreground">{st.name || "Studio"}</span>
                     {st.isPrimary && <Badge variant="outline" className="text-[11px] font-normal">event studio</Badge>}
-                    {!st.isPrimary && <Badge variant="outline" className="text-[11px] font-normal">session</Badge>}
+                    {!st.isPrimary && <Badge variant="outline" className="text-[11px] font-normal">room</Badge>}
                     <Badge variant="outline" className="text-[11px] font-normal">{st.status}</Badge>
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">{st.eventName}</div>
@@ -1306,7 +1307,7 @@ function SessionsPanel() {
                   Open console
                 </Button>
                 {!st.isPrimary && (
-                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => remove(st.id)} aria-label="Remove studio">
+                  <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => remove(st.id)} aria-label="Remove room">
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 )}
@@ -1320,11 +1321,11 @@ function SessionsPanel() {
               create();
             }}
           >
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Rehearsal with Riccoh" className="h-9 max-w-xs" data-testid="input-new-studio" />
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Riccoh + Andrew" className="h-9 max-w-xs" data-testid="input-new-studio" />
             <Button type="submit" size="sm" className="gap-1.5 rounded-full" data-testid="button-new-studio">
-              <Plus className="h-3.5 w-3.5" /> New session
+              <Plus className="h-3.5 w-3.5" /> New room
             </Button>
-            <span className="text-xs text-muted-foreground">Anyone with the join link lands in its green room; you bring them on from the console.</span>
+            <span className="text-xs text-muted-foreground">Anyone with the join link lands in the room's green room; you bring them on from its console.</span>
           </form>
         </CardContent>
       </Card>
@@ -1479,15 +1480,15 @@ export default function Admin() {
             <Tabs defaultValue="events">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="events" data-testid="tab-admin-events">Events</TabsTrigger>
-                <TabsTrigger value="sessions" data-testid="tab-admin-sessions">Sessions</TabsTrigger>
+                <TabsTrigger value="rooms" data-testid="tab-admin-rooms">Rooms</TabsTrigger>
                 <TabsTrigger value="team" data-testid="tab-admin-team">Team</TabsTrigger>
               </TabsList>
               <TabsContent value="events" className="mt-6 flex flex-col gap-8">
                 <EventPicker onOpen={pickEvent} />
                 <NewEventCard />
               </TabsContent>
-              <TabsContent value="sessions" className="mt-6">
-                <SessionsPanel />
+              <TabsContent value="rooms" className="mt-6">
+                <RoomsPanel />
               </TabsContent>
               <TabsContent value="team" className="mt-6">
                 <TeamCard />
