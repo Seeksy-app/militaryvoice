@@ -473,6 +473,15 @@ export default function HostDashboard() {
     onError: (err: Error) => toast({ title: "Couldn't refresh your accounts", description: err.message, variant: "destructive" }),
   });
 
+  // ?tab=integrations (etc.) from a link elsewhere on the dashboard.
+  useEffect(() => {
+    const t = new URLSearchParams(search).get("tab");
+    if (t && ["dashboard", "editProfile", "events", "recordings", "integrations", "fans"].includes(t)) {
+      setScreen(t as typeof screen);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, [search]);
+
   // Coming back from the Upload-Post connect page: ?social=connected
   useEffect(() => {
     if (!data) return;

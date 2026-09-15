@@ -31,6 +31,9 @@ interface Plan {
   posts: PlannedPost[];
 }
 
+/** Always shown, connected or not — the greyed ones say where to add them. */
+const OFFERED: SocialPlatform[] = ["instagram", "facebook", "linkedin", "x"];
+
 function dateLabel(iso: string): string {
   return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" }).format(new Date(iso));
 }
@@ -99,40 +102,56 @@ export function CampaignPlanner({ signupId }: { signupId: number }) {
         </div>
 
         <div className="p-5">
-          {/* Accounts */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {/* Accounts: connected ones toggle; the rest are shaded with a way to add them. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
             <span className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Post from</span>
-            {canPost ? (
-              <div className="flex flex-wrap gap-2">
-                {data.connected.map((p) => {
-                  const on = platforms.includes(p);
+            <div className="flex flex-wrap items-center gap-2">
+              {[...data.connected, ...OFFERED.filter((p) => !data.connected.includes(p))].map((p) => {
+                const isConnected = data.connected.includes(p);
+                const on = isConnected && platforms.includes(p);
+                if (!isConnected) {
                   return (
-                    <button
+                    <Link
                       key={p}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => togglePlatform(p)}
-                      className={`inline-flex items-center gap-2 rounded-full border-2 py-1.5 pl-1.5 pr-3.5 text-sm font-semibold transition-colors ${
-                        on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground hover:border-primary/50"
-                      }`}
-                      data-testid={`campaign-platform-${p}`}
+                      href="/host/dashboard?tab=integrations"
+                      className="inline-flex items-center gap-2 rounded-full border-2 border-dashed border-border py-1.5 pl-1.5 pr-3.5 text-sm font-semibold text-muted-foreground opacity-70 transition-opacity hover:opacity-100"
+                      title={`Connect ${platformLabel(p)} on the Integrations tab`}
+                      data-testid={`campaign-platform-${p}-connect`}
                     >
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full text-white" style={{ background: platformBackground(p) }}>
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full text-white grayscale" style={{ background: platformBackground(p) }}>
                         <PlatformIcon platform={p} className="h-3.5 w-3.5" />
                       </span>
                       {platformLabel(p)}
-                      {on && <Check className="h-4 w-4" />}
-                    </button>
+                      <span className="text-xs font-normal">· connect</span>
+                    </Link>
                   );
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {data.connected.length > 0 ? "Posting from your accounts isn't switched on right now." : "No accounts connected yet."}{" "}
-                <Link href="/host/dashboard?tab=integrations" className="font-medium text-primary hover:underline">
-                  Connect Instagram, Facebook or LinkedIn
-                </Link>{" "}
-                and we can post these for you. You can still save the images below and post them yourself.
+                }
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    aria-pressed={on}
+                    disabled={!canPost}
+                    onClick={() => togglePlatform(p)}
+                    className={`inline-flex items-center gap-2 rounded-full border-2 py-1.5 pl-1.5 pr-3.5 text-sm font-semibold transition-colors ${
+                      on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground hover:border-primary/50"
+                    }`}
+                    data-testid={`campaign-platform-${p}`}
+                  >
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full text-white" style={{ background: platformBackground(p) }}>
+                      <PlatformIcon platform={p} className="h-3.5 w-3.5" />
+                    </span>
+                    {platformLabel(p)}
+                    {on && <Check className="h-4 w-4" />}
+                  </button>
+                );
+              })}
+            </div>
+            {!canPost && (
+              <p className="basis-full text-sm text-muted-foreground">
+                {data.connected.length > 0
+                  ? "Posting from your accounts isn't switched on right now."
+                  : "Connect an account and we post these for you. You can still save the images and post them yourself."}
               </p>
             )}
           </div>
@@ -186,7 +205,7 @@ export function CampaignPlanner({ signupId }: { signupId: number }) {
                         onChange={() => toggleKind(p.kind)}
                         data-testid={`campaign-pick-${p.kind}`}
                       />
-                      {done ? "Already posted" : failed ? "Try again" : "Post this one"}
+                      {done ? "Already posted" : failed ? "Try again" : "Post this one for me"}
                     </label>
                   </div>
                 </div>

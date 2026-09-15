@@ -5,7 +5,7 @@ import multer from "multer";
 import sharp from "sharp";
 import { storage } from "./storage.js";
 import { requireHuman, turnstileSiteKey } from "./turnstile.js";
-import { KINDS, scheduleFor, cardInput, caption as campaignCaption, isKind, type CampaignContext } from "./campaign.js";
+import { KINDS, effectiveSchedule, cardInput, caption as campaignCaption, isKind, type CampaignContext } from "./campaign.js";
 import { uploadPhoto, uploadShowAsset, deleteShowAsset } from "./photoStorage.js";
 import {
   insertSignupSchema,
@@ -698,15 +698,17 @@ export function registerRoutes(app: Express): void {
       .filter((p) => CAMPAIGN_PLATFORMS.includes(p));
     const rows = await storage.listCampaignPosts(signupId);
     const now = Date.now();
+    const schedule = effectiveSchedule(ctx.event, ctx.onAirStart);
     const posts = KINDS.map((def) => {
       const row = rows.find((r) => r.kind === def.kind);
-      const when = scheduleFor(def, ctx.event, ctx.onAirStart);
+      const when = new Date(row?.status === "planned" || !row ? schedule.get(def.kind)!.toISOString() : row.scheduledFor);
       return {
         kind: def.kind,
         label: def.label,
         blurb: def.blurb,
-        scheduledFor: (row?.scheduledFor ?? when.toISOString()),
-        past: when.getTime() <= now,
+        scheduledFor: when.toISOString(),
+        // Within the hour of now: the cron picks it up on its next pass.
+        past: when.getTime() <= now + 3600000,
         selected: Boolean(row),
         status: row?.status ?? null,
         postedAt: row?.postedAt || null,
@@ -748,10 +750,11 @@ export function registerRoutes(app: Express): void {
         return;
       }
     }
+    const schedule = effectiveSchedule(ctx.event, ctx.onAirStart);
     const picks = KINDS.filter((d) => kinds.includes(d.kind)).map((d) => ({
       kind: d.kind,
       platforms,
-      scheduledFor: scheduleFor(d, ctx.event, ctx.onAirStart).toISOString(),
+      scheduledFor: schedule.get(d.kind)!.toISOString(),
     }));
     const rows = await storage.replaceCampaignPlan(signupId, picks);
     res.json({ ok: true, planned: rows.filter((r) => r.status === "planned").length });
@@ -768,6 +771,12 @@ export function registerRoutes(app: Express): void {
       if (!ctx || !profile?.uploadPostUsername) {
         await storage.finishCampaignPost(row.id, false, "No connected account to post from.");
         out.push({ id: row.id, signupId: row.signupId, kind: row.kind, ok: false, error: "no account" });
+        continue;
+      }
+      // Nothing to promote once they've been on.
+      if (ctx.onAirStart.getTime() < Date.now()) {
+        await storage.finishCampaignPost(row.id, false, "The slot had already happened.");
+        out.push({ id: row.id, signupId: row.signupId, kind: row.kind, ok: false, error: "slot passed" });
         continue;
       }
       try {

@@ -33,6 +33,28 @@ export function scheduleFor(def: KindDef, event: EventRow, onAirStart: Date): Da
   return d;
 }
 
+const DAY = 86400000;
+
+/**
+ * The dates we actually post on. Anything already overdue is not fired all at
+ * once — a podcaster who books late would otherwise hit their followers with
+ * three posts in one hour. Overdue posts go now, then every two days, always
+ * finishing before the next dated one.
+ */
+export function effectiveSchedule(event: EventRow, onAirStart: Date, now = new Date()): Map<CampaignKind, Date> {
+  const planned = KINDS.map((d) => ({ def: d, at: scheduleFor(d, event, onAirStart) }));
+  const overdue = planned.filter((p) => p.at.getTime() <= now.getTime());
+  const future = planned.filter((p) => p.at.getTime() > now.getTime());
+  const ceiling = future.length ? Math.min(...future.map((p) => p.at.getTime())) - 12 * 3600000 : Infinity;
+  const out = new Map<CampaignKind, Date>();
+  for (const p of future) out.set(p.def.kind, p.at);
+  overdue.forEach((p, i) => {
+    const spaced = now.getTime() + i * 2 * DAY;
+    out.set(p.def.kind, new Date(Math.max(now.getTime(), Math.min(spaced, ceiling))));
+  });
+  return out;
+}
+
 export interface CampaignContext {
   event: EventRow;
   signup: SignupRow;
