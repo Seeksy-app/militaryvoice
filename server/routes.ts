@@ -912,6 +912,7 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
+    if (!(await requireHuman(req, res))) return;
     const created = await storage.createSponsorInquiry(parsed.data);
     // Send before responding: see the note on /api/reminders. Work started
     // after the response is flushed is not guaranteed to run on serverless.
@@ -2411,6 +2412,7 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
+    if (!(await requireHuman(req, res))) return;
     const row = await storage.createPlatformInterest(parsed.data);
     // Send before responding: see the note on /api/reminders. Work started
     // after the response is flushed is not guaranteed to run on serverless.

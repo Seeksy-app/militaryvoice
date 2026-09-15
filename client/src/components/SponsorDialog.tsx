@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Handshake, Check, Send } from "lucide-react";
+import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 
 interface Props {
   children: React.ReactNode;
@@ -31,12 +32,23 @@ export function SponsorDialog({ children }: Props) {
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
+  const siteKey = useTurnstileSiteKey();
+  const [human, setHuman] = useState<string | null>(null);
+  const [humanReset, setHumanReset] = useState(0);
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/sponsor-inquiries", { name, company, email, phone, message });
+      const res = await apiRequest("POST", "/api/sponsor-inquiries", {
+        name,
+        company,
+        email,
+        phone,
+        message,
+        turnstileToken: human,
+      });
       return res.json();
     },
+    onSettled: () => setHumanReset((n) => n + 1),
     onSuccess: () => {
       setSent(true);
       toast({ title: "Thanks — we'll be in touch", description: "The team gets your note by email right away." });
@@ -53,7 +65,7 @@ export function SponsorDialog({ children }: Props) {
     onError: (err: Error) => toast({ title: "Couldn't send that", description: err.message, variant: "destructive" }),
   });
 
-  const canSubmit = name.trim().length > 0 && /\S+@\S+\.\S+/.test(email);
+  const canSubmit = name.trim().length > 0 && /\S+@\S+\.\S+/.test(email) && (!siteKey || Boolean(human));
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -120,6 +132,7 @@ export function SponsorDialog({ children }: Props) {
               data-testid="input-sponsor-inq-message"
             />
           </div>
+          {siteKey && <Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={humanReset} />}
           <DialogFooter className="gap-2 sm:justify-between">
             <p className="text-xs text-muted-foreground">We'll reply by email. No list, no spam.</p>
             <Button type="submit" disabled={mutation.isPending || !canSubmit || sent} className="gap-1.5 rounded-full" data-testid="button-sponsor-inq-submit">

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { NavBar } from "@/components/NavBar";
@@ -99,6 +100,9 @@ function InterestDialog({
   const [org, setOrg] = useState("");
   const [when, setWhen] = useState("");
   const [about, setAbout] = useState("");
+  const siteKey = useTurnstileSiteKey();
+  const [human, setHuman] = useState<string | null>(null);
+  const [humanReset, setHumanReset] = useState(0);
 
   const submit = useMutation({
     mutationFn: async () =>
@@ -109,7 +113,9 @@ function InterestDialog({
         organization: org.trim(),
         eventTiming: when,
         notes: about.trim(),
+        turnstileToken: human,
       }),
+    onSettled: () => setHumanReset((n) => n + 1),
     onSuccess: () => {
       setOpen(false);
       setName("");
@@ -188,7 +194,13 @@ function InterestDialog({
               data-testid="input-interest-notes"
             />
           </div>
-          <Button type="submit" disabled={submit.isPending || !name.trim() || !email.trim()} className="rounded-full" data-testid="button-interest-submit">
+          {siteKey && <Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={humanReset} />}
+          <Button
+            type="submit"
+            disabled={submit.isPending || !name.trim() || !email.trim() || (Boolean(siteKey) && !human)}
+            className="rounded-full"
+            data-testid="button-interest-submit"
+          >
             {submit.isPending ? "Sending…" : intent === "register" ? "Register my event" : "Join the beta list"}
           </Button>
         </form>
