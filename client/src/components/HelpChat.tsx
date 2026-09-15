@@ -22,7 +22,7 @@ const LINK_RE = /(https?:\/\/[^\s)]+|(?<![\w/])\/(?:schedule|agenda|prepare|faq|
 function linkify(text: string) {
   const out: React.ReactNode[] = [];
   let last = 0;
-  for (const m of text.matchAll(LINK_RE)) {
+  for (const m of Array.from(text.matchAll(LINK_RE))) {
     const start = m.index ?? 0;
     const raw = m[0];
     // Trailing punctuation belongs to the sentence, not the link.
