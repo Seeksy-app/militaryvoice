@@ -76,7 +76,7 @@ import {
   sendListenerStartingSoon,
 } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
-import type { DestinationRow, StudioRow } from "../shared/schema.js";
+import type { DestinationRow, StudioRow, StudioParticipantRow, RunItemRow } from "../shared/schema.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   publishPhoto,
@@ -445,7 +445,8 @@ export function registerRoutes(app: Express): void {
       eventName: event.name,
       onAirLabel: `${formatDateTimeInZone(onAir.start, tz)} ${zoneAbbrev(onAir.start, tz)}`,
       dashboardUrl: `${origin}/host/dashboard`,
-      studioUrl: `${origin}/studio`,
+      // Their own link: joining through it tags them, so their scene finds them.
+      studioUrl: `${origin}/studio?s=${signup.id}`,
       shareUrl: `${origin}/s/${signup.id}`,
       outstanding,
     };
@@ -1953,6 +1954,7 @@ export function registerRoutes(app: Express): void {
     const hostEmail = getSessionEmail(req);
     const profile = hostEmail ? await storage.getProfileByEmail(hostEmail) : undefined;
     const row = await storage.upsertStudioParticipant(found.studio.id, parsed.data.clientKey, {
+      ...(parsed.data.signupId ? { signupId: parsed.data.signupId } : {}),
       displayName: parsed.data.displayName || profile?.hostName || "",
       email: hostEmail || parsed.data.email,
       role: "Speaker",
@@ -2369,15 +2371,45 @@ export function registerRoutes(app: Express): void {
    * stage if it carries nothing. This is what makes the rundown the scene list
    * — the producer follows it down and each row is one press.
    */
-  app.post("/api/admin/run-of-show/:id/take", requireAdmin, async (req, res) => {
-    const items = await storage.listRunOfShow(Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id);
-    const row = items.find((r) => r.id === Number(req.params.id));
-    if (!row) {
-      res.status(404).json({ message: "Not found" });
-      return;
+  /**
+   * Take an agenda row = a scene: its media on the stage, and the right people
+   * on it. A Segment with a booking brings that podcaster on (found by the
+   * link they arrived through, or by name) and clears everyone else; the host
+   * steps off unless the podcaster asked for an interviewer. Every other kind
+   * of row is the host's — intro, handoff, sponsor read.
+   */
+  async function takeRunRow(studio: StudioRow, row: RunItemRow) {
+    const signup = row.signupId ? await storage.getSignupById(row.signupId) : undefined;
+    const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const nameMatch = (a: string, b: string) => {
+      const x = norm(a), y = norm(b);
+      return x.length > 2 && y.length > 2 && (x.includes(y) || y.includes(x));
+    };
+    const isHost = (p: StudioParticipantRow) => p.role === "Host" || norm(p.displayName) === "host";
+    const belongs = (p: StudioParticipantRow) =>
+      Boolean(signup) && (p.signupId === signup!.id || nameMatch(p.displayName, signup!.hostName) || nameMatch(p.displayName, signup!.podcastName));
+    const guestScene = row.kind === "Segment" && Boolean(signup);
+
+    const moved: { id: number; to: string }[] = [];
+    const present = (await storage.listStudioParticipants(studio.id)).filter(withPresence);
+    let onStage = 0;
+    for (const p of present) {
+      let target: "On stage" | "Green room";
+      if (isHost(p)) target = guestScene && !signup!.needsInterviewer ? "Green room" : "On stage";
+      else target = guestScene && belongs(p) ? "On stage" : "Green room";
+      if (target === "On stage") {
+        if (onStage >= studio.maxOnStage) target = "Green room";
+        else onStage += 1;
+      }
+      if (p.state !== target) {
+        await storage.setParticipantState(p.id, target);
+        await syncParticipantState(roomName(studio.id), `p-${p.id}`, target);
+        moved.push({ id: p.id, to: target });
+      }
     }
-    const { studio } = await adminStudio(req);
+
     const updated = await storage.updateStudio(studio.id, {
+      currentRunItemId: row.id,
       stageMediaUrl: row.mediaUrl,
       stageMediaKind: row.mediaKind || "video",
       stageMediaLabel: row.mediaLabel || row.title,
@@ -2387,7 +2419,32 @@ export function registerRoutes(app: Express): void {
       const ev = await storage.getEventById(studio.eventId);
       await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated));
     }
-    res.json(updated);
+    const missing = guestScene && !present.some((p) => !isHost(p) && belongs(p));
+    return { studio: updated, moved, missing: missing ? signup!.podcastName : null };
+  }
+
+  app.post("/api/admin/run-of-show/:id/take", requireAdmin, async (req, res) => {
+    const items = await storage.listRunOfShow(Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id);
+    const row = items.find((r) => r.id === Number(req.params.id));
+    if (!row) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    const { studio } = await adminStudio(req);
+    res.json(await takeRunRow(studio, row));
+  });
+
+  /** The row after the one on now (or the first). What "next scene" presses. */
+  app.post("/api/admin/run-of-show/next", requireAdmin, async (req, res) => {
+    const items = await storage.listRunOfShow(Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id);
+    const { studio } = await adminStudio(req);
+    const idx = items.findIndex((r) => r.id === studio.currentRunItemId);
+    const row = items[idx + 1];
+    if (!row) {
+      res.status(409).json({ message: idx === -1 ? "Nothing in the agenda yet." : "That was the last row." });
+      return;
+    }
+    res.json(await takeRunRow(studio, row));
   });
 
   /** Put something on the stage, or take it off. */

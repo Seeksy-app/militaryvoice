@@ -622,6 +622,8 @@ export const studios = pgTable("studios", {
   recordingEgressId: text("recording_egress_id").notNull().default(""),
   // Whose slot the current recording belongs to.
   recordingSignupId: integer("recording_signup_id"),
+  // The agenda row the producer last took. 0 = nothing taken yet (fall back to the clock).
+  currentRunItemId: integer("current_run_item_id").notNull().default(0),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
@@ -870,6 +872,9 @@ export const studioParticipants = pgTable("studio_participants", {
   displayName: text("display_name").notNull().default(""),
   email: text("email").notNull().default(""),
   role: text("role").notNull().default("Speaker"),
+  // Set when they arrive through their own link (/studio?s=<signup>), so a
+  // scene can find its podcaster without guessing from the name.
+  signupId: integer("signup_id"),
   state: text("state").notNull().default("Green room"),
   camReady: boolean("cam_ready").notNull().default(false),
   micReady: boolean("mic_ready").notNull().default(false),
@@ -882,6 +887,7 @@ export const studioJoinSchema = z.object({
   clientKey: z.string().trim().min(8).max(64),
   displayName: z.string().trim().min(1, "Tell us your name").max(80),
   email: z.string().trim().max(200),
+  signupId: z.number().int().positive().optional(),
 });
 
 export const studioHeartbeatSchema = z.object({

@@ -327,10 +327,25 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     queryFn: () => adminGet(`/api/admin/scenes${q}`),
   });
 
+  const afterTake = (r: { missing?: string | null }) => {
+    refresh();
+    if (r?.missing) {
+      toast({
+        title: `${r.missing} isn't in the green room`,
+        description: "The scene is up, but nobody matching that booking has arrived. Bring them on by hand when they do.",
+      });
+    }
+  };
   const takeRow = useMutation({
-    mutationFn: async (id: number) => adminSend("POST", `/api/admin/run-of-show/${id}/take`, { studioId }),
-    onSuccess: () => refresh(),
-    onError: (e: Error) => toast({ title: "Couldn't take that cue", description: e.message, variant: "destructive" }),
+    mutationFn: async (id: number) =>
+      (await adminSend("POST", `/api/admin/run-of-show/${id}/take`, { studioId, eventId })).json(),
+    onSuccess: afterTake,
+    onError: (e: Error) => toast({ title: "Couldn't take that scene", description: e.message, variant: "destructive" }),
+  });
+  const takeNext = useMutation({
+    mutationFn: async () => (await adminSend("POST", "/api/admin/run-of-show/next", { studioId, eventId })).json(),
+    onSuccess: afterTake,
+    onError: (e: Error) => toast({ title: "No next scene", description: e.message, variant: "destructive" }),
   });
 
   const muteStage = useMutation({
@@ -979,7 +994,117 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
 
           <div className="flex min-h-0 flex-1">
             {/* green room, down the left, where a producer's eye already is */}
-            <aside className="flex w-[204px] shrink-0 flex-col border-r border-white/10">
+            <aside className="flex w-[272px] shrink-0 flex-col border-r border-white/10">
+              {/* Scenes = the agenda. One press takes the row: its media on the
+                  stage, its podcaster on, everyone else off. The dot by each
+                  face says whether that person has actually arrived. */}
+              {isPrimary && (runItems ?? []).length > 0 && (
+                <div className="flex min-h-0 flex-[3] flex-col border-b border-white/10">
+                  <div className="flex items-center justify-between gap-2 px-3 py-2">
+                    <span className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
+                      <ListOrdered className="h-3.5 w-3.5" /> Scenes
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-white/80">{(runItems ?? []).length}</span>
+                    </span>
+                    <Button
+                      size="sm"
+                      className="h-7 gap-1 rounded-full bg-[#F0A71F] px-3 text-[12px] font-bold text-[#1a1200] hover:bg-[#f7b73a]"
+                      disabled={takeNext.isPending || takeRow.isPending}
+                      onClick={() => takeNext.mutate()}
+                      title="Take the next row of the agenda"
+                      data-testid="button-next-scene"
+                    >
+                      Next scene <ArrowDown className="h-3 w-3 -rotate-90" />
+                    </Button>
+                  </div>
+
+                  {(scenes ?? []).length > 0 && (
+                    <div className="flex flex-wrap gap-1 px-3 pb-2">
+                      {(scenes ?? []).map((sc) => {
+                        const on = sc.mediaUrl
+                          ? studio?.stageMediaPlaying && studio?.stageMediaUrl === sc.mediaUrl
+                          : !studio?.stageMediaPlaying && !studio?.currentRunItemId;
+                        return (
+                          <button
+                            key={sc.id}
+                            type="button"
+                            onClick={() => applyScene.mutate(sc.id)}
+                            className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
+                              on ? "bg-[#F0A71F] text-[#1a1200]" : "bg-white/8 text-white/75 hover:bg-white/15"
+                            }`}
+                            data-testid={`button-scene-${sc.id}`}
+                          >
+                            {sc.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-2">
+                    {(runItems ?? []).map((r) => {
+                      const taken = (studio?.currentRunItemId || 0) === r.id;
+                      const isNow = !studio?.currentRunItemId && current?.id === r.id;
+                      const sg = r.signupId ? (signups ?? []).find((x) => x.id === r.signupId) : undefined;
+                      const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+                      const here = sg
+                        ? present.some(
+                            (p) =>
+                              (p as { signupId?: number | null }).signupId === sg.id ||
+                              (norm(p.displayName).length > 2 &&
+                                (norm(sg.hostName).includes(norm(p.displayName)) || norm(p.displayName).includes(norm(sg.hostName)))),
+                          )
+                        : false;
+                      return (
+                        <button
+                          key={r.id}
+                          type="button"
+                          ref={(el) => {
+                            if (el && taken) el.scrollIntoView({ block: "nearest" });
+                          }}
+                          onClick={() => takeRow.mutate(r.id)}
+                          disabled={takeRow.isPending}
+                          className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors ${
+                            taken
+                              ? "bg-[#F0A71F] text-[#1a1200]"
+                              : isNow
+                                ? "bg-white/12 text-white"
+                                : "text-white/70 hover:bg-white/8"
+                          }`}
+                          data-testid={`button-cue-${r.id}`}
+                        >
+                          <span className="w-12 shrink-0 text-[11px] tabular-nums opacity-70">
+                            {r.startAtUtc ? formatTimeInZone(new Date(r.startAtUtc), zone) : "--:--"}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-semibold">{r.title}</span>
+                            <span className="flex items-center gap-1.5 text-[11px] opacity-70">
+                              {r.kind}
+                              {r.mediaUrl && <Film className="h-2.5 w-2.5" />}
+                            </span>
+                          </span>
+                          {sg && (
+                            <span className="relative shrink-0" title={here ? `${sg.hostName} is in the green room` : `${sg.hostName} hasn't arrived`}>
+                              {sg.photoUrl ? (
+                                <img src={sg.photoUrl} alt="" className="h-6 w-6 rounded-full object-cover ring-1 ring-white/20" />
+                              ) : (
+                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold">
+                                  {(sg.hostName || "?").slice(0, 1).toUpperCase()}
+                                </span>
+                              )}
+                              <span
+                                className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[#000741] ${
+                                  here ? "bg-emerald-400" : "bg-white/30"
+                                }`}
+                              />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <div className="flex min-h-0 flex-[2] flex-col">
               {onStage.length > 0 && (
                 <div className="border-b border-white/10 px-3 py-2.5">
                   <div className="mb-2 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
@@ -1059,6 +1184,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 )}
               </div>
 
+              </div>
             </aside>
 
             {/* the programme, filling whatever is left */}
@@ -1085,90 +1211,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               )}
             </div>
 
-            {/* the rundown, driveable — a second person can sit on this alone */}
-            {isPrimary && (runItems ?? []).length > 0 && (
-              <aside className="hidden w-[236px] shrink-0 flex-col border-l border-white/10 xl:flex">
-                <div className="flex items-center justify-between px-4 py-2.5 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
-                  <span className="flex items-center gap-1.5">
-                    <ListOrdered className="h-3.5 w-3.5" /> Rundown
-                  </span>
-                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-white/80">{(runItems ?? []).length}</span>
-                </div>
-
-                <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2.5 pb-3">
-                  {(runItems ?? []).map((r) => {
-                    const isNow = current?.id === r.id;
-                    const onStageNow =
-                      Boolean(r.mediaUrl) && studio?.stageMediaPlaying && studio?.stageMediaUrl === r.mediaUrl;
-                    return (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => takeRow.mutate(r.id)}
-                        disabled={takeRow.isPending}
-                        className={`flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ${
-                          onStageNow
-                            ? "bg-[#F0A71F] text-[#1a1200]"
-                            : isNow
-                              ? "bg-white/12 text-white"
-                              : "text-white/65 hover:bg-white/8"
-                        }`}
-                        data-testid={`button-cue-${r.id}`}
-                      >
-                        <span className="pt-0.5 text-[11px] tabular-nums opacity-70">
-                          {r.startAtUtc ? formatTimeInZone(new Date(r.startAtUtc), zone) : "--:--"}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-xs font-medium">{r.title}</span>
-                          <span className="mt-0.5 flex items-center gap-1.5 text-[11px] opacity-70">
-                            {r.kind}
-                            {r.mediaUrl && (
-                              <>
-                                <Film className="h-2.5 w-2.5" />
-                                {r.mediaLabel || "media"}
-                              </>
-                            )}
-                          </span>
-                        </span>
-                        {isNow && !onStageNow && (
-                          <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#ED1C24]" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <p className="border-t border-white/10 px-4 py-2 text-[11px] leading-snug text-white/35">
-                  Press a row to take it. A row with no media returns the stage to the cameras.
-                </p>
-              </aside>
-            )}
           </div>
-
-          {/* scenes, one press each */}
-          {(scenes ?? []).length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 border-t border-white/10 bg-[#04102b] px-4 py-2.5">
-              <span className="text-[12px] font-bold uppercase tracking-[0.14em] text-white/40">Scenes</span>
-              {(scenes ?? []).map((sc) => {
-                const on = sc.mediaUrl
-                  ? studio?.stageMediaPlaying && studio?.stageMediaUrl === sc.mediaUrl
-                  : !studio?.stageMediaPlaying;
-                return (
-                  <button
-                    key={sc.id}
-                    type="button"
-                    onClick={() => applyScene.mutate(sc.id)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                      on ? "bg-[#F0A71F] text-[#1a1200]" : "bg-white/8 text-white/80 hover:bg-white/15"
-                    }`}
-                    data-testid={`button-scene-${sc.id}`}
-                  >
-                    {sc.name}
-                  </button>
-                );
-              })}
-            </div>
-          )}
 
           {/* the deck: the room's sound on the left, YOU in the middle, like Zoom */}
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-white/10 bg-[#000741] px-4 py-3">

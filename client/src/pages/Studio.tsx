@@ -96,6 +96,12 @@ export default function Studio({ slug }: { slug?: string }) {
     const v = Number(new URLSearchParams(window.location.search).get("studioId"));
     return Number.isFinite(v) && v > 0 ? v : undefined;
   }, []);
+  // ?s=<signup id> comes from the podcaster's own emails, and lets the
+  // producer's scenes find them by booking rather than by name.
+  const signupId = useMemo(() => {
+    const v = Number(new URLSearchParams(window.location.search).get("s"));
+    return Number.isFinite(v) && v > 0 ? v : undefined;
+  }, []);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -198,7 +204,7 @@ export default function Studio({ slug }: { slug?: string }) {
 
   async function join() {
     try {
-      await apiRequest("POST", "/api/studio/join", { clientKey: key, displayName: name.trim(), email: "", slug, studioId });
+      await apiRequest("POST", "/api/studio/join", { clientKey: key, displayName: name.trim(), email: "", slug, studioId, signupId });
       setJoined(true);
       if (!streamRef.current) void startMedia();
     } catch (err) {
