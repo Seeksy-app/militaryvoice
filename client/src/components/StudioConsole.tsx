@@ -430,12 +430,13 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     onSuccess: () => refresh(),
   });
 
-  const live = studio?.status === "Live";
+  const isRoom = kind === "room";
+  const live = !isRoom && studio?.status === "Live";
   const recording = Boolean(studio?.recordingEgressId);
   // "Live" without external destinations has no egress at all — the audience
   // watches on our page — so the button has to read the status, not the egress.
-  const broadcasting = Boolean(studio?.broadcastEgressId) || studio?.status === "Live";
-  const isRoom = kind === "room";
+  // Rooms never stream: whatever status a room carries, it is only ever recording.
+  const broadcasting = !isRoom && (Boolean(studio?.broadcastEgressId) || studio?.status === "Live");
   const stageFull = !!studio && onStage.length >= studio.maxOnStage;
   /**
    * The standby clip is played by a <video> tag on the broadcast, so it has to
@@ -667,9 +668,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             </div>
           </div>
 
-          {broadcasting && (
+          {(broadcasting || (isRoom && recording)) && (
             <span className="inline-flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.14em]">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> On air
+              <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {broadcasting ? "On air" : "Recording"}
             </span>
           )}
 
@@ -1165,6 +1166,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                               <Mic className="h-3 w-3 text-emerald-400" />
                             ) : (
                               <MicOff className="h-3 w-3 text-[#ED1C24]" />
+                            )}
+                            {!p.camReady && !p.micReady && (
+                              <span className="truncate text-[11px] text-[#F0A71F]">Camera not on yet</span>
                             )}
                           </div>
                         </div>
