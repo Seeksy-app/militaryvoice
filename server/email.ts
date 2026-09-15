@@ -9,6 +9,57 @@ const RESEND_BASE = process.env.CUSTOM_CRED_API_RESEND_COM_URL || "https://api.r
 const RESEND_PROXY_TOKEN = process.env.CUSTOM_CRED_API_RESEND_COM_TOKEN;
 
 const FROM_ADDRESS = "MilitaryVoice.ai <hello@militaryvoice.ai>";
+const SITE = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "");
+
+/** Header images live in /public/email; one per mood so emails can rotate. */
+export const EMAIL_BANNERS = {
+  welcome: `${SITE}/email/welcome.jpg`,
+  podcasters: `${SITE}/email/podcasters.jpg`,
+} as const;
+
+/**
+ * The one layout every outward email uses: photo header, white card, navy
+ * footer. Table-based and inline-styled because that's what mail clients
+ * render; 600px wide with a 2x banner so it's sharp on a phone.
+ */
+export function emailShell(o: {
+  banner: string;
+  bannerAlt?: string;
+  eyebrow: string;
+  heading: string;
+  body: string;
+  cta?: { href: string; label: string };
+  secondary?: string; // extra html under the button (calendar links, etc.)
+  footerNote?: string;
+}): string {
+  const cta = o.cta
+    ? `<a href="${o.cta.href}" style="display:inline-block;background:#F0A71F;color:#1a1200;text-decoration:none;font-size:16px;font-weight:700;padding:14px 26px;border-radius:9999px;">${escapeHtml(o.cta.label)}</a>`
+    : "";
+  return `<!doctype html><html><body style="margin:0;padding:0;background:#eef2f8;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f8;">
+    <tr><td align="center" style="padding:24px 12px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        <tr><td style="line-height:0;"><img src="${o.banner}" width="600" alt="${escapeHtml(o.bannerAlt ?? "MilitaryVoice.ai")}" style="display:block;width:100%;height:auto;border:0;"></td></tr>
+        <tr><td style="padding:30px 32px 6px;">
+          <p style="margin:0 0 6px;color:#053877;font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">${escapeHtml(o.eyebrow)}</p>
+          <h1 style="margin:0;color:#0b1220;font-size:26px;line-height:1.25;font-weight:800;">${escapeHtml(o.heading)}</h1>
+        </td></tr>
+        <tr><td style="padding:14px 32px 4px;color:#374151;font-size:16px;line-height:1.65;">${o.body}</td></tr>
+        ${cta ? `<tr><td style="padding:14px 32px 6px;">${cta}</td></tr>` : ""}
+        ${o.secondary ? `<tr><td style="padding:6px 32px 8px;">${o.secondary}</td></tr>` : ""}
+        <tr><td style="padding:16px 32px 28px;color:#6b7280;font-size:13px;line-height:1.6;">${o.footerNote ?? "Questions? Reply to this email and a human will read it."}</td></tr>
+        <tr><td style="background:#053877;padding:20px 32px;">
+          <img src="${SITE}/logo-wave.png" width="54" alt="" style="display:block;border:0;margin:0 0 8px;">
+          <p style="margin:0;color:#ffffff;font-size:14px;font-weight:700;">MilitaryVoice.ai</p>
+          <p style="margin:2px 0 0;color:#c8d8ee;font-size:12px;line-height:1.6;">24 Hour Podcastathon for National Military Podcast Day ·
+            <a href="${SITE}/agenda" style="color:#F0A71F;text-decoration:none;">Agenda</a> ·
+            <a href="${SITE}/host/dashboard" style="color:#F0A71F;text-decoration:none;">Your dashboard</a></p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table></body></html>`;
+}
+
 
 export interface CalendarLinks {
   google: string;
@@ -90,25 +141,24 @@ function buildHtml(rawInput: ConfirmationEmailInput): string {
     podcastName: escapeHtml(rawInput.podcastName),
     eventName: escapeHtml(rawInput.eventName),
   };
-  return `
-  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
-    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">${input.eventName}</p>
-    <h1 style="margin:0 0 20px;color:#111827;font-size:22px;font-weight:700;">You're on the schedule, ${input.hostName}</h1>
-    <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
-      <strong>${input.podcastName}</strong> is confirmed for the marathon. Here's your time:
-    </p>
-    <div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 16px;">
-      <p style="margin:0 0 4px;color:#053877;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">You're on air</p>
-      <p style="margin:0;color:#1f2937;font-size:18px;font-weight:700;">${input.onAirStartLabel} – ${input.onAirEndLabel} (${input.timezoneLabel})</p>
-    </div>
-    <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
-      We'll email you the studio details and how to log in ahead of the event. Please be ready and online
-      <strong>10 minutes before</strong> your go-live time.
-    </p>
-    <a href="${input.agendaUrl}" style="display:inline-block;background:#053877;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:9999px;">View the agenda</a>
-    ${input.calendar ? calendarButtonsHtml(input.calendar) : ""}
-    <p style="margin:28px 0 0;color:#9ca3af;font-size:12px;">Questions? Just reply to this email.</p>
-  </div>`;
+  return emailShell({
+    banner: EMAIL_BANNERS.welcome,
+    bannerAlt: "National Military Podcast Day · October 5, 2026",
+    eyebrow: rawInput.eventName,
+    heading: `You're on the lineup, ${rawInput.hostName}`,
+    body: `
+      <p style="margin:0 0 16px;"><strong>${input.podcastName}</strong> is confirmed. Here's your time:</p>
+      <div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 18px;">
+        <p style="margin:0 0 4px;color:#053877;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">You're on air</p>
+        <p style="margin:0;color:#1f2937;font-size:20px;font-weight:800;">${input.onAirStartLabel} – ${input.onAirEndLabel}</p>
+        <p style="margin:2px 0 0;color:#6b7280;font-size:13px;">${escapeHtml(input.timezoneLabel)}</p>
+      </div>
+      <p style="margin:0 0 12px;">Next, from your dashboard: set your show up for the event, send us anything you want played
+        (intro, outro, images), and tick the ready-made posts and we'll promote your slot from your own accounts.</p>
+      <p style="margin:0;">On the day, be in the studio page <strong>10 minutes before</strong> you're on. We'll email the details ahead of time.</p>`,
+    cta: { href: input.agendaUrl, label: "See the lineup" },
+    secondary: input.calendar ? calendarButtonsHtml(input.calendar) : undefined,
+  });
 }
 
 function buildText(input: ConfirmationEmailInput): string {
@@ -314,19 +364,15 @@ export interface NudgeInput {
 }
 
 function nudgeShell(opts: { eyebrow: string; heading: string; body: string; cta?: { href: string; label: string } }): string {
-  const cta = opts.cta
-    ? `<p style="margin:0 0 8px;"><a href="${opts.cta.href}" style="display:inline-block;background:#F0A71F;color:#1a1200;text-decoration:none;font-size:15px;font-weight:700;padding:12px 22px;border-radius:9999px;">${opts.cta.label}</a></p>`
-    : "";
-  return `
-  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
-    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">${escapeHtml(opts.eyebrow)}</p>
-    <h1 style="margin:0 0 18px;color:#111827;font-size:22px;font-weight:700;">${escapeHtml(opts.heading)}</h1>
-    ${opts.body}
-    ${cta}
-    <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;line-height:1.6;">
-      You're getting this because you hold a slot on MilitaryVoice.ai. Reply to this email and a human will read it.
-    </p>
-  </div>`;
+  return emailShell({
+    banner: EMAIL_BANNERS.podcasters,
+    bannerAlt: "24 Hour Podcastathon",
+    eyebrow: opts.eyebrow,
+    heading: opts.heading,
+    body: opts.body,
+    cta: opts.cta,
+    footerNote: "You're getting this because you hold a slot on MilitaryVoice.ai. Reply to this email and a human will read it.",
+  });
 }
 
 function outstandingHtml(items: string[]): string {
