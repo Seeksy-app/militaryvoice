@@ -1207,7 +1207,7 @@ function EventPicker({ onOpen }: { onOpen: (id: number) => void }) {
             className="group overflow-hidden rounded-2xl border border-border bg-card text-left transition-colors hover:border-primary/50"
             data-testid={`event-open-${e.id}`}
           >
-            <div className="h-28 bg-[#053877] bg-cover bg-center" style={e.imageUrl ? { backgroundImage: `url(${e.imageUrl})` } : undefined} />
+            <div className="aspect-video bg-[#053877] bg-cover bg-center" style={e.imageUrl ? { backgroundImage: `url(${e.imageUrl}?v=2)` } : undefined} />
             <div className="p-4">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">

@@ -570,6 +570,9 @@ export interface IStorage {
   getSignupById(id: number): Promise<SignupRow | undefined>;
   createReminder(reminder: InsertReminder): Promise<ReminderRow>;
   listReminders(): Promise<ReminderRow[]>;
+  /** Mark a reminder as sent, atomically; false if it already was. */
+  claimReminder(id: number): Promise<boolean>;
+  releaseReminder(id: number): Promise<void>;
   createLoginToken(email: string, token: string, expiresAt: string): Promise<LoginTokenRow>;
   getLoginToken(email: string, token: string): Promise<LoginTokenRow | undefined>;
   markLoginTokenUsed(id: number): Promise<void>;
@@ -813,6 +816,21 @@ class DatabaseStorage implements IStorage {
       .values({ ...reminder, createdAt: new Date().toISOString() })
       .returning();
     return created;
+  }
+
+  async claimReminder(id: number): Promise<boolean> {
+    await ready();
+    const rows = await db
+      .update(reminders)
+      .set({ remindedAt: new Date().toISOString() })
+      .where(and(eq(reminders.id, id), eq(reminders.remindedAt, "")))
+      .returning({ id: reminders.id });
+    return rows.length > 0;
+  }
+
+  async releaseReminder(id: number): Promise<void> {
+    await ready();
+    await db.update(reminders).set({ remindedAt: "" }).where(eq(reminders.id, id));
   }
 
   async listReminders(): Promise<ReminderRow[]> {

@@ -157,6 +157,9 @@ export const reminders = pgTable("reminders", {
   phone: text("phone").notNull().default(""), // optional; for a future text reminder
   timezone: text("timezone").notNull().default(""), // fan's zone, for the email
   createdAt: text("created_at").notNull(),
+  // When the "starting soon" email went out. Empty until it has; the claim
+  // that sets it is what stops a double send.
+  remindedAt: text("reminded_at").notNull().default(""),
 });
 
 export const insertReminderSchema = createInsertSchema(reminders)

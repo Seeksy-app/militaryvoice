@@ -73,6 +73,7 @@ import {
   sendBookingAlert,
   sendScheduleReference,
   sendHelpRequestAlert,
+  sendListenerStartingSoon,
 } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, StudioRow } from "../shared/schema.js";
@@ -540,6 +541,18 @@ export function registerRoutes(app: Express): void {
     let sent = false;
     if (kind === "schedule") {
       sent = await sendScheduleReference(to);
+    } else if (kind === "starting") {
+      sent = await sendListenerStartingSoon({
+        to,
+        name: "Jamie",
+        podcastName: "The Devil Dawg Podcast",
+        hostName: "Riccoh Player",
+        timeLabel: "9:30 AM EDT",
+        minutesAway: 30,
+        watchUrl: `${PUBLIC_ORIGIN}/watch`,
+        cardUrl: `${PUBLIC_ORIGIN}/agenda?slot=5`,
+        youtubeUrl: "https://www.youtube.com/@MilitaryVoice",
+      });
     } else {
       const featured = await storage.getFeaturedEvent();
       const active = (await storage.listSignups(featured.id)).filter((x) => x.status !== "cancelled");
@@ -612,7 +625,8 @@ export function registerRoutes(app: Express): void {
     const dryRun = req.query.dryRun === "1" || req.body?.dryRun === true;
     const results = await runNudges({ dryRun });
     const posts = dryRun ? [] : await runCampaign();
-    res.json({ dryRun, considered: results.length, results, posts });
+    const listeners = await runListenerReminders({ dryRun });
+    res.json({ dryRun, considered: results.length, results, posts, listeners });
   };
   app.get("/api/cron/nudges", nudgeHandler);
   app.post("/api/cron/nudges", nudgeHandler);
@@ -797,6 +811,63 @@ export function registerRoutes(app: Express): void {
     const rows = await storage.replaceCampaignPlan(signupId, picks);
     res.json({ ok: true, planned: rows.filter((r) => r.status === "planned").length });
   });
+
+  /**
+   * Listeners who tapped "Remind me": one email in the hour before the show.
+   * The cron runs on the hour, so a 9:30 show is announced at 9:00 and a
+   * 9:00 show at 8:00. Claimed before sending; released on a definite
+   * rejection so the next pass retries.
+   */
+  const LISTENER_WINDOW_MS = 65 * 60_000;
+  async function runListenerReminders(opts: { dryRun?: boolean } = {}) {
+    const now = Date.now();
+    const pending = (await storage.listReminders()).filter((r) => !r.remindedAt);
+    const out: { id: number; to: string; signupId: number; minutesAway: number; sent: boolean }[] = [];
+    if (pending.length === 0) return out;
+    const events = await storage.listEvents();
+    const signupCache = new Map<number, Awaited<ReturnType<typeof storage.getSignupById>>>();
+    for (const r of pending) {
+      let signup = signupCache.get(r.signupId);
+      if (signup === undefined) {
+        signup = await storage.getSignupById(r.signupId);
+        signupCache.set(r.signupId, signup);
+      }
+      if (!signup || signup.status === "cancelled") continue;
+      const event = events.find((e) => e.id === signup!.eventId);
+      if (!event) continue;
+      const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
+      const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+      const ms = onAir.start.getTime() - now;
+      // Not yet close, or already on/over: nothing to send this pass.
+      if (ms > LISTENER_WINDOW_MS || onAir.end.getTime() < now) continue;
+      const minutesAway = Math.max(0, Math.round(ms / 60000));
+      if (opts.dryRun) {
+        out.push({ id: r.id, to: r.email, signupId: signup.id, minutesAway, sent: false });
+        continue;
+      }
+      if (!(await storage.claimReminder(r.id))) continue;
+      const tz = r.timezone || signup.timezone || "America/New_York";
+      let sent = false;
+      try {
+        sent = await sendListenerStartingSoon({
+          to: r.email,
+          name: r.name,
+          podcastName: signup.podcastName,
+          hostName: signup.hostName,
+          timeLabel: `${formatTimeInZone(onAir.start, tz)} ${zoneAbbrev(onAir.start, tz)}`,
+          minutesAway,
+          watchUrl: `${PUBLIC_ORIGIN}${event.slug && !event.isFeatured ? `/event/${event.slug}/watch` : "/watch"}`,
+          cardUrl: `${PUBLIC_ORIGIN}/agenda?slot=${signup.slotIndex}`,
+          youtubeUrl: signup.youtubeUrl || undefined,
+        });
+        if (!sent) await storage.releaseReminder(r.id);
+      } catch (err) {
+        console.error(`Listener reminder ${r.id} failed:`, err);
+      }
+      out.push({ id: r.id, to: r.email, signupId: signup.id, minutesAway, sent });
+    }
+    return out;
+  }
 
   /** Hourly, from the same cron as the nudges. Claim, post, record. */
   async function runCampaign() {

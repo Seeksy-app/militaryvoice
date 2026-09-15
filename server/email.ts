@@ -538,12 +538,9 @@ export async function sendScheduleReference(to: string): Promise<boolean> {
   ${row("I'm on today", "Show day", "3 hours before their slot.")}
   ${row("Rule", "", "Anchored to the event, not the booking date. Overdue posts are spaced so nobody's followers get three in one hour.")}
   ${head("Listeners")}
-  ${row("Remind me", "On tap", "Confirmation with Google / Outlook / Apple calendar links. There is no pre-show email to listeners yet — see note.")}
-</table>
-<p style="margin:16px 0 0;padding:12px 16px;background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;font-size:14px;">
-  <strong>Note:</strong> the homepage tells listeners “We nudge you before the show starts.” Today they only get the
-  calendar links at sign-up; the pre-show email itself isn't built yet. Say the word and it rides the same hourly cron.
-</p>`;
+  ${row("Remind me", "On tap", "Confirmation with Google / Outlook / Apple calendar links.")}
+  ${row("Starting soon", "Within the hour", "One email in the hour before the show they picked (the :00 run before it). Text reminders are not sent — there's no SMS provider.")}
+</table>`;
   const text =
     "Podcaster nudges (relative to each slot): Get ready 14 days before; Two days to go 2 days before; You're on in an hour 60 min before. Only the most urgent goes out.\n" +
     "Posting plan (only what they tick): Join me Aug 31 (past, next run); Share this Sep 7 (past, +2d); What is the day? Sep 14 (past, +4d); Two weeks Sep 21 10am ET; This week Sep 28 10am ET; I'm on today 3h before slot.\n" +
@@ -596,5 +593,44 @@ export async function sendHelpRequestAlert(v: {
       footerNote: "Hit reply on this email and it goes straight to them.",
     }),
     text: `${v.name || "A visitor"} (${v.email}) asked to talk to a person.\nPage: ${v.page}\n\nQuestion:\n${v.question}\n\nTranscript:\n${v.transcript}\n\nReply to this email to answer them.`,
+  });
+}
+
+
+export interface StartingSoonInput {
+  to: string;
+  name: string;
+  podcastName: string;
+  hostName: string;
+  timeLabel: string; // "9:30 AM EDT"
+  minutesAway: number;
+  watchUrl: string;
+  cardUrl: string;
+  youtubeUrl?: string;
+}
+
+/** The listener's pre-show nudge: the promise on the homepage, kept. */
+export async function sendListenerStartingSoon(v: StartingSoonInput): Promise<boolean> {
+  const soon = v.minutesAway <= 5 ? "right now" : `in about ${v.minutesAway} minutes`;
+  const first = v.name.trim().split(/\s+/)[0] || "there";
+  return sendRawEmail({
+    to: v.to,
+    subject: `${v.podcastName} is on ${soon} — ${v.timeLabel}`,
+    html: emailShell({
+      banner: EMAIL_BANNERS.welcome,
+      bannerAlt: "National Military Podcast Day",
+      eyebrow: "Starting soon",
+      heading: `${v.podcastName} goes live ${soon}`,
+      body: `
+        <p style="margin:0 0 14px;">Hi ${escapeHtml(first)} — you asked us to give you a nudge. <strong>${escapeHtml(v.podcastName)}</strong>
+          with ${escapeHtml(v.hostName)} is on at <strong>${escapeHtml(v.timeLabel)}</strong> as part of the 24 Hour Podcastathon.</p>
+        <p style="margin:0;">The stream is on the agenda; the show's card has the host's channels if you'd rather watch there.</p>`,
+      cta: { href: v.watchUrl, label: "Watch live" },
+      secondary: `<p style="margin:0;font-size:14px;"><a href="${v.cardUrl}" style="color:#053877;font-weight:600;">Open the show's card</a>${
+        v.youtubeUrl ? ` · <a href="${v.youtubeUrl}" style="color:#053877;font-weight:600;">Their YouTube</a>` : ""
+      }</p>`,
+      footerNote: "One email, as promised. Reply if anything's wrong.",
+    }),
+    text: `${v.podcastName} with ${v.hostName} is on ${soon} — ${v.timeLabel}.\n\nWatch live: ${v.watchUrl}\nThe show's card: ${v.cardUrl}${v.youtubeUrl ? `\nTheir YouTube: ${v.youtubeUrl}` : ""}`,
   });
 }
