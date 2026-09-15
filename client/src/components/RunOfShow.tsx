@@ -64,6 +64,8 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
   // Forty-eight slots is a lot of page. Start folded and show the next few,
   // because on show day what matters is what's coming, not the whole day.
   const [expanded, setExpanded] = useState(false);
+  // Hide open slots, pre-show and handoffs: just the shows that are actually booked.
+  const [bookedOnly, setBookedOnly] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState<Partial<RunItemRow>>({});
 
@@ -90,6 +92,17 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
     }
     return m;
   }, [assets]);
+
+  const visible = useMemo(() => (bookedOnly ? (items ?? []).filter((it) => it.signupId != null) : items ?? []), [items, bookedOnly]);
+  const bookedSegments = useMemo(() => (items ?? []).filter((it) => it.kind === "Segment" && it.signupId != null), [items]);
+  const withMaterials = useMemo(
+    () =>
+      bookedSegments.filter((it) => {
+        const sg = signupById.get(it.signupId!);
+        return sg ? (assetsByEmail.get(sg.email.toLowerCase()) ?? []).length > 0 : false;
+      }).length,
+    [bookedSegments, signupById, assetsByEmail],
+  );
 
   function refresh() {
     queryClient.invalidateQueries({ queryKey: ["/api/admin/run-of-show"] });
@@ -184,6 +197,22 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
+            {bookedSegments.length > 0 && (
+              <Button
+                variant={bookedOnly ? "default" : "outline"}
+                size="sm"
+                className="gap-1.5 rounded-full"
+                aria-pressed={bookedOnly}
+                onClick={() => setBookedOnly((v) => !v)}
+                title={`${withMaterials} of ${bookedSegments.length} booked shows have sent materials`}
+                data-testid="button-run-booked-only"
+              >
+                <Radio className="h-3.5 w-3.5" /> Booked shows only · {bookedSegments.length}
+                <span className={`text-[11px] font-normal ${bookedOnly ? "text-white/80" : "text-muted-foreground"}`}>
+                  ({withMaterials} with materials)
+                </span>
+              </Button>
+            )}
             {items && items.length > 0 && (
               <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={exportCsv} data-testid="button-run-export">
                 <Download className="h-3.5 w-3.5" /> CSV
@@ -192,7 +221,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
             <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => addItem.mutate()} data-testid="button-run-add">
               <Plus className="h-3.5 w-3.5" /> Add row
             </Button>
-            {items && items.length > COLLAPSED_ROWS && (
+            {items && !bookedOnly && items.length > COLLAPSED_ROWS && (
               <Button
                 variant="outline"
                 size="sm"
@@ -241,7 +270,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {(expanded ? items : items.slice(0, COLLAPSED_ROWS)).map((it) => {
+            {(expanded || bookedOnly ? visible : visible.slice(0, COLLAPSED_ROWS)).map((it) => {
               const s = it.signupId ? signupById.get(it.signupId) : undefined;
               const mats = s ? assetsByEmail.get(s.email.toLowerCase()) ?? [] : [];
               const isEditing = editing === it.id;
@@ -412,6 +441,11 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
                         <PlayCircle className="h-3 w-3" /> Roll their file
                       </Badge>
                     )}
+                    {s && it.kind === "Segment" && mats.length === 0 && (
+                      <Badge variant="outline" className="mt-1.5 gap-1 border-dashed text-xs font-normal text-muted-foreground" title="No intro, outro, mid-roll or images uploaded">
+                        <Paperclip className="h-3 w-3" /> Nothing uploaded yet
+                      </Badge>
+                    )}
 
                     {mats.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -496,7 +530,7 @@ export function RunOfShow({ adminGet, adminSend }: Props) {
             })}
           </div>
         )}
-        {!expanded && items && items.length > COLLAPSED_ROWS && (
+        {!expanded && !bookedOnly && items && items.length > COLLAPSED_ROWS && (
           <button
             type="button"
             className="mt-3 w-full rounded-xl border border-dashed border-border py-3 text-sm text-muted-foreground hover:bg-muted/40"

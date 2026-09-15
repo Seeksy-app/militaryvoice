@@ -25,7 +25,7 @@ import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle } from "lucide-react";
-import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, AdminUserRow, SponsorInquiryRow, PublicSettings } from "@shared/schema";
+import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
 
@@ -793,6 +793,19 @@ function SignupsCard() {
     queryKey: ["/api/admin/signups"],
     queryFn: () => adminGet<SignupRow[]>("/api/admin/signups"),
   });
+  // What each podcaster has actually sent us, keyed by email.
+  const { data: assets } = useQuery<ShowAssetRow[]>({
+    queryKey: ["/api/admin/assets"],
+    queryFn: () => adminGet<ShowAssetRow[]>("/api/admin/assets"),
+  });
+  const assetsByEmail = useMemo(() => {
+    const m = new Map<string, ShowAssetRow[]>();
+    for (const a of assets ?? []) {
+      const k = a.email.toLowerCase();
+      m.set(k, [...(m.get(k) ?? []), a]);
+    }
+    return m;
+  }, [assets]);
   const zone = useMemo(detectLocalTimeZone, []);
 
   async function cancelSignup(id: number) {
@@ -933,8 +946,82 @@ function SignupsCard() {
                       <div className="truncate">{s.email}</div>
                       {s.phone && <div className="truncate">{s.phone}</div>}
                       {s.socialLinks && <div className="truncate">{s.socialLinks}</div>}
-                      {s.notes && <div className="truncate">{s.notes}</div>}
                     </div>
+
+                    {/* What we're actually holding for them, and what they told us. */}
+                    {(() => {
+                      const mats = assetsByEmail.get(s.email.trim().toLowerCase()) ?? [];
+                      const promised = [
+                        s.hasVideoIntro && "intro",
+                        s.hasVideoOutro && "outro",
+                        s.hasSlides && "slides",
+                        s.hasImages && "images",
+                      ].filter(Boolean) as string[];
+                      const recordsWith = [s.recordingMode, s.streamPlatform === "other" ? s.streamPlatformOther : s.streamPlatform]
+                        .filter((v) => v && v !== "none")
+                        .join(" · ");
+                      const facts: { label: string; value: string }[] = [
+                        { label: "Guests", value: s.guests },
+                        { label: "Interview questions", value: s.interviewQuestions },
+                        { label: "Promo notes", value: s.promoNotes },
+                        { label: "Notes", value: s.notes },
+                        { label: "Records with", value: recordsWith },
+                      ].filter((f) => f.value && f.value.trim());
+                      return (
+                        <div className="mt-3 grid gap-3 border-t border-border pt-3 lg:grid-cols-2">
+                          <div>
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">Materials</div>
+                            {s.showFormat === "prerecorded" && (
+                              <div className="mt-1 text-xs">
+                                {s.recordingUrl ? (
+                                  <a href={s.recordingUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                                    <PlayCircle className="h-3 w-3" /> Episode to roll
+                                  </a>
+                                ) : (
+                                  <span className="font-medium text-destructive">Pre-recorded but no episode link yet</span>
+                                )}
+                              </div>
+                            )}
+                            {mats.length > 0 ? (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {mats.map((a) => (
+                                  <a
+                                    key={a.id}
+                                    href={a.fileUrl || a.linkUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium hover:border-primary/50"
+                                    title={a.label || a.fileName}
+                                  >
+                                    {a.kind}
+                                    {a.label ? ` · ${a.label}` : ""}
+                                  </a>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                Nothing uploaded yet{promised.length ? ` — said they'd send: ${promised.join(", ")}` : ""}.
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">From them</div>
+                            {facts.length === 0 ? (
+                              <div className="mt-1 text-xs text-muted-foreground">No guests, questions or notes given.</div>
+                            ) : (
+                              <dl className="mt-1 space-y-1 text-xs">
+                                {facts.map((f) => (
+                                  <div key={f.label}>
+                                    <dt className="inline font-semibold text-foreground">{f.label}: </dt>
+                                    <dd className="inline whitespace-pre-line text-muted-foreground">{f.value}</dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}

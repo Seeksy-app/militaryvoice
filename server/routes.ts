@@ -1639,7 +1639,7 @@ export function registerRoutes(app: Express): void {
         notes: signup
           ? signup.showFormat === "prerecorded"
             ? `PRE-RECORDED — roll the episode.${signup.introStyle === "virtual" ? " Live virtual intro first." : ""}`
-            : "Live from their own studio."
+            : "LIVE — they join from the studio page."
           : "Nobody booked. Fill with sponsor reel or a house segment.",
         startAtUtc: onAir.start.toISOString(),
         durationMinutes: event.onAirMinutes,
