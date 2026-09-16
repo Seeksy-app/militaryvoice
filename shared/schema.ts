@@ -929,9 +929,13 @@ export type ContactRow = typeof contacts.$inferSelect;
 
 export const broadcasts = pgTable("broadcasts", {
   id: serial("id").primaryKey(),
+  // null = global (sent from the standalone CRM tab); number = event-scoped
+  eventId: integer("event_id"),
   subject: text("subject").notNull(),
   bodyText: text("body_text").notNull(),
   status: text("status").notNull().default("draft"),
+  // Which contacts to send to: "signups" (event registrants), "contacts" (imported list), "all" (both)
+  segment: text("segment").notNull().default("contacts"),
   recipientCount: integer("recipient_count"),
   sentAt: text("sent_at"),
   createdAt: text("created_at").notNull(),

@@ -3769,6 +3769,12 @@ export function registerRoutes(app: Express): void {
     res.json(rows);
   });
 
+  app.get("/api/admin/events/:id/signup-contacts", requireAdmin, async (req, res) => {
+    const eventId = Number(req.params.id);
+    const rows = await storage.listSignupContactsForEvent(eventId);
+    res.json(rows);
+  });
+
   app.post("/api/admin/contacts/import", requireAdmin, async (req, res) => {
     const { csv } = req.body as { csv?: string };
     if (!csv || typeof csv !== "string") return res.status(400).json({ error: "Send { csv: \"...\" }" });
@@ -3849,21 +3855,23 @@ export function registerRoutes(app: Express): void {
 
   // ---- Admin: CRM broadcasts -------------------------------------------------
 
-  app.get("/api/admin/broadcasts", requireAdmin, async (_req, res) => {
-    res.json(await storage.listBroadcasts());
+  // eventId query param scopes to an event; omit for global list
+  app.get("/api/admin/broadcasts", requireAdmin, async (req, res) => {
+    const eventId = req.query.eventId ? Number(req.query.eventId) : null;
+    res.json(await storage.listBroadcasts(eventId));
   });
 
   app.post("/api/admin/broadcasts", requireAdmin, async (req, res) => {
-    const { subject, bodyText } = req.body as { subject?: string; bodyText?: string };
+    const { subject, bodyText, eventId, segment } = req.body as { subject?: string; bodyText?: string; eventId?: number | null; segment?: string };
     if (!subject?.trim() || !bodyText?.trim()) return res.status(400).json({ error: "subject and bodyText are required." });
-    const row = await storage.createBroadcast({ subject: subject.trim(), bodyText: bodyText.trim() });
+    const row = await storage.createBroadcast({ subject: subject.trim(), bodyText: bodyText.trim(), eventId: eventId ?? null, segment: segment ?? "contacts" });
     res.json(row);
   });
 
   app.put("/api/admin/broadcasts/:id", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
-    const { subject, bodyText } = req.body as { subject?: string; bodyText?: string };
-    const row = await storage.updateBroadcast(id, { subject: subject?.trim(), bodyText: bodyText?.trim() });
+    const { subject, bodyText, segment } = req.body as { subject?: string; bodyText?: string; segment?: string };
+    const row = await storage.updateBroadcast(id, { subject: subject?.trim(), bodyText: bodyText?.trim(), segment });
     if (!row) return res.status(404).json({ error: "Broadcast not found or already sent." });
     res.json(row);
   });
@@ -3875,13 +3883,29 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/admin/broadcasts/:id/send", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
-    const broadcasts = await storage.listBroadcasts();
-    const broadcast = broadcasts.find((b) => b.id === id);
+    const eventId = req.query.eventId ? Number(req.query.eventId) : null;
+    const broadcastList = await storage.listBroadcasts(eventId);
+    const broadcast = broadcastList.find((b) => b.id === id);
+
     if (!broadcast) return res.status(404).json({ error: "Broadcast not found." });
     if (broadcast.status === "sent") return res.status(409).json({ error: "Already sent." });
 
-    const recipients = await storage.listActiveContactEmails();
-    if (recipients.length === 0) return res.status(400).json({ error: "No active contacts to send to." });
+    // Gather recipients based on segment
+    const deduped = new Map<string, { email: string; firstName: string }>();
+    if (broadcast.segment === "signups" || broadcast.segment === "all") {
+      if (!broadcast.eventId) return res.status(400).json({ error: "segment='signups' requires an event-scoped broadcast." });
+      for (const r of await storage.listSignupContactsForEvent(broadcast.eventId)) {
+        deduped.set(r.email.toLowerCase(), r);
+      }
+    }
+    if (broadcast.segment === "contacts" || broadcast.segment === "all") {
+      for (const r of await storage.listActiveContactEmails()) {
+        deduped.set(r.email.toLowerCase(), r);
+      }
+    }
+
+    const recipients = Array.from(deduped.values());
+    if (recipients.length === 0) return res.status(400).json({ error: "No recipients in the selected segment." });
 
     let sent = 0;
     let failed = 0;

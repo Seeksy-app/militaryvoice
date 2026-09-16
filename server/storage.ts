@@ -1796,22 +1796,41 @@ class DatabaseStorage implements IStorage {
   // CRM — broadcasts
   // -------------------------------------------------------------------------
 
-  async listBroadcasts(): Promise<BroadcastRow[]> {
+  async listBroadcasts(eventId?: number | null): Promise<BroadcastRow[]> {
     await ready();
-    return db.select().from(broadcasts).orderBy(desc(broadcasts.createdAt));
+    if (eventId != null) {
+      return db.select().from(broadcasts).where(eq(broadcasts.eventId, eventId)).orderBy(desc(broadcasts.createdAt));
+    }
+    return db.select().from(broadcasts).where(isNull(broadcasts.eventId)).orderBy(desc(broadcasts.createdAt));
   }
 
-  async createBroadcast(data: { subject: string; bodyText: string }): Promise<BroadcastRow> {
+  async listSignupContactsForEvent(eventId: number): Promise<{ email: string; firstName: string }[]> {
     await ready();
-    const [row] = await db.insert(broadcasts).values({ subject: data.subject, bodyText: data.bodyText, status: "draft", createdAt: new Date().toISOString() }).returning();
+    const rows = await db.select({ email: signups.email, hostName: signups.hostName })
+      .from(signups)
+      .where(and(eq(signups.eventId, eventId), ne(signups.status, "cancelled")));
+    return rows.map((r) => ({ email: r.email, firstName: r.hostName.split(" ")[0] }));
+  }
+
+  async createBroadcast(data: { subject: string; bodyText: string; eventId?: number | null; segment?: string }): Promise<BroadcastRow> {
+    await ready();
+    const [row] = await db.insert(broadcasts).values({
+      subject: data.subject,
+      bodyText: data.bodyText,
+      eventId: data.eventId ?? null,
+      segment: data.segment ?? "contacts",
+      status: "draft",
+      createdAt: new Date().toISOString(),
+    }).returning();
     return row;
   }
 
-  async updateBroadcast(id: number, data: { subject?: string; bodyText?: string }): Promise<BroadcastRow | null> {
+  async updateBroadcast(id: number, data: { subject?: string; bodyText?: string; segment?: string }): Promise<BroadcastRow | null> {
     await ready();
     const patch: Partial<BroadcastRow> = {};
     if (data.subject !== undefined) patch.subject = data.subject;
     if (data.bodyText !== undefined) patch.bodyText = data.bodyText;
+    if (data.segment !== undefined) patch.segment = data.segment;
     if (Object.keys(patch).length === 0) return null;
     const [row] = await db.update(broadcasts).set(patch).where(and(eq(broadcasts.id, id), eq(broadcasts.status, "draft"))).returning();
     return row ?? null;

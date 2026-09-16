@@ -1423,14 +1423,194 @@ type StudioRowLite = { id: number; eventId: number; name: string; status: string
 // ---------------------------------------------------------------------------
 
 type ContactRow = { id: number; email: string; firstName: string; lastName: string; source: string; status: string; importedAt: string };
-type BroadcastRow = { id: number; subject: string; bodyText: string; status: string; recipientCount: number | null; sentAt: string | null; createdAt: string };
+type BroadcastRow = { id: number; eventId: number | null; subject: string; bodyText: string; segment: string; status: string; recipientCount: number | null; sentAt: string | null; createdAt: string };
+
+// ---------------------------------------------------------------------------
+// Shared broadcast compose + list (used by both CrmPanel and CrmEventPanel)
+// ---------------------------------------------------------------------------
+
+const SEGMENT_LABELS: Record<string, string> = {
+  signups: "Signed-up podcasters",
+  contacts: "Imported contacts",
+  all: "Both (signed up + imported)",
+};
+
+function BroadcastsSection({
+  eventId,
+  signupCount,
+  contactCount,
+}: {
+  eventId?: number;
+  signupCount?: number;
+  contactCount: number;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const qKey = eventId ? ["/api/admin/broadcasts", eventId] : ["/api/admin/broadcasts"];
+  const { data: broadcastList = [], isLoading } = useQuery<BroadcastRow[]>({
+    queryKey: qKey,
+    queryFn: () => adminGet<BroadcastRow[]>(`/api/admin/broadcasts${eventId ? `?eventId=${eventId}` : ""}`),
+  });
+
+  const [composing, setComposing] = useState<BroadcastRow | null | "new">(null);
+  const [bSubject, setBSubject] = useState("");
+  const [bBody, setBBody] = useState("");
+  const [bSegment, setBSegment] = useState<"signups" | "contacts" | "all">(eventId ? "signups" : "contacts");
+  const [bBusy, setBBusy] = useState(false);
+
+  function startNew() { setComposing("new"); setBSubject(""); setBBody(""); setBSegment(eventId ? "signups" : "contacts"); }
+  function startEdit(b: BroadcastRow) { setComposing(b); setBSubject(b.subject); setBBody(b.bodyText); setBSegment(b.segment as "signups" | "contacts" | "all"); }
+
+  async function saveDraft(e: React.FormEvent) {
+    e.preventDefault();
+    if (!bSubject.trim() || !bBody.trim()) return;
+    setBBusy(true);
+    try {
+      if (composing === "new") {
+        await adminSend("POST", "/api/admin/broadcasts", { subject: bSubject.trim(), bodyText: bBody.trim(), eventId: eventId ?? null, segment: bSegment });
+      } else if (composing) {
+        await adminSend("PUT", `/api/admin/broadcasts/${composing.id}`, { subject: bSubject.trim(), bodyText: bBody.trim(), segment: bSegment });
+      }
+      queryClient.invalidateQueries({ queryKey: qKey });
+      setComposing(null);
+      toast({ title: "Draft saved" });
+    } catch (err) {
+      toast({ title: "Save failed", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setBBusy(false);
+    }
+  }
+
+  function recipientPreview(seg: string): number {
+    if (seg === "signups") return signupCount ?? 0;
+    if (seg === "contacts") return contactCount;
+    return (signupCount ?? 0) + contactCount;
+  }
+
+  async function sendBroadcast(b: BroadcastRow) {
+    const count = recipientPreview(b.segment);
+    if (!window.confirm(`Send "${b.subject}" to ${count} ${SEGMENT_LABELS[b.segment] ?? b.segment}? This cannot be undone.`)) return;
+    setBBusy(true);
+    try {
+      const url = `/api/admin/broadcasts/${b.id}/send${eventId ? `?eventId=${eventId}` : ""}`;
+      const result: { sent: number; failed: number } = await adminSend("POST", url).then((r) => r.json());
+      toast({ title: "Sent", description: `${result.sent} delivered, ${result.failed} failed.` });
+      queryClient.invalidateQueries({ queryKey: qKey });
+    } catch (err) {
+      toast({ title: "Send failed", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setBBusy(false);
+    }
+  }
+
+  async function deleteBroadcast(id: number) {
+    if (!window.confirm("Delete this draft?")) return;
+    await adminSend("DELETE", `/api/admin/broadcasts/${id}`);
+    queryClient.invalidateQueries({ queryKey: qKey });
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {composing !== null ? (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{composing === "new" ? "New broadcast" : "Edit draft"}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={saveDraft} className="flex flex-col gap-3">
+              <div>
+                <Label>Subject</Label>
+                <Input value={bSubject} onChange={(e) => setBSubject(e.target.value)} placeholder="Podcast Marathon starts Saturday!" />
+              </div>
+              {eventId && (
+                <div>
+                  <Label>Send to</Label>
+                  <Select value={bSegment} onValueChange={(v) => setBSegment(v as "signups" | "contacts" | "all")}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="signups">Signed-up podcasters ({signupCount ?? 0})</SelectItem>
+                      <SelectItem value="contacts">Imported contacts ({contactCount})</SelectItem>
+                      <SelectItem value="all">Both — {(signupCount ?? 0) + contactCount} total</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div>
+                <Label>Body (plain text)</Label>
+                <Textarea
+                  rows={10}
+                  value={bBody}
+                  onChange={(e) => setBBody(e.target.value)}
+                  placeholder={"Hi there,\n\nThe 24-Hour Military Podcast Marathon is coming up..."}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">Paragraphs separated by a blank line. An unsubscribe link is added automatically.</p>
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={bBusy || !bSubject.trim() || !bBody.trim()}>Save draft</Button>
+                <Button type="button" variant="outline" onClick={() => setComposing(null)}>Cancel</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      ) : (
+        <Button className="self-start gap-1.5" onClick={startNew}>
+          <Plus className="h-4 w-4" /> New broadcast
+        </Button>
+      )}
+
+      {isLoading ? (
+        <div className="flex flex-col gap-2">{[1, 2].map((i) => <Skeleton key={i} className="h-14" />)}</div>
+      ) : broadcastList.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No broadcasts yet.</p>
+      ) : (
+        <Card>
+          <CardContent className="p-0 divide-y">
+            {broadcastList.map((b) => (
+              <div key={b.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm truncate">{b.subject}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {b.status === "sent"
+                      ? `Sent ${b.sentAt ? new Date(b.sentAt).toLocaleDateString() : ""} · ${b.recipientCount} recipients`
+                      : `Draft · ${SEGMENT_LABELS[b.segment] ?? b.segment} · ${new Date(b.createdAt).toLocaleDateString()}`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {b.status === "draft" && (
+                    <>
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => startEdit(b)}>Edit</Button>
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={bBusy || recipientPreview(b.segment) === 0}
+                        onClick={() => sendBroadcast(b)}
+                      >
+                        Send to {recipientPreview(b.segment)}
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteBroadcast(b.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  )}
+                  {b.status === "sent" && <Badge className="text-[11px]">Sent</Badge>}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Global CRM tab — contacts only (import + manage list)
+// ---------------------------------------------------------------------------
 
 function CrmPanel() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [tab, setTab] = useState<"contacts" | "broadcasts">("contacts");
 
-  // ---- contacts ----
   const { data: contactList = [], isLoading: loadingContacts } = useQuery<ContactRow[]>({
     queryKey: ["/api/admin/contacts"],
     queryFn: () => adminGet<ContactRow[]>("/api/admin/contacts"),
@@ -1460,216 +1640,162 @@ function CrmPanel() {
     queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
   }
 
-  // ---- broadcasts ----
-  const { data: broadcastList = [], isLoading: loadingBroadcasts } = useQuery<BroadcastRow[]>({
-    queryKey: ["/api/admin/broadcasts"],
-    queryFn: () => adminGet<BroadcastRow[]>("/api/admin/broadcasts"),
-  });
-  const [composing, setComposing] = useState<BroadcastRow | null | "new">(null);
-  const [bSubject, setBSubject] = useState("");
-  const [bBody, setBBody] = useState("");
-  const [bBusy, setBBusy] = useState(false);
-
-  function startNew() {
-    setComposing("new");
-    setBSubject("");
-    setBBody("");
-  }
-
-  function startEdit(b: BroadcastRow) {
-    setComposing(b);
-    setBSubject(b.subject);
-    setBBody(b.bodyText);
-  }
-
-  async function saveDraft(e: React.FormEvent) {
-    e.preventDefault();
-    if (!bSubject.trim() || !bBody.trim()) return;
-    setBBusy(true);
-    try {
-      if (composing === "new") {
-        await adminSend("POST", "/api/admin/broadcasts", { subject: bSubject.trim(), bodyText: bBody.trim() });
-      } else if (composing) {
-        await adminSend("PUT", `/api/admin/broadcasts/${composing.id}`, { subject: bSubject.trim(), bodyText: bBody.trim() });
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/broadcasts"] });
-      setComposing(null);
-      toast({ title: "Draft saved" });
-    } catch (err) {
-      toast({ title: "Save failed", description: (err as Error).message, variant: "destructive" });
-    } finally {
-      setBBusy(false);
-    }
-  }
-
-  async function sendBroadcast(id: number, recipientPreview: number) {
-    if (!window.confirm(`Send this email to ${recipientPreview} active contacts? This cannot be undone.`)) return;
-    setBBusy(true);
-    try {
-      const result: { sent: number; failed: number; total: number } = await adminSend("POST", `/api/admin/broadcasts/${id}/send`).then((r) => r.json());
-      toast({ title: "Sent", description: `${result.sent} delivered, ${result.failed} failed.` });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/broadcasts"] });
-    } catch (err) {
-      toast({ title: "Send failed", description: (err as Error).message, variant: "destructive" });
-    } finally {
-      setBBusy(false);
-    }
-  }
-
-  async function deleteBroadcast(id: number) {
-    if (!window.confirm("Delete this draft?")) return;
-    await adminSend("DELETE", `/api/admin/broadcasts/${id}`);
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/broadcasts"] });
-  }
-
   const activeCount = contactList.filter((c) => c.status === "active").length;
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div>
+        <h2 className="text-lg font-semibold">Contacts</h2>
+        <p className="text-sm text-muted-foreground">{activeCount} active · use event CRM to compose and send emails</p>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Import from CSV</CardTitle>
+          <CardDescription>Paste CSV with at minimum an <code>email</code> column. Optional: <code>first_name</code>, <code>last_name</code>.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={importCsv} className="flex flex-col gap-3">
+            <Textarea
+              placeholder={"email,first_name,last_name\njohn@example.com,John,Smith"}
+              rows={6}
+              value={csvText}
+              onChange={(e) => setCsvText(e.target.value)}
+              className="font-mono text-xs"
+            />
+            <Button type="submit" disabled={importing || !csvText.trim()} className="self-start gap-1.5">
+              <Plus className="h-4 w-4" /> Import
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">All contacts ({contactList.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loadingContacts ? (
+            <div className="p-4 flex flex-col gap-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-9" />)}</div>
+          ) : contactList.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">No contacts yet — import a CSV above.</p>
+          ) : (
+            <div className="divide-y">
+              {contactList.map((c) => (
+                <div key={c.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{c.email}</p>
+                    {(c.firstName || c.lastName) && (
+                      <p className="text-xs text-muted-foreground">{[c.firstName, c.lastName].filter(Boolean).join(" ")}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant={c.status === "active" ? "default" : "secondary"} className="text-[11px]">{c.status}</Badge>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteContact(c.id, c.email)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Event CRM tab — audience segments + broadcast compose/send
+// ---------------------------------------------------------------------------
+
+function CrmEventPanel({ eventId }: { eventId: number }) {
+  const [crmTab, setCrmTab] = useState<"audience" | "broadcasts">("broadcasts");
+
+  // Signup contacts for this event
+  const { data: signupContacts = [], isLoading: loadingSignups } = useQuery<{ email: string; firstName: string }[]>({
+    queryKey: ["/api/admin/signups-contacts", eventId],
+    queryFn: () => adminGet<{ email: string; firstName: string }[]>(`/api/admin/events/${eventId}/signup-contacts`),
+  });
+
+  // Global imported contacts
+  const { data: contactList = [], isLoading: loadingContacts } = useQuery<ContactRow[]>({
+    queryKey: ["/api/admin/contacts"],
+    queryFn: () => adminGet<ContactRow[]>("/api/admin/contacts"),
+  });
+
+  const activeContacts = contactList.filter((c) => c.status === "active");
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-lg font-semibold">CRM</h2>
-          <p className="text-sm text-muted-foreground">{activeCount} active contact{activeCount !== 1 ? "s" : ""}</p>
+          <p className="text-sm text-muted-foreground">
+            {signupContacts.length} signed up · {activeContacts.length} imported contacts
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant={tab === "contacts" ? "default" : "outline"} onClick={() => setTab("contacts")}>Contacts</Button>
-          <Button size="sm" variant={tab === "broadcasts" ? "default" : "outline"} onClick={() => setTab("broadcasts")}>Broadcasts</Button>
+          <Button size="sm" variant={crmTab === "broadcasts" ? "default" : "outline"} onClick={() => setCrmTab("broadcasts")}>Broadcasts</Button>
+          <Button size="sm" variant={crmTab === "audience" ? "default" : "outline"} onClick={() => setCrmTab("audience")}>Audience</Button>
         </div>
       </div>
 
-      {tab === "contacts" && (
+      {crmTab === "broadcasts" && (
+        <BroadcastsSection
+          eventId={eventId}
+          signupCount={signupContacts.length}
+          contactCount={activeContacts.length}
+        />
+      )}
+
+      {crmTab === "audience" && (
         <div className="flex flex-col gap-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Import from CSV</CardTitle>
-              <CardDescription>Paste CSV with at minimum an <code>email</code> column. Optional: <code>first_name</code>, <code>last_name</code>.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={importCsv} className="flex flex-col gap-3">
-                <Textarea
-                  placeholder={"email,first_name,last_name\njohn@example.com,John,Smith"}
-                  rows={6}
-                  value={csvText}
-                  onChange={(e) => setCsvText(e.target.value)}
-                  className="font-mono text-xs"
-                />
-                <Button type="submit" disabled={importing || !csvText.trim()} className="self-start gap-1.5">
-                  <Plus className="h-4 w-4" /> Import
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">All contacts ({contactList.length})</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                Signed-up podcasters
+                <Badge className="text-[11px]">{signupContacts.length}</Badge>
+              </CardTitle>
+              <CardDescription>People who registered for this event.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {loadingContacts ? (
-                <div className="p-4 flex flex-col gap-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-9" />)}</div>
-              ) : contactList.length === 0 ? (
-                <p className="p-4 text-sm text-muted-foreground">No contacts yet — import a CSV above.</p>
+              {loadingSignups ? (
+                <div className="p-4 flex flex-col gap-2">{[1,2,3].map((i) => <Skeleton key={i} className="h-8" />)}</div>
+              ) : signupContacts.length === 0 ? (
+                <p className="p-4 text-sm text-muted-foreground">No one has signed up yet.</p>
               ) : (
-                <div className="divide-y">
-                  {contactList.map((c) => (
-                    <div key={c.id} className="flex items-center justify-between gap-2 px-4 py-2.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{c.email}</p>
-                        {(c.firstName || c.lastName) && (
-                          <p className="text-xs text-muted-foreground">{[c.firstName, c.lastName].filter(Boolean).join(" ")}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <Badge variant={c.status === "active" ? "default" : "secondary"} className="text-[11px]">{c.status}</Badge>
-                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteContact(c.id, c.email)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                <div className="divide-y max-h-64 overflow-y-auto">
+                  {signupContacts.map((c, i) => (
+                    <div key={i} className="flex items-center gap-2 px-4 py-2">
+                      <p className="text-sm font-medium min-w-0 truncate">{c.firstName || c.email}</p>
+                      <p className="text-xs text-muted-foreground truncate flex-1">{c.email}</p>
                     </div>
                   ))}
                 </div>
               )}
             </CardContent>
           </Card>
-        </div>
-      )}
-
-      {tab === "broadcasts" && (
-        <div className="flex flex-col gap-4">
-          {composing !== null ? (
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">{composing === "new" ? "New broadcast" : "Edit draft"}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={saveDraft} className="flex flex-col gap-3">
-                  <div>
-                    <Label>Subject</Label>
-                    <Input value={bSubject} onChange={(e) => setBSubject(e.target.value)} placeholder="Podcast Marathon starts Saturday!" />
-                  </div>
-                  <div>
-                    <Label>Body (plain text)</Label>
-                    <Textarea
-                      rows={10}
-                      value={bBody}
-                      onChange={(e) => setBBody(e.target.value)}
-                      placeholder={"Hi there,\n\nThe 24-Hour Military Podcast Marathon is happening this Saturday..."}
-                    />
-                    <p className="mt-1 text-xs text-muted-foreground">Plain text — paragraphs separated by a blank line. An unsubscribe link is added automatically.</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button type="submit" disabled={bBusy || !bSubject.trim() || !bBody.trim()}>Save draft</Button>
-                    <Button type="button" variant="outline" onClick={() => setComposing(null)}>Cancel</Button>
-                  </div>
-                </form>
-              </CardContent>
-            </Card>
-          ) : (
-            <Button className="self-start gap-1.5" onClick={startNew}>
-              <Plus className="h-4 w-4" /> New broadcast
-            </Button>
-          )}
 
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Broadcasts</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                Imported contacts
+                <Badge variant="secondary" className="text-[11px]">{activeContacts.length}</Badge>
+              </CardTitle>
+              <CardDescription>Podcasters imported from CSV — not necessarily signed up.</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {loadingBroadcasts ? (
-                <div className="p-4 flex flex-col gap-2">{[1, 2].map((i) => <Skeleton key={i} className="h-14" />)}</div>
-              ) : broadcastList.length === 0 ? (
-                <p className="p-4 text-sm text-muted-foreground">No broadcasts yet.</p>
+              {loadingContacts ? (
+                <div className="p-4 flex flex-col gap-2">{[1,2,3].map((i) => <Skeleton key={i} className="h-8" />)}</div>
+              ) : activeContacts.length === 0 ? (
+                <p className="p-4 text-sm text-muted-foreground">No imported contacts — add them in the global CRM tab.</p>
               ) : (
-                <div className="divide-y">
-                  {broadcastList.map((b) => (
-                    <div key={b.id} className="flex items-start justify-between gap-3 px-4 py-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm truncate">{b.subject}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {b.status === "sent"
-                            ? `Sent ${b.sentAt ? new Date(b.sentAt).toLocaleDateString() : ""} · ${b.recipientCount} recipients`
-                            : `Draft · ${new Date(b.createdAt).toLocaleDateString()}`}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {b.status === "draft" && (
-                          <>
-                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => startEdit(b)}>Edit</Button>
-                            <Button
-                              size="sm"
-                              className="h-7 text-xs"
-                              disabled={bBusy || activeCount === 0}
-                              onClick={() => sendBroadcast(b.id, activeCount)}
-                            >
-                              Send to {activeCount}
-                            </Button>
-                            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteBroadcast(b.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </>
-                        )}
-                        {b.status === "sent" && <Badge className="text-[11px]">Sent</Badge>}
-                      </div>
+                <div className="divide-y max-h-64 overflow-y-auto">
+                  {activeContacts.map((c) => (
+                    <div key={c.id} className="flex items-center gap-2 px-4 py-2">
+                      <p className="text-sm font-medium min-w-0 truncate">{[c.firstName, c.lastName].filter(Boolean).join(" ") || c.email}</p>
+                      <p className="text-xs text-muted-foreground truncate flex-1">{c.email}</p>
                     </div>
                   ))}
                 </div>
@@ -1778,10 +1904,11 @@ export default function Admin() {
                 )}
               </div>
               <Tabs value={eventTab} onValueChange={setEventTab}>
-                <TabsList className={`grid w-full ${isMobile ? "grid-cols-3" : "grid-cols-6"}`}>
+                <TabsList className={`grid w-full ${isMobile ? "grid-cols-4" : "grid-cols-7"}`}>
                   <TabsTrigger value="overview" data-testid="tab-admin-overview">Overview</TabsTrigger>
                   <TabsTrigger value="studio" data-testid="tab-admin-studio">Studio</TabsTrigger>
                   <TabsTrigger value="run" data-testid="tab-admin-run">Run of show</TabsTrigger>
+                  <TabsTrigger value="crm" data-testid="tab-admin-event-crm">CRM</TabsTrigger>
                   {!isMobile && (
                     <>
                       <TabsTrigger value="setup" data-testid="tab-admin-setup">Event details</TabsTrigger>
@@ -1805,6 +1932,9 @@ export default function Admin() {
                 </TabsContent>
                 <TabsContent value="run" className="mt-6">
                   <RunOfShow adminGet={adminGet} adminSend={adminSend} eventId={selectedEventId} />
+                </TabsContent>
+                <TabsContent value="crm" className="mt-6">
+                  <CrmEventPanel eventId={selectedEventId} />
                 </TabsContent>
                 {!isMobile && (
                   <>
