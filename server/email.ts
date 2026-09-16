@@ -216,22 +216,23 @@ export interface LoginCodeEmailInput {
 
 /** Send a podcaster their one-time typed sign-in code. Never throws. */
 export async function sendLoginCodeEmail(input: LoginCodeEmailInput): Promise<boolean> {
-  const html = `
-  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
-    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoice.ai</p>
-    <h1 style="margin:0 0 16px;color:#111827;font-size:22px;font-weight:700;">Your sign-in code</h1>
-    <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">Enter this code on the sign-in page. It expires in 15 minutes.</p>
-    <div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 24px;text-align:center;">
-      <p style="margin:0;color:#053877;font-size:28px;font-weight:800;letter-spacing:0.2em;font-family:monospace;">${escapeHtml(input.code)}</p>
-    </div>
-    <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;">If you didn't request this, you can ignore this email.</p>
-  </div>`;
-  const text = `Your MilitaryVoice.ai sign-in code: ${input.code}\n\nThis code expires in 15 minutes. If you didn't request this, you can ignore this email.\n`;
+  const codeBlock = `
+    <div style="background:#fff7e6;border:2px solid #f0a71f;border-radius:12px;padding:20px 24px;margin:0 0 20px;text-align:center;">
+      <p style="margin:0 0 6px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">Your code</p>
+      <p style="margin:0;color:#053877;font-size:36px;font-weight:800;letter-spacing:0.25em;font-family:monospace;">${escapeHtml(input.code)}</p>
+    </div>`;
   return sendRawEmail({
     to: input.to,
     subject: `Your sign-in code: ${input.code}`,
-    html,
-    text,
+    html: emailShell({
+      banner: EMAIL_BANNERS.welcome,
+      bannerAlt: "MilitaryVoice.ai",
+      eyebrow: "Sign-in",
+      heading: "Your sign-in code",
+      body: `<p style="margin:0 0 16px;">Enter this code on the sign-in page. It expires in 15 minutes.</p>${codeBlock}<p style="margin:0;color:#9ca3af;font-size:13px;">If you didn't request this, you can ignore this email.</p>`,
+      footerNote: "One-time code — expires in 15 minutes.",
+    }),
+    text: `Your MilitaryVoice.ai sign-in code: ${input.code}\n\nThis code expires in 15 minutes. If you didn't request this, you can ignore this email.\n`,
   });
 }
 

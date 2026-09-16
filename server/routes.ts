@@ -3772,24 +3772,58 @@ export function registerRoutes(app: Express): void {
   app.post("/api/admin/contacts/import", requireAdmin, async (req, res) => {
     const { csv } = req.body as { csv?: string };
     if (!csv || typeof csv !== "string") return res.status(400).json({ error: "Send { csv: \"...\" }" });
-    const lines = csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    if (lines.length < 2) return res.status(400).json({ error: "CSV must have a header row and at least one data row." });
 
-    const header = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/^["']|["']$/g, ""));
-    const emailIdx = header.findIndex((h) => h === "email");
-    if (emailIdx === -1) return res.status(400).json({ error: "CSV must have an 'email' column." });
-    const firstIdx = header.findIndex((h) => h === "first_name" || h === "firstname" || h === "first");
-    const lastIdx = header.findIndex((h) => h === "last_name" || h === "lastname" || h === "last");
+    // RFC 4180-aware CSV parser: handles quoted fields (including commas and newlines inside quotes).
+    function parseCsv(text: string): string[][] {
+      const rows: string[][] = [];
+      let row: string[] = [];
+      let field = "";
+      let inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (inQuotes) {
+          if (ch === '"') {
+            if (text[i + 1] === '"') { field += '"'; i++; } // escaped quote
+            else inQuotes = false;
+          } else {
+            field += ch;
+          }
+        } else if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ",") {
+          row.push(field.trim()); field = "";
+        } else if (ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) {
+          if (ch === "\r") i++;
+          row.push(field.trim()); field = "";
+          if (row.some((c) => c)) rows.push(row);
+          row = [];
+        } else {
+          field += ch;
+        }
+      }
+      row.push(field.trim());
+      if (row.some((c) => c)) rows.push(row);
+      return rows;
+    }
+
+    const rows = parseCsv(csv);
+    if (rows.length < 2) return res.status(400).json({ error: "CSV must have a header row and at least one data row." });
+
+    const header = rows[0].map((h) => h.toLowerCase());
+    // Accept "email", "email address", or any header that starts with "email address"
+    const emailIdx = header.findIndex((h) => h === "email" || h.startsWith("email address") || h.startsWith("email addr"));
+    if (emailIdx === -1) return res.status(400).json({ error: "CSV must have an 'email' or 'email address' column." });
+    const firstIdx = header.findIndex((h) => h === "first_name" || h === "firstname" || h === "first" || h === "first name");
+    const lastIdx = header.findIndex((h) => h === "last_name" || h === "lastname" || h === "last" || h === "last name");
 
     const parsed: { email: string; firstName: string; lastName: string; source: string }[] = [];
-    for (const line of lines.slice(1)) {
-      const cols = line.split(",").map((c) => c.trim().replace(/^["']|["']$/g, ""));
+    for (const cols of rows.slice(1)) {
       const email = (cols[emailIdx] || "").toLowerCase().trim();
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
       parsed.push({
         email,
-        firstName: firstIdx >= 0 ? (cols[firstIdx] || "") : "",
-        lastName: lastIdx >= 0 ? (cols[lastIdx] || "") : "",
+        firstName: firstIdx >= 0 ? (cols[firstIdx] || "").trim() : "",
+        lastName: lastIdx >= 0 ? (cols[lastIdx] || "").trim() : "",
         source: "csv",
       });
     }
