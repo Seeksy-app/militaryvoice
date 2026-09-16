@@ -74,6 +74,7 @@ import {
   sendScheduleReference,
   sendHelpRequestAlert,
   sendListenerStartingSoon,
+  sendBroadcastEmail,
 } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, StudioRow, StudioParticipantRow, RunItemRow } from "../shared/schema.js";
@@ -3748,6 +3749,121 @@ export function registerRoutes(app: Express): void {
       })),
       contacts,
     });
+  });
+
+  // ---- Admin: CRM contacts ---------------------------------------------------
+
+  /** HMAC token for unsubscribe links — avoids a DB round-trip on click. */
+  function unsubscribeToken(email: string): string {
+    const secret = process.env.SESSION_SECRET || "mv-unsub-secret";
+    return crypto.createHmac("sha256", secret).update(email.toLowerCase()).digest("hex").slice(0, 32);
+  }
+
+  function unsubscribeUrl(req: Request, email: string): string {
+    const origin = process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`;
+    return `${origin}/api/unsubscribe?email=${encodeURIComponent(email)}&token=${unsubscribeToken(email)}`;
+  }
+
+  app.get("/api/admin/contacts", requireAdmin, async (_req, res) => {
+    const rows = await storage.listContacts();
+    res.json(rows);
+  });
+
+  app.post("/api/admin/contacts/import", requireAdmin, async (req, res) => {
+    const { csv } = req.body as { csv?: string };
+    if (!csv || typeof csv !== "string") return res.status(400).json({ error: "Send { csv: \"...\" }" });
+    const lines = csv.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length < 2) return res.status(400).json({ error: "CSV must have a header row and at least one data row." });
+
+    const header = lines[0].split(",").map((h) => h.trim().toLowerCase().replace(/^["']|["']$/g, ""));
+    const emailIdx = header.findIndex((h) => h === "email");
+    if (emailIdx === -1) return res.status(400).json({ error: "CSV must have an 'email' column." });
+    const firstIdx = header.findIndex((h) => h === "first_name" || h === "firstname" || h === "first");
+    const lastIdx = header.findIndex((h) => h === "last_name" || h === "lastname" || h === "last");
+
+    const parsed: { email: string; firstName: string; lastName: string; source: string }[] = [];
+    for (const line of lines.slice(1)) {
+      const cols = line.split(",").map((c) => c.trim().replace(/^["']|["']$/g, ""));
+      const email = (cols[emailIdx] || "").toLowerCase().trim();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue;
+      parsed.push({
+        email,
+        firstName: firstIdx >= 0 ? (cols[firstIdx] || "") : "",
+        lastName: lastIdx >= 0 ? (cols[lastIdx] || "") : "",
+        source: "csv",
+      });
+    }
+    if (parsed.length === 0) return res.status(400).json({ error: "No valid email addresses found in the CSV." });
+    const result = await storage.upsertContacts(parsed);
+    res.json({ ...result, total: parsed.length });
+  });
+
+  app.delete("/api/admin/contacts/:id", requireAdmin, async (req, res) => {
+    await storage.deleteContact(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // Public unsubscribe endpoint — no auth needed, token proves intent.
+  app.get("/api/unsubscribe", async (req, res) => {
+    const { email, token } = req.query as { email?: string; token?: string };
+    if (!email || !token || token !== unsubscribeToken(email)) {
+      return res.status(400).send("Invalid unsubscribe link.");
+    }
+    await storage.unsubscribeContact(email);
+    res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:60px 20px"><h2>You're unsubscribed.</h2><p>You won't receive any more emails from MilitaryVoice.ai.</p></body></html>`);
+  });
+
+  // ---- Admin: CRM broadcasts -------------------------------------------------
+
+  app.get("/api/admin/broadcasts", requireAdmin, async (_req, res) => {
+    res.json(await storage.listBroadcasts());
+  });
+
+  app.post("/api/admin/broadcasts", requireAdmin, async (req, res) => {
+    const { subject, bodyText } = req.body as { subject?: string; bodyText?: string };
+    if (!subject?.trim() || !bodyText?.trim()) return res.status(400).json({ error: "subject and bodyText are required." });
+    const row = await storage.createBroadcast({ subject: subject.trim(), bodyText: bodyText.trim() });
+    res.json(row);
+  });
+
+  app.put("/api/admin/broadcasts/:id", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const { subject, bodyText } = req.body as { subject?: string; bodyText?: string };
+    const row = await storage.updateBroadcast(id, { subject: subject?.trim(), bodyText: bodyText?.trim() });
+    if (!row) return res.status(404).json({ error: "Broadcast not found or already sent." });
+    res.json(row);
+  });
+
+  app.delete("/api/admin/broadcasts/:id", requireAdmin, async (req, res) => {
+    await storage.deleteBroadcast(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
+  app.post("/api/admin/broadcasts/:id/send", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const broadcasts = await storage.listBroadcasts();
+    const broadcast = broadcasts.find((b) => b.id === id);
+    if (!broadcast) return res.status(404).json({ error: "Broadcast not found." });
+    if (broadcast.status === "sent") return res.status(409).json({ error: "Already sent." });
+
+    const recipients = await storage.listActiveContactEmails();
+    if (recipients.length === 0) return res.status(400).json({ error: "No active contacts to send to." });
+
+    let sent = 0;
+    let failed = 0;
+    for (const r of recipients) {
+      const ok = await sendBroadcastEmail({
+        to: r.email,
+        firstName: r.firstName,
+        subject: broadcast.subject,
+        bodyText: broadcast.bodyText,
+        unsubscribeUrl: unsubscribeUrl(req, r.email),
+      });
+      if (ok) sent++;
+      else failed++;
+    }
+    await storage.markBroadcastSent(id, sent);
+    res.json({ sent, failed, total: recipients.length });
   });
 
   // ---- Host: CSV export of their own contacts ---------------------------------

@@ -81,6 +81,7 @@ export function schemaFingerprint(): string {
   // Bootstrap steps that aren't visible in the table shapes still need to run
   // once on every database. Bump this when one is added.
   parts.push("bootstrap:sequences-v1");
+  parts.push("bootstrap:crm-tables-v1");
   return createHash("sha1").update(parts.join("|")).digest("hex").slice(0, 16);
 }
 

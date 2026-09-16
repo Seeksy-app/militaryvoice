@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -34,6 +34,8 @@ import type {
   NudgeKind,
   SponsorInquiryRow,
   InsertSponsorInquiry,
+  ContactRow,
+  BroadcastRow,
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -1743,6 +1745,86 @@ class DatabaseStorage implements IStorage {
       })
       .returning();
     return created;
+  }
+
+  // -------------------------------------------------------------------------
+  // CRM — contacts
+  // -------------------------------------------------------------------------
+
+  async listContacts(): Promise<ContactRow[]> {
+    await ready();
+    return db.select().from(contacts).orderBy(desc(contacts.importedAt));
+  }
+
+  async upsertContacts(rows: { email: string; firstName: string; lastName: string; source: string }[]): Promise<{ inserted: number; updated: number }> {
+    await ready();
+    let inserted = 0;
+    let updated = 0;
+    const now = new Date().toISOString();
+    const { sql } = getConnection();
+    for (const row of rows) {
+      const res = (await sql`
+        INSERT INTO contacts (email, first_name, last_name, source, status, imported_at)
+        VALUES (${row.email.toLowerCase().trim()}, ${row.firstName}, ${row.lastName}, ${row.source}, 'active', ${now})
+        ON CONFLICT (email) DO UPDATE SET first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name
+        RETURNING (xmax = 0) AS was_inserted
+      `) as { was_inserted: boolean }[];
+      if (res[0]?.was_inserted) inserted++;
+      else updated++;
+    }
+    return { inserted, updated };
+  }
+
+  async deleteContact(id: number): Promise<void> {
+    await ready();
+    await db.delete(contacts).where(eq(contacts.id, id));
+  }
+
+  async unsubscribeContact(email: string): Promise<void> {
+    await ready();
+    await db.update(contacts).set({ status: "unsubscribed" }).where(eq(contacts.email, email.toLowerCase().trim()));
+  }
+
+  async listActiveContactEmails(): Promise<{ id: number; email: string; firstName: string }[]> {
+    await ready();
+    const rows = await db.select({ id: contacts.id, email: contacts.email, firstName: contacts.firstName })
+      .from(contacts).where(eq(contacts.status, "active")).orderBy(contacts.id);
+    return rows;
+  }
+
+  // -------------------------------------------------------------------------
+  // CRM — broadcasts
+  // -------------------------------------------------------------------------
+
+  async listBroadcasts(): Promise<BroadcastRow[]> {
+    await ready();
+    return db.select().from(broadcasts).orderBy(desc(broadcasts.createdAt));
+  }
+
+  async createBroadcast(data: { subject: string; bodyText: string }): Promise<BroadcastRow> {
+    await ready();
+    const [row] = await db.insert(broadcasts).values({ subject: data.subject, bodyText: data.bodyText, status: "draft", createdAt: new Date().toISOString() }).returning();
+    return row;
+  }
+
+  async updateBroadcast(id: number, data: { subject?: string; bodyText?: string }): Promise<BroadcastRow | null> {
+    await ready();
+    const patch: Partial<BroadcastRow> = {};
+    if (data.subject !== undefined) patch.subject = data.subject;
+    if (data.bodyText !== undefined) patch.bodyText = data.bodyText;
+    if (Object.keys(patch).length === 0) return null;
+    const [row] = await db.update(broadcasts).set(patch).where(and(eq(broadcasts.id, id), eq(broadcasts.status, "draft"))).returning();
+    return row ?? null;
+  }
+
+  async markBroadcastSent(id: number, recipientCount: number): Promise<void> {
+    await ready();
+    await db.update(broadcasts).set({ status: "sent", recipientCount, sentAt: new Date().toISOString() }).where(eq(broadcasts.id, id));
+  }
+
+  async deleteBroadcast(id: number): Promise<void> {
+    await ready();
+    await db.delete(broadcasts).where(and(eq(broadcasts.id, id), eq(broadcasts.status, "draft")));
   }
 }
 

@@ -634,3 +634,45 @@ export async function sendListenerStartingSoon(v: StartingSoonInput): Promise<bo
     text: `${v.podcastName} with ${v.hostName} is on ${soon} — ${v.timeLabel}.\n\nWatch live: ${v.watchUrl}\nThe show's card: ${v.cardUrl}${v.youtubeUrl ? `\nTheir YouTube: ${v.youtubeUrl}` : ""}`,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Broadcast — one-to-many announcement email
+// ---------------------------------------------------------------------------
+
+/** Convert plain text to basic HTML paragraphs for the email body. */
+function textToHtml(text: string): string {
+  return text
+    .split(/\n{2,}/)
+    .map((p) => `<p style="margin:0 0 14px;">${escapeHtml(p.trim()).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+/**
+ * Send a single broadcast email to one recipient.
+ * The unsubscribe token is a simple HMAC — good enough for a mailing list
+ * of military podcast fans, not a compliance-grade setup.
+ */
+export async function sendBroadcastEmail(opts: {
+  to: string;
+  firstName: string;
+  subject: string;
+  bodyText: string;
+  unsubscribeUrl: string;
+}): Promise<boolean> {
+  const greeting = opts.firstName.trim() ? `Hi ${escapeHtml(opts.firstName.trim())},` : "Hi there,";
+  const bodyHtml = `<p style="margin:0 0 14px;">${greeting}</p>${textToHtml(opts.bodyText)}`;
+  return sendRawEmail({
+    to: opts.to,
+    subject: opts.subject,
+    html: emailShell({
+      banner: EMAIL_BANNERS.welcome,
+      bannerAlt: "MilitaryVoice.ai",
+      eyebrow: "MilitaryVoice.ai",
+      heading: opts.subject,
+      body: bodyHtml,
+      cta: { href: SITE, label: "Visit MilitaryVoice.ai" },
+      footerNote: `Questions? Reply to this email. · <a href="${opts.unsubscribeUrl}" style="color:#6b7280;">Unsubscribe</a>`,
+    }),
+    text: `${greeting}\n\n${opts.bodyText}\n\n---\nVisit: ${SITE}\nUnsubscribe: ${opts.unsubscribeUrl}`,
+  });
+}

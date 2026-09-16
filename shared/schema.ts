@@ -911,3 +911,29 @@ export const studioUpdateSchema = z.object({
 
 /** A participant counts as present if we heard from them recently. */
 export const PRESENCE_WINDOW_MS = 25_000;
+
+// ---------------------------------------------------------------------------
+// CRM — contacts and broadcast emails
+// ---------------------------------------------------------------------------
+
+export const contacts = pgTable("contacts", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  firstName: text("first_name").notNull().default(""),
+  lastName: text("last_name").notNull().default(""),
+  source: text("source").notNull().default("csv"),
+  status: text("status").notNull().default("active"),
+  importedAt: text("imported_at").notNull(),
+});
+export type ContactRow = typeof contacts.$inferSelect;
+
+export const broadcasts = pgTable("broadcasts", {
+  id: serial("id").primaryKey(),
+  subject: text("subject").notNull(),
+  bodyText: text("body_text").notNull(),
+  status: text("status").notNull().default("draft"),
+  recipientCount: integer("recipient_count"),
+  sentAt: text("sent_at"),
+  createdAt: text("created_at").notNull(),
+});
+export type BroadcastRow = typeof broadcasts.$inferSelect;
