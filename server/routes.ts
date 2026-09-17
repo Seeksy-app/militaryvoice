@@ -3951,6 +3951,17 @@ export function registerRoutes(app: Express): void {
         deduped.set(r.email.toLowerCase(), r);
       }
     }
+    if (broadcast.segment.startsWith("segment:")) {
+      const segId = Number(broadcast.segment.split(":")[1]);
+      const segList = await storage.listSegments(eventId);
+      const seg = segList.find((s) => s.id === segId);
+      if (seg) {
+        const filter = JSON.parse(seg.filterJson) as Parameters<typeof storage.resolveSegment>[0];
+        for (const r of await storage.resolveSegment(filter)) {
+          deduped.set(r.email.toLowerCase(), r);
+        }
+      }
+    }
 
     const recipients = Array.from(deduped.values());
     if (recipients.length === 0) return res.status(400).json({ error: "No recipients in the selected segment." });
@@ -4007,6 +4018,10 @@ export function registerRoutes(app: Express): void {
     const eventType = event.type.replace("email.", ""); // "email.opened" → "opened"
     const occurredAt = event.data?.created_at ?? new Date().toISOString();
     await storage.recordBroadcastEvent(emailId, eventType, occurredAt, event.data?.url ?? "");
+    if (eventType === "opened" || eventType === "clicked") {
+      const email = await storage.getEmailByResendId(emailId);
+      if (email) await storage.advanceLifecycle(email, "engaged");
+    }
     res.json({ ok: true });
   });
 
@@ -4033,6 +4048,68 @@ export function registerRoutes(app: Express): void {
       }
     }
     res.json({ matched });
+  });
+
+  // ---- CRM: Segments ----------------------------------------------------------
+
+  app.get("/api/admin/segments", requireAdmin, async (req, res) => {
+    const eventId = req.query.eventId ? Number(req.query.eventId) : null;
+    res.json(await storage.listSegments(eventId));
+  });
+
+  app.post("/api/admin/segments", requireAdmin, async (req, res) => {
+    const { eventId, name, filterJson } = req.body as { eventId?: number; name: string; filterJson: object };
+    if (!name?.trim()) return res.status(400).json({ error: "name required" });
+    res.json(await storage.createSegment(eventId ?? null, name.trim(), filterJson ?? {}));
+  });
+
+  app.delete("/api/admin/segments/:id", requireAdmin, async (req, res) => {
+    await storage.deleteSegment(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // Resolve a segment filter to a list of {email, firstName}
+  app.post("/api/admin/segments/resolve", requireAdmin, async (req, res) => {
+    const filter = req.body as { broadcastId?: number; eventTypes?: string[]; excludeSignupEventId?: number };
+    res.json(await storage.resolveSegment(filter));
+  });
+
+  // ---- CRM: Contact lifecycle & history ---------------------------------------
+
+  app.get("/api/admin/contacts/:email/history", requireAdmin, async (req, res) => {
+    res.json(await storage.getContactHistory(decodeURIComponent(String(req.params.email))));
+  });
+
+  app.patch("/api/admin/contacts/:email/lifecycle", requireAdmin, async (req, res) => {
+    const { stage } = req.body as { stage: string };
+    await storage.advanceLifecycle(decodeURIComponent(String(req.params.email)), stage);
+    res.json({ ok: true });
+  });
+
+  // ---- AI: Draft broadcast email ----------------------------------------------
+
+  app.post("/api/admin/ai/draft-email", requireAdmin, async (req, res) => {
+    const { prompt, context } = req.body as { prompt: string; context?: string };
+    if (!prompt?.trim()) return res.status(400).json({ error: "prompt required" });
+    const Anthropic = (await import("@anthropic-ai/sdk")).default;
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const systemPrompt = `You are an email copywriter for MilitaryVoice.ai — a platform celebrating military and veteran podcasters. Write broadcast emails that are warm, direct, and community-focused. Always return a JSON object with two fields: "subject" (the email subject line, no quotes around it) and "body" (the email body as plain text with blank lines between paragraphs). The body should start with "Hi {{First_Name}}," on the first line. Keep it concise: 3-5 short paragraphs max. Do not include an unsubscribe line or signature — those are added automatically.${context ? `\n\nContext about this broadcast: ${context}` : ""}`;
+    const msg = await client.messages.create({
+      model: "claude-opus-5",
+      max_tokens: 1024,
+      messages: [{ role: "user", content: `Write a broadcast email for this: ${prompt}` }],
+      system: systemPrompt,
+    });
+    const text = msg.content.find((c) => c.type === "text")?.text ?? "";
+    // Extract JSON from the response
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return res.status(500).json({ error: "Model did not return valid JSON", raw: text });
+    try {
+      const parsed = JSON.parse(match[0]) as { subject: string; body: string };
+      res.json(parsed);
+    } catch {
+      res.status(500).json({ error: "Could not parse model response", raw: text });
+    }
   });
 
   // ---- Event team management --------------------------------------------------

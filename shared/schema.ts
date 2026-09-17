@@ -923,9 +923,23 @@ export const contacts = pgTable("contacts", {
   lastName: text("last_name").notNull().default(""),
   source: text("source").notNull().default("csv"),
   status: text("status").notNull().default("active"),
+  // Funnel stage: lead → engaged → signed_up → no_show → alumni
+  lifecycleStage: text("lifecycle_stage").notNull().default("lead"),
   importedAt: text("imported_at").notNull(),
+  lastEngagedAt: text("last_engaged_at").notNull().default(""),
 });
 export type ContactRow = typeof contacts.$inferSelect;
+
+// Saved segment — a named filter that can be used as a broadcast target
+export const segments = pgTable("segments", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id"),
+  name: text("name").notNull(),
+  // JSON-encoded filter definition
+  filterJson: text("filter_json").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+});
+export type SegmentRow = typeof segments.$inferSelect;
 
 export const broadcasts = pgTable("broadcasts", {
   id: serial("id").primaryKey(),
@@ -934,7 +948,7 @@ export const broadcasts = pgTable("broadcasts", {
   subject: text("subject").notNull(),
   bodyText: text("body_text").notNull(),
   status: text("status").notNull().default("draft"),
-  // Which contacts to send to: "signups" (event registrants), "contacts" (imported list), "all" (both)
+  // Which contacts to send to: "signups"|"contacts"|"all"|"segment:<id>"
   segment: text("segment").notNull().default("contacts"),
   // "team" = MilitaryVoice.ai Team, "rico" = Riccoh Player with signature
   sender: text("sender").notNull().default("team"),

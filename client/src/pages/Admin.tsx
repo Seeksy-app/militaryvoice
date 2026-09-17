@@ -1422,7 +1422,19 @@ type StudioRowLite = { id: number; eventId: number; name: string; status: string
 // CRM panel
 // ---------------------------------------------------------------------------
 
-type ContactRow = { id: number; email: string; firstName: string; lastName: string; source: string; status: string; importedAt: string };
+type ContactRow = { id: number; email: string; firstName: string; lastName: string; source: string; status: string; lifecycleStage: string; lastEngagedAt: string; importedAt: string };
+type SegmentRow = { id: number; eventId: number | null; name: string; filterJson: string; createdAt: string };
+type SendRow = { id: number; broadcastId: number; email: string; resendId: string; sentAt: string };
+type BroadcastEventRow = { id: number; resendId: string; eventType: string; occurredAt: string; url: string };
+
+const LIFECYCLE_LABELS: Record<string, string> = { lead: "Lead", engaged: "Engaged", signed_up: "Signed Up", no_show: "No Show", alumni: "Alumni" };
+const LIFECYCLE_COLORS: Record<string, string> = {
+  lead: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+  engaged: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  signed_up: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  no_show: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
+  alumni: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+};
 type BroadcastRow = { id: number; eventId: number | null; subject: string; bodyText: string; segment: string; sender: string | null; banner: string | null; status: string; recipientCount: number | null; sentAt: string | null; createdAt: string };
 
 // ---------------------------------------------------------------------------
@@ -1936,6 +1948,92 @@ function EventTeamPanel({ eventId }: { eventId: number }) {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
+// ContactDrawer — slide-in panel showing a contact's engagement history
+// ---------------------------------------------------------------------------
+
+function ContactDrawer({ contact, onClose, broadcastList }: { contact: ContactRow; onClose: () => void; broadcastList: BroadcastRow[] }) {
+  const queryClient = useQueryClient();
+  const { data: history } = useQuery<{ sends: SendRow[]; events: BroadcastEventRow[] }>({
+    queryKey: ["/api/admin/contacts", contact.email, "history"],
+    queryFn: () => adminGet<{ sends: SendRow[]; events: BroadcastEventRow[] }>(`/api/admin/contacts/${encodeURIComponent(contact.email)}/history`),
+  });
+
+  const broadcastById = new Map(broadcastList.map((b) => [b.id, b]));
+  const eventsByResendId = new Map<string, BroadcastEventRow[]>();
+  for (const e of history?.events ?? []) {
+    (eventsByResendId.get(e.resendId) ?? (eventsByResendId.set(e.resendId, []), eventsByResendId.get(e.resendId)!)).push(e);
+  }
+
+  async function setStage(stage: string) {
+    await adminSend("PATCH", `/api/admin/contacts/${encodeURIComponent(contact.email)}/lifecycle`, { stage });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
+  }
+
+  const stages = ["lead", "engaged", "signed_up", "no_show", "alumni"];
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/30" />
+      <div className="relative w-full max-w-md bg-background border-l shadow-xl flex flex-col h-full overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b">
+          <div>
+            <p className="font-semibold text-base">{contact.firstName} {contact.lastName}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{contact.email}</p>
+          </div>
+          <Button size="icon" variant="ghost" onClick={onClose}><span className="text-lg">×</span></Button>
+        </div>
+        <div className="p-5 space-y-5">
+          {/* Lifecycle stage */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Lifecycle stage</p>
+            <div className="flex flex-wrap gap-1.5">
+              {stages.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStage(s)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${contact.lifecycleStage === s ? LIFECYCLE_COLORS[s] + " border-current" : "border-border text-muted-foreground hover:border-foreground/30"}`}
+                >
+                  {LIFECYCLE_LABELS[s]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Email history */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Broadcast history</p>
+            {!history?.sends?.length ? (
+              <p className="text-sm text-muted-foreground">No broadcasts sent yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {history.sends.map((send) => {
+                  const broadcast = broadcastById.get(send.broadcastId);
+                  const evts = eventsByResendId.get(send.resendId) ?? [];
+                  const types = new Set(evts.map((e) => e.eventType));
+                  return (
+                    <div key={send.id} className="rounded-lg border p-3 text-sm space-y-1">
+                      <p className="font-medium truncate">{broadcast?.subject ?? `Broadcast #${send.broadcastId}`}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(send.sentAt).toLocaleDateString()}</p>
+                      <div className="flex gap-2 flex-wrap mt-1">
+                        {types.has("delivered") && <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">📬 Delivered</span>}
+                        {types.has("opened") && <span className="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">👁 Opened</span>}
+                        {types.has("clicked") && <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">🔗 Clicked</span>}
+                        {types.has("bounced") && <span className="text-xs bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">⚠ Bounced</span>}
+                        {evts.length === 0 && <span className="text-xs text-muted-foreground">No events recorded</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // CrmEventPanel — full CRM UI inside an event
 // ---------------------------------------------------------------------------
 
@@ -2025,6 +2123,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
 
   const [view, setView] = useState<CrmView>("lists");
   const [search, setSearch] = useState("");
+  const [selectedContact, setSelectedContact] = useState<ContactRow | null>(null);
 
   // ── data ────────────────────────────────────────────────────────────────
 
@@ -2080,6 +2179,9 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
   const [bBanner, setBBanner] = useState("welcome");
   const [bBusy, setBBusy] = useState(false);
   const [bShowPreview, setBShowPreview] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
 
   function openCompose(prefillSegment?: "signups" | "contacts" | "all") {
     setEditingBroadcast(null);
@@ -2115,6 +2217,21 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     } catch (err) {
       toast({ title: "Save failed", description: (err as Error).message, variant: "destructive" });
     } finally { setBBusy(false); }
+  }
+
+  async function draftWithAI() {
+    if (!aiPrompt.trim()) return;
+    setAiLoading(true);
+    try {
+      const res = await adminSend("POST", "/api/admin/ai/draft-email", { prompt: aiPrompt });
+      const result = await res.json() as { subject: string; body: string };
+      setBSubject(result.subject ?? "");
+      setBBody(result.body ?? "");
+      setAiOpen(false);
+      setAiPrompt("");
+    } catch (err) {
+      toast({ title: "AI draft failed", description: (err as Error).message, variant: "destructive" });
+    } finally { setAiLoading(false); }
   }
 
   const [confirmBroadcast, setConfirmBroadcast] = useState<BroadcastRow | null>(null);
@@ -2181,6 +2298,9 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
 
   return (
     <div className="flex flex-col gap-0">
+      {selectedContact && (
+        <ContactDrawer contact={selectedContact} onClose={() => setSelectedContact(null)} broadcastList={broadcastList} />
+      )}
       {/* Horizontal sub-nav */}
       <div className="flex border-b mb-6">
         {navItems.map((n) => (
@@ -2360,7 +2480,11 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
               ) : (
                 <div className="divide-y">
                   {filteredContacts.map((c) => (
-                    <div key={c.id} className="flex items-center gap-3 px-4 py-3">
+                    <button
+                      key={c.id}
+                      onClick={() => setSelectedContact(c)}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 text-left transition-colors"
+                    >
                       <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
                         <span className="text-xs font-bold">{(c.firstName || c.email)[0].toUpperCase()}</span>
                       </div>
@@ -2368,7 +2492,10 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                         <p className="text-sm font-medium truncate">{[c.firstName, c.lastName].filter(Boolean).join(" ") || "—"}</p>
                         <p className="text-xs text-muted-foreground truncate">{c.email}</p>
                       </div>
-                    </div>
+                      <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${LIFECYCLE_COLORS[c.lifecycleStage] ?? LIFECYCLE_COLORS.lead}`}>
+                        {LIFECYCLE_LABELS[c.lifecycleStage] ?? c.lifecycleStage}
+                      </span>
+                    </button>
                   ))}
                 </div>
               )}
@@ -2569,6 +2696,32 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                     ))}
                   </div>
                 </div>
+
+                {/* AI draft assistant */}
+                {aiOpen ? (
+                  <div className="rounded-xl border border-violet-200 bg-violet-50 dark:bg-violet-950/30 dark:border-violet-800 p-4 space-y-3">
+                    <p className="text-sm font-semibold text-violet-800 dark:text-violet-300">✨ Draft with AI</p>
+                    <p className="text-xs text-violet-700 dark:text-violet-400">Describe what you want to say and Claude will write the subject line and body for you.</p>
+                    <Textarea
+                      autoFocus
+                      rows={3}
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      placeholder="Invite military podcasters to claim a slot for the October 5 Podcastathon. Keep it warm and personal. Mention it's one slot per show."
+                      className="text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <Button type="button" size="sm" disabled={aiLoading || !aiPrompt.trim()} onClick={draftWithAI} className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white">
+                        {aiLoading ? "Writing…" : "✨ Generate"}
+                      </Button>
+                      <Button type="button" size="sm" variant="ghost" onClick={() => { setAiOpen(false); setAiPrompt(""); }}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button type="button" variant="outline" size="sm" className="gap-1.5 text-violet-700 border-violet-300 hover:bg-violet-50 dark:text-violet-400 dark:border-violet-700" onClick={() => setAiOpen(true)}>
+                    ✨ Draft with AI
+                  </Button>
+                )}
 
                 <div>
                   <Label className="mb-1.5 block">Subject line</Label>

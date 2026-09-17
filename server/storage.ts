@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts, eventTeam, broadcastSends, broadcastEvents, type EventTeamMember } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, type EventTeamMember, type SegmentRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -1893,6 +1893,12 @@ class DatabaseStorage implements IStorage {
     return row ?? null;
   }
 
+  async getEmailByResendId(resendId: string): Promise<string | null> {
+    await ready();
+    const [row] = await db.select({ email: broadcastSends.email }).from(broadcastSends).where(eq(broadcastSends.resendId, resendId));
+    return row?.email ?? null;
+  }
+
   async recordBroadcastSend(broadcastId: number, email: string, resendId: string): Promise<void> {
     await ready();
     await db.insert(broadcastSends).values({ broadcastId, email, resendId, sentAt: new Date().toISOString() });
@@ -1918,11 +1924,91 @@ class DatabaseStorage implements IStorage {
     const sends = await db.select().from(broadcastSends).where(eq(broadcastSends.broadcastId, broadcastId));
     const ids = sends.map((s) => s.resendId).filter(Boolean);
     if (ids.length === 0) return [];
-    const events = await db.select().from(broadcastEvents).where(
+    const evts = await db.select().from(broadcastEvents).where(
       and(inArray(broadcastEvents.resendId, ids), inArray(broadcastEvents.eventType, types))
     );
-    const engagedIds = new Set(events.map((e) => e.resendId));
+    const engagedIds = new Set(evts.map((e) => e.resendId));
     return sends.filter((s) => engagedIds.has(s.resendId)).map((s) => ({ email: s.email, resendId: s.resendId }));
+  }
+
+  // ---- Segments ---------------------------------------------------------------
+
+  async listSegments(eventId: number | null): Promise<SegmentRow[]> {
+    await ready();
+    if (eventId) return db.select().from(segments).where(eq(segments.eventId, eventId)).orderBy(segments.createdAt);
+    return db.select().from(segments).where(isNull(segments.eventId)).orderBy(segments.createdAt);
+  }
+
+  async createSegment(eventId: number | null, name: string, filterJson: object): Promise<SegmentRow> {
+    await ready();
+    const [row] = await db.insert(segments).values({ eventId, name, filterJson: JSON.stringify(filterJson), createdAt: new Date().toISOString() }).returning();
+    return row;
+  }
+
+  async deleteSegment(id: number): Promise<void> {
+    await ready();
+    await db.delete(segments).where(eq(segments.id, id));
+  }
+
+  async resolveSegment(filter: { broadcastId?: number; eventTypes?: string[]; excludeSignupEventId?: number }): Promise<{ email: string; firstName: string }[]> {
+    await ready();
+    let emails: string[] = [];
+
+    if (filter.broadcastId && filter.eventTypes?.length) {
+      const sends = await db.select().from(broadcastSends).where(eq(broadcastSends.broadcastId, filter.broadcastId));
+      const ids = sends.map((s) => s.resendId).filter(Boolean);
+      if (ids.length > 0) {
+        const evts = await db.select().from(broadcastEvents).where(
+          and(inArray(broadcastEvents.resendId, ids), inArray(broadcastEvents.eventType, filter.eventTypes))
+        );
+        const engagedIds = new Set(evts.map((e) => e.resendId));
+        emails = sends.filter((s) => engagedIds.has(s.resendId)).map((s) => s.email);
+      }
+    }
+
+    if (filter.excludeSignupEventId) {
+      const eventSignups = await db.select({ email: signups.email }).from(signups).where(eq(signups.eventId, filter.excludeSignupEventId));
+      const signedUp = new Set(eventSignups.map((s) => s.email.toLowerCase()));
+      emails = emails.filter((e) => !signedUp.has(e.toLowerCase()));
+    }
+
+    // Look up contact details for the emails; fall back to email-only if no contact row
+    const rows = await db.select().from(contacts).where(inArray(contacts.email, emails));
+    const byEmail = new Map(rows.map((r) => [r.email.toLowerCase(), r]));
+    return emails.map((e) => {
+      const c = byEmail.get(e.toLowerCase());
+      return { email: e, firstName: c?.firstName ?? "" };
+    });
+  }
+
+  // ---- Contact lifecycle & history --------------------------------------------
+
+  async advanceLifecycle(email: string, stage: string): Promise<void> {
+    await ready();
+    const order = ["lead", "engaged", "signed_up", "no_show", "alumni"];
+    const rows = await db.select().from(contacts).where(eq(contacts.email, email));
+    const c = rows[0];
+    if (!c) return;
+    const currentIdx = order.indexOf(c.lifecycleStage);
+    const newIdx = order.indexOf(stage);
+    if (newIdx > currentIdx) {
+      await db.update(contacts).set({ lifecycleStage: stage, lastEngagedAt: new Date().toISOString() }).where(eq(contacts.email, email));
+    } else if (newIdx === currentIdx) {
+      await db.update(contacts).set({ lastEngagedAt: new Date().toISOString() }).where(eq(contacts.email, email));
+    }
+  }
+
+  async getContactHistory(email: string): Promise<{ sends: typeof broadcastSends.$inferSelect[]; events: typeof broadcastEvents.$inferSelect[] }> {
+    await ready();
+    const sends = await db.select().from(broadcastSends).where(eq(broadcastSends.email, email)).orderBy(broadcastSends.sentAt);
+    const ids = sends.map((s) => s.resendId).filter(Boolean);
+    const evts = ids.length > 0 ? await db.select().from(broadcastEvents).where(inArray(broadcastEvents.resendId, ids)) : [];
+    return { sends, events: evts };
+  }
+
+  async listContactsEnriched(limit = 200): Promise<ContactRow[]> {
+    await ready();
+    return db.select().from(contacts).orderBy(desc(contacts.importedAt)).limit(limit);
   }
 }
 

@@ -847,7 +847,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                         disabled={broadcast.isPending || record.isPending}
                         data-testid="button-broadcast-toggle"
                       >
-                        <Signal className="h-3.5 w-3.5" /> Go on air <ChevronDown className="h-3.5 w-3.5 opacity-80" />
+                        <Signal className="h-3.5 w-3.5" /> Go live <ChevronDown className="h-3.5 w-3.5 opacity-80" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-64">
@@ -954,7 +954,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
           {isPrimary && (current || next) && (
             <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-white/10 bg-[#000741] px-4 py-2 text-xs">
               <span className="flex min-w-0 items-center gap-2">
-                <span className="font-bold uppercase tracking-[0.14em] text-[#ED1C24]">On air</span>
+                <span className="font-bold uppercase tracking-[0.14em] text-[#ED1C24]">Now</span>
                 <span className="truncate text-white/85">{current?.title ?? "Nothing scheduled"}</span>
               </span>
               {next && (
@@ -968,11 +968,8 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             </div>
           )}
 
-          {/* What you can put on the stage, and where to look at it — above the picture, out of the deck. */}
+          {/* Links row — above the picture */}
           <div className="flex flex-wrap items-center gap-1.5 border-b border-white/10 bg-[#04102b] px-3 py-1.5">
-            <span className="mr-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/40">Stage</span>
-            <DeckButton icon={ImageIcon} label="Share image" onClick={() => setMediaPicker("image")} testId="button-deck-image" />
-            <DeckButton icon={Film} label="Share video" active={studio?.stageMediaPlaying} onClick={() => setMediaPicker("video")} testId="button-deck-video" />
             {!isRoom && (
               <DeckButton
                 icon={PlayCircle}
@@ -1224,18 +1221,21 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
 
           </div>
 
-          {/* the deck: the room's sound on the left, YOU in the middle, like Zoom */}
+          {/* the deck: share/mute on the left, YOU in the middle, volume on the right */}
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-white/10 bg-[#000741] px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
+              <DeckButton icon={ImageIcon} label="Image" onClick={() => setMediaPicker("image")} testId="button-deck-image" />
+              <DeckButton icon={Film} label="Video" active={studio?.stageMediaPlaying} onClick={() => setMediaPicker("video")} testId="button-deck-video" />
               <DeckButton
                 icon={stageMuted ? MicOff : Mic}
-                label={stageMuted ? "Stage muted" : "Mute the stage"}
+                label={stageMuted ? "Stage muted" : "Mute stage"}
                 active={stageMuted}
                 onClick={() => muteStage.mutate(!stageMuted)}
                 testId="button-deck-mute-stage"
               />
             </div>
 
+            {/* Zoom-style cam + mic toggles — always visible, first click joins the room */}
             <div
               className={`flex items-center gap-1.5 rounded-2xl border-2 px-2 py-1.5 ${
                 onCamera ? "border-emerald-500/70 bg-emerald-500/10" : "border-white/15 bg-white/5"
@@ -1243,70 +1243,37 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               data-testid="deck-you"
             >
               <span className="px-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">You</span>
-              {!onCamera ? (
-                <button
-                  type="button"
-                  onClick={() => setOnCamera(true)}
-                  className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-400"
-                  data-testid="button-deck-oncamera"
-                >
-                  <Video className="h-4 w-4" /> Go on camera
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => void toggleCam()}
-                    className={`flex flex-col items-center gap-0.5 rounded-xl px-4 py-1.5 text-xs font-medium ${
-                      camOn ? "bg-white/10 text-white hover:bg-white/15" : "bg-[#ED1C24] text-white"
-                    }`}
-                    data-testid="button-deck-cam"
-                  >
-                    {camOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
-                    {camOn ? "Camera" : "Camera off"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void toggleMic()}
-                    className={`flex flex-col items-center gap-0.5 rounded-xl px-4 py-1.5 text-xs font-medium ${
-                      micOn ? "bg-white/10 text-white hover:bg-white/15" : "bg-[#ED1C24] text-white"
-                    }`}
-                    data-testid="button-deck-mic"
-                  >
-                    {micOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
-                    {micOn ? "Mic" : "Muted"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMonitorMuted((v) => !v)}
-                    className="flex flex-col items-center gap-0.5 rounded-xl bg-white/10 px-4 py-1.5 text-xs font-medium text-white hover:bg-white/15"
-                    title="Whether you hear the stage in this browser"
-                    data-testid="button-deck-volume"
-                  >
-                    {monitorMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
-                    {monitorMuted ? "Hear stage" : "Hearing stage"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOnCamera(false)}
-                    className="ml-1 rounded-xl px-3 py-2 text-xs font-medium text-white/60 hover:bg-white/10 hover:text-white"
-                    data-testid="button-deck-offcamera"
-                  >
-                    Leave camera
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={() => { if (!onCamera) setOnCamera(true); void toggleCam(); }}
+                className={`flex flex-col items-center gap-0.5 rounded-xl px-4 py-1.5 text-xs font-medium ${
+                  onCamera && camOn ? "bg-white/10 text-white hover:bg-white/15" : "bg-[#ED1C24] text-white"
+                }`}
+                data-testid="button-deck-cam"
+              >
+                {onCamera && camOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                {onCamera && camOn ? "Camera" : "Camera off"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { if (!onCamera) setOnCamera(true); void toggleMic(); }}
+                className={`flex flex-col items-center gap-0.5 rounded-xl px-4 py-1.5 text-xs font-medium ${
+                  onCamera && micOn ? "bg-white/10 text-white hover:bg-white/15" : "bg-[#ED1C24] text-white"
+                }`}
+                data-testid="button-deck-mic"
+              >
+                {onCamera && micOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+                {onCamera && micOn ? "Mic" : "Muted"}
+              </button>
             </div>
 
             <div className="flex items-center justify-end gap-2">
-              {!onCamera && (
-                <DeckButton
-                  icon={monitorMuted ? VolumeX : Volume2}
-                  label={monitorMuted ? "Hear the stage" : "Hearing the stage"}
-                  onClick={() => setMonitorMuted((v) => !v)}
-                  testId="button-deck-volume"
-                />
-              )}
+              <DeckButton
+                icon={monitorMuted ? VolumeX : Volume2}
+                label={monitorMuted ? "Hear stage" : "Hearing stage"}
+                onClick={() => setMonitorMuted((v) => !v)}
+                testId="button-deck-volume"
+              />
             </div>
           </div>
         </div>
