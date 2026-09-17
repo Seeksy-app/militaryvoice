@@ -20,10 +20,26 @@ import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 
 interface Props {
   children: React.ReactNode;
+  /** Copy overrides, so a specific pitch can name itself and who replies. */
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+  /** Shown in the toast once it sends. */
+  sentTitle?: string;
+  sentDescription?: string;
+  footNote?: string;
 }
 
 /** "Sponsors" nav item: a short form that reaches the admin team by email. */
-export function SponsorDialog({ children }: Props) {
+export function SponsorDialog({
+  children,
+  eyebrow = "Become a sponsor",
+  title = "Put your brand in front of the whole 24 hours.",
+  description = "Sponsor logos run in the “Friends of the Podcastathon” strip on every page and get read on air between shows. Tell us a little about you and we'll send the packages.",
+  sentTitle = "Thanks — we'll be in touch",
+  sentDescription = "The team gets your note by email right away.",
+  footNote = "We'll reply by email. No list, no spam.",
+}: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -51,7 +67,7 @@ export function SponsorDialog({ children }: Props) {
     onSettled: () => setHumanReset((n) => n + 1),
     onSuccess: () => {
       setSent(true);
-      toast({ title: "Thanks — we'll be in touch", description: "The team gets your note by email right away." });
+      toast({ title: sentTitle, description: sentDescription });
       setTimeout(() => {
         setOpen(false);
         setSent(false);
@@ -74,15 +90,12 @@ export function SponsorDialog({ children }: Props) {
         <DialogHeader>
           <div className="mb-1 flex items-center gap-2 text-primary">
             <Handshake className="h-4 w-4" />
-            <span className="text-xs font-semibold uppercase tracking-[0.14em]">Become a sponsor</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.14em]">{eyebrow}</span>
           </div>
           <DialogTitle className="text-xl" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
-            Put your brand in front of the whole 24 hours.
+            {title}
           </DialogTitle>
-          <DialogDescription>
-            Sponsor logos run in the "Friends of the Podcastathon" strip on every page and get read on air between shows.
-            Tell us a little about you and we'll send the packages.
-          </DialogDescription>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
         <form
@@ -134,7 +147,7 @@ export function SponsorDialog({ children }: Props) {
           </div>
           {siteKey && <Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={humanReset} />}
           <DialogFooter className="gap-2 sm:justify-between">
-            <p className="text-xs text-muted-foreground">We'll reply by email. No list, no spam.</p>
+            <p className="text-xs text-muted-foreground">{footNote}</p>
             <Button type="submit" disabled={mutation.isPending || !canSubmit || sent} className="gap-1.5 rounded-full" data-testid="button-sponsor-inq-submit">
               {sent ? (
                 <>

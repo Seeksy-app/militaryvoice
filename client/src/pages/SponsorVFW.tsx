@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { SponsorDialog } from "@/components/SponsorDialog";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import { slotStart, totalSlots, formatTimeInZone } from "@/lib/schedule";
@@ -155,6 +156,40 @@ export default function SponsorVFW() {
             </p>
             <p className="text-foreground">
               There is one partner sponsorship, and we would like it to be the VFW.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------------- HOSTED BY */}
+      {/* An organisation being asked for five figures wants to know who is
+          running the day. His record answers that better than any copy can. */}
+      <section className="text-white" style={{ backgroundColor: NAVY }}>
+        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[0.62fr_1.38fr] lg:items-center lg:py-20">
+          <div className="relative mx-auto w-full max-w-[280px]">
+            <div className="absolute -inset-3 -rotate-2 rounded-[2rem] bg-[#F0A71F]/80" aria-hidden="true" />
+            <img
+              src="/riccoh-player.jpg"
+              alt="Riccoh Player in Marine Corps utilities holding his Emmy award"
+              loading="lazy"
+              className="relative aspect-[3/4] w-full rounded-[1.75rem] object-cover object-top shadow-2xl"
+            />
+          </div>
+
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>
+              Hosted by
+            </div>
+            <h2 className="mt-3 text-4xl font-bold leading-[1.1] tracking-tight sm:text-5xl" style={HEADLINE_FONT}>
+              Riccoh Player
+            </h2>
+            <p className="mt-5 text-xl leading-relaxed text-white/90 sm:text-2xl">
+              Thirty-three years in the Marine Corps. Five combat tours. An Emmy, and a seat beside a global media
+              executive.
+            </p>
+            <p className="mt-4 text-lg leading-relaxed text-white/70">
+              Rico runs the day from the studio and hosts a slot of his own. He is the person the VFW would be working
+              with, start to finish.
             </p>
           </div>
         </div>
@@ -334,11 +369,18 @@ export default function SponsorVFW() {
           easiest on your end.
         </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <a href="mailto:andrew@podlogix.co?subject=VFW%20title%20sponsorship%20%E2%80%94%20National%20Military%20Podcast%20Day">
+          <SponsorDialog
+            eyebrow="Partner sponsorship"
+            title="Leave your details and Rico will follow up."
+            description="Name and the best way to reach you is all we need. Riccoh Player — who hosts the day — will be in touch shortly to talk it through."
+            sentTitle="Thanks — Rico will be in touch"
+            sentDescription="Your details are with him now. Expect to hear back shortly."
+            footNote="Goes straight to Rico. No list, no spam."
+          >
             <Button size="lg" className="gap-2 rounded-full bg-[#053877] px-7 text-base font-semibold text-white hover:bg-[#0a4a99]">
               Start the conversation <ArrowRight className="h-4 w-4" />
             </Button>
-          </a>
+          </SponsorDialog>
           <Link href="/agenda">
             <Button size="lg" variant="outline" className="rounded-full px-7 text-base">
               See the full agenda
