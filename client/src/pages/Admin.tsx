@@ -1383,6 +1383,7 @@ function SponsorsCard({ eventId }: { eventId: number }) {
                       <div className="text-sm font-semibold">
                         {q.company || q.name}
                         {q.company && <span className="ml-1.5 font-normal text-muted-foreground">· {q.name}</span>}
+                        {q.title && <span className="ml-1.5 font-normal text-muted-foreground">· {q.title}</span>}
                       </div>
                       <div className="text-xs text-muted-foreground">
                         <a href={`mailto:${q.email}`} className="text-primary hover:underline">

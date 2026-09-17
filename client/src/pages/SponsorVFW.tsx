@@ -102,36 +102,25 @@ export default function SponsorVFW() {
             VFW the partner sponsorship of the entire day — including two slots on the schedule for #StillServing.
           </p>
 
-          <div className="mt-9 flex flex-wrap items-center gap-4">
-            <a href="#offer">
-              <Button size="lg" className="gap-2 rounded-full bg-[#F0A71F] px-7 text-base font-semibold text-[#1a1200] hover:bg-[#ffb92e]">
-                See the offer <ArrowRight className="h-4 w-4" />
-              </Button>
-            </a>
-            <a href="#lineup" className="text-sm font-medium text-white/80 underline-offset-4 hover:text-white hover:underline">
-              Meet the lineup
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* ------------------------------------------------------------ STATS */}
-      <section className="border-b border-border bg-background">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-px overflow-hidden px-4 py-12 sm:px-6 lg:grid-cols-4">
-          {[
-            { icon: Clock, n: String(event?.durationHours ?? 24), label: "hours, continuous" },
-            { icon: Radio, n: String(slotCount || 48), label: "broadcast slots" },
-            { icon: Mic2, n: String(event?.slotMinutes ?? 30), label: "minutes per show" },
-            { icon: Users, n: "1", label: "partner sponsorship available" },
-          ].map(({ icon: Icon, n, label }) => (
-            <div key={label} className="px-2 text-center lg:px-4">
-              <Icon className="mx-auto h-5 w-5 text-[#F0A71F]" />
-              <div className="mt-3 text-4xl font-bold tabular-nums tracking-tight text-foreground sm:text-5xl" style={HEADLINE_FONT}>
-                {n}
+          {/* No call to action up here on purpose. This proposal reaches one
+              organisation by URL, so the reader is already committed — the
+              scale of the day is the more useful thing to lead with. */}
+          <div className="mt-12 grid grid-cols-2 gap-y-8 border-t border-white/15 pt-10 lg:grid-cols-4">
+            {[
+              { icon: Clock, n: String(event?.durationHours ?? 24), label: "hours, continuous" },
+              { icon: Radio, n: String(slotCount || 48), label: "broadcast slots" },
+              { icon: Mic2, n: String(event?.slotMinutes ?? 30), label: "minutes per show" },
+              { icon: Users, n: "1", label: "partner sponsorship available" },
+            ].map(({ icon: Icon, n, label }) => (
+              <div key={label} className="px-2 lg:px-0">
+                <Icon className="h-5 w-5" style={{ color: GOLD }} />
+                <div className="mt-2.5 text-4xl font-bold tabular-nums tracking-tight text-white sm:text-5xl" style={HEADLINE_FONT}>
+                  {n}
+                </div>
+                <div className="mt-1 text-sm text-white/60">{label}</div>
               </div>
-              <div className="mt-1 text-sm text-muted-foreground">{label}</div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </section>
 
@@ -188,7 +177,7 @@ export default function SponsorVFW() {
               executive.
             </p>
             <p className="mt-4 text-lg leading-relaxed text-white/70">
-              Rico runs the day from the studio and hosts a slot of his own. He is the person the VFW would be working
+              Riccoh runs the day from the studio and hosts a slot of his own. He is the person the VFW would be working
               with, start to finish.
             </p>
           </div>
@@ -371,11 +360,12 @@ export default function SponsorVFW() {
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <SponsorDialog
             eyebrow="Partner sponsorship"
-            title="Leave your details and Rico will follow up."
-            description="Name and the best way to reach you is all we need. Riccoh Player — who hosts the day — will be in touch shortly to talk it through."
-            sentTitle="Thanks — Rico will be in touch"
+            title="Leave your details and Riccoh will follow up."
+            showNotes={false}
+            description="Your name, title and the best way to reach you is all we need. Riccoh Player — who hosts the day — will be in touch shortly to talk it through."
+            sentTitle="Thanks — Riccoh will be in touch"
             sentDescription="Your details are with him now. Expect to hear back shortly."
-            footNote="Goes straight to Rico. No list, no spam."
+            footNote="Goes straight to Riccoh. No list, no spam."
           >
             <Button size="lg" className="gap-2 rounded-full bg-[#053877] px-7 text-base font-semibold text-white hover:bg-[#0a4a99]">
               Start the conversation <ArrowRight className="h-4 w-4" />

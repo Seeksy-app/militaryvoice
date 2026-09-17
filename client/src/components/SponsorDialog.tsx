@@ -28,6 +28,8 @@ interface Props {
   sentTitle?: string;
   sentDescription?: string;
   footNote?: string;
+  /** Some pitches only need who they are and how to reach them. */
+  showNotes?: boolean;
 }
 
 /** "Sponsors" nav item: a short form that reaches the admin team by email. */
@@ -39,11 +41,13 @@ export function SponsorDialog({
   sentTitle = "Thanks — we'll be in touch",
   sentDescription = "The team gets your note by email right away.",
   footNote = "We'll reply by email. No list, no spam.",
+  showNotes = true,
 }: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
@@ -57,6 +61,7 @@ export function SponsorDialog({
       const res = await apiRequest("POST", "/api/sponsor-inquiries", {
         name,
         company,
+        title: jobTitle,
         email,
         phone,
         message,
@@ -73,6 +78,7 @@ export function SponsorDialog({
         setSent(false);
         setName("");
         setCompany("");
+        setJobTitle("");
         setEmail("");
         setPhone("");
         setMessage("");
@@ -119,6 +125,12 @@ export function SponsorDialog({
               <Input id="sp-company" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Dept. of Hydration" className="mt-1" data-testid="input-sponsor-inq-company" />
             </div>
             <div>
+              <Label htmlFor="sp-title" className="text-xs">
+                Your title
+              </Label>
+              <Input id="sp-title" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="Director of Communications" className="mt-1" data-testid="input-sponsor-inq-title" />
+            </div>
+            <div>
               <Label htmlFor="sp-email" className="text-xs">
                 Email <span className="text-destructive">*</span>
               </Label>
@@ -131,6 +143,7 @@ export function SponsorDialog({
               <Input id="sp-phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(555) 555-5555" className="mt-1" data-testid="input-sponsor-inq-phone" />
             </div>
           </div>
+          {showNotes && (
           <div>
             <Label htmlFor="sp-message" className="text-xs">
               Anything you'd like us to know
@@ -145,6 +158,7 @@ export function SponsorDialog({
               data-testid="input-sponsor-inq-message"
             />
           </div>
+          )}
           {siteKey && <Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={humanReset} />}
           <DialogFooter className="gap-2 sm:justify-between">
             <p className="text-xs text-muted-foreground">{footNote}</p>

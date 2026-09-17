@@ -501,6 +501,8 @@ export const sponsorInquiries = pgTable("sponsor_inquiries", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   company: text("company").notNull().default(""),
+  /** Their job title — who we are actually talking to at the organisation. */
+  title: text("title").notNull().default(""),
   email: text("email").notNull(),
   phone: text("phone").notNull().default(""),
   message: text("message").notNull().default(""),
@@ -513,6 +515,7 @@ export const insertSponsorInquirySchema = createInsertSchema(sponsorInquiries)
   .extend({
     name: z.string().trim().min(1, "Tell us your name"),
     company: z.string().trim().default(""),
+    title: z.string().trim().max(120).default(""),
     email: z.string().trim().email("Enter a valid email"),
     phone: z.string().trim().default(""),
     message: z.string().trim().max(2000).default(""),
