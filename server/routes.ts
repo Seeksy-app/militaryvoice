@@ -2023,6 +2023,11 @@ export function registerRoutes(app: Express): void {
       eventName: event.name,
       studioName: studio.name,
       status: studio.status,
+      // The same shape the room carries. Room metadata only survives while the
+      // room exists, and before the event nobody is in it — so a viewer would
+      // join an empty room and get nothing. Seed them from the record instead
+      // and let live metadata overwrite it once the studio is actually up.
+      meta: studioMeta(event.name, studio, event.startAtUtc),
       token: await studioToken({
         room,
         identity: `viewer-${Math.random().toString(36).slice(2, 12)}`,

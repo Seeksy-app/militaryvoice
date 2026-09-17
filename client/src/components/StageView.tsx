@@ -59,9 +59,11 @@ export interface StageTile {
  * Joins a room read-only and reports whoever the producer has put on stage.
  * Green room participants are deliberately never returned: they are not on air.
  */
-export function useStageRoom(url: string | null, token: string | null, muted: boolean) {
+export function useStageRoom(url: string | null, token: string | null, muted: boolean, seedMeta?: RoomMeta) {
   const [tiles, setTiles] = useState<StageTile[]>([]);
-  const [meta, setMeta] = useState<RoomMeta>({});
+  // Seeded from the record, then overwritten by the room's own metadata once
+  // there is a room to read it from. Before the event there is not.
+  const [meta, setMeta] = useState<RoomMeta>(seedMeta ?? {});
   // Captions arrive as data messages from a transcription agent sitting in the
   // room. Nothing here knows or cares which model produced them.
   const [caption, setCaption] = useState<{ speaker: string; text: string } | null>(null);
@@ -70,13 +72,18 @@ export function useStageRoom(url: string | null, token: string | null, muted: bo
   const roomRef = useRef<Room | null>(null);
 
   useEffect(() => {
+    if (seedMeta) setMeta((prev) => ({ ...seedMeta, ...prev }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(seedMeta ?? {})]);
+
+  useEffect(() => {
     if (!url || !token) return;
     const room = new Room({ adaptiveStream: true, dynacast: true });
     roomRef.current = room;
     let cancelled = false;
 
     const readMeta = (raw?: string) => {
-      if (!raw) return;
+      if (!raw || raw === "{}") return;   // an empty room must not clear the seed
       try {
         setMeta(JSON.parse(raw) as RoomMeta);
       } catch {

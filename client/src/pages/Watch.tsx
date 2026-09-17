@@ -16,6 +16,7 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 
 interface WatchToken {
   configured: boolean;
+  meta?: Record<string, unknown>;
   url?: string;
   token?: string;
   eventName?: string;
@@ -47,7 +48,7 @@ export default function Watch({ slug }: { slug?: string }) {
     refetchInterval: (q) => (q.state.data?.configured ? false : 20_000),
   });
 
-  const { tiles, meta, connected, caption } = useStageRoom(data?.url ?? null, data?.token ?? null, muted);
+  const { tiles, meta, connected, caption } = useStageRoom(data?.url ?? null, data?.token ?? null, muted, data?.meta);
   const live = (meta.status ?? data?.status) === "Live";
   const onAir = tiles.length > 0 || meta.fallbackPlaying;
 
