@@ -936,8 +936,43 @@ export const broadcasts = pgTable("broadcasts", {
   status: text("status").notNull().default("draft"),
   // Which contacts to send to: "signups" (event registrants), "contacts" (imported list), "all" (both)
   segment: text("segment").notNull().default("contacts"),
+  // "team" = MilitaryVoice.ai Team, "rico" = Riccoh Player with signature
+  sender: text("sender").notNull().default("team"),
+  // header banner image key: "welcome" | "podcasters" | "marathon" | "schedule"
+  banner: text("banner").notNull().default("welcome"),
   recipientCount: integer("recipient_count"),
   sentAt: text("sent_at"),
   createdAt: text("created_at").notNull(),
 });
 export type BroadcastRow = typeof broadcasts.$inferSelect;
+
+export const eventTeam = pgTable("event_team", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  name: text("name").notNull(),
+  title: text("title").notNull(),
+  email: text("email").notNull().default(""),
+  photoUrl: text("photo_url").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});
+export type EventTeamMember = typeof eventTeam.$inferSelect;
+
+// One row per recipient per broadcast — links resend message ID to contact
+export const broadcastSends = pgTable("broadcast_sends", {
+  id: serial("id").primaryKey(),
+  broadcastId: integer("broadcast_id").notNull(),
+  email: text("email").notNull(),
+  resendId: text("resend_id").notNull().default(""),
+  sentAt: text("sent_at").notNull(),
+});
+export type BroadcastSend = typeof broadcastSends.$inferSelect;
+
+// Resend webhook events per message
+export const broadcastEvents = pgTable("broadcast_events", {
+  id: serial("id").primaryKey(),
+  resendId: text("resend_id").notNull(),
+  eventType: text("event_type").notNull(), // delivered | opened | clicked | bounced | complained
+  occurredAt: text("occurred_at").notNull(),
+  url: text("url").notNull().default(""), // for click events
+});
+export type BroadcastEvent = typeof broadcastEvents.$inferSelect;

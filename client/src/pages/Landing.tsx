@@ -640,11 +640,11 @@ export default function Landing({ slug }: Props) {
             <Reveal>
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">For podcasters</div>
               <h2 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT}>
-                Claiming a slot takes about two minutes.
+                Your story. Your slot. About two minutes to sign up.
               </h2>
               <p className="mt-4 text-lg leading-relaxed text-white/80">
-                Pick a time, drop your email, tell us about your show once. It's one slot per show — and if your plans
-                change, you can move to any open time without re-entering a thing.
+                Celebrate National Military Podcast Day on October 5. Bring a guest or share your story solo—choose a
+                time and tell us about your show. One slot per show.
               </p>
               <Link href={openSlotsHref}>
                 <Button

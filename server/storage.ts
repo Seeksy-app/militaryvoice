@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts, eventTeam, broadcastSends, broadcastEvents, type EventTeamMember } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -1812,25 +1812,29 @@ class DatabaseStorage implements IStorage {
     return rows.map((r) => ({ email: r.email, firstName: r.hostName.split(" ")[0] }));
   }
 
-  async createBroadcast(data: { subject: string; bodyText: string; eventId?: number | null; segment?: string }): Promise<BroadcastRow> {
+  async createBroadcast(data: { subject: string; bodyText: string; eventId?: number | null; segment?: string; sender?: string; banner?: string }): Promise<BroadcastRow> {
     await ready();
     const [row] = await db.insert(broadcasts).values({
       subject: data.subject,
       bodyText: data.bodyText,
       eventId: data.eventId ?? null,
       segment: data.segment ?? "contacts",
+      sender: data.sender ?? "team",
+      banner: data.banner ?? "welcome",
       status: "draft",
       createdAt: new Date().toISOString(),
     }).returning();
     return row;
   }
 
-  async updateBroadcast(id: number, data: { subject?: string; bodyText?: string; segment?: string }): Promise<BroadcastRow | null> {
+  async updateBroadcast(id: number, data: { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string }): Promise<BroadcastRow | null> {
     await ready();
     const patch: Partial<BroadcastRow> = {};
     if (data.subject !== undefined) patch.subject = data.subject;
     if (data.bodyText !== undefined) patch.bodyText = data.bodyText;
     if (data.segment !== undefined) patch.segment = data.segment;
+    if (data.sender !== undefined) patch.sender = data.sender;
+    if (data.banner !== undefined) patch.banner = data.banner;
     if (Object.keys(patch).length === 0) return null;
     const [row] = await db.update(broadcasts).set(patch).where(and(eq(broadcasts.id, id), eq(broadcasts.status, "draft"))).returning();
     return row ?? null;
@@ -1844,6 +1848,81 @@ class DatabaseStorage implements IStorage {
   async deleteBroadcast(id: number): Promise<void> {
     await ready();
     await db.delete(broadcasts).where(and(eq(broadcasts.id, id), eq(broadcasts.status, "draft")));
+  }
+
+  // ── Event team ────────────────────────────────────────────────────────────
+
+  async listEventTeam(eventId: number): Promise<EventTeamMember[]> {
+    await ready();
+    return db.select().from(eventTeam).where(eq(eventTeam.eventId, eventId)).orderBy(eventTeam.createdAt);
+  }
+
+  async addTeamMember(eventId: number, data: { name: string; title: string; email?: string; photoUrl?: string }): Promise<EventTeamMember> {
+    await ready();
+    const [row] = await db.insert(eventTeam).values({
+      eventId,
+      name: data.name,
+      title: data.title,
+      email: data.email ?? "",
+      photoUrl: data.photoUrl ?? "",
+      createdAt: new Date().toISOString(),
+    }).returning();
+    return row;
+  }
+
+  async updateTeamMember(id: number, data: { name?: string; title?: string; email?: string; photoUrl?: string }): Promise<EventTeamMember | null> {
+    await ready();
+    const patch: Record<string, unknown> = {};
+    if (data.name !== undefined) patch.name = data.name;
+    if (data.title !== undefined) patch.title = data.title;
+    if (data.email !== undefined) patch.email = data.email;
+    if (data.photoUrl !== undefined) patch.photoUrl = data.photoUrl;
+    if (Object.keys(patch).length === 0) return null;
+    const [row] = await db.update(eventTeam).set(patch as any).where(eq(eventTeam.id, id)).returning();
+    return row ?? null;
+  }
+
+  async deleteTeamMember(id: number): Promise<void> {
+    await ready();
+    await db.delete(eventTeam).where(eq(eventTeam.id, id));
+  }
+
+  async getTeamMember(id: number): Promise<EventTeamMember | null> {
+    await ready();
+    const [row] = await db.select().from(eventTeam).where(eq(eventTeam.id, id));
+    return row ?? null;
+  }
+
+  async recordBroadcastSend(broadcastId: number, email: string, resendId: string): Promise<void> {
+    await ready();
+    await db.insert(broadcastSends).values({ broadcastId, email, resendId, sentAt: new Date().toISOString() });
+  }
+
+  async recordBroadcastEvent(resendId: string, eventType: string, occurredAt: string, url?: string): Promise<void> {
+    await ready();
+    await db.insert(broadcastEvents).values({ resendId, eventType, occurredAt, url: url ?? "" });
+  }
+
+  async getBroadcastStats(broadcastId: number): Promise<{ sent: number; delivered: number; opened: number; clicked: number; bounced: number }> {
+    await ready();
+    const sends = await db.select().from(broadcastSends).where(eq(broadcastSends.broadcastId, broadcastId));
+    const ids = sends.map((s) => s.resendId).filter(Boolean);
+    if (ids.length === 0) return { sent: 0, delivered: 0, opened: 0, clicked: 0, bounced: 0 };
+    const events = await db.select().from(broadcastEvents).where(inArray(broadcastEvents.resendId, ids));
+    const count = (type: string) => new Set(events.filter((e) => e.eventType === type).map((e) => e.resendId)).size;
+    return { sent: sends.length, delivered: count("delivered"), opened: count("opened"), clicked: count("clicked"), bounced: count("bounced") };
+  }
+
+  async getBroadcastSendsByEngagement(broadcastId: number, types: string[]): Promise<{ email: string; resendId: string }[]> {
+    await ready();
+    const sends = await db.select().from(broadcastSends).where(eq(broadcastSends.broadcastId, broadcastId));
+    const ids = sends.map((s) => s.resendId).filter(Boolean);
+    if (ids.length === 0) return [];
+    const events = await db.select().from(broadcastEvents).where(
+      and(inArray(broadcastEvents.resendId, ids), inArray(broadcastEvents.eventType, types))
+    );
+    const engagedIds = new Set(events.map((e) => e.resendId));
+    return sends.filter((s) => engagedIds.has(s.resendId)).map((s) => ({ email: s.email, resendId: s.resendId }));
   }
 }
 

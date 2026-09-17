@@ -33,17 +33,34 @@ export function emailShell(o: {
   footerNote?: string;
 }): string {
   const cta = o.cta
-    ? `<a href="${o.cta.href}" style="display:inline-block;background:#F0A71F;color:#1a1200;text-decoration:none;font-size:16px;font-weight:700;padding:14px 26px;border-radius:9999px;">${escapeHtml(o.cta.label)}</a>`
+    ? `<a href="${o.cta.href}" style="display:inline-block;background:#F0A71F;color:#1a1200;text-decoration:none;font-size:13px;font-weight:600;padding:9px 20px;border-radius:9999px;">${escapeHtml(o.cta.label)}</a>`
     : "";
   return `<!doctype html><html><body style="margin:0;padding:0;background:#eef2f8;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f8;">
     <tr><td align="center" style="padding:24px 12px;">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-        <tr><td style="line-height:0;"><img src="${o.banner}" width="600" alt="${escapeHtml(o.bannerAlt ?? "MilitaryVoice.ai")}" style="display:block;width:100%;height:auto;border:0;"></td></tr>
-        <tr><td style="padding:30px 32px 6px;">
-          <p style="margin:0 0 6px;color:#053877;font-size:13px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">${escapeHtml(o.eyebrow)}</p>
-          <h1 style="margin:0;color:#0b1220;font-size:26px;line-height:1.25;font-weight:800;">${escapeHtml(o.heading)}</h1>
+        <!-- Rich banner: photo + dark overlay + logo + title -->
+        <tr><td style="padding:0;background:#053877;" bgcolor="#053877">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;">
+            <tr>
+              <td background="${o.banner}" bgcolor="#053877"
+                  style="background-image:url('${o.banner}');background-size:cover;background-position:center;padding:0;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="background:linear-gradient(135deg,rgba(5,56,119,0.90) 0%,rgba(5,56,119,0.60) 100%);padding:32px 36px 38px;">
+                      <img src="${SITE}/logo-wave.png" width="80" height="24" alt="" style="display:block;border:0;margin:0 0 16px;">
+                      <p style="margin:0 0 8px;color:#ffffff;font-size:34px;font-weight:800;line-height:1.1;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">MilitaryVoice.ai</p>
+                      <p style="margin:0;color:#F0A71F;font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${escapeHtml(o.eyebrow)}</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
         </td></tr>
+        ${o.heading ? `<tr><td style="padding:26px 32px 6px;">
+          <h1 style="margin:0;color:#0b1220;font-size:26px;line-height:1.25;font-weight:800;">${escapeHtml(o.heading)}</h1>
+        </td></tr>` : ""}
         <tr><td style="padding:14px 32px 4px;color:#374151;font-size:16px;line-height:1.65;">${o.body}</td></tr>
         ${cta ? `<tr><td style="padding:14px 32px 6px;">${cta}</td></tr>` : ""}
         ${o.secondary ? `<tr><td style="padding:6px 32px 8px;">${o.secondary}</td></tr>` : ""}
@@ -167,7 +184,7 @@ function buildText(input: ConfirmationEmailInput): string {
 
 /** Low-level Resend sender shared by every email type. Never throws — logs and
  *  returns false on failure so a flaky email provider never blocks a user flow. */
-async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string }): Promise<boolean> {
+async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string }): Promise<string | null> {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (RESEND_API_KEY) {
@@ -179,7 +196,7 @@ async function sendRawEmail(opts: { to: string; subject: string; html: string; t
       method: "POST",
       headers,
       body: JSON.stringify({
-        from: FROM_ADDRESS,
+        from: opts.from ?? FROM_ADDRESS,
         to: [opts.to],
         subject: opts.subject,
         html: opts.html,
@@ -190,18 +207,32 @@ async function sendRawEmail(opts: { to: string; subject: string; html: string; t
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       console.error(`Resend email failed (${res.status}):`, body);
-      return false;
+      return null;
     }
-    return true;
+    const data = await res.json().catch(() => ({})) as { id?: string };
+    return data.id ?? null;
   } catch (err) {
     console.error("Failed to send email:", err);
-    return false;
+    return null;
   }
+}
+
+async function sendEmail(opts: Parameters<typeof sendRawEmail>[0]): Promise<boolean> {
+  return (await sendRawEmail(opts)) !== null;
+}
+
+export async function resendApiGet(path: string): Promise<unknown> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (RESEND_API_KEY) headers["Authorization"] = `Bearer ${RESEND_API_KEY}`;
+  else if (RESEND_PROXY_TOKEN) headers["x-api-key"] = RESEND_PROXY_TOKEN;
+  const res = await fetch(`${RESEND_BASE}${path}`, { headers });
+  if (!res.ok) return null;
+  return res.json().catch(() => null);
 }
 
 /** Send the on-air confirmation email. Never throws. */
 export async function sendConfirmationEmail(input: ConfirmationEmailInput): Promise<boolean> {
-  return sendRawEmail({
+  return sendEmail({
     to: input.to,
     subject: `You're on the schedule: ${input.podcastName} at ${input.onAirStartLabel}`,
     html: buildHtml(input),
@@ -221,7 +252,7 @@ export async function sendLoginCodeEmail(input: LoginCodeEmailInput): Promise<bo
       <p style="margin:0 0 6px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">Your code</p>
       <p style="margin:0;color:#053877;font-size:36px;font-weight:800;letter-spacing:0.25em;font-family:monospace;">${escapeHtml(input.code)}</p>
     </div>`;
-  return sendRawEmail({
+  return sendEmail({
     to: input.to,
     subject: `Your sign-in code: ${input.code}`,
     html: emailShell({
@@ -279,7 +310,7 @@ export async function sendReminderConfirmationEmail(raw: ReminderEmailInput): Pr
     <p style="margin:28px 0 0;color:#9ca3af;font-size:12px;">Didn't ask for this? Ignore it and we won't email you again.</p>
   </div>`;
   const text = `You're set, ${raw.name}.\n\nWe'll email you before ${raw.podcastName} with ${raw.hostName} goes live${raw.wantsText ? ", and text you too" : ""}.\n\nOn air: ${raw.whenLabel} (${raw.timezoneLabel})\n\n${calendarText(raw.calendar)}\nView the agenda: ${raw.agendaUrl}\n`;
-  return sendRawEmail({ to: raw.to, subject: `Reminder set: ${raw.podcastName} · ${raw.whenLabel}`, html, text });
+  return sendEmail({ to: raw.to, subject: `Reminder set: ${raw.podcastName} · ${raw.whenLabel}`, html, text });
 }
 
 /** Tell the admin team a sponsor asked to get involved. Never throws. */
@@ -305,7 +336,7 @@ export async function sendSponsorInquiryEmail(input: {
   </div>`;
   const text = `New sponsor inquiry\n\nName: ${input.name}\nCompany: ${input.company}\nEmail: ${input.email}\nPhone: ${input.phone}\n\n${input.message}\n`;
   const results = await Promise.all(
-    input.to.map((to) => sendRawEmail({ to, subject: `Sponsor inquiry: ${input.company || input.name}`, html, text })),
+    input.to.map((to) => sendEmail({ to, subject: `Sponsor inquiry: ${input.company || input.name}`, html, text })),
   );
   return results.some(Boolean);
 }
@@ -343,7 +374,7 @@ export async function sendPlatformInterestEmail(v: PlatformInterestInput): Promi
     </table>
   </div>`;
   const text = `${heading}\n\n` + rows.map(([k, val]) => `${k}: ${val}`).join("\n") + "\n";
-  return sendRawEmail({ to: "hello@militaryvoice.ai", subject: `${heading}: ${v.name}`, html, text });
+  return sendEmail({ to: "hello@militaryvoice.ai", subject: `${heading}: ${v.name}`, html, text });
 }
 
 // ---------------------------------------------------------------------------
@@ -402,7 +433,7 @@ export async function sendPrepNudge(v: NudgeInput): Promise<boolean> {
       </p>`,
     cta: { href: v.dashboardUrl, label: "Open your dashboard" },
   });
-  return sendRawEmail({
+  return sendEmail({
     to: v.to,
     subject: `${v.podcastName}: your slot is ${v.onAirLabel}`,
     html,
@@ -428,7 +459,7 @@ export async function sendFinalNudge(v: NudgeInput): Promise<boolean> {
       ${outstandingHtml(v.outstanding)}`,
     cta: { href: v.studioUrl, label: "Your studio link" },
   });
-  return sendRawEmail({
+  return sendEmail({
     to: v.to,
     subject: `Two days: ${v.podcastName} at ${v.onAirLabel}`,
     html,
@@ -449,7 +480,7 @@ export async function sendOnAirNudge(v: NudgeInput): Promise<boolean> {
       </p>`,
     cta: { href: v.studioUrl, label: "Join the green room" },
   });
-  return sendRawEmail({
+  return sendEmail({
     to: v.to,
     subject: `You're on soon: ${v.podcastName} at ${v.onAirLabel}`,
     html,
@@ -507,7 +538,7 @@ export async function sendBookingAlert(v: BookingAlertInput): Promise<boolean> {
     (v.needsInterviewer ? "Needs: an interviewer\n" : "") +
     `Lineup: ${v.taken} of ${v.total} slots taken\n\n${v.adminUrl}`;
 
-  return sendRawEmail({
+  return sendEmail({
     to: v.to,
     subject: `New booking: ${v.podcastName} — ${v.onAirLabel}`,
     html,
@@ -546,7 +577,7 @@ export async function sendScheduleReference(to: string): Promise<boolean> {
     "Podcaster nudges (relative to each slot): Get ready 14 days before; Two days to go 2 days before; You're on in an hour 60 min before. Only the most urgent goes out.\n" +
     "Posting plan (only what they tick): Join me Aug 31 (past, next run); Share this Sep 7 (past, +2d); What is the day? Sep 14 (past, +4d); Two weeks Sep 21 10am ET; This week Sep 28 10am ET; I'm on today 3h before slot.\n" +
     "Listeners: calendar links at sign-up; no pre-show email yet.\nCron: every hour on the hour.";
-  return sendRawEmail({
+  return sendEmail({
     to,
     subject: "Your automatic sends: nudges and posting plan dates",
     html: emailShell({
@@ -577,7 +608,7 @@ export async function sendHelpRequestAlert(v: {
     .filter(Boolean)
     .map((l) => `<p style="margin:0 0 6px;">${escapeHtml(l)}</p>`)
     .join("");
-  return sendRawEmail({
+  return sendEmail({
     to: v.to,
     replyTo: v.email,
     subject: `Help request from ${v.name || v.email}: ${v.question.slice(0, 60)}`,
@@ -614,7 +645,7 @@ export interface StartingSoonInput {
 export async function sendListenerStartingSoon(v: StartingSoonInput): Promise<boolean> {
   const soon = v.minutesAway <= 5 ? "right now" : `in about ${v.minutesAway} minutes`;
   const first = v.name.trim().split(/\s+/)[0] || "there";
-  return sendRawEmail({
+  return sendEmail({
     to: v.to,
     subject: `${v.podcastName} is on ${soon} — ${v.timeLabel}`,
     html: emailShell({
@@ -648,6 +679,28 @@ function textToHtml(text: string): string {
     .join("");
 }
 
+const BROADCAST_BANNERS: Record<string, string> = {
+  welcome: `${SITE}/listeners-bg.jpg`,
+  podcasters: `${SITE}/podcasters-bg.jpg`,
+  marathon: `${SITE}/event-marathon.jpg`,
+  schedule: `${SITE}/schedule-hero.jpg`,
+};
+
+const RICO_PHOTO = `${SITE}/riccoh-player.jpg`;
+
+const RICO_SIGNATURE = `
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 0;border-top:1px solid #e5e7eb;padding-top:20px;">
+  <tr>
+    <td style="padding-right:14px;vertical-align:top;">
+      <img src="${RICO_PHOTO}" width="56" height="56" alt="Riccoh Player" style="display:block;border-radius:50%;object-fit:cover;">
+    </td>
+    <td style="vertical-align:top;">
+      <p style="margin:0;color:#0b1220;font-size:14px;font-weight:700;line-height:1.4;">Riccoh Player</p>
+      <p style="margin:2px 0 0;color:#053877;font-size:12px;">Host · MilitaryVoice.ai</p>
+    </td>
+  </tr>
+</table>`;
+
 /**
  * Send a single broadcast email to one recipient.
  * The unsubscribe token is a simple HMAC — good enough for a mailing list
@@ -659,21 +712,50 @@ export async function sendBroadcastEmail(opts: {
   subject: string;
   bodyText: string;
   unsubscribeUrl: string;
-}): Promise<boolean> {
-  const greeting = opts.firstName.trim() ? `Hi ${escapeHtml(opts.firstName.trim())},` : "Hi there,";
-  const bodyHtml = `<p style="margin:0 0 14px;">${greeting}</p>${textToHtml(opts.bodyText)}`;
+  sender?: string;
+  banner?: string;
+  senderMember?: { name: string; title: string; photoUrl: string } | null;
+}): Promise<string | null> {
+  const isRico = opts.sender === "rico" && !opts.senderMember;
+  const member = opts.senderMember;
+  const resolvedName = opts.firstName.trim() || "Friend";
+  const resolvedBodyText = opts.bodyText.replace(/\{\{First_Name\}\}/gi, resolvedName);
+  const resolvedSubject = opts.subject.replace(/\{\{First_Name\}\}/gi, resolvedName);
+
+  // Build member signature if a team member is set
+  const memberSignature = member
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0 0;border-top:1px solid #e5e7eb;padding-top:20px;">
+        <tr>
+          ${member.photoUrl ? `<td width="56" valign="middle" style="padding-right:14px;">
+            <img src="${member.photoUrl}" width="56" height="56" alt="${escapeHtml(member.name)}" style="display:block;border-radius:50%;object-fit:cover;" />
+          </td>` : ""}
+          <td valign="middle">
+            <p style="margin:0;font-weight:700;font-size:15px;color:#0b1220;">${escapeHtml(member.name)}</p>
+            <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">${escapeHtml(member.title)}</p>
+          </td>
+        </tr>
+      </table>`
+    : "";
+
+  const bodyHtml = `${textToHtml(resolvedBodyText)}${isRico ? RICO_SIGNATURE : memberSignature}`;
+  const bannerUrl = BROADCAST_BANNERS[opts.banner ?? "welcome"] ?? BROADCAST_BANNERS.welcome;
+  const eyebrow = member ? `${member.name} · MilitaryVoice.ai` : isRico ? "Riccoh Player · MilitaryVoice.ai" : "MilitaryVoice.ai";
+  const fromName = member ? `${member.name} | MilitaryVoice.ai` : isRico ? "Riccoh Player | MilitaryVoice.ai" : "MilitaryVoice.ai";
+  const fromAddress = `${fromName} <hello@militaryvoice.ai>`;
+
   return sendRawEmail({
     to: opts.to,
-    subject: opts.subject,
+    from: fromAddress,
+    subject: resolvedSubject,
     html: emailShell({
-      banner: EMAIL_BANNERS.welcome,
+      banner: bannerUrl,
       bannerAlt: "MilitaryVoice.ai",
-      eyebrow: "MilitaryVoice.ai",
-      heading: opts.subject,
+      eyebrow,
+      heading: "",
       body: bodyHtml,
       cta: { href: SITE, label: "Visit MilitaryVoice.ai" },
       footerNote: `Questions? Reply to this email. · <a href="${opts.unsubscribeUrl}" style="color:#6b7280;">Unsubscribe</a>`,
     }),
-    text: `${greeting}\n\n${opts.bodyText}\n\n---\nVisit: ${SITE}\nUnsubscribe: ${opts.unsubscribeUrl}`,
+    text: `${resolvedBodyText}${member ? `\n\n— ${member.name}\n${member.title}, MilitaryVoice.ai` : isRico ? "\n\n— Riccoh Player\nHost, MilitaryVoice.ai" : ""}\n\n---\nVisit: ${SITE}\nUnsubscribe: ${opts.unsubscribeUrl}`,
   });
 }

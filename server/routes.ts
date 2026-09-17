@@ -75,6 +75,7 @@ import {
   sendHelpRequestAlert,
   sendListenerStartingSoon,
   sendBroadcastEmail,
+  resendApiGet,
 } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, StudioRow, StudioParticipantRow, RunItemRow } from "../shared/schema.js";
@@ -2920,6 +2921,8 @@ export function registerRoutes(app: Express): void {
   ): Promise<void> {
     const to = (process.env.SIGNUP_NOTIFY_EMAIL || "appletonab@gmail.com").trim();
     if (!to) return;
+    // Also notify Riccoh so he knows every time a podcaster signs up.
+    const RICCOH_EMAIL = "riccoh.player@drphil.tv";
     try {
       const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
       const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
@@ -2937,6 +2940,21 @@ export function registerRoutes(app: Express): void {
         total,
         adminUrl: `${origin}/admin`,
       });
+      if (to.toLowerCase() !== RICCOH_EMAIL) {
+        await sendBookingAlert({
+          to: RICCOH_EMAIL,
+          podcastName: signup.podcastName,
+          hostName: signup.hostName,
+          podcasterEmail: signup.email,
+          eventName: event.name,
+          onAirLabel: `${formatDateTimeInZone(onAir.start, tz)} ${zoneAbbrev(onAir.start, tz)}`,
+          format: signup.showFormat,
+          needsInterviewer: signup.needsInterviewer,
+          taken,
+          total,
+          adminUrl: `${origin}/admin`,
+        });
+      }
     } catch (err) {
       console.error("Failed to send the booking alert:", err);
     }
@@ -3862,16 +3880,16 @@ export function registerRoutes(app: Express): void {
   });
 
   app.post("/api/admin/broadcasts", requireAdmin, async (req, res) => {
-    const { subject, bodyText, eventId, segment } = req.body as { subject?: string; bodyText?: string; eventId?: number | null; segment?: string };
+    const { subject, bodyText, eventId, segment, sender, banner } = req.body as { subject?: string; bodyText?: string; eventId?: number | null; segment?: string; sender?: string; banner?: string };
     if (!subject?.trim() || !bodyText?.trim()) return res.status(400).json({ error: "subject and bodyText are required." });
-    const row = await storage.createBroadcast({ subject: subject.trim(), bodyText: bodyText.trim(), eventId: eventId ?? null, segment: segment ?? "contacts" });
+    const row = await storage.createBroadcast({ subject: subject.trim(), bodyText: bodyText.trim(), eventId: eventId ?? null, segment: segment ?? "contacts", sender: sender ?? "team", banner: banner ?? "welcome" });
     res.json(row);
   });
 
   app.put("/api/admin/broadcasts/:id", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
-    const { subject, bodyText, segment } = req.body as { subject?: string; bodyText?: string; segment?: string };
-    const row = await storage.updateBroadcast(id, { subject: subject?.trim(), bodyText: bodyText?.trim(), segment });
+    const { subject, bodyText, segment, sender, banner } = req.body as { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string };
+    const row = await storage.updateBroadcast(id, { subject: subject?.trim(), bodyText: bodyText?.trim(), segment, sender, banner });
     if (!row) return res.status(404).json({ error: "Broadcast not found or already sent." });
     res.json(row);
   });
@@ -3879,6 +3897,36 @@ export function registerRoutes(app: Express): void {
   app.delete("/api/admin/broadcasts/:id", requireAdmin, async (req, res) => {
     await storage.deleteBroadcast(Number(req.params.id));
     res.json({ ok: true });
+  });
+
+  // Resolve a "member:N" sender to the team member row, or null for "team"/"rico"
+  async function resolveTeamSender(sender: string) {
+    if (!sender.startsWith("member:")) return null;
+    const id = Number(sender.split(":")[1]);
+    return isNaN(id) ? null : storage.getTeamMember(id);
+  }
+
+  app.post("/api/admin/broadcasts/:id/test", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const eventId = req.query.eventId ? Number(req.query.eventId) : null;
+    const broadcastList = await storage.listBroadcasts(eventId);
+    const broadcast = broadcastList.find((b) => b.id === id);
+    if (!broadcast) return res.status(404).json({ error: "Broadcast not found." });
+
+    const adminEmail = (process.env.SIGNUP_NOTIFY_EMAIL || "appletonab@gmail.com").trim();
+    const origin = `${req.protocol}://${req.get("host")}`;
+    const senderMember = await resolveTeamSender(broadcast.sender ?? "team");
+    const ok = await sendBroadcastEmail({
+      to: adminEmail,
+      firstName: "Friend",
+      subject: `[TEST] ${broadcast.subject}`,
+      bodyText: broadcast.bodyText,
+      unsubscribeUrl: `${origin}/unsubscribe?token=test`,
+      sender: broadcast.sender ?? "team",
+      banner: broadcast.banner ?? "welcome",
+      senderMember: senderMember ?? undefined,
+    });
+    res.json({ ok, to: adminEmail });
   });
 
   app.post("/api/admin/broadcasts/:id/send", requireAdmin, async (req, res) => {
@@ -3907,21 +3955,141 @@ export function registerRoutes(app: Express): void {
     const recipients = Array.from(deduped.values());
     if (recipients.length === 0) return res.status(400).json({ error: "No recipients in the selected segment." });
 
+    const senderMember = await resolveTeamSender(broadcast.sender ?? "team");
+
     let sent = 0;
     let failed = 0;
     for (const r of recipients) {
-      const ok = await sendBroadcastEmail({
+      const resendId = await sendBroadcastEmail({
         to: r.email,
         firstName: r.firstName,
         subject: broadcast.subject,
         bodyText: broadcast.bodyText,
         unsubscribeUrl: unsubscribeUrl(req, r.email),
+        sender: broadcast.sender ?? "team",
+        banner: broadcast.banner ?? "welcome",
+        senderMember: senderMember ?? undefined,
       });
-      if (ok) sent++;
-      else failed++;
+      if (resendId) {
+        sent++;
+        await storage.recordBroadcastSend(id, r.email, resendId);
+      } else {
+        failed++;
+      }
     }
     await storage.markBroadcastSent(id, sent);
     res.json({ sent, failed, total: recipients.length });
+  });
+
+  // Broadcast stats (delivered/opened/clicked)
+  app.get("/api/admin/broadcasts/:id/stats", requireAdmin, async (req, res) => {
+    const stats = await storage.getBroadcastStats(Number(req.params.id));
+    res.json(stats);
+  });
+
+  // Engaged contacts (opened or clicked) for a broadcast
+  app.get("/api/admin/broadcasts/:id/engaged", requireAdmin, async (req, res) => {
+    const types = (req.query.types as string ?? "opened,clicked").split(",").map((t) => t.trim()).filter(Boolean);
+    const rows = await storage.getBroadcastSendsByEngagement(Number(req.params.id), types);
+    res.json(rows);
+  });
+
+  // Resend webhook — receives email events in real time
+  app.post("/api/webhooks/resend", async (req, res) => {
+    const secret = process.env.RESEND_WEBHOOK_SECRET;
+    if (secret) {
+      const sig = req.headers["svix-signature"] as string | undefined;
+      if (!sig || !sig.includes(secret)) return res.status(401).end();
+    }
+    const event = req.body as { type?: string; data?: { email_id?: string; url?: string; created_at?: string } };
+    const emailId = event?.data?.email_id;
+    if (!event?.type || !emailId) return res.status(400).end();
+    const eventType = event.type.replace("email.", ""); // "email.opened" → "opened"
+    const occurredAt = event.data?.created_at ?? new Date().toISOString();
+    await storage.recordBroadcastEvent(emailId, eventType, occurredAt, event.data?.url ?? "");
+    res.json({ ok: true });
+  });
+
+  // Retroactive sync: pull recent emails from Resend API and match to broadcast sends
+  app.post("/api/admin/broadcasts/:id/sync-resend", requireAdmin, async (req, res) => {
+    const broadcastId = Number(req.params.id);
+    const page = await resendApiGet("/emails?limit=100") as { data?: Array<{ id: string; to: string[]; created_at: string; last_event?: string }> } | null;
+    if (!page?.data) return res.status(502).json({ error: "Could not reach Resend API" });
+    const sends = page.data;
+    let matched = 0;
+    for (const s of sends) {
+      const email = s.to?.[0];
+      if (!email) continue;
+      // Try recording the send row — if already present it's a no-op via unique constraint
+      try {
+        await storage.recordBroadcastSend(broadcastId, email, s.id);
+        matched++;
+      } catch {
+        // duplicate — already stored
+      }
+      // Record the last event if Resend returned one
+      if (s.last_event) {
+        try { await storage.recordBroadcastEvent(s.id, s.last_event, s.created_at); } catch { /* dup */ }
+      }
+    }
+    res.json({ matched });
+  });
+
+  // ---- Event team management --------------------------------------------------
+
+  app.get("/api/admin/events/:id/team", requireAdmin, async (req, res) => {
+    res.json(await storage.listEventTeam(Number(req.params.id)));
+  });
+
+  app.post("/api/admin/events/:id/team", requireAdmin, async (req, res) => {
+    const { name, title, email, photoUrl } = req.body as { name: string; title: string; email?: string; photoUrl?: string };
+    if (!name?.trim() || !title?.trim()) return res.status(400).json({ error: "name and title required" });
+    const member = await storage.addTeamMember(Number(req.params.id), { name: name.trim(), title: title.trim(), email: email?.trim() ?? "", photoUrl: photoUrl?.trim() ?? "" });
+    res.json(member);
+  });
+
+  // Dedicated photo-upload endpoint for team members (POST so adminUpload() works)
+  app.post("/api/admin/events/:id/team/:memberId/photo", requireAdmin, (req, res, next) => {
+    upload.single("photo")(req, res, (err) => {
+      if (err) { res.status(400).json({ message: err.message }); return; }
+      next();
+    });
+  }, async (req, res) => {
+    const id = Number(req.params.memberId);
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    const filename = `team/${Date.now()}-${id}.jpg`;
+    const photoUrl = await uploadPhoto(filename, req.file.buffer);
+    const member = await storage.updateTeamMember(id, { photoUrl });
+    if (!member) return res.status(404).json({ error: "Team member not found" });
+    res.json(member);
+  });
+
+  app.put("/api/admin/events/:id/team/:memberId", requireAdmin, (req, res, next) => {
+    upload.single("photo")(req, res, (err) => {
+      if (err) { res.status(400).json({ message: err.message }); return; }
+      next();
+    });
+  }, async (req, res) => {
+    const id = Number(req.params.memberId);
+    const { name, title, email } = req.body as { name?: string; title?: string; email?: string };
+    let photoUrl: string | undefined;
+    if (req.file) {
+      const filename = `team/${Date.now()}-${id}.jpg`;
+      photoUrl = await uploadPhoto(filename, req.file.buffer);
+    }
+    const member = await storage.updateTeamMember(id, {
+      name: name?.trim(),
+      title: title?.trim(),
+      email: email?.trim(),
+      photoUrl,
+    });
+    if (!member) return res.status(404).json({ error: "Team member not found" });
+    res.json(member);
+  });
+
+  app.delete("/api/admin/events/:id/team/:memberId", requireAdmin, async (req, res) => {
+    await storage.deleteTeamMember(Number(req.params.memberId));
+    res.json({ ok: true });
   });
 
   // ---- Host: CSV export of their own contacts ---------------------------------
