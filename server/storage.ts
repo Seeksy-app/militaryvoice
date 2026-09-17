@@ -1055,7 +1055,15 @@ class DatabaseStorage implements IStorage {
   /** One studio per event, made on first use so admin never has to create it. */
   async getOrCreateStudio(eventId: number): Promise<StudioRow> {
     await ready();
-    const [found] = await db.select().from(studios).where(eq(studios.eventId, eventId));
+    // Oldest first, deliberately: the event's own studio is the first one made,
+    // and the rundown belongs to it. Without the order Postgres may hand back
+    // any of the event's studios, so the producer and the audience could end up
+    // in different rooms — and which one you got could change between calls.
+    const [found] = await db
+      .select()
+      .from(studios)
+      .where(eq(studios.eventId, eventId))
+      .orderBy(asc(studios.id));
     if (found) return found;
     const now = new Date().toISOString();
     const [created] = await db
