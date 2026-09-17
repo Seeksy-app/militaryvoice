@@ -17,7 +17,7 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 const GOLD = "#F0A71F";
 const NAVY = "#000741";
 
-const TITLE_PRICE = 5000;
+const TITLE_PRICE = 10000;
 const SLOT_PRICE = 250;
 
 const TITLE_BENEFITS = [
@@ -58,8 +58,6 @@ export default function SponsorVFW() {
   }, [event, signups]);
 
   const slotCount = event ? totalSlots(event.durationHours, event.slotMinutes) : 0;
-  const confirmed = lineup.length;
-  const slotTotal = confirmed * SLOT_PRICE;
   const eventDate = event
     ? new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: zone }).format(
         new Date(event.startAtUtc),
@@ -110,7 +108,7 @@ export default function SponsorVFW() {
               </Button>
             </a>
             <a href="#lineup" className="text-sm font-medium text-white/80 underline-offset-4 hover:text-white hover:underline">
-              Meet the {confirmed} confirmed shows
+              Meet the lineup
             </a>
           </div>
         </div>
@@ -122,7 +120,7 @@ export default function SponsorVFW() {
           {[
             { icon: Clock, n: String(event?.durationHours ?? 24), label: "hours, continuous" },
             { icon: Radio, n: String(slotCount || 48), label: "broadcast slots" },
-            { icon: Mic2, n: String(confirmed), label: "shows confirmed" },
+            { icon: Mic2, n: String(event?.slotMinutes ?? 30), label: "minutes per show" },
             { icon: Users, n: "1", label: "title sponsorship available" },
           ].map(({ icon: Icon, n, label }) => (
             <div key={label} className="px-2 text-center lg:px-4">
@@ -142,13 +140,13 @@ export default function SponsorVFW() {
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">The day</div>
             <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
-              One day the whole mil/vet podcast community shows up for.
+              One day that brings the whole mil/vet podcast community together.
             </h2>
           </div>
           <div className="space-y-5 text-lg leading-relaxed text-muted-foreground">
             <p>
-              National Military Podcast Day was created in 2021 by two Marine veterans, Shane Cunningham and Nick
-              Nickerson, to recognize the podcasters telling military and veteran stories in their own words.
+              National Military Podcast Day was created in 2021 by two Marine veterans, to recognize the podcasters
+              telling military stories in their own words.
             </p>
             <p>
               The Podcastathon is how we mark it: {slotCount || 48} half-hour slots running back to back for a full day,
@@ -156,7 +154,7 @@ export default function SponsorVFW() {
               the whole thing streams free on our own watch page and out to every host's channels at the same time.
             </p>
             <p className="text-foreground">
-              There is one title sponsorship, and we would like the VFW to have it.
+              There is one title sponsorship, and we would like it to be the VFW.
             </p>
           </div>
         </div>
@@ -168,7 +166,7 @@ export default function SponsorVFW() {
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">The lineup so far</div>
             <h2 className="mt-3 max-w-3xl text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
-              {confirmed} shows already confirmed, with slots still filling.
+              Shows already on the board.
             </h2>
             <p className="mt-3 max-w-2xl text-muted-foreground">
               Every one of these hosts introduces the day's title sponsor at the top and bottom of their show.
@@ -253,7 +251,7 @@ export default function SponsorVFW() {
                 <span className="text-6xl font-bold tabular-nums tracking-tight text-white" style={HEADLINE_FONT}>
                   {money(SLOT_PRICE)}
                 </span>
-                <span className="text-white/55">per show</span>
+                <span className="text-white/55">per show · {slotCount || 48} slots</span>
               </div>
               <p className="mt-4 text-white/75">
                 Back individual shows instead of the whole day — or add them on top of the title sponsorship.
@@ -263,6 +261,8 @@ export default function SponsorVFW() {
                   "Named as the sponsor of that show, on air and on the agenda",
                   "Your logo on that show's slot and its “coming up next” bumper",
                   "A thank-you from the host, in their own words",
+                  "Pick the shows that fit — by branch, by audience, or by time of day",
+                  "Take as few or as many slots as you want, right up to the full day",
                 ].map((b) => (
                   <li key={b} className="flex gap-3 text-sm leading-relaxed text-white/85">
                     <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: GOLD }} />
@@ -270,15 +270,6 @@ export default function SponsorVFW() {
                   </li>
                 ))}
               </ul>
-              <div className="mt-8 rounded-2xl border border-white/12 bg-white/[0.04] p-5">
-                <div className="text-xs uppercase tracking-wide text-white/55">All {confirmed} confirmed shows</div>
-                <div className="mt-1 text-3xl font-bold tabular-nums text-white" style={HEADLINE_FONT}>
-                  {money(slotTotal)}
-                </div>
-                <div className="mt-1 text-xs text-white/50">
-                  {confirmed} × {money(SLOT_PRICE)} — grows as more shows confirm
-                </div>
-              </div>
             </div>
           </div>
         </div>
