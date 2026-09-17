@@ -24,6 +24,7 @@ import Watch from "@/pages/Watch";
 import { PrivacyPolicy, TermsOfService } from "@/pages/Legal";
 import NationalMilitaryPodcastDay from "@/pages/NationalMilitaryPodcastDay";
 import SponsorVFW from "@/pages/SponsorVFW";
+import Sponsor from "@/pages/Sponsor";
 
 /**
  * Client-side navigation keeps the old scroll position by default. Every
@@ -86,6 +87,7 @@ function AppRouter() {
       <Route path="/admin">{() => <Admin />}</Route>
       <Route path="/national-military-podcast-day">{() => <NationalMilitaryPodcastDay />}</Route>
       {/* Unlisted: a sponsorship proposal delivered by URL, not linked in nav. */}
+      <Route path="/sponsor">{() => <Sponsor />}</Route>
       <Route path="/vfw">{() => <SponsorVFW />}</Route>
       <Route path="/host/dashboard">{() => <HostDashboard />}</Route>
       <Route component={NotFound} />
