@@ -202,6 +202,29 @@ export default function SponsorVFW() {
                 </div>
               ))}
             </div>
+
+            {/* The lineup is the proof; this is where the VFW sees itself in it. */}
+            <div className="mt-10 overflow-hidden rounded-3xl border-2 bg-background" style={{ borderColor: GOLD }}>
+              <div className="grid md:grid-cols-[minmax(0,44%)_1fr]">
+                <img
+                  src="/vfw-podcast-team.jpg"
+                  alt="The hosts of #StillServing: The VFW Podcast"
+                  className="h-56 w-full object-cover md:h-full"
+                />
+                <div className="p-7 sm:p-9">
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>
+                    Your place on the board
+                  </div>
+                  <h3 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
+                    #StillServing joins the lineup.
+                  </h3>
+                  <p className="mt-3 leading-relaxed text-muted-foreground">
+                    Two of the {slotCount || 48} slots are yours. The VFW podcast sits on the same board as every other
+                    show that day — same production, same stream, same audience — with the VFW name on all of it.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
       )}
@@ -238,15 +261,25 @@ export default function SponsorVFW() {
 
               {/* The airtime is what makes this a partnership rather than a logo
                   placement, so it gets its own frame instead of a bullet. */}
-              <div className="mt-6 rounded-2xl border p-5" style={{ borderColor: "rgba(240,167,31,0.45)", backgroundColor: "rgba(240,167,31,0.08)" }}>
-                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: GOLD }}>
-                  <Mic2 className="h-3.5 w-3.5" /> Two slots on the schedule
-                </div>
-                <div className="mt-2 text-lg font-semibold leading-snug text-white">
-                  #StillServing: The VFW Podcast<span className="align-super text-xs">®</span>
-                </div>
-                <div className="mt-1 text-sm text-white/70">
-                  Two {event?.slotMinutes ?? 30}-minute slots of your own, in prime positions on the day.
+              <div
+                className="mt-6 flex items-center gap-4 rounded-2xl border p-5"
+                style={{ borderColor: "rgba(240,167,31,0.45)", backgroundColor: "rgba(240,167,31,0.08)" }}
+              >
+                <img
+                  src="/vfw-stillserving-cover.jpg"
+                  alt="#StillServing: The VFW Podcast"
+                  className="h-20 w-20 shrink-0 rounded-xl object-cover ring-1 ring-white/20"
+                />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: GOLD }}>
+                    <Mic2 className="h-3.5 w-3.5" /> Two slots on the schedule
+                  </div>
+                  <div className="mt-1.5 text-lg font-semibold leading-snug text-white">
+                    #StillServing: The VFW Podcast<span className="align-super text-xs">®</span>
+                  </div>
+                  <div className="mt-1 text-sm text-white/70">
+                    Two {event?.slotMinutes ?? 30}-minute slots of your own, in prime positions on the day.
+                  </div>
                 </div>
               </div>
 
