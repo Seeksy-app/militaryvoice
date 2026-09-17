@@ -2349,7 +2349,15 @@ export function registerRoutes(app: Express): void {
       const patch = body?.slot === "pre"
         ? { preVideoUrl: url, preLabel: label || req.file.originalname }
         : { fallbackVideoUrl: url, fallbackLabel: label || req.file.originalname };
-      res.status(201).json(await storage.updateStudio(studio.id, patch));
+      const updated = await storage.updateStudio(studio.id, patch);
+      // Viewers read the room's metadata, not the database. Every other studio
+      // endpoint pushes after it writes; this one didn't, so an uploaded clip
+      // sat in the row while the stage kept showing the idle card.
+      if (updated) {
+        const ev = await storage.getEventById(studio.eventId);
+        await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev?.startAtUtc ?? ""));
+      }
+      res.status(201).json(updated);
     },
   );
 

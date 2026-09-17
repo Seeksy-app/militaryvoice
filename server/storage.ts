@@ -625,7 +625,7 @@ export interface IStorage {
   deleteStudio(id: number): Promise<void>;
   listScenes(studioId: number): Promise<SceneRow[]>;
   getScene(id: number): Promise<SceneRow | undefined>;
-  createScene(v: Omit<SceneRow, "id" | "createdAt">): Promise<SceneRow>;
+  createScene(v: Pick<SceneRow, "studioId"> & Partial<Omit<SceneRow, "id" | "createdAt" | "studioId">>): Promise<SceneRow>;
   deleteScene(id: number): Promise<void>;
   listNudgesForSignups(signupIds: number[]): Promise<NudgeRow[]>;
   /** Insert-if-absent. Returns false when this nudge was already recorded. */
@@ -1117,7 +1117,9 @@ class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async createScene(v: Omit<SceneRow, "id" | "createdAt">): Promise<SceneRow> {
+  async createScene(
+    v: Pick<SceneRow, "studioId"> & Partial<Omit<SceneRow, "id" | "createdAt" | "studioId">>,
+  ): Promise<SceneRow> {
     await ready();
     const [row] = await db.insert(scenes).values({ ...v, createdAt: new Date().toISOString() }).returning();
     return row;

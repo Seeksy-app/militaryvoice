@@ -681,6 +681,12 @@ export const studios = pgTable("studios", {
   stageMediaKind: text("stage_media_kind").notNull().default("video"),
   stageMediaLabel: text("stage_media_label").notNull().default(""),
   stageMediaPlaying: boolean("stage_media_playing").notNull().default(false),
+  // Graphics: a logo burned into the corner of the stage for the whole show,
+  // independent of whatever scene is up.
+  logoUrl: text("logo_url").notNull().default(""),
+  logoCorner: text("logo_corner").notNull().default("top-right"),
+  logoSize: integer("logo_size").notNull().default(96),
+  logoVisible: boolean("logo_visible").notNull().default(false),
   // Two separate egresses run off the same room: one long broadcast that goes
   // out to every destination for the whole event, and one short recording per
   // slot so each podcaster gets their own file.
@@ -706,9 +712,20 @@ export const scenes = pgTable("scenes", {
   mediaUrl: text("media_url").notNull().default(""),
   mediaKind: text("media_kind").notNull().default("video"),
   mediaLabel: text("media_label").notNull().default(""),
+  /** What the scene puts on the stage: the cameras, a file, or a clock. */
+  kind: text("kind").notNull().default("camera"),
+  /** Countdown scenes only — how long the clock runs for. */
+  countdownSeconds: integer("countdown_seconds").notNull().default(300),
+  /** Shown on the card. Carried over when a scene is made from the agenda so
+   *  the rail can replace the rundown without losing the times. */
+  startAtUtc: text("start_at_utc").notNull().default(""),
+  /** The run-of-show row this came from, so taking a scene can still take the row. */
+  runItemId: integer("run_item_id").notNull().default(0),
   createdAt: text("created_at").notNull(),
 });
 export type SceneRow = typeof scenes.$inferSelect;
+export const SCENE_KINDS = ["camera", "media", "countdown"] as const;
+export type SceneKind = (typeof SCENE_KINDS)[number];
 
 // One finished file per podcaster slot. Written when LiveKit tells us the
 // egress ended, so the row always points at something that actually exists.
