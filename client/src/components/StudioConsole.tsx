@@ -532,17 +532,22 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   const standbyFileRef = useRef<HTMLInputElement | null>(null);
   const [standbyBusy, setStandbyBusy] = useState(false);
 
-  async function uploadStandby(file: File) {
+  /** slot "pre" is the card shown until the event's start time passes. */
+  async function uploadStandby(file: File, slot: "main" | "pre" = "main") {
     setStandbyBusy(true);
     try {
       const form = new FormData();
       form.append("file", file);
       form.append("label", file.name.replace(/\.[^.]+$/, ""));
+      form.append("slot", slot);
       if (studioId) form.append("studioId", String(studioId));
       const res = await fetch("/api/admin/studio/standby", { method: "POST", body: form, credentials: "include" });
       if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as any)?.message ?? "Upload failed");
       refresh();
-      toast({ title: "Standby clip ready", description: file.name });
+      toast({
+        title: slot === "pre" ? "Pre-event card ready" : "Standby clip ready",
+        description: slot === "pre" ? `${file.name} — plays until the event starts` : file.name,
+      });
     } catch (err) {
       toast({ title: "Couldn't upload that", description: (err as Error).message, variant: "destructive" });
     } finally {

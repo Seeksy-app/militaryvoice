@@ -22,10 +22,26 @@ export interface RoomMeta {
   fallbackPlaying?: boolean;
   fallbackVideoUrl?: string;
   fallbackLabel?: string;
+  preVideoUrl?: string;
+  preLabel?: string;
+  eventStartAtUtc?: string;
   stageMediaPlaying?: boolean;
   stageMediaUrl?: string;
   stageMediaKind?: string;
   stageMediaLabel?: string;
+}
+
+/**
+ * Which standby to play. Before the event's start the pre-event card wins, so
+ * a viewer arriving early is told when to come back rather than being shown
+ * "we'll be right back", which reads as a show already in progress. Falls
+ * through to the main standby whenever no pre-event card is set.
+ */
+function pickStandby(meta: RoomMeta): { url: string; label?: string } {
+  const start = meta.eventStartAtUtc ? Date.parse(meta.eventStartAtUtc) : NaN;
+  const beforeEvent = Number.isFinite(start) && Date.now() < start;
+  if (beforeEvent && meta.preVideoUrl) return { url: meta.preVideoUrl, label: meta.preLabel };
+  return { url: meta.fallbackVideoUrl ?? "", label: meta.fallbackLabel };
 }
 
 export interface StageTile {
@@ -271,10 +287,12 @@ export function StageGrid({
   caption?: { speaker: string; text: string } | null;
 }) {
   // Standby is the emergency, so it outranks anything chosen deliberately.
-  if (meta.fallbackPlaying && meta.fallbackVideoUrl) {
-    return (
-      <FullFrameMedia url={meta.fallbackVideoUrl} kind="video" label={meta.fallbackLabel} muted={muted} />
-    );
+  // Before the event opens it plays the pre-event card instead, decided here
+  // against the viewer's own clock — a server-side switch would have to be
+  // pushed, and room metadata only changes when someone touches the studio.
+  const standby = pickStandby(meta);
+  if (meta.fallbackPlaying && standby.url) {
+    return <FullFrameMedia url={standby.url} kind="video" label={standby.label} muted={muted} />;
   }
 
   if (meta.stageMediaPlaying && meta.stageMediaUrl) {

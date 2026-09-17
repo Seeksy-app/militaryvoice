@@ -650,6 +650,12 @@ export const studios = pgTable("studios", {
   // Queued clip that covers a malfunction — one button and it rolls.
   fallbackVideoUrl: text("fallback_video_url").notNull().default(""),
   fallbackLabel: text("fallback_label").notNull().default(""),
+  // A second standby for before the event opens — "tune in on the 5th" rather
+  // than "we'll be right back", which implies a show already running. The
+  // viewer's own clock decides which one plays, so nobody has to remember to
+  // swap them on the morning.
+  preVideoUrl: text("pre_video_url").notNull().default(""),
+  preLabel: text("pre_label").notNull().default(""),
   fallbackPlaying: boolean("fallback_playing").notNull().default(false),
   // Anything the producer puts on the stage itself: a podcaster's intro reel,
   // a sponsor card, a slide. Same mechanism as the standby clip, but chosen
