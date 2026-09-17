@@ -25,6 +25,7 @@ export interface RoomMeta {
   preVideoUrl?: string;
   preLabel?: string;
   eventStartAtUtc?: string;
+  eventEndAtUtc?: string;
   stageMediaPlaying?: boolean;
   stageMediaUrl?: string;
   stageMediaKind?: string;

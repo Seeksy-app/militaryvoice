@@ -2028,7 +2028,7 @@ export function registerRoutes(app: Express): void {
       // room exists, and before the event nobody is in it — so a viewer would
       // join an empty room and get nothing. Seed them from the record instead
       // and let live metadata overwrite it once the studio is actually up.
-      meta: studioMeta(event.name, studio, event.startAtUtc),
+      meta: studioMeta(event.name, studio, event),
       token: await studioToken({
         room,
         identity: `viewer-${Math.random().toString(36).slice(2, 12)}`,
@@ -2264,7 +2264,7 @@ export function registerRoutes(app: Express): void {
     if (updated) {
       // The broadcast layout watches the room, not us — this is what makes the
       // standby clip a real cut on air.
-      await syncRoomMetadata(roomName(studio.id), studioMeta(event?.name ?? "", updated, event?.startAtUtc ?? ""));
+      await syncRoomMetadata(roomName(studio.id), studioMeta(event?.name ?? "", updated, event));
     }
     res.json(updated);
   });
@@ -2361,7 +2361,7 @@ export function registerRoutes(app: Express): void {
       // sat in the row while the stage kept showing the idle card.
       if (updated) {
         const ev = await storage.getEventById(studio.eventId);
-        await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev?.startAtUtc ?? ""));
+        await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
       }
       res.status(201).json(updated);
     },
@@ -2521,7 +2521,7 @@ export function registerRoutes(app: Express): void {
     });
     if (updated) {
       const ev = await storage.getEventById(studio.eventId);
-      await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev?.startAtUtc ?? ""));
+      await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
     }
     res.json(updated);
   });
@@ -2577,7 +2577,7 @@ export function registerRoutes(app: Express): void {
     });
     if (updated) {
       const ev = await storage.getEventById(studio.eventId);
-      await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev?.startAtUtc ?? ""));
+      await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
     }
     const missing = guestScene && !present.some((p) => !isHost(p) && belongs(p));
     return { studio: updated, moved, missing: missing ? signup!.podcastName : null };
@@ -2627,7 +2627,7 @@ export function registerRoutes(app: Express): void {
     const updated = await storage.updateStudio(studio.id, patch);
     if (updated) {
       const ev = await storage.getEventById(studio.eventId);
-      await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev?.startAtUtc ?? ""));
+      await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
     }
     res.json(updated);
   });
@@ -2647,7 +2647,7 @@ export function registerRoutes(app: Express): void {
       }
       const off = await storage.updateStudio(studio.id, { broadcastEgressId: "", status: "Offline" });
       const ev0 = await storage.getEventById(eventId);
-      if (off) await syncRoomMetadata(roomName(studio.id), studioMeta(ev0?.name ?? "", off, ev0?.startAtUtc ?? ""));
+      if (off) await syncRoomMetadata(roomName(studio.id), studioMeta(ev0?.name ?? "", off, ev0));
       res.json(off);
       return;
     }
@@ -2675,7 +2675,7 @@ export function registerRoutes(app: Express): void {
     }
     const updated = await storage.updateStudio(studio.id, { broadcastEgressId: egressId, status: "Live" });
     const ev = await storage.getEventById(eventId);
-    if (updated) await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev?.startAtUtc ?? ""));
+    if (updated) await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
     res.json(updated);
   });
 
@@ -2709,7 +2709,12 @@ export function registerRoutes(app: Express): void {
   }
 
   /** Everything the broadcast layout needs, in one shape. */
-  function studioMeta(eventName: string, st: StudioRow, eventStartAtUtc = "") {
+  function studioMeta(
+    eventName: string,
+    st: StudioRow,
+    ev?: { startAtUtc: string; durationHours: number } | null,
+  ) {
+    const startMs = ev?.startAtUtc ? Date.parse(ev.startAtUtc) : NaN;
     return {
       eventName,
       studioName: st.name,
@@ -2721,7 +2726,13 @@ export function registerRoutes(app: Express): void {
       // so the changeover needs no scheduled job and cannot go stale.
       preVideoUrl: st.preVideoUrl,
       preLabel: st.preLabel,
-      eventStartAtUtc,
+      // The event's own window travels with the metadata so the page can be
+      // honest about the clock without another request: which standby to play,
+      // and whether "Live" is even possible yet.
+      eventStartAtUtc: ev?.startAtUtc ?? "",
+      eventEndAtUtc: Number.isFinite(startMs)
+        ? new Date(startMs + (ev?.durationHours ?? 24) * 3600000).toISOString()
+        : "",
       stageMediaPlaying: st.stageMediaPlaying,
       stageMediaUrl: st.stageMediaUrl,
       stageMediaKind: st.stageMediaKind,

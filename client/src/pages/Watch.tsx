@@ -4,7 +4,7 @@ import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { StageGrid, useStageRoom } from "@/components/StageView";
 import { apiRequest } from "@/lib/queryClient";
-import { Volume2, VolumeX, Radio, Users } from "lucide-react";
+import { Volume2, VolumeX, Radio, Users, CalendarDays } from "lucide-react";
 
 // Where the audience watches, on our own site.
 //
@@ -49,7 +49,33 @@ export default function Watch({ slug }: { slug?: string }) {
   });
 
   const { tiles, meta, connected, caption } = useStageRoom(data?.url ?? null, data?.token ?? null, muted, data?.meta);
-  const live = (meta.status ?? data?.status) === "Live";
+
+  // The badge follows the calendar, not just the studio switch. A studio left
+  // on "Live" between events had the page announcing a red LIVE weeks out,
+  // next to a card telling people when to come back. Decided against the
+  // viewer's own clock, the same way the standby changeover is, so it needs
+  // nothing pushed on the day.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const startMs = Date.parse(meta.eventStartAtUtc ?? "");
+  const endMs = Date.parse(meta.eventEndAtUtc ?? "");
+  const beforeEvent = Number.isFinite(startMs) && now < startMs;
+  const afterEvent = Number.isFinite(endMs) && now >= endMs;
+  // Before the day, never — a studio left switched on, or a rehearsal, is not
+  // something to announce to the public. After the window, only with someone
+  // actually on stage: an event that runs long must not lose its badge
+  // mid-show, but a studio nobody turned off must not keep it forever.
+  const live =
+    !beforeEvent &&
+    (meta.status ?? data?.status) === "Live" &&
+    (!afterEvent || tiles.length > 0);
+  const startLabel = Number.isFinite(startMs)
+    ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(startMs))
+    : "";
   const onAir = tiles.length > 0 || meta.fallbackPlaying;
 
   useEffect(() => {
@@ -75,11 +101,15 @@ export default function Watch({ slug }: { slug?: string }) {
 
             <div className="flex items-center gap-2">
               {live ? (
-                <span className="inline-flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.14em]">
+                <span className="inline-flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.14em]" data-testid="badge-watch-live">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> Live
                 </span>
+              ) : beforeEvent && startLabel ? (
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white/70" data-testid="badge-watch-upcoming">
+                  <CalendarDays className="h-3 w-3" /> Starts {startLabel}
+                </span>
               ) : (
-                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white/70">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white/70" data-testid="badge-watch-offair">
                   <Radio className="h-3 w-3" /> Off air
                 </span>
               )}
