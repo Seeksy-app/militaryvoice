@@ -40,6 +40,7 @@ import {
   NUDGE_KINDS,
   type NudgeKind,
 } from "../shared/schema.js";
+import { isLiveOnlySlot, LIVE_ONLY_LABEL } from "../shared/slots.js";
 import { fromError } from "zod-validation-error";
 import {
   isLiveKitConfigured,
@@ -3281,6 +3282,19 @@ export function registerRoutes(app: Express): void {
       return;
     }
 
+    // Daytime is live-only. Checked here rather than trusted from the picker,
+    // which can be stale by the time the click lands. Slots already held by a
+    // pre-recorded show keep them — this only governs new claims.
+    if (
+      parsed.data.showFormat !== "live" &&
+      isLiveOnlySlot(event.startAtUtc, event.slotMinutes, parsed.data.slotIndex)
+    ) {
+      res.status(400).json({
+        message: `Slots between ${LIVE_ONLY_LABEL} have to be broadcast live. Pick an evening or overnight time, or switch your show to "Go live".`,
+      });
+      return;
+    }
+
     const existing = await storage.getSignupBySlot(parsed.data.eventId, parsed.data.slotIndex);
     if (existing && existing.status !== "cancelled") {
       // Tell them apart. Posting the slot you already hold is a double-submit
@@ -3885,6 +3899,24 @@ export function registerRoutes(app: Express): void {
         }
       } else if (body.clearImage === "true") {
         imageUrl = "";
+      }
+
+      // The signup follows the show, so switching to a recorded episode here
+      // would quietly turn a daytime slot into a file roll. Blocked while they
+      // hold one — a slot that was already recorded keeps what it has.
+      if (parsed.data.showFormat !== "live") {
+        const held = (await storage.listSignups(eventId)).find(
+          (sg) => sg.status !== "cancelled" && sg.email.trim().toLowerCase() === email,
+        );
+        if (held && held.showFormat === "live" && isLiveOnlySlot(event.startAtUtc, event.slotMinutes, held.slotIndex)) {
+          const when = new Intl.DateTimeFormat("en-US", {
+            timeZone: "America/New_York", hour: "numeric", minute: "2-digit", hour12: true,
+          }).format(new Date(new Date(event.startAtUtc).getTime() + held.slotIndex * event.slotMinutes * 60000));
+          res.status(400).json({
+            message: `Your ${when} ET slot is inside the ${LIVE_ONLY_LABEL} window, which is live only. Move to an evening or overnight time first, then switch to a recorded episode.`,
+          });
+          return;
+        }
       }
 
       const saved = await storage.upsertEventShow(email, eventId, {

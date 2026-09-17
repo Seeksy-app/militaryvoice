@@ -3,15 +3,27 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { totalSlots, slotStart, slotEnd, formatDateInZone, formatTimeInZone, onAirWindow } from "@/lib/schedule";
+import { isLiveOnlyBlock, LIVE_ONLY_LABEL } from "@shared/slots";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
-import { Radio, Mic2 } from "lucide-react";
+import { Radio, Mic2, Lock } from "lucide-react";
 
 // Picking a time happens inside an event, after the show is set up. It used to
 // live on the dashboard against whichever event was featured, which meant you
 // could claim a time for an event you had never opened — and, if you had no
 // show for it, be refused by the server with no way forward from that screen.
 
-export function EventSlotPicker({ event, disabled }: { event: PublicEvent; disabled?: boolean }) {
+export function EventSlotPicker({
+  event,
+  disabled,
+  showFormat,
+}: {
+  event: PublicEvent;
+  disabled?: boolean;
+  /** How their show runs. Daytime slots are live only, so a recorded show
+      can't take one — said on the slot itself rather than after the click. */
+  showFormat?: string;
+}) {
+  const recorded = showFormat === "prerecorded";
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
@@ -27,6 +39,10 @@ export function EventSlotPicker({ event, disabled }: { event: PublicEvent; disab
         index: i,
         start: slotStart(event.startAtUtc, event.slotMinutes, i),
         end: slotEnd(event.startAtUtc, event.slotMinutes, i),
+        liveOnly: isLiveOnlyBlock(
+          slotStart(event.startAtUtc, event.slotMinutes, i),
+          slotEnd(event.startAtUtc, event.slotMinutes, i),
+        ),
         signup: (signups ?? []).find((s) => s.slotIndex === i),
       })),
     [event, signups],
@@ -55,7 +71,10 @@ export function EventSlotPicker({ event, disabled }: { event: PublicEvent; disab
   return (
     <div>
       <p className="mb-3 text-sm text-muted-foreground">
-        {open.length} open · {slots.length - open.length} taken.
+        {open.length} open · {slots.length - open.length} taken.{" "}
+        {recorded
+          ? `Times between ${LIVE_ONLY_LABEL} are live only, so they're closed to a recorded episode.`
+          : `Times between ${LIVE_ONLY_LABEL} are live only.`}
       </p>
       <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {slots.map((s) => {
@@ -96,6 +115,22 @@ export function EventSlotPicker({ event, disabled }: { event: PublicEvent; disab
             );
           }
 
+          // Open, but not to them: a recorded show can't take a daytime slot.
+          if (s.liveOnly && recorded) {
+            return (
+              <div
+                key={s.index}
+                className="rounded-lg border border-dashed border-border bg-muted/30 p-3 text-sm opacity-70"
+                data-testid={`slot-live-only-${s.index}`}
+              >
+                {header}
+                <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  <Lock className="h-3 w-3" /> Live only
+                </span>
+              </div>
+            );
+          }
+
           return (
             <button
               key={s.index}
@@ -109,6 +144,9 @@ export function EventSlotPicker({ event, disabled }: { event: PublicEvent; disab
               <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-primary">
                 <Radio className="h-3 w-3" /> {claim.isPending ? "Taking…" : "Open"}
               </span>
+              {s.liveOnly && (
+                <span className="mt-1 block text-xs text-muted-foreground">Live only</span>
+              )}
             </button>
           );
         })}

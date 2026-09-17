@@ -16,6 +16,7 @@ import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
 import { insertProfileSchema, SERVICE_BRANCHES, SERVICE_STATUSES, RECORDING_MODES, STREAM_PLATFORMS, type ProfileRow, type SocialAccount } from "@shared/schema";
 import { PhotoCropDialog } from "@/components/PhotoCropDialog";
 import { formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
+import { isLiveOnlyBlock, LIVE_ONLY_LABEL } from "@shared/slots";
 import {
   Camera,
   ImagePlus,
@@ -318,6 +319,14 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
   const connectedAccounts = parseSocialAccounts(profile?.socialAccounts);
   const watchFormat = form.watch("showFormat");
   const isPrerecorded = watchFormat === "prerecorded";
+  // Setting up against a daytime slot they picked off the schedule: that slot
+  // is live only, so the choice isn't theirs to make here.
+  const liveOnlySlot = !!pendingSlot && isLiveOnlyBlock(pendingSlot.start, pendingSlot.end);
+  useEffect(() => {
+    if (liveOnlySlot && form.getValues("showFormat") !== "live") {
+      form.setValue("showFormat", "live", { shouldDirty: false });
+    }
+  }, [liveOnlySlot, form]);
   const watchIntro = form.watch("introStyle");
   const watchPlatform = form.watch("streamPlatform");
 
@@ -639,7 +648,11 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
               step={3}
               icon={Radio}
               title="How your slot runs"
-              description="Broadcast live in your time block, or hand us an episode you've already recorded."
+              description={
+                liveOnlySlot
+                  ? `The time you picked is between ${LIVE_ONLY_LABEL}, and daytime slots are broadcast live.`
+                  : "Broadcast live in your time block, or hand us an episode you've already recorded."
+              }
             >
               <FormField
                 control={form.control}
@@ -661,25 +674,30 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                             title: "Play a recorded episode",
                             body: "Already have it in the can? Send us the file and we'll roll it in your slot.",
                           },
-                        ].map(({ v, icon: Icon, title, body }) => (
-                          <FormItem key={v} className="space-y-0">
-                            <FormLabel
-                              className={`flex h-full cursor-pointer flex-col gap-2 rounded-xl border-2 p-4 font-normal transition-colors ${
-                                field.value === v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-                              }`}
-                              data-testid={`radio-format-${v}`}
-                            >
-                              <span className="flex items-center justify-between">
-                                <Icon className={`h-5 w-5 ${field.value === v ? "text-primary" : "text-muted-foreground"}`} />
-                                <FormControl>
-                                  <RadioGroupItem value={v} />
-                                </FormControl>
-                              </span>
-                              <span className="text-sm font-semibold text-card-foreground">{title}</span>
-                              <span className="text-xs leading-relaxed text-muted-foreground">{body}</span>
-                            </FormLabel>
-                          </FormItem>
-                        ))}
+                        ].map(({ v, icon: Icon, title, body }) => {
+                          const locked = liveOnlySlot && v === "prerecorded";
+                          return (
+                            <FormItem key={v} className="space-y-0">
+                              <FormLabel
+                                className={`flex h-full flex-col gap-2 rounded-xl border-2 p-4 font-normal transition-colors ${
+                                  field.value === v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
+                                } ${locked ? "cursor-not-allowed border-dashed bg-muted/30 opacity-60 hover:bg-muted/30" : "cursor-pointer"}`}
+                                data-testid={`radio-format-${v}`}
+                              >
+                                <span className="flex items-center justify-between">
+                                  <Icon className={`h-5 w-5 ${field.value === v ? "text-primary" : "text-muted-foreground"}`} />
+                                  <FormControl>
+                                    <RadioGroupItem value={v} disabled={locked} />
+                                  </FormControl>
+                                </span>
+                                <span className="text-sm font-semibold text-card-foreground">{title}</span>
+                                <span className="text-xs leading-relaxed text-muted-foreground">
+                                  {locked ? "Not available in a daytime slot — pick an evening or overnight time instead." : body}
+                                </span>
+                              </FormLabel>
+                            </FormItem>
+                          );
+                        })}
                       </RadioGroup>
                     </FormControl>
                     <FormMessage />

@@ -67,6 +67,7 @@ import {
   formatTimeInZone,
   zoneLabel,
 } from "@/lib/schedule";
+import { isLiveOnlyBlock, LIVE_ONLY_LABEL } from "@shared/slots";
 
 interface HostSignup {
   id: number;
@@ -505,12 +506,32 @@ export default function HostDashboard() {
   const claim = useMutation({
     mutationFn: async (input: { slotIndex: number; eventId?: number }) => {
       if (!data) throw new Error("Not signed in");
+      const targetEventId = input.eventId || data.event.id;
+
+      // Check the daytime rule before releasing anything. The server enforces
+      // it too, but this path gives up the slot they hold first — a rejection
+      // after that would leave them with nothing.
+      if (
+        targetEventId === data.event.id &&
+        isLiveOnlyBlock(
+          slotStart(data.event.startAtUtc, data.event.slotMinutes, input.slotIndex),
+          slotEnd(data.event.startAtUtc, data.event.slotMinutes, input.slotIndex),
+        )
+      ) {
+        const show = await (await apiRequest("GET", `/api/host/shows/${targetEventId}`)).json();
+        if (show?.showFormat === "prerecorded") {
+          throw new Error(
+            `Slots between ${LIVE_ONLY_LABEL} have to be broadcast live. Pick an evening or overnight time, or switch your show to "Go live" first.`,
+          );
+        }
+      }
+
       // One slot per podcaster: moving to a new time releases the current one first.
       for (const held of data.mySignups) {
         await apiRequest("DELETE", `/api/host/signups/${held.id}`);
       }
       const res = await apiRequest("POST", "/api/signups", {
-        eventId: input.eventId || data.event.id,
+        eventId: targetEventId,
         slotIndex: input.slotIndex,
         timezone: zone,
       });
@@ -915,10 +936,20 @@ export default function HostDashboard() {
               <Radio className="h-5 w-5 text-primary" />
               Claim this slot
             </h2>
-            <p className="mb-6 tabular-nums text-sm text-muted-foreground">
+            <p
+              className={`tabular-nums text-sm text-muted-foreground ${
+                isLiveOnlyBlock(selectedSlot.start, selectedSlot.end) ? "mb-2" : "mb-6"
+              }`}
+            >
               {formatDateInZone(selectedSlot.start, zone)}, {formatTimeInZone(selectedSlot.start, zone)}–
               {formatTimeInZone(selectedSlot.end, zone)} · {zoneLabel(zone)}
             </p>
+            {isLiveOnlyBlock(selectedSlot.start, selectedSlot.end) && (
+              <p className="mb-6 text-sm text-muted-foreground" data-testid="text-live-only-notice">
+                This is a daytime slot. Everything between {LIVE_ONLY_LABEL} is broadcast live — a recorded episode
+                can only go in an evening or overnight time.
+              </p>
+            )}
 
             <div className="rounded-xl border border-border bg-card p-5">
               <div className="flex items-center gap-4">

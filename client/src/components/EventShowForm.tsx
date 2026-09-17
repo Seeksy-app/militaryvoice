@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiUpload } from "@/lib/queryClient";
 import { resolveUploadUrl } from "@/lib/queryClient";
-import { Radio, PlayCircle, ImagePlus, Save, Mic2 } from "lucide-react";
+import { Radio, PlayCircle, ImagePlus, Save, Mic2, Lock } from "lucide-react";
 import { INTERVIEW_NEEDS } from "@shared/schema";
+import { LIVE_ONLY_LABEL } from "@shared/slots";
 
 // What a podcaster is bringing to one event: its name, whether it airs live or
 // rolls from a file, and its artwork. Separate from the profile because the
@@ -29,12 +30,15 @@ export function EventShowForm({
   eventName,
   show,
   profilePhotoUrl,
+  liveOnlySlot = false,
   onSaved,
 }: {
   eventId: number;
   eventName: string;
   show: EventShow;
   profilePhotoUrl?: string;
+  /** They hold a daytime slot, which has to be broadcast live. */
+  liveOnlySlot?: boolean;
   onSaved: () => void;
 }) {
   const { toast } = useToast();
@@ -48,6 +52,10 @@ export function EventShowForm({
   const [interviewNeed, setInterviewNeed] = useState(show.interviewNeed || "none");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+
+  // Only a *switch* is blocked. Anyone already holding a daytime slot with a
+  // recorded episode keeps it — the rule starts from here, not retroactively.
+  const lockedLive = liveOnlySlot && (show.showFormat || "live") === "live";
 
   // Matches the Show materials save exactly: solid and enabled only when
   // there is something to save, outline and disabled when there isn't, with
@@ -158,26 +166,45 @@ export function EventShowForm({
 
           <div>
             <Label className="text-sm font-semibold text-foreground">How your slot runs</Label>
+            {lockedLive && (
+              <p className="mt-1 flex items-start gap-1.5 text-xs text-muted-foreground">
+                <Lock className="mt-0.5 h-3 w-3 shrink-0" />
+                <span>
+                  Your time falls between {LIVE_ONLY_LABEL}, and daytime slots are live only. Move to an evening or
+                  overnight time if you'd rather we rolled a recorded episode.
+                </span>
+              </p>
+            )}
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               {[
                 { v: "live", icon: Radio, title: "Go live", body: "You broadcast in real time during your window." },
                 { v: "prerecorded", icon: PlayCircle, title: "Play a recorded episode", body: "Send us the file and we'll roll it in your slot." },
-              ].map(({ v, icon: Icon, title, body }) => (
-                <button
-                  key={v}
-                  type="button"
-                  aria-pressed={format === v}
-                  onClick={() => setFormat(v)}
-                  className={`flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-colors ${
-                    format === v ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-[#053877]/[0.04]"
-                  }`}
-                  data-testid={`radio-show-format-${v}`}
-                >
-                  <Icon className={`h-4 w-4 ${format === v ? "text-primary" : "text-muted-foreground"}`} />
-                  <span className="text-sm font-medium">{title}</span>
-                  <span className="text-xs text-muted-foreground">{body}</span>
-                </button>
-              ))}
+              ].map(({ v, icon: Icon, title, body }) => {
+                const locked = lockedLive && v === "prerecorded";
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={format === v}
+                    disabled={locked}
+                    onClick={() => !locked && setFormat(v)}
+                    className={`flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-colors ${
+                      format === v ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-[#053877]/[0.04]"
+                    } ${locked ? "cursor-not-allowed border-dashed bg-muted/30 opacity-60 hover:bg-muted/30" : ""}`}
+                    data-testid={`radio-show-format-${v}`}
+                  >
+                    {locked ? (
+                      <Lock className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Icon className={`h-4 w-4 ${format === v ? "text-primary" : "text-muted-foreground"}`} />
+                    )}
+                    <span className="text-sm font-medium">{title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {locked ? "Not available in a daytime slot." : body}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

@@ -19,7 +19,8 @@ import {
 import { ShareYourSlot } from "@/components/ShareYourSlot";
 import { CampaignPlanner } from "@/components/CampaignPlanner";
 import { apiRequest } from "@/lib/queryClient";
-import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, onAirWindow } from "@/lib/schedule";
+import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, slotEnd, onAirWindow } from "@/lib/schedule";
+import { isLiveOnlyBlock } from "@shared/slots";
 import type { PublicEvent } from "@shared/schema";
 import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2 } from "lucide-react";
 
@@ -95,6 +96,15 @@ export function EventSettings({
           return `${formatDateInZone(air.start, zone)} · ${formatTimeInZone(air.start, zone)}–${formatTimeInZone(air.end, zone)}`;
         })()
       : "";
+
+  // Daytime slots have to be broadcast live, so the show form hides the
+  // recorded-episode option for anyone holding one.
+  const heldSlotIsLiveOnly =
+    open?.slotIndex != null &&
+    isLiveOnlyBlock(
+      slotStart(open.event.startAtUtc, open.event.slotMinutes, open.slotIndex),
+      slotEnd(open.event.startAtUtc, open.event.slotMinutes, open.slotIndex),
+    );
 
   // ------------------------------------------------------------ chooser
   if (!open) {
@@ -260,7 +270,11 @@ export function EventSettings({
                 ? "Tap any open time to take it."
                 : "Save your show above first — a slot needs a show attached to it."}
             </p>
-            <EventSlotPicker event={open.event} disabled={!open.show?.showName} />
+            <EventSlotPicker
+              event={open.event}
+              disabled={!open.show?.showName}
+              showFormat={openShow?.showFormat ?? open.show?.showFormat}
+            />
           </>
         )}
       </div>
@@ -272,6 +286,7 @@ export function EventSettings({
             eventName={open.event.name}
             show={openShow}
             profilePhotoUrl={profilePhotoUrl}
+            liveOnlySlot={heldSlotIsLiveOnly}
             onSaved={() => {}}
           />
         </div>

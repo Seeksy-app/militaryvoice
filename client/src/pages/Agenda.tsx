@@ -20,6 +20,7 @@ import {
   zoneLabel,
   onAirWindow,
 } from "@/lib/schedule";
+import { isLiveOnlyBlock } from "@shared/slots";
 
 interface Props {
   slug?: string;
@@ -123,7 +124,7 @@ export default function Agenda({ slug }: Props) {
       const showDate = dateLabel !== lastDate;
       lastDate = dateLabel;
       const signup = signups?.find((s) => s.slotIndex === i && s.status !== "cancelled");
-      return { index: i, start, end, showDate, dateLabel, signup };
+      return { index: i, start, end, showDate, dateLabel, signup, liveOnly: isLiveOnlyBlock(start, end) };
     });
   }, [event, signups, viewZone]);
 
@@ -259,6 +260,11 @@ export default function Agenda({ slug }: Props) {
                               <Mic2 className="h-5 w-5" />
                             </div>
                             <div className="text-sm font-semibold text-muted-foreground">This could be you</div>
+                            {s.liveOnly && (
+                              <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                Live only
+                              </div>
+                            )}
                             <div className="inline-flex items-center gap-1 text-xs font-medium text-primary">
                               Claim this slot <ArrowRight className="h-3 w-3" />
                             </div>

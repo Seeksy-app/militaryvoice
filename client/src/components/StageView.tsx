@@ -245,11 +245,15 @@ function FullFrameMedia({
   kind,
   label,
   muted,
+  loop = false,
 }: {
   url: string;
   kind: string;
   label?: string;
   muted: boolean;
+  /** Standby holds the frame for hours, so its clip runs on repeat. A show's
+      own episode does not — it ends when it ends. */
+  loop?: boolean;
 }) {
   const yt = youtubeId(url);
   return (
@@ -259,13 +263,15 @@ function FullFrameMedia({
       ) : yt ? (
         <iframe
           title={label || "On stage"}
-          src={`https://www.youtube.com/embed/${yt}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1`}
+          src={`https://www.youtube.com/embed/${yt}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1${
+            loop ? `&loop=1&playlist=${yt}` : ""
+          }`}
           allow="autoplay; encrypted-media; picture-in-picture"
           allowFullScreen
           className="h-full w-full border-0"
         />
       ) : (
-        <video src={url} autoPlay playsInline muted={muted} className="h-full w-full object-contain" />
+        <video src={url} autoPlay playsInline loop={loop} muted={muted} className="h-full w-full object-contain" />
       )}
       {label && (
         <div
@@ -299,7 +305,7 @@ export function StageGrid({
   // pushed, and room metadata only changes when someone touches the studio.
   const standby = pickStandby(meta);
   if (meta.fallbackPlaying && standby.url) {
-    return <FullFrameMedia url={standby.url} kind="video" label={standby.label} muted={muted} />;
+    return <FullFrameMedia url={standby.url} kind="video" label={standby.label} muted={muted} loop />;
   }
 
   if (meta.stageMediaPlaying && meta.stageMediaUrl) {
