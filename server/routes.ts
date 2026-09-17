@@ -337,6 +337,20 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ message: "Sign in to the admin dashboard." });
 }
 
+/** "24 Hour Podcastathon · Oct 5, 2026" — the banner line on broadcast emails,
+ *  read from the event so it can never contradict the schedule. */
+async function broadcastBannerTitle(): Promise<string> {
+  try {
+    const ev = await storage.getFeaturedEvent();
+    const when = new Intl.DateTimeFormat("en-US", {
+      month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York",
+    }).format(new Date(ev.startAtUtc));
+    return `${ev.name} · ${when}`;
+  } catch {
+    return "24 Hour Podcastathon";
+  }
+}
+
 export function registerRoutes(app: Express): void {
   // ---- Public: events list (for "Choose Your Event") -------------------------
   app.get("/api/events", async (_req, res) => {
@@ -693,6 +707,7 @@ export function registerRoutes(app: Express): void {
             sender: broadcast.sender ?? "team",
             banner: broadcast.banner ?? "welcome",
             senderMember: senderMember ?? undefined,
+            bannerTitle: await broadcastBannerTitle(),
           });
           if (resendId) {
             sent++;
@@ -4128,16 +4143,16 @@ export function registerRoutes(app: Express): void {
   });
 
   app.post("/api/admin/broadcasts", requireAdmin, async (req, res) => {
-    const { subject, bodyText, eventId, segment, sender, banner, scheduledFor } = req.body as { subject?: string; bodyText?: string; eventId?: number | null; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null };
+    const { subject, bodyText, eventId, segment, sender, banner, scheduledFor, source } = req.body as { subject?: string; bodyText?: string; eventId?: number | null; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null; source?: string };
     if (!subject?.trim() || !bodyText?.trim()) return res.status(400).json({ error: "subject and bodyText are required." });
-    const row = await storage.createBroadcast({ subject: subject.trim(), bodyText: bodyText.trim(), eventId: eventId ?? null, segment: segment ?? "contacts", sender: sender ?? "team", banner: banner ?? "welcome", scheduledFor: scheduledFor ?? null });
+    const row = await storage.createBroadcast({ subject: subject.trim(), bodyText: bodyText.trim(), eventId: eventId ?? null, segment: segment ?? "contacts", sender: sender ?? "team", banner: banner ?? "welcome", scheduledFor: scheduledFor ?? null, source });
     res.json(row);
   });
 
   app.put("/api/admin/broadcasts/:id", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
-    const { subject, bodyText, segment, sender, banner, scheduledFor } = req.body as { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null };
-    const row = await storage.updateBroadcast(id, { subject: subject?.trim(), bodyText: bodyText?.trim(), segment, sender, banner, scheduledFor: scheduledFor ?? null });
+    const { subject, bodyText, segment, sender, banner, scheduledFor, source } = req.body as { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null; source?: string };
+    const row = await storage.updateBroadcast(id, { subject: subject?.trim(), bodyText: bodyText?.trim(), segment, sender, banner, scheduledFor: scheduledFor ?? null, source });
     if (!row) return res.status(404).json({ error: "Broadcast not found or already sent." });
     res.json(row);
   });
@@ -4161,20 +4176,39 @@ export function registerRoutes(app: Express): void {
     const broadcast = broadcastList.find((b) => b.id === id);
     if (!broadcast) return res.status(404).json({ error: "Broadcast not found." });
 
-    const adminEmail = (process.env.SIGNUP_NOTIFY_EMAIL || "appletonab@gmail.com").trim();
+    // "Send test to me" should reach whoever pressed it. Their signed-in
+    // address comes first; an explicit list wins over both, and the notify
+    // address is only the last resort.
+    const asked = String(req.body?.to ?? "")
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.includes("@"))
+      .slice(0, 5);
+    const signedInAs = (req as any).adminEmail as string | undefined;
+    const recipients = asked.length
+      ? asked
+      : [signedInAs || process.env.SIGNUP_NOTIFY_EMAIL || "appletonab@gmail.com"];
+
     const origin = `${req.protocol}://${req.get("host")}`;
     const senderMember = await resolveTeamSender(broadcast.sender ?? "team");
-    const ok = await sendBroadcastEmail({
-      to: adminEmail,
-      firstName: "Friend",
-      subject: `[TEST] ${broadcast.subject}`,
-      bodyText: broadcast.bodyText,
-      unsubscribeUrl: `${origin}/unsubscribe?token=test`,
-      sender: broadcast.sender ?? "team",
-      banner: broadcast.banner ?? "welcome",
-      senderMember: senderMember ?? undefined,
-    });
-    res.json({ ok, to: adminEmail });
+    const bannerTitle = await broadcastBannerTitle();
+    const results = await Promise.all(
+      recipients.map(async (to) => ({
+        to,
+        ok: await sendBroadcastEmail({
+          to,
+          firstName: "Friend",
+          subject: `[TEST] ${broadcast.subject}`,
+          bodyText: broadcast.bodyText,
+          unsubscribeUrl: `${origin}/unsubscribe?token=test`,
+          sender: broadcast.sender ?? "team",
+          banner: broadcast.banner ?? "welcome",
+          senderMember: senderMember ?? undefined,
+          bannerTitle,
+        }),
+      })),
+    );
+    res.json({ ok: results.every((r) => r.ok), to: recipients.join(", "), results });
   });
 
   app.post("/api/admin/broadcasts/:id/send", requireAdmin, async (req, res) => {

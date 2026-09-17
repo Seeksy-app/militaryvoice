@@ -26,6 +26,7 @@ import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send } from "lucide-react";
+import { CADENCE_STEPS, cadenceSource } from "@shared/schema";
 import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, SponsorPackageWithSold, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
@@ -2416,7 +2417,33 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
 
 // ---------------------------------------------------------------------------
 
-type CrmView = "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "broadcasts" | "compose";
+type CrmView = "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "broadcasts" | "cadence" | "compose";
+
+/** Broadcast has two faces: the fixed cadence every podcaster walks through,
+ *  and one-off campaigns. They are different jobs, so they get different tabs. */
+function BroadcastSubNav({ view, setView }: { view: CrmView; setView: (v: CrmView) => void }) {
+  const tabs: { key: CrmView; label: string }[] = [
+    { key: "broadcasts", label: "Campaigns" },
+    { key: "cadence", label: "Cadence" },
+  ];
+  return (
+    <div className="inline-flex rounded-lg bg-muted p-1">
+      {tabs.map((t) => (
+        <button
+          key={t.key}
+          type="button"
+          onClick={() => setView(t.key)}
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            view === t.key ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+          data-testid={`tab-broadcast-${t.key}`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function CrmEventPanel({ eventId }: { eventId: number }) {
   const queryClient = useQueryClient();
@@ -2430,6 +2457,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
   const [newListOpen, setNewListOpen] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [newListBusy, setNewListBusy] = useState(false);
+  const [bSource, setBSource] = useState("");
 
   // ── data ────────────────────────────────────────────────────────────────
 
@@ -2448,6 +2476,19 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     queryKey: ["/api/admin/broadcasts", eventId],
     queryFn: () => adminGet<BroadcastRow[]>(`/api/admin/broadcasts?eventId=${eventId}`),
   });
+
+  // Cadence emails are filed by source; campaigns are everything else, so the
+  // two tabs never show each other's rows.
+  const cadenceBySource = useMemo(() => {
+    const m = new Map<string, BroadcastRow>();
+    for (const b of broadcastList) if (b.source?.startsWith("cadence:")) m.set(b.source, b);
+    return m;
+  }, [broadcastList]);
+  const oneOffBroadcasts = useMemo(
+    () => broadcastList.filter((b) => !b.source?.startsWith("cadence:")),
+    [broadcastList],
+  );
+
 
   const { data: teamMembers = [] } = useQuery<TeamMember[]>({
     queryKey: ["/api/admin/events", eventId, "team"],
@@ -2525,8 +2566,9 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
   const [aiOpen, setAiOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
 
-  function openCompose(prefillSegment?: string) {
+  function openCompose(prefillSegment?: string, source?: string) {
     setEditingBroadcast(null);
+    setBSource(source ?? "");
     setBSubject(""); setBBody("");
     setBSegment((prefillSegment ?? "signups") as any);
     setBSender("team"); setBBanner("welcome"); setBScheduledFor("");
@@ -2541,6 +2583,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
   }
   function openEdit(b: BroadcastRow) {
     setEditingBroadcast(b);
+    setBSource(b.source ?? "");
     setBSubject(b.subject); setBBody(b.bodyText);
     setBSegment(b.segment as "signups" | "contacts" | "all");
     setBSender(b.sender ?? "team");
@@ -2557,7 +2600,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     const scheduledFor = bScheduledFor ? new Date(bScheduledFor).toISOString() : null;
     try {
       if (!editingBroadcast) {
-        await adminSend("POST", "/api/admin/broadcasts", { subject: bSubject.trim(), bodyText: bBody.trim(), eventId, segment: bSegment, sender: bSender ?? "team", banner: bBanner, scheduledFor });
+        await adminSend("POST", "/api/admin/broadcasts", { subject: bSubject.trim(), bodyText: bBody.trim(), eventId, segment: bSegment, sender: bSender ?? "team", banner: bBanner, scheduledFor, ...(bSource ? { source: bSource } : {}) });
       } else {
         await adminSend("PUT", `/api/admin/broadcasts/${editingBroadcast.id}`, { subject: bSubject.trim(), bodyText: bBody.trim(), segment: bSegment, sender: bSender ?? "team", banner: bBanner, scheduledFor });
       }
@@ -3006,10 +3049,57 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
       )}
 
       {/* ── BROADCASTS: list ── */}
+      {view === "cadence" && (
+        <div className="flex flex-col gap-4">
+          <BroadcastSubNav view={view} setView={setView} />
+          <p className="text-sm text-muted-foreground">
+            The sequence every podcaster receives. Each step is one email — open it to write or edit.
+          </p>
+          <div className="flex flex-col gap-2">
+            {CADENCE_STEPS.map((step, i) => {
+              const b = cadenceBySource.get(cadenceSource(step.key));
+              return (
+                <div
+                  key={step.key}
+                  className="flex items-center gap-3 rounded-xl border border-border p-3"
+                  data-testid={`row-cadence-${step.key}`}
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                    {i === 0 ? "W" : i}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold">{step.label}</span>
+                      {b?.status === "sent" && <Badge variant="secondary" className="text-[11px]">Sent</Badge>}
+                      {b?.status === "scheduled" && <Badge variant="secondary" className="text-[11px]">Scheduled</Badge>}
+                      {b && b.status === "draft" && <Badge variant="outline" className="text-[11px]">Draft</Badge>}
+                      {!b && <Badge variant="outline" className="text-[11px] text-muted-foreground">Empty</Badge>}
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {b?.subject || step.blurb || "Nothing written yet"}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={b ? "outline" : "default"}
+                    className="shrink-0 gap-1.5"
+                    onClick={() => (b ? openEdit(b) : openCompose(undefined, cadenceSource(step.key)))}
+                    data-testid={`button-cadence-${step.key}`}
+                  >
+                    {b ? <><Pencil className="h-3.5 w-3.5" /> Edit</> : <><Plus className="h-3.5 w-3.5" /> Write</>}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {view === "broadcasts" && (
         <div className="flex flex-col gap-4">
+          <BroadcastSubNav view={view} setView={setView} />
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">{broadcastList.length} campaign{broadcastList.length !== 1 ? "s" : ""}</p>
+            <p className="text-sm text-muted-foreground">{oneOffBroadcasts.length} campaign{oneOffBroadcasts.length !== 1 ? "s" : ""}</p>
             <Button size="sm" className="gap-1.5" onClick={() => openCompose()}>
               <Plus className="h-4 w-4" /> New broadcast
             </Button>

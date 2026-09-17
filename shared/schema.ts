@@ -481,6 +481,23 @@ export type SponsorRow = typeof sponsors.$inferSelect;
 export type PublicSponsor = Pick<SponsorRow, "id" | "name" | "url" | "logoUrl" | "sortOrder" | "tier">;
 
 // ---------------------------------------------------------------------------
+// Broadcast cadence — the fixed sequence of emails every podcaster receives.
+// A broadcast belongs to a step by carrying source = "cadence:<key>"; the step
+// list is shared so the admin UI and the server never disagree about the keys.
+// ---------------------------------------------------------------------------
+export const CADENCE_STEPS = [
+  { key: "welcome", label: "Welcome", blurb: "Sent the moment a slot is claimed" },
+  { key: "email-1", label: "Email 1", blurb: "Pre-show checklist" },
+  { key: "email-2", label: "Email 2", blurb: "" },
+  { key: "email-3", label: "Email 3", blurb: "" },
+  { key: "email-4", label: "Email 4", blurb: "" },
+  { key: "email-5", label: "Email 5", blurb: "" },
+  { key: "email-6", label: "Email 6", blurb: "" },
+] as const;
+export type CadenceKey = (typeof CADENCE_STEPS)[number]["key"];
+export const cadenceSource = (key: string) => `cadence:${key}`;
+
+// ---------------------------------------------------------------------------
 // Admin users — who can open /admin. Sign-in is the same one-time email code
 // podcasters use; there is no shared password to pass around.
 // ---------------------------------------------------------------------------

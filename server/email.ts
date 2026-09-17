@@ -47,9 +47,20 @@ export function emailShell(o: {
                   style="background-image:url('${o.banner}');background-size:cover;background-position:center;padding:0;">
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                   <tr>
-                    <td style="background:linear-gradient(135deg,rgba(5,56,119,0.90) 0%,rgba(5,56,119,0.60) 100%);padding:32px 36px 38px;">
-                      <img src="${SITE}/logo-wave.png" width="80" height="24" alt="" style="display:block;border:0;margin:0 0 16px;">
-                      <p style="margin:0;color:#F0A71F;font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;opacity:0.75;">${escapeHtml(o.eyebrow)}</p>
+                    <td style="background:linear-gradient(135deg,rgba(5,56,119,0.90) 0%,rgba(5,56,119,0.60) 100%);padding:30px 36px 34px;">
+                      <!-- Two cells rather than floats: the only alignment mail
+                           clients agree on. -->
+                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td align="left" valign="bottom" style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                            <img src="${SITE}/logo-wave.png" width="80" height="24" alt="" style="display:block;border:0;margin:0 0 14px;">
+                            <p style="margin:0;color:#F0A71F;font-size:17px;font-weight:800;letter-spacing:0.01em;line-height:1.25;">${escapeHtml(o.eyebrow)}</p>
+                          </td>
+                          <td align="right" valign="bottom" style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;white-space:nowrap;padding-left:16px;">
+                            <p style="margin:0;color:#ffffff;font-size:11px;font-weight:600;letter-spacing:0.10em;text-transform:uppercase;opacity:0.72;">MilitaryVoice.ai</p>
+                          </td>
+                        </tr>
+                      </table>
                     </td>
                   </tr>
                 </table>
@@ -671,10 +682,64 @@ export async function sendListenerStartingSoon(v: StartingSoonInput): Promise<bo
 // ---------------------------------------------------------------------------
 
 /** Convert plain text to basic HTML paragraphs for the email body. */
+/**
+ * Inline marks, applied *after* escaping so the body can never inject markup:
+ * **bold**, and [label](https://…) with the scheme checked.
+ */
+function inlineMarks(escaped: string): string {
+  return escaped
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      (_m, label, href) => `<a href="${href}" style="color:#053877;text-decoration:underline;">${label}</a>`)
+    .replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#0b1220;">$1</strong>');
+}
+
+/** One row of a list: a gold marker in a narrow cell, the text beside it. */
+function listRow(marker: string, body: string, numbered: boolean): string {
+  const bullet = numbered
+    ? `<div style="width:26px;height:26px;border-radius:50%;background:#F0A71F;color:#1a1200;font-weight:700;font-size:13px;line-height:26px;text-align:center;font-family:Arial,sans-serif;">${marker}</div>`
+    : `<div style="width:8px;height:8px;border-radius:50%;background:#F0A71F;margin:8px 0 0 9px;"></div>`;
+  return `<tr>
+    <td width="38" valign="top" style="padding:0 12px 12px 0;">${bullet}</td>
+    <td valign="top" style="padding:0 0 12px;font-size:15px;line-height:1.65;color:#374151;">${body}</td>
+  </tr>`;
+}
+
+/**
+ * Turns the plain-text body an author types into email HTML. Tables rather than
+ * <ol>/<ul> because list rendering is the least consistent thing across mail
+ * clients — Outlook's Word engine in particular ignores most list styling.
+ */
 function textToHtml(text: string): string {
+  const NUM = /^\s*(\d+)[.)]\s+(.*)$/;
+  const BUL = /^\s*[-*•]\s+(.*)$/;
+
   return text
     .split(/\n{2,}/)
-    .map((p) => `<p style="margin:0 0 14px;">${escapeHtml(p.trim()).replace(/\n/g, "<br>")}</p>`)
+    .map((block) => {
+      const lines = block.trim().split("\n").filter((l) => l.trim());
+      if (!lines.length) return "";
+
+      const numbered = lines.every((l) => NUM.test(l));
+      const bulleted = !numbered && lines.every((l) => BUL.test(l));
+
+      if (numbered || bulleted) {
+        const rows = lines
+          .map((l) => {
+            const m = numbered ? l.match(NUM)! : l.match(BUL)!;
+            const marker = numbered ? m[1] : "";
+            const body = inlineMarks(escapeHtml((numbered ? m[2] : m[1]).trim()));
+            return listRow(marker, body, numbered);
+          })
+          .join("");
+        return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 10px;">${rows}</table>`;
+      }
+
+      // A line ending in a colon ahead of a list reads as its lead-in; keep it
+      // tight to what follows rather than a full paragraph gap.
+      const html = inlineMarks(escapeHtml(block.trim())).replace(/\n/g, "<br>");
+      const tight = /:\s*$/.test(block.trim());
+      return `<p style="margin:0 0 ${tight ? 10 : 14}px;font-size:15px;line-height:1.65;color:#374151;">${html}</p>`;
+    })
     .join("");
 }
 
@@ -714,6 +779,8 @@ export async function sendBroadcastEmail(opts: {
   sender?: string;
   banner?: string;
   senderMember?: { name: string; title: string; photoUrl: string } | null;
+  /** Shown large on the banner — the event and its date, not the sender. */
+  bannerTitle?: string;
 }): Promise<string | null> {
   const isRico = opts.sender === "rico" && !opts.senderMember;
   const member = opts.senderMember;
@@ -738,7 +805,9 @@ export async function sendBroadcastEmail(opts: {
 
   const bodyHtml = `${textToHtml(resolvedBodyText)}${isRico ? RICO_SIGNATURE : memberSignature}`;
   const bannerUrl = BROADCAST_BANNERS[opts.banner ?? "welcome"] ?? BROADCAST_BANNERS.welcome;
-  const eyebrow = member ? `${member.name} · MilitaryVoice.ai` : isRico ? "Riccoh Player · MilitaryVoice.ai" : "MilitaryVoice.ai";
+  // The sender is already named in the From line and the signature; the banner
+  // is better spent on what the email is actually about.
+  const eyebrow = opts.bannerTitle?.trim() || "24 Hour Podcastathon";
   const fromName = member ? `${member.name} | MilitaryVoice.ai` : isRico ? "Riccoh Player | MilitaryVoice.ai" : "MilitaryVoice.ai";
   const fromAddress = `${fromName} <hello@militaryvoice.ai>`;
 

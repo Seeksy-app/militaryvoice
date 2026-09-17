@@ -1899,7 +1899,7 @@ class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async updateBroadcast(id: number, data: { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null }): Promise<BroadcastRow | null> {
+  async updateBroadcast(id: number, data: { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null; source?: string }): Promise<BroadcastRow | null> {
     await ready();
     const patch: Partial<BroadcastRow> = {};
     if (data.subject !== undefined) patch.subject = data.subject;
@@ -1907,6 +1907,7 @@ class DatabaseStorage implements IStorage {
     if (data.segment !== undefined) patch.segment = data.segment;
     if (data.sender !== undefined) patch.sender = data.sender;
     if (data.banner !== undefined) patch.banner = data.banner;
+    if (data.source !== undefined) patch.source = data.source;
     if ("scheduledFor" in data) {
       patch.scheduledFor = data.scheduledFor ?? null;
       patch.status = data.scheduledFor ? "scheduled" : "draft";
