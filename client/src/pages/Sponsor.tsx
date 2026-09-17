@@ -7,7 +7,7 @@ import { SponsorDialog } from "@/components/SponsorDialog";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import { slotStart, totalSlots, formatTimeInZone } from "@/lib/schedule";
-import { Check, Mic2, Radio, Clock, Users, ArrowRight } from "lucide-react";
+import { Check, Mic2, Radio, Clock, ArrowRight } from "lucide-react";
 
 // The open sponsorship page, linked from the footer. /vfw is the same pitch
 // addressed to one organisation; this one is for everybody else, so it names
@@ -132,12 +132,11 @@ export default function Sponsor() {
             to put your name on the day.
           </p>
 
-          <div className="mt-12 grid grid-cols-2 gap-y-8 border-t border-white/15 pt-10 lg:grid-cols-4">
+          <div className="mt-12 grid grid-cols-2 gap-y-8 border-t border-white/15 pt-10 lg:grid-cols-3">
             {[
               { icon: Clock, n: String(event?.durationHours ?? 24), label: "hours, continuous" },
               { icon: Radio, n: String(slotCount || 48), label: "broadcast slots" },
               { icon: Mic2, n: String(event?.slotMinutes ?? 30), label: "minutes per show" },
-              { icon: Users, n: "1", label: "title sponsorship available" },
             ].map(({ icon: Icon, n, label }) => (
               <div key={label} className="px-2 lg:px-0">
                 <Icon className="h-5 w-5" style={{ color: GOLD }} />
