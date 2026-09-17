@@ -2594,7 +2594,17 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     setBBusy(true);
     try {
       const result: { ok: boolean; to: string } = await adminSend("POST", `/api/admin/broadcasts/${editingBroadcast.id}/test?eventId=${eventId}`).then((r) => r.json());
-      toast({ title: "Test sent ✓", description: `Preview email sent to ${result.to}` });
+      // The endpoint reports whether the provider accepted it. Saying "sent"
+      // regardless is how a dead mail provider stays invisible.
+      if (result.ok) {
+        toast({ title: "Test sent ✓", description: `Preview email sent to ${result.to}` });
+      } else {
+        toast({
+          title: "Test not sent",
+          description: `The mail provider rejected it. Nothing arrived at ${result.to}.`,
+          variant: "destructive",
+        });
+      }
     } catch (err) {
       toast({ title: "Test failed", description: (err as Error).message, variant: "destructive" });
     } finally { setBBusy(false); }
