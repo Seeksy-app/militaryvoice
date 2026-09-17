@@ -139,7 +139,7 @@ export default function SponsorVFW() {
         <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr]">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">The day</div>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
+            <h2 className="mt-3 text-3xl font-bold leading-[1.25] tracking-tight sm:text-4xl sm:leading-[1.25]" style={HEADLINE_FONT}>
               One day that brings the whole mil/vet podcast community together.
             </h2>
           </div>
@@ -165,7 +165,7 @@ export default function SponsorVFW() {
         <section id="lineup" className="scroll-mt-16 border-y border-border bg-muted/30 py-16 lg:py-20">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">The lineup so far</div>
-            <h2 className="mt-3 max-w-3xl text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
+            <h2 className="mt-3 max-w-3xl text-3xl font-bold leading-[1.25] tracking-tight sm:text-4xl sm:leading-[1.25]" style={HEADLINE_FONT}>
               Shows already on the board.
             </h2>
             <p className="mt-3 max-w-2xl text-muted-foreground">
@@ -215,7 +215,7 @@ export default function SponsorVFW() {
                   <div className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>
                     Your place on the board
                   </div>
-                  <h3 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
+                  <h3 className="mt-3 text-2xl font-bold leading-[1.25] tracking-tight sm:text-3xl sm:leading-[1.25]" style={HEADLINE_FONT}>
                     #StillServing joins the lineup.
                   </h3>
                   <p className="mt-3 leading-relaxed text-muted-foreground">
@@ -326,7 +326,7 @@ export default function SponsorVFW() {
 
       {/* --------------------------------------------------------------- CTA */}
       <section className="mx-auto max-w-4xl px-4 py-20 text-center sm:px-6">
-        <h2 className="text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
+        <h2 className="text-3xl font-bold leading-[1.25] tracking-tight sm:text-4xl sm:leading-[1.25]" style={HEADLINE_FONT}>
           Let's put the VFW on the air.
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-lg leading-relaxed text-muted-foreground">
