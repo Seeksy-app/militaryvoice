@@ -614,64 +614,6 @@ export default function Landing({ slug }: Props) {
         </div>
       </section>
 
-      {/* -------------------------------------------------------- SPONSORS */}
-      {(sponsors ?? []).length > 0 && (
-        <section className="overflow-hidden bg-[#000741] py-16" data-testid="section-sponsors">
-          {presentingSponsors.length > 0 && (
-            <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#F0A71F]">Presented by</div>
-              <div className="mt-7 flex flex-wrap items-center justify-center gap-x-16 gap-y-10">
-                {presentingSponsors.map((sp) => (
-                  <SponsorLogo key={sp.id} sponsor={sp} className="h-20 w-[260px] sm:h-24 sm:w-[320px]" />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {officialSponsors.length > 0 && (
-            <div className={`mx-auto max-w-6xl px-4 text-center sm:px-6 ${presentingSponsors.length > 0 ? "mt-16" : ""}`}>
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-white/55">Official sponsors</div>
-              <div className="mt-7 flex flex-wrap items-center justify-center gap-x-14 gap-y-9">
-                {officialSponsors.map((sp) => (
-                  <SponsorLogo key={sp.id} sponsor={sp} className="h-16 w-[190px] sm:h-[72px] sm:w-[220px]" />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {friendSponsors.length > 0 && (
-            <>
-              <div className={`mx-auto max-w-6xl px-4 text-center sm:px-6 ${paidSponsors.length > 0 ? "mt-16 border-t border-white/10 pt-14" : ""}`}>
-                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-white/55">
-                  Friends of the <span className="text-[#F0A71F]">Podcastathon</span>
-                </div>
-              </div>
-              <div className="relative mt-8">
-                <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#000741] to-transparent" />
-                <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#000741] to-transparent" />
-                <div
-                  className="flex w-max items-center gap-14 px-8 [animation:mvmarquee_var(--mv-marquee-s)_linear_infinite] hover:[animation-play-state:paused]"
-                  style={{ ["--mv-marquee-s" as string]: `${Math.max(18, friendSponsors.length * 6)}s` }}
-                >
-                  {[...friendSponsors, ...friendSponsors].map((sp, i) => (
-                    <SponsorLogo key={`${sp.id}-${i}`} sponsor={sp} className="h-16 w-[190px] sm:h-[72px] sm:w-[220px]" />
-                  ))}
-                </div>
-                <style>{`@keyframes mvmarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
-              </div>
-            </>
-          )}
-
-          <div className="mt-12 text-center">
-            <SponsorDialog>
-              <button type="button" className="text-sm font-medium text-[#F0A71F] underline-offset-4 hover:underline" data-testid="button-become-sponsor">
-                Become a sponsor
-              </button>
-            </SponsorDialog>
-          </div>
-        </section>
-      )}
-
       {/* ------------------------------------------------------ PODCASTERS */}
       <section id="podcasters" className={`relative scroll-mt-16 overflow-hidden ${NAVY}`}>
         <img
@@ -911,37 +853,109 @@ export default function Landing({ slug }: Props) {
         </div>
       </section>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <LogoLockup className="items-start" />
-          <nav className="flex flex-wrap gap-x-5 gap-y-2">
-            <a href="/#podcasters" className="hover:text-foreground">
-              Podcasters
-            </a>
-            <a href="/#listeners" className="hover:text-foreground">
-              Listeners
-            </a>
-            <Link href={scheduleHref} className="hover:text-foreground">
-              Schedule
-            </Link>
-            <Link href={agendaHref} className="hover:text-foreground">
-              Agenda
-            </Link>
-            <Link href="/prepare" className="hover:text-foreground">
-              Podcaster guide
-            </Link>
-            <Link href="/faq" className="hover:text-foreground">
-              FAQ
-            </Link>
+      {/* -------------------------------------------------------- SPONSORS */}
+      {(sponsors ?? []).length > 0 && (
+        <section className="overflow-hidden bg-[#000741] py-16" data-testid="section-sponsors">
+          {presentingSponsors.length > 0 && (
+            <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#F0A71F]">Presented by</div>
+              <div className="mt-7 flex flex-wrap items-center justify-center gap-x-16 gap-y-10">
+                {presentingSponsors.map((sp) => (
+                  <SponsorLogo key={sp.id} sponsor={sp} className="h-20 w-[260px] sm:h-24 sm:w-[320px]" />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {officialSponsors.length > 0 && (
+            <div className={`mx-auto max-w-6xl px-4 text-center sm:px-6 ${presentingSponsors.length > 0 ? "mt-16" : ""}`}>
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-white/55">Official sponsors</div>
+              <div className="mt-7 flex flex-wrap items-center justify-center gap-x-14 gap-y-9">
+                {officialSponsors.map((sp) => (
+                  <SponsorLogo key={sp.id} sponsor={sp} className="h-16 w-[190px] sm:h-[72px] sm:w-[220px]" />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {friendSponsors.length > 0 && (
+            <>
+              <div className={`mx-auto max-w-6xl px-4 text-center sm:px-6 ${paidSponsors.length > 0 ? "mt-16 border-t border-white/10 pt-14" : ""}`}>
+                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-white/55">
+                  Friends of the <span className="text-[#F0A71F]">Podcastathon</span>
+                </div>
+              </div>
+              <div className="relative mt-8">
+                <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#000741] to-transparent" />
+                <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#000741] to-transparent" />
+                <div
+                  className="flex w-max items-center gap-14 px-8 [animation:mvmarquee_var(--mv-marquee-s)_linear_infinite] hover:[animation-play-state:paused]"
+                  style={{ ["--mv-marquee-s" as string]: `${Math.max(18, friendSponsors.length * 6)}s` }}
+                >
+                  {[...friendSponsors, ...friendSponsors].map((sp, i) => (
+                    <SponsorLogo key={`${sp.id}-${i}`} sponsor={sp} className="h-16 w-[190px] sm:h-[72px] sm:w-[220px]" />
+                  ))}
+                </div>
+                <style>{`@keyframes mvmarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
+              </div>
+            </>
+          )}
+
+          <div className="mt-12 text-center">
             <SponsorDialog>
-              <button type="button" className="hover:text-foreground">
-                Sponsors
+              <button type="button" className="text-sm font-medium text-[#F0A71F] underline-offset-4 hover:underline" data-testid="button-become-sponsor">
+                Become a sponsor
               </button>
             </SponsorDialog>
-            <Link href="/host/dashboard" className="hover:text-foreground">
-              Sign in
-            </Link>
-          </nav>
+          </div>
+        </section>
+      )}
+
+      <footer className="border-t border-border">
+        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+            <LogoLockup className="h-9 w-auto" />
+            <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
+              <a href="/#podcasters" className="hover:text-foreground">
+                Podcasters
+              </a>
+              <a href="/#listeners" className="hover:text-foreground">
+                Listeners
+              </a>
+              <Link href={scheduleHref} className="hover:text-foreground">
+                Schedule
+              </Link>
+              <Link href={agendaHref} className="hover:text-foreground">
+                Agenda
+              </Link>
+              <Link href="/prepare" className="hover:text-foreground">
+                Podcaster guide
+              </Link>
+              <Link href="/faq" className="hover:text-foreground">
+                FAQ
+              </Link>
+              <SponsorDialog>
+                <button type="button" className="hover:text-foreground">
+                  Sponsors
+                </button>
+              </SponsorDialog>
+              <Link href="/host/dashboard" className="hover:text-foreground">
+                Sign in
+              </Link>
+            </nav>
+          </div>
+
+          <div className="mt-8 flex flex-col gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <p>© {new Date().getFullYear()} MilitaryVoice.ai. All rights reserved.</p>
+            <nav className="flex flex-wrap gap-x-5 gap-y-2">
+              <Link href="/privacy" className="hover:text-foreground">
+                Privacy Policy
+              </Link>
+              <Link href="/terms" className="hover:text-foreground">
+                Terms &amp; Conditions
+              </Link>
+            </nav>
+          </div>
         </div>
       </footer>
 

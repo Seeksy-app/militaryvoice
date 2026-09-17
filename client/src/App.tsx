@@ -23,6 +23,7 @@ import StudioComposite from "@/pages/StudioComposite";
 import Watch from "@/pages/Watch";
 import { PrivacyPolicy, TermsOfService } from "@/pages/Legal";
 import NationalMilitaryPodcastDay from "@/pages/NationalMilitaryPodcastDay";
+import SponsorVFW from "@/pages/SponsorVFW";
 
 /**
  * Client-side navigation keeps the old scroll position by default. Every
@@ -84,6 +85,8 @@ function AppRouter() {
       <Route path="/event/:slug/studio">{(params) => <Studio slug={params.slug} />}</Route>
       <Route path="/admin">{() => <Admin />}</Route>
       <Route path="/national-military-podcast-day">{() => <NationalMilitaryPodcastDay />}</Route>
+      {/* Unlisted: a sponsorship proposal delivered by URL, not linked in nav. */}
+      <Route path="/vfw">{() => <SponsorVFW />}</Route>
       <Route path="/host/dashboard">{() => <HostDashboard />}</Route>
       <Route component={NotFound} />
     </Switch>
