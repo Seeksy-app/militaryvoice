@@ -33,6 +33,9 @@ import {
   type EventRow,
   type SignupRow,
   updateSponsorSchema,
+  upsertSponsorPackageSchema,
+  SPONSOR_TIERS,
+  type SponsorTier,
   insertEventShowSchema,
   NUDGE_KINDS,
   type NudgeKind,
@@ -1261,7 +1264,7 @@ export function registerRoutes(app: Express): void {
     // The homepage strip is the live-site event's sponsors (legacy rows count as its).
     const featured = await storage.getFeaturedEvent();
     const rows = await storage.listSponsors(true, [featured.id, 0]);
-    const out: PublicSponsor[] = rows.map((r) => ({ id: r.id, name: r.name, url: r.url, logoUrl: r.logoUrl, sortOrder: r.sortOrder }));
+    const out: PublicSponsor[] = rows.map((r) => ({ id: r.id, name: r.name, url: r.url, logoUrl: r.logoUrl, sortOrder: r.sortOrder, tier: r.tier }));
     res.json(out);
   });
 
@@ -3004,6 +3007,18 @@ export function registerRoutes(app: Express): void {
       const logoUrl = await uploadPhoto(filename, req.file.buffer, req.file.mimetype);
       const eventId = Number(body.eventId) || (await storage.getFeaturedEvent()).id;
       const created = await storage.createSponsor({ name, url, logoUrl, eventId });
+      // Tier and package arrive as form fields alongside the upload; applying
+      // them here keeps createSponsor's signature to what a logo upload needs.
+      const tier = SPONSOR_TIERS.includes(body.tier as never) ? (body.tier as SponsorTier) : undefined;
+      const packageId = Number(body.packageId) || 0;
+      if (tier || packageId) {
+        const patched = await storage.updateSponsor(created.id, {
+          ...(tier ? { tier } : {}),
+          ...(packageId ? { packageId } : {}),
+        });
+        res.status(201).json(patched ?? created);
+        return;
+      }
       res.status(201).json(created);
     } catch (err) {
       console.error("Sponsor logo upload failed:", err);
@@ -3027,6 +3042,42 @@ export function registerRoutes(app: Express): void {
 
   app.delete("/api/admin/sponsors/:id", requireAdmin, async (req, res) => {
     await storage.deleteSponsor(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
+  // ---- Sponsorship packages: price and slot count per tier ----------------------
+  app.get("/api/admin/sponsor-packages", requireAdmin, async (req, res) => {
+    noStore(res);
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    res.json(await storage.listSponsorPackages(eventId));
+  });
+
+  app.post("/api/admin/sponsor-packages", requireAdmin, async (req, res) => {
+    const parsed = upsertSponsorPackageSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    res.status(201).json(await storage.createSponsorPackage(eventId, parsed.data));
+  });
+
+  app.patch("/api/admin/sponsor-packages/:id", requireAdmin, async (req, res) => {
+    const parsed = upsertSponsorPackageSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const updated = await storage.updateSponsorPackage(Number(req.params.id), parsed.data);
+    if (!updated) {
+      res.status(404).json({ message: "Package not found" });
+      return;
+    }
+    res.json(updated);
+  });
+
+  app.delete("/api/admin/sponsor-packages/:id", requireAdmin, async (req, res) => {
+    await storage.deleteSponsorPackage(Number(req.params.id));
     res.json({ ok: true });
   });
 

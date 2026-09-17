@@ -412,8 +412,42 @@ export interface SocialAccount {
 }
 
 // ---------------------------------------------------------------------------
-// Sponsors — "Friends of the Podcastathon" logo strip, managed from admin.
+// Sponsors — three tiers on the public site. "presenting" gets a band of its
+// own, "official" a static grid, "friend" the scrolling strip. A package is
+// what they bought; the tier is only where the logo lands.
 // ---------------------------------------------------------------------------
+export const SPONSOR_TIERS = ["presenting", "official", "friend"] as const;
+export type SponsorTier = (typeof SPONSOR_TIERS)[number];
+
+export const sponsorPackages = pgTable("sponsor_packages", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull().default(0),
+  name: text("name").notNull(),
+  /** Whole dollars — these are five-figure round numbers, not cart items. */
+  price: integer("price").notNull().default(0),
+  totalSlots: integer("total_slots").notNull().default(1),
+  /** Which tier a sponsor lands in when this package is assigned to them. */
+  tier: text("tier").notNull().default("official"),
+  description: text("description").notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  createdAt: text("created_at").notNull(),
+});
+
+export const upsertSponsorPackageSchema = z.object({
+  name: z.string().trim().min(1, "Name is required"),
+  price: z.number().int().min(0).default(0),
+  totalSlots: z.number().int().min(1).default(1),
+  tier: z.enum(SPONSOR_TIERS).default("official"),
+  description: z.string().trim().default(""),
+  sortOrder: z.number().int().default(0),
+  active: z.boolean().default(true),
+});
+export type UpsertSponsorPackage = z.infer<typeof upsertSponsorPackageSchema>;
+export type SponsorPackageRow = typeof sponsorPackages.$inferSelect;
+/** A package plus how many of its slots are taken — derived, never stored. */
+export type SponsorPackageWithSold = SponsorPackageRow & { sold: number };
+
 export const sponsors = pgTable("sponsors", {
   id: serial("id").primaryKey(),
   // 0 = created before sponsors were per-event; treated as the featured event's.
@@ -421,6 +455,10 @@ export const sponsors = pgTable("sponsors", {
   name: text("name").notNull(),
   url: text("url").notNull().default(""),
   logoUrl: text("logo_url").notNull(),
+  /** Where the logo shows. Existing rows predate tiers and stay "friend". */
+  tier: text("tier").notNull().default("friend"),
+  /** 0 = no package (a courtesy logo, or one tracked outside the site). */
+  packageId: integer("package_id").notNull().default(0),
   sortOrder: integer("sort_order").notNull().default(0),
   active: boolean("active").notNull().default(true),
   createdAt: text("created_at").notNull(),
@@ -433,12 +471,14 @@ export const updateSponsorSchema = z.object({
     .trim()
     .transform((v) => (v && !/^https?:\/\//i.test(v) ? `https://${v}` : v))
     .optional(),
+  tier: z.enum(SPONSOR_TIERS).optional(),
+  packageId: z.number().int().min(0).optional(),
   sortOrder: z.number().int().optional(),
   active: z.boolean().optional(),
 });
 export type UpdateSponsor = z.infer<typeof updateSponsorSchema>;
 export type SponsorRow = typeof sponsors.$inferSelect;
-export type PublicSponsor = Pick<SponsorRow, "id" | "name" | "url" | "logoUrl" | "sortOrder">;
+export type PublicSponsor = Pick<SponsorRow, "id" | "name" | "url" | "logoUrl" | "sortOrder" | "tier">;
 
 // ---------------------------------------------------------------------------
 // Admin users — who can open /admin. Sign-in is the same one-time email code

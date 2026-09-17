@@ -88,6 +88,35 @@ function longDate(d: Date, zone: string): string {
 }
 
 /** Fade-up on scroll, once. */
+/**
+ * Sponsor logos arrive in every polarity and aspect ratio — white-on-transparent
+ * wordmarks next to square colour badges. A fixed box with object-contain gives
+ * them comparable optical weight, and the navy band behind keeps white marks
+ * legible in either theme.
+ */
+function SponsorLogo({ sponsor, className }: { sponsor: PublicSponsor; className: string }) {
+  const img = (
+    <img
+      src={sponsor.logoUrl}
+      alt={sponsor.name}
+      title={sponsor.name}
+      loading="lazy"
+      className="h-full w-full object-contain opacity-90 transition duration-300 hover:opacity-100"
+    />
+  );
+  return (
+    <div className={`flex shrink-0 items-center justify-center ${className}`}>
+      {sponsor.url ? (
+        <a href={sponsor.url} target="_blank" rel="noopener noreferrer" className="flex h-full w-full items-center justify-center" aria-label={sponsor.name}>
+          {img}
+        </a>
+      ) : (
+        img
+      )}
+    </div>
+  );
+}
+
 function Reveal({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
   return (
     <motion.div
@@ -132,6 +161,12 @@ export default function Landing({ slug }: Props) {
   });
   const { data: podcasters } = useQuery<PublicPodcaster[]>({ queryKey: ["/api/podcasters"] });
   const { data: sponsors } = useQuery<PublicSponsor[]>({ queryKey: ["/api/sponsors"] });
+  // Rows created before tiers existed carry no tier; they stay friends.
+  const byTier = (t: string) => (sponsors ?? []).filter((s) => (s.tier || "friend") === t);
+  const presentingSponsors = byTier("presenting");
+  const officialSponsors = byTier("official");
+  const friendSponsors = byTier("friend");
+  const paidSponsors = [...presentingSponsors, ...officialSponsors];
 
 
   const zone = useMemo(detectLocalTimeZone, []);
@@ -581,43 +616,58 @@ export default function Landing({ slug }: Props) {
 
       {/* -------------------------------------------------------- SPONSORS */}
       {(sponsors ?? []).length > 0 && (
-        <section className="overflow-hidden border-b border-border bg-background py-14" data-testid="section-sponsors">
-          <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
-            <div className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-              Friends of the <span className="text-[#F0A71F]">Podcastathon</span>
+        <section className="overflow-hidden bg-[#000741] py-16" data-testid="section-sponsors">
+          {presentingSponsors.length > 0 && (
+            <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#F0A71F]">Presented by</div>
+              <div className="mt-7 flex flex-wrap items-center justify-center gap-x-16 gap-y-10">
+                {presentingSponsors.map((sp) => (
+                  <SponsorLogo key={sp.id} sponsor={sp} className="h-20 w-[260px] sm:h-24 sm:w-[320px]" />
+                ))}
+              </div>
             </div>
+          )}
+
+          {officialSponsors.length > 0 && (
+            <div className={`mx-auto max-w-6xl px-4 text-center sm:px-6 ${presentingSponsors.length > 0 ? "mt-16" : ""}`}>
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-white/55">Official sponsors</div>
+              <div className="mt-7 flex flex-wrap items-center justify-center gap-x-14 gap-y-9">
+                {officialSponsors.map((sp) => (
+                  <SponsorLogo key={sp.id} sponsor={sp} className="h-16 w-[190px] sm:h-[72px] sm:w-[220px]" />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {friendSponsors.length > 0 && (
+            <>
+              <div className={`mx-auto max-w-6xl px-4 text-center sm:px-6 ${paidSponsors.length > 0 ? "mt-16 border-t border-white/10 pt-14" : ""}`}>
+                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-white/55">
+                  Friends of the <span className="text-[#F0A71F]">Podcastathon</span>
+                </div>
+              </div>
+              <div className="relative mt-8">
+                <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#000741] to-transparent" />
+                <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#000741] to-transparent" />
+                <div
+                  className="flex w-max items-center gap-14 px-8 [animation:mvmarquee_var(--mv-marquee-s)_linear_infinite] hover:[animation-play-state:paused]"
+                  style={{ ["--mv-marquee-s" as string]: `${Math.max(18, friendSponsors.length * 6)}s` }}
+                >
+                  {[...friendSponsors, ...friendSponsors].map((sp, i) => (
+                    <SponsorLogo key={`${sp.id}-${i}`} sponsor={sp} className="h-16 w-[190px] sm:h-[72px] sm:w-[220px]" />
+                  ))}
+                </div>
+                <style>{`@keyframes mvmarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
+              </div>
+            </>
+          )}
+
+          <div className="mt-12 text-center">
             <SponsorDialog>
-              <button type="button" className="mt-3 text-sm font-medium text-primary underline-offset-4 hover:underline" data-testid="button-become-sponsor">
+              <button type="button" className="text-sm font-medium text-[#F0A71F] underline-offset-4 hover:underline" data-testid="button-become-sponsor">
                 Become a sponsor
               </button>
             </SponsorDialog>
-          </div>
-          <div className="relative mt-8">
-            <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-background to-transparent" />
-            <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-background to-transparent" />
-            <div className="flex w-max items-center gap-16 px-8 [animation:mvmarquee_var(--mv-marquee-s)_linear_infinite] hover:[animation-play-state:paused]" style={{ ["--mv-marquee-s" as string]: `${Math.max(18, (sponsors ?? []).length * 6)}s` }}>
-              {[...(sponsors ?? []), ...(sponsors ?? [])].map((sp, i) => {
-                const img = (
-                  <img
-                    src={sp.logoUrl}
-                    alt={sp.name}
-                    title={sp.name}
-                    loading="lazy"
-                    className="h-10 w-auto max-w-[180px] object-contain opacity-80 grayscale transition duration-300 hover:opacity-100 hover:grayscale-0 sm:h-12"
-                  />
-                );
-                return sp.url ? (
-                  <a key={`${sp.id}-${i}`} href={sp.url} target="_blank" rel="noopener noreferrer" className="shrink-0" aria-label={sp.name}>
-                    {img}
-                  </a>
-                ) : (
-                  <span key={`${sp.id}-${i}`} className="shrink-0">
-                    {img}
-                  </span>
-                );
-              })}
-            </div>
-            <style>{`@keyframes mvmarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
           </div>
         </section>
       )}

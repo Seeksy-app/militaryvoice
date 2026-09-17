@@ -18,14 +18,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi";
 import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
-import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send } from "lucide-react";
-import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow } from "@shared/schema";
+import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send } from "lucide-react";
+import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, SponsorPackageWithSold, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
 
@@ -937,7 +938,190 @@ function SignupsCard({ eventId }: { eventId: number }) {
 
 
 // ---------------------------------------------------------------------------
-// Sponsors — logo strip shown on the homepage as "Friends of the Podcastathon"
+// Sponsorship packages — what a tier costs and how many slots it has. "Sold"
+// is counted from the sponsors assigned to each package, never stored, so the
+// two cannot drift apart.
+// ---------------------------------------------------------------------------
+const TIER_LABEL: Record<string, string> = {
+  presenting: "Presenting — top band",
+  official: "Official — logo grid",
+  friend: "Friend — scrolling strip",
+};
+
+function money(n: number) {
+  return n > 0 ? `$${n.toLocaleString("en-US")}` : "—";
+}
+
+function SponsorPackagesCard({ eventId }: { eventId: number }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: packages, isLoading } = useQuery<SponsorPackageWithSold[]>({
+    queryKey: ["/api/admin/sponsor-packages", eventId],
+    queryFn: () => adminGet<SponsorPackageWithSold[]>(`/api/admin/sponsor-packages?eventId=${eventId}`),
+  });
+
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<SponsorPackageWithSold | null>(null);
+  const [form, setForm] = useState({ name: "", price: "", totalSlots: "1", tier: "official", description: "" });
+  const [busy, setBusy] = useState(false);
+
+  function refresh() {
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/sponsor-packages"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/sponsors"] });
+  }
+
+  function startAdd() {
+    setEditing(null);
+    setForm({ name: "", price: "", totalSlots: "1", tier: "official", description: "" });
+    setOpen(true);
+  }
+
+  function startEdit(p: SponsorPackageWithSold) {
+    setEditing(p);
+    setForm({ name: p.name, price: String(p.price || ""), totalSlots: String(p.totalSlots), tier: p.tier, description: p.description });
+    setOpen(true);
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      toast({ title: "Give the package a name", variant: "destructive" });
+      return;
+    }
+    setBusy(true);
+    try {
+      const body = {
+        name: form.name.trim(),
+        price: Number(form.price) || 0,
+        totalSlots: Math.max(1, Number(form.totalSlots) || 1),
+        tier: form.tier,
+        description: form.description.trim(),
+        eventId,
+      };
+      if (editing) await adminSend("PATCH", `/api/admin/sponsor-packages/${editing.id}`, body);
+      else await adminSend("POST", "/api/admin/sponsor-packages", body);
+      setOpen(false);
+      refresh();
+      toast({ title: editing ? "Package updated" : "Package added" });
+    } catch (err) {
+      toast({ title: "Couldn't save the package", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(p: SponsorPackageWithSold) {
+    if (!window.confirm(`Delete "${p.name}"? Sponsors on it stay on the site, just unassigned.`)) return;
+    await adminSend("DELETE", `/api/admin/sponsor-packages/${p.id}`);
+    refresh();
+    toast({ title: "Package deleted" });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <DollarSign className="h-4 w-4 text-primary" /> Sponsorship packages
+            </CardTitle>
+            <CardDescription>Tiers, pricing, and how many slots are left.</CardDescription>
+          </div>
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={startAdd} data-testid="button-add-package">
+            <Plus className="h-4 w-4" /> Add package
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : (packages ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No packages yet. Add one to track what each tier costs and how many slots remain.
+          </p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {(packages ?? []).map((p) => {
+              const left = Math.max(0, p.totalSlots - p.sold);
+              return (
+                <div key={p.id} className="group relative rounded-xl border border-border p-4" data-testid={`card-package-${p.id}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold">{p.name}</div>
+                      <div className="mt-1 text-2xl font-bold tabular-nums text-primary">{money(p.price)}</div>
+                    </div>
+                    <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(p)} aria-label="Edit package">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => remove(p)} aria-label="Delete package">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs tabular-nums text-muted-foreground">
+                    {left} of {p.totalSlots} available{p.sold > 0 ? ` · ${p.sold} sold` : ""}
+                  </div>
+                  <div className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">{TIER_LABEL[p.tier] ?? p.tier}</div>
+                  {p.description && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{p.description}</p>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit package" : "Add package"}</DialogTitle>
+            <DialogDescription>Pricing and slots are shown in admin only — the public site shows logos by tier.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={save} className="flex flex-col gap-3">
+            <div>
+              <Label htmlFor="pkg-name" className="text-xs">Name</Label>
+              <Input id="pkg-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Presenting sponsor" className="mt-1" data-testid="input-package-name" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="pkg-price" className="text-xs">Price (USD)</Label>
+                <Input id="pkg-price" inputMode="numeric" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value.replace(/[^0-9]/g, "") })} placeholder="25000" className="mt-1" data-testid="input-package-price" />
+              </div>
+              <div>
+                <Label htmlFor="pkg-slots" className="text-xs">Total slots</Label>
+                <Input id="pkg-slots" inputMode="numeric" value={form.totalSlots} onChange={(e) => setForm({ ...form, totalSlots: e.target.value.replace(/[^0-9]/g, "") })} className="mt-1" data-testid="input-package-slots" />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Where the logo shows</Label>
+              <Select value={form.tier} onValueChange={(v) => setForm({ ...form, tier: v })}>
+                <SelectTrigger className="mt-1" data-testid="select-package-tier">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TIER_LABEL).map(([v, label]) => (
+                    <SelectItem key={v} value={v}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="pkg-desc" className="text-xs">Description (optional)</Label>
+              <Input id="pkg-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What the sponsor gets" className="mt-1" />
+            </div>
+            <div className="mt-1 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button type="submit" disabled={busy} data-testid="button-save-package">{busy ? "Saving…" : editing ? "Save" : "Create"}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sponsors — logos on the homepage, split across the three tiers
 // ---------------------------------------------------------------------------
 function SponsorsCard({ eventId }: { eventId: number }) {
   const queryClient = useQueryClient();
@@ -966,13 +1150,20 @@ function SponsorsCard({ eventId }: { eventId: number }) {
   });
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [tier, setTier] = useState("friend");
   const [logo, setLogo] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const { data: packages } = useQuery<SponsorPackageWithSold[]>({
+    queryKey: ["/api/admin/sponsor-packages", eventId],
+    queryFn: () => adminGet<SponsorPackageWithSold[]>(`/api/admin/sponsor-packages?eventId=${eventId}`),
+  });
+
   function refresh() {
     queryClient.invalidateQueries({ queryKey: ["/api/admin/sponsors"] });
     queryClient.invalidateQueries({ queryKey: ["/api/sponsors"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/sponsor-packages"] });
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -987,10 +1178,12 @@ function SponsorsCard({ eventId }: { eventId: number }) {
       fd.append("name", name.trim());
       fd.append("url", url.trim());
       fd.append("eventId", String(eventId));
+      fd.append("tier", tier);
       fd.append("logo", logo);
       await adminUpload("/api/admin/sponsors", fd);
       setName("");
       setUrl("");
+      setTier("friend");
       setLogo(null);
       if (preview) URL.revokeObjectURL(preview);
       setPreview(null);
@@ -1003,9 +1196,15 @@ function SponsorsCard({ eventId }: { eventId: number }) {
     }
   }
 
-  async function patch(id: number, body: Partial<Pick<SponsorRow, "name" | "url" | "active" | "sortOrder">>) {
+  async function patch(id: number, body: Partial<Pick<SponsorRow, "name" | "url" | "active" | "sortOrder" | "tier" | "packageId">>) {
     await adminSend("PATCH", `/api/admin/sponsors/${id}`, body);
     refresh();
+  }
+
+  /** Assigning a package also moves the logo to that package's tier. */
+  async function assignPackage(sp: SponsorRow, packageId: number) {
+    const pkg = (packages ?? []).find((p) => p.id === packageId);
+    await patch(sp.id, { packageId, ...(pkg ? { tier: pkg.tier } : {}) });
   }
 
   async function move(index: number, dir: -1 | 1) {
@@ -1045,7 +1244,7 @@ function SponsorsCard({ eventId }: { eventId: number }) {
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
-        <form onSubmit={handleAdd} className="grid gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-4 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-end">
+        <form onSubmit={handleAdd} className="grid gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-4 sm:grid-cols-[auto_1fr_1fr_auto_auto] sm:items-end">
           <div>
             <Label className="text-xs">Logo</Label>
             <label className="mt-1 flex h-16 w-28 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-border bg-background text-muted-foreground hover:border-primary">
@@ -1076,6 +1275,19 @@ function SponsorsCard({ eventId }: { eventId: number }) {
             </Label>
             <Input id="sponsor-url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="example.com" className="mt-1" data-testid="input-sponsor-url" />
           </div>
+          <div>
+            <Label className="text-xs">Tier</Label>
+            <Select value={tier} onValueChange={setTier}>
+              <SelectTrigger className="mt-1 w-full sm:w-[170px]" data-testid="select-sponsor-tier">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="presenting">Presenting</SelectItem>
+                <SelectItem value="official">Official</SelectItem>
+                <SelectItem value="friend">Friend</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Button type="submit" disabled={busy} className="gap-1.5" data-testid="button-add-sponsor">
             <Plus className="h-4 w-4" /> {busy ? "Adding…" : "Add"}
           </Button>
@@ -1101,6 +1313,31 @@ function SponsorsCard({ eventId }: { eventId: number }) {
                   ) : (
                     <div className="text-xs text-muted-foreground">No link</div>
                   )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Select value={sp.tier || "friend"} onValueChange={(v) => patch(sp.id, { tier: v })}>
+                    <SelectTrigger className="h-8 w-[126px] text-xs" data-testid={`select-tier-${sp.id}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="presenting">Presenting</SelectItem>
+                      <SelectItem value="official">Official</SelectItem>
+                      <SelectItem value="friend">Friend</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={String(sp.packageId || 0)} onValueChange={(v) => assignPackage(sp, Number(v))}>
+                    <SelectTrigger className="h-8 w-[150px] text-xs" data-testid={`select-package-${sp.id}`}>
+                      <SelectValue placeholder="No package" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">No package</SelectItem>
+                      {(packages ?? []).map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.name} — {money(p.price)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex items-center gap-1">
                   <Button variant="ghost" size="icon" className="h-8 w-8" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move up">
@@ -3150,6 +3387,7 @@ export default function Admin() {
                     <div className="mt-6 flex flex-col gap-6">
                       <EventSettingsCard eventId={selectedEventId} />
                       <SignupsCard eventId={selectedEventId} />
+                      <SponsorPackagesCard eventId={selectedEventId} />
                       <SponsorsCard eventId={selectedEventId} />
                     </div>
                   )}
@@ -3175,6 +3413,7 @@ export default function Admin() {
                       <SignupsCard eventId={selectedEventId} />
                     </TabsContent>
                     <TabsContent value="sponsors" className="mt-6">
+                      <SponsorPackagesCard eventId={selectedEventId} />
                       <SponsorsCard eventId={selectedEventId} />
                     </TabsContent>
                   </>

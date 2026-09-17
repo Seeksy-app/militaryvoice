@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -15,6 +15,9 @@ import type {
   InsertProfile,
   SponsorRow,
   UpdateSponsor,
+  SponsorPackageRow,
+  SponsorPackageWithSold,
+  UpsertSponsorPackage,
   AdminUserRow,
   ShowAssetRow,
   RunItemRow,
@@ -593,6 +596,10 @@ export interface IStorage {
   createSponsor(data: { name: string; url: string; logoUrl: string; eventId: number }): Promise<SponsorRow>;
   updateSponsor(id: number, patch: UpdateSponsor): Promise<SponsorRow | undefined>;
   deleteSponsor(id: number): Promise<void>;
+  listSponsorPackages(eventId: number): Promise<SponsorPackageWithSold[]>;
+  createSponsorPackage(eventId: number, data: UpsertSponsorPackage): Promise<SponsorPackageRow>;
+  updateSponsorPackage(id: number, patch: Partial<UpsertSponsorPackage>): Promise<SponsorPackageRow | undefined>;
+  deleteSponsorPackage(id: number): Promise<void>;
   listAdmins(): Promise<AdminUserRow[]>;
   isAdminEmail(email: string): Promise<boolean>;
   addAdmin(email: string, name: string): Promise<AdminUserRow>;
@@ -1616,6 +1623,47 @@ class DatabaseStorage implements IStorage {
   async deleteSponsor(id: number): Promise<void> {
     await ready();
     await db.delete(sponsors).where(eq(sponsors.id, id));
+  }
+
+  /**
+   * Packages carry the price and the slot count; how many are taken is counted
+   * from the sponsors pointing at them rather than kept as a column, so the
+   * two can never disagree.
+   */
+  async listSponsorPackages(eventId: number): Promise<SponsorPackageWithSold[]> {
+    await ready();
+    const rows = await db
+      .select()
+      .from(sponsorPackages)
+      .where(inArray(sponsorPackages.eventId, [eventId, 0]))
+      .orderBy(asc(sponsorPackages.sortOrder), asc(sponsorPackages.id));
+    const assigned = await this.listSponsors(false, [eventId, 0]);
+    return rows.map((p) => ({
+      ...p,
+      sold: assigned.filter((s) => s.packageId === p.id && s.active).length,
+    }));
+  }
+
+  async createSponsorPackage(eventId: number, data: UpsertSponsorPackage): Promise<SponsorPackageRow> {
+    await ready();
+    const [created] = await db
+      .insert(sponsorPackages)
+      .values({ ...data, eventId, createdAt: new Date().toISOString() })
+      .returning();
+    return created;
+  }
+
+  async updateSponsorPackage(id: number, patch: Partial<UpsertSponsorPackage>): Promise<SponsorPackageRow | undefined> {
+    await ready();
+    const [updated] = await db.update(sponsorPackages).set(patch).where(eq(sponsorPackages.id, id)).returning();
+    return updated;
+  }
+
+  /** Removing a package leaves its sponsors in place, just unlinked. */
+  async deleteSponsorPackage(id: number): Promise<void> {
+    await ready();
+    await db.update(sponsors).set({ packageId: 0 }).where(eq(sponsors.packageId, id));
+    await db.delete(sponsorPackages).where(eq(sponsorPackages.id, id));
   }
 
   /**
