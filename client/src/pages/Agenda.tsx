@@ -194,7 +194,15 @@ export default function Agenda({ slug }: Props) {
                 {event?.tagline || "Every speaker, every slot, one lineup — share it, save it, or claim what's still open."}
               </p>
 
-              <div className="mt-6 flex flex-wrap items-center gap-3">
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <Link href="/watch">
+                  <span className="inline-flex items-center gap-2 rounded-full bg-[#F0A71F] px-5 py-2 text-sm font-semibold text-[#1a1200] transition-opacity hover:opacity-90">
+                    <Radio className="h-3.5 w-3.5" /> Watch Live
+                  </span>
+                </Link>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
                 <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Times shown in</span>
                 <TimeZoneSelect variant="dark" value={viewZone} onChange={setViewZone} onDetect={() => setViewZone(localZone)} localZone={localZone} />
               </div>

@@ -201,8 +201,13 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   // scroll — once you're on air you can't go hunting for a button.
   const isLive = view === "live";
   const [monitorMuted, setMonitorMuted] = useState(true);
-  const [mediaPicker, setMediaPicker] = useState<null | "image" | "video" | "all">(null);
+  const [mediaPicker, setMediaPicker] = useState<null | "image" | "video" | "all" | "presentations">(null);
   const [sceneName, setSceneName] = useState("");
+  const [agendaPickerOpen, setAgendaPickerOpen] = useState(false);
+  const [presName, setPresName] = useState("");
+  const [presFiles, setPresFiles] = useState<FileList | null>(null);
+  const [presUploading, setPresUploading] = useState(false);
+  const [presSlideIdx, setPresSlideIdx] = useState<Record<number, number>>({});
   const [stageMuted, setStageMuted] = useState(false);
   // The studio takes the whole window by default. Site nav, the logo, the
   // sign-in, the dashboard heading and the tabs are all noise when you're
@@ -305,6 +310,15 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     onError: (e: Error) => toast({ title: "Couldn't move them", description: e.message, variant: "destructive" }),
   });
 
+  const setTitle = useMutation({
+    mutationFn: async ({ id, displayTitle }: { id: number; displayTitle: string }) =>
+      adminSend("PATCH", `/api/admin/studio/participants/${id}/title`, { displayTitle }),
+    onSuccess: () => refresh(),
+  });
+
+  const [editingTitle, setEditingTitle] = useState<number | null>(null);
+  const [titleDraft, setTitleDraft] = useState("");
+
   const { data: feeds2 } = useQuery<
     { id: number; ownerEmail: string; displayName: string; url: string; keyHint: string; status: string }[]
   >({
@@ -321,10 +335,47 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
 
   // Shares a cache key with <Destinations>, so this is free.
   const { data: scenes } = useQuery<
-    { id: number; name: string; mediaUrl: string; mediaLabel: string }[]
+    { id: number; name: string; mediaUrl: string; mediaLabel: string; mediaKind: string }[]
   >({
     queryKey: ["/api/admin/scenes", studioId],
     queryFn: () => adminGet(`/api/admin/scenes${q}`),
+  });
+
+  type PresSlide = { id: number; slideIndex: number; url: string };
+  type Presentation = { id: number; name: string; createdAt: string; slides: PresSlide[] };
+  const { data: presData = [], refetch: refetchPres } = useQuery<Presentation[]>({
+    queryKey: ["/api/admin/studio/presentations", studioId],
+    queryFn: () => adminGet(`/api/admin/studio/presentations?studioId=${studioId}`),
+    enabled: !!studioId,
+  });
+
+  const putOnStage = useMutation({
+    mutationFn: async (body: Record<string, unknown>) =>
+      adminSend("POST", "/api/admin/studio/media", { ...body, studioId }),
+    onSuccess: () => refresh(),
+  });
+
+  async function uploadPresentation(e: React.FormEvent) {
+    e.preventDefault();
+    if (!presFiles || presFiles.length === 0 || !studioId) return;
+    setPresUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("studioId", String(studioId));
+      fd.append("name", presName.trim() || "Presentation");
+      for (const f of Array.from(presFiles)) fd.append("slides", f);
+      const res = await fetch("/api/admin/studio/presentations", { method: "POST", body: fd, credentials: "include" });
+      if (!res.ok) throw new Error(await res.text());
+      setPresName(""); setPresFiles(null); refetchPres();
+      toast({ title: "Presentation uploaded" });
+    } catch (err) {
+      toast({ title: "Upload failed", description: (err as Error).message, variant: "destructive" });
+    } finally { setPresUploading(false); }
+  }
+
+  const deletePresentation = useMutation({
+    mutationFn: async (id: number) => adminSend("DELETE", `/api/admin/studio/presentations/${id}`),
+    onSuccess: () => refetchPres(),
   });
 
   const afterTake = (r: { missing?: string | null }) => {
@@ -372,6 +423,26 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   const dropScene = useMutation({
     mutationFn: async (id: number) => adminSend("DELETE", `/api/admin/scenes/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/scenes", studioId] }),
+  });
+
+  const generateScenes = useMutation({
+    mutationFn: async () => (await adminSend("POST", "/api/admin/scenes/generate", { studioId })).json() as Promise<{ created: number; total: number }>,
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/scenes", studioId] });
+      toast({ title: `Generated ${r.created} scene${r.created !== 1 ? "s" : ""}`, description: `${r.total} items on the agenda.` });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't generate scenes", description: e.message, variant: "destructive" }),
+  });
+
+  const sceneFromAgenda = useMutation({
+    mutationFn: async ({ runItemId, name }: { runItemId: number; name: string }) =>
+      adminSend("POST", "/api/admin/scenes/from-agenda", { studioId, runItemId, name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/scenes", studioId] });
+      setAgendaPickerOpen(false);
+      toast({ title: "Scene added" });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't add scene", description: e.message, variant: "destructive" }),
   });
 
   const { data: dests } = useQuery<PublicDestination[]>({
@@ -514,11 +585,37 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
         <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={(p.displayName || "?").slice(0, 2).toUpperCase()} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">{p.displayName || "Unnamed"}</div>
-          <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-            {p.camReady ? <Video className="h-3 w-3 text-emerald-600" /> : <VideoOff className="h-3 w-3 text-destructive" />}
-            {p.micReady ? <Mic className="h-3 w-3 text-emerald-600" /> : <MicOff className="h-3 w-3 text-destructive" />}
-            <span className="truncate">{p.role}</span>
-          </div>
+          {editingTitle === p.id ? (
+            <form
+              className="mt-1 flex items-center gap-1"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setTitle.mutate({ id: p.id, displayTitle: titleDraft });
+                setEditingTitle(null);
+              }}
+            >
+              <input
+                autoFocus
+                className="h-6 flex-1 rounded border bg-background px-1.5 text-xs min-w-0"
+                placeholder="Lower third title…"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={() => { setTitle.mutate({ id: p.id, displayTitle: titleDraft }); setEditingTitle(null); }}
+              />
+            </form>
+          ) : (
+            <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+              {p.camReady ? <Video className="h-3 w-3 text-emerald-600" /> : <VideoOff className="h-3 w-3 text-destructive" />}
+              {p.micReady ? <Mic className="h-3 w-3 text-emerald-600" /> : <MicOff className="h-3 w-3 text-destructive" />}
+              <button
+                className="truncate hover:text-foreground transition-colors text-left"
+                title="Set lower third title"
+                onClick={() => { setEditingTitle(p.id); setTitleDraft(p.displayTitle || ""); }}
+              >
+                {p.displayTitle || <span className="italic opacity-60">+ lower third</span>}
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {stage ? (
@@ -562,7 +659,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   // the same subscription that powers the green-room thumbnails.
   const monitorTiles: StageTile[] = Array.from(feeds.values())
     .filter((f) => f.state === "On stage")
-    .map((f) => ({ identity: f.identity, name: f.name, video: f.video, audio: f.audio, speaking: f.speaking }))
+    .map((f) => ({ identity: f.identity, name: f.name, displayTitle: f.displayTitle, video: f.video, audio: f.audio, speaking: f.speaking }))
     .sort((a, b) => a.identity.localeCompare(b.identity));
 
   // Presence is what keeps the host in the room lists; without a heartbeat
@@ -1001,38 +1098,94 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   <div className="flex items-center justify-between gap-2 px-3 py-2">
                     <span className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
                       <ListOrdered className="h-3.5 w-3.5" /> Scenes
-                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-white/80">{(runItems ?? []).length}</span>
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-white/80">{(scenes ?? []).length}</span>
                     </span>
-                    <Button
-                      size="sm"
-                      className="h-7 gap-1 rounded-full bg-[#F0A71F] px-3 text-[12px] font-bold text-[#1a1200] hover:bg-[#f7b73a]"
-                      disabled={takeNext.isPending || takeRow.isPending}
-                      onClick={() => takeNext.mutate()}
-                      title="Take the next row of the agenda"
-                      data-testid="button-next-scene"
-                    >
-                      Next scene <ArrowDown className="h-3 w-3 -rotate-90" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        className="h-7 gap-1 rounded-full bg-[#F0A71F] px-3 text-[12px] font-bold text-[#1a1200] hover:bg-[#f7b73a]"
+                        disabled={takeNext.isPending || takeRow.isPending}
+                        onClick={() => takeNext.mutate()}
+                        title="Take the next row of the agenda"
+                        data-testid="button-next-scene"
+                      >
+                        Next scene <ArrowDown className="h-3 w-3 -rotate-90" />
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="ghost" className="h-7 w-7 rounded-full p-0 text-white/60 hover:bg-white/10 hover:text-white">
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem onClick={() => saveScene.mutate("Cameras")}>
+                            <Video className="mr-2 h-3.5 w-3.5" /> Camera only
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setAgendaPickerOpen(true)}>
+                            <ListOrdered className="mr-2 h-3.5 w-3.5" /> From agenda…
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => generateScenes.mutate()}
+                            disabled={generateScenes.isPending}
+                          >
+                            <Clapperboard className="mr-2 h-3.5 w-3.5" />
+                            {generateScenes.isPending ? "Generating…" : "Generate all from agenda"}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
 
                   {(scenes ?? []).length > 0 && (
-                    <div className="flex flex-wrap gap-1 px-3 pb-2">
+                    <div className="grid grid-cols-2 gap-1.5 px-3 pb-2">
                       {(scenes ?? []).map((sc) => {
                         const on = sc.mediaUrl
                           ? studio?.stageMediaPlaying && studio?.stageMediaUrl === sc.mediaUrl
                           : !studio?.stageMediaPlaying && !studio?.currentRunItemId;
+                        const thumb = sc.mediaUrl && (sc.mediaKind === "image" || /\.(jpe?g|png|webp|gif|svg)(\?|$)/i.test(sc.mediaUrl))
+                          ? sc.mediaUrl : null;
                         return (
-                          <button
-                            key={sc.id}
-                            type="button"
-                            onClick={() => applyScene.mutate(sc.id)}
-                            className={`rounded-md px-2 py-1 text-[11px] font-semibold ${
-                              on ? "bg-[#F0A71F] text-[#1a1200]" : "bg-white/8 text-white/75 hover:bg-white/15"
-                            }`}
-                            data-testid={`button-scene-${sc.id}`}
-                          >
-                            {sc.name}
-                          </button>
+                          <div key={sc.id} className="group relative">
+                            <button
+                              type="button"
+                              onClick={() => applyScene.mutate(sc.id)}
+                              className={`relative w-full overflow-hidden rounded-lg border-2 transition-all ${
+                                on ? "border-[#F0A71F] shadow-[0_0_8px_rgba(240,167,31,0.4)]" : "border-white/10 hover:border-white/30"
+                              }`}
+                              style={{ aspectRatio: "16/9" }}
+                              data-testid={`button-scene-${sc.id}`}
+                            >
+                              {thumb ? (
+                                <img src={thumb} alt={sc.name} className="absolute inset-0 h-full w-full object-cover" />
+                              ) : (
+                                <div className="absolute inset-0 flex items-center justify-center"
+                                  style={{ background: "linear-gradient(135deg,#0a1628 0%,#1a2a4a 100%)" }}>
+                                  {sc.mediaUrl ? (
+                                    <Film className="h-5 w-5 text-white/30" />
+                                  ) : (
+                                    <Video className="h-5 w-5 text-white/30" />
+                                  )}
+                                </div>
+                              )}
+                              <div className={`absolute inset-x-0 bottom-0 px-1.5 py-1 text-left ${thumb ? "bg-black/60" : ""}`}>
+                                <p className="truncate text-[10px] font-semibold leading-tight text-white">{sc.name}</p>
+                                {sc.mediaLabel && <p className="truncate text-[9px] text-white/60 leading-tight">{sc.mediaLabel}</p>}
+                              </div>
+                              {on && (
+                                <div className="absolute left-1.5 top-1.5 rounded-sm bg-[#F0A71F] px-1 py-0.5 text-[8px] font-black uppercase text-[#1a1200] leading-none">
+                                  LIVE
+                                </div>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              className="absolute right-1 top-1 hidden rounded-full bg-black/60 p-0.5 text-white/60 hover:text-white group-hover:flex"
+                              onClick={() => dropScene.mutate(sc.id)}
+                              title="Remove scene"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -1280,23 +1433,126 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
       )}
 
       <Dialog open={mediaPicker !== null} onOpenChange={(o) => !o && setMediaPicker(null)}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Put something on the stage</DialogTitle>
             <DialogDescription>
               This replaces the cameras on air until you stop it. The standby clip still overrides everything.
             </DialogDescription>
           </DialogHeader>
-          <MediaLibrary
-            adminGet={adminGet}
-            adminSend={adminSend}
-            studioId={studioId}
-            playingUrl={studio?.stageMediaUrl ?? ""}
-            isPlaying={Boolean(studio?.stageMediaPlaying)}
-            onChanged={refresh}
-            only={mediaPicker === "all" ? undefined : (mediaPicker ?? undefined)}
-            compact
-          />
+
+          {/* Tab bar */}
+          <div className="flex gap-1 rounded-lg bg-muted p-1 shrink-0">
+            {([["media", "Media Library"], ["presentations", "Presentations"]] as const).map(([tab, label]) => (
+              <button
+                key={tab}
+                className={`flex-1 rounded-md py-1.5 text-sm font-medium transition-colors ${mediaPicker === tab || (tab === "media" && mediaPicker !== "presentations") ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setMediaPicker(tab === "media" ? "all" : "presentations")}
+              >{label}</button>
+            ))}
+          </div>
+
+          {mediaPicker === "presentations" ? (
+            <div className="flex flex-col gap-4 overflow-y-auto">
+              {/* Upload form */}
+              <form onSubmit={uploadPresentation} className="flex flex-col gap-2 rounded-xl border border-dashed p-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Upload slide images</p>
+                <input
+                  className="text-sm"
+                  type="text"
+                  placeholder="Presentation name"
+                  value={presName}
+                  onChange={(e) => setPresName(e.target.value)}
+                />
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="text-sm"
+                  onChange={(e) => setPresFiles(e.target.files)}
+                />
+                <Button type="submit" size="sm" disabled={presUploading || !presFiles?.length} className="self-start gap-1.5">
+                  {presUploading ? "Uploading…" : `Upload ${presFiles?.length ?? 0} slide${(presFiles?.length ?? 0) !== 1 ? "s" : ""}`}
+                </Button>
+              </form>
+              {/* Presentation list */}
+              {presData.map((pres) => {
+                const cur = presSlideIdx[pres.id] ?? 0;
+                const slide = pres.slides[cur];
+                return (
+                  <div key={pres.id} className="rounded-xl border p-3 flex flex-col gap-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-semibold text-sm truncate">{pres.name}</p>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-xs text-muted-foreground">{cur + 1}/{pres.slides.length}</span>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" disabled={cur === 0} onClick={() => setPresSlideIdx((s) => ({ ...s, [pres.id]: cur - 1 }))}>‹</Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" disabled={cur >= pres.slides.length - 1} onClick={() => setPresSlideIdx((s) => ({ ...s, [pres.id]: cur + 1 }))}>›</Button>
+                        <Button size="sm" className="h-7 gap-1 px-2.5 text-xs" disabled={!slide} onClick={() => slide && putOnStage.mutate({ action: "play", url: slide.url, kind: "image", label: `${pres.name} · Slide ${cur + 1}` })}>
+                          On stage
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deletePresentation.mutate(pres.id)}>×</Button>
+                      </div>
+                    </div>
+                    {slide && <img src={slide.url} alt={`Slide ${cur + 1}`} className="w-full rounded-lg object-contain max-h-40 bg-black" />}
+                    {/* Slide strip */}
+                    <div className="flex gap-1 overflow-x-auto pb-1">
+                      {pres.slides.map((s, i) => (
+                        <button key={s.id} onClick={() => setPresSlideIdx((p) => ({ ...p, [pres.id]: i }))}
+                          className={`shrink-0 rounded border-2 ${i === cur ? "border-primary" : "border-transparent"}`}
+                        >
+                          <img src={s.url} alt={`Slide ${i + 1}`} className="h-12 w-20 object-contain rounded bg-black" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {presData.length === 0 && !presUploading && (
+                <p className="text-sm text-muted-foreground text-center py-4">No presentations yet. Upload slide images above.</p>
+              )}
+            </div>
+          ) : (
+            <MediaLibrary
+              adminGet={adminGet}
+              adminSend={adminSend}
+              studioId={studioId}
+              playingUrl={studio?.stageMediaUrl ?? ""}
+              isPlaying={Boolean(studio?.stageMediaPlaying)}
+              onChanged={refresh}
+              only={mediaPicker === "all" || mediaPicker === null ? undefined : (mediaPicker as "image" | "video")}
+              compact
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={agendaPickerOpen} onOpenChange={setAgendaPickerOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>From Agenda</DialogTitle>
+            <DialogDescription>Choose a run-of-show item to create a scene for.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-1 max-h-72 overflow-y-auto py-1">
+            {(runItems ?? []).length === 0 && (
+              <p className="text-sm text-muted-foreground px-1">No agenda items found.</p>
+            )}
+            {(runItems ?? []).map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                className="flex flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-muted transition-colors"
+                onClick={() => sceneFromAgenda.mutate({ runItemId: r.id, name: r.title })}
+                disabled={sceneFromAgenda.isPending}
+              >
+                <span className="text-sm font-medium">{r.title}</span>
+                {r.startAtUtc && (
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(r.startAtUtc).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </DialogContent>
       </Dialog>
 

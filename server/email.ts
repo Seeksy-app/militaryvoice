@@ -49,8 +49,7 @@ export function emailShell(o: {
                   <tr>
                     <td style="background:linear-gradient(135deg,rgba(5,56,119,0.90) 0%,rgba(5,56,119,0.60) 100%);padding:32px 36px 38px;">
                       <img src="${SITE}/logo-wave.png" width="80" height="24" alt="" style="display:block;border:0;margin:0 0 16px;">
-                      <p style="margin:0 0 8px;color:#ffffff;font-size:34px;font-weight:800;line-height:1.1;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">MilitaryVoice.ai</p>
-                      <p style="margin:0;color:#F0A71F;font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">${escapeHtml(o.eyebrow)}</p>
+                      <p style="margin:0;color:#F0A71F;font-size:11px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;opacity:0.75;">${escapeHtml(o.eyebrow)}</p>
                     </td>
                   </tr>
                 </table>
@@ -682,8 +681,8 @@ function textToHtml(text: string): string {
 const BROADCAST_BANNERS: Record<string, string> = {
   welcome: `${SITE}/listeners-bg.jpg`,
   podcasters: `${SITE}/podcasters-bg.jpg`,
-  marathon: `${SITE}/event-marathon.jpg`,
-  schedule: `${SITE}/schedule-hero.jpg`,
+  marathon: `${SITE}/hero-3.jpg`,
+  schedule: `${SITE}/agenda-bg.jpg`,
 };
 
 const RICO_PHOTO = `${SITE}/riccoh-player.jpg`;

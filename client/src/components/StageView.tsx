@@ -31,6 +31,8 @@ export interface RoomMeta {
 export interface StageTile {
   identity: string;
   name: string;
+  /** e.g. "Host · Army Ranger" shown in the lower third */
+  displayTitle?: string;
   /** A remote participant's track, or the producer's own local one when they're on camera. */
   video: Track | null;
   audio: Track | null;
@@ -77,7 +79,7 @@ export function useStageRoom(url: string | null, token: string | null, muted: bo
           if (pub.kind === Track.Kind.Video) video = pub.track;
           if (pub.kind === Track.Kind.Audio) audio = pub.track;
         });
-        next.push({ identity: p.identity, name: p.name || p.identity, video, audio, speaking: p.isSpeaking });
+        next.push({ identity: p.identity, name: p.name || p.identity, displayTitle: p.attributes?.displayTitle || "", video, audio, speaking: p.isSpeaking });
       });
       next.sort((a, b) => a.identity.localeCompare(b.identity));
       setTiles(next);
@@ -193,11 +195,22 @@ function Tile({ tile, muted }: { tile: StageTile; muted: boolean }) {
         </div>
       )}
 
-      <div className="absolute bottom-3 left-3 flex items-center gap-2.5 rounded-lg bg-[#000741]/85 px-3.5 py-1.5 backdrop-blur-sm">
-        <span className="h-5 w-1 rounded-full bg-[#F0A71F]" />
-        <span className="whitespace-nowrap text-base font-semibold text-white" style={HEADLINE_FONT}>
-          {tile.name}
-        </span>
+      {/* Lower third — broadcast-style name bar */}
+      <div className="absolute bottom-0 left-0 right-0 px-3 pb-3">
+        <div className="flex items-stretch overflow-hidden rounded-md shadow-lg" style={{ maxWidth: "calc(100% - 0px)" }}>
+          {/* Accent stripe */}
+          <div className="w-1 shrink-0 bg-[#F0A71F]" />
+          <div className="bg-[#000741]/90 backdrop-blur-sm px-3 py-1.5 min-w-0">
+            <p className="whitespace-nowrap text-sm font-bold leading-tight text-white truncate" style={HEADLINE_FONT}>
+              {tile.name}
+            </p>
+            {tile.displayTitle && (
+              <p className="whitespace-nowrap text-xs leading-tight text-[#F0A71F]/90 truncate" style={HEADLINE_FONT}>
+                {tile.displayTitle}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

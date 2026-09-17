@@ -105,10 +105,10 @@ export async function syncRoomMetadata(room: string, data: Record<string, unknow
   }
 }
 
-export async function syncParticipantState(room: string, identity: string, state: string): Promise<void> {
+export async function syncParticipantState(room: string, identity: string, state: string, extra?: Record<string, string>): Promise<void> {
   if (!isLiveKitConfigured()) return;
   try {
-    await rooms().updateParticipant(room, identity, { attributes: { state } });
+    await rooms().updateParticipant(room, identity, { attributes: { state, ...(extra ?? {}) } });
   } catch {
     /* not connected yet — they'll carry the state in their own token instead */
   }

@@ -22,6 +22,7 @@ import Studio from "@/pages/Studio";
 import StudioComposite from "@/pages/StudioComposite";
 import Watch from "@/pages/Watch";
 import { PrivacyPolicy, TermsOfService } from "@/pages/Legal";
+import NationalMilitaryPodcastDay from "@/pages/NationalMilitaryPodcastDay";
 
 /**
  * Client-side navigation keeps the old scroll position by default. Every
@@ -82,6 +83,7 @@ function AppRouter() {
       <Route path="/studio">{() => <Studio />}</Route>
       <Route path="/event/:slug/studio">{(params) => <Studio slug={params.slug} />}</Route>
       <Route path="/admin">{() => <Admin />}</Route>
+      <Route path="/national-military-podcast-day">{() => <NationalMilitaryPodcastDay />}</Route>
       <Route path="/host/dashboard">{() => <HostDashboard />}</Route>
       <Route component={NotFound} />
     </Switch>

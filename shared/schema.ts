@@ -870,6 +870,7 @@ export const studioParticipants = pgTable("studio_participants", {
   // Browser-generated, stored client side, so a refresh rejoins as the same person.
   clientKey: text("client_key").notNull(),
   displayName: text("display_name").notNull().default(""),
+  displayTitle: text("display_title").notNull().default(""),
   email: text("email").notNull().default(""),
   role: text("role").notNull().default("Speaker"),
   // Set when they arrive through their own link (/studio?s=<signup>), so a
@@ -956,6 +957,8 @@ export const broadcasts = pgTable("broadcasts", {
   banner: text("banner").notNull().default("welcome"),
   recipientCount: integer("recipient_count"),
   sentAt: text("sent_at"),
+  scheduledFor: text("scheduled_for"),
+  source: text("source").notNull().default("manual"),
   createdAt: text("created_at").notNull(),
 });
 export type BroadcastRow = typeof broadcasts.$inferSelect;
@@ -990,3 +993,32 @@ export const broadcastEvents = pgTable("broadcast_events", {
   url: text("url").notNull().default(""), // for click events
 });
 export type BroadcastEvent = typeof broadcastEvents.$inferSelect;
+
+// Log of CSV import batches — one row per import action
+export const contactImports = pgTable("contact_imports", {
+  id: serial("id").primaryKey(),
+  importedByEmail: text("imported_by_email").notNull().default(""),
+  inserted: integer("inserted").notNull().default(0),
+  updated: integer("updated").notNull().default(0),
+  total: integer("total").notNull().default(0),
+  importedAt: text("imported_at").notNull(),
+});
+export type ContactImport = typeof contactImports.$inferSelect;
+
+// Slide decks uploaded by a producer or podcaster for a show
+export const presentations = pgTable("presentations", {
+  id: serial("id").primaryKey(),
+  studioId: integer("studio_id").notNull(),
+  name: text("name").notNull().default("Presentation"),
+  createdAt: text("created_at").notNull(),
+});
+export type PresentationRow = typeof presentations.$inferSelect;
+
+export const presentationSlides = pgTable("presentation_slides", {
+  id: serial("id").primaryKey(),
+  presentationId: integer("presentation_id").notNull(),
+  slideIndex: integer("slide_index").notNull().default(0),
+  url: text("url").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+export type PresentationSlideRow = typeof presentationSlides.$inferSelect;

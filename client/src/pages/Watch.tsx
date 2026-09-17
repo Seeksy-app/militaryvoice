@@ -32,6 +32,8 @@ export default function Watch({ slug }: { slug?: string }) {
     return Number.isFinite(v) && v > 0 ? v : undefined;
   });
 
+  const embed = new URLSearchParams(window.location.search).get("embed") === "1";
+
   const { data } = useQuery<WatchToken>({
     queryKey: ["/api/watch/token", slug ?? "featured", studioId ?? 0],
     queryFn: async () => {
@@ -54,45 +56,47 @@ export default function Watch({ slug }: { slug?: string }) {
   }, [data?.eventName]);
 
   return (
-    <div className="min-h-screen bg-[#04102b] text-white">
-      <NavBar />
+    <div className={embed ? "bg-[#04102b] text-white overflow-hidden" : "min-h-screen bg-[#04102b] text-white"}>
+      {!embed && <NavBar />}
 
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
-              {data?.eventName ?? "Live"}
-            </h1>
-            <p className="mt-1 text-sm text-white/55">
-              {data?.studioName ?? "Main studio"}
-              {connected ? "" : " · connecting…"}
-            </p>
+      <div className={embed ? "p-0" : "mx-auto max-w-6xl px-4 py-8 sm:px-6"}>
+        {!embed && (
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
+                {data?.eventName ?? "Live"}
+              </h1>
+              <p className="mt-1 text-sm text-white/55">
+                {data?.studioName ?? "Main studio"}
+                {connected ? "" : " · connecting…"}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {live ? (
+                <span className="inline-flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.14em]">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> Live
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white/70">
+                  <Radio className="h-3 w-3" /> Off air
+                </span>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                onClick={() => setMuted((v) => !v)}
+                data-testid="button-watch-sound"
+              >
+                {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
+                {muted ? "Sound off" : "Sound on"}
+              </Button>
+            </div>
           </div>
+        )}
 
-          <div className="flex items-center gap-2">
-            {live ? (
-              <span className="inline-flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.14em]">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> Live
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white/70">
-                <Radio className="h-3 w-3" /> Off air
-              </span>
-            )}
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-              onClick={() => setMuted((v) => !v)}
-              data-testid="button-watch-sound"
-            >
-              {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-              {muted ? "Sound off" : "Sound on"}
-            </Button>
-          </div>
-        </div>
-
-        <div className="relative mt-5 aspect-video w-full overflow-hidden rounded-2xl border border-white/12 bg-[#000741] shadow-2xl">
+        <div className={`relative w-full overflow-hidden bg-[#000741] ${embed ? "h-full aspect-video" : "mt-5 aspect-video rounded-2xl border border-white/12 shadow-2xl"}`}>
           {data && !data.configured ? (
             <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center">
               <img src="/logo-wave.png?v=2" alt="" className="h-16 w-auto opacity-80" />

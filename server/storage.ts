@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, type EventTeamMember, type SegmentRow } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -39,7 +39,7 @@ import type {
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { and, eq, ne, asc, desc, isNull, inArray } from "drizzle-orm";
+import { and, eq, ne, asc, desc, isNull, inArray, lte } from "drizzle-orm";
 import { ensureSchema as syncSchemaFromDefinitions, schemaFingerprint } from "./schemaSync.js";
 
 // Resolve the Postgres connection string lazily (not at module load) so a
@@ -652,6 +652,7 @@ export interface IStorage {
     v: Partial<StudioParticipantRow>,
   ): Promise<StudioParticipantRow>;
   setParticipantState(id: number, state: string): Promise<StudioParticipantRow | undefined>;
+  setParticipantTitle(id: number, displayTitle: string): Promise<StudioParticipantRow | undefined>;
   removeStudioParticipant(id: number): Promise<void>;
   createRecording(v: {
     eventId: number;
@@ -933,6 +934,12 @@ class DatabaseStorage implements IStorage {
   async listRunOfShow(eventId: number): Promise<RunItemRow[]> {
     await ready();
     return db.select().from(runOfShow).where(eq(runOfShow.eventId, eventId)).orderBy(asc(runOfShow.sortIndex), asc(runOfShow.id));
+  }
+
+  async getRunItem(id: number): Promise<RunItemRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(runOfShow).where(eq(runOfShow.id, id)).limit(1);
+    return row;
   }
 
   /**
@@ -1345,6 +1352,12 @@ class DatabaseStorage implements IStorage {
   async setParticipantState(id: number, state: string): Promise<StudioParticipantRow | undefined> {
     await ready();
     const [row] = await db.update(studioParticipants).set({ state }).where(eq(studioParticipants.id, id)).returning();
+    return row;
+  }
+
+  async setParticipantTitle(id: number, displayTitle: string): Promise<StudioParticipantRow | undefined> {
+    await ready();
+    const [row] = await db.update(studioParticipants).set({ displayTitle }).where(eq(studioParticipants.id, id)).returning();
     return row;
   }
 
@@ -1812,8 +1825,9 @@ class DatabaseStorage implements IStorage {
     return rows.map((r) => ({ email: r.email, firstName: r.hostName.split(" ")[0] }));
   }
 
-  async createBroadcast(data: { subject: string; bodyText: string; eventId?: number | null; segment?: string; sender?: string; banner?: string }): Promise<BroadcastRow> {
+  async createBroadcast(data: { subject: string; bodyText: string; eventId?: number | null; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null; source?: string }): Promise<BroadcastRow> {
     await ready();
+    const isScheduled = !!data.scheduledFor;
     const [row] = await db.insert(broadcasts).values({
       subject: data.subject,
       bodyText: data.bodyText,
@@ -1821,13 +1835,15 @@ class DatabaseStorage implements IStorage {
       segment: data.segment ?? "contacts",
       sender: data.sender ?? "team",
       banner: data.banner ?? "welcome",
-      status: "draft",
+      status: isScheduled ? "scheduled" : "draft",
+      scheduledFor: data.scheduledFor ?? null,
+      source: data.source ?? "manual",
       createdAt: new Date().toISOString(),
     }).returning();
     return row;
   }
 
-  async updateBroadcast(id: number, data: { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string }): Promise<BroadcastRow | null> {
+  async updateBroadcast(id: number, data: { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null }): Promise<BroadcastRow | null> {
     await ready();
     const patch: Partial<BroadcastRow> = {};
     if (data.subject !== undefined) patch.subject = data.subject;
@@ -1835,9 +1851,20 @@ class DatabaseStorage implements IStorage {
     if (data.segment !== undefined) patch.segment = data.segment;
     if (data.sender !== undefined) patch.sender = data.sender;
     if (data.banner !== undefined) patch.banner = data.banner;
+    if ("scheduledFor" in data) {
+      patch.scheduledFor = data.scheduledFor ?? null;
+      patch.status = data.scheduledFor ? "scheduled" : "draft";
+    }
     if (Object.keys(patch).length === 0) return null;
-    const [row] = await db.update(broadcasts).set(patch).where(and(eq(broadcasts.id, id), eq(broadcasts.status, "draft"))).returning();
+    const [row] = await db.update(broadcasts).set(patch).where(and(eq(broadcasts.id, id), inArray(broadcasts.status, ["draft", "scheduled"]))).returning();
     return row ?? null;
+  }
+
+  async listScheduledBroadcasts(): Promise<BroadcastRow[]> {
+    await ready();
+    const now = new Date().toISOString();
+    return db.select().from(broadcasts)
+      .where(and(eq(broadcasts.status, "scheduled"), lte(broadcasts.scheduledFor, now)));
   }
 
   async markBroadcastSent(id: number, recipientCount: number): Promise<void> {
@@ -1847,7 +1874,37 @@ class DatabaseStorage implements IStorage {
 
   async deleteBroadcast(id: number): Promise<void> {
     await ready();
-    await db.delete(broadcasts).where(and(eq(broadcasts.id, id), eq(broadcasts.status, "draft")));
+    await db.delete(broadcasts).where(and(eq(broadcasts.id, id), inArray(broadcasts.status, ["draft", "scheduled"])));
+  }
+
+  async incrementCadenceBroadcast(eventId: number, kind: string, sentCount: number): Promise<void> {
+    await ready();
+    const label = kind === "prep" ? "Prep Nudge (2 weeks out)" : kind === "final" ? "Final Nudge (2 days out)" : kind === "onair" ? "On-Air Nudge (1 hour out)" : kind === "confirmation" ? "Booking Confirmation" : kind;
+    const existing = await db.select().from(broadcasts)
+      .where(and(eq(broadcasts.eventId, eventId), eq(broadcasts.source, `cadence:${kind}`)))
+      .limit(1);
+    if (existing.length > 0) {
+      const row = existing[0];
+      await db.update(broadcasts).set({
+        recipientCount: (row.recipientCount ?? 0) + sentCount,
+        sentAt: new Date().toISOString(),
+        status: "sent",
+      }).where(eq(broadcasts.id, row.id));
+    } else {
+      await db.insert(broadcasts).values({
+        eventId,
+        subject: label,
+        bodyText: "",
+        segment: "signups",
+        sender: "team",
+        banner: "welcome",
+        status: "sent",
+        source: `cadence:${kind}`,
+        recipientCount: sentCount,
+        sentAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      });
+    }
   }
 
   // ── Event team ────────────────────────────────────────────────────────────
@@ -2009,6 +2066,84 @@ class DatabaseStorage implements IStorage {
   async listContactsEnriched(limit = 200): Promise<ContactRow[]> {
     await ready();
     return db.select().from(contacts).orderBy(desc(contacts.importedAt)).limit(limit);
+  }
+
+  // ---- Import log -------------------------------------------------------------
+
+  async recordImport(importedByEmail: string, inserted: number, updated: number, total: number): Promise<void> {
+    await ready();
+    await db.insert(contactImports).values({ importedByEmail, inserted, updated, total, importedAt: new Date().toISOString() });
+  }
+
+  async listImports(): Promise<ContactImport[]> {
+    await ready();
+    return db.select().from(contactImports).orderBy(desc(contactImports.importedAt)).limit(50);
+  }
+
+  // ---- Broadcast engagement recipients ----------------------------------------
+
+  async getEngagementRecipients(
+    broadcastId: number,
+    engagementType: "delivered" | "opened" | "clicked" | "bounced" | "unopened",
+  ): Promise<{ email: string; firstName: string; lastName: string }[]> {
+    await ready();
+    const sends = await db.select().from(broadcastSends).where(eq(broadcastSends.broadcastId, broadcastId));
+    const ids = sends.map((s) => s.resendId).filter(Boolean);
+    if (ids.length === 0) return [];
+
+    let matchedEmails: string[];
+
+    if (engagementType === "unopened") {
+      // delivered but never opened
+      const deliveredEvts = await db.select().from(broadcastEvents).where(
+        and(inArray(broadcastEvents.resendId, ids), eq(broadcastEvents.eventType, "delivered"))
+      );
+      const deliveredIds = new Set(deliveredEvts.map((e) => e.resendId));
+      const openedEvts = await db.select().from(broadcastEvents).where(
+        and(inArray(broadcastEvents.resendId, ids), eq(broadcastEvents.eventType, "opened"))
+      );
+      const openedIds = new Set(openedEvts.map((e) => e.resendId));
+      matchedEmails = sends
+        .filter((s) => deliveredIds.has(s.resendId) && !openedIds.has(s.resendId))
+        .map((s) => s.email);
+    } else {
+      const evts = await db.select().from(broadcastEvents).where(
+        and(inArray(broadcastEvents.resendId, ids), eq(broadcastEvents.eventType, engagementType))
+      );
+      const matchedIds = new Set(evts.map((e) => e.resendId));
+      matchedEmails = sends.filter((s) => matchedIds.has(s.resendId)).map((s) => s.email);
+    }
+
+    const uniqueEmails = Array.from(new Set(matchedEmails));
+    if (uniqueEmails.length === 0) return [];
+    const rows = await db.select().from(contacts).where(inArray(contacts.email, uniqueEmails));
+    const byEmail = new Map(rows.map((r) => [r.email.toLowerCase(), r]));
+    return uniqueEmails.map((e) => {
+      const c = byEmail.get(e.toLowerCase());
+      return { email: e, firstName: c?.firstName ?? "", lastName: c?.lastName ?? "" };
+    });
+  }
+  async createPresentation(studioId: number, name: string, slideUrls: string[]): Promise<PresentationRow> {
+    await ready();
+    const [pres] = await db.insert(presentations).values({ studioId, name, createdAt: new Date().toISOString() }).returning();
+    if (slideUrls.length > 0) {
+      await db.insert(presentationSlides).values(slideUrls.map((url, i) => ({ presentationId: pres.id, slideIndex: i, url, createdAt: new Date().toISOString() })));
+    }
+    return pres;
+  }
+
+  async listPresentations(studioId: number): Promise<(PresentationRow & { slides: PresentationSlideRow[] })[]> {
+    await ready();
+    const preses = await db.select().from(presentations).where(eq(presentations.studioId, studioId)).orderBy(desc(presentations.createdAt));
+    if (preses.length === 0) return [];
+    const allSlides = await db.select().from(presentationSlides).where(inArray(presentationSlides.presentationId, preses.map((p) => p.id))).orderBy(presentationSlides.slideIndex);
+    return preses.map((p) => ({ ...p, slides: allSlides.filter((s) => s.presentationId === p.id) }));
+  }
+
+  async deletePresentation(id: number): Promise<void> {
+    await ready();
+    await db.delete(presentationSlides).where(eq(presentationSlides.presentationId, id));
+    await db.delete(presentations).where(eq(presentations.id, id));
   }
 }
 

@@ -1426,6 +1426,9 @@ type ContactRow = { id: number; email: string; firstName: string; lastName: stri
 type SegmentRow = { id: number; eventId: number | null; name: string; filterJson: string; createdAt: string };
 type SendRow = { id: number; broadcastId: number; email: string; resendId: string; sentAt: string };
 type BroadcastEventRow = { id: number; resendId: string; eventType: string; occurredAt: string; url: string };
+type ContactImport = { id: number; importedByEmail: string; inserted: number; updated: number; total: number; importedAt: string };
+type SignupSummary = { id: number; podcastName: string; hostName: string; email: string; phone: string; slotIndex: number; branch: string; serviceStatus: string; socialLinks: string };
+type EngagementRecipient = { email: string; firstName: string; lastName: string };
 
 const LIFECYCLE_LABELS: Record<string, string> = { lead: "Lead", engaged: "Engaged", signed_up: "Signed Up", no_show: "No Show", alumni: "Alumni" };
 const LIFECYCLE_COLORS: Record<string, string> = {
@@ -1435,7 +1438,7 @@ const LIFECYCLE_COLORS: Record<string, string> = {
   no_show: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
   alumni: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
 };
-type BroadcastRow = { id: number; eventId: number | null; subject: string; bodyText: string; segment: string; sender: string | null; banner: string | null; status: string; recipientCount: number | null; sentAt: string | null; createdAt: string };
+type BroadcastRow = { id: number; eventId: number | null; subject: string; bodyText: string; segment: string; sender: string | null; banner: string | null; status: string; recipientCount: number | null; sentAt: string | null; scheduledFor: string | null; source: string; createdAt: string };
 
 // ---------------------------------------------------------------------------
 // Shared broadcast compose + list (used by both CrmPanel and CrmEventPanel)
@@ -1584,27 +1587,33 @@ function BroadcastsSection({
                   <p className="text-xs text-muted-foreground">
                     {b.status === "sent"
                       ? `Sent ${b.sentAt ? new Date(b.sentAt).toLocaleDateString() : ""} · ${b.recipientCount} recipients`
+                      : b.status === "scheduled" && b.scheduledFor
+                      ? `Scheduled for ${new Date(b.scheduledFor).toLocaleString()} · ${SEGMENT_LABELS[b.segment] ?? b.segment}`
                       : `Draft · ${SEGMENT_LABELS[b.segment] ?? b.segment} · ${new Date(b.createdAt).toLocaleDateString()}`}
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {b.status === "draft" && (
+                  {(b.status === "draft" || b.status === "scheduled") && !b.source.startsWith("cadence:") && (
                     <>
                       <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => startEdit(b)}>Edit</Button>
-                      <Button
-                        size="sm"
-                        className="h-7 text-xs"
-                        disabled={bBusy || recipientPreview(b.segment) === 0}
-                        onClick={() => sendBroadcast(b)}
-                      >
-                        Send to {recipientPreview(b.segment)}
-                      </Button>
+                      {b.status === "draft" && (
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={bBusy || recipientPreview(b.segment) === 0}
+                          onClick={() => sendBroadcast(b)}
+                        >
+                          Send to {recipientPreview(b.segment)}
+                        </Button>
+                      )}
                       <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteBroadcast(b.id)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </>
                   )}
-                  {b.status === "sent" && <Badge className="text-[11px]">Sent</Badge>}
+                  {b.status === "sent" && !b.source.startsWith("cadence:") && <Badge className="text-[11px]">Sent</Badge>}
+                  {b.status === "sent" && b.source.startsWith("cadence:") && <Badge variant="secondary" className="text-[11px]">Auto · {b.recipientCount}</Badge>}
+                  {b.status === "scheduled" && <Badge variant="outline" className="text-[11px] border-amber-400 text-amber-600 dark:text-amber-400">Scheduled</Badge>}
                 </div>
               </div>
             ))}
@@ -1951,12 +1960,35 @@ function EventTeamPanel({ eventId }: { eventId: number }) {
 // ContactDrawer — slide-in panel showing a contact's engagement history
 // ---------------------------------------------------------------------------
 
-function ContactDrawer({ contact, onClose, broadcastList }: { contact: ContactRow; onClose: () => void; broadcastList: BroadcastRow[] }) {
+function ContactDrawer({ contact, onClose, broadcastList, eventId }: {
+  contact: ContactRow | EngagementRecipient;
+  onClose: () => void;
+  broadcastList: BroadcastRow[];
+  eventId: number;
+}) {
   const queryClient = useQueryClient();
+  const email = contact.email;
+
   const { data: history } = useQuery<{ sends: SendRow[]; events: BroadcastEventRow[] }>({
-    queryKey: ["/api/admin/contacts", contact.email, "history"],
-    queryFn: () => adminGet<{ sends: SendRow[]; events: BroadcastEventRow[] }>(`/api/admin/contacts/${encodeURIComponent(contact.email)}/history`),
+    queryKey: ["/api/admin/contacts", email, "history"],
+    queryFn: () => adminGet<{ sends: SendRow[]; events: BroadcastEventRow[] }>(`/api/admin/contacts/${encodeURIComponent(email)}/history`),
   });
+
+  const { data: signup } = useQuery<SignupSummary>({
+    queryKey: ["/api/admin/signup-by-email", eventId, email],
+    queryFn: () => adminGet<SignupSummary>(`/api/admin/events/${eventId}/signup-by-email?email=${encodeURIComponent(email)}`),
+    retry: false,
+  });
+
+  const { data: contactDetail } = useQuery<ContactRow>({
+    queryKey: ["/api/admin/contacts", email],
+    queryFn: async () => {
+      const rows = await adminGet<ContactRow[]>("/api/admin/contacts");
+      return rows.find((c) => c.email.toLowerCase() === email.toLowerCase()) as ContactRow;
+    },
+  });
+
+  const fullContact = contactDetail ?? (contact as ContactRow);
 
   const broadcastById = new Map(broadcastList.map((b) => [b.id, b]));
   const eventsByResendId = new Map<string, BroadcastEventRow[]>();
@@ -1965,11 +1997,13 @@ function ContactDrawer({ contact, onClose, broadcastList }: { contact: ContactRo
   }
 
   async function setStage(stage: string) {
-    await adminSend("PATCH", `/api/admin/contacts/${encodeURIComponent(contact.email)}/lifecycle`, { stage });
+    await adminSend("PATCH", `/api/admin/contacts/${encodeURIComponent(email)}/lifecycle`, { stage });
     queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts", email] });
   }
 
   const stages = ["lead", "engaged", "signed_up", "no_show", "alumni"];
+  const displayName = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || email;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
@@ -1977,27 +2011,66 @@ function ContactDrawer({ contact, onClose, broadcastList }: { contact: ContactRo
       <div className="relative w-full max-w-md bg-background border-l shadow-xl flex flex-col h-full overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b">
           <div>
-            <p className="font-semibold text-base">{contact.firstName} {contact.lastName}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{contact.email}</p>
+            <p className="font-semibold text-base">{displayName}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{email}</p>
+            {signup && <span className="inline-block mt-1 text-xs bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 px-2 py-0.5 rounded-full font-medium">Signed up</span>}
           </div>
           <Button size="icon" variant="ghost" onClick={onClose}><span className="text-lg">×</span></Button>
         </div>
         <div className="p-5 space-y-5">
-          {/* Lifecycle stage */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Lifecycle stage</p>
-            <div className="flex flex-wrap gap-1.5">
-              {stages.map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setStage(s)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${contact.lifecycleStage === s ? LIFECYCLE_COLORS[s] + " border-current" : "border-border text-muted-foreground hover:border-foreground/30"}`}
-                >
-                  {LIFECYCLE_LABELS[s]}
-                </button>
-              ))}
+
+          {/* Signup details */}
+          {signup && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Registration</p>
+              <div className="rounded-lg border p-3 space-y-1.5 text-sm">
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">Podcast</span>
+                  <span className="font-medium text-right">{signup.podcastName}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">Host</span>
+                  <span className="font-medium text-right">{signup.hostName}</span>
+                </div>
+                {signup.phone && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Phone</span>
+                    <span className="font-medium text-right">{signup.phone}</span>
+                  </div>
+                )}
+                {signup.branch && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Branch</span>
+                    <span className="font-medium text-right">{signup.branch} {signup.serviceStatus}</span>
+                  </div>
+                )}
+                {signup.socialLinks && (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Social</span>
+                    <span className="font-medium text-right text-xs truncate max-w-[60%]">{signup.socialLinks}</span>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Lifecycle stage (only for contacts with a CRM row) */}
+          {"lifecycleStage" in fullContact && fullContact.lifecycleStage && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Lifecycle stage</p>
+              <div className="flex flex-wrap gap-1.5">
+                {stages.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setStage(s)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${fullContact.lifecycleStage === s ? LIFECYCLE_COLORS[s] + " border-current" : "border-border text-muted-foreground hover:border-foreground/30"}`}
+                  >
+                    {LIFECYCLE_LABELS[s]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Email history */}
           <div>
@@ -2006,7 +2079,7 @@ function ContactDrawer({ contact, onClose, broadcastList }: { contact: ContactRo
               <p className="text-sm text-muted-foreground">No broadcasts sent yet.</p>
             ) : (
               <div className="space-y-3">
-                {history.sends.map((send) => {
+                {Array.from(new Map(history.sends.map((s) => [s.broadcastId, s])).values()).map((send) => {
                   const broadcast = broadcastById.get(send.broadcastId);
                   const evts = eventsByResendId.get(send.resendId) ?? [];
                   const types = new Set(evts.map((e) => e.eventType));
@@ -2019,7 +2092,7 @@ function ContactDrawer({ contact, onClose, broadcastList }: { contact: ContactRo
                         {types.has("opened") && <span className="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">👁 Opened</span>}
                         {types.has("clicked") && <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">🔗 Clicked</span>}
                         {types.has("bounced") && <span className="text-xs bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">⚠ Bounced</span>}
-                        {evts.length === 0 && <span className="text-xs text-muted-foreground">No events recorded</span>}
+                        {evts.length === 0 && <span className="text-xs text-muted-foreground">Sent — no events recorded</span>}
                       </div>
                     </div>
                   );
@@ -2039,12 +2112,13 @@ function ContactDrawer({ contact, onClose, broadcastList }: { contact: ContactRo
 
 type BroadcastStats = { sent: number; delivered: number; opened: number; clicked: number; bounced: number };
 
-function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onConfirm, onDelete }: {
+function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onConfirm, onDelete, onViewEngagement }: {
   b: BroadcastRow; eventId: number; dimmed: boolean; bBusy: boolean;
   recipientCount: (seg: string) => number;
   onEdit: (b: BroadcastRow) => void;
   onConfirm: (b: BroadcastRow) => void;
   onDelete: (id: number) => void;
+  onViewEngagement: (broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) => void;
 }) {
   const { data: stats } = useQuery<BroadcastStats>({
     queryKey: ["/api/admin/broadcasts", b.id, "stats"],
@@ -2052,15 +2126,6 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
     enabled: b.status === "sent",
     staleTime: 60_000,
   });
-
-  async function downloadEngaged() {
-    const rows = await adminGet<{ email: string }[]>(`/api/admin/broadcasts/${b.id}/engaged?types=opened,clicked`);
-    const csv = "email\n" + rows.map((r) => r.email).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `engaged-broadcast-${b.id}.csv`;
-    a.click();
-  }
 
   return (
     <div className={`border rounded-xl px-4 py-3 flex items-start justify-between gap-3 transition-opacity ${dimmed ? "opacity-40 pointer-events-none" : ""}`}>
@@ -2070,44 +2135,42 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
           {SEGMENT_LABELS[b.segment] ?? b.segment} ·{" "}
           {b.status === "sent"
             ? `Sent ${b.sentAt ? new Date(b.sentAt).toLocaleDateString() : ""} · ${b.recipientCount} recipients`
+            : b.status === "scheduled" && b.scheduledFor
+            ? `Scheduled for ${new Date(b.scheduledFor).toLocaleString()}`
             : `Draft · ${new Date(b.createdAt).toLocaleDateString()}`}
         </p>
         {b.status === "sent" && stats && (
-          <div className="flex gap-3 mt-1.5 text-xs">
-            <span className="text-muted-foreground">📬 {stats.delivered} delivered</span>
-            <span className="text-blue-600 dark:text-blue-400">👁 {stats.opened} opened</span>
-            <span className="text-green-600 dark:text-green-400">🔗 {stats.clicked} clicked</span>
-            {stats.bounced > 0 && <span className="text-destructive">⚠ {stats.bounced} bounced</span>}
+          <div className="flex gap-3 mt-1.5 text-xs flex-wrap">
+            <button onClick={() => onViewEngagement(b.id, "delivered", `Delivered — ${b.subject}`)} className="text-muted-foreground hover:text-foreground hover:underline transition-colors">📬 {stats.delivered} delivered</button>
+            <button onClick={() => onViewEngagement(b.id, "opened", `Opened — ${b.subject}`)} className="text-blue-600 dark:text-blue-400 hover:underline">👁 {stats.opened} opened</button>
+            <button onClick={() => onViewEngagement(b.id, "unopened", `Delivered but not opened — ${b.subject}`)} className="text-amber-600 dark:text-amber-400 hover:underline">↩ {stats.delivered - stats.opened} not opened</button>
+            <button onClick={() => onViewEngagement(b.id, "clicked", `Clicked — ${b.subject}`)} className="text-green-600 dark:text-green-400 hover:underline">🔗 {stats.clicked} clicked</button>
+            {stats.bounced > 0 && <button onClick={() => onViewEngagement(b.id, "bounced", `Bounced — ${b.subject}`)} className="text-destructive hover:underline">⚠ {stats.bounced} bounced</button>}
           </div>
         )}
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
-        {b.status === "draft" && (
+        {(b.status === "draft" || b.status === "scheduled") && !b.source?.startsWith("cadence:") && (
           <>
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onEdit(b)}>Edit</Button>
-            <Button
-              size="sm"
-              className="h-7 text-xs gap-1"
-              disabled={bBusy || recipientCount(b.segment) === 0}
-              onClick={() => onConfirm(b)}
-            >
-              <Send className="h-3 w-3" /> Send to {recipientCount(b.segment)}
-            </Button>
+            {b.status === "draft" && (
+              <Button
+                size="sm"
+                className="h-7 text-xs gap-1"
+                disabled={bBusy || recipientCount(b.segment) === 0}
+                onClick={() => onConfirm(b)}
+              >
+                <Send className="h-3 w-3" /> Send to {recipientCount(b.segment)}
+              </Button>
+            )}
             <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => onDelete(b.id)}>
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </>
         )}
-        {b.status === "sent" && (
-          <div className="flex items-center gap-1.5">
-            {stats && (stats.opened > 0 || stats.clicked > 0) && (
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={downloadEngaged}>
-                Export engaged
-              </Button>
-            )}
-            <Badge className="text-[11px]">Sent</Badge>
-          </div>
-        )}
+        {b.status === "sent" && !b.source?.startsWith("cadence:") && <Badge className="text-[11px]">Sent</Badge>}
+        {b.status === "sent" && b.source?.startsWith("cadence:") && <Badge variant="secondary" className="text-[11px]">Auto · {b.recipientCount}</Badge>}
+        {b.status === "scheduled" && <Badge variant="outline" className="text-[11px] border-amber-400 text-amber-600 dark:text-amber-400">Scheduled</Badge>}
       </div>
     </div>
   );
@@ -2115,7 +2178,7 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
 
 // ---------------------------------------------------------------------------
 
-type CrmView = "lists" | "list-signups" | "list-contacts" | "broadcasts" | "compose";
+type CrmView = "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "broadcasts" | "compose";
 
 function CrmEventPanel({ eventId }: { eventId: number }) {
   const queryClient = useQueryClient();
@@ -2123,7 +2186,12 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
 
   const [view, setView] = useState<CrmView>("lists");
   const [search, setSearch] = useState("");
-  const [selectedContact, setSelectedContact] = useState<ContactRow | null>(null);
+  const [selectedContact, setSelectedContact] = useState<ContactRow | EngagementRecipient | null>(null);
+  const [engagementCtx, setEngagementCtx] = useState<{ broadcastId: number; type: string; label: string } | null>(null);
+  const [activeSegment, setActiveSegment] = useState<SegmentRow | null>(null);
+  const [newListOpen, setNewListOpen] = useState(false);
+  const [newListName, setNewListName] = useState("");
+  const [newListBusy, setNewListBusy] = useState(false);
 
   // ── data ────────────────────────────────────────────────────────────────
 
@@ -2148,6 +2216,22 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     queryFn: () => adminGet<TeamMember[]>(`/api/admin/events/${eventId}/team`),
   });
 
+  const { data: importLog = [] } = useQuery<ContactImport[]>({
+    queryKey: ["/api/admin/contacts/imports"],
+    queryFn: () => adminGet<ContactImport[]>("/api/admin/contacts/imports"),
+  });
+
+  const { data: customSegments = [], refetch: refetchSegments } = useQuery<SegmentRow[]>({
+    queryKey: ["/api/admin/segments", eventId],
+    queryFn: () => adminGet<SegmentRow[]>(`/api/admin/segments?eventId=${eventId ?? ""}`),
+  });
+
+  const { data: engagementRecipients = [], isLoading: loadingEngagement } = useQuery<EngagementRecipient[]>({
+    queryKey: ["/api/admin/broadcasts", engagementCtx?.broadcastId, "recipients", engagementCtx?.type],
+    queryFn: () => adminGet<EngagementRecipient[]>(`/api/admin/broadcasts/${engagementCtx!.broadcastId}/recipients?engagement=${engagementCtx!.type}`),
+    enabled: !!engagementCtx && view === "list-engagement",
+  });
+
   // ── import ──────────────────────────────────────────────────────────────
 
   const [csvFile, setCsvFile] = useState<File | null>(null);
@@ -2169,27 +2253,53 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     } finally { setImporting(false); }
   }
 
+  async function createList(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newListName.trim()) return;
+    setNewListBusy(true);
+    try {
+      await adminSend("POST", "/api/admin/segments", { eventId: eventId ?? null, name: newListName.trim(), filterJson: {} });
+      setNewListName(""); setNewListOpen(false);
+      refetchSegments();
+      toast({ title: "List created", description: `"${newListName.trim()}" is ready. Add contacts by emailing from the Broadcasts tab.` });
+    } catch (err) {
+      toast({ title: "Failed", description: (err as Error).message, variant: "destructive" });
+    } finally { setNewListBusy(false); }
+  }
+
+  async function deleteSegment(seg: SegmentRow) {
+    await adminSend("DELETE", `/api/admin/segments/${seg.id}`, null);
+    refetchSegments();
+  }
+
   // ── compose / send ──────────────────────────────────────────────────────
 
   const [editingBroadcast, setEditingBroadcast] = useState<BroadcastRow | null>(null);
   const [bSubject, setBSubject] = useState("");
   const [bBody, setBBody] = useState("");
-  const [bSegment, setBSegment] = useState<"signups" | "contacts" | "all">("signups");
+  const [bSegment, setBSegment] = useState<string>("signups");
   const [bSender, setBSender] = useState("team");
   const [bBanner, setBBanner] = useState("welcome");
+  const [bScheduledFor, setBScheduledFor] = useState("");
   const [bBusy, setBBusy] = useState(false);
   const [bShowPreview, setBShowPreview] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiOpen, setAiOpen] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
 
-  function openCompose(prefillSegment?: "signups" | "contacts" | "all") {
+  function openCompose(prefillSegment?: string) {
     setEditingBroadcast(null);
     setBSubject(""); setBBody("");
-    setBSegment(prefillSegment ?? "signups");
-    setBSender("team"); setBBanner("welcome");
+    setBSegment((prefillSegment ?? "signups") as any);
+    setBSender("team"); setBBanner("welcome"); setBScheduledFor("");
     setBShowPreview(false);
     setView("compose");
+  }
+
+  function openEngagementView(broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) {
+    setEngagementCtx({ broadcastId, type, label });
+    setSearch("");
+    setView("list-engagement");
   }
   function openEdit(b: BroadcastRow) {
     setEditingBroadcast(b);
@@ -2197,6 +2307,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     setBSegment(b.segment as "signups" | "contacts" | "all");
     setBSender(b.sender ?? "team");
     setBBanner(b.banner ?? "welcome");
+    setBScheduledFor(b.scheduledFor ? b.scheduledFor.slice(0, 16) : "");
     setBShowPreview(false);
     setView("compose");
   }
@@ -2205,14 +2316,15 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     e.preventDefault();
     if (!bSubject.trim() || !bBody.trim()) return;
     setBBusy(true);
+    const scheduledFor = bScheduledFor ? new Date(bScheduledFor).toISOString() : null;
     try {
       if (!editingBroadcast) {
-        await adminSend("POST", "/api/admin/broadcasts", { subject: bSubject.trim(), bodyText: bBody.trim(), eventId, segment: bSegment, sender: bSender ?? "team", banner: bBanner });
+        await adminSend("POST", "/api/admin/broadcasts", { subject: bSubject.trim(), bodyText: bBody.trim(), eventId, segment: bSegment, sender: bSender ?? "team", banner: bBanner, scheduledFor });
       } else {
-        await adminSend("PUT", `/api/admin/broadcasts/${editingBroadcast.id}`, { subject: bSubject.trim(), bodyText: bBody.trim(), segment: bSegment, sender: bSender ?? "team", banner: bBanner });
+        await adminSend("PUT", `/api/admin/broadcasts/${editingBroadcast.id}`, { subject: bSubject.trim(), bodyText: bBody.trim(), segment: bSegment, sender: bSender ?? "team", banner: bBanner, scheduledFor });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/admin/broadcasts", eventId] });
-      toast({ title: "Draft saved" });
+      toast({ title: scheduledFor ? "Scheduled ✓" : "Draft saved", description: scheduledFor ? `Will send at ${new Date(scheduledFor).toLocaleString()}` : undefined });
       setView("broadcasts");
     } catch (err) {
       toast({ title: "Save failed", description: (err as Error).message, variant: "destructive" });
@@ -2253,7 +2365,19 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
   function recipientCount(seg: string) {
     if (seg === "signups") return signupContacts.length;
     if (seg === "contacts") return activeContacts.length;
+    if (seg.startsWith("engagement:")) return -1; // unknown until send
     return signupContacts.length + activeContacts.length;
+  }
+
+  function segmentLabel(seg: string) {
+    if (SEGMENT_LABELS[seg]) return SEGMENT_LABELS[seg];
+    if (seg.startsWith("engagement:")) {
+      const [, bId, type] = seg.split(":");
+      const b = broadcastList.find((x) => x.id === Number(bId));
+      const typeLabel: Record<string, string> = { delivered: "delivered", opened: "who opened", clicked: "who clicked", bounced: "bounced", unopened: "delivered but not opened" };
+      return `Contacts ${typeLabel[type] ?? type}${b ? ` — "${b.subject}"` : ""}`;
+    }
+    return seg;
   }
 
   async function confirmAndSend() {
@@ -2292,14 +2416,14 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     { id: "lists", label: "Contacts" },
     { id: "broadcasts", label: "Broadcasts" },
   ];
-  const activeNav = view === "list-signups" || view === "list-contacts" ? "lists"
+  const activeNav = view === "list-signups" || view === "list-contacts" || view === "list-engagement" ? "lists"
     : view === "compose" ? "broadcasts"
     : view;
 
   return (
     <div className="flex flex-col gap-0">
       {selectedContact && (
-        <ContactDrawer contact={selectedContact} onClose={() => setSelectedContact(null)} broadcastList={broadcastList} />
+        <ContactDrawer contact={selectedContact} onClose={() => setSelectedContact(null)} broadcastList={broadcastList} eventId={eventId} />
       )}
       {/* Horizontal sub-nav */}
       <div className="flex border-b mb-6">
@@ -2321,6 +2445,36 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
       {/* ── CONTACTS: list directory ── */}
       {view === "lists" && (
         <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">Select a list to view or email its contacts</p>
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setNewListOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> New list
+            </Button>
+          </div>
+
+          {/* New list dialog */}
+          {newListOpen && (
+            <Card className="border-primary/50 shadow-sm">
+              <CardContent className="pt-4 pb-4">
+                <form onSubmit={createList} className="flex items-center gap-3 flex-wrap">
+                  <div className="flex-1 min-w-48">
+                    <Input
+                      autoFocus
+                      placeholder='List name, e.g. "Hot leads — clicked email"'
+                      value={newListName}
+                      onChange={(e) => setNewListName(e.target.value)}
+                    />
+                  </div>
+                  <Button type="submit" disabled={newListBusy || !newListName.trim()} size="sm">
+                    {newListBusy ? "Creating…" : "Create list"}
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => { setNewListOpen(false); setNewListName(""); }}>Cancel</Button>
+                </form>
+                <p className="text-xs text-muted-foreground mt-2">The list starts empty. Add contacts by saving from an engagement view or importing a CSV.</p>
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Signed-up card */}
             <div
@@ -2354,6 +2508,15 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                 </div>
                 <span className="text-2xl font-bold text-primary">{loadingContacts ? "—" : activeContacts.length}</span>
               </div>
+              {importLog.length > 0 && (
+                <div className="space-y-1">
+                  {importLog.slice(0, 2).map((imp) => (
+                    <p key={imp.id} className="text-xs text-muted-foreground">
+                      {new Date(imp.importedAt).toLocaleDateString()} — {imp.inserted} added, {imp.updated} updated ({imp.total} total)
+                    </p>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-2 mt-auto">
                 <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={(e) => { e.stopPropagation(); setShowImport((v) => !v); }}>
                   <Upload className="h-3 w-3" /> Import CSV
@@ -2365,6 +2528,35 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
               </div>
             </div>
           </div>
+
+          {/* Custom segments */}
+          {customSegments.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {customSegments.map((seg) => (
+                <div
+                  key={seg.id}
+                  className="border rounded-xl p-5 cursor-pointer hover:border-primary hover:bg-accent/30 transition-colors flex flex-col gap-3"
+                  onClick={() => { setActiveSegment(seg); setSearch(""); setView("list-segment"); }}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold text-sm">{seg.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Custom list · {new Date(seg.createdAt).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 mt-auto">
+                    <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={(e) => { e.stopPropagation(); openCompose(`segment:${seg.id}`); }}>
+                      <Mail className="h-3 w-3" /> Email list
+                    </Button>
+                    <button
+                      className="text-xs text-muted-foreground hover:text-destructive ml-auto"
+                      onClick={(e) => { e.stopPropagation(); if (confirm(`Delete "${seg.name}"?`)) deleteSegment(seg); }}
+                    >Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {showImport && (
             <Card>
@@ -2425,15 +2617,20 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
               ) : (
                 <div className="divide-y">
                   {filteredSignups.map((c, i) => (
-                    <div key={i} className="flex items-center gap-3 px-4 py-3">
+                    <button
+                      key={i}
+                      onClick={() => setSelectedContact({ email: c.email, firstName: c.firstName, lastName: "" })}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 text-left transition-colors"
+                    >
                       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                         <span className="text-xs font-bold text-primary">{(c.firstName || c.email)[0].toUpperCase()}</span>
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{c.firstName || "—"}</p>
                         <p className="text-xs text-muted-foreground truncate">{c.email}</p>
                       </div>
-                    </div>
+                      <span className="shrink-0 text-xs px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">Signed up</span>
+                    </button>
                   ))}
                 </div>
               )}
@@ -2504,6 +2701,62 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
         </div>
       )}
 
+      {/* ── CONTACTS: engagement filter view ── */}
+      {view === "list-engagement" && engagementCtx && (
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <button onClick={() => setView("broadcasts")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="h-3.5 w-3.5" /> Broadcasts
+            </button>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm font-semibold truncate">{engagementCtx.label}</span>
+              {!loadingEngagement && <Badge variant="secondary">{engagementRecipients.length}</Badge>}
+            </div>
+            <Button
+              size="sm"
+              className="gap-1.5 ml-auto"
+              disabled={engagementRecipients.length === 0}
+              onClick={() => openCompose(`engagement:${engagementCtx.broadcastId}:${engagementCtx.type}`)}
+            >
+              <Mail className="h-3.5 w-3.5" /> Email these {engagementRecipients.length || "…"}
+            </Button>
+          </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input placeholder="Search name or email…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <Card>
+            <CardContent className="p-0">
+              {loadingEngagement ? (
+                <div className="p-4 flex flex-col gap-2">{[1,2,3,4,5].map((i) => <Skeleton key={i} className="h-10" />)}</div>
+              ) : engagementRecipients.length === 0 ? (
+                <p className="p-4 text-sm text-muted-foreground">No contacts in this group yet.</p>
+              ) : (
+                <div className="divide-y">
+                  {engagementRecipients
+                    .filter((c) => !search || c.email.includes(search.toLowerCase()) || `${c.firstName} ${c.lastName}`.toLowerCase().includes(search.toLowerCase()))
+                    .map((c) => (
+                    <button
+                      key={c.email}
+                      onClick={() => setSelectedContact(c)}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 text-left transition-colors"
+                    >
+                      <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center shrink-0">
+                        <span className="text-xs font-bold">{(c.firstName || c.email)[0].toUpperCase()}</span>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{[c.firstName, c.lastName].filter(Boolean).join(" ") || "—"}</p>
+                        <p className="text-xs text-muted-foreground truncate">{c.email}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* ── BROADCASTS: list ── */}
       {view === "broadcasts" && (
         <div className="flex flex-col gap-4">
@@ -2532,7 +2785,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                     <p className="font-semibold text-sm">Ready to send?</p>
                     <p className="text-sm text-muted-foreground mt-0.5">
                       You're about to send <span className="font-medium text-foreground">"{confirmBroadcast.subject}"</span> to{" "}
-                      <span className="font-medium text-foreground">{recipientCount(confirmBroadcast.segment)} {SEGMENT_LABELS[confirmBroadcast.segment] ?? confirmBroadcast.segment}</span>.
+                      <span className="font-medium text-foreground">{recipientCount(confirmBroadcast.segment) >= 0 ? `${recipientCount(confirmBroadcast.segment)} ` : ""}{segmentLabel(confirmBroadcast.segment)}</span>.
                       This cannot be undone.
                     </p>
                   </div>
@@ -2556,6 +2809,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                   onEdit={openEdit}
                   onConfirm={setConfirmBroadcast}
                   onDelete={deleteBroadcast}
+                  onViewEngagement={openEngagementView}
                 />
               ))}
             </div>
@@ -2591,7 +2845,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
               <div className="border rounded-xl overflow-hidden max-w-[600px] shadow-sm">
                 <div className="relative h-36 overflow-hidden">
                   <img
-                    src={{ welcome: "/listeners-bg.jpg", podcasters: "/podcasters-bg.jpg", marathon: "/event-marathon.jpg", schedule: "/schedule-hero.jpg" }[bBanner] ?? "/listeners-bg.jpg"}
+                    src={{ welcome: "/listeners-bg.jpg", podcasters: "/podcasters-bg.jpg", marathon: "/hero-3.jpg", schedule: "/agenda-bg.jpg" }[bBanner] ?? "/listeners-bg.jpg"}
                     alt=""
                     className="absolute inset-0 w-full h-full object-cover"
                   />
@@ -2599,8 +2853,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                     const previewMember = bSender.startsWith("member:") ? teamMembers.find((m) => m.id === Number(bSender.split(":")[1])) : null;
                     return (
                       <div className="absolute inset-0 flex flex-col justify-end p-6" style={{ background: "linear-gradient(135deg,rgba(5,56,119,0.90) 0%,rgba(5,56,119,0.60) 100%)" }}>
-                        <p className="font-extrabold text-2xl text-white leading-tight">MilitaryVoice.ai</p>
-                        <p className="text-[#F0A71F] text-xs font-bold uppercase tracking-widest mt-1">
+                        <p className="text-[#F0A71F] text-xs font-bold uppercase tracking-widest opacity-75">
                           {previewMember ? `${previewMember.name} · MilitaryVoice.ai` : "MilitaryVoice.ai"}
                         </p>
                       </div>
@@ -2646,16 +2899,23 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label className="mb-1.5 block">Send to</Label>
-                    <Select value={bSegment} onValueChange={(v) => setBSegment(v as "signups" | "contacts" | "all")}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="signups">Signed-up podcasters ({signupContacts.length})</SelectItem>
-                        <SelectItem value="contacts">Imported contacts ({activeContacts.length})</SelectItem>
-                        <SelectItem value="all">Both — {signupContacts.length + activeContacts.length} total</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    {bSegment.startsWith("engagement:") ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 rounded-md border px-3 py-2 text-sm bg-muted/30 text-muted-foreground truncate">{segmentLabel(bSegment)}</div>
+                        <Button type="button" size="sm" variant="ghost" className="h-9 text-xs" onClick={() => setBSegment("signups")}>Change</Button>
+                      </div>
+                    ) : (
+                      <Select value={bSegment} onValueChange={setBSegment}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="signups">Signed-up podcasters ({signupContacts.length})</SelectItem>
+                          <SelectItem value="contacts">Imported contacts ({activeContacts.length})</SelectItem>
+                          <SelectItem value="all">Both — {signupContacts.length + activeContacts.length} total</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
                   <div>
                     <Label className="mb-1.5 block">From</Label>
@@ -2681,8 +2941,8 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                     {[
                       { key: "welcome", label: "Welcome", src: "/listeners-bg.jpg" },
                       { key: "podcasters", label: "Podcasters", src: "/podcasters-bg.jpg" },
-                      { key: "marathon", label: "Marathon", src: "/event-marathon.jpg" },
-                      { key: "schedule", label: "Schedule", src: "/schedule-hero.jpg" },
+                      { key: "marathon", label: "Military", src: "/hero-3.jpg" },
+                      { key: "schedule", label: "Agenda", src: "/agenda-bg.jpg" },
                     ].map((t) => (
                       <button
                         key={t.key}
@@ -2695,6 +2955,21 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Schedule send */}
+                <div>
+                  <Label className="mb-1.5 block">Schedule send <span className="text-muted-foreground font-normal">(optional — leave blank to save as draft)</span></Label>
+                  <input
+                    type="datetime-local"
+                    value={bScheduledFor}
+                    onChange={(e) => setBScheduledFor(e.target.value)}
+                    min={new Date().toISOString().slice(0, 16)}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  />
+                  {bScheduledFor && (
+                    <p className="mt-1 text-xs text-muted-foreground">Will send automatically at {new Date(bScheduledFor).toLocaleString()}</p>
+                  )}
                 </div>
 
                 {/* AI draft assistant */}

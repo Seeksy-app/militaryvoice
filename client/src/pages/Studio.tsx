@@ -21,6 +21,8 @@ import {
   LogOut,
   Volume2,
   VolumeX,
+  Download,
+  Disc,
 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -117,6 +119,37 @@ export default function Studio({ slug }: { slug?: string }) {
   const [stream, setStream] = useState<MediaStream | null>(null);
 
   const queryClient = useQueryClient();
+
+  interface RecordingRow {
+    id: number;
+    status: string;
+    durationSeconds: number | null;
+    fileSizeBytes: number | null;
+    downloadUrl: string | null;
+    createdAt: string;
+  }
+  const { data: recordings = [] } = useQuery<RecordingRow[]>({
+    queryKey: ["/api/host/recordings", signupId],
+    queryFn: async () => {
+      const q = signupId ? `?signupId=${signupId}` : "";
+      const r = await apiRequest("GET", `/api/host/recordings${q}`);
+      return r.json();
+    },
+    enabled: joined,
+    refetchInterval: 30_000,
+  });
+
+  function fmtDuration(secs: number | null) {
+    if (!secs) return "—";
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+  function fmtSize(bytes: number | null) {
+    if (!bytes) return "";
+    if (bytes > 1_000_000_000) return ` · ${(bytes / 1e9).toFixed(1)} GB`;
+    return ` · ${(bytes / 1e6).toFixed(0)} MB`;
+  }
   const stateKey = ["/api/studio/state", slug ?? "featured", studioId ?? 0, key];
 
   // Once we're in the room the heartbeat carries the state back with it, so
@@ -513,6 +546,45 @@ export default function Studio({ slug }: { slug?: string }) {
                 <p className="rounded-2xl border border-[#F0A71F]/40 bg-[#F0A71F]/10 p-4 text-sm text-white/85">
                   The producer has rolled the standby video. Hold tight — you'll be brought back shortly.
                 </p>
+              )}
+
+              {/* ── My recordings ── */}
+              {recordings.length > 0 && (
+                <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-5">
+                  <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/60">
+                    <Disc className="h-3.5 w-3.5 text-[#ED1C24]" /> My recordings
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {recordings.map((r) => (
+                      <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.04] px-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-white truncate">
+                            {new Date(r.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                          </p>
+                          <p className="text-xs text-white/50">
+                            {r.status === "Recording" ? (
+                              <span className="text-[#ED1C24] font-medium">● Recording…</span>
+                            ) : r.status === "Ready" ? (
+                              `${fmtDuration(r.durationSeconds)}${fmtSize(r.fileSizeBytes)}`
+                            ) : (
+                              r.status
+                            )}
+                          </p>
+                        </div>
+                        {r.status === "Ready" && r.downloadUrl && (
+                          <a
+                            href={r.downloadUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20 transition-colors"
+                          >
+                            <Download className="h-3 w-3" /> Download MP4
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           </div>

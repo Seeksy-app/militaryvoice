@@ -518,6 +518,7 @@ export function registerRoutes(app: Express): void {
           console.error(`Nudge ${kind} failed for signup ${signup.id}:`, err);
         }
         out.push({ signupId: signup.id, to: signup.email, kind, sent, suppressed });
+        if (sent) await storage.incrementCadenceBroadcast(event.id, kind, 1).catch(() => {});
       }
     }
     return out;
@@ -633,6 +634,78 @@ export function registerRoutes(app: Express): void {
   };
   app.get("/api/cron/nudges", nudgeHandler);
   app.post("/api/cron/nudges", nudgeHandler);
+
+  /** Hourly cron: fire any scheduled broadcasts whose time has come. */
+  const scheduledBroadcastHandler: RequestHandler = async (req, res) => {
+    const cronSecret = process.env.CRON_SECRET;
+    const auth = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
+    if (cronSecret && auth !== cronSecret) {
+      res.status(401).json({ message: "Not authorised." });
+      return;
+    }
+    const due = await storage.listScheduledBroadcasts();
+    const origin = `${req.protocol}://${req.get("host")}`;
+    let fired = 0;
+    for (const broadcast of due) {
+      try {
+        const deduped = new Map<string, { email: string; firstName: string }>();
+        if (broadcast.segment === "signups" || broadcast.segment === "all") {
+          if (broadcast.eventId) {
+            for (const r of await storage.listSignupContactsForEvent(broadcast.eventId)) {
+              deduped.set(r.email.toLowerCase(), r);
+            }
+          }
+        }
+        if (broadcast.segment === "contacts" || broadcast.segment === "all") {
+          for (const r of await storage.listActiveContactEmails()) {
+            deduped.set(r.email.toLowerCase(), r);
+          }
+        }
+        if (broadcast.segment.startsWith("segment:")) {
+          const segId = Number(broadcast.segment.split(":")[1]);
+          const segList = await storage.listSegments(broadcast.eventId ?? null);
+          const seg = segList.find((s) => s.id === segId);
+          if (seg) {
+            const filter = JSON.parse(seg.filterJson) as Parameters<typeof storage.resolveSegment>[0];
+            for (const r of await storage.resolveSegment(filter)) {
+              deduped.set(r.email.toLowerCase(), r);
+            }
+          }
+        }
+        if (broadcast.segment.startsWith("engagement:")) {
+          const [, bId, engType] = broadcast.segment.split(":");
+          const rows = await storage.getEngagementRecipients(Number(bId), engType as any);
+          for (const r of rows) deduped.set(r.email.toLowerCase(), r);
+        }
+        const recipients = Array.from(deduped.values());
+        const senderMember = await resolveTeamSender(broadcast.sender ?? "team");
+        let sent = 0;
+        for (const r of recipients) {
+          const resendId = await sendBroadcastEmail({
+            to: r.email,
+            firstName: r.firstName,
+            subject: broadcast.subject,
+            bodyText: broadcast.bodyText,
+            unsubscribeUrl: `${origin}/unsubscribe?token=scheduled`,
+            sender: broadcast.sender ?? "team",
+            banner: broadcast.banner ?? "welcome",
+            senderMember: senderMember ?? undefined,
+          });
+          if (resendId) {
+            sent++;
+            await storage.recordBroadcastSend(broadcast.id, r.email, resendId);
+          }
+        }
+        await storage.markBroadcastSent(broadcast.id, sent);
+        fired++;
+      } catch (err) {
+        console.error(`Scheduled broadcast ${broadcast.id} failed:`, err);
+      }
+    }
+    res.json({ fired, total: due.length });
+  };
+  app.get("/api/cron/broadcasts", scheduledBroadcastHandler);
+  app.post("/api/cron/broadcasts", scheduledBroadcastHandler);
 
   // ---- A podcaster's own share link -------------------------------------------
   //      /s/:id unfurls with their artwork and their time, then sends the
@@ -2021,7 +2094,7 @@ export function registerRoutes(app: Express): void {
         identity: `p-${me.id}`,
         name: me.displayName || "Speaker",
         canPublish: true,
-        attributes: { state: me.state, participantId: String(me.id) },
+        attributes: { state: me.state, participantId: String(me.id), displayTitle: me.displayTitle ?? "" },
       }),
     });
   });
@@ -2134,7 +2207,7 @@ export function registerRoutes(app: Express): void {
           name: row.displayName || "Host",
           canPublish: true,
           admin: true,
-          attributes: { state: row.state, participantId: String(row.id) },
+          attributes: { state: row.state, participantId: String(row.id), displayTitle: row.displayTitle ?? "" },
         }),
       });
       return;
@@ -2194,7 +2267,17 @@ export function registerRoutes(app: Express): void {
       res.status(404).json({ message: "Not found" });
       return;
     }
-    await syncParticipantState(roomName(row.studioId), `p-${row.id}`, state);
+    await syncParticipantState(roomName(row.studioId), `p-${row.id}`, state, { displayTitle: row.displayTitle ?? "" });
+    res.json(row);
+  });
+
+  // ---- Studio: participant title (lower third) ---------------------------------
+  app.patch("/api/admin/studio/participants/:id/title", requireAdmin, async (req, res) => {
+    const id = numParam(req.params.id) ?? 0;
+    const title = typeof req.body?.displayTitle === "string" ? req.body.displayTitle.trim().slice(0, 120) : "";
+    const row = await storage.setParticipantTitle(id, title);
+    if (!row) return res.status(404).json({ message: "Not found" });
+    await syncParticipantState(roomName(row.studioId), `p-${row.id}`, row.state, { displayTitle: title });
     res.json(row);
   });
 
@@ -2340,6 +2423,48 @@ export function registerRoutes(app: Express): void {
   app.delete("/api/admin/scenes/:id", requireAdmin, async (req, res) => {
     await storage.deleteScene(Number(req.params.id));
     res.json({ ok: true });
+  });
+
+  /** Auto-generate one scene per run-of-show item. Idempotent: existing scenes
+   *  with the same name are skipped, not duplicated. */
+  app.post("/api/admin/scenes/generate", requireAdmin, async (req, res) => {
+    const { studio } = await adminStudio(req);
+    const items = await storage.listRunOfShow(studio.eventId);
+    const existing = await storage.listScenes(studio.id);
+    const existingNames = new Set(existing.map((s) => s.name));
+    let created = 0;
+    for (let i = 0; i < items.length; i++) {
+      const r = items[i];
+      if (existingNames.has(r.title)) continue;
+      await storage.createScene({
+        studioId: studio.id,
+        name: r.title,
+        sortIndex: existing.length + created,
+        mediaUrl: r.mediaUrl || "",
+        mediaKind: r.mediaKind || "video",
+        mediaLabel: r.mediaLabel || "",
+      });
+      created++;
+    }
+    res.json({ created, total: items.length });
+  });
+
+  /** Create a scene from a specific run-of-show item. */
+  app.post("/api/admin/scenes/from-agenda", requireAdmin, async (req, res) => {
+    const { studio } = await adminStudio(req);
+    const runItemId = Number(req.body?.runItemId);
+    const item = await storage.getRunItem(runItemId);
+    if (!item) return res.status(404).json({ message: "Agenda item not found" });
+    const existing = await storage.listScenes(studio.id);
+    const scene = await storage.createScene({
+      studioId: studio.id,
+      name: req.body?.name || item.title,
+      sortIndex: existing.length,
+      mediaUrl: item.mediaUrl || "",
+      mediaKind: item.mediaKind || "video",
+      mediaLabel: item.mediaLabel || "",
+    });
+    res.status(201).json(scene);
   });
 
   /** One click during the show: put the stage back the way this scene had it. */
@@ -2720,6 +2845,44 @@ export function registerRoutes(app: Express): void {
     res.json(await storage.listRecordings(eventId));
   });
 
+  // ---- Studio: presentations (slide decks) ------------------------------------
+  app.get("/api/admin/studio/presentations", requireAdmin, async (req, res) => {
+    const studioId = numParam(req.query.studioId);
+    if (!studioId) return res.status(400).json({ error: "studioId required" });
+    res.json(await storage.listPresentations(studioId));
+  });
+
+  app.post(
+    "/api/admin/studio/presentations",
+    requireAdmin,
+    (req, res, next) => {
+      assetUpload.array("slides", 50)(req, res, (err: any) => {
+        if (err) return res.status(400).json({ error: err.message });
+        next();
+      });
+    },
+    async (req: any, res: any) => {
+      const studioId = numParam(req.body?.studioId);
+      const name = typeof req.body?.name === "string" ? req.body.name.trim() || "Presentation" : "Presentation";
+      if (!studioId) return res.status(400).json({ error: "studioId required" });
+      const files: Express.Multer.File[] = req.files ?? [];
+      const urls: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const key = `presentations/${studioId}/${Date.now()}-${i}.${f.originalname.split(".").pop() ?? "jpg"}`;
+        const url = await uploadShowAsset(key, f.buffer, f.mimetype || "image/jpeg");
+        urls.push(url);
+      }
+      const pres = await storage.createPresentation(studioId, name, urls);
+      res.json({ ...pres, slides: urls.map((url, i) => ({ url, slideIndex: i })) });
+    },
+  );
+
+  app.delete("/api/admin/studio/presentations/:id", requireAdmin, async (req, res) => {
+    await storage.deletePresentation(numParam(req.params.id) ?? 0);
+    res.json({ ok: true });
+  });
+
   // ---- LiveKit webhook ----------------------------------------------------------
   //      LiveKit signs this with the same API key pair, and sends it as
   //      application/webhook+json — which express.json() leaves alone, so the
@@ -2891,7 +3054,7 @@ export function registerRoutes(app: Express): void {
       const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
       const tz = signup.timezone || "America/New_York";
       const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
-      return await sendConfirmationEmail({
+      const sent = await sendConfirmationEmail({
         to: signup.email,
         hostName: signup.hostName,
         podcastName: signup.podcastName,
@@ -2902,6 +3065,8 @@ export function registerRoutes(app: Express): void {
         agendaUrl: `${origin}/agenda`,
         calendar: calendarLinksFor(signup, event, origin),
       });
+      if (sent) await storage.incrementCadenceBroadcast(event.id, "confirmation", 1).catch(() => {});
+      return sent;
     } catch (err) {
       console.error("Failed to send signup confirmation email:", err);
       return false;
@@ -3793,6 +3958,16 @@ export function registerRoutes(app: Express): void {
     res.json(rows);
   });
 
+  app.get("/api/admin/events/:id/signup-by-email", requireAdmin, async (req, res) => {
+    const eventId = Number(req.params.id);
+    const email = String(req.query.email ?? "");
+    if (!email) return res.status(400).json({ error: "email required" });
+    const rows = await storage.listSignups(eventId);
+    const signup = rows.find((s) => s.email.toLowerCase() === email.toLowerCase());
+    if (!signup) return res.status(404).json({ error: "not found" });
+    res.json(signup);
+  });
+
   app.post("/api/admin/contacts/import", requireAdmin, async (req, res) => {
     const { csv } = req.body as { csv?: string };
     if (!csv || typeof csv !== "string") return res.status(400).json({ error: "Send { csv: \"...\" }" });
@@ -3853,7 +4028,23 @@ export function registerRoutes(app: Express): void {
     }
     if (parsed.length === 0) return res.status(400).json({ error: "No valid email addresses found in the CSV." });
     const result = await storage.upsertContacts(parsed);
+    // Log this import batch
+    const adminEmail = (req as any).session?.adminEmail ?? "";
+    await storage.recordImport(adminEmail, result.inserted, result.updated, parsed.length).catch(() => {});
     res.json({ ...result, total: parsed.length });
+  });
+
+  app.get("/api/admin/contacts/imports", requireAdmin, async (req, res) => {
+    res.json(await storage.listImports());
+  });
+
+  app.get("/api/admin/broadcasts/:id/recipients", requireAdmin, async (req, res) => {
+    const broadcastId = Number(req.params.id);
+    const engagementType = (req.query.engagement as string) ?? "delivered";
+    const valid = ["delivered", "opened", "clicked", "bounced", "unopened"];
+    if (!valid.includes(engagementType)) return res.status(400).json({ error: "Invalid engagement type" });
+    const rows = await storage.getEngagementRecipients(broadcastId, engagementType as any);
+    res.json(rows);
   });
 
   app.delete("/api/admin/contacts/:id", requireAdmin, async (req, res) => {
@@ -3880,16 +4071,16 @@ export function registerRoutes(app: Express): void {
   });
 
   app.post("/api/admin/broadcasts", requireAdmin, async (req, res) => {
-    const { subject, bodyText, eventId, segment, sender, banner } = req.body as { subject?: string; bodyText?: string; eventId?: number | null; segment?: string; sender?: string; banner?: string };
+    const { subject, bodyText, eventId, segment, sender, banner, scheduledFor } = req.body as { subject?: string; bodyText?: string; eventId?: number | null; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null };
     if (!subject?.trim() || !bodyText?.trim()) return res.status(400).json({ error: "subject and bodyText are required." });
-    const row = await storage.createBroadcast({ subject: subject.trim(), bodyText: bodyText.trim(), eventId: eventId ?? null, segment: segment ?? "contacts", sender: sender ?? "team", banner: banner ?? "welcome" });
+    const row = await storage.createBroadcast({ subject: subject.trim(), bodyText: bodyText.trim(), eventId: eventId ?? null, segment: segment ?? "contacts", sender: sender ?? "team", banner: banner ?? "welcome", scheduledFor: scheduledFor ?? null });
     res.json(row);
   });
 
   app.put("/api/admin/broadcasts/:id", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
-    const { subject, bodyText, segment, sender, banner } = req.body as { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string };
-    const row = await storage.updateBroadcast(id, { subject: subject?.trim(), bodyText: bodyText?.trim(), segment, sender, banner });
+    const { subject, bodyText, segment, sender, banner, scheduledFor } = req.body as { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null };
+    const row = await storage.updateBroadcast(id, { subject: subject?.trim(), bodyText: bodyText?.trim(), segment, sender, banner, scheduledFor: scheduledFor ?? null });
     if (!row) return res.status(404).json({ error: "Broadcast not found or already sent." });
     res.json(row);
   });
@@ -3961,6 +4152,12 @@ export function registerRoutes(app: Express): void {
           deduped.set(r.email.toLowerCase(), r);
         }
       }
+    }
+    // engagement:<broadcastId>:<type> — e.g. "engagement:1:opened"
+    if (broadcast.segment.startsWith("engagement:")) {
+      const [, bId, engType] = broadcast.segment.split(":");
+      const rows = await storage.getEngagementRecipients(Number(bId), engType as any);
+      for (const r of rows) deduped.set(r.email.toLowerCase(), r);
     }
 
     const recipients = Array.from(deduped.values());

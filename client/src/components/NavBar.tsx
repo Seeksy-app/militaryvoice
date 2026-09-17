@@ -15,8 +15,19 @@ import { useTheme } from "@/lib/theme";
 import { getQueryFn } from "@/lib/queryClient";
 import type { ProfileRow } from "@shared/schema";
 
-// Section anchors live on the landing page; plain <a> so the browser handles
-// the scroll (same page) or the full navigation (other pages).
+function scrollToAnchor(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
+  const hash = href.split("#")[1];
+  if (!hash) return;
+  const el = document.getElementById(hash);
+  if (el) {
+    e.preventDefault();
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.history.pushState(null, "", href);
+  }
+  // else: fall through to native navigation (different page)
+}
+
+// Section anchors live on the landing page.
 const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/#podcasters", label: "Podcasters", anchor: true },
   { href: "/#listeners", label: "Listeners", anchor: true },
@@ -55,7 +66,7 @@ export function NavBar() {
           {LINKS.map((link) => {
             const active = !link.anchor && (location === link.href || (location.startsWith("/event/") && location.endsWith(link.href)));
             return link.anchor ? (
-              <a key={link.href} href={link.href} className={linkCls(false)} data-testid={`link-nav-${link.label.toLowerCase()}`}>
+              <a key={link.href} href={link.href} onClick={(e) => scrollToAnchor(e, link.href)} className={linkCls(false)} data-testid={`link-nav-${link.label.toLowerCase()}`}>
                 {link.label}
               </a>
             ) : (
@@ -103,7 +114,7 @@ export function NavBar() {
               {LINKS.map((link) =>
                 link.anchor ? (
                   <DropdownMenuItem key={link.href} asChild>
-                    <a href={link.href}>{link.label}</a>
+                    <a href={link.href} onClick={(e) => scrollToAnchor(e, link.href)}>{link.label}</a>
                   </DropdownMenuItem>
                 ) : (
                   <DropdownMenuItem key={link.href} asChild>
