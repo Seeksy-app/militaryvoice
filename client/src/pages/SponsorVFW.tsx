@@ -17,10 +17,10 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 const GOLD = "#F0A71F";
 const NAVY = "#000741";
 
-const TITLE_PRICE = 10000;
+const PARTNER_PRICE = 10000;
 const SLOT_PRICE = 250;
 
-const TITLE_BENEFITS = [
+const PARTNER_BENEFITS = [
   "Title billing all day — “National Military Podcast Day, presented by the VFW” on the stream, the site and every announcement",
   "Your logo on the broadcast lower third for all 24 hours",
   "Named in the opening and closing of every show on the schedule",
@@ -98,7 +98,7 @@ export default function SponsorVFW() {
           <p className="mt-6 max-w-2xl text-lg leading-relaxed text-white/80">
             On {eventDate} we broadcast for {event?.durationHours ?? 24} hours straight — back-to-back shows hosted by
             military and veteran podcasters, streamed live and free to anyone who wants to listen. We are offering the
-            VFW the title sponsorship of the entire day.
+            VFW the partner sponsorship of the entire day — including two slots on the schedule for #StillServing.
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-4">
@@ -121,7 +121,7 @@ export default function SponsorVFW() {
             { icon: Clock, n: String(event?.durationHours ?? 24), label: "hours, continuous" },
             { icon: Radio, n: String(slotCount || 48), label: "broadcast slots" },
             { icon: Mic2, n: String(event?.slotMinutes ?? 30), label: "minutes per show" },
-            { icon: Users, n: "1", label: "title sponsorship available" },
+            { icon: Users, n: "1", label: "partner sponsorship available" },
           ].map(({ icon: Icon, n, label }) => (
             <div key={label} className="px-2 text-center lg:px-4">
               <Icon className="mx-auto h-5 w-5 text-[#F0A71F]" />
@@ -154,7 +154,7 @@ export default function SponsorVFW() {
               the whole thing streams free on our own watch page and out to every host's channels at the same time.
             </p>
             <p className="text-foreground">
-              There is one title sponsorship, and we would like it to be the VFW.
+              There is one partner sponsorship, and we would like it to be the VFW.
             </p>
           </div>
         </div>
@@ -169,7 +169,7 @@ export default function SponsorVFW() {
               Shows already on the board.
             </h2>
             <p className="mt-3 max-w-2xl text-muted-foreground">
-              Every one of these hosts introduces the day's title sponsor at the top and bottom of their show.
+              Every one of these hosts introduces the day's partner sponsor at the top and bottom of their show.
             </p>
 
             <div className="mt-10 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
@@ -219,23 +219,39 @@ export default function SponsorVFW() {
           </div>
 
           <div className="mt-12 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-            {/* Title sponsorship — the ask */}
+            {/* Partner sponsorship — the ask */}
             <div className="relative rounded-3xl border-2 p-8 sm:p-10" style={{ borderColor: GOLD, backgroundColor: "rgba(255,255,255,0.04)" }}>
               <div className="absolute -top-3.5 left-8 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#1a1200]" style={{ backgroundColor: GOLD }}>
                 Our recommendation
               </div>
-              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-white/60">Title sponsor</div>
+              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-white/60">Partner sponsor</div>
               <div className="mt-3 flex items-baseline gap-2">
                 <span className="text-6xl font-bold tabular-nums tracking-tight text-white" style={HEADLINE_FONT}>
-                  {money(TITLE_PRICE)}
+                  {money(PARTNER_PRICE)}
                 </span>
                 <span className="text-white/55">· one available</span>
               </div>
               <p className="mt-4 text-white/75">
-                The VFW name on the whole day, from the first show to the last.
+                The VFW name on the whole day, from the first show to the last — and a place on the schedule of your
+                own.
               </p>
+
+              {/* The airtime is what makes this a partnership rather than a logo
+                  placement, so it gets its own frame instead of a bullet. */}
+              <div className="mt-6 rounded-2xl border p-5" style={{ borderColor: "rgba(240,167,31,0.45)", backgroundColor: "rgba(240,167,31,0.08)" }}>
+                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: GOLD }}>
+                  <Mic2 className="h-3.5 w-3.5" /> Two slots on the schedule
+                </div>
+                <div className="mt-2 text-lg font-semibold leading-snug text-white">
+                  #StillServing: The VFW Podcast<span className="align-super text-xs">®</span>
+                </div>
+                <div className="mt-1 text-sm text-white/70">
+                  Two {event?.slotMinutes ?? 30}-minute slots of your own, in prime positions on the day.
+                </div>
+              </div>
+
               <ul className="mt-7 space-y-3.5">
-                {TITLE_BENEFITS.map((b) => (
+                {PARTNER_BENEFITS.map((b) => (
                   <li key={b} className="flex gap-3 text-sm leading-relaxed text-white/85">
                     <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: GOLD }} />
                     <span>{b}</span>
@@ -254,7 +270,7 @@ export default function SponsorVFW() {
                 <span className="text-white/55">per show · {slotCount || 48} slots</span>
               </div>
               <p className="mt-4 text-white/75">
-                Back individual shows instead of the whole day — or add them on top of the title sponsorship.
+                Back individual shows instead of the whole day — or add them on top of the partnership.
               </p>
               <ul className="mt-7 space-y-3.5">
                 {[
