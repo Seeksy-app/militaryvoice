@@ -196,8 +196,9 @@ export function FinancesCard({ event }: { event: PublicEvent }) {
               </div>
               <div className="mt-0.5 text-2xl font-bold tabular-nums" data-testid="finance-flat">{usd0(m.flat)}</div>
               <div className="text-xs text-muted-foreground">
-                Recording, captioning, clip selection and rendering. We pay this to cut {m.slots} shows into clips
-                whether one person watches or a hundred thousand.
+                The monthly plans, plus recording, captioning, clip selection and rendering —{" "}
+                <span className="tabular-nums">{usd(m.flat - m.fixed)}</span> of it is the work of turning {m.slots}{" "}
+                shows into recordings and clips, and we pay that whether one person watches or a hundred thousand.
               </div>
             </div>
             <div className="bg-card p-4">
