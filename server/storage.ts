@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -41,6 +41,7 @@ import type {
   BroadcastRow,
   ClipRow,
   ClipStatus,
+  SocialMetricRow,
   TranscriptLineRow,
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -688,6 +689,8 @@ export interface IStorage {
   transcriptBetween(studioId: number, startMs: number, endMs: number): Promise<TranscriptLineRow[]>;
   listClips(recordingId: number): Promise<ClipRow[]>;
   listClipsByEmail(email: string): Promise<ClipRow[]>;
+  listSocialMetrics(): Promise<SocialMetricRow[]>;
+  upsertSocialMetric(v: Omit<SocialMetricRow, "id">): Promise<SocialMetricRow>;
   replaceClips(recordingId: number, rows: Omit<ClipRow, "id" | "createdAt" | "recordingId">[]): Promise<ClipRow[]>;
   listDestinations(eventId: number): Promise<DestinationRow[]>;
   getDestination(id: number): Promise<DestinationRow | undefined>;
@@ -1559,6 +1562,37 @@ class DatabaseStorage implements IStorage {
   async listClips(recordingId: number): Promise<ClipRow[]> {
     await ready();
     return db.select().from(clips).where(eq(clips.recordingId, recordingId)).orderBy(asc(clips.startSec));
+  }
+
+  // ---- Audience figures ----------------------------------------------------
+  async listSocialMetrics(): Promise<SocialMetricRow[]> {
+    await ready();
+    return db.select().from(socialMetrics).orderBy(desc(socialMetrics.followers));
+  }
+
+  /** One row per account, replaced on every read — history isn't the point,
+   *  the current number and when it was taken is. */
+  async upsertSocialMetric(v: Omit<SocialMetricRow, "id">): Promise<SocialMetricRow> {
+    await ready();
+    const [row] = await db
+      .insert(socialMetrics)
+      .values(v)
+      .onConflictDoUpdate({
+        target: [socialMetrics.email, socialMetrics.platform, socialMetrics.handle],
+        set: {
+          followers: v.followers,
+          engagementRate: v.engagementRate,
+          avgViews: v.avgViews,
+          avgLikes: v.avgLikes,
+          credibility: v.credibility,
+          audience: v.audience,
+          raw: v.raw,
+          error: v.error,
+          fetchedAt: v.fetchedAt,
+        },
+      })
+      .returning();
+    return row;
   }
 
   async listClipsByEmail(email: string): Promise<ClipRow[]> {

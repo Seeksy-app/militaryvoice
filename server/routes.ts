@@ -45,6 +45,7 @@ import {
   type NudgeKind,
 } from "../shared/schema.js";
 import { isLiveOnlySlot, LIVE_ONLY_LABEL } from "../shared/slots.js";
+import { isConfigured as isInfluencersConfigured, credits, enrichHandle } from "./influencers.js";
 import { fromError } from "zod-validation-error";
 import { z } from "zod";
 import {
@@ -141,10 +142,19 @@ function toPublicEvent(event: EventRow): PublicEvent {
  * `getEventBySlug`/`getEventById` directly and still see everything.
  */
 async function publicEvent(slug?: string): Promise<EventRow | undefined> {
-  const event = slug ? await storage.getEventBySlug(slug) : await storage.getFeaturedEvent();
-  // The featured event is the site's own front door. If someone hides it the
-  // site should say so honestly rather than silently promote another one.
-  return event?.visible ? event : undefined;
+  // A named event either exists publicly or it doesn't.
+  if (slug) {
+    const named = await storage.getEventBySlug(slug);
+    return named?.visible ? named : undefined;
+  }
+  const featured = await storage.getFeaturedEvent();
+  if (featured?.visible) return featured;
+  // The front door, with the featured event hidden. This used to return
+  // nothing, which took the homepage, the agenda and the watch page down
+  // together — and that is far worse than showing a different event. Whatever
+  // else is public stands in until somebody fixes the flag.
+  const [standIn] = (await storage.listEvents()).filter((e) => e.visible);
+  return standIn;
 }
 
 // Public read endpoints are safe to serve from Vercel's CDN for a few seconds:
@@ -1122,13 +1132,18 @@ export function registerRoutes(app: Express): void {
   });
 
   app.get("/api/event", async (req, res) => {
-    publicCache(res, 60);
     const slug = typeof req.query.slug === "string" ? req.query.slug : undefined;
     const event = await publicEvent(slug);
     if (!event) {
+      // Deliberately uncached. This used to set a 60-second edge cache before
+      // it knew the answer, so a few seconds of bad state froze a 404 across
+      // the whole edge for a minute — the homepage stayed empty long after
+      // the database was correct again.
+      noStore(res);
       res.status(404).json({ message: "Event not found" });
       return;
     }
+    publicCache(res, 60);
     res.json(toPublicEvent(event));
   });
 
@@ -3102,6 +3117,127 @@ export function registerRoutes(app: Express): void {
   app.delete("/api/admin/studio/presentations/:id", requireAdmin, async (req, res) => {
     await storage.deletePresentation(numParam(req.params.id) ?? 0);
     res.json({ ok: true });
+  });
+
+  // ---- Audience figures --------------------------------------------------------
+  //      What the connected accounts reach, for the sponsorship pages. Pulled
+  //      only when somebody asks — every successful result costs a credit.
+
+  /** Every connected account we could enrich, from the Upload-Post snapshot. */
+  async function connectedHandles(): Promise<{ email: string; platform: string; handle: string; consented: boolean }[]> {
+    const profiles = await storage.listCompleteProfiles();
+    const out: { email: string; platform: string; handle: string; consented: boolean }[] = [];
+    for (const p of profiles) {
+      for (const a of parseSocialAccounts(p.socialAccounts)) {
+        const handle = String((a as { username?: string }).username ?? "").trim();
+        // Facebook hands back a numeric page id, which is not a handle and
+        // enriches to nothing. Skip rather than spend a credit finding out.
+        if (!handle || /^\d+$/.test(handle)) continue;
+        out.push({ email: p.email, platform: String(a.platform), handle, consented: p.shareAudienceStats });
+      }
+    }
+    return out;
+  }
+
+  app.get("/api/admin/audience", requireAdmin, async (_req, res) => {
+    noStore(res);
+    const rows = await storage.listSocialMetrics();
+    let balance: unknown = null;
+    if (isInfluencersConfigured()) balance = await credits().catch((e) => ({ error: (e as Error).message }));
+    res.json({
+      configured: isInfluencersConfigured(),
+      handles: await connectedHandles(),
+      metrics: rows.map((r) => ({ ...r, raw: r.raw ? "stored" : "" })),
+      credits: balance,
+    });
+  });
+
+  /**
+   * Read the figures. `handle` does one account — spend a single credit and
+   * look at the shape before committing to the rest.
+   */
+  app.post("/api/admin/audience/refresh", requireAdmin, async (req, res) => {
+    if (!isInfluencersConfigured()) {
+      res.status(503).json({ message: "No influencers.club key on this deployment." });
+      return;
+    }
+    const only = String(req.body?.handle ?? "").trim().toLowerCase();
+    const wanted = (await connectedHandles()).filter((h) => !only || h.handle.toLowerCase() === only);
+    if (wanted.length === 0) {
+      res.status(400).json({ message: only ? "No connected account with that handle." : "No connected accounts to read." });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const done: { handle: string; platform: string; followers: number; error: string }[] = [];
+    for (const h of wanted) {
+      try {
+        const m = await enrichHandle(h.platform, h.handle);
+        await storage.upsertSocialMetric({
+          email: h.email,
+          platform: h.platform,
+          handle: h.handle,
+          followers: m.followers,
+          engagementRate: m.engagementRate,
+          avgViews: m.avgViews,
+          avgLikes: m.avgLikes,
+          credibility: m.credibility,
+          audience: m.audience ? JSON.stringify(m.audience).slice(0, 20000) : "",
+          // Kept so the readers can be corrected without spending again.
+          raw: JSON.stringify(m.raw).slice(0, 60000),
+          error: "",
+          fetchedAt: now,
+        });
+        done.push({ handle: h.handle, platform: h.platform, followers: m.followers, error: "" });
+      } catch (err) {
+        const message = (err as Error).message.slice(0, 400);
+        await storage.upsertSocialMetric({
+          email: h.email, platform: h.platform, handle: h.handle,
+          followers: 0, engagementRate: "", avgViews: 0, avgLikes: 0, credibility: "",
+          audience: "", raw: "", error: message, fetchedAt: now,
+        });
+        done.push({ handle: h.handle, platform: h.platform, followers: 0, error: message });
+      }
+    }
+    res.json({ read: done.length, results: done });
+  });
+
+  /** One stored response in full, to learn the provider's real field names. */
+  app.get("/api/admin/audience/raw/:id", requireAdmin, async (req, res) => {
+    noStore(res);
+    const row = (await storage.listSocialMetrics()).find((r) => r.id === Number(req.params.id));
+    if (!row) {
+      res.status(404).json({ message: "No such row." });
+      return;
+    }
+    res.type("application/json").send(row.raw || "{}");
+  });
+
+  /**
+   * The public figure for the sponsorship pages.
+   *
+   * Only podcasters who opted in are counted, and the shape says plainly that
+   * a combined following is not deduplicated reach — a sponsor's marketing
+   * team discounts a sum, and rightly.
+   */
+  app.get("/api/audience-summary", async (_req, res) => {
+    publicCache(res, 300);
+    const rows = (await storage.listSocialMetrics()).filter((r) => !r.error && r.followers > 0);
+    const profiles = await storage.listCompleteProfiles();
+    const consenting = new Set(profiles.filter((p) => p.shareAudienceStats).map((p) => p.email));
+    const counted = rows.filter((r) => consenting.has(r.email));
+    const byPlatform: Record<string, number> = {};
+    for (const r of counted) byPlatform[r.platform] = (byPlatform[r.platform] ?? 0) + r.followers;
+    const dates = counted.map((r) => r.fetchedAt).filter(Boolean).sort();
+    res.json({
+      shows: new Set(counted.map((r) => r.email)).size,
+      accounts: counted.length,
+      combinedFollowing: counted.reduce((n, r) => n + r.followers, 0),
+      byPlatform,
+      /** Said out loud so the page can't imply otherwise. */
+      deduplicated: false,
+      asOf: dates[dates.length - 1] ?? "",
+    });
   });
 
   // ---- The studio agent ----------------------------------------------------------

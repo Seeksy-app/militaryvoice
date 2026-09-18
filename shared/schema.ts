@@ -235,6 +235,10 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
   // organization has no branch.
   branch: text("branch").notNull().default(""),
   serviceStatus: text("service_status").notNull().default(""),
+  // Whether their audience figures may be counted in what we show sponsors.
+  // Off unless they say otherwise: they connected these accounts so we could
+  // post their clips, which is not the same as agreeing to be in a sales deck.
+  shareAudienceStats: boolean("share_audience_stats").notNull().default(false),
   // How they normally produce their show, so the studio team knows what to expect.
   recordingMode: text("recording_mode").notNull().default(""),
   postEdits: text("post_edits").notNull().default(""),
@@ -360,6 +364,7 @@ export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
     rssUrl: optionalUrl("RSS feed"),
     youtubeUrl: optionalUrl("YouTube"),
     needsInterviewer: z.boolean(),
+    shareAudienceStats: z.boolean(),
     showFormat: z.enum(["live", "prerecorded"]),
     introStyle: z.enum(["virtual", "straight"]),
     recordingUrl: optionalUrl("episode"),
@@ -838,6 +843,40 @@ export const clips = pgTable(
   }),
 );
 export type ClipRow = typeof clips.$inferSelect;
+
+/**
+ * What one connected account reaches, as a third party measures it.
+ *
+ * Kept per account with the moment it was read, because a follower count on a
+ * sponsorship page is a claim with a date on it. `raw` holds the untouched
+ * response: the provider's schema isn't published, so the normalised columns
+ * are a best reading of it and the original has to survive the first correction.
+ */
+export const socialMetrics = pgTable(
+  "social_metrics",
+  {
+    id: serial("id").primaryKey(),
+    email: text("email").notNull(),
+    platform: text("platform").notNull(),
+    handle: text("handle").notNull().default(""),
+    followers: integer("followers").notNull().default(0),
+    /** Percent, as the provider reports it — 2.4 means 2.4%. */
+    engagementRate: text("engagement_rate").notNull().default(""),
+    avgViews: integer("avg_views").notNull().default(0),
+    avgLikes: integer("avg_likes").notNull().default(0),
+    /** Share of followers judged real, 0–100. Blank when not supplied. */
+    credibility: text("credibility").notNull().default(""),
+    /** JSON: country, gender and age breakdowns when the provider gives them. */
+    audience: text("audience").notNull().default(""),
+    raw: text("raw").notNull().default(""),
+    error: text("error").notNull().default(""),
+    fetchedAt: text("fetched_at").notNull(),
+  },
+  (t) => ({
+    accountIdx: uniqueIndex("social_metrics_account_idx").on(t.email, t.platform, t.handle),
+  }),
+);
+export type SocialMetricRow = typeof socialMetrics.$inferSelect;
 
 /** One clip as the worker hands it back, before it has urls. */
 export const clipResultSchema = z.object({

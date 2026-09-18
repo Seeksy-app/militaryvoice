@@ -216,6 +216,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
       socialLinks: profile?.socialLinks ?? "",
       rssUrl: profile?.rssUrl ?? "",
       youtubeUrl: profile?.youtubeUrl ?? "",
+      shareAudienceStats: profile?.shareAudienceStats ?? false,
       showFormat: (profile?.showFormat as "live" | "prerecorded") ?? "live",
       recordingUrl: profile?.recordingUrl ?? "",
       introStyle: (profile?.introStyle as "virtual" | "straight") ?? "virtual",

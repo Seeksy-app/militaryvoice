@@ -109,6 +109,33 @@ export function PrivacyPolicy() {
         </p>
       </Section>
 
+      <Section heading="If you link your social accounts">
+        <p>
+          Linking the accounts you post from does two things: they show as follow buttons on your card in the public
+          lineup, and they're where we can send clips from your segment. We store the platform, the handle and the
+          public follower count the platform reports.
+        </p>
+        <p>
+          Separately, and only if you switch it on in your dashboard, we ask a third-party service —{" "}
+          <a className="text-primary hover:underline" href="https://influencers.club" target="_blank" rel="noreferrer">
+            influencers.club
+          </a>{" "}
+          — for the public audience figures attached to those handles: follower counts, typical engagement, and
+          aggregate audience makeup such as country and age bands. We pass it the handle and nothing else. It has no
+          access to your accounts, and neither do we beyond what you granted for posting.
+        </p>
+        <p>
+          Those figures are used to tell sponsors the size of the audience this event reaches. They are published as a
+          combined total across the shows that opted in — never as a per-person list, and never attached to your name
+          without asking you first. The switch is off until you turn it on, and turning it off stops your figures being
+          counted from that moment.
+        </p>
+        <p className="rounded-xl border border-border bg-muted/40 p-4 text-sm">
+          A combined following is not the same as the number of distinct people, and we say so wherever we publish it.
+          We will not present a sum as deduplicated reach.
+        </p>
+      </Section>
+
       <Section heading="What is public, and what is not">
         <p>
           Your show name, host name, photo, links and slot time appear on the public lineup — that is the point of
@@ -216,6 +243,19 @@ export function TermsOfService() {
           If you connect YouTube or paste a stream key, you are asking us to broadcast to that account on your behalf
           during your slot. Their rules apply to you there as well as ours here, and a strike on your channel is
           between you and them.
+        </p>
+      </Section>
+
+      <Section heading="Your audience figures">
+        <p>
+          If you switch on audience figures in your dashboard, you're letting us count the public follower and
+          engagement numbers attached to your linked handles toward the combined audience we quote to sponsors, and to
+          retrieve those numbers from a third-party data provider. You can switch it off at any time; we stop counting
+          you from then on, though anything already printed or sent stays as it was printed.
+        </p>
+        <p>
+          We publish combined totals, not lists of individuals, and we state the date the figures were read. We don't
+          claim a sum of followings is a count of distinct people.
         </p>
       </Section>
 

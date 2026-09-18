@@ -54,6 +54,7 @@ import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { NextSteps } from "@/components/NextSteps";
 import { OwnEncoder } from "@/components/OwnEncoder";
 import { PromotionScreen } from "@/components/PromotionScreen";
+import { AudienceConsent } from "@/components/AudienceConsent";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SocialTiles } from "@/components/SocialTiles";
@@ -847,6 +848,7 @@ export default function HostDashboard() {
                   </div>
                 </div>
                 <SocialTiles accounts={social.accounts} onConnect={() => connectSocial.mutate()} connecting={connectSocial.isPending} />
+                {social.accounts.length > 0 && profile && <AudienceConsent profile={profile} />}
                 {social.accounts.length === 0 && (
                   <p className="mt-2 text-sm text-muted-foreground">
                     Nothing linked yet. Connected accounts light up here and show as follow buttons on your card in the lineup.

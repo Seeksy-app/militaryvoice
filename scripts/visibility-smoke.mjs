@@ -18,7 +18,19 @@ if (!event) {
   console.error(`No event ${ID}`);
   process.exit(1);
 }
-console.log(`Testing "${event.name}" (/${event.slug})${event.is_featured ? " — the featured event" : ""}\n`);
+// Hiding the featured event blanks the public site for as long as the test
+// holds it that way, and an edge cache can outlive the test. Never on the
+// front door — this script writes to whatever database it is pointed at, and
+// that is routinely the live one.
+if (event.is_featured) {
+  console.error(
+    `"${event.name}" is the live-site event. Hiding it would take the public site down for the length of this run.\n` +
+      `Point this at another event, or make a different one featured first.`,
+  );
+  await sql.end();
+  process.exit(1);
+}
+console.log(`Testing "${event.name}" (/${event.slug})\n`);
 
 let bad = 0;
 const check = (name, ok, detail = "") => {
