@@ -3165,7 +3165,20 @@ export function registerRoutes(app: Express): void {
       for (const d of await storage.listDestinations(eventId)) {
         if (d.live) await storage.updateDestination(d.id, { live: false });
       }
-      const off = await storage.updateStudio(studio.id, { broadcastEgressId: "", status: "Offline" });
+      // Whatever was on the stage stops with the broadcast.
+      //
+      // A countdown counts against the viewer's own clock from a timestamp in
+      // the room metadata, so ending the stream left it running — the show was
+      // over and the watch page was still ticking towards a break that was
+      // never coming. Same for a clip playing out. The scene itself is kept,
+      // so the rail is where the producer left it when they come back.
+      const off = await storage.updateStudio(studio.id, {
+        broadcastEgressId: "",
+        status: "Offline",
+        countdownEndsAtUtc: "",
+        countdownLabel: "",
+        stageMediaPlaying: false,
+      });
       const ev0 = await storage.getEventById(eventId);
       if (off) await syncRoomMetadata(roomName(studio.id), studioMeta(ev0?.name ?? "", off, ev0));
       res.json(off);

@@ -1679,7 +1679,14 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               {onCamera && me && (
                 <button
                   type="button"
-                  onClick={() => setState.mutate({ id: me.id, state: meOnStage ? "Green room" : "On stage" })}
+                  // Going on stage turns the camera on. Going on with it off
+                  // puts a black rectangle on the broadcast, which is never
+                  // what anybody means by "put me on" — and it is exactly what
+                  // happened: a minute of stage time recorded with no picture.
+                  onClick={() => {
+                    if (!meOnStage && !camOn) void toggleCam();
+                    setState.mutate({ id: me.id, state: meOnStage ? "Green room" : "On stage" });
+                  }}
                   disabled={setState.isPending}
                   title={meOnStage ? "Take yourself off the stage" : "Put yourself on the stage"}
                   className={`ml-1 flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-colors ${
