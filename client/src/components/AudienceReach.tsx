@@ -40,9 +40,15 @@ const PLATFORM_LABEL: Record<string, string> = {
   tiktok: "TikTok",
 };
 
-function compact(n: number): string {
+/**
+ * Exact up to a million, rounded above it.
+ *
+ * "40K" reads as an estimate and invites a discount; "40,377" reads as
+ * something that was counted. These figures are counted, so they're shown that
+ * way — rounding only kicks in where the digits stop being legible.
+ */
+function figure(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
-  if (n >= 10_000) return `${Math.round(n / 1000)}K`;
   return n.toLocaleString("en-US");
 }
 
@@ -72,25 +78,25 @@ export function AudienceReach({ tone = "light" }: { tone?: "light" | "dark" }) {
   const figures = [
     {
       icon: Users,
-      n: compact(data.followers),
+      n: figure(data.followers),
       label: "combined following",
       note: `across ${data.channels} connected channels`,
     },
     {
       icon: Eye,
-      n: compact(data.impressions),
+      n: figure(data.impressions),
       label: "impressions",
       note: `in the last ${months} months`,
     },
     {
       icon: Radio,
-      n: compact(data.reach),
+      n: figure(data.reach),
       label: "people reached",
       note: "unique accounts, same period",
     },
     {
       icon: Heart,
-      n: compact(data.engagements),
+      n: figure(data.engagements),
       label: "likes, comments, shares",
       note: "on the posts we can measure",
     },
@@ -154,7 +160,7 @@ export function AudienceReach({ tone = "light" }: { tone?: "light" | "dark" }) {
                 data-testid={`platform-${p.platform}`}
               >
                 <span className="font-medium">{PLATFORM_LABEL[p.platform] ?? p.platform}</span>
-                <span className="tabular-nums opacity-70">{compact(p.followers)}</span>
+                <span className="tabular-nums opacity-70">{figure(p.followers)}</span>
               </span>
             ))}
           </div>
