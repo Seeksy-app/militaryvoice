@@ -264,6 +264,21 @@ export async function updateBroadcastTargets(
   await egress().updateStream(egressId, add, remove);
 }
 
+/**
+ * The egress ids LiveKit currently has running.
+ *
+ * Only STARTING and ACTIVE count. Everything else — complete, failed, aborted
+ * — is over, whatever our own row still says about it.
+ */
+export async function runningEgressIds(): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (const e of await egress().listEgress({})) {
+    const status = String(e.status);
+    if (status === "0" || status === "1" || /STARTING|ACTIVE/i.test(status)) out.add(e.egressId);
+  }
+  return out;
+}
+
 export async function stopEgressById(egressId: string): Promise<void> {
   await egress().stopEgress(egressId);
 }

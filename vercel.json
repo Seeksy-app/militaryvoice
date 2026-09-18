@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/reach",
       "schedule": "20 6 * * *"
+    },
+    {
+      "path": "/api/cron/reconcile",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

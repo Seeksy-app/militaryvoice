@@ -385,6 +385,17 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   // scroll — once you're on air you can't go hunting for a button.
   const isLive = view === "live";
   const [monitorMuted, setMonitorMuted] = useState(true);
+
+  /**
+   * Another console open in this browser, publishing.
+   *
+   * Two studio tabs both live on the same microphone is a feedback loop: your
+   * voice goes into one room, comes out of the other tab's speakers, and back
+   * into the mic. It sounds like the room is broken and the cause is invisible
+   * — nothing on either screen mentions the other tab. A BroadcastChannel is
+   * enough to notice, because the tabs are in the same browser by definition.
+   */
+  const [otherConsole, setOtherConsole] = useState<string>("");
   const [mediaPicker, setMediaPicker] = useState<null | "image" | "video" | "all" | "presentations">(null);
   const [sceneName, setSceneName] = useState("");
   const [presName, setPresName] = useState("");
@@ -897,6 +908,31 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     .filter((f) => f.state === "On stage")
     .map((f) => ({ identity: f.identity, name: f.name, displayTitle: f.displayTitle, video: f.video, audio: f.audio, speaking: f.speaking }))
     .sort((a, b) => a.identity.localeCompare(b.identity));
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const ch = new BroadcastChannel("mv-studio-console");
+    const label = currentStudio?.name ?? "another studio";
+    let lastSeen = 0;
+
+    ch.onmessage = (e) => {
+      const m = e.data as { studioId?: number; publishing?: boolean; name?: string };
+      if (!m?.publishing || m.studioId === studioId) return;
+      lastSeen = Date.now();
+      setOtherConsole(m.name || "another studio");
+    };
+    const beat = setInterval(() => {
+      if (onCamera && micOn) ch.postMessage({ studioId, publishing: true, name: label });
+      // Stop warning once the other tab has gone quiet for a few beats.
+      if (lastSeen && Date.now() - lastSeen > 9000) setOtherConsole("");
+    }, 3000);
+    if (onCamera && micOn) ch.postMessage({ studioId, publishing: true, name: label });
+
+    return () => {
+      clearInterval(beat);
+      ch.close();
+    };
+  }, [studioId, onCamera, micOn, currentStudio?.name]);
 
   // Presence is what keeps the host in the room lists; without a heartbeat
   // they'd vanish after twenty-five seconds like anyone who closed their laptop.
@@ -1491,6 +1527,24 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             </div>
 
           </div>
+
+          {otherConsole && onCamera && micOn && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#F0A71F]/40 bg-[#F0A71F]/15 px-4 py-2 text-sm">
+              <span className="flex items-center gap-2 text-white">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-[#F0A71F]" />
+                Your microphone is also live in <span className="font-semibold">{otherConsole}</span> in another tab.
+                That's what echoes.
+              </span>
+              <Button
+                size="sm"
+                className="h-7 shrink-0 rounded-full bg-[#F0A71F] text-xs font-semibold text-[#1a1200] hover:bg-[#f5b944]"
+                onClick={() => void toggleMic()}
+                data-testid="button-fix-feedback"
+              >
+                Mute me here
+              </Button>
+            </div>
+          )}
 
           {/* the deck: share/mute on the left, YOU in the middle, volume on the right */}
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-10 border-t border-white/10 bg-[#000741] px-4 py-3">

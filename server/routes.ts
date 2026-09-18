@@ -58,6 +58,7 @@ import {
   startBroadcast,
   startSegmentRecording,
   stopEgressById,
+  runningEgressIds,
   studioToken,
   syncParticipantState,
   syncRoomMetadata,
@@ -809,6 +810,59 @@ export function registerRoutes(app: Express): void {
       res.status(502).json({ message: (err as Error).message });
     }
   };
+  /**
+   * Clear egress flags whose egress has died.
+   *
+   * A studio keeps an egress id and a status so the console knows whether it
+   * is on. Nothing clears them when an egress ends without telling us — a
+   * crashed worker, a room that emptied, a laptop closed mid-session — so the
+   * flags outlive the thing they describe. A producer then walks into a room
+   * that says RECORDING, cannot stop it because there is nothing to stop, and
+   * has no way to tell whether they are on air. The watch page reads the same
+   * status to decide whether to show a LIVE badge.
+   *
+   * Runs on the same sweep as the nudges, and never touches an egress LiveKit
+   * still reports as running.
+   */
+  const reconcileEgressHandler: RequestHandler = async (_req, res) => {
+    if (!isLiveKitConfigured()) {
+      res.json({ skipped: "no media layer" });
+      return;
+    }
+    let running: Set<string>;
+    try {
+      running = await runningEgressIds();
+    } catch (err) {
+      // Unreachable LiveKit is not evidence that anything stopped.
+      res.status(502).json({ message: (err as Error).message });
+      return;
+    }
+    let cleared = 0;
+    for (const st of await storage.listAllStudios()) {
+      const deadBroadcast = !!st.broadcastEgressId && !running.has(st.broadcastEgressId);
+      const deadRecording = !!st.recordingEgressId && !running.has(st.recordingEgressId);
+      const falselyLive = st.status === "Live" && (!st.broadcastEgressId || deadBroadcast);
+      if (!deadBroadcast && !deadRecording && !falselyLive) continue;
+      await storage.updateStudio(st.id, {
+        ...(deadBroadcast ? { broadcastEgressId: "" } : {}),
+        ...(deadRecording ? { recordingEgressId: "" } : {}),
+        ...(falselyLive ? { status: "Offline" } : {}),
+      });
+      cleared++;
+    }
+    for (const r of await storage.listUnfinishedRecordings()) {
+      if (running.has(r.egressId)) continue;
+      await storage.finishRecording(r.egressId, {
+        status: "Failed",
+        error: "Egress ended without a completion callback; reconciled from LiveKit.",
+      });
+      cleared++;
+    }
+    res.json({ cleared, running: running.size });
+  };
+  app.get("/api/cron/reconcile", reconcileEgressHandler);
+  app.post("/api/cron/reconcile", reconcileEgressHandler);
+
   app.get("/api/cron/reach", audienceRefreshHandler);
   app.post("/api/cron/reach", audienceRefreshHandler);
 

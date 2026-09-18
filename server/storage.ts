@@ -687,6 +687,7 @@ export interface IStorage {
   releaseNudge(signupId: number, kind: NudgeKind): Promise<void>;
   listCampaignPosts(signupId: number): Promise<CampaignPostRow[]>;
   listAllStudios(): Promise<StudioRow[]>;
+  listUnfinishedRecordings(): Promise<RecordingRow[]>;
   createHelpRequest(v: { name: string; email: string; question: string; transcript: string; page: string }): Promise<HelpRequestRow>;
   listHelpRequests(): Promise<HelpRequestRow[]>;
   /** Make the stored plan match `picks`; posts already sent are left alone. */
@@ -1514,6 +1515,12 @@ class DatabaseStorage implements IStorage {
   }
 
   /** Called from the LiveKit webhook, so it has to be safe to run twice. */
+  /** Recordings our database still believes are running. */
+  async listUnfinishedRecordings(): Promise<RecordingRow[]> {
+    await ready();
+    return db.select().from(recordings).where(eq(recordings.status, "Recording"));
+  }
+
   async finishRecording(
     egressId: string,
     v: { status: string; url?: string; durationSec?: number; sizeBytes?: string; error?: string },
