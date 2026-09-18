@@ -1072,7 +1072,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 <span className="mx-1 hidden h-7 w-px bg-white/15 sm:block" />
 
                 {/* Where the stream goes. Icons for what's on; tap to switch any on or off. */}
-                {!isRoom && (
+                {/* Only when there is somewhere else to send it. With no
+                    external destinations this said "To our watch page" and
+                    opened an empty list — a control whose only state is its
+                    default. */}
+                {!isRoom && houseDestRows.length > 0 && (
                   <Popover>
                     <PopoverTrigger asChild>
                       <button
@@ -1194,15 +1198,36 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     <Disc className="h-3.5 w-3.5" /> Start recording
                   </Button>
                 ) : (
+                  /* Go live goes live. It used to open a menu of three
+                     options, so the button everybody reaches for did nothing
+                     visible and the actual action was a second click most
+                     people never made. The common case — out to the watch page
+                     and keep a recording — is now the button itself, and the
+                     chevron beside it holds the other two. */
+                  <div className="flex items-center">
+                    <Button
+                      size="sm"
+                      className="h-9 gap-1.5 rounded-l-full rounded-r-none border-r border-white/20 bg-[#ED1C24] px-4 font-semibold text-white shadow-[0_6px_20px_rgba(237,28,36,0.45)] hover:bg-[#c81820]"
+                      disabled={broadcast.isPending || record.isPending}
+                      onClick={() => {
+                        broadcast.mutate("start");
+                        record.mutate({ action: "start", signupId: current?.signupId ?? undefined });
+                      }}
+                      data-testid="button-broadcast-toggle"
+                    >
+                      <Signal className="h-3.5 w-3.5" />
+                      {broadcast.isPending || record.isPending ? "Going live…" : "Go live"}
+                    </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
                         size="sm"
-                        className="h-9 gap-1.5 rounded-full bg-[#ED1C24] px-4 font-semibold text-white shadow-[0_6px_20px_rgba(237,28,36,0.45)] hover:bg-[#c81820]"
+                        aria-label="Other ways to go live"
+                        className="h-9 rounded-l-none rounded-r-full bg-[#ED1C24] px-2.5 font-semibold text-white shadow-[0_6px_20px_rgba(237,28,36,0.45)] hover:bg-[#c81820]"
                         disabled={broadcast.isPending || record.isPending}
-                        data-testid="button-broadcast-toggle"
+                        data-testid="button-broadcast-options"
                       >
-                        <Signal className="h-3.5 w-3.5" /> Go live <ChevronDown className="h-3.5 w-3.5 opacity-80" />
+                        <ChevronDown className="h-3.5 w-3.5 opacity-80" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-64">
@@ -1220,21 +1245,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                           <span className="block text-xs text-muted-foreground">Nothing goes out; the file is saved</span>
                         </span>
                       </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => {
-                          broadcast.mutate("start");
-                          record.mutate({ action: "start", signupId: current?.signupId ?? undefined });
-                        }}
-                        data-testid="menu-live-record"
-                      >
-                        <Radio className="mr-2 h-4 w-4" />
-                        <span>
-                          <span className="block font-semibold">Live stream + record</span>
-                          <span className="block text-xs text-muted-foreground">Go out and keep a copy</span>
-                        </span>
-                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  </div>
                 )}
               </>
             )}
@@ -1361,14 +1374,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               roomConnected={roomStatus === "connected"}
               onStage={(id) => setState.mutate({ id, state: "On stage" })}
             />
-            <span className="ml-auto flex items-center gap-1.5">
-              <a href={joinUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/15" data-testid="link-deck-greenroom">
-                <Users className="h-4 w-4" /> Green room link
-              </a>
-              <a href={watchUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/15" data-testid="link-deck-watch">
-                <Radio className="h-4 w-4" /> Watch page
-              </a>
-            </span>
+            {/* The same two links live on the deck. Having them here as well
+                put the least urgent thing on screen in the most prominent
+                strip, twice. */}
           </div>
 
           <div className="flex min-h-0 flex-1">
@@ -1469,7 +1477,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
           </div>
 
           {/* the deck: share/mute on the left, YOU in the middle, volume on the right */}
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-white/10 bg-[#000741] px-4 py-3">
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-10 border-t border-white/10 bg-[#000741] px-4 py-3">
             {/* What you put on air, on the left. */}
             <div className="flex items-center gap-1">
               <DeckButton icon={ImageIcon} label="Image" onClick={() => setMediaPicker("image")} testId="button-deck-image" />
@@ -1492,34 +1500,33 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             </div>
 
             {/* Zoom-style cam + mic toggles — always visible, first click joins the room */}
-            <div
-              className={`flex items-center gap-1.5 rounded-2xl border-2 px-2 py-1.5 ${
-                onCamera ? "border-emerald-500/70 bg-emerald-500/10" : "border-white/15 bg-white/5"
-              }`}
-              data-testid="deck-you"
-            >
-              <span className="px-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">You</span>
+            {/* Your own camera and mic, the way every conference app draws
+                them: the same stacked icon as the rest of the deck, red only
+                on the slash. Two filled red blocks read as an error state
+                rather than as "off", which is the normal way to sit in a
+                studio before you are called up. */}
+            <div className="flex items-center gap-1" data-testid="deck-you">
               <button
                 type="button"
                 onClick={() => { if (!onCamera) setOnCamera(true); void toggleCam(); }}
-                className={`flex flex-col items-center gap-0.5 rounded-xl px-4 py-1.5 text-xs font-medium ${
-                  onCamera && camOn ? "bg-white/10 text-white hover:bg-white/15" : "bg-[#ED1C24] text-white"
-                }`}
+                title={onCamera && camOn ? "Turn your camera off" : "Turn your camera on"}
+                aria-label={onCamera && camOn ? "Turn your camera off" : "Turn your camera on"}
+                className="flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none text-white/70 transition-colors hover:bg-white/10 hover:text-white"
                 data-testid="button-deck-cam"
               >
-                {onCamera && camOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
-                {onCamera && camOn ? "Camera" : "Camera off"}
+                {onCamera && camOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5 text-[#ED1C24]" />}
+                <span className="w-full truncate text-center">{onCamera && camOn ? "Camera" : "Camera off"}</span>
               </button>
               <button
                 type="button"
                 onClick={() => { if (!onCamera) setOnCamera(true); void toggleMic(); }}
-                className={`flex flex-col items-center gap-0.5 rounded-xl px-4 py-1.5 text-xs font-medium ${
-                  onCamera && micOn ? "bg-white/10 text-white hover:bg-white/15" : "bg-[#ED1C24] text-white"
-                }`}
+                title={onCamera && micOn ? "Mute yourself" : "Unmute yourself"}
+                aria-label={onCamera && micOn ? "Mute yourself" : "Unmute yourself"}
+                className="flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none text-white/70 transition-colors hover:bg-white/10 hover:text-white"
                 data-testid="button-deck-mic"
               >
-                {onCamera && micOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
-                {onCamera && micOn ? "Mic" : "Muted"}
+                {onCamera && micOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5 text-[#ED1C24]" />}
+                <span className="w-full truncate text-center">{onCamera && micOn ? "Mic" : "Muted"}</span>
               </button>
             </div>
 
