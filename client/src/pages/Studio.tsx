@@ -127,6 +127,13 @@ export function readFrame(
   return [light, background, framing];
 }
 
+/** "Andrew Appleton" → "AA". One letter when there is only one word. */
+function initialsOf(v: string): string {
+  const parts = (v ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const KEY_STORAGE = "mv_studio_key";
 const HEARTBEAT_MS = 6_000;
@@ -235,9 +242,14 @@ function PeerTile({ peer, muted = false }: { peer: RoomPeer; muted?: boolean }) 
     <div className="relative aspect-video overflow-hidden rounded-xl border border-white/15 bg-black">
       <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
       <audio ref={audioRef} autoPlay muted={muted} />
+      {/* Their initials rather than a crossed-out camera icon. Four tiles all
+          showing the same grey icon tell you nothing about who is in the room;
+          the names are underneath but the eye goes to the picture. */}
       {!peer.videoTrack && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <VideoOff className="h-5 w-5 text-white/30" />
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-lg font-bold text-white/60 ring-1 ring-white/15">
+            {initialsOf(peer.name)}
+          </span>
         </div>
       )}
       <span className="absolute inset-x-1.5 bottom-1.5 truncate rounded bg-black/60 px-1.5 py-0.5 text-[12px] text-white">
@@ -711,24 +723,38 @@ export default function Studio({ slug }: { slug?: string }) {
                     onStage ? "border-[#ED1C24]" : "border-white/20"
                   }`}
                 >
-                  {/* Their artwork sits behind the video, so a camera that is
-                      off shows who they are instead of a black rectangle —
-                      which is also what the stage does, and the green room
-                      should not look more broken than the show. */}
-                  {!camOn && state?.myPhotoUrl && (
-                    <>
-                      <img
-                        src={resolveUploadUrl(state.myPhotoUrl)}
-                        alt=""
-                        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-xl"
-                      />
-                      <img
-                        src={resolveUploadUrl(state.myPhotoUrl)}
-                        alt=""
-                        className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full object-cover ring-2 ring-white/25"
-                        data-testid="img-self-avatar"
-                      />
-                    </>
+                  {/* A camera that's off shows who they are instead of a
+                      black rectangle — which is what the stage does, and the
+                      green room shouldn't look more broken than the show.
+                      Initials when there's no picture at all: crew hold no
+                      slot, so there is often no artwork to fall back to, and
+                      an empty tile tells the room nothing. */}
+                  {!camOn && (
+                    <div className="absolute inset-0 flex items-center justify-center" data-testid="self-avatar">
+                      {state?.myPhotoUrl ? (
+                        <>
+                          <img
+                            src={resolveUploadUrl(state.myPhotoUrl)}
+                            alt=""
+                            aria-hidden="true"
+                            className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-xl"
+                          />
+                          <img
+                            src={resolveUploadUrl(state.myPhotoUrl)}
+                            alt=""
+                            className="relative h-24 w-24 rounded-full object-cover ring-2 ring-white/25"
+                            data-testid="img-self-avatar"
+                          />
+                        </>
+                      ) : (
+                        <span
+                          className="flex h-24 w-24 items-center justify-center rounded-full bg-white/10 text-3xl font-bold text-white/70 ring-2 ring-white/20"
+                          data-testid="text-self-initials"
+                        >
+                          {initialsOf(state?.me?.displayName || name)}
+                        </span>
+                      )}
+                    </div>
                   )}
 
                   <video

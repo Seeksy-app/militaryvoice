@@ -2138,6 +2138,7 @@ export function registerRoutes(app: Express): void {
     // standing in the green room was told "no slot on this event", because
     // the row they were being matched on had no address in it yet.
     const sessionEmail = (req ? getSessionEmail(req) : "") ?? "";
+    const adminEmail = (req ? getAdminEmail(req) : "") ?? "";
     const email = (sessionEmail || me?.email || "").trim().toLowerCase();
     if (email) {
       const mine = (await storage.listSignups(event.id)).find(
@@ -2155,6 +2156,16 @@ export function registerRoutes(app: Express): void {
           label: mine.podcastName,
         };
       }
+    }
+
+    // Crew hold no slot and have no podcaster profile, so there is no artwork
+    // to fall back to — but they are usually on the event team, which does
+    // carry a photo. Without this a producer's camera being off is a black
+    // rectangle with no clue whose it is.
+    if (!myPhotoUrl && adminEmail) {
+      const team = await storage.listEventTeam(event.id);
+      myPhotoUrl =
+        team.find((m) => m.email.trim().toLowerCase() === adminEmail.trim().toLowerCase())?.photoUrl || "";
     }
 
     return {
@@ -2177,7 +2188,7 @@ export function registerRoutes(app: Express): void {
       /** Which sign-in the slot was looked up under, so a mismatch is visible. */
       myEmail: email,
       /** True when they got in as crew rather than as someone on the lineup. */
-      isCrew: Boolean(req && getAdminEmail(req) && (await storage.isAdminEmail(getAdminEmail(req)!))),
+      isCrew: Boolean(adminEmail && (await storage.isAdminEmail(adminEmail))),
       onStageCount: onStage.length,
       greenRoomCount: all.filter((p) => p.state === "Green room" && withPresence(p)).length,
     };
