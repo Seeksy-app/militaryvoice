@@ -41,6 +41,7 @@ import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -154,6 +155,9 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  // Off by default, deliberately. The old behaviour gave everyone thirty days
+  // whether they were on their own laptop or a library computer.
+  const [remember, setRemember] = useState(false);
 
   // Cloudflare check on the code request — the one form a bot can use to
   // make us send email. Off entirely when the server has no keys.
@@ -178,7 +182,7 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
 
   const verifyCode = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/host/verify-code", { email, code });
+      const res = await apiRequest("POST", "/api/host/verify-code", { email, code, remember });
       return res.json();
     },
     onSuccess: () => {
@@ -288,6 +292,21 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
                 onChange={(e) => setCode(e.target.value)}
                 data-testid="input-host-code"
               />
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border p-3">
+                <Checkbox
+                  checked={remember}
+                  onCheckedChange={(v) => setRemember(v === true)}
+                  className="mt-0.5"
+                  data-testid="checkbox-remember-me"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">Keep me signed in for 30 days</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Only on a device that's yours. Leave it unticked on a shared or public computer — otherwise the
+                    next person to open this browser is signed in as you.
+                  </span>
+                </span>
+              </label>
               <Button type="submit" disabled={verifyCode.isPending || !code.trim()} data-testid="button-verify-code">
                 {verifyCode.isPending ? "Checking…" : "Sign in"}
               </Button>

@@ -3861,6 +3861,19 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
+    // Hiding the site's own front door would 404 the homepage, the agenda and
+    // the watch page for everyone. Refused here rather than in the browser, so
+    // it holds however the call arrives.
+    if (parsed.data.visible === false) {
+      const current = await storage.getEventById(id);
+      if (current?.isFeatured) {
+        res.status(409).json({
+          message:
+            "This is the live-site event — hiding it would take the homepage down with it. Make another event the live-site event first, then hide this one.",
+        });
+        return;
+      }
+    }
     const updated = await storage.updateEvent(id, parsed.data);
     if (!updated) {
       res.status(404).json({ message: "Event not found" });
@@ -4099,7 +4112,7 @@ export function registerRoutes(app: Express): void {
       return;
     }
     await storage.markLoginTokenUsed(row.id);
-    setSessionCookie(res, email);
+    setSessionCookie(res, email, req.body?.remember === true);
     res.json({ ok: true, email });
   });
 
@@ -4193,7 +4206,10 @@ export function registerRoutes(app: Express): void {
   /** Every event, with what this podcaster has done on each. */
   app.get("/api/host/events", requireHostSession, async (req, res) => {
     const email = (req as any).hostEmail as string;
-    const events = await storage.listEvents();
+    // Switching an event off hides it from podcasters too, not just the
+    // public — a test event in somebody's dashboard is the thing the switch
+    // exists to stop.
+    const events = (await storage.listEvents()).filter((e) => e.visible);
     const shows = await storage.listEventShows(email);
     const out = [];
     for (const event of events) {

@@ -1453,7 +1453,9 @@ function EventPicker({ onOpen }: { onOpen: (id: number) => void }) {
                   <div className="truncate text-base font-semibold text-card-foreground">{e.name}</div>
                   <div className="text-xs text-muted-foreground">{e.occasion || e.tagline}</div>
                 </div>
-                {e.isFeatured && <Badge className="shrink-0 bg-[#F0A71F] text-[#1a1200] hover:bg-[#F0A71F]">Live site</Badge>}
+                {e.isFeatured && e.visible !== false && (
+                  <Badge className="shrink-0 bg-[#F0A71F] text-[#1a1200] hover:bg-[#F0A71F]">Live site</Badge>
+                )}
                 {e.visible === false && (
                   <Badge variant="outline" className="shrink-0 gap-1 border-dashed text-muted-foreground" data-testid={`badge-hidden-${e.id}`}>
                     <EyeOff className="h-3 w-3" /> Hidden
@@ -3487,13 +3489,25 @@ export default function Admin() {
                   </button>
                   <h2 className="text-2xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
                     {selectedEvent.name}
-                    {selectedEvent.isFeatured && <Badge className="ml-3 bg-[#F0A71F] align-middle text-[#1a1200] hover:bg-[#F0A71F]">Live site</Badge>}
+                    {selectedEvent.isFeatured && selectedEvent.visible !== false && (
+                      <Badge className="ml-3 bg-[#F0A71F] align-middle text-[#1a1200] hover:bg-[#F0A71F]">Live site</Badge>
+                    )}
                   </h2>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm font-medium">
+                  <label
+                    className={`flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm font-medium ${
+                      selectedEvent.isFeatured ? "opacity-60" : ""
+                    }`}
+                    title={
+                      selectedEvent.isFeatured
+                        ? "The live-site event can't be hidden — the homepage follows it. Make another event live first."
+                        : undefined
+                    }
+                  >
                     <Switch
                       checked={selectedEvent.visible !== false}
+                      disabled={selectedEvent.isFeatured}
                       onCheckedChange={(v) => setEventVisible(selectedEvent.id, v)}
                       data-testid="switch-event-visible"
                     />

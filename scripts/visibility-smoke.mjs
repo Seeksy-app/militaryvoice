@@ -59,6 +59,29 @@ const watch = await get(`/api/watch/token?slug=${event.slug}`);
 const watchJson = JSON.parse(watch.text);
 check("the watch page can't be reached either", watchJson.configured === false, JSON.stringify(watchJson).slice(0, 80));
 
+// A podcaster shouldn't be looking at a switched-off event either — that is
+// the case the switch exists for. Uses a real host session cookie, minted the
+// same way the server signs one.
+const hostCookie = await (async () => {
+  const crypto = await import("node:crypto");
+  const [p] = await sql`select email from podcaster_profiles limit 1`;
+  if (!p) return null;
+  const payload = { email: p.email, exp: Date.now() + 3600e3 };
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const mac = crypto
+    .createHmac("sha256", process.env.SESSION_SECRET || "dev-only-insecure-secret-change-me")
+    .update(body)
+    .digest("base64url");
+  return `mv_host_session=${body}.${mac}`;
+})();
+
+if (hostCookie) {
+  const rows = await fetch(`${BASE}/api/host/events`, { headers: { cookie: hostCookie } }).then((r) => r.json());
+  check("gone from the podcaster's event list", !rows.some((r) => r.event.id === ID), `${rows.length} shown`);
+} else {
+  console.log("SKIP  podcaster's event list — no profile to sign in as");
+}
+
 // Admin must still see it, or an event could be hidden with no way back.
 const adminSee = await fetch(`${BASE}/api/admin/events`, { headers: { "x-admin-password": PW } });
 const adminRows = await adminSee.json();

@@ -8,6 +8,10 @@ import type { Request, Response, NextFunction } from "express";
 const COOKIE_NAME = "mv_host_session";
 const ADMIN_COOKIE_NAME = "mv_admin_session";
 const SESSION_DAYS = 30;
+/** How long a session lasts when they didn't ask to be remembered. Long enough
+ *  to finish what they came to do, short enough to be no use to the next
+ *  person on a shared machine. */
+const SESSION_HOURS = 12;
 
 // A real secret must be set in production (Vercel env var). The fallback keeps
 // local dev working but is intentionally obvious so it's never mistaken for a
@@ -61,8 +65,19 @@ export function parseCookies(header: string | undefined): Record<string, string>
   return out;
 }
 
-export function setSessionCookie(res: Response, email: string): void {
-  const exp = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
+/**
+ * Start a host session.
+ *
+ * `remember` is the podcaster's own answer to "keep me signed in", and it has
+ * to be asked rather than assumed: this used to give everyone thirty days,
+ * including whoever signed in from a library computer to check their slot.
+ * Without it the cookie has no Max-Age at all, so the browser drops it when it
+ * closes — and the signature carries its own shorter expiry, so a copied
+ * cookie is no use the next day either.
+ */
+export function setSessionCookie(res: Response, email: string, remember = false): void {
+  const hours = remember ? SESSION_DAYS * 24 : SESSION_HOURS;
+  const exp = Date.now() + hours * 60 * 60 * 1000;
   const token = sign({ email, exp });
   const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
   const attrs = [
@@ -70,8 +85,8 @@ export function setSessionCookie(res: Response, email: string): void {
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
-    `Max-Age=${SESSION_DAYS * 24 * 60 * 60}`,
   ];
+  if (remember) attrs.push(`Max-Age=${hours * 60 * 60}`);
   if (isProd) attrs.push("Secure");
   res.setHeader("Set-Cookie", attrs.join("; "));
 }
