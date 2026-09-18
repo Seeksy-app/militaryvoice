@@ -2071,15 +2071,36 @@ export function registerRoutes(app: Express): void {
   // ---- Studio -----------------------------------------------------------------
   //      Show control only: who's waiting, who's on stage, and the emergency
   //      clip. The video layer plugs in behind this.
-  async function studioForSlug(slug?: string, studioId?: number) {
-    const event = await publicEvent(slug);
-    if (!event) return null;
-    // A speaker's link can name the room; without one they land in the event's
-    // own studio, which is what every existing link already means.
+  /**
+   * The studio a public link is asking for.
+   *
+   * A named studio decides its own event. This used to resolve the event first
+   * — the featured one when no slug was given — and then accept the studio
+   * only if it happened to belong to that event. Every other studio fell
+   * through to the marathon's, so pressing "Watch page" from a test event
+   * showed the live marathon instead: a different show, to a real audience,
+   * with none of your test on it.
+   *
+   * A hidden event stays hidden. Crew can still preview their own — they are
+   * the only people who could have the link — but it is never substituted for
+   * something else, which is the failure worth preventing.
+   */
+  async function studioForSlug(slug?: string, studioId?: number, req?: Request) {
     if (studioId) {
       const picked = await storage.getStudioById(studioId);
-      if (picked && picked.eventId === event.id) return { event, studio: picked };
+      if (picked) {
+        const owner = await storage.getEventById(picked.eventId);
+        if (owner) {
+          if (owner.visible) return { event: owner, studio: picked };
+          const adminEmail = req ? getAdminEmail(req) : "";
+          if (adminEmail && (await storage.isAdminEmail(adminEmail))) return { event: owner, studio: picked };
+          return null;
+        }
+      }
+      return null;
     }
+    const event = await publicEvent(slug);
+    if (!event) return null;
     return { event, studio: await storage.getOrCreateStudio(event.id) };
   }
 
@@ -2196,7 +2217,7 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/studio/state", async (req, res) => {
     noStore(res);
-    const found = await studioForSlug(typeof req.query.slug === "string" ? req.query.slug : undefined, numParam(req.query.studioId));
+    const found = await studioForSlug(typeof req.query.slug === "string" ? req.query.slug : undefined, numParam(req.query.studioId), req);
     if (!found) {
       res.status(404).json({ message: "No event" });
       return;
@@ -2222,6 +2243,7 @@ export function registerRoutes(app: Express): void {
     const found = await studioForSlug(
       typeof req.query.slug === "string" ? req.query.slug : undefined,
       numParam(req.query.studioId),
+      req,
     );
     if (!found) {
       res.json({ scenes: [], currentSceneId: 0 });
@@ -2245,6 +2267,7 @@ export function registerRoutes(app: Express): void {
     const found = await studioForSlug(
       typeof req.query.slug === "string" ? req.query.slug : undefined,
       numParam(req.query.studioId),
+      req,
     );
     if (!found) {
       res.json({ configured: false });
@@ -2279,7 +2302,7 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
-    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId));
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId), req);
     if (!found) {
       res.status(404).json({ message: "No event" });
       return;
@@ -2329,7 +2352,7 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
-    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId));
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId), req);
     if (!found) {
       res.status(404).json({ message: "No event" });
       return;
@@ -2364,7 +2387,7 @@ export function registerRoutes(app: Express): void {
       res.json({ configured: false });
       return;
     }
-    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId));
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId), req);
     const key = typeof req.body?.clientKey === "string" ? req.body.clientKey : "";
     if (!found || !key) {
       res.status(404).json({ message: "No event" });
@@ -2401,7 +2424,7 @@ export function registerRoutes(app: Express): void {
    * yourself and nobody else.
    */
   app.post("/api/studio/rename", async (req, res) => {
-    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId));
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId), req);
     if (!found) {
       res.status(404).json({ message: "No event" });
       return;
@@ -2422,7 +2445,7 @@ export function registerRoutes(app: Express): void {
   });
 
   app.post("/api/studio/leave", async (req, res) => {
-    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId));
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId), req);
     const key = typeof req.body?.clientKey === "string" ? req.body.clientKey : "";
     if (found && key) {
       const me = (await storage.listStudioParticipants(found.studio.id)).find((p) => p.clientKey === key);

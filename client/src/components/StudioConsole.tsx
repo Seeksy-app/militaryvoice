@@ -453,6 +453,17 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   const present = (data?.participants ?? []).filter((p) => p.present);
   const onStage = present.filter((p) => p.state === "On stage");
   const greenRoom = present.filter((p) => p.state !== "On stage");
+  /**
+   * The producer's own participant row.
+   *
+   * Turning your camera on publishes you into the room but leaves you in the
+   * green room like anybody else, and the only way onto the stage was pressing
+   * On beside your own name in a list you are not looking at — so a producer
+   * could go live, record for seven minutes and capture nothing but the idle
+   * card, with their camera on the whole time.
+   */
+  const me = selfKey ? present.find((p) => p.clientKey === selfKey) : undefined;
+  const meOnStage = me?.state === "On stage";
   const stale = (data?.participants ?? []).filter((p) => !p.present);
 
   // What the control room should be doing right now, and next.
@@ -785,14 +796,19 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   }, [kind, studioId, studios]);
   const currentStudio = visibleStudios.find((x) => x.id === (studioId ?? visibleStudios[0]?.id));
   const isPrimary = currentStudio?.isPrimary !== false;
-  const watchUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/watch${currentStudio && !currentStudio.isPrimary ? `?studioId=${currentStudio.id}` : ""}`
-      : "/watch";
-  const joinUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/studio${currentStudio && !currentStudio.isPrimary ? `?studioId=${currentStudio.id}` : ""}`
-      : "/studio";
+  /**
+   * Links to this studio, not to whichever one the site happens to feature.
+   *
+   * The studioId was only appended for non-primary studios, on the assumption
+   * that a primary studio is the one /watch shows. That is only true of the
+   * featured event: open the primary studio of any other event, press Watch
+   * page, and you land on the marathon — a different event, live, with none of
+   * your test on it. Always naming the studio removes the assumption.
+   */
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const studioQuery = currentStudio ? `?studioId=${currentStudio.id}` : "";
+  const watchUrl = `${origin}/watch${studioQuery}`;
+  const joinUrl = `${origin}/studio${studioQuery}`;
 
   function Tile({ p, stage }: { p: Participant; stage: boolean }) {
     return (
@@ -1528,6 +1544,23 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 {onCamera && micOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5 text-[#ED1C24]" />}
                 <span className="w-full truncate text-center">{onCamera && micOn ? "Mic" : "Muted"}</span>
               </button>
+
+              {/* Onto the stage, from where you are. */}
+              {onCamera && me && (
+                <button
+                  type="button"
+                  onClick={() => setState.mutate({ id: me.id, state: meOnStage ? "Green room" : "On stage" })}
+                  disabled={setState.isPending}
+                  title={meOnStage ? "Take yourself off the stage" : "Put yourself on the stage"}
+                  className={`ml-1 flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-colors ${
+                    meOnStage ? "bg-[#ED1C24] text-white" : "bg-white/10 text-white hover:bg-white/20"
+                  }`}
+                  data-testid="button-deck-self-stage"
+                >
+                  <Radio className="h-5 w-5" />
+                  <span className="w-full truncate text-center">{meOnStage ? "On stage" : "Go on stage"}</span>
+                </button>
+              )}
             </div>
 
             {/* Where other people are, on the right — they open a tab rather
