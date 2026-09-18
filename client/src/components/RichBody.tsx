@@ -90,42 +90,69 @@ export function htmlToMarkers(root: HTMLElement): string {
     }
   };
 
+  const BLOCK = new Set(["P", "DIV", "UL", "OL", "H1", "H2", "H3", "H4", "BLOCKQUOTE", "HR", "PRE", "SECTION", "ARTICLE", "LI"]);
+  const hasBlockChild = (el: HTMLElement) =>
+    Array.from(el.children).some((c) => BLOCK.has(c.tagName));
+
+  /**
+   * Walk blocks wherever they are, not only at the top level.
+   *
+   * contentEditable does not produce the tidy HTML this component writes. Ask
+   * a browser for a bullet list and you often get <div><ul>…</ul></div>, and a
+   * top-level-only loop walks straight past that <ul>, falls through to the
+   * inline path, and concatenates the three items into one paragraph with no
+   * separators and no markers — which is exactly what reached the preview.
+   */
   const blocks: string[] = [];
-  for (const node of Array.from(root.childNodes)) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const t = (node.textContent ?? "").trim();
-      if (t) blocks.push(t);
-      continue;
+  function collect(parent: HTMLElement | Element): void {
+    for (const node of Array.from(parent.childNodes)) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const t = (node.textContent ?? "").trim();
+        if (t) blocks.push(t);
+        continue;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) continue;
+      const el = node as HTMLElement;
+
+      if (el.tagName === "HR") {
+        blocks.push("---");
+        continue;
+      }
+      if (el.tagName === "H1" || el.tagName === "H2" || el.tagName === "H3" || el.tagName === "H4") {
+        const t = inline(el).trim();
+        if (t) blocks.push(`${el.tagName === "H1" || el.tagName === "H2" ? "##" : "###"} ${t}`);
+        continue;
+      }
+      if (el.tagName === "BLOCKQUOTE") {
+        const t = inline(el).trim();
+        if (t) blocks.push(t.split("\n").map((l) => `> ${l.trim()}`).join("\n"));
+        continue;
+      }
+      if (el.tagName === "UL" || el.tagName === "OL") {
+        const ordered = el.tagName === "OL";
+        // Direct children only, so a nested list doesn't get counted twice —
+        // and by hand rather than with :scope, which linkedom and older
+        // browsers do not implement.
+        const items = Array.from(el.children)
+          .filter((c) => c.tagName === "LI")
+          .map((li, i) => `${ordered ? `${i + 1}. ` : "- "}${inline(li).trim()}`)
+          .filter((t) => t.replace(/^(?:[-•]|\d+\.)\s*/, "").length > 0);
+        if (items.length) blocks.push(items.join("\n"));
+        continue;
+      }
+
+      // A wrapper around other blocks contributes nothing itself — descend.
+      // A wrapper around only text and marks is a paragraph.
+      if (hasBlockChild(el)) {
+        collect(el);
+        continue;
+      }
+      const text = inline(el).replace(/\u00a0/g, " ").trimEnd();
+      if (text.trim()) blocks.push(text);
     }
-    if (node.nodeType !== Node.ELEMENT_NODE) continue;
-    const el = node as HTMLElement;
-    if (el.tagName === "HR") {
-      blocks.push("---");
-      continue;
-    }
-    if (el.tagName === "H2" || el.tagName === "H3") {
-      const t = inline(el).trim();
-      if (t) blocks.push(`${el.tagName === "H2" ? "##" : "###"} ${t}`);
-      continue;
-    }
-    if (el.tagName === "BLOCKQUOTE") {
-      const t = inline(el).trim();
-      if (t) blocks.push(t.split("\n").map((l) => `> ${l.trim()}`).join("\n"));
-      continue;
-    }
-    if (el.tagName === "UL" || el.tagName === "OL") {
-      const ordered = el.tagName === "OL";
-      const items = Array.from(el.querySelectorAll(":scope > li")).map(
-        (li, i) => `${ordered ? `${i + 1}. ` : "- "}${inline(li).trim()}`,
-      );
-      if (items.length) blocks.push(items.join("\n"));
-      continue;
-    }
-    const text = inline(el).replace(/ /g, " ").trimEnd();
-    if (text.trim()) blocks.push(text);
-    // An empty <div> is someone pressing return twice; that's a paragraph
-    // break, which the join below already provides.
   }
+  collect(root);
+
   return blocks.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
