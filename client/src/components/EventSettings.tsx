@@ -16,13 +16,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { ShareYourSlot } from "@/components/ShareYourSlot";
-import { CampaignPlanner } from "@/components/CampaignPlanner";
 import { apiRequest } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, slotEnd, onAirWindow } from "@/lib/schedule";
 import { isLiveOnlyBlock } from "@shared/slots";
 import type { PublicEvent } from "@shared/schema";
-import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2, Headphones } from "lucide-react";
+import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2, Headphones, Megaphone } from "lucide-react";
 
 // Choose an event, then set up the show you're bringing to it. Everything
 // about one event lives behind its own card, so a podcaster in two events
@@ -38,11 +36,14 @@ interface EventEntry {
 export function EventSettings({
   profilePhotoUrl,
   onPickSlot,
+  onOpenPromotion,
   children,
 }: {
   profilePhotoUrl?: string;
   /** Send them to the slot picker for this event. */
   onPickSlot: (eventId: number) => void;
+  /** Promotion lives in its own tab; this is the way there. */
+  onOpenPromotion: () => void;
   /** Show materials / Stream / Recordings, rendered once an event is chosen. */
   children?: (entry: EventEntry) => React.ReactNode;
 }) {
@@ -324,17 +325,28 @@ export function EventSettings({
 
       {children?.(open)}
 
-      {/* Promotion comes after the work. Sharing matters, but not before
-          they've set the show up and sent us what we need. */}
+      {/* Promotion has its own tab now. It sat here, underneath the work,
+          which meant people finished the work and left — and promotion is
+          what decides whether anyone is watching. */}
       {open.slotIndex != null && open.signupId != null && (
-        <>
-          <ShareYourSlot
-            signupId={open.signupId}
-            podcastName={open.show?.showName || open.event.name}
-            whenLabel={onAirLabel}
-          />
-          <CampaignPlanner signupId={open.signupId} />
-        </>
+        <button
+          type="button"
+          onClick={onOpenPromotion}
+          className="mt-6 flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-5 text-left transition-colors hover-elevate"
+          data-testid="link-to-promotion"
+        >
+          <span className="min-w-0">
+            <span className="flex items-center gap-2 font-semibold text-foreground">
+              <Megaphone className="h-4 w-4 text-primary" /> Get people watching
+            </span>
+            <span className="mt-1 block text-sm text-muted-foreground">
+              Your share card, a posting plan for the days before, and the clips we cut afterwards.
+            </span>
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary">
+            Open Promotion <ChevronRight className="h-3.5 w-3.5" />
+          </span>
+        </button>
       )}
     </section>
   );

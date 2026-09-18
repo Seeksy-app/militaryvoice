@@ -53,6 +53,7 @@ import { EventSettings } from "@/components/EventSettings";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { NextSteps } from "@/components/NextSteps";
 import { OwnEncoder } from "@/components/OwnEncoder";
+import { PromotionScreen } from "@/components/PromotionScreen";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SocialTiles } from "@/components/SocialTiles";
@@ -342,41 +343,48 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
 // Dashboard
 // ---------------------------------------------------------------------------
 /**
- * One section of Event settings. Everything for an event reads as a single
- * scroll — tabs hid two thirds of it behind a click — but each part folds
- * away so the page stays walkable.
+ * What the event view says about streaming: one line, read-only.
+ *
+ * The connect/disconnect controls live in Integrations. Having them in both
+ * places meant YouTube appeared twice with the same channel name under it,
+ * which reads as a bug even when both are working.
  */
-function EventPanel({
-  title,
-  hint,
-  defaultOpen = false,
-  children,
-}: {
-  title: string;
-  hint?: string;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
+function StreamStatusRow({ onOpen }: { onOpen: () => void }) {
+  const { data } = useQuery<{ connected: boolean; channelTitle?: string }>({
+    queryKey: ["/api/host/youtube"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/youtube")).json(),
+  });
+  const connected = Boolean(data?.connected);
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-3 px-5 py-4 text-left hover:bg-[#053877]/[0.04]"
-        data-testid={`panel-${title.toLowerCase().replace(/\s+/g, "-")}`}
-      >
-        {open ? (
-          <ChevronDown className="h-4 w-4 shrink-0 text-[#053877]" />
-        ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 text-[#053877]" />
-        )}
-        <span className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">{title}</span>
-        {hint && <span className="hidden text-xs text-muted-foreground sm:inline">{hint}</span>}
-      </button>
-      {open && <div className="flex flex-col gap-6 border-t border-border bg-card px-5 pb-6 pt-5">{children}</div>}
-    </section>
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-5 text-left shadow-sm transition-colors hover-elevate"
+      data-testid="row-stream-status"
+    >
+      <span className="flex min-w-0 items-start gap-3">
+        <span
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+            connected ? "bg-[#ED1C24]/10 text-[#ED1C24]" : "bg-muted text-muted-foreground"
+          }`}
+        >
+          <Radio className="h-4.5 w-4.5" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-card-foreground">
+            {connected ? `Also going out to your YouTube — ${data?.channelTitle ?? "your channel"}` : "Going out on MilitaryVoice.ai only"}
+          </span>
+          <span className="mt-0.5 block text-sm text-muted-foreground">
+            {connected
+              ? "We'll open a broadcast on your channel when your slot starts."
+              : "Connect your own channel and we'll broadcast there too. Optional — your slot airs either way."}
+          </span>
+        </span>
+      </span>
+      <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary">
+        {connected ? "Change" : "Set it up"} <ChevronRight className="h-3.5 w-3.5" />
+      </span>
+    </button>
   );
 }
 
@@ -384,7 +392,7 @@ export default function HostDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const search = useSearch();
-  const [screen, setScreen] = useState<"dashboard" | "editProfile" | "events" | "recordings" | "integrations" | "fans" | "claim">("dashboard");
+  const [screen, setScreen] = useState<"dashboard" | "editProfile" | "events" | "promotion" | "recordings" | "integrations" | "claim">("dashboard");
   const [profileDirty, setProfileDirty] = useState(false);
   const [remindEventSetup, setRemindEventSetup] = useState(false);
 
@@ -496,7 +504,13 @@ export default function HostDashboard() {
   // ?tab=integrations (etc.) from a link elsewhere on the dashboard.
   useEffect(() => {
     const t = new URLSearchParams(search).get("tab");
-    if (t && ["dashboard", "editProfile", "events", "recordings", "integrations", "fans"].includes(t)) {
+    // "fans" was folded into Promotion; old links still land somewhere sane.
+    if (t === "fans") {
+      setScreen("promotion");
+      window.history.replaceState(null, "", window.location.pathname);
+      return;
+    }
+    if (t && ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations"].includes(t)) {
       setScreen(t as typeof screen);
       window.history.replaceState(null, "", window.location.pathname);
     }
@@ -647,13 +661,13 @@ export default function HostDashboard() {
                   ? "Profile settings"
                   : screen === "events"
                     ? "Event settings"
-                    : screen === "recordings"
-                      ? "Recordings"
-                      : screen === "integrations"
-                        ? "Integrations"
-                      : screen === "fans"
-                        ? "Fans & contacts"
-                      : "Podcaster Dashboard"}
+                    : screen === "promotion"
+                      ? "Promotion"
+                      : screen === "recordings"
+                        ? "Recordings"
+                        : screen === "integrations"
+                          ? "Integrations"
+                          : "Podcaster Dashboard"}
             </h1>
             {data && (
               <p className="mt-1 text-sm text-muted-foreground">
@@ -687,9 +701,9 @@ export default function HostDashboard() {
                 ["dashboard", "Dashboard", "Your card and slot"],
                 ["editProfile", "Profile settings", "About you"],
                 ["events", "Event settings", "Your shows and times"],
+                ["promotion", "Promotion", "Get people watching"],
                 ["recordings", "Recordings", "Yours after the show"],
                 ["integrations", "Integrations", "Your connected accounts"],
-                ["fans", "Fans & contacts", "Who asked for a reminder"],
               ] as const
             ).map(([value, label, hint]) => {
               const active = screen === value;
@@ -777,6 +791,22 @@ export default function HostDashboard() {
           <RecordingsScreen socialAccounts={profile?.socialAccounts} />
         ) : screen === "integrations" ? (
           <section className="mt-6">
+            {/* Streaming used to live on the event, which meant YouTube had two
+                homes and read as though something was connected twice. It
+                connects here; the event only reports what it finds. */}
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+              <Radio className="h-4 w-4" /> Going out live
+            </h2>
+            <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
+              Do you want your slot to go out on your own channel as well as ours? Optional — it airs on
+              MilitaryVoice.ai either way.
+            </p>
+            <ConnectYoutube />
+            <OwnEncoder />
+
+            <h2 className="mb-2 mt-10 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+              <Link2 className="h-4 w-4" /> Posting accounts
+            </h2>
             <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
               Link the accounts you post from. Connected ones show as follow buttons on your card in the public
               lineup, and are where we can send clips after your slot.
@@ -826,57 +856,11 @@ export default function HostDashboard() {
                     )}
 
           </section>
-        ) : screen === "fans" ? (
-          <>
-            {/* --------------------------------------------------- reminders */}
-            <section className="mt-8">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-                  <Users className="h-4 w-4" />
-                  Fans who want a reminder ({data.contacts.length})
-                </h2>
-                {data.contacts.length > 0 && (
-                  <a href={`${API_BASE}/api/host/export.csv`} data-testid="link-host-export-csv">
-                    <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
-                      <Download className="h-3.5 w-3.5" />
-                      Export CSV
-                    </Button>
-                  </a>
-                )}
-              </div>
-
-              {data.contacts.length === 0 ? (
-                <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-                  No fans have asked for a reminder yet. Share your agenda link to get the word out.
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-border bg-card">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border text-left text-xs uppercase tracking-[0.08em] text-foreground">
-                        <th className="px-4 py-2.5 font-medium">Name</th>
-                        <th className="px-4 py-2.5 font-medium">Email</th>
-                        <th className="px-4 py-2.5 font-medium">Phone</th>
-                        <th className="px-4 py-2.5 font-medium">Signed up</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.contacts.map((c) => (
-                        <tr key={c.id} className="border-b border-border last:border-0" data-testid={`row-contact-${c.id}`}>
-                          <td className="px-4 py-2.5 font-medium text-card-foreground">{c.name || "—"}</td>
-                          <td className="px-4 py-2.5 text-card-foreground">{c.email}</td>
-                          <td className="px-4 py-2.5 text-muted-foreground">{c.phone || "—"}</td>
-                          <td className="px-4 py-2.5 text-muted-foreground">{new Date(c.createdAt).toLocaleDateString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </section>
-          </>
+        ) : screen === "promotion" ? (
+          <PromotionScreen contacts={data.contacts} />
         ) : screen === "events" ? (
           <EventSettings
+            onOpenPromotion={() => setScreen("promotion")}
             profilePhotoUrl={profile?.photoUrl}
             onPickSlot={() => {
               setScreen("dashboard");
@@ -893,21 +877,12 @@ export default function HostDashboard() {
                 and after — so the dashboard says so. */}
                 {profile && entry.slotIndex != null && (
                   <div className="mt-6 flex flex-col gap-4">
-                    <EventPanel title="Show materials" hint="Files and show details" defaultOpen>
-                      <ShowMaterials profile={profile} showFormat={entry.show?.showFormat} interviewNeed={entry.show?.interviewNeed} />
-                    </EventPanel>
+                    {/* No wrapper: the panel was titled "Show materials" and
+                        the section inside it "Media", which is two names for
+                        one thing. ShowMaterials carries its own headings. */}
+                    <ShowMaterials profile={profile} showFormat={entry.show?.showFormat} interviewNeed={entry.show?.interviewNeed} />
 
-                    <EventPanel title="Stream" hint="Where it goes out">
-                      <p className="text-[15px] text-foreground">
-                        Do you want your slot to go out on your own channels as well as ours? Optional — it airs on
-                        MilitaryVoice.ai either way.
-                      </p>
-                      <ConnectYoutube />
-                      {/* Pushing your own live feed in is meaningless for a
-                          pre-recorded slot: we're rolling your file, there is no
-                          feed to send. Only offer it when the slot is live. */}
-                      {entry.show?.showFormat !== "prerecorded" && <OwnEncoder />}
-                    </EventPanel>
+                    <StreamStatusRow onOpen={() => setScreen("integrations")} />
 
                   </div>
                 )}

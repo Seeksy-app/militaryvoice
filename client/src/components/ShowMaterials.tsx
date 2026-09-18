@@ -172,13 +172,19 @@ export function ShowMaterials({
   // Everything in here is optional. It defaults open so nobody misses it, and
   // folds away once they've sent what they're sending.
   const [openFiles, setOpenFiles] = useState(true);
+  // Nobody should meet a type dropdown, a name field, an upload button and a
+  // link box before they have even said they have a file. One question first.
+  const [wantsFiles, setWantsFiles] = useState<boolean | null>(null);
+  const hasAssets = Boolean(assets && assets.length > 0);
+  // Already sent something, or just said they have something to send.
+  const showUploader = hasAssets ? openFiles : wantsFiles === true;
   const [openDetails, setOpenDetails] = useState(true);
 
   return (
     <section className="mt-8" data-testid="section-show-materials">
       <h2 className="mb-3 flex flex-wrap items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
         <Paperclip className="h-4 w-4" />
-        Show materials
+        Media
         <span className="rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#000741]">
           All optional
         </span>
@@ -186,39 +192,79 @@ export function ShowMaterials({
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
         <div className="bg-[#053877] px-5 py-3.5 text-white">
-          <p className="text-sm font-semibold">Everything the studio needs from you</p>
+          <p className="text-sm font-semibold">Anything we play or show during your slot</p>
           <p className="mt-0.5 text-xs text-white/85">
-            Nothing here is required to hold your slot. Send what you have and it's attached
-            automatically — you can come back and add the rest any time.
+            None of it is required to hold your slot. Send what you have and it's attached automatically — you can
+            come back and add the rest any time.
           </p>
         </div>
 
         {/* ---------------------------------------------------------- files */}
         <div className="border-b border-border p-5">
-          <button
-            type="button"
-            className="group mb-4 flex w-full items-center gap-3 text-left"
-            onClick={() => setOpenFiles((v) => !v)}
-            aria-expanded={openFiles}
-            data-testid="toggle-materials-files"
-          >
-            <span className="h-8 w-1 shrink-0 rounded-full bg-[#F0A71F]" aria-hidden="true" />
-            <span className="min-w-0 flex-1">
-              <span className="block text-base font-bold leading-tight text-[#053877]">Files to play or show</span>
-              <span className="block text-xs text-muted-foreground">Intros, outros, slides — anything we roll for you.</span>
-            </span>
-            {assets && assets.length > 0 && (
-              <span className="shrink-0 rounded-full bg-[#053877] px-2.5 py-0.5 text-[12px] font-bold text-white">
-                {assets.length}
+          {hasAssets && (
+            <button
+              type="button"
+              className="group mb-4 flex w-full items-center gap-3 text-left"
+              onClick={() => setOpenFiles((v) => !v)}
+              aria-expanded={openFiles}
+              data-testid="toggle-materials-files"
+            >
+              <span className="h-8 w-1 shrink-0 rounded-full bg-[#F0A71F]" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-base font-bold leading-tight text-[#053877]">
+                  {assets!.length} file{assets!.length === 1 ? "" : "s"} attached to your slot
+                </span>
+                <span className="block text-xs text-muted-foreground">Intros, outros, slides — anything we roll for you.</span>
               </span>
-            )}
-            {openFiles ? (
-              <ChevronDown className="h-4 w-4 shrink-0 text-[#053877]" />
-            ) : (
-              <ChevronRight className="h-4 w-4 shrink-0 text-[#053877]" />
-            )}
-          </button>
-          {openFiles && (
+              {openFiles ? (
+                <ChevronDown className="h-4 w-4 shrink-0 text-[#053877]" />
+              ) : (
+                <ChevronRight className="h-4 w-4 shrink-0 text-[#053877]" />
+              )}
+            </button>
+          )}
+
+          {/* The question, asked once, for anyone with nothing attached yet. */}
+          {!hasAssets && (
+            <div className="mb-4">
+              <p className="text-[15px] font-semibold text-foreground">
+                Do you have anything for us to play during your slot?
+              </p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                An intro, an outro, a sponsor reel, slides. {isPrerecorded ? "Your episode itself is already set up separately." : ""}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={wantsFiles === true ? "default" : "outline"}
+                  className="rounded-full"
+                  onClick={() => setWantsFiles(true)}
+                  data-testid="button-media-yes"
+                >
+                  Yes, I have files
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={wantsFiles === false ? "default" : "outline"}
+                  className="rounded-full"
+                  onClick={() => setWantsFiles(false)}
+                  data-testid="button-media-no"
+                >
+                  No, nothing to send
+                </Button>
+              </div>
+              {wantsFiles === false && (
+                <p className="mt-3 rounded-xl border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+                  Nothing to do then — we'll take you straight from the green room. If that changes, come back and say
+                  yes any time before the day.
+                </p>
+              )}
+            </div>
+          )}
+
+          {showUploader && (
           <>
 
           {assets && assets.length > 0 && (
