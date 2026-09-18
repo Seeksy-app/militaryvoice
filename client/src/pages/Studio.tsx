@@ -10,6 +10,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useStudioRoom, type RoomPeer } from "@/hooks/use-studio-room";
 import { StageGrid, type RoomMeta } from "@/components/StageView";
 import { SceneRail } from "@/components/SceneRail";
+import { GreenRoomTools } from "@/components/GreenRoomTools";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
 import type { StudioParticipantRow, SceneRow } from "@shared/schema";
 import {
@@ -28,7 +29,102 @@ import {
   Disc,
   Lightbulb,
   ArrowLeft,
+  Sparkles,
+  Headphones,
+  MessageSquare,
+  Wifi,
 } from "lucide-react";
+
+export interface SetupCheck {
+  key: "light" | "background" | "framing";
+  label: string;
+  state: "good" | "warn";
+  note: string;
+}
+
+/**
+ * Turn one thumbnail into three observations.
+ *
+ * Everything here is arithmetic on pixels — mean luma for exposure, the
+ * difference between the middle third and the edges for backlighting, and
+ * how much detail sits in the outer band for how busy the room is. It is not
+ * face detection and does not pretend to be: "framing" is inferred from where
+ * the brightest, most detailed part of the picture sits, which for a person
+ * on a webcam is their face often enough to be useful and wrong often enough
+ * that it is phrased as a suggestion.
+ */
+export function readFrame(
+  data: Uint8ClampedArray,
+  w: number,
+  h: number,
+  mean: number,
+  darkShare: number,
+): SetupCheck[] {
+  const luma = new Float64Array(w * h);
+  for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+    luma[p] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+  }
+  const at = (x: number, y: number) => luma[y * w + x];
+
+  // Centre third versus the outer band: a bright window behind someone shows
+  // up as edges much brighter than the middle.
+  let centreSum = 0, centreN = 0, edgeSum = 0, edgeN = 0;
+  const x0 = Math.floor(w / 3), x1 = Math.ceil((w * 2) / 3);
+  const y0 = Math.floor(h / 4), y1 = Math.ceil((h * 3) / 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const inCentre = x >= x0 && x < x1 && y >= y0 && y < y1;
+      if (inCentre) { centreSum += at(x, y); centreN++; }
+      else { edgeSum += at(x, y); edgeN++; }
+    }
+  }
+  const centre = centreN ? centreSum / centreN : mean;
+  const edge = edgeN ? edgeSum / edgeN : mean;
+
+  // Detail in the outer band, as a stand-in for how busy the room is.
+  let edgeDetail = 0, edgeDetailN = 0;
+  let colSum = 0, colWeight = 0, rowSum = 0, rowWeight = 0;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const g = Math.abs(at(x + 1, y) - at(x - 1, y)) + Math.abs(at(x, y + 1) - at(x, y - 1));
+      if (x < x0 || x >= x1) { edgeDetail += g; edgeDetailN++; }
+      // Where the detail is, weighted — roughly where the subject is.
+      colSum += x * g; colWeight += g;
+      rowSum += y * g; rowWeight += g;
+    }
+  }
+  const busy = edgeDetailN ? edgeDetail / edgeDetailN : 0;
+  const cx = colWeight ? colSum / colWeight / w : 0.5;
+  const cy = rowWeight ? rowSum / rowWeight / h : 0.5;
+
+  const light: SetupCheck =
+    mean < 55
+      ? { key: "light", label: "Lighting", state: "warn", note: "It's dark where you are. A lamp or a window in front of you — not behind — is the whole fix." }
+      : mean > 205
+        ? { key: "light", label: "Lighting", state: "warn", note: "You're blown out. Move away from the light behind you, or turn it down." }
+        : edge > centre + 38
+          ? { key: "light", label: "Lighting", state: "warn", note: "The light is behind you, so you're a silhouette. Turn around, or close the blind and put a lamp in front." }
+          : { key: "light", label: "Lighting", state: "good", note: "Well lit and evenly exposed." };
+
+  const background: SetupCheck =
+    darkShare > 0.55
+      ? { key: "background", label: "Background", state: "warn", note: "You're lit but the room behind you is black. Any light on the back wall stops you floating in the dark." }
+      : busy > 26
+        ? { key: "background", label: "Background", state: "warn", note: "There's a lot going on behind you. A plainer wall, or a couple of steps further from it, keeps the attention on you." }
+        : { key: "background", label: "Background", state: "good", note: "Clean enough not to pull focus." };
+
+  const off = Math.abs(cx - 0.5);
+  const framing: SetupCheck =
+    off > 0.17
+      ? { key: "framing", label: "Framing", state: "warn", note: `You're sitting well to the ${cx < 0.5 ? "left" : "right"} of frame. Centre yourself — the lower third covers the bottom of the picture.` }
+      : cy > 0.66
+        ? { key: "framing", label: "Framing", state: "warn", note: "You're low in frame. Raise the camera to eye level — on a couple of books if you have to." }
+        : cy < 0.3
+          ? { key: "framing", label: "Framing", state: "warn", note: "There's a lot of room above your head. Tilt down, or raise your chair." }
+          : { key: "framing", label: "Framing", state: "good", note: "Centred, at about eye level." };
+
+  return [light, background, framing];
+}
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const KEY_STORAGE = "mv_studio_key";
@@ -42,6 +138,8 @@ interface StudioState {
   /** What's actually going out, in the same shape the watch page renders. */
   meta?: RoomMeta;
   me: StudioParticipantRow | null;
+  /** Their own slot on this event, when they hold one. Crew have none. */
+  mySlot?: { startsAtUtc: string; endsAtUtc: string; label: string } | null;
   onStageCount: number;
   greenRoomCount: number;
 }
@@ -310,7 +408,7 @@ export default function Studio({ slug }: { slug?: string }) {
 
   // Real audio and video, when the event has a media layer configured. Without
   // it the page still works as a green room; it just doesn't carry sound.
-  const { status: roomStatus, peers, reconnect } = useStudioRoom({
+  const { status: roomStatus, peers, reconnect, quality } = useStudioRoom({
     enabled: joined,
     clientKey: key,
     slug,
@@ -335,14 +433,23 @@ export default function Studio({ slug }: { slug?: string }) {
    */
   const [camProved, setCamProved] = useState(false);
   const [micProved, setMicProved] = useState(false);
-  /** Read off the picture: too dark to see, or blown out. */
-  const [lightHint, setLightHint] = useState<string>("");
+  /**
+   * What the picture itself says about lighting, framing and background.
+   *
+   * Read off a 64px thumbnail of their own video every couple of seconds —
+   * no model, no upload, nothing leaves the browser. These are heuristics on
+   * brightness and detail, and they are worded as observations rather than
+   * verdicts, because a heuristic that says "your background is cluttered"
+   * about a bookshelf somebody likes is worse than saying nothing.
+   */
+  const [setup, setSetup] = useState<SetupCheck[]>([]);
+  const [showSetup, setShowSetup] = useState(false);
 
   useEffect(() => {
     if (!stream) {
       setCamProved(false);
       setMicProved(false);
-      setLightHint("");
+      setSetup([]);
     }
   }, [stream]);
 
@@ -375,19 +482,37 @@ export default function Studio({ slug }: { slug?: string }) {
       const px = data.length / 4;
       const mean = sum / px;
       const darkShare = dark / px;
-      setLightHint(
-        mean < 55
-          ? "It's dark where you are. A lamp or a window in front of you — not behind — makes the difference."
-          : mean > 205
-            ? "You're blown out. Move away from the light behind you, or turn it down."
-            : darkShare > 0.55
-              ? "Your face is lit but the room behind you is black. A light on the back wall stops you floating in the dark."
-              : "",
-      );
+      setSetup(readFrame(data, canvas.width, canvas.height, mean, darkShare));
     }, 2000);
     return () => clearInterval(id);
   }, [stream, camOn]);
 
+  const warnCount = setup.filter((c) => c.state === "warn").length;
+
+  const zone = useMemo(detectLocalTimeZone, []);
+  // A countdown has to move on its own; nobody reloads a green room.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  /**
+   * "You're on at 3:30 PM · in 2 hours" — the thing everybody in a green room
+   * actually wants to know. The server already worked the window out; the
+   * client only has to say it in their own zone and count down.
+   */
+  const slotLabel = useMemo(() => {
+    const slot = state?.mySlot;
+    if (!slot) return "";
+    const start = new Date(slot.startsAtUtc);
+    const when = `${formatTimeInZone(start, zone)}`;
+    const mins = Math.round((start.getTime() - now) / 60000);
+    if (mins > 90) return `${when} · in ${Math.round(mins / 60)} hours`;
+    if (mins > 1) return `${when} · in ${mins} minutes`;
+    if (mins > -5) return `${when} · you're up now`;
+    return `${when} · your slot has passed`;
+  }, [state?.mySlot, zone, now]);
   const onStage = state?.me?.state === "On stage";
   // Standby rolling with nobody up is not a live show, whatever the flag says.
   const showIsLive =
@@ -406,9 +531,12 @@ export default function Studio({ slug }: { slug?: string }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
-              {state?.studio.name ?? "Studio"}
+              Green Room
             </h1>
-            <p className="mt-1 text-sm text-white/60">{state?.eventName?.trim() ?? "Loading…"}</p>
+            <p className="mt-1 text-sm text-white/60">
+              {state?.eventName?.trim() ?? "Loading…"}
+              {state?.studio.name ? ` · ${state.studio.name}` : ""}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             {/* What's true from where they're standing. The studio's own status
@@ -432,23 +560,10 @@ export default function Studio({ slug }: { slug?: string }) {
               />
               {onStage ? "You're on air" : showIsLive ? "Show is live" : "Off air"}
             </Badge>
-            {joined && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-                onClick={async () => {
-                  await apiRequest("POST", "/api/studio/leave", { clientKey: key, slug, studioId }).catch(() => {});
-                  streamRef.current?.getTracks().forEach((t) => t.stop());
-                  streamRef.current = null;
-                  setStream(null);
-                  setJoined(false);
-                }}
-                data-testid="button-studio-leave"
-              >
-                <LogOut className="h-3.5 w-3.5" /> Leave
-              </Button>
-            )}
+            {/* No Leave button here. "Back to your dashboard" at the top left
+                is the way out, and two of them a few hundred pixels apart —
+                one of which silently drops your camera — is a way to leave by
+                accident in the minute before you are due on. */}
           </div>
         </div>
 
@@ -581,6 +696,29 @@ export default function Studio({ slug }: { slug?: string }) {
                       ))}
                     </span>
                   )}
+                  {/* Beside the meter because this is the other half of "am I
+                      ready" — the half nobody thinks to check until they see
+                      themselves back. */}
+                  {stream && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-expanded={showSetup}
+                      className={`h-8 gap-1.5 rounded-full border-white/25 text-white hover:bg-white/20 hover:text-white ${
+                        warnCount > 0 ? "bg-[#F0A71F]/20 border-[#F0A71F]/50" : "bg-white/10"
+                      }`}
+                      onClick={() => setShowSetup((v) => !v)}
+                      data-testid="button-setup-check"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-[#F0A71F]" />
+                      Check my setup
+                      {warnCount > 0 && (
+                        <span className="rounded-full bg-[#F0A71F] px-1.5 text-[10px] font-bold text-[#1a1200]">
+                          {warnCount}
+                        </span>
+                      )}
+                    </Button>
+                  )}
                 </div>
 
                 <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
@@ -599,11 +737,48 @@ export default function Studio({ slug }: { slug?: string }) {
                   ))}
                 </ul>
 
-                {lightHint && (
-                  <p className="mt-2 flex items-start gap-2 rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/10 p-2.5 text-xs text-white/85">
-                    <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#F0A71F]" />
-                    {lightHint}
-                  </p>
+                {showSetup && (
+                  <div className="mt-2 rounded-xl border border-white/15 bg-white/[0.05] p-3" data-testid="panel-setup-check">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/55">
+                        <Sparkles className="h-3.5 w-3.5 text-[#F0A71F]" /> How you look right now
+                      </span>
+                      <button type="button" onClick={() => setShowSetup(false)} className="text-xs text-white/45 hover:text-white">
+                        Hide
+                      </button>
+                    </div>
+
+                    {!camOn ? (
+                      <p className="mt-2 text-xs text-white/60">Turn your camera on and this fills in.</p>
+                    ) : setup.length === 0 ? (
+                      <p className="mt-2 text-xs text-white/60">Reading your picture…</p>
+                    ) : (
+                      <ul className="mt-2 flex flex-col gap-2">
+                        {setup.map((c) => (
+                          <li key={c.key} className="flex items-start gap-2 text-xs" data-testid={`setup-${c.key}`}>
+                            {c.state === "good" ? (
+                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                            ) : (
+                              <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#F0A71F]" />
+                            )}
+                            <span>
+                              <span className={c.state === "good" ? "font-medium text-white/85" : "font-medium text-white"}>
+                                {c.label}
+                              </span>
+                              <span className="text-white/60"> — {c.note}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {/* Said plainly, because "AI is looking at me" is a
+                        reasonable thing to worry about in a green room. */}
+                    <p className="mt-2.5 border-t border-white/10 pt-2 text-[11px] leading-relaxed text-white/35">
+                      Worked out in your own browser from your own picture. Nothing is uploaded, recorded or seen by
+                      anyone else, and it updates every couple of seconds while your camera is on.
+                    </p>
+                  </div>
                 )}
 
                 {mediaError && (
@@ -668,6 +843,18 @@ export default function Studio({ slug }: { slug?: string }) {
                   </Button>
                 )}
               </div>
+
+              {/* The space under the stage was empty, and the two questions
+                  everyone arrives with — does this work, can anyone hear me —
+                  went unanswered. */}
+              <GreenRoomTools
+                stream={stream}
+                micOn={micOn}
+                onStage={onStage}
+                peerCount={greenRoomPeers.length}
+                quality={quality}
+                slotLabel={slotLabel}
+              />
 
               {roomStatus === "unavailable" && (
                 <p className="mt-3 rounded-xl border border-white/15 bg-white/[0.06] p-3 text-sm text-white/60">

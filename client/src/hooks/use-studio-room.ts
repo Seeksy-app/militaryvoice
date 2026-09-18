@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ConnectionQuality,
   ConnectionState,
   Room,
   RoomEvent,
@@ -148,5 +149,36 @@ export function useStudioRoom({ enabled, clientKey, slug, studioId, stream }: Ar
     // stream identity is what matters here, not its contents
   }, [enabled, clientKey, slug, studioId, stream, attempt]);
 
-  return { status, peers, reconnect };
+  /**
+   * Connection health, read from the transport rather than guessed.
+   *
+   * LiveKit publishes a ConnectionQuality per participant, which is the same
+   * signal the server uses to decide whether to drop someone's layer — so it
+   * is the honest answer to "will I hold up", and it costs nothing to read.
+   */
+  const [quality, setQuality] = useState<{ label: string; detail: string; tone: "good" | "fair" | "poor" } | null>(null);
+  useEffect(() => {
+    if (!enabled) {
+      setQuality(null);
+      return;
+    }
+    const read = () => {
+      const q = roomRef.current?.localParticipant?.connectionQuality;
+      if (!q) return;
+      if (q === ConnectionQuality.Excellent) {
+        setQuality({ label: "Strong", detail: "Plenty of headroom for full quality video.", tone: "good" });
+      } else if (q === ConnectionQuality.Good) {
+        setQuality({ label: "Good", detail: "Steady. You'll go out clean.", tone: "good" });
+      } else if (q === ConnectionQuality.Poor) {
+        setQuality({ label: "Struggling", detail: "Your picture will soften and may stutter. Worth fixing before you're on.", tone: "poor" });
+      } else {
+        setQuality({ label: "Checking…", detail: "Measuring your connection.", tone: "fair" });
+      }
+    };
+    read();
+    const id = setInterval(read, 3000);
+    return () => clearInterval(id);
+  }, [enabled, status]);
+
+  return { status, peers, reconnect, quality };
 }

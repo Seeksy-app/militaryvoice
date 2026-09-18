@@ -95,6 +95,29 @@ export interface YoutubeBroadcast {
 }
 
 /**
+ * Credit for the music in the standby card, appended to every description.
+ *
+ * The clip carrying this track goes out on the simulcast, so it lands on each
+ * host's own channel as well as ours — and an uncredited licensed track is
+ * exactly what a Content ID claim is made of. Putting it here rather than
+ * asking people to remember means a claim can only happen if the licence
+ * itself changes. See media/README.md.
+ */
+export const MUSIC_CREDIT = [
+  "Music from #Uppbeat",
+  "https://uppbeat.io/t/sonda/rocket",
+  "License code: 32BTNUWKMGDRSCHG",
+].join("\n");
+
+/** Append the credit once, leaving room inside YouTube's 5000-char limit. */
+export function withMusicCredit(description: string): string {
+  if (description.includes("uppbeat.io")) return description;
+  const body = description.trim();
+  const tail = `\n\n${MUSIC_CREDIT}`;
+  return `${body.slice(0, 5000 - tail.length)}${tail}`;
+}
+
+/**
  * Opens a broadcast on their channel and returns somewhere to push to.
  * Three calls, because YouTube models the event and the pipe separately and
  * makes you bind them: create the broadcast, create the stream, bind.
@@ -108,7 +131,7 @@ export async function createBroadcast(
     body: JSON.stringify({
       snippet: {
         title: opts.title.slice(0, 100),
-        description: (opts.description ?? "").slice(0, 5000),
+        description: withMusicCredit(opts.description ?? ""),
         scheduledStartTime: opts.startAtIso,
       },
       status: { privacyStatus: opts.privacy ?? "public", selfDeclaredMadeForKids: false },
