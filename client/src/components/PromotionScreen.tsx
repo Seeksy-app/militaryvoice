@@ -108,6 +108,7 @@ export function PromotionScreen({ contacts }: { contacts: Contact[] }) {
             <>
               {/* Both of these bring their own heading — a second one above
                   each just said the same words twice. */}
+              <div id="section-share-slot" className="scroll-mt-24" />
               <ShareYourSlot
                 signupId={chosen.signupId!}
                 podcastName={chosen.show?.showName || chosen.event.name}

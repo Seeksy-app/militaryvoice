@@ -809,7 +809,7 @@ export default function HostDashboard() {
               </div>
             )}
             {social?.configured && (
-              <div className="mt-4 border-t border-border pt-4" data-testid="section-social-accounts">
+              <div className="mt-4 scroll-mt-24 border-t border-border pt-4" id="section-social-accounts" data-testid="section-social-accounts">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Social accounts</p>
                   <div className="flex items-center gap-1">
@@ -1137,10 +1137,13 @@ export default function HostDashboard() {
                 hasShow: !!hostEvents?.some((e) => !!e.show?.showName),
                 hasSlot: data.mySignups.length > 0,
                 hasAccounts: (social?.accounts?.length ?? 0) > 0,
-                hasMaterials: (hostAssets?.length ?? 0) > 0,
+                // Answering "nothing to send" finishes this step as truly as
+                // uploading does. The list should hear both answers.
+                hasMaterials: (hostAssets?.length ?? 0) > 0 || Boolean(profile?.mediaAnswered),
               }}
               onGoEvents={() => goTo("events")}
               onGoIntegrations={() => goTo("integrations")}
+              onGoPromotion={() => goTo("promotion")}
             />
 
 

@@ -102,7 +102,7 @@ export function EventShowForm({
   return (
     <div className="flex flex-col gap-6">
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="bg-[#053877] px-5 py-3.5 text-white">
+        <div className="bg-[#053877] px-5 py-3.5 text-white" id="set-up-your-show">
           <p className="text-sm font-semibold">Set up your show</p>
           <p className="mt-0.5 text-xs text-white/85">What you're bringing to {eventName}.</p>
         </div>

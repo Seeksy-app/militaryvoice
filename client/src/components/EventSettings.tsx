@@ -230,7 +230,7 @@ export function EventSettings({
       <h2 className="text-xl font-bold tracking-tight">{open.event.name}</h2>
 
       {/* ------------------------------------------------ time slot */}
-      <div className="mt-4 rounded-2xl border border-border bg-card p-5">
+      <div className="mt-4 scroll-mt-24 rounded-2xl border border-border bg-card p-5" id="your-time-slot">
         <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
           {open.slotIndex != null ? "Your time slot" : "Choose a time"}
         </h3>

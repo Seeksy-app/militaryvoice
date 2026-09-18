@@ -11,8 +11,23 @@ export interface StepState {
   hasMaterials: boolean;
 }
 
+/**
+ * Anchors the step rows scroll to.
+ *
+ * Moving to the right screen isn't the same as arriving at the thing. These
+ * ids are on the sections themselves, so a click lands on the control rather
+ * than at the top of a page the person then has to search.
+ */
+export const STEP_ANCHOR = {
+  show: "set-up-your-show",
+  slot: "your-time-slot",
+  materials: "section-media",
+  accounts: "section-social-accounts",
+  share: "section-share-slot",
+} as const;
+
 interface Step {
-  key: string;
+  key: keyof typeof STEP_ANCHOR;
   label: string;
   detail: string;
   done: boolean;
@@ -24,11 +39,36 @@ export function NextSteps({
   state,
   onGoEvents,
   onGoIntegrations,
+  onGoPromotion,
 }: {
   state: StepState;
   onGoEvents: () => void;
   onGoIntegrations: () => void;
+  onGoPromotion: () => void;
 }) {
+  /**
+   * Take them to the screen, then to the spot on it.
+   *
+   * The screen swap is a React render, so the anchor can't exist yet when the
+   * click happens. Poll briefly for it rather than guessing at a delay — a
+   * cold query can take a second, and a fixed timeout is either too short or
+   * a needless wait.
+   */
+  function goTo(step: Step) {
+    step.go();
+    const id = STEP_ANCHOR[step.key];
+    const started = Date.now();
+    const find = () => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      if (Date.now() - started < 4000) requestAnimationFrame(find);
+    };
+    requestAnimationFrame(find);
+  }
+
   const steps: Step[] = [
     {
       key: "show",
@@ -70,7 +110,7 @@ export function NextSteps({
       // prompt rather than pretending to know.
       done: false,
       cta: "Get your link",
-      go: onGoEvents,
+      go: onGoPromotion,
     },
   ];
 
@@ -93,11 +133,15 @@ export function NextSteps({
           {visible.map((s) => {
             const isNext = s.key === next?.key;
             return (
-              <li
-                key={s.key}
-                className={`flex flex-wrap items-center gap-3 px-5 py-4 ${isNext ? "bg-[#053877]/[0.04]" : ""}`}
-                data-testid={`step-${s.key}`}
-              >
+              <li key={s.key} data-testid={`step-${s.key}`}>
+                <button
+                  type="button"
+                  onClick={() => goTo(s)}
+                  className={`flex w-full flex-wrap items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-[#053877]/[0.06] ${
+                    isNext ? "bg-[#053877]/[0.04]" : ""
+                  }`}
+                  data-testid={`step-row-${s.key}`}
+                >
                 {s.done ? (
                   <CheckCircle2 className="h-5 w-5 shrink-0 text-primary" />
                 ) : (
@@ -111,20 +155,22 @@ export function NextSteps({
                   {!s.done && <p className="text-xs text-muted-foreground">{s.detail}</p>}
                 </div>
 
-                {!s.done && (
-                  <button
-                    type="button"
-                    onClick={s.go}
-                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold transition-colors ${
-                      isNext
-                        ? "bg-[#053877] text-white hover:bg-[#06498f]"
-                        : "border border-border bg-card text-foreground hover:bg-[#053877]/[0.04]"
-                    }`}
-                    data-testid={`step-cta-${s.key}`}
-                  >
-                    {s.cta} <ArrowRight className="h-3.5 w-3.5" />
-                  </button>
-                )}
+                  {!s.done && (
+                    <span
+                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold ${
+                        isNext
+                          ? "bg-[#053877] text-white"
+                          : "border border-border bg-card text-foreground"
+                      }`}
+                      data-testid={`step-cta-${s.key}`}
+                    >
+                      {s.cta} <ArrowRight className="h-3.5 w-3.5" />
+                    </span>
+                  )}
+                  {/* A finished step is still worth revisiting — it just
+                      doesn't shout about it. */}
+                  {s.done && <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground/40" />}
+                </button>
               </li>
             );
           })}

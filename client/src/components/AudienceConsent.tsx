@@ -26,7 +26,7 @@ export function AudienceConsent({ profile }: { profile: ProfileRow }) {
         ["hasVideoIntro", String(profile.hasVideoIntro)], ["hasVideoOutro", String(profile.hasVideoOutro)],
         ["hasSlides", String(profile.hasSlides)], ["hasImages", String(profile.hasImages)],
         ["needsInterviewer", String(profile.needsInterviewer)],
-        ["shareAudienceStats", String(on)],
+        ["shareAudienceStats", String(on)], ["mediaAnswered", String(profile.mediaAnswered)],
         ["socialLinks", profile.socialLinks ?? ""], ["rssUrl", profile.rssUrl ?? ""], ["youtubeUrl", profile.youtubeUrl ?? ""],
         ["showFormat", profile.showFormat || "live"], ["recordingUrl", profile.recordingUrl ?? ""],
         ["introStyle", profile.introStyle || "virtual"], ["branch", profile.branch ?? ""],

@@ -239,6 +239,10 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
   // Off unless they say otherwise: they connected these accounts so we could
   // post their clips, which is not the same as agreeing to be in a sales deck.
   shareAudienceStats: boolean("share_audience_stats").notNull().default(false),
+  // They've answered the "anything for us to play?" question — either way.
+  // Without this, "no, nothing to send" left the checklist item open forever,
+  // which is the one honest answer the list couldn't hear.
+  mediaAnswered: boolean("media_answered").notNull().default(false),
   // How they normally produce their show, so the studio team knows what to expect.
   recordingMode: text("recording_mode").notNull().default(""),
   postEdits: text("post_edits").notNull().default(""),
@@ -365,6 +369,7 @@ export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
     youtubeUrl: optionalUrl("YouTube"),
     needsInterviewer: z.boolean(),
     shareAudienceStats: z.boolean(),
+    mediaAnswered: z.boolean(),
     showFormat: z.enum(["live", "prerecorded"]),
     introStyle: z.enum(["virtual", "straight"]),
     recordingUrl: optionalUrl("episode"),

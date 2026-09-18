@@ -121,6 +121,43 @@ export function ShowMaterials({
     onError: (err: Error) => toast({ title: "Couldn't add that", description: err.message, variant: "destructive" }),
   });
 
+  /** Answering either way is the answer. Saved so the checklist can cross it
+   *  off and stay crossed off — "nothing to send" is a finished task. */
+  const answerMedia = useMutation({
+    mutationFn: async () => {
+      const fd = new FormData();
+      fd.append("podcastName", profile.podcastName);
+      fd.append("hostName", profile.hostName);
+      fd.append("phone", profile.phone ?? "");
+      fd.append("numPeople", String(profile.numPeople ?? 1));
+      fd.append("hasVideoIntro", String(bringing.hasVideoIntro));
+      fd.append("hasVideoOutro", String(bringing.hasVideoOutro));
+      fd.append("hasSlides", String(bringing.hasSlides));
+      fd.append("hasImages", String(bringing.hasImages));
+      fd.append("needsInterviewer", String(needsInterviewer));
+      fd.append("shareAudienceStats", String(profile.shareAudienceStats));
+      fd.append("mediaAnswered", "true");
+      fd.append("socialLinks", profile.socialLinks ?? "");
+      fd.append("rssUrl", profile.rssUrl ?? "");
+      fd.append("youtubeUrl", profile.youtubeUrl ?? "");
+      fd.append("showFormat", profile.showFormat || "live");
+      fd.append("recordingUrl", profile.recordingUrl ?? "");
+      fd.append("introStyle", profile.introStyle || "virtual");
+      fd.append("branch", profile.branch ?? "");
+      fd.append("serviceStatus", profile.serviceStatus ?? "");
+      fd.append("recordingMode", profile.recordingMode ?? "");
+      fd.append("postEdits", profile.postEdits ?? "");
+      fd.append("streamPlatform", profile.streamPlatform ?? "");
+      fd.append("streamPlatformOther", profile.streamPlatformOther ?? "");
+      fd.append("notes", profile.notes ?? "");
+      fd.append("guests", guests);
+      fd.append("interviewQuestions", questions);
+      fd.append("promoNotes", promo);
+      return (await apiUpload("PUT", "/api/host/profile", fd)).json();
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/host/profile"] }),
+  });
+
   const remove = useMutation({
     mutationFn: async (id: number) => apiRequest("DELETE", `/api/host/assets/${id}`),
     onSuccess: () => {
@@ -174,14 +211,14 @@ export function ShowMaterials({
   const [openFiles, setOpenFiles] = useState(true);
   // Nobody should meet a type dropdown, a name field, an upload button and a
   // link box before they have even said they have a file. One question first.
-  const [wantsFiles, setWantsFiles] = useState<boolean | null>(null);
+  const [wantsFiles, setWantsFiles] = useState<boolean | null>(profile.mediaAnswered ? false : null);
   const hasAssets = Boolean(assets && assets.length > 0);
   // Already sent something, or just said they have something to send.
   const showUploader = hasAssets ? openFiles : wantsFiles === true;
   const [openDetails, setOpenDetails] = useState(true);
 
   return (
-    <section className="mt-8" data-testid="section-show-materials">
+    <section className="mt-8 scroll-mt-24" id="section-media" data-testid="section-show-materials">
       <h2 className="mb-3 flex flex-wrap items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
         <Paperclip className="h-4 w-4" />
         Media
@@ -239,7 +276,10 @@ export function ShowMaterials({
                   size="sm"
                   variant={wantsFiles === true ? "default" : "outline"}
                   className="rounded-full"
-                  onClick={() => setWantsFiles(true)}
+                  onClick={() => {
+                    setWantsFiles(true);
+                    answerMedia.mutate();
+                  }}
                   data-testid="button-media-yes"
                 >
                   Yes, I have files
@@ -249,7 +289,10 @@ export function ShowMaterials({
                   size="sm"
                   variant={wantsFiles === false ? "default" : "outline"}
                   className="rounded-full"
-                  onClick={() => setWantsFiles(false)}
+                  onClick={() => {
+                    setWantsFiles(false);
+                    answerMedia.mutate();
+                  }}
                   data-testid="button-media-no"
                 >
                   No, nothing to send
