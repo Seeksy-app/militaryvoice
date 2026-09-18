@@ -1116,35 +1116,73 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   </Popover>
                 )}
 
-                {/* One control for going on: live stream, record, or both. */}
+                {/* One control, and its colour is the answer to "are we on".
+                    Red means the button will put you on air; green means you
+                    already are. It used to be red either way, with the state
+                    hiding in a separate pill — so the most consequential fact
+                    on the screen was the one thing it didn't say loudly. */}
                 {broadcasting || recording ? (
-                  <div className="flex items-center gap-2">
-                    <span className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white">
-                      {broadcasting && (
-                        <span className="flex items-center gap-1.5">
-                          <span className="h-2 w-2 animate-pulse rounded-full bg-[#ED1C24]" /> Live
-                        </span>
-                      )}
-                      {broadcasting && recording && <span className="text-white/40">·</span>}
-                      {recording && (
-                        <span className="flex items-center gap-1.5">
-                          <Disc className="h-3 w-3 text-[#ED1C24]" /> Recording
-                        </span>
-                      )}
-                    </span>
-                    <Button
-                      size="sm"
-                      className="h-9 gap-1.5 rounded-full bg-white/15 px-4 font-semibold text-white hover:bg-white/25"
-                      disabled={broadcast.isPending || record.isPending}
-                      onClick={() => {
-                        if (recording) record.mutate({ action: "stop" });
-                        if (broadcasting) broadcast.mutate("stop");
-                      }}
-                      data-testid="button-end-all"
-                    >
-                      <Square className="h-3.5 w-3.5" /> End
-                    </Button>
-                  </div>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        className="h-9 gap-2 rounded-full bg-emerald-600 px-4 font-semibold text-white shadow-[0_6px_20px_rgba(5,150,105,0.4)] hover:bg-emerald-700"
+                        disabled={broadcast.isPending || record.isPending}
+                        data-testid="button-end-all"
+                      >
+                        <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
+                        {broadcasting && recording
+                          ? "Live · recording"
+                          : broadcasting
+                            ? "Live"
+                            : "Recording"}
+                        <Square className="h-3.5 w-3.5 opacity-80" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          {broadcasting ? "End the broadcast?" : "Stop recording?"}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription asChild>
+                          <div className="space-y-2">
+                            {broadcasting && (
+                              <p>
+                                The watch page and every connected destination stop immediately. Anyone watching sees
+                                the stream end.
+                              </p>
+                            )}
+                            {recording && (
+                              <p>
+                                The recording is closed and saved. It appears in Recordings within a few minutes, and
+                                the clipper picks it up from there.
+                              </p>
+                            )}
+                            {/* The bit people get wrong: starting again is a
+                                new stream, not a resumption, and every viewer
+                                has to reconnect. */}
+                            <p className="font-medium text-foreground">
+                              Going live again starts a fresh stream — viewers have to reload, and a new recording
+                              begins. This can't be undone.
+                            </p>
+                          </div>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel data-testid="button-end-cancel">Stay on air</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={() => {
+                            if (recording) record.mutate({ action: "stop" });
+                            if (broadcasting) broadcast.mutate("stop");
+                          }}
+                          data-testid="button-end-confirm"
+                        >
+                          {broadcasting ? "End the broadcast" : "Stop recording"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 ) : isRoom ? (
                   <Button
                     size="sm"
