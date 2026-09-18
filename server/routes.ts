@@ -2174,6 +2174,10 @@ export function registerRoutes(app: Express): void {
       onStage,
       mySlot,
       myPhotoUrl,
+      /** Which sign-in the slot was looked up under, so a mismatch is visible. */
+      myEmail: email,
+      /** True when they got in as crew rather than as someone on the lineup. */
+      isCrew: Boolean(req && getAdminEmail(req) && (await storage.isAdminEmail(getAdminEmail(req)!))),
       onStageCount: onStage.length,
       greenRoomCount: all.filter((p) => p.state === "Green room" && withPresence(p)).length,
     };

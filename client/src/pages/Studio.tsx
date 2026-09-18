@@ -143,6 +143,9 @@ interface StudioState {
   mySlot?: { startsAtUtc: string; endsAtUtc: string; label: string } | null;
   /** Their show artwork, for when the camera is off. */
   myPhotoUrl?: string;
+  /** The sign-in the slot was looked up under. */
+  myEmail?: string;
+  isCrew?: boolean;
   onStageCount: number;
   greenRoomCount: number;
 }
@@ -547,6 +550,9 @@ export default function Studio({ slug }: { slug?: string }) {
   const slotLabel = useMemo(() => {
     const slot = state?.mySlot;
     if (!slot) return "";
+    // The empty case is handled by the caller, which names the account it
+    // checked — "no slot" without saying whose is how somebody who holds one
+    // under a different sign-in concludes the page is broken.
     const start = new Date(slot.startsAtUtc);
     const when = `${formatTimeInZone(start, zone)}`;
     const mins = Math.round((start.getTime() - now) / 60000);
@@ -690,6 +696,9 @@ export default function Studio({ slug }: { slug?: string }) {
               peerCount={greenRoomPeers.length}
               quality={quality}
               slotLabel={slotLabel}
+              signedInAs={state?.myEmail ?? ""}
+              isCrew={!!state?.isCrew}
+              camOn={camOn}
             />
           </div>
 
@@ -887,9 +896,24 @@ export default function Studio({ slug }: { slug?: string }) {
                       <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/55">
                         <Sparkles className="h-3.5 w-3.5 text-[#F0A71F]" /> How you look right now
                       </span>
-                      <button type="button" onClick={() => setShowSetup(false)} className="text-xs text-white/45 hover:text-white">
-                        Hide
-                      </button>
+                      <span className="flex items-center gap-2">
+                        {/* The readings keep updating underneath, but after
+                            the first pass there was nothing that said so and
+                            no way to ask again after moving a lamp. */}
+                        {!scanning && (
+                          <button
+                            type="button"
+                            onClick={() => setScanned(0)}
+                            className="text-xs text-[#F0A71F] hover:text-white"
+                            data-testid="button-setup-rescan"
+                          >
+                            Scan again
+                          </button>
+                        )}
+                        <button type="button" onClick={() => setShowSetup(false)} className="text-xs text-white/45 hover:text-white">
+                          Hide
+                        </button>
+                      </span>
                     </div>
 
                     {!camOn ? (
@@ -940,8 +964,9 @@ export default function Studio({ slug }: { slug?: string }) {
                     {/* Said plainly, because "AI is looking at me" is a
                         reasonable thing to worry about in a green room. */}
                     <p className="mt-2.5 border-t border-white/10 pt-2 text-[11px] leading-relaxed text-white/35">
+                      {camOn && !scanning ? "Still watching — move a lamp and this follows. " : ""}
                       Worked out in your own browser from your own picture. Nothing is uploaded, recorded or seen by
-                      anyone else, and it updates every couple of seconds while your camera is on.
+                      anyone else.
                     </p>
                   </div>
                 )}

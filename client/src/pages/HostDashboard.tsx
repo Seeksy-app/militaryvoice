@@ -39,6 +39,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { NavBar } from "@/components/NavBar";
+import { LogoLockup } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -744,54 +745,89 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const selectedSlot = slots.find((s) => s.index === claimIndex);
   const inSetup = !!data && !loadingProfile && !hasProfile;
 
+  // Signed in, past setup: this is a workspace, not a page of the website.
+  // The public nav is for people deciding whether to take part; somebody who
+  // has already taken a slot just loses a band of screen to it.
+  const workspace = !!data && hasProfile && !inSetup;
+
   return (
     <div className="min-h-screen">
-      <NavBar />
-      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              {inSetup
-                ? "Set up your show"
-                : screen === "editProfile"
-                  ? "Profile settings"
-                  : screen === "events"
-                    ? "Event settings"
-                    : screen === "promotion"
-                      ? "Promotion"
-                      : screen === "recordings"
-                        ? "Recordings"
-                        : screen === "integrations"
-                          ? "Integrations"
-                          : "Podcaster Dashboard"}
-            </h1>
+      {!workspace && <NavBar />}
+      <div className={`mx-auto max-w-6xl px-4 sm:px-6 ${workspace ? "py-5" : "py-10"}`}>
+        {workspace ? (
+          /* One line: the mark, who you are, and the way out. The page title
+             is gone because the highlighted tab below already says
+             "Integrations" — printing it twice, with the address bar saying it
+             a third time, was three answers to a question nobody asked. */
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <Link href="/host/dashboard" className="shrink-0" data-testid="link-workspace-home">
+              <LogoLockup className="h-9 w-auto" />
+            </Link>
+            <div className="flex min-w-0 items-center gap-2">
+              {profile?.photoUrl ? (
+                <img
+                  src={resolveUploadUrl(profile.photoUrl)}
+                  alt=""
+                  className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-border"
+                />
+              ) : (
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-xs font-bold text-[#053877]">
+                  {(profile?.podcastName || data?.email || "?").trim().charAt(0).toUpperCase()}
+                </span>
+              )}
+              <span className="hidden min-w-0 sm:block">
+                <span className="block truncate text-sm font-semibold text-foreground">
+                  {profile?.podcastName || data?.email}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">{data?.email}</span>
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-1 shrink-0 gap-1.5 rounded-full"
+                onClick={() => logout.mutate()}
+                disabled={logout.isPending}
+                data-testid="button-host-logout"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Sign out</span>
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                {inSetup ? "Set up your show" : "Podcaster Dashboard"}
+              </h1>
+              {data && (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {inSetup && pendingSummary ? "Step 3 of 3 · " : ""}
+                  Signed in as {data.email}
+                </p>
+              )}
+            </div>
             {data && (
-              <p className="mt-1 text-sm text-muted-foreground">
-                {inSetup && pendingSummary ? "Step 3 of 3 · " : ""}
-                Signed in as {data.email}
-              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 rounded-full"
+                onClick={() => logout.mutate()}
+                disabled={logout.isPending}
+                data-testid="button-host-logout"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sign out
+              </Button>
             )}
           </div>
-          {data && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5 rounded-full"
-              onClick={() => logout.mutate()}
-              disabled={logout.isPending}
-              data-testid="button-host-logout"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Sign out
-            </Button>
-          )}
-        </div>
+        )}
 
         {/* Two places to be, said plainly: one about them, one about an
             event. Everything else hangs off those. Hidden during first-time
             setup, where there is only one thing to do. */}
         {data && hasProfile && !inSetup && (
-          <nav className="mt-6 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm sm:grid-cols-3 lg:grid-cols-6">
+          <nav className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm sm:grid-cols-3 lg:grid-cols-6">
             {(
               [
                 ["dashboard", "Dashboard", "Your card and slot"],

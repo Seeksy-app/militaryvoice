@@ -27,8 +27,9 @@ export interface Quality {
  * way they believe hearing themselves. Never leaves the browser — the blob is
  * played from memory and dropped.
  */
-function PlaybackDialog({ stream, open, onOpenChange }: {
+function PlaybackDialog({ stream, camOn, open, onOpenChange }: {
   stream: MediaStream | null;
+  camOn: boolean;
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
@@ -95,7 +96,7 @@ function PlaybackDialog({ stream, open, onOpenChange }: {
         )}
         <div className="flex flex-wrap gap-2">
           {state === "idle" && (
-            <Button className="gap-1.5 rounded-full" disabled={!stream} onClick={record} data-testid="button-playback-record">
+            <Button className="gap-1.5 rounded-full" disabled={!stream || !camOn} onClick={record} data-testid="button-playback-record">
               <Play className="h-4 w-4" /> Record {RECORD_SECONDS} seconds
             </Button>
           )}
@@ -112,6 +113,11 @@ function PlaybackDialog({ stream, open, onOpenChange }: {
         </div>
         {error && <p className="text-sm text-[#b45309]">{error}</p>}
         {!stream && <p className="text-sm text-muted-foreground">Turn your camera and mic on first.</p>}
+        {stream && !camOn && (
+          <p className="text-sm text-muted-foreground">
+            Your camera is off, so this would record six seconds of black. Turn it on in the green room and come back.
+          </p>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -164,6 +170,9 @@ export function GreenRoomTools({
   peerCount,
   quality,
   slotLabel,
+  signedInAs,
+  isCrew,
+  camOn,
 }: {
   stream: MediaStream | null;
   micOn: boolean;
@@ -171,17 +180,25 @@ export function GreenRoomTools({
   peerCount: number;
   quality: Quality | null;
   slotLabel: string;
+  signedInAs: string;
+  isCrew: boolean;
+  camOn: boolean;
 }) {
   const [testOpen, setTestOpen] = useState(false);
 
   return (
     <>
       <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-4" data-testid="green-room-tools">
+        {/* A camera that is switched off still has a track, and MediaRecorder
+            happily records six seconds of black from it. The button offered
+            the test anyway, so the answer to "does my camera work" was a black
+            rectangle — which looks like the test is broken rather than the
+            camera being off. */}
         <Box
           icon={Headphones}
           label="Check yourself"
-          value={stream ? "Record 6 seconds" : "Turn your camera on"}
-          hint={stream ? "See and hear it back" : undefined}
+          value={!stream ? "Turn your camera on" : camOn ? "Record 6 seconds" : "Camera is off"}
+          hint={!stream ? undefined : camOn ? "See and hear it back" : "Turn it on to record a test"}
           onClick={stream ? () => setTestOpen(true) : undefined}
           testId="tool-playback"
         />
@@ -209,16 +226,26 @@ export function GreenRoomTools({
           hint={quality?.tone === "poor" ? "A cable beats wi-fi" : undefined}
           testId="tool-connection"
         />
+        {/* When there's no slot, name the account that was checked. Somebody
+            who holds one under a different sign-in reads a bare "no slot" as
+            the page being wrong, and there is no way to tell from the screen
+            which of two sessions they are in. */}
         <Box
           icon={Clock}
           label="When you're on"
-          value={slotLabel || "No slot on this event"}
-          hint={slotLabel ? "Wait here — the producer brings you up" : "You're here as crew"}
+          value={slotLabel || "No slot for this sign-in"}
+          hint={
+            slotLabel
+              ? "Wait here — the producer brings you up"
+              : signedInAs
+                ? `${signedInAs}${isCrew ? " · crew" : ""}`
+                : "Sign in to see your slot"
+          }
           testId="tool-slot"
         />
       </div>
 
-      <PlaybackDialog stream={stream} open={testOpen} onOpenChange={setTestOpen} />
+      <PlaybackDialog stream={stream} camOn={camOn} open={testOpen} onOpenChange={setTestOpen} />
     </>
   );
 }
