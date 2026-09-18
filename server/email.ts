@@ -22,7 +22,13 @@ export const EMAIL_BANNERS = {
 /**
  * The one layout every outward email uses: photo header, white card, navy
  * footer. Table-based and inline-styled because that's what mail clients
- * render; 600px wide with a 2x banner so it's sharp on a phone.
+ * render; 640px wide with a 2x banner so it's sharp on a phone.
+ *
+ * 600px was the standard because Outlook's old reading pane was about that
+ * wide and anything larger got a horizontal scrollbar. That pane is long gone
+ * and 640 is comfortably inside what every current client shows, so the body
+ * gets forty more pixels — worth about five characters a line, which is the
+ * difference between a three-line bullet and a two-line one.
  */
 export function emailShell(o: {
   banner: string;
@@ -40,7 +46,7 @@ export function emailShell(o: {
   return `<!doctype html><html><body style="margin:0;padding:0;background:#eef2f8;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f8;">
     <tr><td align="center" style="padding:24px 12px;">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+      <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
         <!-- The artwork, whole.
              It used to be a background-image with a dark gradient and the
              header type drawn on top. Three things went wrong with that: the
@@ -51,8 +57,8 @@ export function emailShell(o: {
              the wave in half. A plain <img> has none of those problems: it
              always shows the whole thing, at every width, in every client. -->
         <tr><td style="padding:0;background:#053877;font-size:0;line-height:0;" bgcolor="#053877">
-          <img src="${o.banner}" width="600" alt="${escapeHtml(o.bannerAlt ?? "MilitaryVoice.ai")}"
-               style="display:block;width:100%;max-width:600px;height:auto;border:0;">
+          <img src="${o.banner}" width="640" alt="${escapeHtml(o.bannerAlt ?? "MilitaryVoice.ai")}"
+               style="display:block;width:100%;max-width:640px;height:auto;border:0;">
         </td></tr>
         <!-- The brand bar: what this email is on the left, the mark on the
              right. Below the picture rather than on it, so neither can ever
@@ -698,14 +704,20 @@ function inlineMarks(escaped: string): string {
     .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
 }
 
-/** One row of a list: a gold marker in a narrow cell, the text beside it. */
+/**
+ * One row of a list: a gold marker in a narrow cell, the text beside it.
+ *
+ * The marker cell was 38px wide with 12px of padding after it — half an inch
+ * of nothing between the dot and the first word, which read as a hanging
+ * indent rather than a bullet. A dot needs about as much room as a dot.
+ */
 function listRow(marker: string, body: string, numbered: boolean): string {
   const bullet = numbered
-    ? `<div style="width:26px;height:26px;border-radius:50%;background:#F0A71F;color:#1a1200;font-weight:700;font-size:13px;line-height:26px;text-align:center;font-family:Arial,sans-serif;">${marker}</div>`
-    : `<div style="width:8px;height:8px;border-radius:50%;background:#F0A71F;margin:8px 0 0 9px;"></div>`;
+    ? `<div style="width:22px;height:22px;border-radius:50%;background:#F0A71F;color:#1a1200;font-weight:700;font-size:12px;line-height:22px;text-align:center;font-family:Arial,sans-serif;">${marker}</div>`
+    : `<div style="width:7px;height:7px;border-radius:50%;background:#F0A71F;margin:8px 0 0 2px;"></div>`;
   return `<tr>
-    <td width="38" valign="top" style="padding:0 12px 12px 0;">${bullet}</td>
-    <td valign="top" style="padding:0 0 12px;font-size:15px;line-height:1.65;color:#374151;">${body}</td>
+    <td width="${numbered ? 30 : 14}" valign="top" style="padding:0 ${numbered ? 10 : 8}px 8px 0;">${bullet}</td>
+    <td valign="top" style="padding:0 0 8px;font-size:15px;line-height:1.6;color:#374151;">${body}</td>
   </tr>`;
 }
 
@@ -778,15 +790,27 @@ function textToHtml(text: string): string {
     .join("");
 }
 
+/**
+ * Header images, every one cropped to the 2.5:1 the header wants.
+ *
+ * The header is a plain <img>, so the file's own shape is the shape people
+ * see — a hero cropped by the browser shows whatever the middle happens to
+ * be. scripts/email-banners.ts regenerates the set.
+ *
+ * "marathon" is kept pointing at studio.jpg because broadcasts already store
+ * that key; renaming it would blank the header on every draft that has it.
+ */
 const BROADCAST_BANNERS: Record<string, string> = {
-  welcome: `${SITE}/listeners-bg.jpg`,
-  podcasters: `${SITE}/podcasters-bg.jpg`,
-  // Cropped to the 2.5:1 the header wants, rather than a hero cropped by the
-  // browser — the header is a plain <img> now, so the file's own shape is the
-  // shape people see.
+  welcome: `${SITE}/email/welcome.jpg`,
+  podcasters: `${SITE}/email/podcasters.jpg`,
   marathon: `${SITE}/email/studio.jpg`,
+  studio: `${SITE}/email/studio.jpg`,
   conversation: `${SITE}/email/conversation.jpg`,
-  schedule: `${SITE}/agenda-bg.jpg`,
+  desk: `${SITE}/email/desk.jpg`,
+  mic: `${SITE}/email/mic.jpg`,
+  headphones: `${SITE}/email/headphones.jpg`,
+  board: `${SITE}/email/board.jpg`,
+  schedule: `${SITE}/email/schedule.jpg`,
 };
 
 const RICO_PHOTO = `${SITE}/riccoh-player.jpg`;

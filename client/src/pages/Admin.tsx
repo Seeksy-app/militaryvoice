@@ -3729,13 +3729,27 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                 </div>
 
                 <div>
-                  <Label className="mb-2 block">Header image</Label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <Label className="mb-2 block">
+                    Header image
+                    <span className="ml-2 text-xs font-normal text-muted-foreground">
+                      each one is the real file, cropped as it will arrive
+                    </span>
+                  </Label>
+                  {/* The preview used to show /hero-3.jpg while the email sent
+                      /email/studio.jpg — so what you picked was not what you
+                      saw. Every tile now points at the file that actually
+                      ships. */}
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                     {[
-                      { key: "welcome", label: "Welcome", src: "/listeners-bg.jpg" },
-                      { key: "podcasters", label: "Podcasters", src: "/podcasters-bg.jpg" },
-                      { key: "marathon", label: "Military", src: "/hero-3.jpg" },
-                      { key: "schedule", label: "Agenda", src: "/agenda-bg.jpg" },
+                      { key: "welcome", label: "Listeners", src: "/email/welcome.jpg" },
+                      { key: "podcasters", label: "Podcasters", src: "/email/podcasters.jpg" },
+                      { key: "marathon", label: "Studio", src: "/email/studio.jpg" },
+                      { key: "conversation", label: "Conversation", src: "/email/conversation.jpg" },
+                      { key: "desk", label: "Desk", src: "/email/desk.jpg" },
+                      { key: "mic", label: "Microphone", src: "/email/mic.jpg" },
+                      { key: "headphones", label: "Headphones", src: "/email/headphones.jpg" },
+                      { key: "board", label: "Mixing board", src: "/email/board.jpg" },
+                      { key: "schedule", label: "Agenda", src: "/email/schedule.jpg" },
                     ].map((t) => (
                       <button
                         key={t.key}
@@ -3743,7 +3757,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                         onClick={() => setBBanner(t.key)}
                         className={`rounded-lg overflow-hidden border-2 transition-all ${bBanner === t.key ? "border-primary shadow-md" : "border-transparent hover:border-muted-foreground/30"}`}
                       >
-                        <img src={t.src} alt={t.label} className="w-full h-24 object-cover" />
+                        <img src={t.src} alt={t.label} loading="lazy" className="h-16 w-full object-cover" />
                         <p className={`text-xs py-1.5 text-center font-medium ${bBanner === t.key ? "text-primary" : "text-muted-foreground"}`}>{t.label}</p>
                       </button>
                     ))}
