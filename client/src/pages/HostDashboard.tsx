@@ -389,6 +389,43 @@ function StreamStatusRow({ onOpen }: { onOpen: () => void }) {
   );
 }
 
+/**
+ * A section heading you can take a link to.
+ *
+ * The link icon appears on hover and copies the full address including the
+ * tab, so what lands in someone's clipboard opens the right screen scrolled
+ * to the right place — rather than the dashboard home with a fragment that
+ * matches nothing.
+ */
+function AnchoredHeading({ id, icon: Icon, label }: { id: string; icon: typeof Radio; label: string }) {
+  const { toast } = useToast();
+  const href = `${window.location.origin}${window.location.pathname}#${id}`;
+  return (
+    <h2
+      id={id}
+      className="group mb-2 mt-10 flex scroll-mt-24 items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground"
+    >
+      <Icon className="h-4 w-4" /> {label}
+      <a
+        href={`#${id}`}
+        aria-label={`Copy a link to ${label}`}
+        title="Copy a link to this section"
+        className="opacity-0 transition-opacity focus:opacity-100 group-hover:opacity-60 hover:!opacity-100"
+        onClick={(e) => {
+          e.preventDefault();
+          navigator.clipboard.writeText(href).then(
+            () => toast({ title: "Link copied", description: "It opens this tab, scrolled to here." }),
+            () => toast({ title: "Couldn't copy that link", variant: "destructive" }),
+          );
+        }}
+        data-testid={`anchor-${id}`}
+      >
+        <Link2 className="h-3.5 w-3.5" />
+      </a>
+    </h2>
+  );
+}
+
 /** The screens the dashboard nav switches between, and their URLs. */
 const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "claim"] as const;
 type Screen = (typeof SCREENS)[number];
@@ -538,6 +575,31 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     },
     onError: (err: Error) => toast({ title: "Couldn't refresh your accounts", description: err.message, variant: "destructive" }),
   });
+
+  /**
+   * Scroll to a #section-… anchor once it exists.
+   *
+   * The browser's own hash scroll fires on load, which on this page is before
+   * the dashboard query has come back and the section has rendered — so it
+   * lands nowhere and the link looks broken. Polling briefly for the element
+   * costs nothing and works whether the data is cached or cold.
+   */
+  useEffect(() => {
+    const id = window.location.hash.replace(/^#/, "");
+    if (!id) return;
+    const started = Date.now();
+    let frame = 0;
+    const find = () => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      if (Date.now() - started < 6000) frame = requestAnimationFrame(find);
+    };
+    frame = requestAnimationFrame(find);
+    return () => cancelAnimationFrame(frame);
+  }, [screen, data]);
 
   // ?tab=integrations from an older link. Every one of these still works; it
   // just lands on the real address now instead of leaving the query string in
@@ -884,12 +946,11 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 <SocialTiles accounts={social.accounts} onConnect={() => connectSocial.mutate()} connecting={connectSocial.isPending} />
                 {social.accounts.length > 0 && profile && <AudienceConsent profile={profile} />}
 
-                <h2
-                  id="section-going-out-live"
-                  className="mb-2 mt-10 flex scroll-mt-24 items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground"
-                >
-                  <Radio className="h-4 w-4" /> Going out live
-                </h2>
+                {/* Linkable on its own, because "go and connect your YouTube"
+                    is a thing we say in emails and in the checklist, and
+                    "Integrations, then scroll down" is a worse instruction
+                    than a link that lands on it. */}
+                <AnchoredHeading id="section-going-out-live" icon={Radio} label="Going out live" />
                 <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
                   Do you want your slot to go out on your own channel as well as ours? Optional — it airs on
                   MilitaryVoice.ai either way.
