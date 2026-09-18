@@ -25,10 +25,11 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useProducerRoom, type ProducerFeed } from "@/hooks/use-producer-room";
 import { Destinations } from "@/components/Destinations";
-import { StageGrid, youtubeId, type StageTile } from "@/components/StageView";
-import { MediaLibrary } from "@/components/MediaLibrary";
+import { StageGrid, youtubeId, clockText, type StageTile } from "@/components/StageView";
+import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
+import { SceneRail, type SceneSpec } from "@/components/SceneRail";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { STUDIO_STATUSES, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow } from "@shared/schema";
+import { STUDIO_STATUSES, LOGO_CORNERS, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow, type SceneRow } from "@shared/schema";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
 import {
   MonitorPlay,
@@ -64,6 +65,7 @@ import {
   LogOut,
   ChevronDown,
   Settings2,
+  Timer,
 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -148,6 +150,37 @@ function FeedThumb({ feed, initials, fill }: { feed?: ProducerFeed; initials: st
 }
 
 /** One control on the live deck. Icon over label, so the row scans at a glance. */
+/** A running break clock, in the producer's own bar, with the way out of it. */
+function CountdownChip({ endsAt, label, onClear }: { endsAt: number; label: string; onClear: () => void }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, []);
+  const left = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  const done = left <= 0;
+  return (
+    <span
+      className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${
+        done ? "bg-[#ED1C24] text-white" : "bg-[#F0A71F] text-[#1a1200]"
+      }`}
+      data-testid="chip-countdown"
+    >
+      <Timer className="h-4 w-4" />
+      <span className="tabular-nums font-bold">{clockText(left)}</span>
+      <span className="max-w-[10rem] truncate opacity-80">{done ? "clock at zero" : label}</span>
+      <button
+        type="button"
+        onClick={onClear}
+        className="rounded-full bg-black/20 px-2 py-0.5 text-[11px] font-semibold hover:bg-black/35"
+        data-testid="button-clear-countdown"
+      >
+        Clear
+      </button>
+    </span>
+  );
+}
+
 function DeckButton({
   icon: Icon,
   label,
@@ -203,7 +236,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   const [monitorMuted, setMonitorMuted] = useState(true);
   const [mediaPicker, setMediaPicker] = useState<null | "image" | "video" | "all" | "presentations">(null);
   const [sceneName, setSceneName] = useState("");
-  const [agendaPickerOpen, setAgendaPickerOpen] = useState(false);
   const [presName, setPresName] = useState("");
   const [presFiles, setPresFiles] = useState<FileList | null>(null);
   const [presUploading, setPresUploading] = useState(false);
@@ -334,9 +366,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   });
 
   // Shares a cache key with <Destinations>, so this is free.
-  const { data: scenes } = useQuery<
-    { id: number; name: string; mediaUrl: string; mediaLabel: string; mediaKind: string }[]
-  >({
+  const { data: scenes } = useQuery<SceneRow[]>({
     queryKey: ["/api/admin/scenes", studioId],
     queryFn: () => adminGet(`/api/admin/scenes${q}`),
   });
@@ -387,18 +417,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
       });
     }
   };
-  const takeRow = useMutation({
-    mutationFn: async (id: number) =>
-      (await adminSend("POST", `/api/admin/run-of-show/${id}/take`, { studioId, eventId })).json(),
-    onSuccess: afterTake,
-    onError: (e: Error) => toast({ title: "Couldn't take that scene", description: e.message, variant: "destructive" }),
-  });
-  const takeNext = useMutation({
-    mutationFn: async () => (await adminSend("POST", "/api/admin/run-of-show/next", { studioId, eventId })).json(),
-    onSuccess: afterTake,
-    onError: (e: Error) => toast({ title: "No next scene", description: e.message, variant: "destructive" }),
-  });
-
   const muteStage = useMutation({
     mutationFn: async (muted: boolean) => adminSend("POST", "/api/admin/studio/mute-stage", { muted, studioId }),
     onSuccess: (_r, muted) => {
@@ -409,20 +427,54 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   });
 
   const applyScene = useMutation({
-    mutationFn: async (id: number) => adminSend("POST", `/api/admin/scenes/${id}/apply`, { studioId }),
-    onSuccess: () => refresh(),
+    mutationFn: async (id: number) => (await adminSend("POST", `/api/admin/scenes/${id}/apply`, { studioId })).json(),
+    // A scene off the agenda moves people too, so it gets the same warning a
+    // taken row does when the podcaster hasn't turned up.
+    onSuccess: afterTake,
     onError: (e: Error) => toast({ title: "Couldn't take that scene", description: e.message, variant: "destructive" }),
   });
 
+  const invalidateScenes = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/scenes", studioId] });
+
   const saveScene = useMutation({
-    mutationFn: async (name: string) => adminSend("POST", "/api/admin/scenes", { name, studioId }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/scenes", studioId] }),
+    mutationFn: async (name: string) => adminSend("POST", "/api/admin/scenes", { name, studioId, capture: true }),
+    onSuccess: invalidateScenes,
     onError: (e: Error) => toast({ title: "Couldn't save that scene", description: e.message, variant: "destructive" }),
+  });
+
+  const addScene = useMutation({
+    mutationFn: async (spec: SceneSpec) => adminSend("POST", "/api/admin/scenes", { ...spec, studioId }),
+    onSuccess: invalidateScenes,
+    onError: (e: Error) => toast({ title: "Couldn't add that scene", description: e.message, variant: "destructive" }),
+  });
+
+  const patchScene = useMutation({
+    mutationFn: async ({ id, patch }: { id: number; patch: Partial<SceneSpec> }) =>
+      adminSend("PATCH", `/api/admin/scenes/${id}`, patch),
+    onSuccess: invalidateScenes,
+    onError: (e: Error) => toast({ title: "Couldn't change that scene", description: e.message, variant: "destructive" }),
+  });
+
+  const reorderScenes = useMutation({
+    mutationFn: async (ids: number[]) => adminSend("POST", "/api/admin/scenes/reorder", { ids, studioId }),
+    onSuccess: invalidateScenes,
+    onError: (e: Error) => toast({ title: "Couldn't reorder those", description: e.message, variant: "destructive" }),
   });
 
   const dropScene = useMutation({
     mutationFn: async (id: number) => adminSend("DELETE", `/api/admin/scenes/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/scenes", studioId] }),
+    onSuccess: invalidateScenes,
+  });
+
+  const clearCountdown = useMutation({
+    mutationFn: async () => adminSend("POST", "/api/admin/studio/countdown/clear", { studioId }),
+    onSuccess: () => refresh(),
+  });
+
+  // The uploads podcasters already sent us, offered when building a media scene.
+  const { data: mediaItems } = useQuery<MediaItem[]>({
+    queryKey: ["/api/admin/media"],
+    queryFn: () => adminGet<MediaItem[]>("/api/admin/media"),
   });
 
   const generateScenes = useMutation({
@@ -432,17 +484,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
       toast({ title: `Generated ${r.created} scene${r.created !== 1 ? "s" : ""}`, description: `${r.total} items on the agenda.` });
     },
     onError: (e: Error) => toast({ title: "Couldn't generate scenes", description: e.message, variant: "destructive" }),
-  });
-
-  const sceneFromAgenda = useMutation({
-    mutationFn: async ({ runItemId, name }: { runItemId: number; name: string }) =>
-      adminSend("POST", "/api/admin/scenes/from-agenda", { studioId, runItemId, name }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/scenes", studioId] });
-      setAgendaPickerOpen(false);
-      toast({ title: "Scene added" });
-    },
-    onError: (e: Error) => toast({ title: "Couldn't add scene", description: e.message, variant: "destructive" }),
   });
 
   const { data: dests } = useQuery<PublicDestination[]>({
@@ -509,6 +550,10 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   // Rooms never stream: whatever status a room carries, it is only ever recording.
   const broadcasting = !isRoom && (Boolean(studio?.broadcastEgressId) || studio?.status === "Live");
   const stageFull = !!studio && onStage.length >= studio.maxOnStage;
+  // A cleared countdown is an empty string; anything unparseable is treated the
+  // same, so a bad value can't wedge a clock on the air.
+  const countdownEndsRaw = studio?.countdownEndsAtUtc ? Date.parse(studio.countdownEndsAtUtc) : NaN;
+  const countdownEnds = Number.isFinite(countdownEndsRaw) ? countdownEndsRaw : null;
   /**
    * The standby clip is played by a <video> tag on the broadcast, so it has to
    * be an actual media file. A YouTube or Vimeo *page* link looks right and
@@ -531,6 +576,25 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
 
   const standbyFileRef = useRef<HTMLInputElement | null>(null);
   const [standbyBusy, setStandbyBusy] = useState(false);
+  const logoFileRef = useRef<HTMLInputElement | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+
+  async function uploadLogo(file: File) {
+    setLogoBusy(true);
+    try {
+      const form = new FormData();
+      form.append("logo", file);
+      if (studioId) form.append("studioId", String(studioId));
+      const res = await fetch("/api/admin/studio/logo", { method: "POST", body: form, credentials: "include" });
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as any)?.message ?? "Upload failed");
+      refresh();
+      toast({ title: "Logo is on the frame", description: "Switch it off any time from the live bar." });
+    } catch (err) {
+      toast({ title: "Couldn't upload that", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setLogoBusy(false);
+    }
+  }
 
   /** slot "pre" is the card shown until the event's start time passes. */
   async function uploadStandby(file: File, slot: "main" | "pre" = "main") {
@@ -1082,6 +1146,23 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 testId="button-deck-standby"
               />
             )}
+            {!isRoom && studio?.logoUrl && (
+              <DeckButton
+                icon={ImageIcon}
+                label={studio.logoVisible ? "Logo on" : "Logo off"}
+                active={studio.logoVisible}
+                amber
+                onClick={() => patchStudio.mutate({ logoVisible: !studio.logoVisible })}
+                testId="button-deck-logo"
+              />
+            )}
+            {countdownEnds !== null && (
+              <CountdownChip
+                endsAt={countdownEnds}
+                label={studio?.countdownLabel ?? ""}
+                onClear={() => clearCountdown.mutate()}
+              />
+            )}
             <span className="ml-auto flex items-center gap-1.5">
               <a href={joinUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl bg-white/8 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/15" data-testid="link-deck-greenroom">
                 <Users className="h-4 w-4" /> Green room link
@@ -1094,172 +1175,32 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
 
           <div className="flex min-h-0 flex-1">
             {/* green room, down the left, where a producer's eye already is */}
-            <aside className="flex w-[272px] shrink-0 flex-col border-r border-white/10">
-              {/* Scenes = the agenda. One press takes the row: its media on the
-                  stage, its podcaster on, everyone else off. The dot by each
-                  face says whether that person has actually arrived. */}
-              {isPrimary && (runItems ?? []).length > 0 && (
-                <div className="flex min-h-0 flex-[3] flex-col border-b border-white/10">
-                  <div className="flex items-center justify-between gap-2 px-3 py-2">
-                    <span className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.14em] text-white/55">
-                      <ListOrdered className="h-3.5 w-3.5" /> Scenes
-                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-white/80">{(scenes ?? []).length}</span>
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        className="h-7 gap-1 rounded-full bg-[#F0A71F] px-3 text-[12px] font-bold text-[#1a1200] hover:bg-[#f7b73a]"
-                        disabled={takeNext.isPending || takeRow.isPending}
-                        onClick={() => takeNext.mutate()}
-                        title="Take the next row of the agenda"
-                        data-testid="button-next-scene"
-                      >
-                        Next scene <ArrowDown className="h-3 w-3 -rotate-90" />
-                      </Button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="sm" variant="ghost" className="h-7 w-7 rounded-full p-0 text-white/60 hover:bg-white/10 hover:text-white">
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuItem onClick={() => saveScene.mutate("Cameras")}>
-                            <Video className="mr-2 h-3.5 w-3.5" /> Camera only
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setAgendaPickerOpen(true)}>
-                            <ListOrdered className="mr-2 h-3.5 w-3.5" /> From agenda…
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => generateScenes.mutate()}
-                            disabled={generateScenes.isPending}
-                          >
-                            <Clapperboard className="mr-2 h-3.5 w-3.5" />
-                            {generateScenes.isPending ? "Generating…" : "Generate all from agenda"}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-
-                  {(scenes ?? []).length > 0 && (
-                    <div className="grid grid-cols-2 gap-1.5 px-3 pb-2">
-                      {(scenes ?? []).map((sc) => {
-                        const on = sc.mediaUrl
-                          ? studio?.stageMediaPlaying && studio?.stageMediaUrl === sc.mediaUrl
-                          : !studio?.stageMediaPlaying && !studio?.currentRunItemId;
-                        const thumb = sc.mediaUrl && (sc.mediaKind === "image" || /\.(jpe?g|png|webp|gif|svg)(\?|$)/i.test(sc.mediaUrl))
-                          ? sc.mediaUrl : null;
-                        return (
-                          <div key={sc.id} className="group relative">
-                            <button
-                              type="button"
-                              onClick={() => applyScene.mutate(sc.id)}
-                              className={`relative w-full overflow-hidden rounded-lg border-2 transition-all ${
-                                on ? "border-[#F0A71F] shadow-[0_0_8px_rgba(240,167,31,0.4)]" : "border-white/10 hover:border-white/30"
-                              }`}
-                              style={{ aspectRatio: "16/9" }}
-                              data-testid={`button-scene-${sc.id}`}
-                            >
-                              {thumb ? (
-                                <img src={thumb} alt={sc.name} className="absolute inset-0 h-full w-full object-cover" />
-                              ) : (
-                                <div className="absolute inset-0 flex items-center justify-center"
-                                  style={{ background: "linear-gradient(135deg,#0a1628 0%,#1a2a4a 100%)" }}>
-                                  {sc.mediaUrl ? (
-                                    <Film className="h-5 w-5 text-white/30" />
-                                  ) : (
-                                    <Video className="h-5 w-5 text-white/30" />
-                                  )}
-                                </div>
-                              )}
-                              <div className={`absolute inset-x-0 bottom-0 px-1.5 py-1 text-left ${thumb ? "bg-black/60" : ""}`}>
-                                <p className="truncate text-[10px] font-semibold leading-tight text-white">{sc.name}</p>
-                                {sc.mediaLabel && <p className="truncate text-[9px] text-white/60 leading-tight">{sc.mediaLabel}</p>}
-                              </div>
-                              {on && (
-                                <div className="absolute left-1.5 top-1.5 rounded-sm bg-[#F0A71F] px-1 py-0.5 text-[8px] font-black uppercase text-[#1a1200] leading-none">
-                                  LIVE
-                                </div>
-                              )}
-                            </button>
-                            <button
-                              type="button"
-                              className="absolute right-1 top-1 hidden rounded-full bg-black/60 p-0.5 text-white/60 hover:text-white group-hover:flex"
-                              onClick={() => dropScene.mutate(sc.id)}
-                              title="Remove scene"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2 pb-2">
-                    {(runItems ?? []).map((r) => {
-                      const taken = (studio?.currentRunItemId || 0) === r.id;
-                      const isNow = !studio?.currentRunItemId && current?.id === r.id;
-                      const sg = r.signupId ? (signups ?? []).find((x) => x.id === r.signupId) : undefined;
-                      const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-                      const here = sg
-                        ? present.some(
-                            (p) =>
-                              (p as { signupId?: number | null }).signupId === sg.id ||
-                              (norm(p.displayName).length > 2 &&
-                                (norm(sg.hostName).includes(norm(p.displayName)) || norm(p.displayName).includes(norm(sg.hostName)))),
-                          )
-                        : false;
-                      return (
-                        <button
-                          key={r.id}
-                          type="button"
-                          ref={(el) => {
-                            if (el && taken) el.scrollIntoView({ block: "nearest" });
-                          }}
-                          onClick={() => takeRow.mutate(r.id)}
-                          disabled={takeRow.isPending}
-                          className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors ${
-                            taken
-                              ? "bg-[#F0A71F] text-[#1a1200]"
-                              : isNow
-                                ? "bg-white/12 text-white"
-                                : "text-white/70 hover:bg-white/8"
-                          }`}
-                          data-testid={`button-cue-${r.id}`}
-                        >
-                          <span className="w-12 shrink-0 text-[11px] tabular-nums opacity-70">
-                            {r.startAtUtc ? formatTimeInZone(new Date(r.startAtUtc), zone) : "--:--"}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-xs font-semibold">{r.title}</span>
-                            <span className="flex items-center gap-1.5 text-[11px] opacity-70">
-                              {r.kind}
-                              {r.mediaUrl && <Film className="h-2.5 w-2.5" />}
-                            </span>
-                          </span>
-                          {sg && (
-                            <span className="relative shrink-0" title={here ? `${sg.hostName} is in the green room` : `${sg.hostName} hasn't arrived`}>
-                              {sg.photoUrl ? (
-                                <img src={sg.photoUrl} alt="" className="h-6 w-6 rounded-full object-cover ring-1 ring-white/20" />
-                              ) : (
-                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold">
-                                  {(sg.hostName || "?").slice(0, 1).toUpperCase()}
-                                </span>
-                              )}
-                              <span
-                                className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-[#000741] ${
-                                  here ? "bg-emerald-400" : "bg-white/30"
-                                }`}
-                              />
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+            <aside className="flex w-[300px] shrink-0 flex-col border-r border-white/10">
+              {/* The rail is the show. One press cuts: its media on the stage,
+                  its podcaster on, everyone else off. The dot by each face says
+                  whether that person has actually arrived. */}
+              {/* Every studio gets a rail, not just the event's own: a one-off
+                  room is exactly where a countdown and a sponsor card earn
+                  their keep. The agenda entries in the menu fold away when
+                  there's no agenda behind them. */}
+              <div className="flex min-h-0 flex-[3] flex-col border-b border-white/10">
+                  <SceneRail
+                    scenes={scenes ?? []}
+                    currentSceneId={studio?.currentSceneId ?? 0}
+                    zone={zone}
+                    runItems={runItems ?? []}
+                    signups={signups ?? []}
+                    presentNames={present.map((p) => p.displayName || "")}
+                    media={mediaItems ?? []}
+                    busy={applyScene.isPending}
+                    onApply={(id) => applyScene.mutate(id)}
+                    onAdd={(spec) => addScene.mutate(spec)}
+                    onPatch={(id, patch) => patchScene.mutate({ id, patch })}
+                    onDelete={(id) => dropScene.mutate(id)}
+                    onReorder={(ids) => reorderScenes.mutate(ids)}
+                    onGenerate={() => generateScenes.mutate()}
+                  />
+              </div>
               <div className="flex min-h-0 flex-[2] flex-col">
               {onStage.length > 0 && (
                 <div className="border-b border-white/10 px-3 py-2.5">
@@ -1365,6 +1306,13 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   stageMediaUrl: studio?.stageMediaUrl,
                   stageMediaKind: studio?.stageMediaKind,
                   stageMediaLabel: studio?.stageMediaLabel,
+                  // The monitor has to be the programme, not an approximation
+                  // of it: whatever the audience gets, the producer sees.
+                  countdownEndsAtUtc: studio?.countdownEndsAtUtc,
+                  countdownLabel: studio?.countdownLabel,
+                  logoUrl: studio?.logoVisible ? studio?.logoUrl : "",
+                  logoCorner: studio?.logoCorner,
+                  logoSize: studio?.logoSize,
                   eventName: currentStudio?.name,
                 }}
                 muted={monitorMuted}
@@ -1528,36 +1476,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               compact
             />
           )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={agendaPickerOpen} onOpenChange={setAgendaPickerOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>From Agenda</DialogTitle>
-            <DialogDescription>Choose a run-of-show item to create a scene for.</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-1 max-h-72 overflow-y-auto py-1">
-            {(runItems ?? []).length === 0 && (
-              <p className="text-sm text-muted-foreground px-1">No agenda items found.</p>
-            )}
-            {(runItems ?? []).map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                className="flex flex-col items-start rounded-lg px-3 py-2 text-left hover:bg-muted transition-colors"
-                onClick={() => sceneFromAgenda.mutate({ runItemId: r.id, name: r.title })}
-                disabled={sceneFromAgenda.isPending}
-              >
-                <span className="text-sm font-medium">{r.title}</span>
-                {r.startAtUtc && (
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(r.startAtUtc).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
         </DialogContent>
       </Dialog>
 
@@ -1815,8 +1733,8 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 <Clapperboard className="h-3.5 w-3.5 text-primary" /> Scenes
               </div>
               <p className="mb-3 mt-1 text-xs text-muted-foreground">
-                Set the stage how you want it, then save it under a name. During the show it's one press —
-                countdown, welcome, outro. A scene with nothing on the stage means "back to the cameras".
+                Scenes are built and reordered on the rail in the Live tab, where you actually use them. This is the
+                other way in: set the stage how you want it, then save that exact state under a name.
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 {(scenes ?? []).map((sc) => (
@@ -1863,6 +1781,132 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     <Plus className="h-3 w-3" /> Save the stage
                   </Button>
                 </form>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-muted/25 p-4">
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                <ImageIcon className="h-3.5 w-3.5 text-primary" /> Graphics
+              </div>
+              <p className="mb-3 mt-1 text-xs text-muted-foreground">
+                A logo in the corner of the frame, above every scene — cameras, clips and the break clock alike. It
+                reaches the recording and every destination, because it's burned into the picture, not laid over the
+                player. PNG or SVG with a transparent background sits best.
+              </p>
+
+              <div className="flex flex-wrap items-start gap-4">
+                <div
+                  className="relative flex h-24 w-40 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border"
+                  style={{ background: "linear-gradient(135deg,#0a1628 0%,#1a2a4a 100%)" }}
+                >
+                  {studio?.logoUrl ? (
+                    <img
+                      src={studio.logoUrl}
+                      alt=""
+                      className={`absolute max-h-[38%] max-w-[38%] object-contain transition-opacity ${
+                        studio.logoVisible ? "opacity-100" : "opacity-25"
+                      } ${
+                        studio.logoCorner === "top-left"
+                          ? "left-2 top-2"
+                          : studio.logoCorner === "bottom-left"
+                            ? "bottom-2 left-2"
+                            : studio.logoCorner === "bottom-right"
+                              ? "bottom-2 right-2"
+                              : "right-2 top-2"
+                      }`}
+                      data-testid="img-logo-preview"
+                    />
+                  ) : (
+                    <span className="text-[11px] text-white/40">No logo yet</span>
+                  )}
+                </div>
+
+                <div className="flex min-w-[15rem] flex-1 flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      ref={logoFileRef}
+                      type="file"
+                      accept="image/png,image/svg+xml,image/webp,image/jpeg"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadLogo(f);
+                        e.target.value = "";
+                      }}
+                      data-testid="input-studio-logo"
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5 rounded-full text-xs"
+                      disabled={logoBusy}
+                      onClick={() => logoFileRef.current?.click()}
+                      data-testid="button-upload-logo"
+                    >
+                      <Upload className="h-3.5 w-3.5" /> {logoBusy ? "Uploading…" : studio?.logoUrl ? "Replace" : "Upload a logo"}
+                    </Button>
+                    {studio?.logoUrl && (
+                      <label className="flex items-center gap-2 text-xs font-medium">
+                        <Switch
+                          checked={Boolean(studio.logoVisible)}
+                          onCheckedChange={(v) => patchStudio.mutate({ logoVisible: v })}
+                          data-testid="switch-logo-visible"
+                        />
+                        {studio.logoVisible ? "On air" : "Hidden"}
+                      </label>
+                    )}
+                  </div>
+
+                  {studio?.logoUrl && (
+                    <>
+                      <div>
+                        <Label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                          Corner
+                        </Label>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {LOGO_CORNERS.map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => patchStudio.mutate({ logoCorner: c })}
+                              className={`rounded-full border px-2.5 py-1 text-[11px] font-medium capitalize transition-colors ${
+                                (studio.logoCorner || "top-right") === c
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-border hover:bg-muted"
+                              }`}
+                              data-testid={`button-logo-corner-${c}`}
+                            >
+                              {c.replace("-", " ")}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label
+                          htmlFor="logo-size"
+                          className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground"
+                        >
+                          Size — {studio.logoSize || 96}px on a 1280-wide frame
+                        </Label>
+                        <input
+                          id="logo-size"
+                          type="range"
+                          min={40}
+                          max={320}
+                          step={8}
+                          value={studio.logoSize || 96}
+                          onChange={(e) => patchStudio.mutate({ logoSize: Number(e.target.value) })}
+                          className="mt-1.5 w-full accent-[#F0A71F]"
+                          data-testid="input-logo-size"
+                        />
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Scales with the frame, so it looks the same on the stream as it does here.
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 

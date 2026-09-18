@@ -37,6 +37,8 @@ import {
   SPONSOR_TIERS,
   type SponsorTier,
   insertEventShowSchema,
+  sceneInputSchema,
+  scenePatchSchema,
   NUDGE_KINDS,
   type NudgeKind,
 } from "../shared/schema.js";
@@ -2252,6 +2254,44 @@ export function registerRoutes(app: Express): void {
     });
   });
 
+  /** The corner logo. An image, not a clip — stored like a sponsor mark. */
+  app.post(
+    "/api/admin/studio/logo",
+    requireAdmin,
+    (req, res, next) => {
+      upload.single("logo")(req, res, (err: any) => {
+        if (err) {
+          res.status(400).json({ message: err.message || "Couldn't read that image." });
+          return;
+        }
+        next();
+      });
+    },
+    async (req, res) => {
+      if (!req.file) {
+        res.status(400).json({ message: "Attach an image. A PNG or SVG with a transparent background sits best over video." });
+        return;
+      }
+      const { studio } = await adminStudio(req);
+      const ext = (req.file.mimetype.split("/")[1] || "png").replace("svg+xml", "svg").replace("jpeg", "jpg");
+      let url = "";
+      try {
+        url = await uploadPhoto(`studio-logos/${Date.now()}-${crypto.randomBytes(5).toString("hex")}.${ext}`, req.file.buffer, req.file.mimetype);
+      } catch (err) {
+        console.error("Studio logo upload failed:", err);
+        res.status(502).json({ message: "Couldn't store that image. Try again." });
+        return;
+      }
+      // Uploading one means wanting it on screen; hiding it is one switch away.
+      const updated = await storage.updateStudio(studio.id, { logoUrl: url, logoVisible: true });
+      if (updated) {
+        const ev = await storage.getEventById(studio.eventId);
+        await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
+      }
+      res.status(201).json(updated);
+    },
+  );
+
   app.patch("/api/admin/studio", requireAdmin, async (req, res) => {
     const parsed = studioUpdateSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -2436,25 +2476,78 @@ export function registerRoutes(app: Express): void {
     res.json(await storage.listScenes(studio.id));
   });
 
-  /** Saves whatever is on the stage right now under a name. */
+  /**
+   * Add a scene. With `capture: true` it snapshots whatever is on the stage
+   * right now; otherwise it takes the card as described — a camera scene, a
+   * piece of media, or a countdown.
+   */
   app.post("/api/admin/scenes", requireAdmin, async (req, res) => {
     const { studio } = await adminStudio(req);
-    const name = String(req.body?.name ?? "").trim().slice(0, 60) || "Scene";
     const existing = await storage.listScenes(studio.id);
+
+    if (req.body?.capture) {
+      const name = String(req.body?.name ?? "").trim().slice(0, 60) || "Scene";
+      const playing = studio.stageMediaPlaying && Boolean(studio.stageMediaUrl);
+      res.status(201).json(
+        await storage.createScene({
+          studioId: studio.id,
+          name,
+          kind: playing ? "media" : "camera",
+          sortIndex: existing.length,
+          mediaUrl: playing ? studio.stageMediaUrl : "",
+          mediaKind: studio.stageMediaKind,
+          mediaLabel: studio.stageMediaLabel,
+        }),
+      );
+      return;
+    }
+
+    const parsed = sceneInputSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const v = parsed.data;
+    if (v.kind === "media" && !v.mediaUrl) {
+      res.status(400).json({ message: "A media scene needs a file or a link." });
+      return;
+    }
     res.status(201).json(
-      await storage.createScene({
-        studioId: studio.id,
-        name,
-        sortIndex: existing.length,
-        mediaUrl: studio.stageMediaPlaying ? studio.stageMediaUrl : "",
-        mediaKind: studio.stageMediaKind,
-        mediaLabel: studio.stageMediaLabel,
-      }),
+      await storage.createScene({ studioId: studio.id, sortIndex: existing.length, ...v }),
     );
   });
 
+  app.patch("/api/admin/scenes/:id", requireAdmin, async (req, res) => {
+    const scene = await storage.getScene(Number(req.params.id));
+    if (!scene) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    const parsed = scenePatchSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    res.json(await storage.updateScene(scene.id, parsed.data));
+  });
+
+  /** Drag-and-drop, or the up/down buttons: the rail sends the order it wants. */
+  app.post("/api/admin/scenes/reorder", requireAdmin, async (req, res) => {
+    const { studio } = await adminStudio(req);
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter(Number.isFinite);
+    res.json(await storage.reorderScenes(studio.id, ids));
+  });
+
   app.delete("/api/admin/scenes/:id", requireAdmin, async (req, res) => {
-    await storage.deleteScene(Number(req.params.id));
+    const id = Number(req.params.id);
+    const scene = await storage.getScene(id);
+    await storage.deleteScene(id);
+    // Otherwise the studio goes on pointing at a scene that no longer exists,
+    // and the rail has nothing to mark as on air.
+    if (scene) {
+      const studio = await storage.getStudioById(scene.studioId);
+      if (studio?.currentSceneId === id) await storage.updateStudio(studio.id, { currentSceneId: 0 });
+    }
     res.json({ ok: true });
   });
 
@@ -2473,9 +2566,14 @@ export function registerRoutes(app: Express): void {
         studioId: studio.id,
         name: r.title,
         sortIndex: existing.length + created,
+        kind: r.mediaUrl ? "media" : "camera",
         mediaUrl: r.mediaUrl || "",
         mediaKind: r.mediaKind || "video",
         mediaLabel: r.mediaLabel || "",
+        // The times come with them. That is what lets the rail stand in for
+        // the rundown rather than sit beside it.
+        startAtUtc: r.startAtUtc || "",
+        runItemId: r.id,
       });
       created++;
     }
@@ -2493,9 +2591,12 @@ export function registerRoutes(app: Express): void {
       studioId: studio.id,
       name: req.body?.name || item.title,
       sortIndex: existing.length,
+      kind: item.mediaUrl ? "media" : "camera",
       mediaUrl: item.mediaUrl || "",
       mediaKind: item.mediaKind || "video",
       mediaLabel: item.mediaLabel || "",
+      startAtUtc: item.startAtUtc || "",
+      runItemId: item.id,
     });
     res.status(201).json(scene);
   });
@@ -2512,13 +2613,59 @@ export function registerRoutes(app: Express): void {
       res.status(404).json({ message: "Not found" });
       return;
     }
-    const updated = await storage.updateStudio(studio.id, {
-      stageMediaUrl: scene.mediaUrl,
-      stageMediaKind: scene.mediaKind,
-      stageMediaLabel: scene.mediaLabel,
-      // A scene with no media is "back to the cameras".
-      stageMediaPlaying: Boolean(scene.mediaUrl),
-    });
+    // A scene built from an agenda row still does everything taking that row
+    // did — the right podcaster on stage, everyone else off. That is what lets
+    // the rail replace the rundown instead of sitting beside it.
+    if (scene.runItemId) {
+      const row = await storage.getRunItem(scene.runItemId);
+      if (row) {
+        const taken = await takeRunRow(studio, row);
+        const withScene = await storage.updateStudio(studio.id, {
+          currentSceneId: scene.id,
+          countdownEndsAtUtc: "",
+          countdownLabel: "",
+        });
+        if (withScene) {
+          const ev = await storage.getEventById(studio.eventId);
+          await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", withScene, ev));
+        }
+        res.json({ ...withScene, moved: taken.moved, missing: taken.missing });
+        return;
+      }
+    }
+
+    const patch =
+      scene.kind === "countdown"
+        ? {
+            stageMediaPlaying: false,
+            currentSceneId: scene.id,
+            // Stored as the moment it hits zero, so every viewer counts down
+            // against their own clock and nothing has to be ticked at them.
+            countdownEndsAtUtc: new Date(Date.now() + scene.countdownSeconds * 1000).toISOString(),
+            countdownLabel: scene.name,
+          }
+        : {
+            stageMediaUrl: scene.mediaUrl,
+            stageMediaKind: scene.mediaKind,
+            stageMediaLabel: scene.mediaLabel,
+            // A scene with no media is "back to the cameras".
+            stageMediaPlaying: Boolean(scene.mediaUrl),
+            currentSceneId: scene.id,
+            countdownEndsAtUtc: "",
+            countdownLabel: "",
+          };
+    const updated = await storage.updateStudio(studio.id, patch);
+    if (updated) {
+      const ev = await storage.getEventById(studio.eventId);
+      await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
+    }
+    res.json(updated);
+  });
+
+  /** Stop a running countdown early — the clock comes off, the stage stays. */
+  app.post("/api/admin/studio/countdown/clear", requireAdmin, async (req, res) => {
+    const { studio } = await adminStudio(req);
+    const updated = await storage.updateStudio(studio.id, { countdownEndsAtUtc: "", countdownLabel: "" });
     if (updated) {
       const ev = await storage.getEventById(studio.eventId);
       await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
@@ -2737,6 +2884,13 @@ export function registerRoutes(app: Express): void {
       stageMediaUrl: st.stageMediaUrl,
       stageMediaKind: st.stageMediaKind,
       stageMediaLabel: st.stageMediaLabel,
+      // Graphics sit above whatever scene is up, so they travel separately.
+      logoUrl: st.logoVisible ? st.logoUrl : "",
+      logoCorner: st.logoCorner,
+      logoSize: st.logoSize,
+      countdownEndsAtUtc: st.countdownEndsAtUtc,
+      countdownLabel: st.countdownLabel,
+      currentSceneId: st.currentSceneId,
     };
   }
 

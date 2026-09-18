@@ -26,6 +26,12 @@ export interface RoomMeta {
   preLabel?: string;
   eventStartAtUtc?: string;
   eventEndAtUtc?: string;
+  logoUrl?: string;
+  logoCorner?: string;
+  logoSize?: number;
+  countdownEndsAtUtc?: string;
+  countdownLabel?: string;
+  currentSceneId?: number;
   stageMediaPlaying?: boolean;
   stageMediaUrl?: string;
   stageMediaKind?: string;
@@ -286,7 +292,83 @@ function FullFrameMedia({
   );
 }
 
-/** The frame itself: standby clip, played media, the stage, or a holding card. */
+/** mm:ss, or h:mm:ss once there's an hour on the clock. */
+export function clockText(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+}
+
+/**
+ * A break clock, filling the frame.
+ *
+ * The metadata carries the instant it reaches zero, not a number of seconds
+ * left, so every viewer counts down against their own clock: nobody has to be
+ * sent a tick, a late arrival joins at the right number, and a reconnect
+ * doesn't restart it. It holds at 00:00 rather than cutting away — a stuck
+ * zero reads as "they're running late", which is true, where an empty stage
+ * reads as a fault.
+ */
+function CountdownFrame({ endsAt, label }: { endsAt: number; label?: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(t);
+  }, []);
+  const left = Math.max(0, (endsAt - now) / 1000);
+  const done = left <= 0;
+
+  return (
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-[#04102b]"
+      style={{ background: "radial-gradient(120% 90% at 50% 0%, #0d2451 0%, #04102b 62%)" }}
+      data-testid="stage-countdown"
+    >
+      <img src="/logo-wave.png?v=2" alt="" className="h-12 w-auto opacity-80 sm:h-16" />
+      {label && (
+        <p className="px-6 text-center text-lg font-semibold uppercase tracking-[0.22em] text-[#F0A71F] sm:text-xl">
+          {label}
+        </p>
+      )}
+      <p
+        className={`text-[19vw] font-bold leading-none tabular-nums sm:text-[15vw] ${done ? "text-white/45" : "text-white"}`}
+        style={HEADLINE_FONT}
+      >
+        {clockText(left)}
+      </p>
+      <p className="text-sm uppercase tracking-[0.3em] text-white/40">{done ? "Starting shortly" : "Back in"}</p>
+    </div>
+  );
+}
+
+const CORNER_CLASS: Record<string, string> = {
+  "top-left": "left-[3%] top-[4%]",
+  "top-right": "right-[3%] top-[4%]",
+  "bottom-left": "left-[3%] bottom-[4%]",
+  "bottom-right": "right-[3%] bottom-[4%]",
+};
+
+/**
+ * The station mark, above everything. Sized as a share of the frame rather
+ * than in pixels: the same studio is composited at 1080p for the broadcast and
+ * at whatever width the watch page happens to be, and a 96px logo that looks
+ * right in the console would be a postage stamp on the stream.
+ */
+function LogoOverlay({ url, corner, size }: { url: string; corner?: string; size?: number }) {
+  if (!url) return null;
+  // 96px against a 1280-wide reference frame — the number the console shows.
+  const pct = Math.min(40, Math.max(4, ((size ?? 96) / 1280) * 100));
+  return (
+    <div className={`pointer-events-none absolute z-20 ${CORNER_CLASS[corner ?? "top-right"] ?? CORNER_CLASS["top-right"]}`} style={{ width: `${pct}%` }}>
+      <img src={url} alt="" className="h-auto w-full object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]" data-testid="stage-logo" />
+    </div>
+  );
+}
+
+/** The frame itself: standby clip, break clock, played media, the stage, or a holding card. */
 export function StageGrid({
   tiles,
   meta,
@@ -305,23 +387,21 @@ export function StageGrid({
   // against the viewer's own clock — a server-side switch would have to be
   // pushed, and room metadata only changes when someone touches the studio.
   const standby = pickStandby(meta);
-  if (meta.fallbackPlaying && standby.url) {
-    return <FullFrameMedia url={standby.url} kind="video" label={standby.label} muted={muted} loop />;
-  }
+  const countdownEnds = meta.countdownEndsAtUtc ? Date.parse(meta.countdownEndsAtUtc) : NaN;
 
-  if (meta.stageMediaPlaying && meta.stageMediaUrl) {
-    return (
+  const body =
+    meta.fallbackPlaying && standby.url ? (
+      <FullFrameMedia url={standby.url} kind="video" label={standby.label} muted={muted} loop />
+    ) : Number.isFinite(countdownEnds) ? (
+      <CountdownFrame endsAt={countdownEnds} label={meta.countdownLabel} />
+    ) : meta.stageMediaPlaying && meta.stageMediaUrl ? (
       <FullFrameMedia
         url={meta.stageMediaUrl}
         kind={meta.stageMediaKind ?? "video"}
         label={meta.stageMediaLabel}
         muted={muted}
       />
-    );
-  }
-
-  if (tiles.length === 0) {
-    return (
+    ) : tiles.length === 0 ? (
       <div className="flex h-full w-full flex-col items-center justify-center gap-5 px-6 text-center">
         <img src="/logo-wave.png?v=2" alt="" className="h-20 w-auto opacity-90" />
         <p className="text-2xl font-semibold text-white/85 sm:text-3xl" style={HEADLINE_FONT}>
@@ -329,17 +409,23 @@ export function StageGrid({
         </p>
         <p className="text-base text-white/50">We'll be right back.</p>
       </div>
+    ) : (
+      <>
+        <div className={`grid h-full w-full gap-3 p-3 ${gridFor(tiles.length)}`}>
+          {tiles.map((t) => (
+            <Tile key={t.identity} tile={t} muted={muted} />
+          ))}
+        </div>
+        <Captions caption={caption} />
+      </>
     );
-  }
 
+  // Graphics sit above whatever the stage is doing — that is the point of
+  // them. The server only sends a url when the logo is switched on.
   return (
     <>
-      <div className={`grid h-full w-full gap-3 p-3 ${gridFor(tiles.length)}`}>
-        {tiles.map((t) => (
-          <Tile key={t.identity} tile={t} muted={muted} />
-        ))}
-      </div>
-      <Captions caption={caption} />
+      {body}
+      <LogoOverlay url={meta.logoUrl ?? ""} corner={meta.logoCorner} size={meta.logoSize} />
     </>
   );
 }

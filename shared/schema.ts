@@ -696,6 +696,15 @@ export const studios = pgTable("studios", {
   recordingSignupId: integer("recording_signup_id"),
   // The agenda row the producer last took. 0 = nothing taken yet (fall back to the clock).
   currentRunItemId: integer("current_run_item_id").notNull().default(0),
+  // The scene that is up. Recorded rather than inferred from what's on the
+  // stage: two scenes can put the same thing there, and the rail has to mark
+  // the one that was actually pressed.
+  currentSceneId: integer("current_scene_id").notNull().default(0),
+  // A running countdown, as the instant it reaches zero. The clock is drawn by
+  // every viewer against their own time, so it stays in step without a tick
+  // being pushed to anyone.
+  countdownEndsAtUtc: text("countdown_ends_at_utc").notNull().default(""),
+  countdownLabel: text("countdown_label").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
@@ -980,6 +989,9 @@ export const studioHeartbeatSchema = z.object({
   micReady: z.boolean(),
 });
 
+export const LOGO_CORNERS = ["top-left", "top-right", "bottom-left", "bottom-right"] as const;
+export type LogoCorner = (typeof LOGO_CORNERS)[number];
+
 export const studioUpdateSchema = z.object({
   name: z.string().trim().max(80).optional(),
   status: z.enum(STUDIO_STATUSES).optional(),
@@ -991,7 +1003,25 @@ export const studioUpdateSchema = z.object({
   stageMediaKind: z.enum(["video", "image"]).optional(),
   stageMediaLabel: z.string().trim().max(120).optional(),
   stageMediaPlaying: z.boolean().optional(),
+  logoUrl: z.string().trim().max(600).optional(),
+  logoCorner: z.enum(LOGO_CORNERS).optional(),
+  logoSize: z.number().int().min(40).max(320).optional(),
+  logoVisible: z.boolean().optional(),
 });
+
+
+/** Everything a scene card carries. Kind decides which of the rest matter. */
+export const sceneInputSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  kind: z.enum(SCENE_KINDS).default("camera"),
+  mediaUrl: z.string().trim().max(600).default(""),
+  mediaKind: z.enum(["video", "image"]).default("video"),
+  mediaLabel: z.string().trim().max(120).default(""),
+  countdownSeconds: z.number().int().min(5).max(7200).default(300),
+  startAtUtc: z.string().trim().max(40).default(""),
+  runItemId: z.number().int().min(0).default(0),
+});
+export const scenePatchSchema = sceneInputSchema.partial();
 
 /** A participant counts as present if we heard from them recently. */
 export const PRESENCE_WINDOW_MS = 25_000;

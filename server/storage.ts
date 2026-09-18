@@ -626,6 +626,8 @@ export interface IStorage {
   listScenes(studioId: number): Promise<SceneRow[]>;
   getScene(id: number): Promise<SceneRow | undefined>;
   createScene(v: Pick<SceneRow, "studioId"> & Partial<Omit<SceneRow, "id" | "createdAt" | "studioId">>): Promise<SceneRow>;
+  updateScene(id: number, patch: Partial<Omit<SceneRow, "id" | "createdAt" | "studioId">>): Promise<SceneRow | undefined>;
+  reorderScenes(studioId: number, ids: number[]): Promise<SceneRow[]>;
   deleteScene(id: number): Promise<void>;
   listNudgesForSignups(signupIds: number[]): Promise<NudgeRow[]>;
   /** Insert-if-absent. Returns false when this nudge was already recorded. */
@@ -1123,6 +1125,30 @@ class DatabaseStorage implements IStorage {
     await ready();
     const [row] = await db.insert(scenes).values({ ...v, createdAt: new Date().toISOString() }).returning();
     return row;
+  }
+
+  async updateScene(
+    id: number,
+    patch: Partial<Omit<SceneRow, "id" | "createdAt" | "studioId">>,
+  ): Promise<SceneRow | undefined> {
+    await ready();
+    if (Object.keys(patch).length === 0) return this.getScene(id);
+    const [row] = await db.update(scenes).set(patch).where(eq(scenes.id, id)).returning();
+    return row;
+  }
+
+  /** Renumber a studio's scenes to the order given. Ids not listed keep their
+   *  place at the end, so a stale client can't lose a scene it never saw. */
+  async reorderScenes(studioId: number, ids: number[]): Promise<SceneRow[]> {
+    await ready();
+    const mine = await this.listScenes(studioId);
+    const wanted = ids.filter((id) => mine.some((s) => s.id === id));
+    const rest = mine.filter((s) => !wanted.includes(s.id)).map((s) => s.id);
+    const order = [...wanted, ...rest];
+    for (let i = 0; i < order.length; i++) {
+      await db.update(scenes).set({ sortIndex: i }).where(eq(scenes.id, order[i]));
+    }
+    return this.listScenes(studioId);
   }
 
   async deleteScene(id: number): Promise<void> {
