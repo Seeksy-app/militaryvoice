@@ -1782,6 +1782,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   signups: "Signed-up podcasters",
   contacts: "Imported contacts",
   all: "Both (signed up + imported)",
+  "not-signed-up": "On the list, no slot yet",
 };
 
 function BroadcastsSection({
@@ -2446,14 +2447,19 @@ function ContactDrawer({ contact, onClose, broadcastList, eventId }: {
 
 type BroadcastStats = { sent: number; delivered: number; opened: number; clicked: number; bounced: number };
 
-function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onConfirm, onDelete, onViewEngagement }: {
+function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onConfirm, onDelete, onViewEngagement, onDuplicate, onSetSource }: {
   b: BroadcastRow; eventId: number; dimmed: boolean; bBusy: boolean;
   recipientCount: (seg: string) => number;
   onEdit: (b: BroadcastRow) => void;
   onConfirm: (b: BroadcastRow) => void;
   onDelete: (id: number) => void;
   onViewEngagement: (broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) => void;
+  onDuplicate: (b: BroadcastRow) => void;
+  onSetSource: (b: BroadcastRow, source: string) => void;
 }) {
+  const cadenceKey = b.source?.startsWith("cadence:") ? b.source.slice("cadence:".length) : "";
+  const step = CADENCE_STEPS.find((x) => x.key === cadenceKey);
+  const editable = b.status === "draft" || b.status === "scheduled";
   const { data: stats } = useQuery<BroadcastStats>({
     queryKey: ["/api/admin/broadcasts", b.id, "stats"],
     queryFn: () => adminGet<BroadcastStats>(`/api/admin/broadcasts/${b.id}/stats`),
@@ -2466,6 +2472,7 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
       <div className="min-w-0 flex-1">
         <p className="font-semibold text-sm truncate">{b.subject}</p>
         <p className="text-xs text-muted-foreground mt-0.5">
+          {step && <span className="mr-1 font-medium text-primary">{step.label} ·</span>}
           {SEGMENT_LABELS[b.segment] ?? b.segment} ·{" "}
           {b.status === "sent"
             ? `Sent ${b.sentAt ? new Date(b.sentAt).toLocaleDateString() : ""} · ${b.recipientCount} recipients`
@@ -2483,27 +2490,78 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
           </div>
         )}
       </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        {(b.status === "draft" || b.status === "scheduled") && !b.source?.startsWith("cadence:") && (
-          <>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onEdit(b)}>Edit</Button>
-            {b.status === "draft" && (
-              <Button
-                size="sm"
-                className="h-7 text-xs gap-1"
-                disabled={bBusy || recipientCount(b.segment) === 0}
-                onClick={() => onConfirm(b)}
-              >
-                <Send className="h-3 w-3" /> Send to {recipientCount(b.segment)}
-              </Button>
-            )}
-            <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => onDelete(b.id)}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </>
+      {/* Every template opens. Being wired into the cadence used to remove the
+          Edit button entirely, which left seven emails on the page that could
+          only be read — and the one that had already gone out could not even
+          be copied to send again. */}
+      <div className="flex flex-wrap items-center justify-end gap-1.5 shrink-0">
+        {editable && (
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onEdit(b)} data-testid={`button-edit-${b.id}`}>
+            Edit
+          </Button>
         )}
-        {b.status === "sent" && !b.source?.startsWith("cadence:") && <Badge className="text-[11px]">Sent</Badge>}
-        {b.status === "sent" && b.source?.startsWith("cadence:") && <Badge variant="secondary" className="text-[11px]">Auto · {b.recipientCount}</Badge>}
+
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 gap-1 text-xs"
+          onClick={() => onDuplicate(b)}
+          data-testid={`button-duplicate-${b.id}`}
+          title="Copy this into a new draft"
+        >
+          <Copy className="h-3 w-3" /> Duplicate
+        </Button>
+
+        {/* A cadence slot holds one template. Putting a template into a slot
+            that is taken would leave two emails on the same trigger, so taken
+            slots are shown as taken rather than silently overwritten. */}
+        {editable && !step && (
+          <Select value="" onValueChange={(key) => onSetSource(b, cadenceSource(key))}>
+            <SelectTrigger className="h-7 w-[9.5rem] text-xs" data-testid={`select-add-cadence-${b.id}`}>
+              <span className="flex items-center gap-1 text-muted-foreground"><Plus className="h-3 w-3" /> Add to cadence</span>
+            </SelectTrigger>
+            <SelectContent>
+              {CADENCE_STEPS.map((st) => (
+                <SelectItem key={st.key} value={st.key}>
+                  {st.label}
+                  {st.blurb ? ` — ${st.blurb}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {editable && step && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs text-muted-foreground"
+            onClick={() => onSetSource(b, "manual")}
+            data-testid={`button-unwire-${b.id}`}
+          >
+            Take out of cadence
+          </Button>
+        )}
+
+        {b.status === "draft" && (
+          <Button
+            size="sm"
+            className="h-7 text-xs gap-1"
+            disabled={bBusy || recipientCount(b.segment) === 0}
+            onClick={() => onConfirm(b)}
+            data-testid={`button-send-${b.id}`}
+          >
+            <Send className="h-3 w-3" /> Send to {recipientCount(b.segment)}
+          </Button>
+        )}
+
+        {editable && (
+          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => onDelete(b.id)}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        )}
+
+        {b.status === "sent" && !step && <Badge className="text-[11px]">Sent</Badge>}
+        {b.status === "sent" && step && <Badge variant="secondary" className="text-[11px]">Auto · {b.recipientCount}</Badge>}
         {b.status === "scheduled" && <Badge variant="outline" className="text-[11px] border-amber-400 text-amber-600 dark:text-amber-400">Scheduled</Badge>}
       </div>
     </div>
@@ -2518,7 +2576,7 @@ type CrmView = "lists" | "list-signups" | "list-contacts" | "list-engagement" | 
  *  and one-off campaigns. They are different jobs, so they get different tabs. */
 function BroadcastSubNav({ view, setView }: { view: CrmView; setView: (v: CrmView) => void }) {
   const tabs: { key: CrmView; label: string }[] = [
-    { key: "broadcasts", label: "Campaigns" },
+    { key: "broadcasts", label: "Templates" },
     { key: "cadence", label: "Cadence" },
   ];
   return (
@@ -2583,6 +2641,27 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     () => broadcastList.filter((b) => !b.source?.startsWith("cadence:")),
     [broadcastList],
   );
+
+  /**
+   * The list reads as a history, so it is ordered like one.
+   *
+   * Sent mail first in the order it went out — the first thing anyone received
+   * is the first thing on the page — then anything scheduled by when it fires,
+   * then the drafts. Sorting the whole list by creation date instead buried
+   * the one email that has actually been sent under seven that never have.
+   */
+  const orderedBroadcasts = useMemo(() => {
+    const rank = (b: BroadcastRow) => (b.status === "sent" ? 0 : b.status === "scheduled" ? 1 : 2);
+    const when = (b: BroadcastRow) => Date.parse(b.sentAt ?? b.scheduledFor ?? b.createdAt) || 0;
+    return [...broadcastList].sort((a, b) => {
+      const ra = rank(a);
+      const rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      // Sent and scheduled read forwards in time; drafts read newest-first,
+      // because an unsent draft is a to-do, not a record.
+      return ra === 2 ? when(b) - when(a) : when(a) - when(b);
+    });
+  }, [broadcastList]);
 
 
   const { data: teamMembers = [] } = useQuery<TeamMember[]>({
@@ -2724,6 +2803,50 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
 
   const [confirmBroadcast, setConfirmBroadcast] = useState<BroadcastRow | null>(null);
 
+  /** Copy one into a fresh draft and open it, so the copy is the next thing on screen. */
+  async function duplicateBroadcast(b: BroadcastRow) {
+    setBBusy(true);
+    try {
+      const copy: BroadcastRow = await adminSend("POST", `/api/admin/broadcasts/${b.id}/duplicate?eventId=${eventId}`).then((r) => r.json());
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/broadcasts", eventId] });
+      openEdit(copy);
+      toast({ title: "Copied to a new draft", description: "Nothing is sent until you press send." });
+    } catch (err) {
+      toast({ title: "Couldn't duplicate", description: (err as Error).message, variant: "destructive" });
+    } finally { setBBusy(false); }
+  }
+
+  /**
+   * Wire a template into a cadence slot, or take it back out.
+   *
+   * A slot holds one template. If something is already in the slot it is taken
+   * out first rather than left behind — two drafts claiming the same trigger
+   * is the kind of thing nobody notices until both of them send.
+   */
+  async function setBroadcastSource(b: BroadcastRow, source: string) {
+    setBBusy(true);
+    try {
+      if (source.startsWith("cadence:")) {
+        const occupant = broadcastList.find((x) => x.source === source && x.id !== b.id);
+        if (occupant) {
+          if (!window.confirm(`"${occupant.subject}" is already in that slot. Move it out and put "${b.subject}" in?`)) {
+            return;
+          }
+          await adminSend("PUT", `/api/admin/broadcasts/${occupant.id}`, { source: "manual" });
+        }
+      }
+      await adminSend("PUT", `/api/admin/broadcasts/${b.id}`, { source });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/broadcasts", eventId] });
+      const step = CADENCE_STEPS.find((x) => `cadence:${x.key}` === source);
+      toast({
+        title: step ? `Now sending as ${step.label}` : "Taken out of the cadence",
+        description: step ? step.blurb || "It fires automatically at that point." : "It stays here as a template you can send by hand.",
+      });
+    } catch (err) {
+      toast({ title: "Couldn't change that", description: (err as Error).message, variant: "destructive" });
+    } finally { setBBusy(false); }
+  }
+
   async function sendTest() {
     if (!editingBroadcast) {
       toast({ title: "Save draft first", description: "Save the draft before sending a test email." });
@@ -2748,9 +2871,20 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     } finally { setBBusy(false); }
   }
 
+  /** The set of signed-up emails, for excluding them from a recruitment send. */
+  const signedUpEmails = useMemo(
+    () => new Set(signupContacts.map((c) => c.email.trim().toLowerCase())),
+    [signupContacts],
+  );
+  const notSignedUpCount = useMemo(
+    () => activeContacts.filter((c) => !signedUpEmails.has(c.email.trim().toLowerCase())).length,
+    [activeContacts, signedUpEmails],
+  );
+
   function recipientCount(seg: string) {
     if (seg === "signups") return signupContacts.length;
     if (seg === "contacts") return activeContacts.length;
+    if (seg === "not-signed-up") return notSignedUpCount;
     if (seg.startsWith("engagement:")) return -1; // unknown until send
     return signupContacts.length + activeContacts.length;
   }
@@ -3194,7 +3328,12 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
         <div className="flex flex-col gap-4">
           <BroadcastSubNav view={view} setView={setView} />
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">{oneOffBroadcasts.length} campaign{oneOffBroadcasts.length !== 1 ? "s" : ""}</p>
+            <p className="text-sm text-muted-foreground">
+              {orderedBroadcasts.length} template{orderedBroadcasts.length !== 1 ? "s" : ""}
+              {oneOffBroadcasts.length !== orderedBroadcasts.length && (
+                <span> · {orderedBroadcasts.length - oneOffBroadcasts.length} wired into the cadence</span>
+              )}
+            </p>
             <Button size="sm" className="gap-1.5" onClick={() => openCompose()}>
               <Plus className="h-4 w-4" /> New broadcast
             </Button>
@@ -3231,11 +3370,13 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                 </div>
               )}
 
-              {broadcastList.map((b) => (
+              {orderedBroadcasts.map((b) => (
                 <BroadcastCard
                   key={b.id}
                   b={b}
                   eventId={eventId}
+                  onDuplicate={duplicateBroadcast}
+                  onSetSource={setBroadcastSource}
                   dimmed={!!(confirmBroadcast && confirmBroadcast.id !== b.id)}
                   bBusy={bBusy}
                   recipientCount={recipientCount}
@@ -3345,6 +3486,10 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                         <SelectContent>
                           <SelectItem value="signups">Signed-up podcasters ({signupContacts.length})</SelectItem>
                           <SelectItem value="contacts">Imported contacts ({activeContacts.length})</SelectItem>
+                          {/* The recruitment audience: on the list, hasn't taken a
+                              slot. Asking someone to sign up when they already
+                              have is the fastest way to look like nobody's home. */}
+                          <SelectItem value="not-signed-up">On the list, no slot yet ({notSignedUpCount})</SelectItem>
                           <SelectItem value="all">Both — {signupContacts.length + activeContacts.length} total</SelectItem>
                         </SelectContent>
                       </Select>

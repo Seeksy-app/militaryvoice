@@ -89,7 +89,7 @@ import {
   resendApiGet,
 } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
-import type { DestinationRow, StudioRow, StudioParticipantRow, RunItemRow } from "../shared/schema.js";
+import type { DestinationRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   publishPhoto,
@@ -367,6 +367,59 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
     return;
   }
   res.status(401).json({ message: "Sign in to the admin dashboard." });
+}
+
+/**
+ * Who a broadcast actually goes to.
+ *
+ * This used to live in two places — the scheduled-send sweeper and the
+ * send-now route — which is how `not-signed-up` would have ended up working in
+ * one and silently missing from the other. One reader, both callers.
+ */
+async function resolveBroadcastRecipients(broadcast: BroadcastRow): Promise<{ email: string; firstName: string }[]> {
+  const deduped = new Map<string, { email: string; firstName: string }>();
+  const seg = broadcast.segment;
+
+  if (seg === "signups" || seg === "all") {
+    if (broadcast.eventId) {
+      for (const r of await storage.listSignupContactsForEvent(broadcast.eventId)) {
+        deduped.set(r.email.toLowerCase(), r);
+      }
+    }
+  }
+  if (seg === "contacts" || seg === "all") {
+    for (const r of await storage.listActiveContactEmails()) deduped.set(r.email.toLowerCase(), r);
+  }
+
+  // Everyone on the list who hasn't taken a slot yet. The whole point of this
+  // one is that it must never reach someone who already signed up — being
+  // asked to join after you already have reads as nobody paying attention —
+  // so the exclusion is applied last, after every other rule has added.
+  if (seg === "not-signed-up") {
+    for (const r of await storage.listActiveContactEmails()) deduped.set(r.email.toLowerCase(), r);
+    if (broadcast.eventId) {
+      for (const r of await storage.listSignupContactsForEvent(broadcast.eventId)) {
+        deduped.delete(r.email.toLowerCase());
+      }
+    }
+  }
+
+  if (seg.startsWith("segment:")) {
+    const segId = Number(seg.split(":")[1]);
+    const segList = await storage.listSegments(broadcast.eventId ?? null);
+    const found = segList.find((x) => x.id === segId);
+    if (found) {
+      const filter = JSON.parse(found.filterJson) as Parameters<typeof storage.resolveSegment>[0];
+      for (const r of await storage.resolveSegment(filter)) deduped.set(r.email.toLowerCase(), r);
+    }
+  }
+  if (seg.startsWith("engagement:")) {
+    const [, bId, engType] = seg.split(":");
+    for (const r of await storage.getEngagementRecipients(Number(bId), engType as any)) {
+      deduped.set(r.email.toLowerCase(), r);
+    }
+  }
+  return Array.from(deduped.values());
 }
 
 /** "24 Hour Podcastathon · Oct 5, 2026" — the banner line on broadcast emails,
@@ -697,36 +750,7 @@ export function registerRoutes(app: Express): void {
     let fired = 0;
     for (const broadcast of due) {
       try {
-        const deduped = new Map<string, { email: string; firstName: string }>();
-        if (broadcast.segment === "signups" || broadcast.segment === "all") {
-          if (broadcast.eventId) {
-            for (const r of await storage.listSignupContactsForEvent(broadcast.eventId)) {
-              deduped.set(r.email.toLowerCase(), r);
-            }
-          }
-        }
-        if (broadcast.segment === "contacts" || broadcast.segment === "all") {
-          for (const r of await storage.listActiveContactEmails()) {
-            deduped.set(r.email.toLowerCase(), r);
-          }
-        }
-        if (broadcast.segment.startsWith("segment:")) {
-          const segId = Number(broadcast.segment.split(":")[1]);
-          const segList = await storage.listSegments(broadcast.eventId ?? null);
-          const seg = segList.find((s) => s.id === segId);
-          if (seg) {
-            const filter = JSON.parse(seg.filterJson) as Parameters<typeof storage.resolveSegment>[0];
-            for (const r of await storage.resolveSegment(filter)) {
-              deduped.set(r.email.toLowerCase(), r);
-            }
-          }
-        }
-        if (broadcast.segment.startsWith("engagement:")) {
-          const [, bId, engType] = broadcast.segment.split(":");
-          const rows = await storage.getEngagementRecipients(Number(bId), engType as any);
-          for (const r of rows) deduped.set(r.email.toLowerCase(), r);
-        }
-        const recipients = Array.from(deduped.values());
+        const recipients = await resolveBroadcastRecipients(broadcast);
         const senderMember = await resolveTeamSender(broadcast.sender ?? "team");
         let sent = 0;
         for (const r of recipients) {
@@ -4842,6 +4866,34 @@ export function registerRoutes(app: Express): void {
     res.json(row);
   });
 
+  /**
+   * Copy one into a fresh draft.
+   *
+   * A sent broadcast is frozen — that's correct, its stats have to keep
+   * meaning what they said. But "send that one again" is the most ordinary
+   * thing to want, and without this the only route to it was retyping the
+   * whole email. The copy is always a plain draft, never a cadence step: a
+   * cadence slot holds exactly one template, and silently making a second
+   * would leave two emails fighting over the same trigger.
+   */
+  app.post("/api/admin/broadcasts/:id/duplicate", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const eventId = req.query.eventId ? Number(req.query.eventId) : null;
+    const source = (await storage.listBroadcasts(eventId)).find((b) => b.id === id);
+    if (!source) return res.status(404).json({ error: "Broadcast not found." });
+    const row = await storage.createBroadcast({
+      subject: `${source.subject} (copy)`,
+      bodyText: source.bodyText,
+      eventId: source.eventId,
+      segment: source.segment,
+      sender: source.sender,
+      banner: source.banner,
+      scheduledFor: null,
+      source: "manual",
+    });
+    res.json(row);
+  });
+
   app.delete("/api/admin/broadcasts/:id", requireAdmin, async (req, res) => {
     await storage.deleteBroadcast(Number(req.params.id));
     res.json({ ok: true });
@@ -4905,38 +4957,10 @@ export function registerRoutes(app: Express): void {
     if (!broadcast) return res.status(404).json({ error: "Broadcast not found." });
     if (broadcast.status === "sent") return res.status(409).json({ error: "Already sent." });
 
-    // Gather recipients based on segment
-    const deduped = new Map<string, { email: string; firstName: string }>();
-    if (broadcast.segment === "signups" || broadcast.segment === "all") {
-      if (!broadcast.eventId) return res.status(400).json({ error: "segment='signups' requires an event-scoped broadcast." });
-      for (const r of await storage.listSignupContactsForEvent(broadcast.eventId)) {
-        deduped.set(r.email.toLowerCase(), r);
-      }
+    if ((broadcast.segment === "signups" || broadcast.segment === "all") && !broadcast.eventId) {
+      return res.status(400).json({ error: "segment='signups' requires an event-scoped broadcast." });
     }
-    if (broadcast.segment === "contacts" || broadcast.segment === "all") {
-      for (const r of await storage.listActiveContactEmails()) {
-        deduped.set(r.email.toLowerCase(), r);
-      }
-    }
-    if (broadcast.segment.startsWith("segment:")) {
-      const segId = Number(broadcast.segment.split(":")[1]);
-      const segList = await storage.listSegments(eventId);
-      const seg = segList.find((s) => s.id === segId);
-      if (seg) {
-        const filter = JSON.parse(seg.filterJson) as Parameters<typeof storage.resolveSegment>[0];
-        for (const r of await storage.resolveSegment(filter)) {
-          deduped.set(r.email.toLowerCase(), r);
-        }
-      }
-    }
-    // engagement:<broadcastId>:<type> — e.g. "engagement:1:opened"
-    if (broadcast.segment.startsWith("engagement:")) {
-      const [, bId, engType] = broadcast.segment.split(":");
-      const rows = await storage.getEngagementRecipients(Number(bId), engType as any);
-      for (const r of rows) deduped.set(r.email.toLowerCase(), r);
-    }
-
-    const recipients = Array.from(deduped.values());
+    const recipients = await resolveBroadcastRecipients(broadcast);
     if (recipients.length === 0) return res.status(400).json({ error: "No recipients in the selected segment." });
 
     const senderMember = await resolveTeamSender(broadcast.sender ?? "team");
@@ -4985,12 +5009,19 @@ export function registerRoutes(app: Express): void {
       const sig = req.headers["svix-signature"] as string | undefined;
       if (!sig || !sig.includes(secret)) return res.status(401).end();
     }
-    const event = req.body as { type?: string; data?: { email_id?: string; url?: string; created_at?: string } };
+    const event = req.body as {
+      type?: string;
+      data?: { email_id?: string; url?: string; created_at?: string; click?: { link?: string; timestamp?: string } };
+    };
     const emailId = event?.data?.email_id;
     if (!event?.type || !emailId) return res.status(400).end();
     const eventType = event.type.replace("email.", ""); // "email.opened" → "opened"
     const occurredAt = event.data?.created_at ?? new Date().toISOString();
-    await storage.recordBroadcastEvent(emailId, eventType, occurredAt, event.data?.url ?? "");
+    // Resend puts the clicked link at data.click.link, not data.url — reading
+    // only the latter is why every click we have recorded has a blank URL and
+    // we cannot say which link people actually followed.
+    const url = event.data?.click?.link ?? event.data?.url ?? "";
+    await storage.recordBroadcastEvent(emailId, eventType, occurredAt, url);
     if (eventType === "opened" || eventType === "clicked") {
       const email = await storage.getEmailByResendId(emailId);
       if (email) await storage.advanceLifecycle(email, "engaged");
