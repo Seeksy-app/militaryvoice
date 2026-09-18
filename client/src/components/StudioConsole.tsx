@@ -287,17 +287,25 @@ function DeckButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium transition-colors ${
+      title={label}
+      aria-label={label}
+      aria-pressed={!!active}
+      // Icon above, word underneath, the way every conference deck does it.
+      // Side-by-side at this size made a row of pills of different widths that
+      // moved as their labels changed — "Mute stage" becoming "Stage muted"
+      // shifted everything beside it, which is the last thing you want under
+      // the hand of somebody cutting a live show.
+      className={`flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-colors ${
         active
           ? amber
             ? "bg-[#F0A71F] text-[#1a1200]"
             : "bg-[#ED1C24] text-white"
-          : "bg-white/8 text-white/80 hover:bg-white/15"
+          : "text-white/70 hover:bg-white/10 hover:text-white"
       }`}
       data-testid={testId}
     >
-      <Icon className="h-4 w-4" />
-      {label}
+      <Icon className="h-5 w-5" />
+      <span className="w-full truncate text-center">{label}</span>
     </button>
   );
 }
@@ -1424,15 +1432,24 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
 
           {/* the deck: share/mute on the left, YOU in the middle, volume on the right */}
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-t border-white/10 bg-[#000741] px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
+            {/* What you put on air, on the left. */}
+            <div className="flex items-center gap-1">
               <DeckButton icon={ImageIcon} label="Image" onClick={() => setMediaPicker("image")} testId="button-deck-image" />
               <DeckButton icon={Film} label="Video" active={studio?.stageMediaPlaying} onClick={() => setMediaPicker("video")} testId="button-deck-video" />
               <DeckButton
                 icon={stageMuted ? MicOff : Mic}
-                label={stageMuted ? "Stage muted" : "Mute stage"}
+                label={stageMuted ? "Unmute" : "Mute stage"}
                 active={stageMuted}
                 onClick={() => muteStage.mutate(!stageMuted)}
                 testId="button-deck-mute-stage"
+              />
+              <DeckButton
+                icon={monitorMuted ? VolumeX : Volume2}
+                label={monitorMuted ? "Listen" : "Listening"}
+                active={!monitorMuted}
+                amber
+                onClick={() => setMonitorMuted((v) => !v)}
+                testId="button-deck-volume"
               />
             </div>
 
@@ -1468,13 +1485,22 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               </button>
             </div>
 
-            <div className="flex items-center justify-end gap-2">
-              <DeckButton
-                icon={monitorMuted ? VolumeX : Volume2}
-                label={monitorMuted ? "Hear stage" : "Hearing stage"}
-                onClick={() => setMonitorMuted((v) => !v)}
-                testId="button-deck-volume"
-              />
+            {/* Where other people are, on the right — they open a tab rather
+                than changing what is on air, so they do not belong next to
+                the controls that do. */}
+            <div className="flex items-center justify-end gap-1">
+              <a href={joinUrl} target="_blank" rel="noreferrer" title="Open the green room" data-testid="link-deck-green-room">
+                <span className="flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none text-white/70 transition-colors hover:bg-white/10 hover:text-white">
+                  <Users className="h-5 w-5" />
+                  <span className="w-full truncate text-center">Green room</span>
+                </span>
+              </a>
+              <a href={watchUrl} target="_blank" rel="noreferrer" title="Open the watch page" data-testid="link-deck-watch">
+                <span className="flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none text-white/70 transition-colors hover:bg-white/10 hover:text-white">
+                  <Radio className="h-5 w-5" />
+                  <span className="w-full truncate text-center">Watch page</span>
+                </span>
+              </a>
             </div>
           </div>
         </div>
