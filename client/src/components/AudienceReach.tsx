@@ -63,7 +63,7 @@ export function useAudienceSnapshot() {
 /**
  * @param tone  `dark` sits on the navy band, `light` on the page ground.
  */
-export function AudienceReach({ tone = "light" }: { tone?: "light" | "dark" }) {
+export function AudienceReach({ tone = "dark" }: { tone?: "light" | "dark" }) {
   const { data } = useAudienceSnapshot();
   if (!data || data.followers <= 0) return null;
 
@@ -118,13 +118,13 @@ export function AudienceReach({ tone = "light" }: { tone?: "light" | "dark" }) {
           }`}
           style={headline}
         >
-          The shows on the board already carry an audience.
+          The podcasters' reach so far.
+          {/* The asterisk carries the reader to the provenance note at the
+              bottom without spending a paragraph on it up here. */}
+          <span className={dark ? "text-[#F0A71F]" : "text-[#F0A71F]"} aria-hidden="true">
+            *
+          </span>
         </h2>
-        <p className={`mt-3 max-w-2xl ${dark ? "text-white/70" : "text-muted-foreground"}`}>
-          Read straight from the connected channels of {data.shows}
-          {data.showsTotal > data.shows ? ` of the ${data.showsTotal} shows` : " shows"} confirmed so far — so this is a
-          floor, not a ceiling. It grows with every host who joins the lineup.
-        </p>
 
         <div
           className={`mt-10 grid grid-cols-2 gap-y-10 border-t pt-10 lg:grid-cols-4 ${
@@ -169,7 +169,7 @@ export function AudienceReach({ tone = "light" }: { tone?: "light" | "dark" }) {
         {/* The part a media buyer checks first. Putting it in plain words is
             the difference between a number they trust and one they halve. */}
         <p className={`mt-8 max-w-3xl text-xs leading-relaxed ${dark ? "text-white/45" : "text-muted-foreground"}`}>
-          Pulled from each host's own accounts on {asOf}. Combined following adds every connected channel together and
+          <span className="text-[#F0A71F]">*</span> Pulled from each host's own accounts on {asOf}. Combined following adds every connected channel together and
           is not deduplicated — a listener who follows a show on two platforms is counted twice, and audiences overlap
           between shows. Figures that failed a consistency check against the platform's own reporting were left out
           rather than estimated.

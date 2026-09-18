@@ -258,13 +258,15 @@ export default function Sponsor() {
       <AudienceReach />
 
       {/* ------------------------------------------------------------ TIERS */}
-      <section id="tiers" className="scroll-mt-16 py-16 lg:py-20" style={{ backgroundColor: NAVY }}>
+      {/* Inverted against the navy reach band above it, so the page alternates
+          rather than running two dark sections together. */}
+      <section id="tiers" className="scroll-mt-16 border-b border-border bg-background py-16 lg:py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center">
             <div className="text-xs font-semibold uppercase tracking-[0.28em]" style={{ color: GOLD }}>
               Sponsorship
             </div>
-            <h2 className="mt-3 text-3xl font-bold leading-[1.25] tracking-tight text-white sm:text-4xl sm:leading-[1.25]" style={HEADLINE_FONT}>
+            <h2 className="mt-3 text-3xl font-bold leading-[1.25] tracking-tight text-foreground sm:text-4xl sm:leading-[1.25]" style={HEADLINE_FONT}>
               Three ways in. All start on {eventDate}.
             </h2>
           </div>
@@ -298,11 +300,10 @@ export default function Sponsor() {
             ].map((tier) => (
               <div
                 key={tier.name}
-                className={`relative flex flex-col rounded-3xl p-8 ${tier.featured ? "border-2" : "border border-white/15"}`}
-                style={{
-                  borderColor: tier.featured ? GOLD : undefined,
-                  backgroundColor: tier.featured ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.03)",
-                }}
+                className={`relative flex flex-col rounded-3xl p-8 ${
+                  tier.featured ? "border-2 bg-[#F0A71F]/[0.07]" : "border border-border bg-card"
+                }`}
+                style={{ borderColor: tier.featured ? GOLD : undefined }}
                 data-testid={`card-tier-${tier.name.split(" ")[0].toLowerCase()}`}
               >
                 {tier.featured && (
@@ -313,17 +314,17 @@ export default function Sponsor() {
                     Most visible
                   </div>
                 )}
-                <div className="text-sm font-semibold uppercase tracking-[0.18em] text-white/60">{tier.name}</div>
+                <div className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">{tier.name}</div>
                 <div className="mt-3 flex items-baseline gap-2">
-                  <span className="text-5xl font-bold tabular-nums tracking-tight text-white" style={HEADLINE_FONT}>
+                  <span className="text-5xl font-bold tabular-nums tracking-tight text-foreground" style={HEADLINE_FONT}>
                     {money(tier.price)}
                   </span>
                 </div>
-                <div className="mt-1 text-sm text-white/55">{tier.note}</div>
-                <p className="mt-4 text-white/75">{tier.blurb}</p>
+                <div className="mt-1 text-sm text-muted-foreground">{tier.note}</div>
+                <p className="mt-4 text-muted-foreground">{tier.blurb}</p>
                 <ul className="mt-7 flex-1 space-y-3.5">
                   {tier.benefits.map((b) => (
-                    <li key={b} className="flex gap-3 text-sm leading-relaxed text-white/85">
+                    <li key={b} className="flex gap-3 text-sm leading-relaxed text-foreground">
                       <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: GOLD }} />
                       <span>{b}</span>
                     </li>
@@ -335,7 +336,7 @@ export default function Sponsor() {
                       className={`w-full rounded-full font-semibold ${
                         tier.featured
                           ? "bg-[#F0A71F] text-[#1a1200] hover:bg-[#ffb92e]"
-                          : "border border-white/25 bg-white/10 text-white hover:bg-white/20"
+                          : "bg-[#053877] text-white hover:bg-[#064391]"
                       }`}
                       data-testid={`button-tier-${tier.name.split(" ")[0].toLowerCase()}`}
                     >

@@ -257,31 +257,33 @@ export default function SponsorVFW() {
       <AudienceReach />
 
       {/* ------------------------------------------------------------ OFFER */}
-      <section id="offer" className="scroll-mt-16 py-16 lg:py-20" style={{ backgroundColor: NAVY }}>
+      {/* Inverted against the navy reach band above it, so the page alternates
+          rather than running two dark sections together. */}
+      <section id="offer" className="scroll-mt-16 border-b border-border bg-background py-16 lg:py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center">
             <div className="text-xs font-semibold uppercase tracking-[0.28em]" style={{ color: GOLD }}>
               The offer
             </div>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl" style={HEADLINE_FONT}>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-foreground sm:text-4xl" style={HEADLINE_FONT}>
               Two ways in. Both start on {eventDate}.
             </h2>
           </div>
 
           <div className="mt-12 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
             {/* Partner sponsorship — the ask */}
-            <div className="relative rounded-3xl border-2 p-8 sm:p-10" style={{ borderColor: GOLD, backgroundColor: "rgba(255,255,255,0.04)" }}>
+            <div className="relative rounded-3xl border-2 bg-[#F0A71F]/[0.07] p-8 sm:p-10" style={{ borderColor: GOLD }}>
               <div className="absolute -top-3.5 left-8 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#1a1200]" style={{ backgroundColor: GOLD }}>
                 Our recommendation
               </div>
-              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-white/60">Partner sponsor</div>
+              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">Partner sponsor</div>
               <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-6xl font-bold tabular-nums tracking-tight text-white" style={HEADLINE_FONT}>
+                <span className="text-6xl font-bold tabular-nums tracking-tight text-foreground" style={HEADLINE_FONT}>
                   {money(PARTNER_PRICE)}
                 </span>
-                <span className="text-white/55">· one available</span>
+                <span className="text-muted-foreground">· one available</span>
               </div>
-              <p className="mt-4 text-white/75">
+              <p className="mt-4 text-muted-foreground">
                 The VFW name on the whole day, from the first show to the last — and a place on the schedule of your
                 own.
               </p>
@@ -290,21 +292,21 @@ export default function SponsorVFW() {
                   placement, so it gets its own frame instead of a bullet. */}
               <div
                 className="mt-6 flex items-center gap-4 rounded-2xl border p-5"
-                style={{ borderColor: "rgba(240,167,31,0.45)", backgroundColor: "rgba(240,167,31,0.08)" }}
+                style={{ borderColor: "rgba(240,167,31,0.55)", backgroundColor: "rgba(240,167,31,0.12)" }}
               >
                 <img
                   src="/vfw-stillserving-cover.jpg"
                   alt="#StillServing: The VFW Podcast"
-                  className="h-20 w-20 shrink-0 rounded-xl object-cover ring-1 ring-white/20"
+                  className="h-20 w-20 shrink-0 rounded-xl object-cover ring-1 ring-border"
                 />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: GOLD }}>
                     <Mic2 className="h-3.5 w-3.5" /> Two slots on the schedule
                   </div>
-                  <div className="mt-1.5 text-lg font-semibold leading-snug text-white">
+                  <div className="mt-1.5 text-lg font-semibold leading-snug text-foreground">
                     #StillServing: The VFW Podcast<span className="align-super text-xs">®</span>
                   </div>
-                  <div className="mt-1 text-sm text-white/70">
+                  <div className="mt-1 text-sm text-muted-foreground">
                     Two {event?.slotMinutes ?? 30}-minute slots of your own, in prime positions on the day.
                   </div>
                 </div>
@@ -312,7 +314,7 @@ export default function SponsorVFW() {
 
               <ul className="mt-7 space-y-3.5">
                 {PARTNER_BENEFITS.map((b) => (
-                  <li key={b} className="flex gap-3 text-sm leading-relaxed text-white/85">
+                  <li key={b} className="flex gap-3 text-sm leading-relaxed text-foreground">
                     <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: GOLD }} />
                     <span>{b}</span>
                   </li>
@@ -321,15 +323,15 @@ export default function SponsorVFW() {
             </div>
 
             {/* Per-slot — the low-friction add-on */}
-            <div className="rounded-3xl border border-white/15 bg-white/[0.03] p-8 sm:p-10">
-              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-white/60">Show sponsorship</div>
+            <div className="rounded-3xl border border-border bg-card p-8 sm:p-10">
+              <div className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">Show sponsorship</div>
               <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-6xl font-bold tabular-nums tracking-tight text-white" style={HEADLINE_FONT}>
+                <span className="text-6xl font-bold tabular-nums tracking-tight text-foreground" style={HEADLINE_FONT}>
                   {money(SLOT_PRICE)}
                 </span>
-                <span className="text-white/55">per show · {slotCount || 48} slots</span>
+                <span className="text-muted-foreground">per show · {slotCount || 48} slots</span>
               </div>
-              <p className="mt-4 text-white/75">
+              <p className="mt-4 text-muted-foreground">
                 Back individual shows instead of the whole day — or add them on top of the partnership.
               </p>
               <ul className="mt-7 space-y-3.5">
@@ -340,7 +342,7 @@ export default function SponsorVFW() {
                   "Pick the shows that fit — by branch, by audience, or by time of day",
                   "Take as few or as many slots as you want, right up to the full day",
                 ].map((b) => (
-                  <li key={b} className="flex gap-3 text-sm leading-relaxed text-white/85">
+                  <li key={b} className="flex gap-3 text-sm leading-relaxed text-foreground">
                     <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: GOLD }} />
                     <span>{b}</span>
                   </li>
