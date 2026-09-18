@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Bold, Italic, Link2, List, ListOrdered, Undo2, Unlink } from "lucide-react";
+import { Bold, Italic, Link2, List, ListOrdered, Undo2, Unlink, Heading1, Heading2, Pilcrow, Quote, Minus, Eraser } from "lucide-react";
 
 // Write the email the way you'd write a document.
 //
@@ -23,7 +23,10 @@ const escapeHtml = (s: string) => s.replace(/[&<>]/g, (c) => ESCAPE[c]);
 /** Marker text → the HTML shown in the editor. */
 export function markersToHtml(text: string): string {
   const NUM = /^\s*(\d+)[.)]\s+(.*)$/;
-  const BUL = /^\s*[-*•]\s+(.*)$/;
+  const BUL = /^\s*[-•]\s+(.*)$/;
+  const HEAD = /^\s*(#{2,3})\s+(.*)$/;
+  const QUOTE = /^\s*>\s?(.*)$/;
+  const RULE = /^\s*-{3,}\s*$/;
 
   const inline = (s: string) =>
     escapeHtml(s)
@@ -39,6 +42,14 @@ export function markersToHtml(text: string): string {
     .map((block) => {
       const lines = block.split("\n").filter((l) => l.trim());
       if (!lines.length) return "";
+      if (lines.length === 1 && RULE.test(lines[0])) return "<hr>";
+      if (lines.length === 1 && HEAD.test(lines[0])) {
+        const [, hashes, body] = lines[0].match(HEAD)!;
+        return `<h${hashes.length}>${inline(body.trim())}</h${hashes.length}>`;
+      }
+      if (lines.every((l) => QUOTE.test(l))) {
+        return `<blockquote>${lines.map((l) => inline(l.match(QUOTE)![1].trim())).join("<br>")}</blockquote>`;
+      }
       if (lines.every((l) => NUM.test(l))) {
         return `<ol>${lines.map((l) => `<li>${inline(l.match(NUM)![2])}</li>`).join("")}</ol>`;
       }
@@ -68,11 +79,12 @@ export function htmlToMarkers(root: HTMLElement): string {
         const href = el.getAttribute("href") ?? "";
         return /^https?:\/\//i.test(href) ? `[${inner}](${href})` : inner;
       }
-      // The email renderer has no italic mark, so rather than emit something
-      // that would arrive as literal asterisks, the emphasis is dropped and
-      // the words are kept.
       case "I":
       case "EM":
+        return inner.trim() ? `*${inner}*` : inner;
+      // Underline is not offered and not emitted. In an email an underline
+      // reads as a link people then try to click, and there is no marker for
+      // it — anything pasted in underlined arrives as plain text instead.
       default:
         return inner;
     }
@@ -87,6 +99,20 @@ export function htmlToMarkers(root: HTMLElement): string {
     }
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
     const el = node as HTMLElement;
+    if (el.tagName === "HR") {
+      blocks.push("---");
+      continue;
+    }
+    if (el.tagName === "H2" || el.tagName === "H3") {
+      const t = inline(el).trim();
+      if (t) blocks.push(`${el.tagName === "H2" ? "##" : "###"} ${t}`);
+      continue;
+    }
+    if (el.tagName === "BLOCKQUOTE") {
+      const t = inline(el).trim();
+      if (t) blocks.push(t.split("\n").map((l) => `> ${l.trim()}`).join("\n"));
+      continue;
+    }
     if (el.tagName === "UL" || el.tagName === "OL") {
       const ordered = el.tagName === "OL";
       const items = Array.from(el.querySelectorAll(":scope > li")).map(
@@ -134,11 +160,16 @@ export function RichBody({ value, onChange, placeholder }: Props) {
   const syncActive = useCallback(() => {
     if (typeof document.queryCommandState !== "function") return;
     try {
+      const tag = String(document.queryCommandValue("formatBlock") || "").toLowerCase();
       setActive({
         bold: document.queryCommandState("bold"),
         italic: document.queryCommandState("italic"),
         insertUnorderedList: document.queryCommandState("insertUnorderedList"),
         insertOrderedList: document.queryCommandState("insertOrderedList"),
+        h2: tag === "h2",
+        h3: tag === "h3",
+        blockquote: tag === "blockquote",
+        p: tag === "p" || tag === "div" || tag === "",
       });
     } catch {
       /* Safari throws when the selection is outside the document. */
@@ -166,39 +197,64 @@ export function RichBody({ value, onChange, placeholder }: Props) {
     exec("createLink", url);
   }
 
-  const tools = [
-    { key: "bold", icon: Bold, label: "Bold", run: () => exec("bold"), shortcut: "⌘B" },
-    { key: "italic", icon: Italic, label: "Italic", run: () => exec("italic"), shortcut: "⌘I" },
-    { key: "link", icon: Link2, label: "Add link", run: addLink, shortcut: "⌘K" },
-    { key: "unlink", icon: Unlink, label: "Remove link", run: () => exec("unlink") },
-    { key: "insertUnorderedList", icon: List, label: "Bullets", run: () => exec("insertUnorderedList") },
-    { key: "insertOrderedList", icon: ListOrdered, label: "Numbered list", run: () => exec("insertOrderedList") },
+  /** Turn the block the caret is in into a heading, quote or plain paragraph. */
+  function block(tag: "H2" | "H3" | "BLOCKQUOTE" | "P") {
+    exec("formatBlock", `<${tag.toLowerCase()}>`);
+  }
+
+  const groups: { key: string; icon: typeof Bold; label: string; run: () => void; shortcut?: string }[][] = [
+    [
+      { key: "bold", icon: Bold, label: "Bold", run: () => exec("bold"), shortcut: "⌘B" },
+      { key: "italic", icon: Italic, label: "Italic", run: () => exec("italic"), shortcut: "⌘I" },
+      { key: "link", icon: Link2, label: "Add link", run: addLink, shortcut: "⌘K" },
+      { key: "unlink", icon: Unlink, label: "Remove link", run: () => exec("unlink") },
+    ],
+    [
+      { key: "h2", icon: Heading1, label: "Big heading", run: () => block("H2") },
+      { key: "h3", icon: Heading2, label: "Small heading", run: () => block("H3") },
+      { key: "p", icon: Pilcrow, label: "Normal text", run: () => block("P") },
+    ],
+    [
+      { key: "insertUnorderedList", icon: List, label: "Bullets", run: () => exec("insertUnorderedList") },
+      { key: "insertOrderedList", icon: ListOrdered, label: "Numbered list", run: () => exec("insertOrderedList") },
+    ],
+    [
+      { key: "blockquote", icon: Quote, label: "Highlight box", run: () => block("BLOCKQUOTE") },
+      { key: "hr", icon: Minus, label: "Divider line", run: () => exec("insertHTML", "<hr>") },
+      { key: "removeFormat", icon: Eraser, label: "Clear formatting", run: () => exec("removeFormat") },
+    ],
   ];
 
   return (
     <div className="rounded-md border border-input focus-within:ring-2 focus-within:ring-ring">
       <div className="flex flex-wrap items-center gap-0.5 border-b border-input bg-muted/40 px-1.5 py-1">
-        {tools.map((t) => (
-          <Button
-            key={t.key}
-            type="button"
-            size="icon"
-            variant="ghost"
-            title={`${t.label}${t.shortcut ? ` (${t.shortcut})` : ""}`}
-            aria-label={t.label}
-            aria-pressed={!!active[t.key]}
-            className={`h-8 w-8 ${active[t.key] ? "bg-[#053877]/12 text-[#053877] dark:bg-white/15 dark:text-white" : ""}`}
-            // Mousedown, not click: clicking a button blurs the editor and
-            // takes the selection with it before the command can run.
-            onMouseDown={(e) => {
-              e.preventDefault();
-              t.run();
-            }}
-            data-testid={`rich-${t.key}`}
-          >
-            <t.icon className="h-4 w-4" />
-          </Button>
+        {groups.map((group, gi) => (
+          <div key={gi} className="flex items-center gap-0.5">
+            {gi > 0 && <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />}
+            {group.map((t) => (
+              <Button
+                key={t.key}
+                type="button"
+                size="icon"
+                variant="ghost"
+                title={`${t.label}${t.shortcut ? ` (${t.shortcut})` : ""}`}
+                aria-label={t.label}
+                aria-pressed={!!active[t.key]}
+                className={`h-8 w-8 ${active[t.key] ? "bg-[#053877]/12 text-[#053877] dark:bg-white/15 dark:text-white" : ""}`}
+                // Mousedown, not click: clicking a button blurs the editor and
+                // takes the selection with it before the command can run.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  t.run();
+                }}
+                data-testid={`rich-${t.key}`}
+              >
+                <t.icon className="h-4 w-4" />
+              </Button>
+            ))}
+          </div>
         ))}
+        <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
         <Button
           type="button"
           size="icon"
@@ -210,9 +266,17 @@ export function RichBody({ value, onChange, placeholder }: Props) {
         >
           <Undo2 className="h-4 w-4" />
         </Button>
-        <span className="ml-auto pr-1.5 text-[11px] text-muted-foreground">
-          Highlight text, then Bold or Add link
-        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          title="Insert the recipient's first name"
+          className="h-8 px-2 text-xs"
+          onMouseDown={(e) => { e.preventDefault(); exec("insertText", "{{First_Name}}"); }}
+          data-testid="rich-firstname"
+        >
+          First name
+        </Button>
       </div>
 
       <div

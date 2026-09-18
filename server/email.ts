@@ -692,7 +692,10 @@ function inlineMarks(escaped: string): string {
   return escaped
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
       (_m, label, href) => `<a href="${href}" style="color:#053877;text-decoration:underline;">${label}</a>`)
-    .replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#0b1220;">$1</strong>');
+    .replace(/\*\*([^*]+)\*\*/g, '<strong style="color:#0b1220;">$1</strong>')
+    // Single asterisks after the double ones have been consumed, so **bold**
+    // can never be read as two italics wrapping nothing.
+    .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
 }
 
 /** One row of a list: a gold marker in a narrow cell, the text beside it. */
@@ -713,13 +716,43 @@ function listRow(marker: string, body: string, numbered: boolean): string {
  */
 function textToHtml(text: string): string {
   const NUM = /^\s*(\d+)[.)]\s+(.*)$/;
-  const BUL = /^\s*[-*•]\s+(.*)$/;
+  // A bullet is "- " or "• ". An asterisk is not, any more: "*Important*" on
+  // its own line is italics, and treating it as a bullet ate the closing mark.
+  const BUL = /^\s*[-•]\s+(.*)$/;
+  const HEAD = /^\s*(#{2,3})\s+(.*)$/;
+  const QUOTE = /^\s*>\s?(.*)$/;
+  const RULE = /^\s*-{3,}\s*$/;
 
   return text
     .split(/\n{2,}/)
     .map((block) => {
       const lines = block.trim().split("\n").filter((l) => l.trim());
       if (!lines.length) return "";
+
+      // A divider on its own.
+      if (lines.length === 1 && RULE.test(lines[0])) {
+        return '<hr style="border:0;border-top:1px solid #e5e7eb;margin:22px 0;">';
+      }
+
+      // Headings. Two sizes is all an email needs; more just invites a
+      // hierarchy nobody reads on a phone.
+      if (lines.length === 1 && HEAD.test(lines[0])) {
+        const [, hashes, body] = lines[0].match(HEAD)!;
+        const big = hashes.length === 2;
+        return `<p style="margin:26px 0 10px;font-size:${big ? 21 : 17}px;line-height:1.3;font-weight:700;color:#0b1220;">${inlineMarks(escapeHtml(body.trim()))}</p>`;
+      }
+
+      // A pulled-out note, in the brand gold. The one thing in an email people
+      // read when they read nothing else.
+      if (lines.every((l) => QUOTE.test(l))) {
+        const body = lines.map((l) => inlineMarks(escapeHtml(l.match(QUOTE)![1].trim()))).join("<br>");
+        return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">
+          <tr>
+            <td width="4" style="background:#F0A71F;"></td>
+            <td style="padding:12px 16px;background:#fdf6e8;font-size:15px;line-height:1.6;color:#4b3b16;">${body}</td>
+          </tr>
+        </table>`;
+      }
 
       const numbered = lines.every((l) => NUM.test(l));
       const bulleted = !numbered && lines.every((l) => BUL.test(l));
