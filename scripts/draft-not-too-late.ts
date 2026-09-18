@@ -20,33 +20,29 @@ const dateLong = new Intl.DateTimeFormat("en-US", {
 }).format(start);
 const days = Math.max(0, Math.ceil((start.getTime() - Date.now()) / 86_400_000));
 
-const subject = `It's not too late — ${open} slots left, {{First_Name}}`;
+// Short enough to read on a phone without scrolling, and no slot count.
+//
+// The count is deliberately gone. Not only because the number goes stale
+// between drafting and sending — thirty of forty-eight is also not scarce,
+// and "only a few left" would be a straightforward lie that anyone can check
+// against the agenda. The urgency here is the two things that are true: the
+// date is fixed and coming, and the good hours really do go first.
+const subject = `Don't leave it too late, {{First_Name}}`;
 const body = `Hi {{First_Name}},
 
-It's not too late.
+${dateLong} is ${days} days out, and the board is filling up.
 
-${dateLong} is ${days} days away and we still have **${open} of the ${total} slots** open on the 24-Hour Mil/Vet Podcastathon. ${taken} shows are already on the board.
+Thirty minutes, live, doing what you already do every week. No studio, no producer, no crew — we run the whole broadcast. You show up and talk.
 
-If you've been meaning to grab a time and haven't got round to it, this is the part where I say it plainly: I'd like you on the schedule.
+We cut the clips for you afterwards, and it goes out on your own YouTube at the same time if you want it.
 
-**What it costs you:** thirty minutes, live, doing what you already do every week.
+The prime hours go first. If you'd rather pick a good time than take what's left, do it this week.
 
-**What you don't need:** a studio, a producer, a crew, or an audience. We run the whole broadcast. You show up and talk.
+[Grab a slot](https://www.militaryvoice.ai/#podcasters)
 
-**What you get:**
+Two minutes, and it costs you nothing.`;
 
-- Your show in front of every other host's listeners
-- Clips cut from your segment automatically — vertical, square and wide, captions included
-- Your slot going out on your own YouTube channel at the same time, if you want it
-- Your name on the day
-
-[Pick a time](https://www.militaryvoice.ai/#podcasters)
-
-Takes about two minutes. The good hours go first — that's just how it works.
-
-And if it's genuinely not for you this year, reply and tell me. I'd rather know than keep asking.`;
-
-console.log(`${open} of ${total} open · ${taken} taken · ${days} days out`);
+console.log(`${open} of ${total} open · ${taken} taken · ${days} days out (counts are not in the email)`);
 console.log(`subject: ${subject}`);
 
 if (process.argv.includes("--apply")) {
