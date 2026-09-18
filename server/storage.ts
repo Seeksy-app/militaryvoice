@@ -535,13 +535,60 @@ async function recordSchemaFingerprint(): Promise<void> {
     ON CONFLICT (key) DO UPDATE SET value = ${fp}`;
 }
 
+/**
+ * Run the bootstrap under three protections, learned the hard way.
+ *
+ * On 18 Sep an abandoned transaction held a lock on admin_users. Every cold
+ * start's `ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS …` queued behind
+ * it — and a queued ALTER holds ACCESS EXCLUSIVE intent, so every *reader* of
+ * that table queued behind the ALTER. requireAdmin reads admin_users, so the
+ * whole API went to 500s. The sync then timed out, the fingerprint was never
+ * recorded, and the next cold start did it all again.
+ *
+ *   lock_timeout       an ALTER that can't get its lock gives up instead of
+ *                      parking in the queue and blocking every reader. This is
+ *                      the one that actually breaks the cascade.
+ *   statement_timeout  no single statement can hold a serverless invocation
+ *                      open for two minutes.
+ *   advisory lock      one instance does the DDL; the rest skip rather than
+ *                      pile a dozen more ALTERs onto the same tables.
+ */
+async function runBootstrap(): Promise<void> {
+  const { sql } = getConnection();
+  const [{ got }] = await sql<{ got: boolean }[]>`SELECT pg_try_advisory_lock(873321) AS got`;
+  if (!got) {
+    // Another instance is already doing it. Nothing to wait for: whoever holds
+    // the lock records the fingerprint, and this instance picks it up next
+    // time. Far better than adding to the queue.
+    console.warn("Schema bootstrap already running elsewhere — skipping.");
+    return;
+  }
+  try {
+    await sql.unsafe("SET lock_timeout = '3s'");
+    await sql.unsafe("SET statement_timeout = '20s'");
+    await ensureSchema();
+    await recordSchemaFingerprint();
+  } finally {
+    await sql.unsafe("SET lock_timeout = DEFAULT").catch(() => {});
+    await sql.unsafe("SET statement_timeout = DEFAULT").catch(() => {});
+    await sql`SELECT pg_advisory_unlock(873321)`.catch(() => {});
+  }
+}
+
 async function ensureSchemaSafe(attempt = 0): Promise<void> {
   try {
     if (await schemaAlreadyPresent()) return;
-    await ensureSchema();
-    await recordSchemaFingerprint();
+    await runBootstrap();
   } catch (err: any) {
     const code = String(err?.code ?? "");
+    // 55P03 lock_not_available, 57014 statement timeout: the database is busy,
+    // not broken. The schema is almost certainly already right — every
+    // statement is IF NOT EXISTS — so serve the request rather than 500 the
+    // whole API over a migration that has nothing left to do.
+    if (code === "55P03" || code === "57014") {
+      console.warn(`Schema bootstrap gave way to a busy database (${code}); continuing.`);
+      return;
+    }
     if (BENIGN_SCHEMA_ERRORS.has(code)) {
       console.warn(`Schema bootstrap race ignored (${code}).`);
       return;
