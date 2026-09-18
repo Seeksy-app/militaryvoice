@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { useStudioRoom, type RoomPeer } from "@/hooks/use-studio-room";
 import { StageGrid, type RoomMeta } from "@/components/StageView";
 import { SceneRail } from "@/components/SceneRail";
@@ -29,6 +29,7 @@ import {
   Disc,
   Lightbulb,
   ArrowLeft,
+  Pencil,
   Sparkles,
   Headphones,
   MessageSquare,
@@ -140,6 +141,8 @@ interface StudioState {
   me: StudioParticipantRow | null;
   /** Their own slot on this event, when they hold one. Crew have none. */
   mySlot?: { startsAtUtc: string; endsAtUtc: string; label: string } | null;
+  /** Their show artwork, for when the camera is off. */
+  myPhotoUrl?: string;
   onStageCount: number;
   greenRoomCount: number;
 }
@@ -305,7 +308,7 @@ export default function Studio({ slug }: { slug?: string }) {
 
   // Once we're in the room the heartbeat carries the state back with it, so
   // this poll only runs while we're still on the join screen.
-  const { data: state } = useQuery<StudioState>({
+  const { data: state, refetch: refetchState } = useQuery<StudioState>({
     queryKey: stateKey,
     queryFn: async () => {
       const q = new URLSearchParams({ clientKey: key, ...(slug ? { slug } : {}), ...(studioId ? { studioId: String(studioId) } : {}) });
@@ -510,6 +513,22 @@ export default function Studio({ slug }: { slug?: string }) {
     return () => clearInterval(id);
   }, [stream, camOn]);
 
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+
+  async function saveName() {
+    const next = nameDraft.trim().slice(0, 60);
+    setEditingName(false);
+    if (!next || next === (state?.me?.displayName ?? "")) return;
+    try {
+      await apiRequest("POST", "/api/studio/rename", { clientKey: key, slug, studioId, displayName: next });
+      await refetchState();
+    } catch {
+      // Not worth a dialog: the name they see reverts to the stored one on
+      // the next poll, which is the honest outcome.
+    }
+  }
+
   const warnCount = setup.filter((c) => c.state === "warn").length;
 
   const zone = useMemo(detectLocalTimeZone, []);
@@ -683,7 +702,33 @@ export default function Studio({ slug }: { slug?: string }) {
                     onStage ? "border-[#ED1C24]" : "border-white/20"
                   }`}
                 >
-                  <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+                  {/* Their artwork sits behind the video, so a camera that is
+                      off shows who they are instead of a black rectangle —
+                      which is also what the stage does, and the green room
+                      should not look more broken than the show. */}
+                  {!camOn && state?.myPhotoUrl && (
+                    <>
+                      <img
+                        src={resolveUploadUrl(state.myPhotoUrl)}
+                        alt=""
+                        className="absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-xl"
+                      />
+                      <img
+                        src={resolveUploadUrl(state.myPhotoUrl)}
+                        alt=""
+                        className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full object-cover ring-2 ring-white/25"
+                        data-testid="img-self-avatar"
+                      />
+                    </>
+                  )}
+
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`relative h-full w-full object-cover ${camOn ? "" : "opacity-0"}`}
+                  />
 
                   {/* The sweep runs over your own picture while the checks
                       resolve, so it is obvious what is being looked at — and
@@ -703,8 +748,53 @@ export default function Studio({ slug }: { slug?: string }) {
                       </Button>
                     </div>
                   )}
+                  {/* The name the room sees and the lower third carries, and
+                      it could only be set on the way in — so anyone who typed
+                      it in a hurry was stuck with it in front of an audience.
+                      Click it and fix it. */}
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-3 pb-1.5 pt-6">
-                    <p className="truncate text-sm font-semibold">{state?.me?.displayName || name || "You"}</p>
+                    {editingName ? (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          void saveName();
+                        }}
+                        className="flex items-center gap-1.5"
+                      >
+                        <input
+                          autoFocus
+                          value={nameDraft}
+                          maxLength={60}
+                          onChange={(e) => setNameDraft(e.target.value)}
+                          onBlur={() => void saveName()}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              setEditingName(false);
+                              setNameDraft(state?.me?.displayName ?? name);
+                            }
+                          }}
+                          className="min-w-0 flex-1 rounded-md border border-white/30 bg-black/50 px-2 py-1 text-sm font-semibold text-white outline-none focus:border-[#F0A71F]"
+                          data-testid="input-rename-self"
+                        />
+                        <button type="submit" className="shrink-0 rounded-md bg-[#F0A71F] px-2 py-1 text-xs font-bold text-[#1a1200]">
+                          Save
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNameDraft(state?.me?.displayName ?? name);
+                          setEditingName(true);
+                        }}
+                        className="group/name flex w-full items-center gap-1.5 text-left"
+                        title="Change the name people see"
+                        data-testid="button-rename-self"
+                      >
+                        <span className="truncate text-sm font-semibold">{state?.me?.displayName || name || "You"}</span>
+                        <Pencil className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover/name:opacity-70" />
+                      </button>
+                    )}
                   </div>
                   {onStage && (
                     <div className="absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-[#ED1C24] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide">

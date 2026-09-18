@@ -236,9 +236,13 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
   branch: text("branch").notNull().default(""),
   serviceStatus: text("service_status").notNull().default(""),
   // Whether their audience figures may be counted in what we show sponsors.
-  // Off unless they say otherwise: they connected these accounts so we could
-  // post their clips, which is not the same as agreeing to be in a sales deck.
-  shareAudienceStats: boolean("share_audience_stats").notNull().default(false),
+  //
+  // On by default. What this gates is a total with no names in it — sponsors
+  // fund the production every host here uses, and a bigger honest combined
+  // number is what gets the event paid for. Anything that would name a
+  // podcaster's own figures is a separate question and is not covered by this.
+  // The toggle is in their dashboard and turning it off takes one click.
+  shareAudienceStats: boolean("share_audience_stats").notNull().default(true),
   // They've answered the "anything for us to play?" question — either way.
   // Without this, "no, nothing to send" left the checklist item open forever,
   // which is the one honest answer the list couldn't hear.

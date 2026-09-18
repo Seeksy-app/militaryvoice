@@ -2130,11 +2130,22 @@ export function registerRoutes(app: Express): void {
       .map((p) => ({ name: p.displayName }));
 
     let mySlot: { startsAtUtc: string; endsAtUtc: string; label: string } | null = null;
-    const email = (me?.email ?? "").trim().toLowerCase();
+    let myPhotoUrl = "";
+    // The signed-in account first, the participant row second.
+    //
+    // This used to read only the participant's email, which is filled in when
+    // they join — so a host who had signed in, held a 3am slot and was
+    // standing in the green room was told "no slot on this event", because
+    // the row they were being matched on had no address in it yet.
+    const sessionEmail = (req ? getSessionEmail(req) : "") ?? "";
+    const email = (sessionEmail || me?.email || "").trim().toLowerCase();
     if (email) {
       const mine = (await storage.listSignups(event.id)).find(
         (sgn) => sgn.status !== "cancelled" && sgn.email.trim().toLowerCase() === email,
       );
+      // Their own artwork, so a camera that's off shows who they are rather
+      // than a black rectangle.
+      myPhotoUrl = mine?.photoUrl || (await storage.getProfileByEmail(email))?.photoUrl || "";
       if (mine) {
         const blockStart = new Date(new Date(event.startAtUtc).getTime() + mine.slotIndex * event.slotMinutes * 60000);
         const air = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
@@ -2162,6 +2173,7 @@ export function registerRoutes(app: Express): void {
       me,
       onStage,
       mySlot,
+      myPhotoUrl,
       onStageCount: onStage.length,
       greenRoomCount: all.filter((p) => p.state === "Green room" && withPresence(p)).length,
     };
@@ -2355,6 +2367,36 @@ export function registerRoutes(app: Express): void {
         attributes: { state: me.state, participantId: String(me.id), displayTitle: me.displayTitle ?? "" },
       }),
     });
+  });
+
+  /**
+   * Change the name that shows under your own picture.
+   *
+   * It is the name the room sees and the name the lower third carries, and
+   * until now it could only be set once, on the way in — so anybody who typed
+   * it in a hurry, or was auto-filled with the wrong one, was stuck with it in
+   * front of an audience. Scoped to the caller's own clientKey: you can rename
+   * yourself and nobody else.
+   */
+  app.post("/api/studio/rename", async (req, res) => {
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId));
+    if (!found) {
+      res.status(404).json({ message: "No event" });
+      return;
+    }
+    const clientKey = typeof req.body?.clientKey === "string" ? req.body.clientKey : "";
+    const displayName = String(req.body?.displayName ?? "").trim().slice(0, 60);
+    if (!clientKey || !displayName) {
+      res.status(400).json({ message: "A name is required." });
+      return;
+    }
+    const all = await storage.listStudioParticipants(found.studio.id);
+    if (!all.some((p) => p.clientKey === clientKey)) {
+      res.status(404).json({ message: "You're not in this room." });
+      return;
+    }
+    await storage.upsertStudioParticipant(found.studio.id, clientKey, { displayName });
+    res.json(await speakerState(found.event, found.studio, clientKey, req));
   });
 
   app.post("/api/studio/leave", async (req, res) => {
