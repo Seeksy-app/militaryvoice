@@ -1,0 +1,11 @@
+import "dotenv/config";
+import postgres from "postgres";
+const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1 });
+const [r] = await sql`SELECT * FROM signups WHERE id = 9`;
+console.log("columns:", Object.keys(r).join(", "));
+console.log("photo:", r.photo_url);
+console.log("branch:", r.branch, "| service:", r.service_status, "| format:", r.show_format, "| status:", r.status);
+const idx = await sql`SELECT indexdef FROM pg_indexes WHERE tablename = 'signups'`;
+console.log("\nindexes:");
+for (const i of idx) console.log(" ", i.indexdef);
+await sql.end();

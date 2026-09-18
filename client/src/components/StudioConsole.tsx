@@ -47,6 +47,8 @@ import {
   AlertTriangle,
   Clock,
   Disc,
+  Pause,
+  Play,
   Square,
   Signal,
   Cable,
@@ -396,6 +398,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
    * enough to notice, because the tabs are in the same browser by definition.
    */
   const [otherConsole, setOtherConsole] = useState<string>("");
+
   const [mediaPicker, setMediaPicker] = useState<null | "image" | "video" | "all" | "presentations">(null);
   const [sceneName, setSceneName] = useState("");
   const [presName, setPresName] = useState("");
@@ -461,6 +464,16 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   } = useProducerRoom({ enabled: isLive, adminSend, studioId, publish: onCamera, displayName: "Host" });
 
   const studio = data?.studio;
+
+  /**
+   * Paused: the standby card is up and the stage is muted.
+   *
+   * Not a state of its own — it is the two things a producer does by hand when
+   * they need to hold, and reading it back off those two flags means nothing
+   * can disagree with reality. A separate "paused" column could say paused
+   * while the stage was live, which is the one mistake worth designing out.
+   */
+  const paused = Boolean(studio?.fallbackPlaying) && stageMuted;
   const present = (data?.participants ?? []).filter((p) => p.present);
   const onStage = present.filter((p) => p.state === "On stage");
   const greenRoom = present.filter((p) => p.state !== "On stage");
@@ -1178,20 +1191,29 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     hiding in a separate pill — so the most consequential fact
                     on the screen was the one thing it didn't say loudly. */}
                 {broadcasting || recording ? (
+                  <div className="flex items-center">
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
                         size="sm"
-                        className="h-9 gap-2 rounded-full bg-emerald-600 px-4 font-semibold text-white shadow-[0_6px_20px_rgba(5,150,105,0.4)] hover:bg-emerald-700"
+                        className={`h-9 gap-2 rounded-l-full rounded-r-none border-r px-4 font-semibold text-white ${
+                          paused
+                            ? "border-[#1a1200]/20 bg-[#F0A71F] text-[#1a1200] shadow-[0_6px_20px_rgba(240,167,31,0.4)] hover:bg-[#f5b944]"
+                            : "border-white/20 bg-emerald-600 shadow-[0_6px_20px_rgba(5,150,105,0.4)] hover:bg-emerald-700"
+                        }`}
                         disabled={broadcast.isPending || record.isPending}
                         data-testid="button-end-all"
                       >
-                        <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
-                        {broadcasting && recording
-                          ? "Live · recording"
-                          : broadcasting
-                            ? "Live"
-                            : "Recording"}
+                        <span
+                          className={`h-2 w-2 rounded-full ${paused ? "bg-[#1a1200]" : "animate-pulse bg-white"}`}
+                        />
+                        {paused
+                          ? "Paused"
+                          : broadcasting && recording
+                            ? "Live · recording"
+                            : broadcasting
+                              ? "Live"
+                              : "Recording"}
                         <Square className="h-3.5 w-3.5 opacity-80" />
                       </Button>
                     </AlertDialogTrigger>
@@ -1239,6 +1261,60 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
+                  {/* Pause beside End, because holding is the thing you
+                      actually need mid-show and ending almost never is. It
+                      keeps the stream up and the recording running — the
+                      segment stays one file — and puts the standby card on
+                      with the stage muted. Reversible, so it asks nothing. */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        aria-label="Pause or hold"
+                        className={`h-9 rounded-l-none rounded-r-full px-2.5 font-semibold text-white ${
+                          paused
+                            ? "bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b944]"
+                            : "bg-emerald-600 hover:bg-emerald-700"
+                        }`}
+                        disabled={patchStudio.isPending || muteStage.isPending}
+                        data-testid="button-live-options"
+                      >
+                        <ChevronDown className="h-3.5 w-3.5 opacity-80" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-64">
+                      <DropdownMenuItem
+                        onClick={() => {
+                          patchStudio.mutate({ fallbackPlaying: !paused });
+                          muteStage.mutate(!paused);
+                        }}
+                        disabled={!studio?.fallbackVideoUrl && !paused}
+                        data-testid="menu-pause"
+                      >
+                        {paused ? <Play className="mr-2 h-4 w-4" /> : <Pause className="mr-2 h-4 w-4" />}
+                        <span>
+                          <span className="block font-semibold">{paused ? "Back on air" : "Pause"}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {paused
+                              ? "Drop the standby card and unmute the stage"
+                              : studio?.fallbackVideoUrl
+                                ? "Standby card up, stage muted — stream and recording keep running"
+                                : "Set a standby clip first"}
+                          </span>
+                        </span>
+                      </DropdownMenuItem>
+                      {recording && broadcasting && (
+                        <DropdownMenuItem onClick={() => record.mutate({ action: "stop" })} data-testid="menu-stop-recording">
+                          <Disc className="mr-2 h-4 w-4" />
+                          <span>
+                            <span className="block font-semibold">Stop recording</span>
+                            <span className="block text-xs text-muted-foreground">Stay live, close the file</span>
+                          </span>
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  </div>
                 ) : isRoom ? (
                   <Button
                     size="sm"
