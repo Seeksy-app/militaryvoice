@@ -2749,14 +2749,136 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
 
 // ---------------------------------------------------------------------------
 
-type CrmView = "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "broadcasts" | "cadence" | "compose";
+type CrmView = "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "broadcasts" | "cadence" | "activity" | "compose";
 
-/** Broadcast has two faces: the fixed cadence every podcaster walks through,
- *  and one-off campaigns. They are different jobs, so they get different tabs. */
+/**
+ * Everything that has actually gone out, newest first.
+ *
+ * The Templates tab is a place to write; it lists drafts and sends together
+ * because a draft becomes a send. That makes it the wrong place to answer
+ * "what have we sent this week and did anyone read it" — the sends are
+ * scattered between eight drafts. This is the same rows, filtered to what
+ * left the building and ordered by when.
+ *
+ * It counts the automatic emails too. Those fire per person rather than as a
+ * campaign, so their row carries a running total rather than a one-off count,
+ * and leaving them out would understate what the list has received from us.
+ */
+function ActivityLog({
+  broadcasts,
+  onViewEngagement,
+}: {
+  broadcasts: BroadcastRow[];
+  onViewEngagement: (broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) => void;
+}) {
+  const sent = useMemo(
+    () =>
+      broadcasts
+        .filter((b) => b.status === "sent" && (b.recipientCount ?? 0) > 0)
+        .sort((a, b) => Date.parse(b.sentAt ?? b.createdAt) - Date.parse(a.sentAt ?? a.createdAt)),
+    [broadcasts],
+  );
+  const total = sent.reduce((n, b) => n + (b.recipientCount ?? 0), 0);
+
+  if (sent.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed p-10 text-center">
+        <Mail className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
+        <p className="text-sm font-medium">Nothing has gone out yet</p>
+        <p className="mt-1 text-xs text-muted-foreground">Sent emails land here with their delivery and open counts.</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <p className="text-sm text-muted-foreground">
+        {sent.length} send{sent.length === 1 ? "" : "s"} · {total.toLocaleString()} emails in total
+      </p>
+      <div className="flex flex-col gap-2">
+        {sent.map((b) => {
+          const auto = b.source?.startsWith("cadence:");
+          const when = b.sentAt ? new Date(b.sentAt) : null;
+          return <ActivityRow key={b.id} b={b} auto={!!auto} when={when} onViewEngagement={onViewEngagement} />;
+        })}
+      </div>
+    </>
+  );
+}
+
+/** One send, with its numbers read back from Resend's webhook. */
+function ActivityRow({
+  b,
+  auto,
+  when,
+  onViewEngagement,
+}: {
+  b: BroadcastRow;
+  auto: boolean;
+  when: Date | null;
+  onViewEngagement: (broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) => void;
+}) {
+  const { data: stats } = useQuery<BroadcastStats>({
+    queryKey: ["/api/admin/broadcasts", b.id, "stats"],
+    queryFn: () => adminGet<BroadcastStats>(`/api/admin/broadcasts/${b.id}/stats`),
+    staleTime: 60_000,
+  });
+
+  return (
+    <div className="rounded-xl border border-border px-4 py-3" data-testid={`activity-${b.id}`}>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">{b.subject}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {when ? when.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—"}
+            {" · "}
+            {SEGMENT_LABELS[b.segment] ?? b.segment}
+            {" · "}
+            {b.recipientCount} {auto ? "so far" : b.recipientCount === 1 ? "recipient" : "recipients"}
+          </p>
+        </div>
+        {auto ? (
+          <Badge variant="secondary" className="shrink-0 text-[11px]">Automatic</Badge>
+        ) : (
+          <Badge className="shrink-0 text-[11px]">Sent</Badge>
+        )}
+      </div>
+
+      {stats && (stats.delivered > 0 || stats.bounced > 0) ? (
+        <div className="mt-2 flex flex-wrap gap-3 text-xs">
+          <button onClick={() => onViewEngagement(b.id, "delivered", `Delivered — ${b.subject}`)} className="text-muted-foreground hover:underline">
+            📬 {stats.delivered} delivered
+          </button>
+          <button onClick={() => onViewEngagement(b.id, "opened", `Opened — ${b.subject}`)} className="text-blue-600 hover:underline dark:text-blue-400">
+            👁 {stats.opened} opened
+          </button>
+          <button onClick={() => onViewEngagement(b.id, "clicked", `Clicked — ${b.subject}`)} className="text-green-600 hover:underline dark:text-green-400">
+            🔗 {stats.clicked} clicked
+          </button>
+          {stats.bounced > 0 && (
+            <button onClick={() => onViewEngagement(b.id, "bounced", `Bounced — ${b.subject}`)} className="text-destructive hover:underline">
+              ⚠ {stats.bounced} bounced
+            </button>
+          )}
+        </div>
+      ) : (
+        /* A transactional send has no broadcast_sends rows to join against,
+           so there is nothing to report beyond the count it keeps itself. */
+        <p className="mt-2 text-xs text-muted-foreground">
+          {auto ? "Sent one at a time as people book — no per-send tracking." : "Waiting for delivery events."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Three jobs: write the emails, wire them into the sequence, and see what
+ *  has actually gone out. */
 function BroadcastSubNav({ view, setView }: { view: CrmView; setView: (v: CrmView) => void }) {
   const tabs: { key: CrmView; label: string }[] = [
     { key: "broadcasts", label: "Templates" },
     { key: "cadence", label: "Cadence" },
+    { key: "activity", label: "Activity log" },
   ];
   return (
     <div className="inline-flex rounded-lg bg-muted p-1">
@@ -3562,6 +3684,14 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* ── ACTIVITY LOG ── */}
+      {view === "activity" && (
+        <div className="flex flex-col gap-4">
+          <BroadcastSubNav view={view} setView={setView} />
+          <ActivityLog broadcasts={broadcastList} onViewEngagement={openEngagementView} />
         </div>
       )}
 
