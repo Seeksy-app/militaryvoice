@@ -30,8 +30,8 @@ import { RichBody } from "@/components/RichBody";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
-import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube } from "lucide-react";
-import { CADENCE_STEPS, cadenceSource } from "@shared/schema";
+import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
+import { CADENCE_STEPS, CADENCE_AUTOMATIC, cadenceSource } from "@shared/schema";
 import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, SponsorPackageWithSold, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
@@ -3487,8 +3487,44 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
         <div className="flex flex-col gap-4">
           <BroadcastSubNav view={view} setView={setView} />
           <p className="text-sm text-muted-foreground">
-            The sequence every podcaster receives. Each step is one email — open it to write or edit.
+            Everything a podcaster receives, in the order it reaches them. The numbered steps are yours to write; the
+            first one goes out automatically the moment they take a slot.
           </p>
+
+          {/* The automatic emails are shown because leaving them out made the
+              sequence look like it starts with the welcome — it doesn't, and
+              somebody writing step one needs to know the reader has already
+              had their slot confirmed. They are not editable here: their
+              wording lives in server/email.ts because it carries the slot
+              time and calendar links a template cannot. */}
+          <div className="flex flex-col gap-2">
+            {CADENCE_AUTOMATIC.map((step) => {
+              const b = cadenceBySource.get(cadenceSource(step.key));
+              return (
+                <div
+                  key={step.key}
+                  className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 p-3"
+                  data-testid={`row-cadence-auto-${step.key}`}
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <Zap className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold">{step.label}</span>
+                      <Badge variant="secondary" className="text-[11px]">Automatic</Badge>
+                      {typeof b?.recipientCount === "number" && b.recipientCount > 0 && (
+                        <span className="text-xs text-muted-foreground">{b.recipientCount} sent so far</span>
+                      )}
+                    </div>
+                    <p className="truncate text-xs text-muted-foreground">{step.blurb}</p>
+                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground">Wording is built in</span>
+                </div>
+              );
+            })}
+          </div>
+
           <div className="flex flex-col gap-2">
             {CADENCE_STEPS.map((step, i) => {
               const b = cadenceBySource.get(cadenceSource(step.key));
@@ -3499,7 +3535,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                   data-testid={`row-cadence-${step.key}`}
                 >
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                    {i === 0 ? "W" : i}
+                    {i + 1}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

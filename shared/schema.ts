@@ -506,14 +506,43 @@ export type PublicSponsor = Pick<SponsorRow, "id" | "name" | "url" | "logoUrl" |
 // A broadcast belongs to a step by carrying source = "cadence:<key>"; the step
 // list is shared so the admin UI and the server never disagree about the keys.
 // ---------------------------------------------------------------------------
+/**
+ * The emails a podcaster receives, in the order they arrive.
+ *
+ * Named for when they fire rather than numbered. "Email 4" tells whoever is
+ * editing it nothing about who is reading it or what they already know;
+ * "One hour before" tells them everything, and stops the day-before email
+ * being written as though its reader has not heard from us yet.
+ *
+ * The keys are stored on every broadcast, so they never change — only the
+ * labels do.
+ */
 export const CADENCE_STEPS = [
-  { key: "welcome", label: "Welcome", blurb: "Sent the moment a slot is claimed" },
-  { key: "email-1", label: "Email 1", blurb: "Pre-show checklist" },
-  { key: "email-2", label: "Email 2", blurb: "" },
-  { key: "email-3", label: "Email 3", blurb: "" },
-  { key: "email-4", label: "Email 4", blurb: "" },
-  { key: "email-5", label: "Email 5", blurb: "" },
-  { key: "email-6", label: "Email 6", blurb: "" },
+  { key: "welcome", label: "Welcome", blurb: "When they take a slot — what to do first", auto: false },
+  { key: "materials", label: "Two weeks out", blurb: "Artwork, clips and guest names", auto: false },
+  { key: "email-1", label: "Ten days out", blurb: "Pre-show checklist", auto: false },
+  { key: "email-2", label: "Five days out", blurb: "Test your camera, mic and lighting", auto: false },
+  { key: "email-3", label: "The day before", blurb: "You're on tomorrow — everything in one place", auto: false },
+  { key: "email-4", label: "One hour before", blurb: "Final call, and how to join", auto: false },
+  { key: "email-5", label: "After the show", blurb: "Thank you, and the replay", auto: false },
+  { key: "email-6", label: "Clips ready", blurb: "Their segment, cut and ready to post", auto: false },
+] as const;
+
+/**
+ * Transactional emails that report into the Cadence tab but are not edited
+ * there.
+ *
+ * Their wording lives in server/email.ts because they carry per-person detail
+ * a template cannot — the slot time, the calendar links, the sign-in code. The
+ * rows under these keys exist only to count sends, which is why their bodies
+ * are empty, and showing them beside the templates with an Edit button is how
+ * somebody ends up sending a blank duplicate of a confirmation.
+ */
+export const CADENCE_AUTOMATIC = [
+  { key: "confirmation", label: "Booking confirmation", blurb: "Sent the instant a slot is claimed, with their time and calendar links" },
+  { key: "prep", label: "Prep nudge", blurb: "Two weeks before their slot" },
+  { key: "final", label: "Final nudge", blurb: "Two days before their slot" },
+  { key: "onair", label: "On-air nudge", blurb: "One hour before their slot" },
 ] as const;
 export type CadenceKey = (typeof CADENCE_STEPS)[number]["key"];
 export const cadenceSource = (key: string) => `cadence:${key}`;
