@@ -3,11 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { SponsorDialog } from "@/components/SponsorDialog";
-import { AudienceReach } from "@/components/AudienceReach";
+import { AudienceReach, useAudienceSnapshot } from "@/components/AudienceReach";
+import { POSTS_BEFORE_PER_SHOW, POSTS_AFTER_PER_SHOW, postsLabel } from "@shared/promo";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import { slotStart, totalSlots, formatTimeInZone } from "@/lib/schedule";
-import { Check, Mic2, Radio, Clock, ArrowRight } from "lucide-react";
+import { Check, Mic2, Radio, Clock, ArrowRight, Megaphone, Users } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
 
 // A one-page sponsorship proposal, addressed to a single organisation. It is
@@ -48,6 +49,8 @@ export default function SponsorVFW() {
     queryFn: async () => (await apiRequest("GET", `/api/signups?eventId=${event!.id}`)).json(),
     enabled: !!event,
   });
+
+  const { data: audience } = useAudienceSnapshot();
 
   const zone = "America/New_York";
 
@@ -107,18 +110,35 @@ export default function SponsorVFW() {
           {/* No call to action up here on purpose. This proposal reaches one
               organisation by URL, so the reader is already committed — the
               scale of the day is the more useful thing to lead with. */}
-          <div className="mt-12 grid grid-cols-2 gap-y-8 border-t border-white/15 pt-10 lg:grid-cols-3">
+          {/* The fourth figure is the promotional commitment, not a forecast.
+              Every number here is countable: hours on the clock, slots on the
+              board, posts the lineup has agreed to run, and followers read
+              from their own accounts. Nothing is multiplied into an
+              "impressions" figure we cannot evidence. */}
+          <div className="mt-12 grid grid-cols-2 gap-y-8 border-t border-white/15 pt-10 lg:grid-cols-4">
             {[
-              { icon: Clock, n: String(event?.durationHours ?? 24), label: "hours, continuous" },
-              { icon: Radio, n: String(slotCount || 48), label: "broadcast slots" },
-              { icon: Mic2, n: String(event?.slotMinutes ?? 30), label: "minutes per show" },
-            ].map(({ icon: Icon, n, label }) => (
+              { icon: Clock, n: String(event?.durationHours ?? 24), label: "hours, continuous", note: "no dead air" },
+              { icon: Radio, n: String(slotCount || 48), label: "broadcast slots", note: `${event?.slotMinutes ?? 30} minutes each` },
+              {
+                icon: Megaphone,
+                n: postsLabel(lineup.length || 17),
+                label: "promotional posts",
+                note: `${POSTS_BEFORE_PER_SHOW} before and ${POSTS_AFTER_PER_SHOW} after, per show`,
+              },
+              {
+                icon: Users,
+                n: audience ? audience.followers.toLocaleString("en-US") : "—",
+                label: "combined following",
+                note: audience ? `across ${audience.channels} connected channels` : "being counted",
+              },
+            ].map(({ icon: Icon, n, label, note }) => (
               <div key={label} className="px-2 lg:px-0">
                 <Icon className="h-5 w-5" style={{ color: GOLD }} />
                 <div className="mt-2.5 text-4xl font-bold tabular-nums tracking-tight text-white sm:text-5xl" style={HEADLINE_FONT}>
                   {n}
                 </div>
                 <div className="mt-1 text-sm text-white/60">{label}</div>
+                <div className="text-xs text-white/40">{note}</div>
               </div>
             ))}
           </div>
