@@ -39,31 +39,31 @@ export function emailShell(o: {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f8;">
     <tr><td align="center" style="padding:24px 12px;">
       <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-        <!-- Rich banner: photo + dark overlay + logo + title -->
-        <tr><td style="padding:0;background:#053877;" bgcolor="#053877">
-          <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;">
+        <!-- The artwork, whole.
+             It used to be a background-image with a dark gradient and the
+             header type drawn on top. Three things went wrong with that: the
+             wash was hiding a picture that is already treated, the type landed
+             on the artwork's own lettering, and cover-cropping a 2.5:1 image
+             into a band nowhere near 2.5:1 meant which part got clipped
+             changed with the width of the client, and on a phone it clipped
+             the wave in half. A plain <img> has none of those problems: it
+             always shows the whole thing, at every width, in every client. -->
+        <tr><td style="padding:0;background:#053877;font-size:0;line-height:0;" bgcolor="#053877">
+          <img src="${o.banner}" width="600" alt="${escapeHtml(o.bannerAlt ?? "MilitaryVoice.ai")}"
+               style="display:block;width:100%;max-width:600px;height:auto;border:0;">
+        </td></tr>
+        <!-- The brand bar: what this email is on the left, the mark on the
+             right. Below the picture rather than on it, so neither can ever
+             land on the other whatever width the client renders at. -->
+        <tr><td style="background:#042a5c;padding:12px 32px 14px;" bgcolor="#042a5c">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
             <tr>
-              <td background="${o.banner}" bgcolor="#053877"
-                  style="background-image:url('${o.banner}');background-size:cover;background-position:center;padding:0;">
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                  <tr>
-                    <td style="background:linear-gradient(135deg,rgba(5,56,119,0.90) 0%,rgba(5,56,119,0.60) 100%);padding:30px 36px 34px;">
-                      <!-- Two cells rather than floats: the only alignment mail
-                           clients agree on. -->
-                      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                        <tr>
-                          <td align="left" valign="bottom" style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-                            <img src="${SITE}/logo-wave.png" width="80" height="24" alt="" style="display:block;border:0;margin:0 0 14px;">
-                            <p style="margin:0;color:#F0A71F;font-size:17px;font-weight:800;letter-spacing:0.01em;line-height:1.25;">${escapeHtml(o.eyebrow)}</p>
-                          </td>
-                          <td align="right" valign="bottom" style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;white-space:nowrap;padding-left:16px;">
-                            <p style="margin:0;color:#ffffff;font-size:11px;font-weight:600;letter-spacing:0.10em;text-transform:uppercase;opacity:0.72;">MilitaryVoice.ai</p>
-                          </td>
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
-                </table>
+              <td align="left" valign="middle" style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+                <p style="margin:0;color:#F0A71F;font-size:13px;font-weight:800;letter-spacing:0.07em;text-transform:uppercase;line-height:1.35;">${escapeHtml(o.eyebrow)}</p>
+              </td>
+              <td align="right" valign="middle" style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;white-space:nowrap;padding-left:18px;">
+                <img src="${SITE}/logo-wave.png" width="58" height="17" alt="" style="display:block;border:0;margin:0 0 5px auto;">
+                <p style="margin:0;color:#ffffff;font-size:10px;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;opacity:0.85;">MilitaryVoice.ai</p>
               </td>
             </tr>
           </table>
