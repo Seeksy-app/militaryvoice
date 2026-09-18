@@ -302,6 +302,62 @@ function DeckButton({
   );
 }
 
+/**
+ * Says when the rendered standby clip no longer matches the lineup.
+ *
+ * Everything else on the public side rebuilds itself from the database. The
+ * clip cannot: it is an encoded file with the faces burnt into it, so a host
+ * who signs up after it was made is simply absent from the card inviting
+ * people to watch them. That happened for weeks with the last one, and nothing
+ * in the product said so — you would find out by watching your own pre-show
+ * and counting.
+ */
+function StandbyFreshness({ adminGet, eventId }: { adminGet: <T>(path: string) => Promise<T>; eventId?: number }) {
+  const { data } = useQuery<{
+    lineup: number;
+    build: { shows?: number; builtAt?: string; music?: string } | null;
+    stale: boolean;
+  }>({
+    queryKey: ["/api/admin/standby-build", eventId ?? 0],
+    queryFn: () => adminGet(`/api/admin/standby-build?eventId=${eventId ?? ""}`),
+    staleTime: 60_000,
+  });
+  if (!data?.build) return null;
+
+  const { build, lineup, stale } = data;
+  const built = build.builtAt ? new Date(build.builtAt).toLocaleDateString() : "";
+  const cmd = "npx tsx scripts/build-standby.ts --music media/standby-bed.mp3 --upload";
+
+  return (
+    <div
+      className={`mt-3 rounded-xl border p-3 text-xs ${
+        stale ? "border-[#F0A71F]/60 bg-[#F0A71F]/10" : "border-border bg-muted/30"
+      }`}
+      data-testid="panel-standby-freshness"
+    >
+      {stale ? (
+        <>
+          <p className="font-semibold text-foreground">
+            The pre-event card is showing {build.shows} shows — the lineup now has {lineup}.
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            The faces are rendered into the file, so it can't update itself. Rebuild and it goes live in about twenty
+            seconds:
+          </p>
+          <code className="mt-2 block overflow-x-auto rounded bg-background px-2 py-1.5 font-mono text-[11px]">
+            {cmd}
+          </code>
+        </>
+      ) : (
+        <p className="text-muted-foreground">
+          Pre-event card is current — {build.shows} shows, built {built}
+          {build.music ? ` · ${build.music}` : ""}.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedStudioId, onLeave }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1694,6 +1750,8 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     Nothing queued. If the show falls over, the audience sees a holding card.
                   </p>
                 )}
+
+                <StandbyFreshness adminGet={adminGet} eventId={eventId} />
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <input

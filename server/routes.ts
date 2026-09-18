@@ -3856,6 +3856,30 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  /**
+   * Whether the rendered standby clip still matches the lineup.
+   *
+   * The poster and the watch-page listing rebuild themselves from the
+   * database; the clip is a file, so it cannot. Nothing else in the product
+   * would tell you it had gone stale — you would find out by watching your own
+   * pre-show and counting faces.
+   */
+  app.get("/api/admin/standby-build", requireAdmin, async (req, res) => {
+    noStore(res);
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent())?.id;
+    const lineup = eventId
+      ? (await storage.listSignups(eventId)).filter((s) => s.status !== "cancelled").length
+      : 0;
+    let build: { shows?: number; builtAt?: string; music?: string; url?: string } | null = null;
+    try {
+      const raw = await storage.getSetting("standbyBuild");
+      build = raw ? JSON.parse(raw) : null;
+    } catch {
+      build = null;
+    }
+    res.json({ lineup, build, stale: !!build && typeof build.shows === "number" && build.shows !== lineup });
+  });
+
   app.get("/api/admin/reach", requireAdmin, async (_req, res) => {
     noStore(res);
     res.json({ snapshot: await readAudienceSnapshot(), windowDays: AUDIENCE_WINDOW_DAYS });

@@ -285,7 +285,22 @@ if (process.argv.includes("--upload")) {
     SELECT id FROM studios WHERE event_id = ${event.id} AND pre_video_url <> '' ORDER BY id LIMIT 1`;
   if (!target) throw new Error("No studio with a pre-event card to replace.");
   await db`UPDATE studios SET pre_video_url = ${url}, pre_label = ${"Tune in October 5"} WHERE id = ${target.id}`;
+
+  // Record what went into it. The clip is a rendered file, so it cannot know
+  // that a nineteenth host signed up an hour later — and a standby card that
+  // silently leaves people out is exactly the failure the last one had, where
+  // six hosts sat behind "+6 more" for weeks. Admin compares this against the
+  // live lineup and says when it has gone stale.
+  const stamp = JSON.stringify({
+    shows: shows.length,
+    builtAt: new Date().toISOString(),
+    music: musicFile ? path.basename(musicFile) : "generated bed",
+    url,
+  });
+  await db`
+    INSERT INTO site_settings (key, value) VALUES ('standbyBuild', ${stamp})
+    ON CONFLICT (key) DO UPDATE SET value = ${stamp}`;
   await db.end();
-  console.log(`uploaded → studio #${target.id}\n${url}`);
+  console.log(`uploaded → studio #${target.id}  (${shows.length} shows, ${musicFile ? path.basename(musicFile) : "generated bed"})\n${url}`);
 }
 process.exit(0);
