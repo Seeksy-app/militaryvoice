@@ -830,12 +830,17 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <nav className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm sm:grid-cols-3 lg:grid-cols-6">
             {(
               [
+                /* In the order the work actually happens: say who you are,
+                   set your show up, connect the accounts the promotion posts
+                   from, promote it, then collect what came out. Integrations
+                   sat after Recordings, which put "connect your accounts"
+                   after "here's your finished audio". */
                 ["dashboard", "Dashboard", "Your card and slot"],
                 ["editProfile", "Profile settings", "About you"],
                 ["events", "Event settings", "Your shows and times"],
+                ["integrations", "Integrations", "Your connected accounts"],
                 ["promotion", "Promotion", "Get people watching"],
                 ["recordings", "Recordings", "Yours after the show"],
-                ["integrations", "Integrations", "Your connected accounts"],
               ] as const
             ).map(([value, label, hint]) => {
               const active = screen === value;
@@ -1025,35 +1030,17 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     {/* No wrapper: the panel was titled "Show materials" and
                         the section inside it "Media", which is two names for
                         one thing. ShowMaterials carries its own headings. */}
+                    {/* The YouTube row moved out. Whether their slot also goes
+                        to their own channel is an Integrations question, and
+                        having it here too meant one setting with two homes. */}
                     <ShowMaterials profile={profile} showFormat={entry.show?.showFormat} interviewNeed={entry.show?.interviewNeed} />
-
-                    <StreamStatusRow onOpen={() => setScreen("integrations")} />
-
                   </div>
                 )}
 
-                {/* The guide is about getting ready for an event, so it reads
-                    here rather than on the dashboard home. */}
-                <section className="mt-2">
-              <Link href="/prepare" data-testid="link-prepare-guide">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-5 transition-colors hover-elevate">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                      <BookOpen className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-card-foreground">Getting ready for your slot</p>
-                      <p className="mt-0.5 text-sm text-muted-foreground">
-                        What to send us beforehand, how show day runs, and when to be in the studio.
-                      </p>
-                    </div>
-                  </div>
-                  <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
-                    Read the guide <ArrowRight className="h-3.5 w-3.5" />
-                  </span>
-                </div>
-              </Link>
-                </section>
+                {/* The guide card used to sit here. Two prompts at the foot
+                    of the page competed, and the one that matters is the one
+                    that moves them on to promotion — /prepare is still linked
+                    from the FAQ and the emails. */}
               </>
             )}
           </EventSettings>

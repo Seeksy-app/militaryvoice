@@ -229,86 +229,85 @@ export function EventSettings({
 
       <h2 className="text-xl font-bold tracking-tight">{open.event.name}</h2>
 
-      {/* ------------------------------------------------ time slot */}
-      <div className="mt-4 scroll-mt-24 rounded-2xl border border-border bg-card p-5" id="your-time-slot">
-        <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-          {open.slotIndex != null ? "Your time slot" : "Choose a time"}
-        </h3>
-        {open.slotIndex != null ? (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#053877]/20 bg-[#053877]/[0.05] px-4 py-3">
-            <div className="min-w-0">
-              <p className="text-lg font-bold leading-tight text-[#053877]">{onAirLabel}</p>
-              <p className="text-xs text-muted-foreground">
-                {zoneLabel(zone)} · you're on the schedule for {open.event.name}.
-              </p>
-            </div>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive">
-                  <Trash2 className="h-3.5 w-3.5" /> Remove this time
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Give up this time?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {onAirLabel} goes back on the open schedule for anyone to claim, and you can pick a different
-                    time straight after. Anyone who set a reminder for this slot won't be notified.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Keep it</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    onClick={() => open.signupId != null && removeSlot.mutate(open.signupId)}
-                    data-testid="button-remove-slot"
-                  >
-                    {removeSlot.isPending ? "Removing…" : "Remove it"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+      {/* ------------------------------------- slot and green room, in one line */}
+      {/* Two full-width cards to say one time and offer one button was most of
+          a screen before anybody reached the thing they came to do. The slot
+          is a clock and a time; the green room is the button beside it. */}
+      {open.slotIndex != null ? (
+        <div
+          className="mt-4 flex scroll-mt-24 flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border border-border bg-card px-5 py-4"
+          id="your-time-slot"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877]">
+              <Clock className="h-5 w-5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-base font-bold leading-tight text-[#053877] dark:text-[#8ab4f8]">
+                {onAirLabel}
+              </span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {zoneLabel(zone)} · you're on the schedule
+              </span>
+            </span>
           </div>
-        ) : (
-          <>
-            <p className="mb-3 mt-1 text-sm text-muted-foreground">
-              {open.show?.showName
-                ? "Tap any open time to take it."
-                : "Save your show above first — a slot needs a show attached to it."}
-            </p>
-            <EventSlotPicker
-              event={open.event}
-              disabled={!open.show?.showName}
-              showFormat={openShow?.showFormat ?? open.show?.showFormat}
-            />
-          </>
-        )}
-      </div>
 
-      {/* ------------------------------------------------ green room */}
-      {/* Open whenever they want it, not just on the day. The first time
-          anyone discovers their microphone is the wrong one should not be
-          ninety seconds before they go on. */}
-      <div className="mt-4 rounded-2xl border border-border bg-card p-5">
-        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-          <Headphones className="h-4 w-4" /> Green room
-        </h3>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Your waiting room for {open.event.name}. Check your camera, microphone and speakers, see yourself the way the
-          audience will, and set your levels. Nothing you do in here goes on air — the producer brings you onto the
-          stage when it's your turn.
-        </p>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <span className="hidden h-8 w-px bg-border sm:block" aria-hidden="true" />
+
           <a href={greenRoomHref} target="_blank" rel="noreferrer" data-testid="link-green-room">
             <Button className="gap-1.5 rounded-full">
               <Headphones className="h-4 w-4" /> Enter the green room
             </Button>
           </a>
-          <span className="text-xs text-muted-foreground">
-            Open any time. Worth a two-minute check this week.
+          <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+            Check your camera, mic and lighting. Open any time — nothing in there goes on air.
           </span>
+
+          {/* Giving up a slot is rare and permanent, so it sits at the far end
+              looking like what it is rather than beside the primary action. */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="sm" className="shrink-0 gap-1.5 text-muted-foreground hover:text-destructive">
+                <Trash2 className="h-3.5 w-3.5" /> Remove
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Give up this time?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {onAirLabel} goes back on the open schedule for anyone to claim, and you can pick a different
+                  time straight after. Anyone who set a reminder for this slot won't be notified.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Keep it</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => open.signupId != null && removeSlot.mutate(open.signupId)}
+                  disabled={removeSlot.isPending}
+                  data-testid="button-remove-slot"
+                >
+                  {removeSlot.isPending ? "Removing…" : "Remove it"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
-      </div>
+      ) : (
+        <div className="mt-4 scroll-mt-24 rounded-2xl border border-border bg-card p-5" id="your-time-slot">
+          <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">Choose a time</h3>
+          <p className="mb-3 mt-1 text-sm text-muted-foreground">
+            {open.show?.showName
+              ? "Tap any open time to take it."
+              : "Save your show above first — a slot needs a show attached to it."}
+          </p>
+          <EventSlotPicker
+            event={open.event}
+            disabled={!open.show?.showName}
+            showFormat={openShow?.showFormat ?? open.show?.showFormat}
+          />
+        </div>
+      )}
 
       {openShow && (
         <div className="mt-6">
@@ -325,28 +324,32 @@ export function EventSettings({
 
       {children?.(open)}
 
-      {/* Promotion has its own tab now. It sat here, underneath the work,
-          which meant people finished the work and left — and promotion is
-          what decides whether anyone is watching. */}
+      {/* What to do next, at the point they've finished.
+          The page saves as it goes, so there is no Save button to end on and
+          nothing telling anyone they're done — people got to the bottom of a
+          long form, found no full stop, and left. This is the full stop, and
+          it points at the thing that actually decides whether anyone watches. */}
       {open.slotIndex != null && open.signupId != null && (
-        <button
-          type="button"
-          onClick={onOpenPromotion}
-          className="mt-6 flex w-full flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-5 text-left transition-colors hover-elevate"
+        <div
+          className="mt-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/25 bg-primary/5 p-5"
           data-testid="link-to-promotion"
         >
-          <span className="min-w-0">
-            <span className="flex items-center gap-2 font-semibold text-foreground">
-              <Megaphone className="h-4 w-4 text-primary" /> Get people watching
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Check className="h-4.5 w-4.5" />
             </span>
-            <span className="mt-1 block text-sm text-muted-foreground">
-              Your share card, a posting plan for the days before, and the clips we cut afterwards.
-            </span>
-          </span>
-          <span className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary">
-            Open Promotion <ChevronRight className="h-3.5 w-3.5" />
-          </span>
-        </button>
+            <div className="min-w-0">
+              <p className="font-semibold text-foreground">That's your show set up — it saves as you go.</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Next: get people watching. Your share card, a posting plan for the days before, and the clips we cut
+                afterwards.
+              </p>
+            </div>
+          </div>
+          <Button onClick={onOpenPromotion} className="shrink-0 gap-1.5 rounded-full" data-testid="button-next-promotion">
+            <Megaphone className="h-4 w-4" /> Go to Promotion <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       )}
     </section>
   );
