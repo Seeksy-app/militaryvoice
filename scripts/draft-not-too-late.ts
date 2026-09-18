@@ -20,29 +20,43 @@ const dateLong = new Intl.DateTimeFormat("en-US", {
 }).format(start);
 const days = Math.max(0, Math.ceil((start.getTime() - Date.now()) / 86_400_000));
 
-// Short enough to read on a phone without scrolling, and no slot count.
+// The longer version, with the actions linked where they are mentioned.
 //
-// The count is deliberately gone. Not only because the number goes stale
-// between drafting and sending — thirty of forty-eight is also not scarce,
-// and "only a few left" would be a straightforward lie that anyone can check
-// against the agenda. The urgency here is the two things that are true: the
-// date is fixed and coming, and the good hours really do go first.
-const subject = `Don't leave it too late, {{First_Name}}`;
+// Links inside the sentence rather than one button at the bottom: somebody
+// skimming on a phone stops at the line that interests them, and that line
+// should be the thing they can act on.
+const AGENDA = "https://www.militaryvoice.ai/agenda";
+const SIGNUP = "https://www.militaryvoice.ai/#podcasters";
+const STUDIO = "https://www.militaryvoice.ai/watchfloor";
+const YOUTUBE = "https://www.militaryvoice.ai/host/dashboard/integrations#section-going-out-live";
+
+const subject = `It's not too late — ${open} slots left, {{First_Name}}`;
 const body = `Hi {{First_Name}},
 
-${dateLong} is ${days} days out, and the board is filling up.
+It's not too late.
 
-Thirty minutes, live, doing what you already do every week. No studio, no producer, no crew — we run the whole broadcast. You show up and talk.
+${dateLong} is ${days} days away and we still have **${open} of the ${total} slots** open on the 24-Hour Mil/Vet Podcastathon. ${taken} shows are [already on the board](${AGENDA}).
 
-We cut the clips for you afterwards, and it goes out on your own YouTube at the same time if you want it.
+If you've been meaning to grab a time and haven't got round to it, this is the part where I say it plainly: I'd like you on the schedule.
 
-The prime hours go first. If you'd rather pick a good time than take what's left, do it this week.
+**What it costs you:** thirty minutes, live, doing what you already do every week.
 
-[Grab a slot](https://www.militaryvoice.ai/#podcasters)
+**What you don't need:** a studio, a producer, a crew, or an audience. [We run the whole broadcast](${STUDIO}). You show up and talk.
 
-Two minutes, and it costs you nothing.`;
+**What you get:**
 
-console.log(`${open} of ${total} open · ${taken} taken · ${days} days out (counts are not in the email)`);
+- Your show in front of [every other host's listeners](${AGENDA})
+- [Clips cut from your segment](${STUDIO}) automatically — vertical, square and wide, captions included
+- Your slot going out on [your own YouTube channel](${YOUTUBE}) at the same time, if you want it
+- Your name on the day
+
+[Pick a time](${SIGNUP})
+
+Takes about two minutes. The good hours go first — that's just how it works.
+
+And if it's genuinely not for you this year, [reply and tell me](mailto:hello@militaryvoice.ai). I'd rather know than keep asking.`;
+
+console.log(`${open} of ${total} open · ${taken} taken · ${days} days out`);
 console.log(`subject: ${subject}`);
 
 if (process.argv.includes("--apply")) {
