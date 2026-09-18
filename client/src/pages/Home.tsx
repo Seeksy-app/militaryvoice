@@ -18,6 +18,7 @@ import {
   formatDateInZone,
   formatTimeInZone,
 } from "@/lib/schedule";
+import { SiteFooter } from "@/components/SiteFooter";
 
 interface Props {
   slug?: string;
@@ -225,6 +226,7 @@ export default function Home({ slug }: Props) {
           </div>
         )}
       </section>
+    <SiteFooter />
     </div>
   );
 }

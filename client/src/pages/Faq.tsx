@@ -6,6 +6,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import type { PublicEvent } from "@shared/schema";
 import { detectLocalTimeZone, formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
 import { Mic2, Headphones, HelpCircle, ArrowRight, Mail } from "lucide-react";
+import { SiteFooter } from "@/components/SiteFooter";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -315,6 +316,7 @@ export default function Faq() {
           </div>
         </section>
       </div>
+    <SiteFooter />
     </div>
   );
 }

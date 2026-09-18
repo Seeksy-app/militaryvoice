@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import type { PublicEvent } from "@shared/schema";
 import { CalendarDays, Radio } from "lucide-react";
+import { SiteFooter } from "@/components/SiteFooter";
 
 // The event's own About page — about the day, not about us. One per event,
 // so a second tenant gets theirs by filling in a field, and the "What is
@@ -110,6 +111,7 @@ export default function EventAbout({ slug }: { slug?: string }) {
           </Button>
         </div>
       </div>
+    <SiteFooter />
     </div>
   );
 }

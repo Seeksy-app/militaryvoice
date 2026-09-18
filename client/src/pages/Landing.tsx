@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
 import { LogoLockup } from "@/components/Logo";
+import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, PlatformIcon, platformLabel, parseSocialAccounts } from "@/components/SocialIcons";
@@ -914,54 +915,7 @@ export default function Landing({ slug }: Props) {
         </section>
       )}
 
-      <footer className="border-t border-border">
-        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-            <LogoLockup className="h-9 w-auto" />
-            <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
-              <a href="/#podcasters" className="hover:text-foreground">
-                Podcasters
-              </a>
-              <a href="/#listeners" className="hover:text-foreground">
-                Listeners
-              </a>
-              <Link href={scheduleHref} className="hover:text-foreground">
-                Schedule
-              </Link>
-              <Link href={agendaHref} className="hover:text-foreground">
-                Agenda
-              </Link>
-              <Link href="/prepare" className="hover:text-foreground">
-                Podcaster guide
-              </Link>
-              <Link href="/faq" className="hover:text-foreground">
-                FAQ
-              </Link>
-              <Link href="/watchfloor" className="hover:text-foreground">
-                Studio
-              </Link>
-              <Link href="/sponsor" className="hover:text-foreground">
-                Sponsor
-              </Link>
-              <Link href="/host/dashboard" className="hover:text-foreground">
-                Sign in
-              </Link>
-            </nav>
-          </div>
-
-          <div className="mt-8 flex flex-col gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <p>© {new Date().getFullYear()} MilitaryVoice.ai. All rights reserved.</p>
-            <nav className="flex flex-wrap gap-x-5 gap-y-2">
-              <Link href="/privacy" className="hover:text-foreground">
-                Privacy Policy
-              </Link>
-              <Link href="/terms" className="hover:text-foreground">
-                Terms &amp; Conditions
-              </Link>
-            </nav>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter slug={slug} />
 
       <PodcasterDialog
         signup={selectedPodcaster?.signup ?? null}

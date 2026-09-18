@@ -73,7 +73,9 @@ export function AudienceReach({ tone = "dark" }: { tone?: "light" | "dark" }) {
   const asOf = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" }).format(
     new Date(data.generatedAt),
   );
-  const months = Math.round(data.windowDays / 30);
+  const windowLabel = data.windowDays >= 300
+    ? `${Math.round(data.windowDays / 30)} months`
+    : `${data.windowDays} days`;
 
   const figures = [
     {
@@ -86,13 +88,18 @@ export function AudienceReach({ tone = "dark" }: { tone?: "light" | "dark" }) {
       icon: Eye,
       n: figure(data.impressions),
       label: "impressions",
-      note: `in the last ${months} months`,
+      note: `in the last ${windowLabel}`,
     },
     {
       icon: Radio,
       n: figure(data.reach),
-      label: "people reached",
-      note: "unique accounts, same period",
+      // Each platform reports reach as unique accounts *within that account's
+      // own audience*. Add sixteen of those together and the result is not a
+      // count of unique people — the same person reached by two shows is in
+      // there twice. Calling it "people reached" was wrong, and it is the
+      // first claim a media buyer would have taken apart.
+      label: "accounts reached",
+      note: "summed across channels, same period",
     },
     {
       icon: Heart,
@@ -169,10 +176,12 @@ export function AudienceReach({ tone = "dark" }: { tone?: "light" | "dark" }) {
         {/* The part a media buyer checks first. Putting it in plain words is
             the difference between a number they trust and one they halve. */}
         <p className={`mt-8 max-w-3xl text-xs leading-relaxed ${dark ? "text-white/45" : "text-muted-foreground"}`}>
-          <span className="text-[#F0A71F]">*</span> Pulled from each host's own accounts on {asOf}. Combined following adds every connected channel together and
-          is not deduplicated — a listener who follows a show on two platforms is counted twice, and audiences overlap
-          between shows. Figures that failed a consistency check against the platform's own reporting were left out
-          rather than estimated.
+          <span className="text-[#F0A71F]">*</span> Pulled from each host's own connected accounts on {asOf}, covering
+          up to the last {windowLabel}. Every figure here is a sum across channels, not a count of people: a listener
+          who follows a show on two platforms is counted twice, audiences overlap between shows, and reach is each
+          platform's own count of accounts within that channel's audience. These describe the participating shows —
+          they are not a projection of who will watch on the day. Figures that failed a consistency check against the
+          platform's own reporting were left out rather than estimated.
         </p>
       </div>
     </section>

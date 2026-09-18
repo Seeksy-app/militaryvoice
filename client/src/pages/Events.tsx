@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarDays, Radio, ArrowRight } from "lucide-react";
 import type { PublicEvent } from "@shared/schema";
 import { detectLocalTimeZone, formatDateInZone, formatTimeInZone } from "@/lib/schedule";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export default function Events() {
   const { data: events, isLoading } = useQuery<PublicEvent[]>({ queryKey: ["/api/events"] });
@@ -61,6 +62,7 @@ export default function Events() {
           </div>
         )}
       </section>
+    <SiteFooter />
     </div>
   );
 }

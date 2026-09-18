@@ -8,6 +8,7 @@ import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import { slotStart, totalSlots, formatTimeInZone } from "@/lib/schedule";
 import { Check, Mic2, Radio, Clock, ArrowRight } from "lucide-react";
+import { SiteFooter } from "@/components/SiteFooter";
 
 // A one-page sponsorship proposal, addressed to a single organisation. It is
 // deliberately not linked from the nav — the URL is the delivery mechanism.
@@ -383,6 +384,7 @@ export default function SponsorVFW() {
           </Link>
         </div>
       </section>
+    <SiteFooter />
     </div>
   );
 }

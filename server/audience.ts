@@ -28,8 +28,17 @@ import { rawAnalytics, isUploadPostConfigured, parseSocialAccounts, SOCIAL_PLATF
 
 export const AUDIENCE_SNAPSHOT_KEY = "audienceSnapshot";
 
-/** The window Upload-Post's analytics cover. Stated on the page, not implied. */
-export const AUDIENCE_WINDOW_DAYS = 365;
+/**
+ * The window Upload-Post's analytics actually cover.
+ *
+ * Checked against the raw payloads rather than assumed: every platform returns
+ * a daily series running about thirty days back, and Facebook states
+ * `period_days=30` outright. This was published as "the last 12 months" for
+ * one afternoon, which understated the shows by a factor of twelve and would
+ * have been the first thing a sponsor's analyst disproved.
+ * scripts/audience-window.ts re-runs the check.
+ */
+export const AUDIENCE_WINDOW_DAYS = 30;
 
 export interface PlatformTotal {
   platform: string;

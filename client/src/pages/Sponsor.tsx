@@ -9,6 +9,7 @@ import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import { slotStart, totalSlots, formatTimeInZone } from "@/lib/schedule";
 import { Check, Mic2, Radio, Clock, ArrowRight } from "lucide-react";
+import { SiteFooter } from "@/components/SiteFooter";
 
 // The open sponsorship page, linked from the footer. /vfw is the same pitch
 // addressed to one organisation; this one is for everybody else, so it names
@@ -372,6 +373,7 @@ export default function Sponsor() {
           </Link>
         </div>
       </section>
+    <SiteFooter />
     </div>
   );
 }

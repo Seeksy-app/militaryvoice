@@ -21,6 +21,7 @@ import {
   onAirWindow,
 } from "@/lib/schedule";
 import { isLiveOnlyBlock } from "@shared/slots";
+import { SiteFooter } from "@/components/SiteFooter";
 
 interface Props {
   slug?: string;
@@ -359,6 +360,7 @@ export default function Agenda({ slug }: Props) {
         open={!!selected}
         onOpenChange={(o) => !o && setSelected(null)}
       />
+    <SiteFooter />
     </div>
   );
 }

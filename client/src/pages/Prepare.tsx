@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import type { PublicEvent, ProfileRow } from "@shared/schema";
 import { detectLocalTimeZone, slotStart, slotEnd, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
+import { SiteFooter } from "@/components/SiteFooter";
 import {
   CalendarClock,
   Clock,
@@ -325,6 +326,7 @@ export default function Prepare() {
           </p>
         </section>
       </div>
+    <SiteFooter />
     </div>
   );
 }

@@ -19,6 +19,7 @@ import {
   Share2,
   CalendarClock,
 } from "lucide-react";
+import { SiteFooter } from "@/components/SiteFooter";
 
 // Why Watchfloor rather than the tool they already pay for.
 //
@@ -391,6 +392,7 @@ export default function Watchfloor() {
           </div>
         </div>
       </section>
+    <SiteFooter />
     </div>
   );
 }
