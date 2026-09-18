@@ -4025,13 +4025,21 @@ export default function Admin() {
                         : undefined
                     }
                   >
+                    {/* Green for live. This is the one switch on the page whose
+                        "on" state means the public can see something, and the
+                        default navy read as off at a glance — worse still when
+                        the live-site event locks it on and the disabled styling
+                        greys it out. */}
                     <Switch
                       checked={selectedEvent.visible !== false}
                       disabled={selectedEvent.isFeatured}
                       onCheckedChange={(v) => setEventVisible(selectedEvent.id, v)}
+                      className="data-[state=checked]:bg-[#1a9e5f] disabled:opacity-100 disabled:cursor-default"
                       data-testid="switch-event-visible"
                     />
-                    {selectedEvent.visible !== false ? "Public" : "Hidden"}
+                    <span className={selectedEvent.visible !== false ? "font-semibold text-[#15834f] dark:text-[#3ac486]" : "text-muted-foreground"}>
+                      {selectedEvent.visible !== false ? "Public" : "Hidden"}
+                    </span>
                   </label>
                   {!selectedEvent.isFeatured && (
                     <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => makeLive(selectedEvent.id)} data-testid="button-make-live">
