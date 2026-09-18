@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, serial, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, serial, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -757,8 +757,113 @@ export const recordings = pgTable("recordings", {
   error: text("error").notNull().default(""),
   startedAt: text("started_at").notNull(),
   endedAt: text("ended_at"),
+  // Clipping runs after the recorder finishes, on a worker that isn't this
+  // one. The status is the whole queue: no second table, and a job that dies
+  // mid-flight is visible rather than silently lost.
+  clipStatus: text("clip_status").notNull().default("none"),
+  clipError: text("clip_error").notNull().default(""),
+  clipClaimedAt: text("clip_claimed_at").notNull().default(""),
 });
 export type RecordingRow = typeof recordings.$inferSelect;
+
+export const CLIP_STATUSES = ["none", "queued", "running", "done", "failed"] as const;
+export type ClipStatus = (typeof CLIP_STATUSES)[number];
+
+/**
+ * What the room heard, line by line, written as it happens.
+ *
+ * The captioning agent is already running speech-to-text on everyone on stage
+ * so the audience gets captions. Keeping those lines means the transcript of
+ * every segment exists the moment the segment ends — no second pass, no second
+ * bill, and clips can be cut while the next show is still going out.
+ */
+export const transcriptLines = pgTable(
+  "transcript_lines",
+  {
+    id: serial("id").primaryKey(),
+    studioId: integer("studio_id").notNull(),
+    eventId: integer("event_id").notNull().default(0),
+    speaker: text("speaker").notNull().default(""),
+    text: text("text").notNull().default(""),
+    // Epoch milliseconds, as text: a segment is cut against wall-clock time,
+    // and an integer column would overflow.
+    startMs: text("start_ms").notNull().default("0"),
+    endMs: text("end_ms").notNull().default("0"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => ({
+    studioIdx: index("transcript_lines_studio_idx").on(t.studioId),
+  }),
+);
+export type TranscriptLineRow = typeof transcriptLines.$inferSelect;
+
+/**
+ * One cut from one recording: a moment worth posting, chosen by the agent and
+ * rendered in the shapes the networks actually want.
+ */
+export const clips = pgTable(
+  "clips",
+  {
+    id: serial("id").primaryKey(),
+    recordingId: integer("recording_id").notNull(),
+    eventId: integer("event_id").notNull().default(0),
+    signupId: integer("signup_id"),
+    // Flat, like recordings: a podcaster keeps their clips even if the booking
+    // is later moved or cancelled.
+    email: text("email").notNull().default(""),
+    title: text("title").notNull().default(""),
+    /** The line to post with it. */
+    caption: text("caption").notNull().default(""),
+    /** Why the agent thought this was the moment — shown, not hidden, so a
+     *  podcaster can tell a good pick from a bad one at a glance. */
+    reason: text("reason").notNull().default(""),
+    startSec: integer("start_sec").notNull().default(0),
+    endSec: integer("end_sec").notNull().default(0),
+    /** What is said in it, for the description and for search. */
+    transcript: text("transcript").notNull().default(""),
+    /** 16:9, 9:16 and 1:1 renders, plus the subtitles as a sidecar file. */
+    url: text("url").notNull().default(""),
+    verticalUrl: text("vertical_url").notNull().default(""),
+    squareUrl: text("square_url").notNull().default(""),
+    subtitlesUrl: text("subtitles_url").notNull().default(""),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => ({
+    recordingIdx: index("clips_recording_idx").on(t.recordingId),
+    emailIdx: index("clips_email_idx").on(t.email),
+  }),
+);
+export type ClipRow = typeof clips.$inferSelect;
+
+/** One clip as the worker hands it back, before it has urls. */
+export const clipResultSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  caption: z.string().trim().max(400).default(""),
+  reason: z.string().trim().max(400).default(""),
+  startSec: z.number().int().min(0),
+  endSec: z.number().int().min(1),
+  transcript: z.string().trim().max(8000).default(""),
+  url: z.string().trim().max(600).default(""),
+  verticalUrl: z.string().trim().max(600).default(""),
+  squareUrl: z.string().trim().max(600).default(""),
+  subtitlesUrl: z.string().trim().max(600).default(""),
+});
+export type ClipResult = z.infer<typeof clipResultSchema>;
+
+export const transcriptBatchSchema = z.object({
+  studioId: z.number().int().positive(),
+  lines: z
+    .array(
+      z.object({
+        speaker: z.string().trim().max(120).default(""),
+        text: z.string().trim().min(1).max(2000),
+        startMs: z.number().min(0),
+        endMs: z.number().min(0),
+      }),
+    )
+    .min(1)
+    .max(200),
+});
 
 // Where a broadcast goes. A destination with no signupId is the house's own —
 // it carries the whole event. One with a signupId belongs to that podcaster and

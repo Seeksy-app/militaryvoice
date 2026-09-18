@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MyRecordings } from "@/components/MyRecordings";
+import { MyClips } from "@/components/MyClips";
 import { apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, RecordingRow } from "@shared/schema";
-import { Disc } from "lucide-react";
+import { Disc, Scissors } from "lucide-react";
 
 // Every session this podcaster has recorded, with a filter by event. Sessions
 // belong to an event, so once somebody has been in two the list needs saying
@@ -69,6 +70,15 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
       )}
 
       <MyRecordings socialAccounts={socialAccounts} eventId={eventId} showEmpty />
+
+      <h2 className="mb-3 mt-10 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+        <Scissors className="h-4 w-4" /> Clips cut for you
+      </h2>
+      <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
+        The studio reads back what was said and cuts the moments that stand on their own — vertical, square and wide,
+        with the words in a subtitle file. Nothing to request and nothing to edit.
+      </p>
+      <MyClips />
     </section>
   );
 }

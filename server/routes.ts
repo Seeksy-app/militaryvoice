@@ -37,6 +37,8 @@ import {
   SPONSOR_TIERS,
   type SponsorTier,
   insertEventShowSchema,
+  clipResultSchema,
+  transcriptBatchSchema,
   sceneInputSchema,
   scenePatchSchema,
   NUDGE_KINDS,
@@ -44,6 +46,7 @@ import {
 } from "../shared/schema.js";
 import { isLiveOnlySlot, LIVE_ONLY_LABEL } from "../shared/slots.js";
 import { fromError } from "zod-validation-error";
+import { z } from "zod";
 import {
   isLiveKitConfigured,
   isRecordingConfigured,
@@ -3086,6 +3089,200 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
+  // ---- The studio agent ----------------------------------------------------------
+  //      A long-lived worker that lives outside this function: it joins rooms
+  //      to caption them, and cuts clips out of each recording once the
+  //      recorder is done. It authenticates with one shared token, held only
+  //      by that worker — never in a browser, so these routes are not part of
+  //      the admin surface and never touch an admin session.
+  function agentToken(): string {
+    return (process.env.AGENT_TOKEN || "").trim();
+  }
+
+  function requireAgent(req: Request, res: Response, next: NextFunction) {
+    const want = agentToken();
+    if (!want) {
+      res.status(503).json({ message: "No agent token configured on this deployment." });
+      return;
+    }
+    const got = (req.header("x-agent-token") || "").trim();
+    // Both sides are already secrets of the same length in practice; compare
+    // in constant time anyway so a mismatch leaks nothing about the prefix.
+    const a = Buffer.from(got);
+    const b = Buffer.from(want);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      res.status(401).json({ message: "Bad agent token." });
+      return;
+    }
+    next();
+  }
+
+  /** Captions as they happen. The agent batches, so one call carries many lines. */
+  app.post("/api/agent/transcript", requireAgent, async (req, res) => {
+    const parsed = transcriptBatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const studio = await storage.getStudioById(parsed.data.studioId);
+    if (!studio) {
+      res.status(404).json({ message: "No such studio." });
+      return;
+    }
+    const written = await storage.appendTranscript(studio.id, studio.eventId, parsed.data.lines);
+    res.json({ written });
+  });
+
+  /**
+   * Take the next recording that needs clipping.
+   *
+   * Everything the worker needs comes back in one response — a link to the
+   * file and the transcript we already captured live — so it never needs
+   * database or storage credentials of its own.
+   */
+  app.post("/api/agent/clip-jobs/claim", requireAgent, async (_req, res) => {
+    const rec = await storage.claimClipJob();
+    if (!rec) {
+      res.json({ job: null });
+      return;
+    }
+    let downloadUrl = "";
+    try {
+      downloadUrl = rec.url ? await signedRecordingUrl(rec.url, 7200) : "";
+    } catch (err) {
+      console.error("Couldn't sign a recording for the clipper:", err);
+    }
+    if (!downloadUrl) {
+      await storage.setClipStatus(rec.id, "failed", "The recording couldn't be signed for download.");
+      res.json({ job: null });
+      return;
+    }
+
+    // The transcript is already ours: the captioning agent wrote it while the
+    // segment was going out. Offsets are relative to the start of the file, so
+    // the worker can cut straight from them.
+    const startMs = Date.parse(rec.startedAt);
+    const endMs = rec.endedAt ? Date.parse(rec.endedAt) : startMs + rec.durationSec * 1000;
+    const lines = Number.isFinite(startMs)
+      ? (await storage.transcriptBetween(rec.studioId, startMs, endMs)).map((l) => ({
+          speaker: l.speaker,
+          text: l.text,
+          startSec: Math.max(0, (Number(l.startMs) - startMs) / 1000),
+          endSec: Math.max(0, (Number(l.endMs) - startMs) / 1000),
+        }))
+      : [];
+
+    const signup = rec.signupId ? await storage.getSignupById(rec.signupId) : undefined;
+    res.json({
+      job: {
+        recordingId: rec.id,
+        title: rec.title,
+        durationSec: rec.durationSec,
+        downloadUrl,
+        show: signup?.podcastName ?? rec.title,
+        host: signup?.hostName ?? "",
+        transcript: lines,
+      },
+    });
+  });
+
+  /** One rendered clip, uploaded straight into the asset bucket. */
+  app.post(
+    "/api/agent/clip-files",
+    requireAgent,
+    (req, res, next) => {
+      assetUpload.single("file")(req, res, (err: any) => {
+        if (err) {
+          res.status(400).json({ message: err.message || "Couldn't accept that file." });
+          return;
+        }
+        next();
+      });
+    },
+    async (req, res) => {
+      if (!req.file) {
+        res.status(400).json({ message: "Attach a file." });
+        return;
+      }
+      const safe = String(req.body?.name ?? req.file.originalname).replace(/[^a-zA-Z0-9._-]/g, "_").slice(-90);
+      const key = `clips/${Date.now()}-${crypto.randomBytes(5).toString("hex")}-${safe}`;
+      try {
+        const url = await uploadShowAsset(key, req.file.buffer, req.file.mimetype || "video/mp4");
+        res.status(201).json({ url });
+      } catch (err) {
+        console.error("Clip upload failed:", err);
+        res.status(502).json({ message: "Upload failed." });
+      }
+    },
+  );
+
+  /** The worker is done: here are the clips, in order. */
+  app.post("/api/agent/clip-jobs/:id/done", requireAgent, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec) {
+      res.status(404).json({ message: "No such recording." });
+      return;
+    }
+    const parsed = z.array(clipResultSchema).max(20).safeParse(req.body?.clips ?? []);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const rows = parsed.data
+      .filter((c) => c.endSec > c.startSec)
+      .map((c) => ({
+        eventId: rec.eventId,
+        signupId: rec.signupId ?? null,
+        email: rec.email,
+        title: c.title,
+        caption: c.caption,
+        reason: c.reason,
+        startSec: c.startSec,
+        endSec: c.endSec,
+        transcript: c.transcript,
+        url: c.url,
+        verticalUrl: c.verticalUrl,
+        squareUrl: c.squareUrl,
+        subtitlesUrl: c.subtitlesUrl,
+      }));
+    const saved = await storage.replaceClips(rec.id, rows);
+    await storage.setClipStatus(rec.id, "done", "");
+    res.json({ saved: saved.length });
+  });
+
+  app.post("/api/agent/clip-jobs/:id/failed", requireAgent, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec) {
+      res.status(404).json({ message: "No such recording." });
+      return;
+    }
+    await storage.setClipStatus(rec.id, "failed", String(req.body?.error ?? "").slice(0, 500));
+    res.json({ ok: true });
+  });
+
+  /** A podcaster's own clips, newest first. */
+  app.get("/api/host/clips", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (req as any).hostEmail as string;
+    res.json(await storage.listClipsByEmail(email));
+  });
+
+  app.get("/api/admin/recordings/:id/clips", requireAdmin, async (req, res) => {
+    noStore(res);
+    res.json(await storage.listClips(Number(req.params.id)));
+  });
+
+  /** Re-run the clipper on a recording — after a failure, or for a second opinion. */
+  app.post("/api/admin/recordings/:id/reclip", requireAdmin, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.status !== "Ready") {
+      res.status(404).json({ message: "That recording isn't finished." });
+      return;
+    }
+    await storage.setClipStatus(rec.id, "queued", "");
+    res.json({ ok: true });
+  });
+
   // ---- LiveKit webhook ----------------------------------------------------------
   //      LiveKit signs this with the same API key pair, and sends it as
   //      application/webhook+json — which express.json() leaves alone, so the
@@ -3111,7 +3308,7 @@ export function registerRoutes(app: Express): void {
     // the upload succeeded, so we fall back to the path we asked it to write.
     const ok = Number(info.status) === 3;
     try {
-      await storage.finishRecording(info.egressId, {
+      const finished = await storage.finishRecording(info.egressId, {
         status: ok ? "Ready" : "Failed",
         url: ok && file?.filename ? String(file.filename) : "",
         // LiveKit reports duration in nanoseconds.
@@ -3119,6 +3316,12 @@ export function registerRoutes(app: Express): void {
         sizeBytes: file?.size ? String(file.size) : "0",
         error: ok ? "" : String(info.error ?? "The recorder stopped without saving."),
       });
+      // A finished segment is a clip job. Queued rather than done here: the
+      // work needs ffmpeg and minutes, neither of which a serverless function
+      // has, so the worker picks it up.
+      if (ok && finished?.id && agentToken()) {
+        await storage.setClipStatus(finished.id, "queued", "");
+      }
     } catch (err) {
       console.error("Couldn't record the end of egress", info.egressId, err);
     }

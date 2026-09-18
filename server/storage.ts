@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -39,10 +39,13 @@ import type {
   InsertSponsorInquiry,
   ContactRow,
   BroadcastRow,
+  ClipRow,
+  ClipStatus,
+  TranscriptLineRow,
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { and, eq, ne, asc, desc, isNull, inArray, lte } from "drizzle-orm";
+import { and, eq, ne, or, asc, desc, isNull, inArray, lte, lt } from "drizzle-orm";
 import { ensureSchema as syncSchemaFromDefinitions, schemaFingerprint } from "./schemaSync.js";
 
 // Resolve the Postgres connection string lazily (not at module load) so a
@@ -679,6 +682,13 @@ export interface IStorage {
   listRecordingsByEmail(email: string): Promise<RecordingRow[]>;
   listRecordings(eventId?: number): Promise<RecordingRow[]>;
   getRecording(id: number): Promise<RecordingRow | undefined>;
+  setClipStatus(recordingId: number, status: ClipStatus, error?: string): Promise<RecordingRow | undefined>;
+  claimClipJob(): Promise<RecordingRow | undefined>;
+  appendTranscript(studioId: number, eventId: number, lines: { speaker: string; text: string; startMs: number; endMs: number }[]): Promise<number>;
+  transcriptBetween(studioId: number, startMs: number, endMs: number): Promise<TranscriptLineRow[]>;
+  listClips(recordingId: number): Promise<ClipRow[]>;
+  listClipsByEmail(email: string): Promise<ClipRow[]>;
+  replaceClips(recordingId: number, rows: Omit<ClipRow, "id" | "createdAt" | "recordingId">[]): Promise<ClipRow[]>;
   listDestinations(eventId: number): Promise<DestinationRow[]>;
   getDestination(id: number): Promise<DestinationRow | undefined>;
   createDestination(eventId: number, ownerEmail: string, v: DestinationInput): Promise<DestinationRow>;
@@ -1481,6 +1491,98 @@ class DatabaseStorage implements IStorage {
     await ready();
     const [row] = await db.select().from(recordings).where(eq(recordings.id, id));
     return row;
+  }
+
+  // ---- Clipping ------------------------------------------------------------
+  async setClipStatus(recordingId: number, status: ClipStatus, error = ""): Promise<RecordingRow | undefined> {
+    await ready();
+    const [row] = await db
+      .update(recordings)
+      .set({ clipStatus: status, clipError: error.slice(0, 500) })
+      .where(eq(recordings.id, recordingId))
+      .returning();
+    return row;
+  }
+
+  /**
+   * Hand the next queued recording to a worker, marking it taken in the same
+   * breath. The claim time is what makes a dead worker recoverable: a job that
+   * has been "running" for over an hour is reclaimed rather than stuck.
+   */
+  async claimClipJob(): Promise<RecordingRow | undefined> {
+    await ready();
+    const stale = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const [row] = await db
+      .update(recordings)
+      .set({ clipStatus: "running", clipClaimedAt: new Date().toISOString() })
+      .where(
+        and(
+          eq(recordings.status, "Ready"),
+          or(eq(recordings.clipStatus, "queued"), and(eq(recordings.clipStatus, "running"), lt(recordings.clipClaimedAt, stale))),
+        ),
+      )
+      .returning();
+    return row;
+  }
+
+  async appendTranscript(
+    studioId: number,
+    eventId: number,
+    lines: { speaker: string; text: string; startMs: number; endMs: number }[],
+  ): Promise<number> {
+    await ready();
+    if (lines.length === 0) return 0;
+    const now = new Date().toISOString();
+    await db.insert(transcriptLines).values(
+      lines.map((l) => ({
+        studioId,
+        eventId,
+        speaker: l.speaker.slice(0, 120),
+        text: l.text.slice(0, 2000),
+        startMs: String(Math.round(l.startMs)),
+        endMs: String(Math.round(l.endMs)),
+        createdAt: now,
+      })),
+    );
+    return lines.length;
+  }
+
+  async transcriptBetween(studioId: number, startMs: number, endMs: number): Promise<TranscriptLineRow[]> {
+    await ready();
+    // start_ms is text so it can hold an epoch; compare as a number or "900" sorts after "1000".
+    const rows = await db.select().from(transcriptLines).where(eq(transcriptLines.studioId, studioId));
+    return rows
+      .filter((r) => Number(r.endMs) >= startMs && Number(r.startMs) <= endMs)
+      .sort((a, b) => Number(a.startMs) - Number(b.startMs));
+  }
+
+  async listClips(recordingId: number): Promise<ClipRow[]> {
+    await ready();
+    return db.select().from(clips).where(eq(clips.recordingId, recordingId)).orderBy(asc(clips.startSec));
+  }
+
+  async listClipsByEmail(email: string): Promise<ClipRow[]> {
+    await ready();
+    return db
+      .select()
+      .from(clips)
+      .where(eq(clips.email, email.toLowerCase().trim()))
+      .orderBy(desc(clips.createdAt), asc(clips.startSec));
+  }
+
+  /** A re-run replaces what was there, so a retried job can't double the list. */
+  async replaceClips(
+    recordingId: number,
+    rows: Omit<ClipRow, "id" | "createdAt" | "recordingId">[],
+  ): Promise<ClipRow[]> {
+    await ready();
+    await db.delete(clips).where(eq(clips.recordingId, recordingId));
+    if (rows.length === 0) return [];
+    const now = new Date().toISOString();
+    return db
+      .insert(clips)
+      .values(rows.map((r) => ({ ...r, recordingId, createdAt: now })))
+      .returning();
   }
 
   // ---- Destinations ----------------------------------------------------------

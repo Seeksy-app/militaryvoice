@@ -30,11 +30,67 @@ import { AudioStream, RoomEvent, TrackKind, type RemoteParticipant, type RemoteT
 /** Only people the producer has put on stage are on air, so only they get captioned. */
 const ON_STAGE = "On stage";
 
+const API_BASE = (process.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "");
+const AGENT_TOKEN = process.env.AGENT_TOKEN || "";
+
+/**
+ * Keep what was said, as well as showing it.
+ *
+ * The captions are already being produced for the audience. Posting the final
+ * lines back means every segment has a timed transcript the instant it ends —
+ * which is what lets the clipper cut a show into posts without paying to
+ * listen to the same audio a second time. Best-effort by design: a transcript
+ * that fails to save must never take the captions off the air with it.
+ */
+function transcriptSink(studioId: number) {
+  type Line = { speaker: string; text: string; startMs: number; endMs: number };
+  let pending: Line[] = [];
+  let timer: NodeJS.Timeout | null = null;
+
+  async function flush() {
+    timer = null;
+    const batch = pending.splice(0, 200);
+    if (batch.length === 0 || !AGENT_TOKEN || !studioId) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/transcript`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-agent-token": AGENT_TOKEN },
+        body: JSON.stringify({ studioId, lines: batch }),
+      });
+      if (!res.ok) console.warn("transcript rejected:", res.status, (await res.text()).slice(0, 160));
+    } catch (err) {
+      console.warn("transcript not saved:", (err as Error).message);
+    }
+  }
+
+  return {
+    add(line: Line) {
+      if (!AGENT_TOKEN || !studioId) return;
+      pending.push(line);
+      if (pending.length >= 25) void flush();
+      else if (!timer) timer = setTimeout(() => void flush(), 5000);
+    },
+    async drain() {
+      if (timer) clearTimeout(timer);
+      await flush();
+    },
+  };
+}
+
+/** Rooms are named mv-studio-<id>; the transcript belongs to that studio. */
+function studioIdFrom(roomName: string): number {
+  const m = /(\d+)$/.exec(roomName ?? "");
+  return m ? Number(m[1]) : 0;
+}
+
 export default defineAgent({
   entry: async (ctx: JobContext) => {
     await ctx.connect();
     const room = ctx.room;
     const stt = new deepgram.STT({ model: "nova-3", interimResults: true });
+    const studioId = studioIdFrom(room.name ?? "");
+    const transcript = transcriptSink(studioId);
+    if (!AGENT_TOKEN) console.warn("No AGENT_TOKEN — captions will go out but nothing will be kept for clipping.");
 
     const publish = async (speaker: string, text: string, final: boolean) => {
       await room.localParticipant?.publishData(
@@ -47,6 +103,9 @@ export default defineAgent({
       const name = participant.name || participant.identity;
       const stream = stt.stream();
       const audio = new AudioStream(track);
+      // Deepgram times each phrase from the start of its own stream, so a
+      // clip cut from these needs the wall clock the stream began on.
+      const streamStart = Date.now();
 
       // Feed audio in and read text out at the same time.
       void (async () => {
@@ -59,7 +118,18 @@ export default defineAgent({
         if (!alt?.text) continue;
         // Interim results keep captions moving with the speaker; the final one
         // corrects it. Both are published — the layout just shows the latest.
-        await publish(name, alt.text, event.type === "final_transcript");
+        const final = event.type === "final_transcript";
+        await publish(name, alt.text, final);
+        // Only finals are kept: an interim is the same words half-heard, and
+        // a transcript full of both is worse than no transcript at all.
+        if (final) {
+          transcript.add({
+            speaker: name,
+            text: alt.text,
+            startMs: streamStart + (alt.startTime ?? 0) * 1000,
+            endMs: streamStart + (alt.endTime ?? alt.startTime ?? 0) * 1000,
+          });
+        }
       }
     };
 
@@ -70,6 +140,9 @@ export default defineAgent({
         console.error("transcription stopped for", participant.identity, err),
       );
     });
+
+    // Whatever is still in hand when the room empties.
+    room.on(RoomEvent.Disconnected, () => void transcript.drain());
 
     // Someone promoted mid-sentence should start being captioned immediately.
     room.on(RoomEvent.ParticipantAttributesChanged, (_changed, participant) => {
