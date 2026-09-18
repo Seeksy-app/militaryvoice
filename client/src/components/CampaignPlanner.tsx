@@ -148,7 +148,7 @@ export function CampaignPlanner({ signupId }: { signupId: number }) {
                   return (
                     <Link
                       key={p}
-                      href="/host/dashboard?tab=integrations"
+                      href="/host/dashboard/integrations"
                       className="inline-flex items-center gap-2 rounded-full border-2 border-dashed border-border py-1.5 pl-1.5 pr-3.5 text-sm font-semibold text-muted-foreground opacity-70 transition-opacity hover:opacity-100"
                       title={`Connect ${platformLabel(p)} on the Integrations tab`}
                       data-testid={`campaign-platform-${p}-connect`}

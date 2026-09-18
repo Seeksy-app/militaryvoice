@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearch, Link } from "wouter";
+import { useSearch, useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Mic2,
@@ -389,17 +389,45 @@ function StreamStatusRow({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-export default function HostDashboard() {
+/** The screens the dashboard nav switches between, and their URLs. */
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "claim"] as const;
+type Screen = (typeof SCREENS)[number];
+
+/** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
+const SCREEN_SLUG: Record<Screen, string> = {
+  dashboard: "",
+  editProfile: "profile",
+  events: "events",
+  promotion: "promotion",
+  recordings: "recordings",
+  integrations: "integrations",
+  claim: "claim",
+};
+const SLUG_SCREEN = new Map<string, Screen>(
+  (Object.entries(SCREEN_SLUG) as [Screen, string][]).filter(([, v]) => v).map(([k, v]) => [v, k]),
+);
+export function hostScreenPath(screen: Screen): string {
+  const slug = SCREEN_SLUG[screen];
+  return slug ? `/host/dashboard/${slug}` : "/host/dashboard";
+}
+
+export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const search = useSearch();
-  const [screen, setScreen] = useState<"dashboard" | "editProfile" | "events" | "promotion" | "recordings" | "integrations" | "claim">("dashboard");
+  const [, navigate] = useLocation();
+  // The URL is the source of truth for which screen is showing, so a tab can
+  // be linked, bookmarked and reached with the browser's back button.
+  const screen: Screen = (tab && SLUG_SCREEN.get(tab.toLowerCase())) || "dashboard";
   const [profileDirty, setProfileDirty] = useState(false);
   const [remindEventSetup, setRemindEventSetup] = useState(false);
 
   // The nav is buttons, not links, so ProfileForm's own leave-guard (which
   // watches anchors and page unload) never sees these clicks.
-  function goTo(next: typeof screen) {
+  function setScreen(next: Screen) {
+    navigate(hostScreenPath(next));
+  }
+  function goTo(next: Screen) {
     if (profileDirty && !window.confirm("You have unsaved changes to your profile. Leave without saving?")) return;
     setProfileDirty(false);
     setScreen(next);
@@ -511,20 +539,16 @@ export default function HostDashboard() {
     onError: (err: Error) => toast({ title: "Couldn't refresh your accounts", description: err.message, variant: "destructive" }),
   });
 
-  // ?tab=integrations (etc.) from a link elsewhere on the dashboard.
+  // ?tab=integrations from an older link. Every one of these still works; it
+  // just lands on the real address now instead of leaving the query string in
+  // the bar and the URL disagreeing with the screen.
   useEffect(() => {
     const t = new URLSearchParams(search).get("tab");
+    if (!t) return;
     // "fans" was folded into Promotion; old links still land somewhere sane.
-    if (t === "fans") {
-      setScreen("promotion");
-      window.history.replaceState(null, "", window.location.pathname);
-      return;
-    }
-    if (t && ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations"].includes(t)) {
-      setScreen(t as typeof screen);
-      window.history.replaceState(null, "", window.location.pathname);
-    }
-  }, [search]);
+    const target: Screen | undefined = t === "fans" ? "promotion" : (SCREENS as readonly string[]).includes(t) ? (t as Screen) : undefined;
+    if (target) navigate(hostScreenPath(target), { replace: true });
+  }, [search, navigate]);
 
   // Coming back from the Upload-Post connect page: ?social=connected
   useEffect(() => {
@@ -718,10 +742,19 @@ export default function HostDashboard() {
             ).map(([value, label, hint]) => {
               const active = screen === value;
               return (
-                <button
+                /* A real anchor, so the address bar is honest and these can be
+                   opened in a new tab, copied, or middle-clicked. The click is
+                   still intercepted for the unsaved-changes guard — wouter
+                   would otherwise navigate away from a half-edited profile
+                   without asking. */
+                <a
                   key={value}
-                  type="button"
-                  onClick={() => goTo(value)}
+                  href={hostScreenPath(value)}
+                  onClick={(e) => {
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                    e.preventDefault();
+                    goTo(value);
+                  }}
                   aria-current={active ? "page" : undefined}
                   className={`flex flex-col gap-0.5 rounded-xl px-2 py-2.5 transition-colors ${
                     active
@@ -732,7 +765,7 @@ export default function HostDashboard() {
                 >
                   <span className="text-sm font-semibold">{label}</span>
                   <span className="hidden text-[12px] font-normal opacity-70 sm:block">{hint}</span>
-                </button>
+                </a>
               );
             })}
           </nav>
