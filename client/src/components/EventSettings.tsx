@@ -22,7 +22,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, slotEnd, onAirWindow } from "@/lib/schedule";
 import { isLiveOnlyBlock } from "@shared/slots";
 import type { PublicEvent } from "@shared/schema";
-import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2 } from "lucide-react";
+import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2, Headphones } from "lucide-react";
 
 // Choose an event, then set up the show you're bringing to it. Everything
 // about one event lives behind its own card, so a podcaster in two events
@@ -96,6 +96,11 @@ export function EventSettings({
           return `${formatDateInZone(air.start, zone)} · ${formatTimeInZone(air.start, zone)}–${formatTimeInZone(air.end, zone)}`;
         })()
       : "";
+
+  // The event's own studio is at /studio; anything that isn't the site's
+  // featured event is reached through its slug.
+  const greenRoomHref =
+    open?.event.isFeatured === false && open.event.slug ? `/event/${open.event.slug}/studio` : "/studio";
 
   // Daytime slots have to be broadcast live, so the show form hides the
   // recorded-episode option for anyone holding one.
@@ -277,6 +282,31 @@ export function EventSettings({
             />
           </>
         )}
+      </div>
+
+      {/* ------------------------------------------------ green room */}
+      {/* Open whenever they want it, not just on the day. The first time
+          anyone discovers their microphone is the wrong one should not be
+          ninety seconds before they go on. */}
+      <div className="mt-4 rounded-2xl border border-border bg-card p-5">
+        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+          <Headphones className="h-4 w-4" /> Green room
+        </h3>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          Your waiting room for {open.event.name}. Check your camera, microphone and speakers, see yourself the way the
+          audience will, and set your levels. Nothing you do in here goes on air — the producer brings you onto the
+          stage when it's your turn.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <a href={greenRoomHref} target="_blank" rel="noreferrer" data-testid="link-green-room">
+            <Button className="gap-1.5 rounded-full">
+              <Headphones className="h-4 w-4" /> Enter the green room
+            </Button>
+          </a>
+          <span className="text-xs text-muted-foreground">
+            Open any time. Worth a two-minute check this week.
+          </span>
+        </div>
       </div>
 
       {openShow && (

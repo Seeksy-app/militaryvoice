@@ -10,6 +10,10 @@ export const events = pgTable("events", {
   id: serial("id").primaryKey(),
   slug: text("slug").notNull().default(""),
   isFeatured: boolean("is_featured").notNull().default(false),
+  // Whether the public can see it at all. Off hides it from every public
+  // listing *and* from a direct link — a hidden event is not a secret URL, it
+  // is not reachable. Defaults on, so nothing that exists today changes.
+  visible: boolean("visible").notNull().default(true),
   name: text("name").notNull(),
   tagline: text("tagline").notNull().default(""),
   description: text("description").notNull().default(""),

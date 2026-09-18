@@ -132,6 +132,21 @@ function toPublicEvent(event: EventRow): PublicEvent {
   return rest;
 }
 
+/**
+ * Resolve an event for a member of the public.
+ *
+ * Hiding an event has to mean hiding it, not leaving it on an unlisted URL:
+ * every public path goes through here, so switching one off takes its landing
+ * page, its agenda, its schedule and its watch page with it. Admin paths use
+ * `getEventBySlug`/`getEventById` directly and still see everything.
+ */
+async function publicEvent(slug?: string): Promise<EventRow | undefined> {
+  const event = slug ? await storage.getEventBySlug(slug) : await storage.getFeaturedEvent();
+  // The featured event is the site's own front door. If someone hides it the
+  // site should say so honestly rather than silently promote another one.
+  return event?.visible ? event : undefined;
+}
+
 // Public read endpoints are safe to serve from Vercel's CDN for a few seconds:
 // the homepage fires several in parallel and a cold instance costs ~2s each.
 // Writers invalidate client-side; a 10s window is invisible to visitors.
@@ -361,7 +376,7 @@ export function registerRoutes(app: Express): void {
   // ---- Public: events list (for "Choose Your Event") -------------------------
   app.get("/api/events", async (_req, res) => {
     publicCache(res, 60);
-    const rows = await storage.listEvents();
+    const rows = (await storage.listEvents()).filter((e) => e.visible);
     res.json(rows.map(toPublicEvent));
   });
 
@@ -1064,7 +1079,7 @@ export function registerRoutes(app: Express): void {
     const staticPaths = ["", "/schedule", "/agenda", "/faq", "/prepare", "/platform", "/events", "/policy", "/terms"];
     let events: { slug: string }[] = [];
     try {
-      events = (await storage.listEvents()).filter((e) => e.slug);
+      events = (await storage.listEvents()).filter((e) => e.slug && e.visible);
     } catch {
       /* a sitemap is worth serving even if the database is having a moment */
     }
@@ -1109,7 +1124,7 @@ export function registerRoutes(app: Express): void {
   app.get("/api/event", async (req, res) => {
     publicCache(res, 60);
     const slug = typeof req.query.slug === "string" ? req.query.slug : undefined;
-    const event = slug ? await storage.getEventBySlug(slug) : await storage.getFeaturedEvent();
+    const event = await publicEvent(slug);
     if (!event) {
       res.status(404).json({ message: "Event not found" });
       return;
@@ -1911,7 +1926,7 @@ export function registerRoutes(app: Express): void {
   //      Show control only: who's waiting, who's on stage, and the emergency
   //      clip. The video layer plugs in behind this.
   async function studioForSlug(slug?: string, studioId?: number) {
-    const event = slug ? await storage.getEventBySlug(slug) : await storage.getFeaturedEvent();
+    const event = await publicEvent(slug);
     if (!event) return null;
     // A speaker's link can name the room; without one they land in the event's
     // own studio, which is what every existing link already means.

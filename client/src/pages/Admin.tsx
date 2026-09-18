@@ -1454,6 +1454,11 @@ function EventPicker({ onOpen }: { onOpen: (id: number) => void }) {
                   <div className="text-xs text-muted-foreground">{e.occasion || e.tagline}</div>
                 </div>
                 {e.isFeatured && <Badge className="shrink-0 bg-[#F0A71F] text-[#1a1200] hover:bg-[#F0A71F]">Live site</Badge>}
+                {e.visible === false && (
+                  <Badge variant="outline" className="shrink-0 gap-1 border-dashed text-muted-foreground" data-testid={`badge-hidden-${e.id}`}>
+                    <EyeOff className="h-3 w-3" /> Hidden
+                  </Badge>
+                )}
               </div>
               <div className="mt-3 text-sm text-muted-foreground">
                 {formatDateInZone(start, zone)} · {formatTimeInZone(start, zone)} · {e.durationHours}h
@@ -3402,6 +3407,30 @@ export default function Admin() {
   };
   const queryClientTop = useQueryClient();
   const { toast: toastTop } = useToast();
+  /** Refresh everything that reads the event list or the featured event. */
+  async function refreshEventQueries() {
+    await Promise.all(
+      ["/api/admin/events", "/api/admin/event", "/api/event", "/api/events", "/api/signups", "/api/sponsors"].map((k) =>
+        queryClientTop.invalidateQueries({ queryKey: [k] }),
+      ),
+    );
+  }
+
+  async function setEventVisible(id: number, visible: boolean) {
+    try {
+      await adminSend("PUT", `/api/admin/events/${id}`, { visible } as UpdateEvent);
+      await refreshEventQueries();
+      toastTop({
+        title: visible ? "Event is public" : "Event is hidden",
+        description: visible
+          ? "It's back in the events list and its own pages work again."
+          : "It's out of the events list, and its landing page, agenda and watch page all 404 — a direct link won't reach it either.",
+      });
+    } catch (err) {
+      toastTop({ title: "Couldn't change that", description: (err as Error).message, variant: "destructive" });
+    }
+  }
+
   async function makeLive(id: number) {
     try {
       await adminSend("PUT", `/api/admin/events/${id}`, { isFeatured: true } as UpdateEvent);
@@ -3461,11 +3490,21 @@ export default function Admin() {
                     {selectedEvent.isFeatured && <Badge className="ml-3 bg-[#F0A71F] align-middle text-[#1a1200] hover:bg-[#F0A71F]">Live site</Badge>}
                   </h2>
                 </div>
-                {!selectedEvent.isFeatured && (
-                  <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => makeLive(selectedEvent.id)} data-testid="button-make-live">
-                    <Star className="h-3.5 w-3.5" /> Make this the live-site event
-                  </Button>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm font-medium">
+                    <Switch
+                      checked={selectedEvent.visible !== false}
+                      onCheckedChange={(v) => setEventVisible(selectedEvent.id, v)}
+                      data-testid="switch-event-visible"
+                    />
+                    {selectedEvent.visible !== false ? "Public" : "Hidden"}
+                  </label>
+                  {!selectedEvent.isFeatured && (
+                    <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => makeLive(selectedEvent.id)} data-testid="button-make-live">
+                      <Star className="h-3.5 w-3.5" /> Make this the live-site event
+                    </Button>
+                  )}
+                </div>
               </div>
               <Tabs value={eventTab} onValueChange={setEventTab}>
                 <TabsList className={`grid w-full ${isMobile ? "grid-cols-5" : "grid-cols-8"}`}>
