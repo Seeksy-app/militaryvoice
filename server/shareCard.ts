@@ -180,3 +180,115 @@ export async function buildShareCard(input: CardInput, size: CardSize = "wide"):
   });
   return sharp(ground).composite(layers).jpeg({ quality: 88, mozjpeg: true }).toBuffer();
 }
+
+// ---------------------------------------------------------------------------
+// The lineup poster — one image with the whole board on it
+// ---------------------------------------------------------------------------
+
+export interface LineupShow {
+  podcastName: string;
+  photoUrl?: string;
+}
+
+/**
+ * Everybody on one card, for the host to post.
+ *
+ * The per-slot card sells one show; this one sells the day, and the reason it
+ * exists is that "look who's coming" is the post people actually share. It
+ * takes whatever the lineup currently is rather than a fixed nine, so it does
+ * not quietly leave out the hosts who signed up most recently — which is
+ * exactly what the hand-made version of this did.
+ */
+export async function buildLineupCard(
+  input: { shows: LineupShow[]; dateLabel: string; footer?: string },
+  size: CardSize = "square",
+): Promise<Buffer> {
+  const { w: W, h: H } = CARD_SIZES[size];
+  const shows = input.shows.slice(0, 24);
+  const k = W / 1080;
+
+  // Columns are chosen so the last row is never a single lonely face.
+  const cols = size === "wide" ? Math.min(6, Math.max(3, Math.ceil(shows.length / 2)))
+    : shows.length <= 4 ? 2
+    : shows.length <= 9 ? 3
+    : 4;
+  const rows = Math.ceil(shows.length / cols);
+
+  const ground = Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#000741"/>
+        <stop offset="60%" stop-color="#053877"/>
+        <stop offset="100%" stop-color="#06498f"/>
+      </linearGradient>
+    </defs>
+    <rect width="${W}" height="${H}" fill="url(#g)"/>
+    <circle cx="${W * 0.9}" cy="${H * 0.12}" r="${W * 0.2}" fill="#ffffff" opacity="0.04"/>
+    <circle cx="${W * 0.08}" cy="${H * 0.92}" r="${W * 0.16}" fill="#F0A71F" opacity="0.06"/>
+  </svg>`);
+
+  const headH = Math.round(H * (size === "story" ? 0.20 : 0.26));
+  const footH = Math.round(H * (size === "story" ? 0.12 : 0.14));
+  const gridH = H - headH - footH;
+  const cellH = gridH / rows;
+  const cellW = W / cols;
+  // Leave room under each face for its name.
+  const AV = Math.round(Math.min(cellW * 0.62, cellH * 0.58));
+
+  const eyebrow = `NATIONAL MILITARY PODCAST DAY · ${input.dateLabel.toUpperCase()}`;
+  const title = `${shows.length} SHOWS. ONE DAY.`;
+  const footer = input.footer ?? "24 hours, free to watch · militaryvoice.ai";
+
+  const parts: string[] = [];
+  const layers: OverlayOptions[] = [];
+
+  const sE = fitSize(eyebrow, "bold", Math.round(26 * k), Math.round(15 * k), W - 80 * k);
+  const sT = fitSize(title, "bold", Math.round(78 * k), Math.round(40 * k), W - 90 * k);
+  parts.push(
+    textPath(eyebrow, { x: W / 2, y: Math.round(headH * 0.36), size: sE, weight: "bold", fill: "#F0A71F", letterSpacing: 2.5 * k, anchor: "middle" }),
+    textPath(title, { x: W / 2, y: Math.round(headH * 0.74), size: sT, weight: "bold", fill: "#ffffff", anchor: "middle" }),
+  );
+
+  for (let i = 0; i < shows.length; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const inRow = Math.min(cols, shows.length - row * cols);
+    const rowW = inRow * cellW;
+    const cx = Math.round((W - rowW) / 2 + col * cellW + cellW / 2);
+    const cy = Math.round(headH + row * cellH + cellH * 0.44);
+
+    const av = shows[i].photoUrl ? await circularAvatar(shows[i].photoUrl!, AV) : null;
+    if (av) layers.push({ input: av, top: cy - Math.round(AV / 2), left: cx - Math.round(AV / 2) });
+    parts.push(
+      `<circle cx="${cx}" cy="${cy}" r="${AV / 2 + 4 * k}" fill="${av ? "none" : "#ffffff14"}" stroke="#F0A71F" stroke-width="${Math.max(2, 3.5 * k)}" opacity="0.9"/>`,
+    );
+
+    // Two lines maximum, shrunk to the cell — a cut-off show name defeats the
+    // point of putting the face there.
+    const name = shows[i].podcastName.trim();
+    const boxW = cellW - 12 * k;
+    const sN = fitSize(name, "bold", Math.round(23 * k), Math.round(12 * k), boxW * 2);
+    const words = name.split(/\s+/);
+    const lines: string[] = [];
+    let cur = words[0] ?? "";
+    for (const w of words.slice(1)) {
+      const next = `${cur} ${w}`;
+      if (textWidth(next, sN, "bold") <= boxW) cur = next;
+      else { lines.push(cur); cur = w; }
+    }
+    if (cur) lines.push(cur);
+    const shown = lines.length <= 2 ? lines : [lines[0], lines.slice(1).join(" ")];
+    shown.forEach((line, li) => {
+      parts.push(textPath(line, {
+        x: cx, y: cy + AV / 2 + Math.round(30 * k) + li * Math.round(sN * 1.2),
+        size: sN, weight: "bold", fill: "#ffffff", anchor: "middle",
+      }));
+    });
+  }
+
+  const sF = fitSize(footer, "bold", Math.round(30 * k), Math.round(17 * k), W - 80 * k);
+  parts.push(textPath(footer, { x: W / 2, y: H - Math.round(footH * 0.38), size: sF, weight: "bold", fill: "#cfe0f5", anchor: "middle" }));
+
+  const overlay = Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${parts.join("\n")}</svg>`);
+  return sharp(ground).composite([...layers, { input: overlay }]).jpeg({ quality: 88 }).toBuffer();
+}

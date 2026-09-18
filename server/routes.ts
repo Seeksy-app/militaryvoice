@@ -76,7 +76,7 @@ import {
   myChannel,
   createBroadcast,
 } from "./youtube.js";
-import { buildShareCard, CARD_SIZES, type CardSize } from "./shareCard.js";
+import { buildShareCard, buildLineupCard, CARD_SIZES, type CardSize } from "./shareCard.js";
 import {
   sendPrepNudge,
   sendFinalNudge,
@@ -822,6 +822,81 @@ export function registerRoutes(app: Express): void {
       size,
     );
     // Scrapers fetch this once and cache hard; so should the CDN.
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
+    res.end(jpg);
+  });
+
+  /**
+   * The whole board on one image, and one show framed as a spotlight.
+   *
+   * These are what the host posts. /og/slot already renders a card for a
+   * podcaster's own share link; a spotlight is the same card addressed to a
+   * listener rather than a follower — "come and watch this one" instead of
+   * "this is my slot" — so it is the same renderer with different words, not a
+   * second design to keep in sync.
+   */
+  app.get("/og/lineup.jpg", async (req, res) => {
+    const ev = await publicEvent(typeof req.query.slug === "string" ? req.query.slug : undefined);
+    if (!ev) {
+      noStore(res);
+      res.status(404).end();
+      return;
+    }
+    const origin = `${req.protocol}://${req.get("host")}`;
+    const signups = (await storage.listSignups(ev.id))
+      .filter((sg) => sg.status !== "cancelled")
+      .sort((a, b) => a.slotIndex - b.slotIndex);
+    const requested = String(req.query.size ?? "square");
+    const size: CardSize = requested in CARD_SIZES ? (requested as CardSize) : "square";
+    const dateLabel = new Intl.DateTimeFormat("en-US", {
+      month: "long", day: "numeric", timeZone: "America/New_York",
+    }).format(new Date(ev.startAtUtc));
+
+    const jpg = await buildLineupCard(
+      {
+        dateLabel,
+        shows: signups.map((sg) => ({
+          podcastName: sg.podcastName,
+          photoUrl: sg.photoUrl
+            ? sg.photoUrl.startsWith("http") ? sg.photoUrl : `${origin}${sg.photoUrl}`
+            : undefined,
+        })),
+      },
+      size,
+    );
+    res.setHeader("Content-Type", "image/jpeg");
+    // Short, because the lineup grows: a host who signs up today should be on
+    // the poster within the hour, not whenever the CDN feels like it.
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=900");
+    res.end(jpg);
+  });
+
+  app.get("/og/spotlight/:id.jpg", async (req, res) => {
+    const found = await shareSubject(Number(req.params.id));
+    if (!found) {
+      res.status(404).end();
+      return;
+    }
+    const { signup, whenLabel } = found;
+    const origin = `${req.protocol}://${req.get("host")}`;
+    const photo = signup.photoUrl
+      ? signup.photoUrl.startsWith("http") ? signup.photoUrl : `${origin}${signup.photoUrl}`
+      : undefined;
+    const requested = String(req.query.size ?? "square");
+    const size: CardSize = requested in CARD_SIZES ? (requested as CardSize) : "square";
+    const jpg = await buildShareCard(
+      {
+        podcastName: signup.podcastName,
+        hostName: signup.hostName,
+        whenLabel,
+        photoUrl: photo,
+        eyebrow: "IN THE SPOTLIGHT",
+        subline: signup.hostName ? `Hosted by ${signup.hostName}` : undefined,
+        footer: "Free to watch · register at militaryvoice.ai",
+      },
+      size,
+    );
     res.setHeader("Content-Type", "image/jpeg");
     res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
     res.end(jpg);

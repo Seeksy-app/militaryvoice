@@ -25,6 +25,7 @@ import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi
 import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
 import { RiccohPosts } from "@/components/RiccohPosts";
+import { RiccohImages } from "@/components/RiccohImages";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
@@ -3790,7 +3791,8 @@ export default function Admin() {
                 <TabsContent value="team" className="mt-6">
                   <EventTeamPanel eventId={selectedEventId} />
                 </TabsContent>
-                <TabsContent value="promotion" className="mt-6">
+                <TabsContent value="promotion" className="mt-6 flex flex-col gap-12">
+                  <RiccohImages event={selectedEvent} />
                   <RiccohPosts event={selectedEvent} />
                 </TabsContent>
                 <TabsContent value="finances" className="mt-6">
