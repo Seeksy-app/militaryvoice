@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { LogoLockup } from "@/components/Logo";
+import { LogoLockupOnDark } from "@/components/Logo";
 
 // The footer, on every public page.
 //
@@ -34,9 +34,9 @@ export function SiteFooter({ slug }: { slug?: string }) {
     <footer className="text-white" style={{ backgroundColor: NAVY }} data-testid="site-footer">
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-          {/* The dark lockup is the one drawn for light grounds; on navy the
-              standard mark is the readable one. */}
-          <LogoLockup className="h-9 w-auto" />
+          {/* Always the dark-ground lockup: this band is navy in both themes,
+              so the theme-swapping one puts near-black letters on navy. */}
+          <LogoLockupOnDark className="h-12" />
           <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/65">
             {links.map((l) =>
               l.external ? (

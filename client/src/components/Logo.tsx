@@ -26,3 +26,15 @@ export function LogoLockup({ className = "h-14 lg:h-[72px]" }: { className?: str
     </>
   );
 }
+
+/**
+ * The lockup for a surface that is dark in *both* themes.
+ *
+ * LogoLockup swaps on the theme, which is right when the mark sits on the page
+ * ground. It is wrong on a band that is navy either way — in light mode it
+ * picks the near-black lettering and the wordmark disappears into the
+ * background, which is exactly what happened in the footer.
+ */
+export function LogoLockupOnDark({ className = "h-14" }: { className?: string }) {
+  return <img src="/logo-lockup-dark.png?v=3" alt="MilitaryVoice.ai" className={`w-auto ${className}`} />;
+}

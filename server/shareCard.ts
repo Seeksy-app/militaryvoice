@@ -185,6 +185,37 @@ export async function buildShareCard(input: CardInput, size: CardSize = "wide"):
 // The lineup poster — one image with the whole board on it
 // ---------------------------------------------------------------------------
 
+/**
+ * The largest size at which a name wraps to at most two lines that each fit.
+ *
+ * Returns the last-resort smallest size with an ellipsis when even that fails,
+ * which in practice only happens for a single unbroken word longer than the
+ * cell — a case worth degrading rather than letting it run off the card.
+ */
+function fitTwoLines(text: string, boxW: number, maxSize: number, minSize: number): { lines: string[]; size: number } {
+  const words = text.split(/\s+/).filter(Boolean);
+  for (let size = maxSize; size >= minSize; size -= 1) {
+    const lines: string[] = [];
+    let cur = words[0] ?? "";
+    let overflowed = textWidth(cur, size, "bold") > boxW;
+    for (const w of words.slice(1)) {
+      const next = `${cur} ${w}`;
+      if (textWidth(next, size, "bold") <= boxW) cur = next;
+      else {
+        lines.push(cur);
+        cur = w;
+        if (textWidth(w, size, "bold") > boxW) overflowed = true;
+      }
+    }
+    if (cur) lines.push(cur);
+    if (!overflowed && lines.length <= 2) return { lines, size };
+  }
+  // Nothing fits: cut the single line rather than paint over the neighbours.
+  let cut = text;
+  while (cut.length > 1 && textWidth(`${cut}…`, minSize, "bold") > boxW) cut = cut.slice(0, -1);
+  return { lines: [cut === text ? text : `${cut.trimEnd()}…`], size: minSize };
+}
+
 export interface LineupShow {
   podcastName: string;
   photoUrl?: string;
@@ -207,11 +238,16 @@ export async function buildLineupCard(
   const shows = input.shows.slice(0, 24);
   const k = W / 1080;
 
-  // Columns are chosen so the last row is never a single lonely face.
-  const cols = size === "wide" ? Math.min(6, Math.max(3, Math.ceil(shows.length / 2)))
-    : shows.length <= 4 ? 2
-    : shows.length <= 9 ? 3
-    : 4;
+  // Columns are chosen to keep the row count down, because rows are what this
+  // layout runs out of: every cell has to hold a face *and* up to two lines of
+  // show name, and a fifth row is what pushed the names into the avatars below
+  // them the first time round.
+  const wide = size === "wide";
+  const cols = wide
+    ? Math.min(7, Math.max(3, Math.ceil(shows.length / 2)))
+    : size === "story"
+      ? Math.min(4, Math.max(2, Math.round(Math.sqrt(shows.length))))
+      : Math.min(6, Math.max(2, Math.ceil(Math.sqrt(shows.length))));
   const rows = Math.ceil(shows.length / cols);
 
   const ground = Buffer.from(`<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
@@ -227,13 +263,21 @@ export async function buildLineupCard(
     <circle cx="${W * 0.08}" cy="${H * 0.92}" r="${W * 0.16}" fill="#F0A71F" opacity="0.06"/>
   </svg>`);
 
-  const headH = Math.round(H * (size === "story" ? 0.20 : 0.26));
-  const footH = Math.round(H * (size === "story" ? 0.12 : 0.14));
+  // The header and footer give ground back as the grid gets denser — a title
+  // band sized for four faces is wasted space when there are twenty.
+  const dense = Math.min(1, Math.max(0, (rows - 2) / 4));
+  const headH = Math.round(H * ((size === "story" ? 0.20 : 0.26) - 0.07 * dense));
+  const footH = Math.round(H * ((size === "story" ? 0.12 : 0.14) - 0.04 * dense));
   const gridH = H - headH - footH;
   const cellH = gridH / rows;
   const cellW = W / cols;
-  // Leave room under each face for its name.
-  const AV = Math.round(Math.min(cellW * 0.62, cellH * 0.58));
+
+  // Size the type first, then give the avatar whatever is left. Doing it the
+  // other way round is how the names ended up overlapping the row beneath.
+  const nameSize = Math.round(Math.max(11, Math.min(23, cellW * 0.115)) * (k < 1 ? 1 : 1));
+  const nameLead = Math.round(nameSize * 1.18);
+  const nameBlockH = nameLead * 2 + Math.round(10 * k);
+  const AV = Math.round(Math.max(44 * k, Math.min(cellW * 0.6, cellH - nameBlockH - 8 * k)));
 
   const eyebrow = `NATIONAL MILITARY PODCAST DAY · ${input.dateLabel.toUpperCase()}`;
   const title = `${shows.length} SHOWS. ONE DAY.`;
@@ -255,7 +299,9 @@ export async function buildLineupCard(
     const inRow = Math.min(cols, shows.length - row * cols);
     const rowW = inRow * cellW;
     const cx = Math.round((W - rowW) / 2 + col * cellW + cellW / 2);
-    const cy = Math.round(headH + row * cellH + cellH * 0.44);
+    // The face sits at the top of its cell and the name hangs below it, so a
+    // one-line name and a two-line name both stay inside the same box.
+    const cy = Math.round(headH + row * cellH + AV / 2 + 4 * k);
 
     const av = shows[i].photoUrl ? await circularAvatar(shows[i].photoUrl!, AV) : null;
     if (av) layers.push({ input: av, top: cy - Math.round(AV / 2), left: cx - Math.round(AV / 2) });
@@ -263,24 +309,18 @@ export async function buildLineupCard(
       `<circle cx="${cx}" cy="${cy}" r="${AV / 2 + 4 * k}" fill="${av ? "none" : "#ffffff14"}" stroke="#F0A71F" stroke-width="${Math.max(2, 3.5 * k)}" opacity="0.9"/>`,
     );
 
-    // Two lines maximum, shrunk to the cell — a cut-off show name defeats the
-    // point of putting the face there.
+    // Two lines maximum, both inside the cell.
+    //
+    // Sizing the whole string to twice the cell width is not the same as every
+    // wrapped line fitting it — that is what put "Double Dare Podcast" over the
+    // left edge of the card. So the size comes down until an actual wrap at
+    // that size produces at most two lines and no line wider than the cell.
     const name = shows[i].podcastName.trim();
     const boxW = cellW - 12 * k;
-    const sN = fitSize(name, "bold", Math.round(23 * k), Math.round(12 * k), boxW * 2);
-    const words = name.split(/\s+/);
-    const lines: string[] = [];
-    let cur = words[0] ?? "";
-    for (const w of words.slice(1)) {
-      const next = `${cur} ${w}`;
-      if (textWidth(next, sN, "bold") <= boxW) cur = next;
-      else { lines.push(cur); cur = w; }
-    }
-    if (cur) lines.push(cur);
-    const shown = lines.length <= 2 ? lines : [lines[0], lines.slice(1).join(" ")];
+    const { lines: shown, size: sN } = fitTwoLines(name, boxW, nameSize, Math.max(9, Math.round(nameSize * 0.55)));
     shown.forEach((line, li) => {
       parts.push(textPath(line, {
-        x: cx, y: cy + AV / 2 + Math.round(30 * k) + li * Math.round(sN * 1.2),
+        x: cx, y: cy + AV / 2 + Math.round(sN * 1.25) + li * Math.round(sN * 1.18),
         size: sN, weight: "bold", fill: "#ffffff", anchor: "middle",
       }));
     });
