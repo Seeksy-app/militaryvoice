@@ -179,7 +179,7 @@ function clientKey(): string {
  * and is gated twice: readOnly here, and /api/studio/scenes having no write
  * side to call.
  */
-function RunningOrder({ slug, studioId }: { slug?: string; studioId?: number }) {
+function RunningOrder({ slug, studioId, searchable = false }: { slug?: string; studioId?: number; searchable?: boolean }) {
   const zone = useMemo(detectLocalTimeZone, []);
   const { data } = useQuery<{ scenes: SceneRow[]; currentSceneId: number }>({
     queryKey: ["/api/studio/scenes", slug ?? "featured", studioId ?? 0],
@@ -204,6 +204,7 @@ function RunningOrder({ slug, studioId }: { slug?: string; studioId?: number }) 
         presentNames={[]}
         media={[]}
         readOnly
+        searchable={searchable}
         onApply={() => {}}
         onAdd={() => {}}
         onPatch={() => {}}
@@ -1108,7 +1109,11 @@ export default function Studio({ slug }: { slug?: string }) {
 
             {/* --------------------------------------------- right: the running order */}
             <div className="order-3 flex flex-col gap-4">
-              <RunningOrder slug={slug} studioId={studioId} />
+              {/* Producers get the filter in here too — they answer "is my video
+                  loaded?" from wherever they happen to be standing. A podcaster
+                  is looking for one scene, their own, and scrolling to it is
+                  not the problem worth solving. */}
+              <RunningOrder slug={slug} studioId={studioId} searchable={!!state?.isCrew} />
 
               {recordings.length > 0 && (
                 <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-4">

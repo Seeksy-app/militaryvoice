@@ -26,6 +26,7 @@ import {
   Timer,
   Plus,
   X,
+  Search,
   ChevronUp,
   ChevronDown,
   Pencil,
@@ -91,6 +92,7 @@ export function SceneRail({
   media,
   busy,
   readOnly = false,
+  searchable = false,
   onApply,
   onAdd,
   onPatch,
@@ -109,6 +111,8 @@ export function SceneRail({
   busy?: boolean;
   /** Podcasters see the rail; only a producer changes it. */
   readOnly?: boolean;
+  /** Producers get a filter. 146 scenes is not a list you scroll on a question. */
+  searchable?: boolean;
   onApply: (id: number) => void;
   onAdd: (spec: SceneSpec) => void;
   onPatch: (id: number, patch: Partial<SceneSpec>) => void;
@@ -116,6 +120,7 @@ export function SceneRail({
   onReorder: (ids: number[]) => void;
   onGenerate: () => void;
 }) {
+  const [query, setQuery] = useState("");
   const [addKind, setAddKind] = useState<null | "media" | "countdown">(null);
   const [agendaOpen, setAgendaOpen] = useState(false);
   const [renaming, setRenaming] = useState<number | null>(null);
@@ -159,6 +164,30 @@ export function SceneRail({
   }
 
   const nextScene = liveIndex >= 0 ? scenes[liveIndex + 1] : scenes[0];
+
+  /**
+   * Filter by anything you'd actually say out loud.
+   *
+   * "Do you have my video loaded?" is asked by name, and the name is not
+   * always in the scene's title — a run-of-show item carries the show name,
+   * and the media scene under it may just be called "Clip". So the scene's
+   * name, its kind, and the agenda item it belongs to are all searched, which
+   * means typing a podcaster's name finds their intro, their segment and
+   * their handoff rather than only whichever one happens to be titled.
+   */
+  const runById = useMemo(() => new Map(runItems.map((r) => [r.id, r])), [runItems]);
+  const q = query.trim().toLowerCase();
+  const shown = useMemo(() => {
+    if (!q) return scenes.map((sc, i) => ({ sc, i }));
+    return scenes
+      .map((sc, i) => ({ sc, i }))
+      .filter(({ sc }) => {
+        const run = sc.runItemId ? runById.get(sc.runItemId) : undefined;
+        return [sc.name, sc.kind, run?.title, run?.notes]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q));
+      });
+  }, [scenes, q, runById]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -208,6 +237,38 @@ export function SceneRail({
         )}
       </div>
 
+      {searchable && scenes.length > 8 && (
+        <div className="px-3 pb-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/35" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Find a scene or a name…"
+              className="w-full rounded-lg border border-white/15 bg-white/[0.06] py-1.5 pl-8 pr-8 text-sm text-white outline-none placeholder:text-white/35 focus:border-[#F0A71F]/60"
+              data-testid="input-scene-search"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                aria-label="Clear the search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          {q && (
+            <p className="mt-1.5 text-[11px] text-white/45">
+              {shown.length === 0
+                ? "Nothing matches — try part of a show name."
+                : `${shown.length} of ${scenes.length} scenes`}
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3" data-testid="scene-rail">
         {scenes.length === 0 && (
           <div className="rounded-xl border border-dashed border-white/15 p-4 text-center">
@@ -228,7 +289,7 @@ export function SceneRail({
           </div>
         )}
 
-        {scenes.map((sc, i) => {
+        {shown.map(({ sc, i }) => {
           const on = sc.id === currentSceneId;
           const k = kindOf(sc);
           const thumb = k === "media" && isImage(sc) ? sc.mediaUrl : null;

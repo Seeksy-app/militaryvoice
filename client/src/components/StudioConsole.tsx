@@ -1344,6 +1344,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     signups={signups ?? []}
                     presentNames={present.map((p) => p.displayName || "")}
                     media={mediaItems ?? []}
+                    searchable
                     busy={applyScene.isPending}
                     onApply={(id) => applyScene.mutate(id)}
                     onAdd={(spec) => addScene.mutate(spec)}
