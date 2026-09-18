@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi";
 import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
+import { RiccohPosts } from "@/components/RiccohPosts";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
@@ -3608,7 +3609,7 @@ export default function Admin() {
                 </div>
               </div>
               <Tabs value={eventTab} onValueChange={setEventTab}>
-                <TabsList className={`grid w-full ${isMobile ? "grid-cols-5" : "grid-cols-9"}`}>
+                <TabsList className={`grid w-full ${isMobile ? "grid-cols-5" : "grid-cols-10"}`}>
                   <TabsTrigger value="overview" data-testid="tab-admin-overview">Overview</TabsTrigger>
                   <TabsTrigger value="studio" data-testid="tab-admin-studio">Studio</TabsTrigger>
                   <TabsTrigger value="run" data-testid="tab-admin-run">Run of show</TabsTrigger>
@@ -3616,6 +3617,7 @@ export default function Admin() {
                   <TabsTrigger value="crm" data-testid="tab-admin-event-crm">CRM</TabsTrigger>
                   {!isMobile && (
                     <>
+                      <TabsTrigger value="promotion" data-testid="tab-admin-promotion">Promotion</TabsTrigger>
                       <TabsTrigger value="finances" data-testid="tab-admin-finances">Finances</TabsTrigger>
                       <TabsTrigger value="setup" data-testid="tab-admin-setup">Event details</TabsTrigger>
                       <TabsTrigger value="signups" data-testid="tab-admin-signups">Podcasters</TabsTrigger>
@@ -3642,6 +3644,9 @@ export default function Admin() {
                 </TabsContent>
                 <TabsContent value="team" className="mt-6">
                   <EventTeamPanel eventId={selectedEventId} />
+                </TabsContent>
+                <TabsContent value="promotion" className="mt-6">
+                  <RiccohPosts event={selectedEvent} />
                 </TabsContent>
                 <TabsContent value="finances" className="mt-6">
                   <FinancesCard event={selectedEvent} />
