@@ -20,7 +20,12 @@ try {
 console.log(`LiveKit reports ${live.length} egress record(s):`);
 for (const e of live) console.log(`   ${e.egressId}  ${e.status}  room=${e.roomName}`);
 
-const liveIds = new Set(live.filter((e) => /STARTING|ACTIVE|ENDING/i.test(e.status)).map((e) => e.egressId));
+// LiveKit returns the enum as a number when serialised, so matching only on
+// the name silently marks every running egress dead — which is exactly the
+// wrong direction for a script whose job is spotting stale flags.
+const liveIds = new Set(
+  live.filter((e) => e.status === "0" || e.status === "1" || /STARTING|ACTIVE/i.test(e.status)).map((e) => e.egressId),
+);
 console.log("\nOur studios:");
 for (const s of studios) {
   const b = s.broadcast_egress_id, r = s.recording_egress_id;
