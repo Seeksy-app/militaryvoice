@@ -16,6 +16,8 @@ const RATE = {
   r2GbMonth: 0.015,
   vercelPro: 20,
   resend: 20,
+  // Posting and social analytics for every podcaster, 25 profiles on this tier.
+  uploadPost: 50,
 };
 
 const MB_PER_MIN = (mbps) => (mbps * 60) / 8;   // megabits/s -> MB/min
@@ -73,11 +75,12 @@ function event({ viewers, hours = 24, slotMin = 30, prerecordedSlots = 13 }) {
     [`Cloudflare R2 — recordings (${Math.round(recordingGb)} GB, egress free)`, r2],
     [`Supabase storage — clips (${Math.round(clipGb)} GB, 8 GB included)`, storage],
     [`Supabase egress (${Math.round(egressGb)} GB served)`, egress],
+    ["Upload-Post (monthly plan)", RATE.uploadPost],
     ["Vercel Pro (monthly plan)", RATE.vercelPro],
     ["Resend (monthly plan)", RATE.resend],
   ];
   const total = lines.reduce((n, [, v]) => n + v, 0);
-  const fixed = RATE.livekit.ship + RATE.supabase.pro + RATE.vercelPro + RATE.resend;
+  const fixed = RATE.livekit.ship + RATE.supabase.pro + RATE.vercelPro + RATE.resend + RATE.uploadPost;
   return { viewers, lines, total, fixed, variable: total - fixed, connMin, dataGb, prerecGb, storedGb };
 }
 

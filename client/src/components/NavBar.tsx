@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Moon, Sun, LogIn, LayoutDashboard, Menu } from "lucide-react";
+import { Moon, Sun, LogIn, LayoutDashboard, Menu, Headphones } from "lucide-react";
 import { LogoLockup } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/lib/theme";
-import { getQueryFn } from "@/lib/queryClient";
+import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import type { ProfileRow } from "@shared/schema";
 
 function scrollToAnchor(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
@@ -48,6 +48,26 @@ export function NavBar() {
   });
   const signedIn = me !== null && me !== undefined;
 
+  // The green room is only a link if there's a room to walk into — which means
+  // holding a slot on an event. Shown greyed rather than hidden for anyone
+  // signed in without one, so it reads as "not yet" rather than "not for you".
+  // Shares the cache with the dashboard's own copy — same key, same fetcher —
+  // so on any page that already asks for it this costs nothing, and elsewhere
+  // it is one request that stands for five minutes.
+  const { data: myEvents } = useQuery<{ slotIndex: number | null; event: { slug: string; isFeatured: boolean } }[]>({
+    queryKey: ["/api/host/events"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/events")).json(),
+    enabled: signedIn,
+    retry: false,
+    staleTime: 5 * 60_000,
+  });
+  const booked = (myEvents ?? []).find((e) => e.slotIndex != null);
+  const greenRoomHref = booked
+    ? booked.event.isFeatured === false && booked.event.slug
+      ? `/event/${booked.event.slug}/studio`
+      : "/studio"
+    : "";
+
   const linkCls = (active: boolean) =>
     `whitespace-nowrap rounded-md px-2.5 py-2 text-[15px] font-medium transition-colors hover-elevate ${
       active ? "text-primary" : "text-muted-foreground"
@@ -77,6 +97,24 @@ export function NavBar() {
           <Link href="/sponsor" className={linkCls(location === "/sponsor")} data-testid="link-nav-sponsors">
             Sponsors
           </Link>
+          {signedIn &&
+            (greenRoomHref ? (
+              <Link
+                href={greenRoomHref}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#F0A71F] px-3 py-1.5 text-[15px] font-semibold text-[#1a1200] transition-colors hover:bg-[#f7b73a]"
+                data-testid="link-nav-green-room"
+              >
+                <Headphones className="h-3.5 w-3.5" /> Green room
+              </Link>
+            ) : (
+              <span
+                className="inline-flex cursor-not-allowed items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-[15px] font-medium text-muted-foreground/50"
+                title="Take a time on an event and your green room opens here"
+                data-testid="link-nav-green-room-off"
+              >
+                <Headphones className="h-3.5 w-3.5" /> Green room
+              </span>
+            ))}
         </nav>
 
         <div className="flex items-center gap-1.5">
@@ -120,6 +158,11 @@ export function NavBar() {
                 ),
               )}
               <DropdownMenuSeparator />
+              {signedIn && greenRoomHref && (
+                <DropdownMenuItem asChild>
+                  <Link href={greenRoomHref}>Green room</Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem asChild>
                 <Link href="/sponsor">Sponsors</Link>
               </DropdownMenuItem>

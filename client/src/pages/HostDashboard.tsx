@@ -52,7 +52,6 @@ import { ShowMaterials } from "@/components/ShowMaterials";
 import { EventSettings } from "@/components/EventSettings";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { NextSteps } from "@/components/NextSteps";
-import { OwnEncoder } from "@/components/OwnEncoder";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { AudienceConsent } from "@/components/AudienceConsent";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
@@ -792,20 +791,12 @@ export default function HostDashboard() {
           <RecordingsScreen socialAccounts={profile?.socialAccounts} />
         ) : screen === "integrations" ? (
           <section className="mt-6">
-            {/* Streaming used to live on the event, which meant YouTube had two
-                homes and read as though something was connected twice. It
-                connects here; the event only reports what it finds. */}
+            {/* Posting accounts lead: nearly everyone has them, and they are
+                what the clips and the follow buttons depend on. Going live on
+                your own channel is the smaller, optional half, so it sits
+                under. "Use your own gear" is out for now — it invites people
+                to bring an encoder to an event that doesn't need one. */}
             <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-              <Radio className="h-4 w-4" /> Going out live
-            </h2>
-            <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
-              Do you want your slot to go out on your own channel as well as ours? Optional — it airs on
-              MilitaryVoice.ai either way.
-            </p>
-            <ConnectYoutube />
-            <OwnEncoder />
-
-            <h2 className="mb-2 mt-10 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
               <Link2 className="h-4 w-4" /> Posting accounts
             </h2>
             <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
@@ -849,6 +840,15 @@ export default function HostDashboard() {
                 </div>
                 <SocialTiles accounts={social.accounts} onConnect={() => connectSocial.mutate()} connecting={connectSocial.isPending} />
                 {social.accounts.length > 0 && profile && <AudienceConsent profile={profile} />}
+
+                <h2 className="mb-2 mt-10 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+                  <Radio className="h-4 w-4" /> Going out live
+                </h2>
+                <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
+                  Do you want your slot to go out on your own channel as well as ours? Optional — it airs on
+                  MilitaryVoice.ai either way.
+                </p>
+                <ConnectYoutube />
                 {social.accounts.length === 0 && (
                   <p className="mt-2 text-sm text-muted-foreground">
                     Nothing linked yet. Connected accounts light up here and show as follow buttons on your card in the lineup.

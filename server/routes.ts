@@ -1973,11 +1973,7 @@ export function registerRoutes(app: Express): void {
   }
 
   /** What a speaker sees: their own state plus whether the room is live. */
-  async function speakerState(
-    event: EventRow,
-    studio: { id: number; name: string; status: string; fallbackPlaying: boolean; maxOnStage: number },
-    clientKey: string,
-  ) {
+  async function speakerState(event: EventRow, studio: StudioRow, clientKey: string) {
     const all = await storage.listStudioParticipants(studio.id);
     const me = all.find((p) => p.clientKey === clientKey) ?? null;
 
@@ -2012,6 +2008,9 @@ export function registerRoutes(app: Express): void {
         fallbackPlaying: studio.fallbackPlaying,
         maxOnStage: studio.maxOnStage,
       },
+      // The same shape the watch page renders from, so the green room can show
+      // the programme itself rather than a description of it. Read-only here.
+      meta: studioMeta(event.name, studio, event),
       me,
       onStage,
       mySlot,
@@ -2036,6 +2035,36 @@ export function registerRoutes(app: Express): void {
    * and the token can only subscribe — never publish, never see the green
    * room's identities beyond what the stage already shows.
    */
+  /**
+   * The running order, for the people in it.
+   *
+   * Read-only on purpose: a podcaster should be able to see where the show is
+   * up to and what's next without being able to change it. Only a producer
+   * edits scenes, and that stays behind the admin routes.
+   */
+  app.get("/api/studio/scenes", async (req, res) => {
+    noStore(res);
+    const found = await studioForSlug(
+      typeof req.query.slug === "string" ? req.query.slug : undefined,
+      numParam(req.query.studioId),
+    );
+    if (!found) {
+      res.json({ scenes: [], currentSceneId: 0 });
+      return;
+    }
+    const rows = await storage.listScenes(found.studio.id);
+    res.json({
+      currentSceneId: found.studio.currentSceneId,
+      scenes: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        kind: r.kind,
+        startAtUtc: r.startAtUtc,
+        hasMedia: Boolean(r.mediaUrl),
+      })),
+    });
+  });
+
   app.get("/api/watch/token", async (req, res) => {
     noStore(res);
     if (!isLiveKitConfigured()) {

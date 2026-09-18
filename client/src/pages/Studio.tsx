@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useStudioRoom, type RoomPeer } from "@/hooks/use-studio-room";
+import { StageGrid, type RoomMeta } from "@/components/StageView";
+import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
 import type { StudioParticipantRow } from "@shared/schema";
 import {
   Mic,
@@ -23,6 +25,7 @@ import {
   VolumeX,
   Download,
   Disc,
+  ListOrdered,
 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -32,6 +35,8 @@ const HEARTBEAT_MS = 6_000;
 interface StudioState {
   eventName: string;
   studio: { name: string; status: string; fallbackPlaying: boolean; maxOnStage: number };
+  /** What's actually going out, in the same shape the watch page renders. */
+  meta?: RoomMeta;
   me: StudioParticipantRow | null;
   onStageCount: number;
   greenRoomCount: number;
@@ -49,6 +54,76 @@ function clientKey(): string {
   } catch {
     return "anon" + Math.random().toString(36).slice(2, 12);
   }
+}
+
+interface SceneLine {
+  id: number;
+  name: string;
+  kind: string;
+  startAtUtc: string;
+  hasMedia: boolean;
+}
+
+/**
+ * What's on now and what's coming, for the people in the show.
+ *
+ * Read-only by design and by route: podcasters get /api/studio/scenes, which
+ * has no write side at all. Editing the running order is a producer's job and
+ * lives behind the admin routes.
+ */
+function RunningOrder({ slug, studioId }: { slug?: string; studioId?: number }) {
+  const zone = useMemo(detectLocalTimeZone, []);
+  const { data } = useQuery<{ scenes: SceneLine[]; currentSceneId: number }>({
+    queryKey: ["/api/studio/scenes", slug ?? "featured", studioId ?? 0],
+    queryFn: async () => {
+      const q = new URLSearchParams();
+      if (slug) q.set("slug", slug);
+      if (studioId) q.set("studioId", String(studioId));
+      return (await apiRequest("GET", `/api/studio/scenes?${q}`)).json();
+    },
+    refetchInterval: 15_000,
+  });
+
+  const scenes = data?.scenes ?? [];
+  if (scenes.length === 0) return null;
+
+  const liveIndex = scenes.findIndex((x) => x.id === data?.currentSceneId);
+  // Where we are, and a little either side. The whole rail is the producer's
+  // problem; the person waiting only needs to know they're close.
+  const from = Math.max(0, liveIndex < 0 ? 0 : liveIndex - 1);
+  const shown = scenes.slice(from, from + 8);
+
+  return (
+    <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-white/50">
+          <ListOrdered className="h-3.5 w-3.5 text-[#F0A71F]" /> Running order
+        </span>
+        <span className="text-[11px] text-white/35">{scenes.length} in all</span>
+      </div>
+      <ol className="flex flex-col gap-1">
+        {shown.map((x) => {
+          const on = x.id === data?.currentSceneId;
+          return (
+            <li
+              key={x.id}
+              className={`flex items-start gap-2 rounded-lg px-2 py-1.5 ${on ? "bg-[#F0A71F] text-[#1a1200]" : "text-white/70"}`}
+              data-testid={`running-order-${x.id}`}
+            >
+              <span className={`w-11 shrink-0 text-[11px] tabular-nums ${on ? "opacity-70" : "opacity-45"}`}>
+                {x.startAtUtc ? formatTimeInZone(new Date(x.startAtUtc), zone) : "—"}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-semibold">{x.name}</span>
+                {on && <span className="text-[10px] font-bold uppercase tracking-wide">On now</span>}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <p className="mt-2 text-[11px] text-white/35">The producer runs this — it's here so you can see it coming.</p>
+    </div>
+  );
 }
 
 /** Attaches a subscribed LiveKit track to a real media element. */
@@ -333,152 +408,97 @@ export default function Studio({ slug }: { slug?: string }) {
             </form>
           </div>
         ) : (
-          <div className="mt-8 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-            {/* ------------------------------------------------ camera preview */}
-            <div>
-              <div
-                className={`relative aspect-video overflow-hidden rounded-2xl border-2 bg-black ${
-                  onStage ? "border-[#ED1C24]" : "border-white/15"
-                }`}
-              >
-                <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-contain" />
-                {!stream && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
-                    <VideoOff className="h-8 w-8 text-white/40" />
-                    <p className="text-sm text-white/70">Your camera isn't on yet.</p>
-                    <Button size="sm" className="rounded-full" onClick={() => void startMedia()} data-testid="button-studio-start-media">
-                      Turn on camera & mic
-                    </Button>
-                  </div>
-                )}
-                {onStage && (
-                  <div className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-[#ED1C24] px-3 py-1 text-xs font-bold uppercase tracking-wide">
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> On stage
-                  </div>
-                )}
-              </div>
-
-              {mediaError && (
-                <p className="mt-3 flex items-start gap-2 rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/10 p-3 text-sm text-white/85">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
-                  {mediaError}
-                </p>
-              )}
-
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-                  onClick={() => toggleTrack("video")}
-                  disabled={!stream}
-                  data-testid="button-studio-toggle-cam"
+          /* Three columns: who's waiting, the programme, what's coming.
+             The programme is the middle because it is the thing everyone in
+             here is about to be part of, and seeing it is how you know the
+             room is real. Your own face and your own checks live together on
+             the left, because they are one question — am I ready. */
+          <div className="mt-5 grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)_260px]">
+            {/* ------------------------------------------------ left: the room */}
+            <div className="order-2 flex flex-col gap-4 xl:order-1">
+              <div>
+                <div
+                  className={`relative aspect-video overflow-hidden rounded-2xl border-2 bg-black ${
+                    onStage ? "border-[#ED1C24]" : "border-white/20"
+                  }`}
                 >
-                  {camOn ? <Video className="h-3.5 w-3.5" /> : <VideoOff className="h-3.5 w-3.5 text-[#ED1C24]" />}
-                  {camOn ? "Camera on" : "Camera off"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
-                  onClick={() => toggleTrack("audio")}
-                  disabled={!stream}
-                  data-testid="button-studio-toggle-mic"
-                >
-                  {micOn ? <Mic className="h-3.5 w-3.5" /> : <MicOff className="h-3.5 w-3.5 text-[#ED1C24]" />}
-                  {micOn ? "Mic on" : "Mic off"}
-                </Button>
-
-                {stream && (
-                  <div className="ml-1 flex items-center gap-1" aria-label="Microphone level">
-                    {Array.from({ length: 10 }).map((_, i) => (
-                      <span
-                        key={i}
-                        className={`h-4 w-1.5 rounded-full transition-colors ${
-                          micOn && level * 10 > i ? "bg-[#F0A71F]" : "bg-white/15"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="ml-auto gap-1.5 text-white/60 hover:text-white"
-                  onClick={async () => {
-                    await apiRequest("POST", "/api/studio/leave", { clientKey: key, slug, studioId }).catch(() => {});
-                    streamRef.current?.getTracks().forEach((t) => t.stop());
-                    streamRef.current = null;
-                    setStream(null);
-                    setJoined(false);
-                  }}
-                  data-testid="button-studio-leave"
-                >
-                  <LogOut className="h-3.5 w-3.5" /> Leave
-                </Button>
-              </div>
-            </div>
-
-            {/* ---------------------------------------------------- your status */}
-            <div className="flex flex-col gap-4">
-              <div
-                className={`rounded-2xl border p-5 ${
-                  onStage ? "border-[#ED1C24]/60 bg-[#ED1C24]/10" : "border-white/15 bg-white/[0.06]"
-                }`}
-              >
-                <div className="text-xs font-semibold uppercase tracking-wide text-white/60">You are</div>
-                <div className="mt-1 text-xl font-bold" style={HEADLINE_FONT}>
-                  {onStage ? "On stage" : "In the green room"}
-                </div>
-                <p className="mt-2 text-sm text-white/70">
-                  {onStage
-                    ? "You're part of the broadcast. Camera and mic are being taken."
-                    : "Stay here with your camera on. The producer will bring you up when it's your turn."}
-                </p>
-              </div>
-
-              {/* On air. When you're waiting this is a monitor you can watch;
-                  when you're up there it's the people beside you. */}
-              {(onAirPeers.length > 0 || state?.studio.fallbackPlaying) && (
-                <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-5">
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/60">
-                      <Radio className="h-3.5 w-3.5 text-[#ED1C24]" />
-                      {onStage ? "Also on stage" : "On air now"}
-                    </div>
-                    {!onStage && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 gap-1.5 px-2 text-xs text-white/60 hover:text-white"
-                        onClick={() => setListenToShow((v) => !v)}
-                        data-testid="button-listen-show"
-                      >
-                        {listenToShow ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
-                        {listenToShow ? "Listening" : "Listen in"}
+                  <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+                  {!stream && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center">
+                      <VideoOff className="h-6 w-6 text-white/40" />
+                      <Button size="sm" className="rounded-full" onClick={() => void startMedia()} data-testid="button-studio-start-media">
+                        Turn on camera & mic
                       </Button>
-                    )}
+                    </div>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-3 pb-1.5 pt-6">
+                    <p className="truncate text-sm font-semibold">{state?.me?.displayName || name || "You"}</p>
                   </div>
-                  <div className={`grid gap-2 ${onAirPeers.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
-                    {onAirPeers.map((p) => (
-                      // On stage you hear them. Waiting, only if you asked to.
-                      <PeerTile key={p.identity} peer={p} muted={!onStage && !listenToShow} />
-                    ))}
-                  </div>
-                  {!onStage && (
-                    <p className="mt-2 text-xs text-white/45">
-                      They can't hear the green room. Nothing said here reaches the broadcast.
-                    </p>
+                  {onStage && (
+                    <div className="absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-[#ED1C24] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> On stage
+                    </div>
                   )}
                 </div>
-              )}
 
-              {/* The green room as an actual room: everyone waiting can see and
-                  hear each other, and none of it goes out. */}
-              {!onStage && greenRoomPeers.length > 0 && (
-                <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-5">
-                  <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/60">
+                {/* Your controls and your checks, directly under your own face. */}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                    onClick={() => toggleTrack("video")}
+                    disabled={!stream}
+                    data-testid="button-studio-toggle-cam"
+                  >
+                    {camOn ? <Video className="h-3.5 w-3.5" /> : <VideoOff className="h-3.5 w-3.5 text-[#ED1C24]" />}
+                    {camOn ? "Camera on" : "Camera off"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                    onClick={() => toggleTrack("audio")}
+                    disabled={!stream}
+                    data-testid="button-studio-toggle-mic"
+                  >
+                    {micOn ? <Mic className="h-3.5 w-3.5" /> : <MicOff className="h-3.5 w-3.5 text-[#ED1C24]" />}
+                    {micOn ? "Mic on" : "Mic off"}
+                  </Button>
+                  {stream && (
+                    <span className="flex items-center gap-0.5" aria-label="Microphone level">
+                      {Array.from({ length: 8 }).map((_, i) => (
+                        <span
+                          key={i}
+                          className={`h-3.5 w-1 rounded-full transition-colors ${micOn && level * 8 > i ? "bg-[#F0A71F]" : "bg-white/15"}`}
+                        />
+                      ))}
+                    </span>
+                  )}
+                </div>
+
+                <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[12px]">
+                  {([["Camera", camOn], ["Mic", micOn && level > 0.02], ["Name", !!state?.me?.displayName]] as const).map(
+                    ([label, ok]) => (
+                      <li key={label} className="flex items-center gap-1">
+                        <CheckCircle2 className={`h-3.5 w-3.5 ${ok ? "text-[#F0A71F]" : "text-white/25"}`} />
+                        <span className={ok ? "text-white/85" : "text-white/40"}>{label}</span>
+                      </li>
+                    ),
+                  )}
+                </ul>
+
+                {mediaError && (
+                  <p className="mt-2 flex items-start gap-2 rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/10 p-2.5 text-xs text-white/85">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#F0A71F]" />
+                    {mediaError}
+                  </p>
+                )}
+              </div>
+
+              {greenRoomPeers.length > 0 && (
+                <div>
+                  <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-white/50">
                     <Users className="h-3.5 w-3.5 text-[#F0A71F]" /> In here with you ({greenRoomPeers.length})
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -486,84 +506,107 @@ export default function Studio({ slug }: { slug?: string }) {
                       <PeerTile key={p.identity} peer={p} />
                     ))}
                   </div>
-                  <p className="mt-2 text-xs text-white/45">
-                    Talk freely — this is off air.
-                  </p>
+                  <p className="mt-2 text-[11px] text-white/40">Talk freely — none of this is on air.</p>
                 </div>
               )}
 
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full gap-1.5 text-white/55 hover:text-white"
+                onClick={async () => {
+                  await apiRequest("POST", "/api/studio/leave", { clientKey: key, slug, studioId }).catch(() => {});
+                  streamRef.current?.getTracks().forEach((t) => t.stop());
+                  streamRef.current = null;
+                  setStream(null);
+                  setJoined(false);
+                }}
+                data-testid="button-studio-leave"
+              >
+                <LogOut className="h-3.5 w-3.5" /> Leave the green room
+              </Button>
+            </div>
+
+            {/* --------------------------------------------- centre: the studio */}
+            <div className="order-1 xl:order-2">
+              <div className="relative aspect-video overflow-hidden rounded-2xl border border-white/15 bg-black">
+                {/* Exactly what the audience is seeing — the standby card, a
+                    clip, the break clock or the stage. Not a description of it. */}
+                <StageGrid
+                  tiles={onAirPeers.map((p) => ({
+                    identity: p.identity,
+                    name: p.name,
+                    displayTitle: "",
+                    video: p.videoTrack ?? null,
+                    audio: p.audioTrack ?? null,
+                    speaking: false,
+                  }))}
+                  meta={(state?.meta ?? {}) as RoomMeta}
+                  muted={!onStage && !listenToShow}
+                  idleTitle={state?.studio.name}
+                />
+              </div>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-white/55">
+                  {onStage
+                    ? "You're on the air. Camera and mic are being taken."
+                    : "This is what's going out. The producer brings you up when it's your turn."}
+                </p>
+                {!onStage && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 shrink-0 gap-1.5 px-2 text-xs text-white/55 hover:text-white"
+                    onClick={() => setListenToShow((v) => !v)}
+                    data-testid="button-listen-show"
+                  >
+                    {listenToShow ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+                    {listenToShow ? "Listening" : "Listen in"}
+                  </Button>
+                )}
+              </div>
+
               {roomStatus === "unavailable" && (
-                <p className="rounded-2xl border border-white/15 bg-white/[0.06] p-4 text-sm text-white/60">
+                <p className="mt-3 rounded-xl border border-white/15 bg-white/[0.06] p-3 text-sm text-white/60">
                   Sound and video for this event aren't switched on yet. Your camera check still works.
                 </p>
               )}
-              {roomStatus === "error" && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#ED1C24]/50 bg-[#ED1C24]/10 p-4 text-sm text-white/85">
-                  <span>We couldn't connect you to the live room. Trying again shortly.</span>
-                  <Button size="sm" className="rounded-full" onClick={reconnect} data-testid="button-studio-reconnect">
-                    Reconnect now
-                  </Button>
-                </div>
-              )}
-              {roomStatus === "idle" && stream && (
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#F0A71F]/50 bg-[#F0A71F]/10 p-4 text-sm text-white/85">
-                  <span>You dropped out of the room — reconnecting. Keep this tab in front.</span>
+              {(roomStatus === "error" || (roomStatus === "idle" && stream)) && (
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#ED1C24]/50 bg-[#ED1C24]/10 p-3 text-sm text-white/85">
+                  <span>
+                    {roomStatus === "error"
+                      ? "We couldn't connect you to the live room. Trying again shortly."
+                      : "You dropped out of the room — reconnecting. Keep this tab in front."}
+                  </span>
                   <Button size="sm" className="rounded-full" onClick={reconnect} data-testid="button-studio-reconnect">
                     Reconnect now
                   </Button>
                 </div>
               )}
               {roomStatus === "connecting" && (
-                <p className="rounded-2xl border border-white/15 bg-white/[0.06] p-4 text-sm text-white/60">Connecting you to the room…</p>
+                <p className="mt-3 text-sm text-white/50">Connecting you to the room…</p>
               )}
+            </div>
 
-              <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-5">
-                <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-white/60">Your check</div>
-                <ul className="flex flex-col gap-2 text-sm">
-                  {[
-                    ["Camera working", camOn],
-                    ["Microphone working", micOn && level > 0.02],
-                    ["Name set", !!state?.me?.displayName],
-                  ].map(([label, ok]) => (
-                    <li key={label as string} className="flex items-center gap-2">
-                      <CheckCircle2 className={`h-4 w-4 ${ok ? "text-[#F0A71F]" : "text-white/25"}`} />
-                      <span className={ok ? "text-white" : "text-white/55"}>{label as string}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+            {/* --------------------------------------------- right: the running order */}
+            <div className="order-3 flex flex-col gap-4">
+              <RunningOrder slug={slug} studioId={studioId} />
 
-              <div className="flex items-center gap-4 rounded-2xl border border-white/15 bg-white/[0.06] p-5 text-sm">
-                <span className="inline-flex items-center gap-1.5 text-white/75">
-                  <Radio className="h-4 w-4 text-[#F0A71F]" /> {state?.onStageCount ?? 0} on stage
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-white/75">
-                  <Users className="h-4 w-4 text-[#F0A71F]" /> {state?.greenRoomCount ?? 0} waiting
-                </span>
-              </div>
-
-              {state?.studio.fallbackPlaying && (
-                <p className="rounded-2xl border border-[#F0A71F]/40 bg-[#F0A71F]/10 p-4 text-sm text-white/85">
-                  The producer has rolled the standby video. Hold tight — you'll be brought back shortly.
-                </p>
-              )}
-
-              {/* ── My recordings ── */}
               {recordings.length > 0 && (
-                <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-5">
-                  <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/60">
+                <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-4">
+                  <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-white/50">
                     <Disc className="h-3.5 w-3.5 text-[#ED1C24]" /> My recordings
                   </div>
                   <div className="flex flex-col gap-2">
                     {recordings.map((r) => (
-                      <div key={r.id} className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.04] px-3 py-2.5">
+                      <div key={r.id} className="flex items-center justify-between gap-2 rounded-lg bg-white/[0.04] px-2.5 py-2">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-white truncate">
-                            {new Date(r.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                          <p className="truncate text-xs font-medium text-white">
+                            {new Date(r.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                           </p>
-                          <p className="text-xs text-white/50">
+                          <p className="text-[11px] text-white/50">
                             {r.status === "Recording" ? (
-                              <span className="text-[#ED1C24] font-medium">● Recording…</span>
+                              <span className="font-medium text-[#ED1C24]">● Recording…</span>
                             ) : r.status === "Ready" ? (
                               `${fmtDuration(r.durationSeconds)}${fmtSize(r.fileSizeBytes)}`
                             ) : (
@@ -576,9 +619,9 @@ export default function Studio({ slug }: { slug?: string }) {
                             href={r.downloadUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="shrink-0 flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20 transition-colors"
+                            className="shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-white/20"
                           >
-                            <Download className="h-3 w-3" /> Download MP4
+                            <Download className="mr-1 inline h-3 w-3" /> MP4
                           </a>
                         )}
                       </div>

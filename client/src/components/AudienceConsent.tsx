@@ -62,10 +62,10 @@ export function AudienceConsent({ profile }: { profile: ProfileRow }) {
       />
       <span className="min-w-0">
         <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-          <BarChart3 className="h-3.5 w-3.5 text-primary" /> Count my audience in what we show sponsors
+          <BarChart3 className="h-3.5 w-3.5 text-primary" /> Count me in
         </span>
         <span className="mt-1 block text-sm text-muted-foreground">
-          We add your follower numbers to the event's combined total. Sponsors fund the production everyone here uses,
+          Add my follower numbers to the event's combined total. Sponsors fund the production everyone here uses,
           and they buy audience — a bigger honest number gets more of them. Your figures are shown as part of a total,
           never as a list of names, and you can switch this off whenever you like.
         </span>
