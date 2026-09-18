@@ -433,8 +433,22 @@ export default function Studio({ slug }: { slug?: string }) {
     studioId,
     stream,
   });
-  const onAirPeers = peers.filter((p) => p.state === "On stage");
-  const greenRoomPeers = peers.filter((p) => p.state !== "On stage");
+  /**
+   * The audience is in the same LiveKit room as the green room.
+   *
+   * /api/watch/token admits viewers subscribe-only under a `viewer-…`
+   * identity, and the green room roster was "everyone not on stage" — so
+   * anybody watching the public page appeared in "In here with you", with
+   * their camera off and the name "Viewer". Two strangers in a room the
+   * lineup is told is private, and a count that matched nobody in it.
+   *
+   * They cannot publish and nobody can see or hear them, so this is a display
+   * bug rather than a leak — but it is the wrong answer to "who is in here".
+   */
+  const isViewer = (p: RoomPeer) => p.identity.startsWith("viewer-");
+  const onAirPeers = peers.filter((p) => p.state === "On stage" && !isViewer(p));
+  const greenRoomPeers = peers.filter((p) => p.state !== "On stage" && !isViewer(p));
+  const watchingCount = peers.filter(isViewer).length;
   // Whether we're listening to the programme while we wait. Off by default:
   // hearing the show and the room at once is a mess, and the show is what
   // you'd be talking over.
@@ -1005,6 +1019,13 @@ export default function Studio({ slug }: { slug?: string }) {
                 )}
               </div>
 
+              {greenRoomPeers.length === 0 && (
+                <p className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-white/45">
+                  Nobody else is in the green room yet.
+                  {watchingCount > 0 && ` ${watchingCount} watching the public stream — they can't hear you.`}
+                </p>
+              )}
+
               {greenRoomPeers.length > 0 && (
                 <div>
                   <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-white/50">
@@ -1015,7 +1036,10 @@ export default function Studio({ slug }: { slug?: string }) {
                       <PeerTile key={p.identity} peer={p} />
                     ))}
                   </div>
-                  <p className="mt-2 text-[11px] text-white/40">Talk freely — none of this is on air.</p>
+                  <p className="mt-2 text-[11px] text-white/40">
+                    Talk freely — none of this is on air.
+                    {watchingCount > 0 && ` ${watchingCount} watching the public stream, who cannot hear you.`}
+                  </p>
                 </div>
               )}
 
