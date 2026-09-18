@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MyRecordings } from "@/components/MyRecordings";
+import { MyClips } from "@/components/MyClips";
 import { apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, RecordingRow } from "@shared/schema";
 import { Disc, Scissors } from "lucide-react";
@@ -70,12 +71,21 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
 
       <MyRecordings socialAccounts={socialAccounts} eventId={eventId} showEmpty />
 
-      {/* The clips themselves live under Promotion — a clip is not an archive,
-          it is next week's post. This is just the signpost. */}
-      <p className="mt-8 text-sm text-muted-foreground">
-        <Scissors className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />
-        Clips cut from these recordings are under <span className="font-medium text-foreground">Promotion</span>.
-      </p>
+      {/* The clips sit with the recordings they came from.
+          They were filed under Promotion on the reasoning that a clip is next
+          week's post rather than an archive — which is true of what you do
+          with one, and not true of where you go to look for it. Somebody
+          hunting for their clips looks where their recording is. */}
+      <div className="mt-10">
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+          <Scissors className="h-4 w-4" /> Clips cut for you
+        </h2>
+        <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
+          After your slot the studio reads back what was said and cuts the moments that stand on their own — vertical,
+          square and wide, with the words in a subtitle file. Nothing to request and nothing to edit.
+        </p>
+        <MyClips />
+      </div>
     </section>
   );
 }

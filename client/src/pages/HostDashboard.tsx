@@ -840,7 +840,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 ["events", "Event settings", "Your shows and times"],
                 ["integrations", "Integrations", "Your connected accounts"],
                 ["promotion", "Promotion", "Get people watching"],
-                ["recordings", "Recordings", "Yours after the show"],
+                ["recordings", "Recordings & clips", "Yours after the show"],
               ] as const
             ).map(([value, label, hint]) => {
               const active = screen === value;

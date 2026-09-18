@@ -8,7 +8,7 @@ import { MyClips } from "@/components/MyClips";
 import { apiRequest, API_BASE } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone, detectLocalTimeZone, slotStart, onAirWindow } from "@/lib/schedule";
 import type { PublicEvent } from "@shared/schema";
-import { Scissors, Users, Download, CalendarClock } from "lucide-react";
+import { Users, Download, CalendarClock, ChevronDown } from "lucide-react";
 
 // Everything that puts an audience in front of a show, in one place.
 //
@@ -33,16 +33,78 @@ interface Contact {
   createdAt: string;
 }
 
-function SectionHeading({ icon: Icon, children }: { icon: typeof Scissors; children: React.ReactNode }) {
+
+/** The people who asked to be told when this show is on. */
+function FansPanel({ contacts, open, onToggle }: { contacts: Contact[]; open: boolean; onToggle: () => void }) {
   return (
-    <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-      <Icon className="h-4 w-4" /> {children}
-    </h2>
+    <div className="rounded-2xl border border-border bg-card">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full flex-wrap items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-[#053877]/[0.04]"
+        aria-expanded={open}
+        data-testid="button-toggle-fans"
+      >
+        <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Users className="h-4 w-4 text-primary" /> Fans who asked for a reminder
+          <span className="rounded-full bg-[#053877]/10 px-2 py-0.5 text-xs font-bold text-[#053877] dark:bg-white/10 dark:text-white">
+            {contacts.length}
+          </span>
+        </span>
+        <span className="inline-flex items-center gap-1 text-sm font-medium text-primary">
+          {open ? "Hide" : "See their emails"} <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+        </span>
+      </button>
+
+      {open && (
+        <div className="border-t border-border p-5 pt-4">
+          {contacts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Nobody yet. The share card above is what starts this — everyone who taps it can ask to be told when
+              you're on.
+            </p>
+          ) : (
+            <>
+              <div className="mb-3 flex justify-end">
+                <a href={`${API_BASE}/api/host/export.csv`} data-testid="link-host-export-csv">
+                  <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
+                    <Download className="h-3.5 w-3.5" /> Export CSV
+                  </Button>
+                </a>
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs uppercase tracking-[0.08em] text-foreground">
+                      <th className="px-4 py-2.5 font-medium">Name</th>
+                      <th className="px-4 py-2.5 font-medium">Email</th>
+                      <th className="px-4 py-2.5 font-medium">Phone</th>
+                      <th className="px-4 py-2.5 font-medium">Signed up</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contacts.map((c) => (
+                      <tr key={c.id} className="border-b border-border last:border-0" data-testid={`row-contact-${c.id}`}>
+                        <td className="px-4 py-2.5 font-medium text-card-foreground">{c.name || "—"}</td>
+                        <td className="px-4 py-2.5 text-card-foreground">{c.email}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{c.phone || "—"}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{new Date(c.createdAt).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
 export function PromotionScreen({ contacts }: { contacts: Contact[] }) {
   const zone = useMemo(detectLocalTimeZone, []);
+  const [fansOpen, setFansOpen] = useState(false);
   const [eventId, setEventId] = useState<number | null>(null);
 
   const { data: entries, isLoading } = useQuery<EventEntry[]>({
@@ -114,64 +176,42 @@ export function PromotionScreen({ contacts }: { contacts: Contact[] }) {
                 podcastName={chosen.show?.showName || chosen.event.name}
                 whenLabel={whenLabel}
               />
+
+              {/* Where the share card leads. Everybody who taps it can ask to
+                  be told when this show is on, and that list is the one thing
+                  on this page that is a result rather than a task — so it is
+                  named here, next to the thing that produces it. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setFansOpen(true);
+                  window.requestAnimationFrame(() =>
+                    document.getElementById("section-fans")?.scrollIntoView({ behavior: "smooth", block: "center" }),
+                  );
+                }}
+                className="-mt-4 inline-flex w-fit items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                data-testid="link-see-fans"
+              >
+                <Users className="h-3.5 w-3.5" />
+                {contacts.length === 0
+                  ? "Nobody has asked for a reminder yet"
+                  : `${contacts.length} ${contacts.length === 1 ? "person has" : "people have"} asked for a reminder — see their emails`}
+              </button>
               <CampaignPlanner signupId={chosen.signupId!} />
             </>
           )}
         </>
       )}
 
-      {/* --------------------------------------------------------- the clips */}
-      <div>
-        <SectionHeading icon={Scissors}>Clips cut for you</SectionHeading>
-        <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
-          After your slot the studio reads back what was said and cuts the moments that stand on their own — vertical,
-          square and wide, with the words in a subtitle file. Nothing to request and nothing to edit.
-        </p>
-        <MyClips />
+      {/* ---------------------------------------------------------- the fans */}
+      {/* A list of email addresses is a thing you go and get, not a thing you
+          read on the way past. It was a permanent block under the work; it is
+          a line now, and it opens when somebody wants it — which also keeps
+          it out of the nav, where it would be a seventh tab for a table. */}
+      <div id="section-fans" className="scroll-mt-24">
+        <FansPanel contacts={contacts} open={fansOpen} onToggle={() => setFansOpen((v) => !v)} />
       </div>
 
-      {/* ------------------------------------------------------------- fans */}
-      <div>
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <SectionHeading icon={Users}>Fans who asked for a reminder ({contacts.length})</SectionHeading>
-          {contacts.length > 0 && (
-            <a href={`${API_BASE}/api/host/export.csv`} data-testid="link-host-export-csv">
-              <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
-                <Download className="h-3.5 w-3.5" /> Export CSV
-              </Button>
-            </a>
-          )}
-        </div>
-        {contacts.length === 0 ? (
-          <div className="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">
-            Nobody has asked for a reminder yet. The share card above is what starts that — every person who taps it
-            can ask to be told when you're on.
-          </div>
-        ) : (
-          <div className="overflow-x-auto rounded-xl border border-border bg-card">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs uppercase tracking-[0.08em] text-foreground">
-                  <th className="px-4 py-2.5 font-medium">Name</th>
-                  <th className="px-4 py-2.5 font-medium">Email</th>
-                  <th className="px-4 py-2.5 font-medium">Phone</th>
-                  <th className="px-4 py-2.5 font-medium">Signed up</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contacts.map((c) => (
-                  <tr key={c.id} className="border-b border-border last:border-0" data-testid={`row-contact-${c.id}`}>
-                    <td className="px-4 py-2.5 font-medium text-card-foreground">{c.name || "—"}</td>
-                    <td className="px-4 py-2.5 text-card-foreground">{c.email}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{c.phone || "—"}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{new Date(c.createdAt).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </section>
   );
 }
