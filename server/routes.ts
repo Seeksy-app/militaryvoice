@@ -2345,7 +2345,14 @@ export function registerRoutes(app: Express): void {
     });
     // Same shape as /state: one round trip per beat keeps the studio quiet on
     // the database while still moving people between rooms promptly.
-    res.json(await speakerState(found.event, found.studio, parsed.data.clientKey));
+    //
+    // `req` matters. Everything in speakerState that depends on who is asking
+    // — their slot, their artwork, whether they are crew — is read from the
+    // session on the request, and this call was omitting it. The heartbeat
+    // and the poll therefore returned different answers every few seconds,
+    // which showed up as the avatar flickering on and off and the slot
+    // appearing and vanishing.
+    res.json(await speakerState(found.event, found.studio, parsed.data.clientKey, req));
   });
 
   // A LiveKit token for one speaker. Everyone who has joined publishes, green
