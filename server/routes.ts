@@ -2052,16 +2052,12 @@ export function registerRoutes(app: Express): void {
       res.json({ scenes: [], currentSceneId: 0 });
       return;
     }
-    const rows = await storage.listScenes(found.studio.id);
+    // The same rows the producer's rail renders, so the green room shows the
+    // running order itself rather than a summary of it. Read-only by route:
+    // there is no write side here at all.
     res.json({
       currentSceneId: found.studio.currentSceneId,
-      scenes: rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        kind: r.kind,
-        startAtUtc: r.startAtUtc,
-        hasMedia: Boolean(r.mediaUrl),
-      })),
+      scenes: await storage.listScenes(found.studio.id),
     });
   });
 

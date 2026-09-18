@@ -215,7 +215,12 @@ export function ShowMaterials({
   const hasAssets = Boolean(assets && assets.length > 0);
   // Already sent something, or just said they have something to send.
   const showUploader = hasAssets ? openFiles : wantsFiles === true;
-  const [openDetails, setOpenDetails] = useState(true);
+  const [openDetails, setOpenDetails] = useState(false);
+  // Same shape as the media question above. Anyone who has already written
+  // something skips the question and sees what they wrote.
+  const hasDetails = Boolean((profile.guests ?? "") || (profile.interviewQuestions ?? "") || (profile.promoNotes ?? ""));
+  const [wantsDetails, setWantsDetails] = useState<boolean | null>(null);
+  const showDetails = hasDetails || wantsDetails === true || openDetails;
 
   return (
     <section className="mt-8 scroll-mt-24" id="section-media" data-testid="section-show-materials">
@@ -465,25 +470,67 @@ export function ShowMaterials({
 
         {/* -------------------------------------------------------- details */}
         <div className="flex flex-col gap-4 p-5">
-          <button
-            type="button"
-            className="flex w-full items-center gap-3 text-left"
-            onClick={() => setOpenDetails((v) => !v)}
-            aria-expanded={openDetails}
-            data-testid="toggle-materials-details"
-          >
-            <span className="h-8 w-1 shrink-0 rounded-full bg-[#F0A71F]" aria-hidden="true" />
-            <span className="min-w-0 flex-1">
-              <span className="block text-base font-bold leading-tight text-[#053877]">Show details</span>
-              <span className="block text-xs text-muted-foreground">What the crew reads out and plans around.</span>
-            </span>
-            {openDetails ? (
-              <ChevronDown className="h-4 w-4 shrink-0 text-[#053877]" />
-            ) : (
-              <ChevronRight className="h-4 w-4 shrink-0 text-[#053877]" />
-            )}
-          </button>
-          {openDetails && (
+          {(hasDetails || wantsDetails === true) && (
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 text-left"
+              onClick={() => setOpenDetails((v) => !v)}
+              aria-expanded={showDetails}
+              data-testid="toggle-materials-details"
+            >
+              <span className="h-8 w-1 shrink-0 rounded-full bg-[#F0A71F]" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-base font-bold leading-tight text-[#053877]">Show details</span>
+                <span className="block text-xs text-muted-foreground">What the crew reads out and plans around.</span>
+              </span>
+              {showDetails ? (
+                <ChevronDown className="h-4 w-4 shrink-0 text-[#053877]" />
+              ) : (
+                <ChevronRight className="h-4 w-4 shrink-0 text-[#053877]" />
+              )}
+            </button>
+          )}
+
+          {!hasDetails && wantsDetails !== true && (
+            <div>
+              <p className="text-[15px] font-semibold text-foreground">
+                Is there anything you want the host to mention?
+              </p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                A guest you're bringing, a launch, a cause — anything they should read out or plan around.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() => setWantsDetails(true)}
+                  data-testid="button-details-yes"
+                >
+                  Yes, there is
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={wantsDetails === false ? "default" : "outline"}
+                  className="rounded-full"
+                  onClick={() => setWantsDetails(false)}
+                  data-testid="button-details-no"
+                >
+                  No, nothing to add
+                </Button>
+              </div>
+              {wantsDetails === false && (
+                <p className="mt-3 rounded-xl border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+                  Understood — the host will introduce you from your show name and your card. Say the word any time
+                  before the day if that changes.
+                </p>
+              )}
+            </div>
+          )}
+
+          {showDetails && (
           <>
 
           {/* Only what still needs answering. A pre-recorded episode has its

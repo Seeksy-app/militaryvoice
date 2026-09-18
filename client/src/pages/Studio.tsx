@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,8 +9,9 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useStudioRoom, type RoomPeer } from "@/hooks/use-studio-room";
 import { StageGrid, type RoomMeta } from "@/components/StageView";
+import { SceneRail } from "@/components/SceneRail";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
-import type { StudioParticipantRow } from "@shared/schema";
+import type { StudioParticipantRow, SceneRow } from "@shared/schema";
 import {
   Mic,
   MicOff,
@@ -25,7 +26,8 @@ import {
   VolumeX,
   Download,
   Disc,
-  ListOrdered,
+  Lightbulb,
+  ArrowLeft,
 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -56,24 +58,17 @@ function clientKey(): string {
   }
 }
 
-interface SceneLine {
-  id: number;
-  name: string;
-  kind: string;
-  startAtUtc: string;
-  hasMedia: boolean;
-}
-
 /**
- * What's on now and what's coming, for the people in the show.
+ * The producer's own scene rail, read-only.
  *
- * Read-only by design and by route: podcasters get /api/studio/scenes, which
- * has no write side at all. Editing the running order is a producer's job and
- * lives behind the admin routes.
+ * Not a summary of it — the same component, so what a podcaster sees is what
+ * the control room sees, down to the thumbnails. Editing is a producer's job
+ * and is gated twice: readOnly here, and /api/studio/scenes having no write
+ * side to call.
  */
 function RunningOrder({ slug, studioId }: { slug?: string; studioId?: number }) {
   const zone = useMemo(detectLocalTimeZone, []);
-  const { data } = useQuery<{ scenes: SceneLine[]; currentSceneId: number }>({
+  const { data } = useQuery<{ scenes: SceneRow[]; currentSceneId: number }>({
     queryKey: ["/api/studio/scenes", slug ?? "featured", studioId ?? 0],
     queryFn: async () => {
       const q = new URLSearchParams();
@@ -84,44 +79,25 @@ function RunningOrder({ slug, studioId }: { slug?: string; studioId?: number }) 
     refetchInterval: 15_000,
   });
 
-  const scenes = data?.scenes ?? [];
-  if (scenes.length === 0) return null;
-
-  const liveIndex = scenes.findIndex((x) => x.id === data?.currentSceneId);
-  // Where we are, and a little either side. The whole rail is the producer's
-  // problem; the person waiting only needs to know they're close.
-  const from = Math.max(0, liveIndex < 0 ? 0 : liveIndex - 1);
-  const shown = scenes.slice(from, from + 8);
-
+  if (!data?.scenes?.length) return null;
   return (
-    <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-4">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-white/50">
-          <ListOrdered className="h-3.5 w-3.5 text-[#F0A71F]" /> Running order
-        </span>
-        <span className="text-[11px] text-white/35">{scenes.length} in all</span>
-      </div>
-      <ol className="flex flex-col gap-1">
-        {shown.map((x) => {
-          const on = x.id === data?.currentSceneId;
-          return (
-            <li
-              key={x.id}
-              className={`flex items-start gap-2 rounded-lg px-2 py-1.5 ${on ? "bg-[#F0A71F] text-[#1a1200]" : "text-white/70"}`}
-              data-testid={`running-order-${x.id}`}
-            >
-              <span className={`w-11 shrink-0 text-[11px] tabular-nums ${on ? "opacity-70" : "opacity-45"}`}>
-                {x.startAtUtc ? formatTimeInZone(new Date(x.startAtUtc), zone) : "—"}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-xs font-semibold">{x.name}</span>
-                {on && <span className="text-[10px] font-bold uppercase tracking-wide">On now</span>}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-      <p className="mt-2 text-[11px] text-white/35">The producer runs this — it's here so you can see it coming.</p>
+    <div className="flex max-h-[70vh] min-h-0 flex-col overflow-hidden rounded-2xl border border-white/15 bg-white/[0.04]">
+      <SceneRail
+        scenes={data.scenes}
+        currentSceneId={data.currentSceneId}
+        zone={zone}
+        runItems={[]}
+        signups={[]}
+        presentNames={[]}
+        media={[]}
+        readOnly
+        onApply={() => {}}
+        onAdd={() => {}}
+        onPatch={() => {}}
+        onDelete={() => {}}
+        onReorder={() => {}}
+        onGenerate={() => {}}
+      />
     </div>
   );
 }
@@ -346,14 +322,85 @@ export default function Studio({ slug }: { slug?: string }) {
   // you'd be talking over.
   const [listenToShow, setListenToShow] = useState(false);
 
+  /**
+   * Whether the camera and mic are actually working, proved rather than asked.
+   *
+   * "Camera on" only ever meant a track existed. A covered lens, a virtual
+   * camera with no source, a muted-at-the-OS microphone — all reported on. So
+   * the camera check waits for real frames, and the mic check waits to hear
+   * something. Both latch once proved, and neither is remembered between
+   * visits: a laptop that worked last week is not evidence about today.
+   */
+  const [camProved, setCamProved] = useState(false);
+  const [micProved, setMicProved] = useState(false);
+  /** Read off the picture: too dark to see, or blown out. */
+  const [lightHint, setLightHint] = useState<string>("");
+
+  useEffect(() => {
+    if (!stream) {
+      setCamProved(false);
+      setMicProved(false);
+      setLightHint("");
+    }
+  }, [stream]);
+
+  useEffect(() => {
+    if (micOn && level > 0.06) setMicProved(true);
+  }, [micOn, level]);
+
+  useEffect(() => {
+    if (!stream || !camOn) return;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const id = setInterval(() => {
+      const v = videoRef.current;
+      if (!v || !v.videoWidth || v.readyState < 2) return;
+      setCamProved(true);
+      if (!ctx) return;
+      // A thumbnail is plenty — this is about average brightness, not detail.
+      canvas.width = 64;
+      canvas.height = Math.max(1, Math.round((64 * v.videoHeight) / v.videoWidth));
+      ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+      let sum = 0;
+      let dark = 0;
+      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < data.length; i += 4) {
+        // Rec. 601 luma: green carries most of what the eye reads as bright.
+        const y = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        sum += y;
+        if (y < 40) dark++;
+      }
+      const px = data.length / 4;
+      const mean = sum / px;
+      const darkShare = dark / px;
+      setLightHint(
+        mean < 55
+          ? "It's dark where you are. A lamp or a window in front of you — not behind — makes the difference."
+          : mean > 205
+            ? "You're blown out. Move away from the light behind you, or turn it down."
+            : darkShare > 0.55
+              ? "Your face is lit but the room behind you is black. A light on the back wall stops you floating in the dark."
+              : "",
+      );
+    }, 2000);
+    return () => clearInterval(id);
+  }, [stream, camOn]);
+
   const onStage = state?.me?.state === "On stage";
-  const live = state?.studio.status === "Live";
+  // Standby rolling with nobody up is not a live show, whatever the flag says.
+  const showIsLive =
+    state?.studio.status === "Live" && !state?.studio.fallbackPlaying && onAirPeers.length > 0;
 
   return (
     <div className="min-h-screen bg-[#04102b] text-white">
-      <NavBar />
-
-      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+      <div className="mx-auto w-full max-w-[1800px] px-4 py-5 sm:px-6">
+        <Link
+          href="/host/dashboard"
+          className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
+          data-testid="link-back-to-dashboard"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to your dashboard
+        </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
@@ -361,14 +408,46 @@ export default function Studio({ slug }: { slug?: string }) {
             </h1>
             <p className="mt-1 text-sm text-white/60">{state?.eventName?.trim() ?? "Loading…"}</p>
           </div>
-          <Badge
-            className={`gap-1.5 px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
-              live ? "bg-[#ED1C24] text-white hover:bg-[#ED1C24]" : "bg-white/15 text-white/80 hover:bg-white/15"
-            }`}
-          >
-            <span className={`h-2 w-2 rounded-full ${live ? "animate-pulse bg-white" : "bg-white/50"}`} />
-            {live ? "On the air" : (state?.studio.status ?? "Offline")}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {/* What's true from where they're standing. The studio's own status
+                said "Live" while standby was rolling and nobody was on stage,
+                which reads as "you are being broadcast" — the one thing it must
+                never say wrongly. */}
+            <Badge
+              className={`gap-1.5 px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                onStage
+                  ? "bg-[#ED1C24] text-white hover:bg-[#ED1C24]"
+                  : showIsLive
+                    ? "bg-[#F0A71F] text-[#1a1200] hover:bg-[#F0A71F]"
+                    : "bg-white/15 text-white/80 hover:bg-white/15"
+              }`}
+              data-testid="badge-studio-air"
+            >
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  onStage ? "animate-pulse bg-white" : showIsLive ? "bg-[#1a1200]" : "bg-white/50"
+                }`}
+              />
+              {onStage ? "You're on air" : showIsLive ? "Show is live" : "Off air"}
+            </Badge>
+            {joined && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                onClick={async () => {
+                  await apiRequest("POST", "/api/studio/leave", { clientKey: key, slug, studioId }).catch(() => {});
+                  streamRef.current?.getTracks().forEach((t) => t.stop());
+                  streamRef.current = null;
+                  setStream(null);
+                  setJoined(false);
+                }}
+                data-testid="button-studio-leave"
+              >
+                <LogOut className="h-3.5 w-3.5" /> Leave
+              </Button>
+            )}
+          </div>
         </div>
 
         {!joined ? (
@@ -413,7 +492,7 @@ export default function Studio({ slug }: { slug?: string }) {
              here is about to be part of, and seeing it is how you know the
              room is real. Your own face and your own checks live together on
              the left, because they are one question — am I ready. */
-          <div className="mt-5 grid gap-5 xl:grid-cols-[300px_minmax(0,1fr)_260px]">
+          <div className="mt-5 grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
             {/* ------------------------------------------------ left: the room */}
             <div className="order-2 flex flex-col gap-4 xl:order-1">
               <div>
@@ -477,16 +556,28 @@ export default function Studio({ slug }: { slug?: string }) {
                   )}
                 </div>
 
-                <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[12px]">
-                  {([["Camera", camOn], ["Mic", micOn && level > 0.02], ["Name", !!state?.me?.displayName]] as const).map(
-                    ([label, ok]) => (
-                      <li key={label} className="flex items-center gap-1">
-                        <CheckCircle2 className={`h-3.5 w-3.5 ${ok ? "text-[#F0A71F]" : "text-white/25"}`} />
-                        <span className={ok ? "text-white/85" : "text-white/40"}>{label}</span>
-                      </li>
-                    ),
-                  )}
+                <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
+                  {(
+                    [
+                      ["Camera", camProved, camOn ? "waiting for a picture" : "turn it on"],
+                      ["Mic", micProved, micOn ? "say something" : "turn it on"],
+                      ["Name", !!state?.me?.displayName, "set it above"],
+                    ] as const
+                  ).map(([label, ok, hint]) => (
+                    <li key={label} className="flex items-center gap-1" title={ok ? `${label} working` : `${label} — ${hint}`}>
+                      <CheckCircle2 className={`h-3.5 w-3.5 ${ok ? "text-emerald-400" : "text-white/25"}`} />
+                      <span className={ok ? "text-white/85" : "text-white/40"}>{label}</span>
+                      {!ok && <span className="text-white/30">· {hint}</span>}
+                    </li>
+                  ))}
                 </ul>
+
+                {lightHint && (
+                  <p className="mt-2 flex items-start gap-2 rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/10 p-2.5 text-xs text-white/85">
+                    <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#F0A71F]" />
+                    {lightHint}
+                  </p>
+                )}
 
                 {mediaError && (
                   <p className="mt-2 flex items-start gap-2 rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/10 p-2.5 text-xs text-white/85">
@@ -510,21 +601,6 @@ export default function Studio({ slug }: { slug?: string }) {
                 </div>
               )}
 
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full gap-1.5 text-white/55 hover:text-white"
-                onClick={async () => {
-                  await apiRequest("POST", "/api/studio/leave", { clientKey: key, slug, studioId }).catch(() => {});
-                  streamRef.current?.getTracks().forEach((t) => t.stop());
-                  streamRef.current = null;
-                  setStream(null);
-                  setJoined(false);
-                }}
-                data-testid="button-studio-leave"
-              >
-                <LogOut className="h-3.5 w-3.5" /> Leave the green room
-              </Button>
             </div>
 
             {/* --------------------------------------------- centre: the studio */}

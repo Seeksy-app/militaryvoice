@@ -7,6 +7,7 @@ import {
   LogOut,
   Download,
   Radio,
+  Headphones,
   Mail,
   KeyRound,
   ArrowLeft,
@@ -1037,6 +1038,35 @@ export default function HostDashboard() {
                     {/* The website / YouTube / RSS pills lived here, but
                         "where people can listen" is a Profile settings thing
                         now and they made the card read as a link dump. */}
+
+                    {/* The green room sat in the top nav, where it competed
+                        with the public pages for attention and meant nothing to
+                        anyone without a slot. It belongs here, beside the slot
+                        it's for. */}
+                    {data.mySignups.length > 0 && (
+                      <a
+                        href={data.event.isFeatured === false && data.event.slug ? `/event/${data.event.slug}/studio` : "/studio"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-[#F0A71F] bg-[#F0A71F]/10 px-4 py-3 transition-colors hover:bg-[#F0A71F]/20"
+                        data-testid="link-dashboard-green-room"
+                      >
+                        <span className="flex min-w-0 items-center gap-3">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F0A71F] text-[#1a1200]">
+                            <Headphones className="h-4.5 w-4.5" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-semibold text-card-foreground">Enter the green room</span>
+                            <span className="block text-sm text-muted-foreground">
+                              Check your camera, mic and lighting. Open any time — worth two minutes this week.
+                            </span>
+                          </span>
+                        </span>
+                        <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-[#7a5200]">
+                          Open <ArrowRight className="h-3.5 w-3.5" />
+                        </span>
+                      </a>
+                    )}
 
                     <div className="mt-4 border-t border-border pt-4" data-testid="section-your-slot">
                       <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your slot</p>

@@ -74,6 +74,8 @@ const HERO_IMAGES = [
   "/hero-8.jpg",
   "/hero-9.jpg",
   "/hero-10.jpg",
+  "/hero-11.jpg",
+  "/hero-12.jpg",
 ];
 const HERO_ROTATE_MS = 6000;
 // Where every slot goes out live. Shown beside the hero waveform.

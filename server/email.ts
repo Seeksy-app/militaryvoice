@@ -15,6 +15,8 @@ const SITE = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai").repla
 export const EMAIL_BANNERS = {
   welcome: `${SITE}/email/welcome.jpg`,
   podcasters: `${SITE}/email/podcasters.jpg`,
+  studio: `${SITE}/email/studio.jpg`,
+  conversation: `${SITE}/email/conversation.jpg`,
 } as const;
 
 /**
@@ -746,7 +748,11 @@ function textToHtml(text: string): string {
 const BROADCAST_BANNERS: Record<string, string> = {
   welcome: `${SITE}/listeners-bg.jpg`,
   podcasters: `${SITE}/podcasters-bg.jpg`,
-  marathon: `${SITE}/hero-3.jpg`,
+  // Cropped to the 2.5:1 the header wants, rather than a hero cropped by the
+  // browser — the header is a plain <img> now, so the file's own shape is the
+  // shape people see.
+  marathon: `${SITE}/email/studio.jpg`,
+  conversation: `${SITE}/email/conversation.jpg`,
   schedule: `${SITE}/agenda-bg.jpg`,
 };
 

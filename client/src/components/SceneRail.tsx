@@ -90,6 +90,7 @@ export function SceneRail({
   presentNames,
   media,
   busy,
+  readOnly = false,
   onApply,
   onAdd,
   onPatch,
@@ -106,6 +107,8 @@ export function SceneRail({
   presentNames: string[];
   media: MediaChoice[];
   busy?: boolean;
+  /** Podcasters see the rail; only a producer changes it. */
+  readOnly?: boolean;
   onApply: (id: number) => void;
   onAdd: (spec: SceneSpec) => void;
   onPatch: (id: number, patch: Partial<SceneSpec>) => void;
@@ -131,6 +134,7 @@ export function SceneRail({
   // a scene called "Segment 3" doesn't cut the programme to scene 3.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      if (readOnly) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement | null;
       if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
@@ -144,7 +148,7 @@ export function SceneRail({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [scenes, onApply]);
+  }, [scenes, onApply, readOnly]);
 
   function move(index: number, by: number) {
     const next = [...scenes];
@@ -163,6 +167,7 @@ export function SceneRail({
           <Clapperboard className="h-3.5 w-3.5" /> Scenes
           <span className="rounded-full bg-white/10 px-2 py-0.5 text-white/80">{scenes.length}</span>
         </span>
+        {readOnly ? null : (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -200,6 +205,7 @@ export function SceneRail({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3" data-testid="scene-rail">
@@ -240,8 +246,8 @@ export function SceneRail({
             <div key={sc.id} ref={on ? liveRef : undefined} className="group relative">
               <button
                 type="button"
-                disabled={busy}
-                onClick={() => onApply(sc.id)}
+                disabled={busy || readOnly}
+                onClick={() => !readOnly && onApply(sc.id)}
                 className={`relative block w-full overflow-hidden rounded-xl border-2 text-left transition-all disabled:opacity-60 ${
                   on
                     ? "border-[#F0A71F] shadow-[0_0_0_3px_rgba(240,167,31,0.18)]"
@@ -332,7 +338,7 @@ export function SceneRail({
 
               {/* Editing controls stay out of the way until wanted — this is a
                   surface you press during a show, not one you fiddle with. */}
-              <div className="pointer-events-none absolute right-1.5 top-8 flex flex-col gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+              <div className={`pointer-events-none absolute right-1.5 top-8 flex-col gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 ${readOnly ? "hidden" : "flex"}`}>
                 <IconBtn label="Move up" onClick={() => move(i, -1)} disabled={i === 0}>
                   <ChevronUp className="h-3 w-3" />
                 </IconBtn>
@@ -353,7 +359,7 @@ export function SceneRail({
                 </IconBtn>
               </div>
 
-              {renaming === sc.id && (
+              {!readOnly && renaming === sc.id && (
                 <form
                   className="absolute inset-x-1.5 bottom-1.5 flex items-center gap-1"
                   onSubmit={(e) => {
@@ -380,7 +386,7 @@ export function SceneRail({
         })}
       </div>
 
-      <div className="border-t border-white/10 p-2.5">
+      <div className={`border-t border-white/10 p-2.5 ${readOnly ? "hidden" : ""}`}>
         <Button
           size="sm"
           className="h-9 w-full gap-1.5 rounded-full bg-[#F0A71F] text-[13px] font-bold text-[#1a1200] hover:bg-[#f7b73a]"
@@ -394,6 +400,11 @@ export function SceneRail({
         </Button>
         <p className="mt-1.5 text-center text-[10px] text-white/35">Press 1–9 to cut straight to a scene</p>
       </div>
+      {readOnly && (
+        <p className="border-t border-white/10 px-3 py-2.5 text-[11px] text-white/35">
+          The producer runs this — it's here so you can see it coming.
+        </p>
+      )}
 
       <AddMediaScene
         open={addKind === "media"}
