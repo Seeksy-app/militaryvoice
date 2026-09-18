@@ -314,3 +314,22 @@
     inset: -1px;
   }
 }
+
+/* The email body editor. Styling lives here rather than in Tailwind classes
+   because the content is contentEditable HTML the browser generates, so there
+   is nowhere to hang a class on a <ul> the user just created. */
+.rich-body p { margin: 0 0 0.85em; }
+.rich-body p:last-child { margin-bottom: 0; }
+.rich-body ul,
+.rich-body ol { margin: 0 0 0.85em; padding-left: 1.4em; }
+.rich-body ul { list-style: disc; }
+.rich-body ol { list-style: decimal; }
+.rich-body li { margin: 0 0 0.3em; }
+.rich-body strong { font-weight: 700; }
+.rich-body a { color: #053877; text-decoration: underline; }
+.dark .rich-body a { color: #8ab4f8; }
+.rich-body:empty::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+}

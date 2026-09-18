@@ -4324,7 +4324,18 @@ export function registerRoutes(app: Express): void {
   app.get("/api/admin/signups", requireAdmin, async (req, res) => {
     const eventId = req.query.eventId ? Number(req.query.eventId) : undefined;
     const rows = await storage.listSignups(eventId);
-    res.json(rows);
+    // Whether their slot also goes out on their own channel is a show-day fact
+    // the producer needs, and it lived only in each host's own dashboard —
+    // there was no way to see who had done it and who hadn't.
+    const channels = new Map(
+      (await storage.listYoutubeAccounts()).map((a) => [a.email.trim().toLowerCase(), a]),
+    );
+    res.json(
+      rows.map((r) => {
+        const yt = channels.get(r.email.trim().toLowerCase());
+        return { ...r, youtubeConnected: !!yt, youtubeChannelTitle: yt?.channelTitle ?? "" };
+      }),
+    );
   });
 
   app.patch("/api/admin/signups/:id/cancel", requireAdmin, async (req, res) => {

@@ -701,6 +701,7 @@ export interface IStorage {
   getEventShow(email: string, eventId: number): Promise<EventShowRow | undefined>;
   listEventShows(email: string): Promise<EventShowRow[]>;
   upsertEventShow(email: string, eventId: number, v: Partial<EventShowRow>): Promise<EventShowRow>;
+  listYoutubeAccounts(): Promise<YoutubeAccountRow[]>;
   getYoutubeAccount(email: string): Promise<YoutubeAccountRow | undefined>;
   upsertYoutubeAccount(email: string, v: Partial<YoutubeAccountRow> & { refreshToken: string }): Promise<YoutubeAccountRow>;
   deleteYoutubeAccount(email: string): Promise<void>;
@@ -1368,6 +1369,12 @@ class DatabaseStorage implements IStorage {
       })
       .returning();
     return row;
+  }
+
+  /** Every host who has connected a channel, for the readiness view. */
+  async listYoutubeAccounts(): Promise<YoutubeAccountRow[]> {
+    await ready();
+    return db.select().from(youtubeAccounts).orderBy(youtubeAccounts.createdAt);
   }
 
   async getYoutubeAccount(email: string): Promise<YoutubeAccountRow | undefined> {

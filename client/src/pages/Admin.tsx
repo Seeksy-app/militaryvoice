@@ -26,10 +26,11 @@ import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
 import { RiccohPosts } from "@/components/RiccohPosts";
 import { RiccohImages } from "@/components/RiccohImages";
+import { RichBody } from "@/components/RichBody";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
-import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw } from "lucide-react";
+import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube } from "lucide-react";
 import { CADENCE_STEPS, cadenceSource } from "@shared/schema";
 import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, SponsorPackageWithSold, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
@@ -729,6 +730,7 @@ function SignupsCard({ eventId }: { eventId: number }) {
   }
 
   const active = (signups ?? []).filter((s) => s.status !== "cancelled");
+  const ytConnected = active.filter((s) => (s as { youtubeConnected?: boolean }).youtubeConnected);
   const needsInterviewer = active.filter((s) => s.needsInterviewer);
   const prerecorded = active.filter((s) => s.showFormat === "prerecorded");
 
@@ -786,7 +788,21 @@ function SignupsCard({ eventId }: { eventId: number }) {
                           />
                         )}
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-medium text-card-foreground">{s.podcastName}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-sm font-medium text-card-foreground">{s.podcastName}</span>
+                            <Youtube
+                              className={`h-3.5 w-3.5 shrink-0 ${
+                                (s as { youtubeConnected?: boolean }).youtubeConnected
+                                  ? "text-[#FF0000]"
+                                  : "text-muted-foreground/25"
+                              }`}
+                              aria-label={
+                                (s as { youtubeConnected?: boolean }).youtubeConnected
+                                  ? `Streaming to ${(s as { youtubeChannelTitle?: string }).youtubeChannelTitle || "their channel"}`
+                                  : "No YouTube channel connected"
+                              }
+                            />
+                          </div>
                           <div className="truncate text-xs text-muted-foreground">{s.hostName}</div>
                         </div>
                       </div>
@@ -1192,79 +1208,6 @@ function EmailPreview({ subject, bodyText, sender, banner }: {
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * Insert the marks the email renderer understands.
- *
- * Not a rich-text editor: the body is stored as plain text on purpose, because
- * the same string has to survive being read back, edited, and re-rendered by a
- * converter that builds table-based HTML for Outlook. So these buttons write
- * the markers rather than styling a document — what you type is what gets sent.
- */
-function BodyToolbar({ value, onChange, textareaId }: {
-  value: string;
-  onChange: (v: string) => void;
-  textareaId: string;
-}) {
-  function apply(kind: "bold" | "link" | "bullets" | "numbers") {
-    const el = document.getElementById(textareaId) as HTMLTextAreaElement | null;
-    const start = el?.selectionStart ?? value.length;
-    const end = el?.selectionEnd ?? value.length;
-    const selected = value.slice(start, end);
-    let replacement = selected;
-    let caretOffset = 0;
-
-    if (kind === "bold") {
-      replacement = `**${selected || "bold text"}**`;
-      caretOffset = selected ? replacement.length : 2;
-    } else if (kind === "link") {
-      replacement = `[${selected || "link text"}](https://)`;
-      caretOffset = replacement.length - 1;
-    } else {
-      // Lists only render when every line in the block is a list line, so a
-      // selection is converted line by line and an empty one seeds three rows.
-      const marker = (i: number) => (kind === "numbers" ? `${i + 1}. ` : "- ");
-      const lines = (selected || "First point\nSecond point\nThird point").split("\n");
-      replacement = lines.map((l, i) => `${marker(i)}${l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "")}`).join("\n");
-      caretOffset = replacement.length;
-    }
-
-    const next = value.slice(0, start) + replacement + value.slice(end);
-    onChange(next);
-    window.requestAnimationFrame(() => {
-      el?.focus();
-      const pos = start + caretOffset;
-      el?.setSelectionRange(pos, pos);
-    });
-  }
-
-  const buttons: { kind: Parameters<typeof apply>[0]; label: string; hint: string }[] = [
-    { kind: "bold", label: "Bold", hint: "**bold**" },
-    { kind: "link", label: "Link", hint: "[text](https://…)" },
-    { kind: "bullets", label: "Bullets", hint: "- one per line" },
-    { kind: "numbers", label: "Numbered", hint: "1. one per line" },
-  ];
-
-  return (
-    <div className="flex flex-wrap items-center gap-1 rounded-t-md border border-b-0 border-input bg-muted/40 px-2 py-1.5">
-      {buttons.map((b) => (
-        <Button
-          key={b.kind}
-          type="button"
-          size="sm"
-          variant="ghost"
-          title={b.hint}
-          className="h-7 px-2 text-xs"
-          onClick={() => apply(b.kind)}
-          data-testid={`body-mark-${b.kind}`}
-        >
-          {b.label}
-        </Button>
-      ))}
-      <span className="ml-auto pr-1 text-[11px] text-muted-foreground">Markers are plain text — what you type is what sends</span>
     </div>
   );
 }
@@ -3854,26 +3797,19 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                 </div>
                 <div>
                   <Label className="mb-1.5 block">Body</Label>
-                  {/* The email renderer has understood bold, links and lists
-                      all along; nothing in here said so, so every email we
-                      have sent is flat text. The toolbar is mostly a way of
-                      telling people the feature exists. */}
-                  <BodyToolbar value={bBody} onChange={setBBody} textareaId="broadcast-body" />
-                  <Textarea
-                    id="broadcast-body"
-                    rows={14}
+                  {/* Edits the rendered email, stores the marker text the
+                      send path already reads — so nothing about how these go
+                      out changed, and every email already written still
+                      opens. See RichBody for the conversion both ways. */}
+                  <RichBody
                     value={bBody}
-                    onChange={(e) => setBBody(e.target.value)}
-                    className="rounded-t-none border-t-0 font-[15px]"
-                    placeholder={"Hi {{First_Name}},\n\nThe 24-Hour Military Podcast Marathon is coming up and we'd love to have you on...\n\n- Pick any 30-minute slot\n- We run the whole broadcast\n\n**Claim your slot** at [militaryvoice.ai](https://www.militaryvoice.ai)"}
+                    onChange={setBBody}
+                    placeholder="Hi {{First_Name}}, …"
                   />
                   <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    <code className="rounded bg-muted px-1 py-0.5 font-mono">{"{{First_Name}}"}</code> inserts the
-                    recipient's first name · <code className="rounded bg-muted px-1 py-0.5 font-mono">**bold**</code> ·{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 font-mono">[text](https://link)</code> ·{" "}
-                    lines starting <code className="rounded bg-muted px-1 py-0.5 font-mono">-</code> become bullets and{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 font-mono">1.</code> a numbered list, as long as every
-                    line in the block is one. Blank line between paragraphs. Unsubscribe link added automatically.
+                    Highlight text and use the toolbar, or ⌘B for bold and ⌘K for a link. Type{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 font-mono">{"{{First_Name}}"}</code> anywhere to drop
+                    in the recipient's first name. Unsubscribe link is added automatically.
                   </p>
                 </div>
                 {/* The real renderer, in an iframe. A preview built by a
