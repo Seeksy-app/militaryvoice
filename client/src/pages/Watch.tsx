@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { StageGrid, useStageRoom } from "@/components/StageView";
+import { WatchSchedule } from "@/components/WatchSchedule";
 import { apiRequest } from "@/lib/queryClient";
 import { Volume2, VolumeX, Radio, Users, CalendarDays } from "lucide-react";
 
@@ -162,6 +163,10 @@ export default function Watch({ slug }: { slug?: string }) {
           </span>
           <span>Also going out to our channels — follow along wherever you prefer.</span>
         </div>
+
+        {/* The guide is for people planning around the day; an embed is a
+            player dropped into someone else's page and has no room for it. */}
+        {!embed && <WatchSchedule slug={slug} />}
       </div>
     </div>
   );
