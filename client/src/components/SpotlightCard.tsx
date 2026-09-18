@@ -6,6 +6,7 @@ import type { PublicSignup } from "@shared/schema";
 import { Clock } from "lucide-react";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
+import { deriveSocialAccounts } from "@shared/socialLinks";
 import { formatDateInZone, formatTimeInZone } from "@/lib/schedule";
 
 /** A card-worthy podcaster: either a claimed slot (with on-air start) or a
@@ -66,7 +67,11 @@ export function SpotlightCard({ items, zone, agendaHref, intervalMs = 6000 }: Pr
   if (!current) return null;
   const signup = current;
   const start = current.start;
-  const socials = parseSocialAccounts(signup.socialAccounts);
+  const socials = deriveSocialAccounts(
+    parseSocialAccounts(signup.socialAccounts),
+    (signup as { socialLinks?: string }).socialLinks,
+    (signup as { youtubeUrl?: string }).youtubeUrl,
+  );
 
   return (
     <div

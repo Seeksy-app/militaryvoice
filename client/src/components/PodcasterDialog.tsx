@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
+import { deriveSocialAccounts, isPlainWebsite } from "@shared/socialLinks";
 import { AgendaSignupActions } from "@/components/AgendaSignupActions";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import type { PublicSignup } from "@shared/schema";
@@ -47,7 +48,14 @@ export function PodcasterDialog({ signup, onAirStart, onAirEnd, zone, shareText,
   });
 
   if (!signup) return null;
-  const socials = parseSocialAccounts(signup.socialAccounts);
+  const socials = deriveSocialAccounts(
+    parseSocialAccounts(signup.socialAccounts),
+    signup.socialLinks,
+    signup.youtubeUrl,
+  );
+  // A pasted Instagram link is now an Instagram button, so showing it again as
+  // a generic globe beside it is the same link twice.
+  const showWebsite = !!signup.socialLinks && isPlainWebsite(signup.socialLinks);
   const hasLinks = !!(signup.socialLinks || signup.rssUrl || signup.youtubeUrl);
 
   return (
@@ -143,7 +151,7 @@ export function PodcasterDialog({ signup, onAirStart, onAirEnd, zone, shareText,
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Follow the show</div>
               <SocialIconRow accounts={socials} size="md" variant="filled" />
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {signup.socialLinks && (
+                {showWebsite && (
                   <a
                     href={toHref(signup.socialLinks)}
                     target="_blank"
@@ -154,7 +162,7 @@ export function PodcasterDialog({ signup, onAirStart, onAirEnd, zone, shareText,
                     <span className="truncate">{linkLabel(signup.socialLinks)}</span>
                   </a>
                 )}
-                {signup.youtubeUrl && (
+                {signup.youtubeUrl && !socials.some((a) => a.platform === "youtube") && (
                   <a
                     href={toHref(signup.youtubeUrl)}
                     target="_blank"

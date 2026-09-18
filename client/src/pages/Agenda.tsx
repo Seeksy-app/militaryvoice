@@ -5,6 +5,7 @@ import { NavBar } from "@/components/NavBar";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { AgendaSignupActions } from "@/components/AgendaSignupActions";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
+import { deriveSocialAccounts } from "@shared/socialLinks";
 import { PodcasterDialog } from "@/components/PodcasterDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Mic2, ArrowRight, CalendarDays, Radio, Play, Check } from "lucide-react";
@@ -325,7 +326,17 @@ export default function Agenda({ slug }: Props) {
                         </button>
 
                         <div className="mt-auto flex flex-col gap-3 px-4 pb-4">
-                          <SocialIconRow accounts={parseSocialAccounts(signup.socialAccounts)} />
+                          {/* Connected accounts plus anything placeable from the links they
+                              pasted at signup — only five of eighteen shows have
+                              connected, so reading connected-only left most cards
+                              with no follow buttons while the profile showed them. */}
+                          <SocialIconRow
+                            accounts={deriveSocialAccounts(
+                              parseSocialAccounts(signup.socialAccounts),
+                              signup.socialLinks,
+                              signup.youtubeUrl,
+                            )}
+                          />
                           {onAir && (
                             <div className="text-xs text-muted-foreground" data-testid={`text-agenda-onair-${s.index}`}>
                               On air {formatTimeInZone(onAir.start, viewZone)}–{formatTimeInZone(onAir.end, viewZone)}

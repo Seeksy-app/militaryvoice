@@ -46,6 +46,7 @@ import {
 } from "../shared/schema.js";
 import { isLiveOnlySlot, LIVE_ONLY_LABEL } from "../shared/slots.js";
 import { isConfigured as isInfluencersConfigured, credits, enrichHandle } from "./influencers.js";
+import { deriveSocialAccounts } from "../shared/socialLinks.js";
 import { buildAudienceSnapshot, readAudienceSnapshot, saveAudienceSnapshot, AUDIENCE_WINDOW_DAYS } from "./audience.js";
 import { fromError } from "zod-validation-error";
 import { z } from "zod";
@@ -808,8 +809,8 @@ export function registerRoutes(app: Express): void {
       res.status(502).json({ message: (err as Error).message });
     }
   };
-  app.get("/api/cron/audience", audienceRefreshHandler);
-  app.post("/api/cron/audience", audienceRefreshHandler);
+  app.get("/api/cron/reach", audienceRefreshHandler);
+  app.post("/api/cron/reach", audienceRefreshHandler);
 
   // ---- A podcaster's own share link -------------------------------------------
   //      /s/:id unfurls with their artwork and their time, then sends the
@@ -3322,16 +3323,48 @@ export function registerRoutes(app: Express): void {
   //      only when somebody asks — every successful result costs a credit.
 
   /** Every connected account we could enrich, from the Upload-Post snapshot. */
-  async function connectedHandles(): Promise<{ email: string; platform: string; handle: string; consented: boolean }[]> {
+  /**
+   * Every handle we could enrich, connected or not.
+   *
+   * Upload-Post only knows about the five podcasters who went through its
+   * connect flow. The other thirteen pasted a profile link at signup, and
+   * those links carry a real platform and a real handle — which is exactly
+   * what influencers.club takes. `source` says which is which, because a
+   * derived handle is a guess from a typed URL and a connected one is not.
+   */
+  async function connectedHandles(): Promise<
+    { email: string; platform: string; handle: string; consented: boolean; source: "connected" | "link" }[]
+  > {
     const profiles = await storage.listCompleteProfiles();
-    const out: { email: string; platform: string; handle: string; consented: boolean }[] = [];
+    const signups = await storage.listSignups((await storage.getFeaturedEvent()).id);
+    const linksByEmail = new Map<string, { socialLinks: string; youtubeUrl: string }>();
+    for (const sg of signups) {
+      if (sg.status === "cancelled") continue;
+      linksByEmail.set(sg.email.trim().toLowerCase(), {
+        socialLinks: sg.socialLinks ?? "",
+        youtubeUrl: sg.youtubeUrl ?? "",
+      });
+    }
+
+    const out: { email: string; platform: string; handle: string; consented: boolean; source: "connected" | "link" }[] = [];
     for (const p of profiles) {
-      for (const a of parseSocialAccounts(p.socialAccounts)) {
+      const connected = parseSocialAccounts(p.socialAccounts);
+      const seen = new Set<string>();
+      for (const a of connected) {
         const handle = String((a as { username?: string }).username ?? "").trim();
         // Facebook hands back a numeric page id, which is not a handle and
         // enriches to nothing. Skip rather than spend a credit finding out.
         if (!handle || /^\d+$/.test(handle)) continue;
-        out.push({ email: p.email, platform: String(a.platform), handle, consented: p.shareAudienceStats });
+        seen.add(String(a.platform));
+        out.push({ email: p.email, platform: String(a.platform), handle, consented: p.shareAudienceStats, source: "connected" });
+      }
+
+      const typed = linksByEmail.get(p.email.trim().toLowerCase())
+        ?? { socialLinks: p.socialLinks ?? "", youtubeUrl: p.youtubeUrl ?? "" };
+      for (const a of deriveSocialAccounts([], typed.socialLinks, typed.youtubeUrl)) {
+        if (seen.has(a.platform) || !a.username || /^\d+$/.test(a.username)) continue;
+        seen.add(a.platform);
+        out.push({ email: p.email, platform: a.platform, handle: a.username, consented: p.shareAudienceStats, source: "link" });
       }
     }
     return out;
@@ -3726,7 +3759,12 @@ export function registerRoutes(app: Express): void {
     res.json(snap);
   });
 
-  app.post("/api/admin/audience/refresh", requireAdmin, async (req, res) => {
+  // "reach", not "audience": /api/admin/audience was already taken by the
+  // influencers.club panel further up this file, and Express answers with the
+  // first route that matches. Registering these second meant the sponsor-page
+  // Refresh button was quietly calling influencers.club and spending a credit
+  // per handle, while its GET returned a shape the panel could not read.
+  app.post("/api/admin/reach/refresh", requireAdmin, async (req, res) => {
     try {
       const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent())?.id;
       const snap = await buildAudienceSnapshot(eventId);
@@ -3737,7 +3775,8 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/admin/audience", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/reach", requireAdmin, async (_req, res) => {
+    noStore(res);
     res.json({ snapshot: await readAudienceSnapshot(), windowDays: AUDIENCE_WINDOW_DAYS });
   });
 

@@ -41,7 +41,7 @@
       "schedule": "0 * * * *"
     },
     {
-      "path": "/api/cron/audience",
+      "path": "/api/cron/reach",
       "schedule": "20 6 * * *"
     }
   ]

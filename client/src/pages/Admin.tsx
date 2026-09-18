@@ -1342,17 +1342,17 @@ function AudienceSnapshotPanel({ eventId }: { eventId: number }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const { data } = useQuery<{ snapshot: AudienceSnapshot | null; windowDays: number }>({
-    queryKey: ["/api/admin/audience"],
-    queryFn: () => adminGet<{ snapshot: AudienceSnapshot | null; windowDays: number }>("/api/admin/audience"),
+    queryKey: ["/api/admin/reach"],
+    queryFn: () => adminGet<{ snapshot: AudienceSnapshot | null; windowDays: number }>("/api/admin/reach"),
   });
   const snap = data?.snapshot ?? null;
 
   async function refreshNow() {
     setBusy(true);
     try {
-      const res = await adminSend("POST", "/api/admin/audience/refresh", { eventId });
+      const res = await adminSend("POST", "/api/admin/reach/refresh", { eventId });
       const next = (await res.json()) as AudienceSnapshot;
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/audience"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/reach"] });
       queryClient.invalidateQueries({ queryKey: ["/api/audience/summary"] });
       toast({
         title: `${next.followers.toLocaleString()} combined following`,

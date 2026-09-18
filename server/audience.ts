@@ -191,6 +191,10 @@ export async function buildAudienceSnapshot(eventId?: number): Promise<AudienceS
   }
 
   const byPlatform = new Map<string, PlatformTotal>();
+  // What Upload-Post has already answered for, so the influencers.club pass
+  // below can fill gaps without counting the same channel twice.
+  const countedByEmail = new Map<string, Set<string>>();
+  const countedShows = new Set<string>();
   let shows = 0;
   let channels = 0;
   let followers = 0;
@@ -246,6 +250,10 @@ export async function buildAudienceSnapshot(eventId?: number): Promise<AudienceS
       }
       counted += 1;
       channels += 1;
+      const key = profile.email.trim().toLowerCase();
+      if (!countedByEmail.has(key)) countedByEmail.set(key, new Set());
+      countedByEmail.get(key)!.add(platform);
+      countedShows.add(key);
       followers += figures.followers;
       reach += figures.reach;
       impressions += figures.impressions;
@@ -256,6 +264,37 @@ export async function buildAudienceSnapshot(eventId?: number): Promise<AudienceS
       byPlatform.set(platform, row);
     }
     if (counted > 0) shows += 1;
+  }
+
+  // ---------------------------------------------------------------------
+  // The shows that never connected
+  //
+  // Upload-Post can only speak for the handful who went through its connect
+  // flow. Everyone else pasted a profile link at signup, and where an admin
+  // has spent an influencers.club credit on one of those handles we hold a
+  // real follower count for it. Folding those in is the difference between a
+  // figure covering five shows and one covering the lineup — and some of the
+  // biggest followings on the board belong to hosts who never connected.
+  //
+  // Only followers are taken. influencers.club reports engagement over its own
+  // window on its own definitions, and adding that to Upload-Post's 30 days
+  // would produce a number describing neither.
+  for (const m of await storage.listSocialMetrics()) {
+    if (m.error || m.followers <= 0 || m.followers > MAX_FOLLOWERS) continue;
+    const key = m.email.trim().toLowerCase();
+    // Never double-count a platform Upload-Post already answered for.
+    if (countedByEmail.get(key)?.has(m.platform)) continue;
+    (countedByEmail.get(key) ?? countedByEmail.set(key, new Set()).get(key)!).add(m.platform);
+    if (!countedShows.has(key)) {
+      countedShows.add(key);
+      shows += 1;
+    }
+    channels += 1;
+    followers += m.followers;
+    const row = byPlatform.get(m.platform) ?? { platform: m.platform, channels: 0, followers: 0 };
+    row.channels += 1;
+    row.followers += m.followers;
+    byPlatform.set(m.platform, row);
   }
 
   return {
