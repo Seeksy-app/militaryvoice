@@ -1,17 +1,36 @@
-// Audience figures for the accounts podcasters have connected.
+// Audience figures for accounts a podcaster has *not* connected to us.
 //
-// influencers.club enriches a handle into followers, engagement and audience
-// makeup. Two things shape how this is written:
+// Upload-Post can only speak for the handful who went through its connect
+// flow. For everyone else we have a profile link they typed at signup, which
+// shared/socialLinks.ts turns into a platform and a handle — and that pair is
+// exactly what this provider takes.
 //
-//   1. Their response schema is not published. So nothing here assumes a field
-//      name — each number is read from a list of plausible paths, and the
-//      untouched response is stored alongside. When the real shape is known
-//      from one live call, the readers get corrected and the stored raw rows
-//      can be re-read without spending another credit.
-//   2. Credits are consumed per successful result. Nothing calls this on a
-//      schedule; a person asks for it, and asks for one handle or all of them.
+// Two things shape how this is written:
+//
+//   1. **One call answers for every platform.** The profile endpoint is asked
+//      about one handle and returns a block per network it can match that
+//      creator to, so asking about a YouTube handle can come back with their
+//      Instagram and TikTok as well. Reading only the platform we asked about
+//      would throw most of what we paid for away.
+//   2. **Credits are consumed per successful result** (0.2 each, nothing when
+//      there's no data). Nothing calls this on a schedule; a person asks for
+//      it, for one handle or all of them.
+//
+// The response's nested per-platform shapes are not fully documented, so each
+// number is read from a list of plausible keys and the untouched response is
+// stored alongside — the readers can then be corrected without spending again.
 
-const BASE = "https://api-dashboard.influencers.club";
+const BASE = "https://api-dashboard.influencers.club/public/v1";
+
+/** Platforms the profile endpoint accepts. Ours that it doesn't: threads. */
+const SUPPORTED = new Set(["instagram", "youtube", "tiktok", "twitter", "facebook", "linkedin", "pinterest", "snapchat", "twitch", "discord", "onlyfans"]);
+
+/** Our platform names to theirs. */
+function providerPlatform(p: string): string | null {
+  const v = p.toLowerCase();
+  if (v === "x") return "twitter";
+  return SUPPORTED.has(v) ? v : null;
+}
 
 export function isConfigured(): boolean {
   return Boolean((process.env.INFLUENCER_CLUB_API_KEY || "").trim());
@@ -33,7 +52,14 @@ async function call(path: string, init: RequestInit = {}): Promise<unknown> {
     },
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`influencers.club ${path} → ${res.status} ${text.slice(0, 300)}`);
+  if (!res.ok) {
+    // A 403 that answers in HTML is their web app, not their API — almost
+    // always a wrong path rather than a wrong key, and worth saying so because
+    // the two have very different fixes.
+    const htmlish = text.trimStart().startsWith("<");
+    const detail = htmlish ? "(HTML response — check the path, not the key)" : text.slice(0, 300);
+    throw new Error(`influencers.club ${path} → ${res.status} ${detail}`);
+  }
   try {
     return JSON.parse(text);
   } catch {
@@ -43,7 +69,7 @@ async function call(path: string, init: RequestInit = {}): Promise<unknown> {
 
 /** How many credits are left, so a refresh can say what it will cost first. */
 export async function credits(): Promise<unknown> {
-  return call("/account-credits-and-usage", { method: "GET" });
+  return call("/account/credits", { method: "GET" });
 }
 
 // ---------------------------------------------------------------------------
@@ -100,45 +126,71 @@ export interface Metrics {
   raw: unknown;
 }
 
+/** One platform's figures out of a profile response. */
+export interface PlatformMetrics extends Metrics {
+  platform: string;
+  handle: string;
+}
+
+const FOLLOWER_KEYS = [
+  "followers", "follower_count", "followers_count", "subscribers", "subscriber_count",
+  "subscribers_count", "fans", "connections", "edge_followed_by",
+];
+
+/** Read one platform block out of `result`. Null when there's nothing usable. */
+function readPlatform(platform: string, block: unknown): Omit<PlatformMetrics, "raw"> | null {
+  if (!block || typeof block !== "object") return null;
+  const followers = num(block, FOLLOWER_KEYS);
+  const handle =
+    (typeof (block as Record<string, unknown>).handle === "string" && (block as Record<string, string>).handle) ||
+    (typeof (block as Record<string, unknown>).username === "string" && (block as Record<string, string>).username) ||
+    "";
+  const engagementRate = ratio(block, ["engagement_rate", "engagementRate", "engagement", "er"]);
+  const avgViews = num(block, ["average_views", "avg_views", "avgViews", "median_views"]);
+  const avgLikes = num(block, ["average_likes", "avg_likes", "avgLikes", "median_likes"]);
+  const credibility = ratio(block, ["credibility", "audience_credibility", "follower_credibility", "real_followers"]);
+  const audience = firstObject(block, ["audience", "demographics", "audience_demographics"]);
+  if (followers === 0 && !engagementRate && avgViews === 0 && avgLikes === 0) return null;
+  return { platform, handle: String(handle).replace(/^@/, ""), followers, engagementRate, avgViews, avgLikes, credibility, audience };
+}
+
 /**
- * Pull one handle. Field paths are ordered most-to-least likely; every one of
- * them is a guess until a real response is seen, which is why `raw` is kept.
+ * Enrich one handle, and keep every platform the answer contains.
+ *
+ * Asking about a YouTube channel routinely comes back with the same creator's
+ * Instagram and TikTok too. Those are already paid for by the one request, so
+ * they are returned rather than discarded — which for a lineup where most
+ * hosts only pasted a single link is most of the value.
  */
-export async function enrichHandle(platform: string, handle: string): Promise<Metrics> {
+export async function enrichHandle(platform: string, handle: string): Promise<Metrics & { platforms: PlatformMetrics[] }> {
   const clean = handle.trim().replace(/^@/, "");
-  const raw = await call("/enrich-by-handle/analytics", {
+  const wanted = providerPlatform(platform);
+  if (!wanted) throw new Error(`influencers.club does not cover ${platform}.`);
+
+  const raw = await call("/creators/enrich/handle/profile/", {
     method: "POST",
-    body: JSON.stringify({ platform: platform.toLowerCase(), handle: clean, username: clean }),
+    body: JSON.stringify({ handle: clean, platform: wanted, email_required: "preferred" }),
   });
 
+  const result = (raw as { result?: Record<string, unknown> })?.result ?? {};
+  const platforms: PlatformMetrics[] = [];
+  for (const [name, block] of Object.entries(result)) {
+    const read = readPlatform(name === "twitter" ? "x" : name, block);
+    if (read) platforms.push({ ...read, handle: read.handle || clean, raw: block });
+  }
+
+  // The platform actually asked about leads, so a caller that only wants one
+  // number gets the one it asked for.
+  const primary = platforms.find((p) => p.platform === (platform === "x" ? "x" : platform.toLowerCase())) ?? platforms[0];
   return {
-    followers: num(raw, [
-      "followers",
-      "data.followers",
-      "profile.followers",
-      "data.profile.followers",
-      "analytics.followers",
-      "followerCount",
-      "data.follower_count",
-    ]),
-    engagementRate: ratio(raw, [
-      "engagementRate",
-      "engagement_rate",
-      "data.engagement_rate",
-      "analytics.engagement_rate",
-      "data.analytics.engagement_rate",
-    ]),
-    avgViews: num(raw, ["avgViews", "average_views", "data.average_views", "analytics.average_views"]),
-    avgLikes: num(raw, ["avgLikes", "average_likes", "data.average_likes", "analytics.average_likes"]),
-    credibility: ratio(raw, [
-      "credibility",
-      "audience.credibility",
-      "data.audience.credibility",
-      "analytics.audience.credibility",
-      "follower_credibility",
-    ]),
-    audience: firstObject(raw, ["audience", "data.audience", "analytics.audience", "data.analytics.audience"]),
+    followers: primary?.followers ?? 0,
+    engagementRate: primary?.engagementRate ?? "",
+    avgViews: primary?.avgViews ?? 0,
+    avgLikes: primary?.avgLikes ?? 0,
+    credibility: primary?.credibility ?? "",
+    audience: primary?.audience ?? null,
     raw,
+    platforms,
   };
 }
 

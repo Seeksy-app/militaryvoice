@@ -3393,7 +3393,16 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const only = String(req.body?.handle ?? "").trim().toLowerCase();
-    const wanted = (await connectedHandles()).filter((h) => !only || h.handle.toLowerCase() === only);
+    const all = await connectedHandles();
+    // Already answered for, unless this is a deliberate single-handle retry.
+    const held = new Set(
+      (await storage.listSocialMetrics())
+        .filter((m) => !m.error && m.followers > 0)
+        .map((m) => `${m.email.toLowerCase()}|${m.platform}`),
+    );
+    const wanted = all.filter((h) =>
+      only ? h.handle.toLowerCase() === only : !held.has(`${h.email.toLowerCase()}|${h.platform}`),
+    );
     if (wanted.length === 0) {
       res.status(400).json({ message: only ? "No connected account with that handle." : "No connected accounts to read." });
       return;
@@ -3404,22 +3413,30 @@ export function registerRoutes(app: Express): void {
     for (const h of wanted) {
       try {
         const m = await enrichHandle(h.platform, h.handle);
-        await storage.upsertSocialMetric({
-          email: h.email,
-          platform: h.platform,
-          handle: h.handle,
-          followers: m.followers,
-          engagementRate: m.engagementRate,
-          avgViews: m.avgViews,
-          avgLikes: m.avgLikes,
-          credibility: m.credibility,
-          audience: m.audience ? JSON.stringify(m.audience).slice(0, 20000) : "",
-          // Kept so the readers can be corrected without spending again.
-          raw: JSON.stringify(m.raw).slice(0, 60000),
-          error: "",
-          fetchedAt: now,
-        });
-        done.push({ handle: h.handle, platform: h.platform, followers: m.followers, error: "" });
+        // One request answers for every network they could match this creator
+        // to, and we have already paid for all of it — so all of it is stored,
+        // not just the platform whose handle we happened to have.
+        const rows = m.platforms.length
+          ? m.platforms
+          : [{ platform: h.platform, handle: h.handle, followers: m.followers, engagementRate: m.engagementRate, avgViews: m.avgViews, avgLikes: m.avgLikes, credibility: m.credibility, audience: m.audience, raw: m.raw }];
+        for (const r of rows) {
+          await storage.upsertSocialMetric({
+            email: h.email,
+            platform: r.platform,
+            handle: r.handle || h.handle,
+            followers: r.followers,
+            engagementRate: r.engagementRate,
+            avgViews: r.avgViews,
+            avgLikes: r.avgLikes,
+            credibility: r.credibility,
+            audience: r.audience ? JSON.stringify(r.audience).slice(0, 20000) : "",
+            // Kept so the readers can be corrected without spending again.
+            raw: JSON.stringify(r.raw).slice(0, 60000),
+            error: "",
+            fetchedAt: now,
+          });
+        }
+        done.push({ handle: h.handle, platform: rows.map((r) => `${r.platform}:${r.followers}`).join(" "), followers: m.followers, error: "" });
       } catch (err) {
         const message = (err as Error).message.slice(0, 400);
         await storage.upsertSocialMetric({
