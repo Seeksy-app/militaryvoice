@@ -32,7 +32,10 @@ const run = promisify(execFile);
 const W = 1920;
 const H = 1080;
 const PER_PANEL = 9;
-const PANEL_SECONDS = 7;
+// Three bars of the bed per panel, so the loop point lands on a downbeat
+// instead of halfway through a chord. See scripts/jazz-bed.ts for the tempo.
+const BAR_SECONDS = (60 / 92) * 4;
+const PANEL_SECONDS = BAR_SECONDS * 3;
 const FADE = 1.2;
 const NAVY = "#000741";
 const GOLD = "#F0A71F";
@@ -209,29 +212,20 @@ const musicFile = musicArg > -1 ? process.argv[musicArg + 1] : "";
 
 const totalSeconds = panels.length * PANEL_SECONDS;
 
-/**
- * An A-minor pad: root, fifth, octave, and two quiet upper partials, each on
- * its own slow tremolo so they drift against each other instead of sitting
- * still as a hum. Lowpassed to take the edge off, then loudness-normalised —
- * the first version of this peaked at -37 dBFS, which is not quiet, it is
- * inaudible, and a standby card that looks like it has sound and doesn't is
- * worse than one that plainly doesn't.
- */
-const PAD = [
-  { hz: 110.0, gain: 0.5, lfo: 0.13 },   // A2
-  { hz: 164.81, gain: 0.34, lfo: 0.17 }, // E3
-  { hz: 220.0, gain: 0.26, lfo: 0.11 },  // A3
-  { hz: 329.63, gain: 0.12, lfo: 0.23 }, // E4
-  { hz: 440.0, gain: 0.05, lfo: 0.19 },  // A4, just for air
-];
-const padFilter =
-  PAD.map((v, i) => `sine=frequency=${v.hz}:sample_rate=48000,volume=${v.gain},tremolo=f=${v.lfo}:d=0.6[p${i}]`).join(";") +
-  `;${PAD.map((_, i) => `[p${i}]`).join("")}amix=inputs=${PAD.length}:normalize=0,` +
-  `lowpass=f=1400,loudnorm=I=-23:TP=-3:LRA=7`;
-
-const audio = musicFile
-  ? ["-stream_loop", "-1", "-i", musicFile]
-  : ["-f", "lavfi", "-i", padFilter];
+// Stacked sine waves with a tremolo on them is a hum, not music, which is
+// what the first version of this was. The bed is now generated as actual
+// audio — a ii–V–I–vi turnaround with a walking bass and brushes — by
+// scripts/jazz-bed.ts. Still a stand-in for a licensed cue, which --music
+// takes instead and should carry on the day.
+let audio: string[];
+if (musicFile) {
+  audio = ["-stream_loop", "-1", "-i", musicFile];
+} else {
+  const { renderJazz } = await import("./jazz-bed.js");
+  const bedPath = path.join(outDir, "bed.wav");
+  await fs.writeFile(bedPath, renderJazz(panels.length * PANEL_SECONDS + 1));
+  audio = ["-i", bedPath];
+}
 
 // Each panel holds, then cross-dissolves into the next; the last dissolves
 // back to the first so the loop has no seam.
@@ -263,7 +257,9 @@ const args = [
   "-t", String(totalSeconds),
   "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "medium", "-crf", "21",
   "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
-  "-af", `afade=t=in:st=0:d=1.5,afade=t=out:st=${totalSeconds - 1.5}:d=1.5`,
+  // Normalise whatever the bed is — generated or supplied — so a licensed cue
+  // dropped in with --music does not arrive twice as loud as the stand-in.
+  "-af", `loudnorm=I=-23:TP=-3:LRA=9,afade=t=in:st=0:d=1.2,afade=t=out:st=${Math.max(0, totalSeconds - 1.5)}:d=1.5`,
   "-movflags", "+faststart",
   out,
 ];
