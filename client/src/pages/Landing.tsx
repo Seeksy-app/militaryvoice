@@ -934,6 +934,9 @@ export default function Landing({ slug }: Props) {
               <Link href="/faq" className="hover:text-foreground">
                 FAQ
               </Link>
+              <Link href="/watchfloor" className="hover:text-foreground">
+                Studio
+              </Link>
               <Link href="/sponsor" className="hover:text-foreground">
                 Sponsor
               </Link>

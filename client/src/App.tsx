@@ -17,6 +17,7 @@ import Landing from "@/pages/Landing";
 import Faq from "@/pages/Faq";
 import Prepare from "@/pages/Prepare";
 import Platform from "@/pages/Platform";
+import Watchfloor from "@/pages/Watchfloor";
 import EventAbout from "@/pages/EventAbout";
 import Studio from "@/pages/Studio";
 import StudioComposite from "@/pages/StudioComposite";
@@ -77,6 +78,8 @@ function AppRouter() {
       <Route path="/terms">{() => <TermsOfService />}</Route>
       <Route path="/prepare">{() => <Prepare />}</Route>
       <Route path="/platform">{() => <Platform />}</Route>
+      <Route path="/watchfloor">{() => <Watchfloor />}</Route>
+      <Route path="/studio-platform">{() => <Watchfloor />}</Route>
       <Route path="/about">{() => <EventAbout />}</Route>
       <Route path="/event/:slug/about">{(params) => <EventAbout slug={params.slug} />}</Route>
       <Route path="/studio/composite">{() => <StudioComposite />}</Route>
