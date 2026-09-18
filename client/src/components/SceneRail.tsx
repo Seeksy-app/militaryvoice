@@ -33,6 +33,7 @@ import {
   ListOrdered,
   Clapperboard,
   Check,
+  Captions,
   ArrowRight,
 } from "lucide-react";
 
@@ -54,6 +55,9 @@ export interface SceneSpec {
   /** Set when the scene came from an agenda row, so taking it takes the row. */
   startAtUtc?: string;
   runItemId?: number;
+  /** The lower third this scene puts on air when it is taken. */
+  bannerTitle?: string;
+  bannerSubtitle?: string;
 }
 
 export interface MediaChoice {
@@ -124,6 +128,8 @@ export function SceneRail({
   const [addKind, setAddKind] = useState<null | "media" | "countdown">(null);
   const [agendaOpen, setAgendaOpen] = useState(false);
   const [renaming, setRenaming] = useState<number | null>(null);
+  const [bannering, setBannering] = useState<number | null>(null);
+  const [bannerDraft, setBannerDraft] = useState({ title: "", sub: "" });
   const [draft, setDraft] = useState("");
   const liveRef = useRef<HTMLDivElement | null>(null);
 
@@ -347,6 +353,17 @@ export function SceneRail({
                       On air
                     </span>
                   )}
+                  {/* This scene brings a name bar with it. Worth knowing at a
+                      glance, because taking it changes what is on screen
+                      beyond the picture. */}
+                  {sc.bannerTitle && !on && (
+                    <span
+                      className="absolute right-1.5 top-1.5 rounded bg-black/55 p-1 text-white/75"
+                      title={`Lower third: ${sc.bannerTitle}`}
+                    >
+                      <Captions className="h-3 w-3" />
+                    </span>
+                  )}
 
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-2 pb-1.5 pt-6">
                     <div className="flex items-end gap-1.5">
@@ -415,6 +432,15 @@ export function SceneRail({
                 >
                   <Pencil className="h-3 w-3" />
                 </IconBtn>
+                <IconBtn
+                  label={sc.bannerTitle ? "Edit the lower third" : "Add a lower third"}
+                  onClick={() => {
+                    setBannering(sc.id);
+                    setBannerDraft({ title: sc.bannerTitle ?? "", sub: sc.bannerSubtitle ?? "" });
+                  }}
+                >
+                  <Captions className="h-3 w-3" />
+                </IconBtn>
                 <IconBtn label="Remove scene" onClick={() => onDelete(sc.id)}>
                   <X className="h-3 w-3" />
                 </IconBtn>
@@ -440,6 +466,54 @@ export function SceneRail({
                   <button type="submit" className="rounded-md bg-[#F0A71F] p-1.5 text-[#1a1200]" aria-label="Save name">
                     <Check className="h-3 w-3" />
                   </button>
+                </form>
+              )}
+
+              {/* The name bar this scene carries. It lives on the card rather
+                  than in a panel of its own because that is the whole point:
+                  taking the scene puts it up, so it has to be edited where the
+                  scene is. */}
+              {!readOnly && bannering === sc.id && (
+                <form
+                  className="absolute inset-x-1.5 bottom-1.5 flex flex-col gap-1 rounded-lg bg-[#04102b]/95 p-1.5 ring-1 ring-white/20"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    onPatch(sc.id, {
+                      bannerTitle: bannerDraft.title.trim(),
+                      bannerSubtitle: bannerDraft.title.trim() ? bannerDraft.sub.trim() : "",
+                    });
+                    setBannering(null);
+                  }}
+                >
+                  <input
+                    autoFocus
+                    maxLength={80}
+                    placeholder="Name on air"
+                    className="h-7 w-full rounded-md border border-white/20 bg-[#000741] px-2 text-xs text-white placeholder:text-white/30"
+                    value={bannerDraft.title}
+                    onChange={(e) => setBannerDraft((d) => ({ ...d, title: e.target.value }))}
+                    onKeyDown={(e) => e.key === "Escape" && setBannering(null)}
+                    data-testid={`input-scene-banner-${sc.id}`}
+                  />
+                  <div className="flex items-center gap-1">
+                    <input
+                      maxLength={120}
+                      placeholder="Underneath"
+                      className="h-7 min-w-0 flex-1 rounded-md border border-white/20 bg-[#000741] px-2 text-xs text-white placeholder:text-white/30"
+                      value={bannerDraft.sub}
+                      onChange={(e) => setBannerDraft((d) => ({ ...d, sub: e.target.value }))}
+                      onKeyDown={(e) => e.key === "Escape" && setBannering(null)}
+                      data-testid={`input-scene-banner-sub-${sc.id}`}
+                    />
+                    <button
+                      type="submit"
+                      className="shrink-0 rounded-md bg-[#F0A71F] p-1.5 text-[#1a1200]"
+                      aria-label="Save the lower third"
+                    >
+                      <Check className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <p className="text-[10px] leading-tight text-white/35">Leave the name empty for no lower third.</p>
                 </form>
               )}
             </div>

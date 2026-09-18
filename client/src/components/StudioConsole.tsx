@@ -28,6 +28,7 @@ import { Destinations } from "@/components/Destinations";
 import { StageGrid, youtubeId, clockText, type StageTile } from "@/components/StageView";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
 import { SceneRail, type SceneSpec } from "@/components/SceneRail";
+import { StudioRail } from "@/components/StudioRail";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { STUDIO_STATUSES, LOGO_CORNERS, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow, type SceneRow } from "@shared/schema";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
@@ -656,6 +657,13 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     mutationFn: async () => adminSend("POST", "/api/admin/studio/countdown/clear", { studioId }),
     onSuccess: () => refresh(),
   });
+
+  // The lower third the scene on air carries, shown in the rail so a producer
+  // can see where the name bar came from before they overwrite it.
+  const currentSceneBanner = useMemo(() => {
+    const sc = (scenes ?? []).find((x) => x.id === studio?.currentSceneId);
+    return sc?.bannerTitle ? { name: sc.name, title: sc.bannerTitle } : null;
+  }, [scenes, studio?.currentSceneId]);
 
   // The uploads podcasters already sent us, offered when building a media scene.
   const { data: mediaItems } = useQuery<MediaItem[]>({
@@ -1602,6 +1610,21 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               )}
             </div>
 
+            {/* The graphics rail. It takes its width out of the stage rather
+                than floating over it, so the picture the producer is judging
+                is never partly covered by the panel they opened to change it. */}
+            <StudioRail
+              studio={studio ?? null}
+              media={mediaItems ?? []}
+              sceneBanner={currentSceneBanner}
+              patch={(pch) => patchStudio.mutate(pch as Record<string, unknown>)}
+              uploadLogo={uploadLogo}
+              logoBusy={logoBusy}
+              adminGet={adminGet}
+              adminSend={adminSend}
+              studioId={studioId}
+              onMediaChanged={refresh}
+            />
           </div>
 
           {otherConsole && onCamera && micOn && (
@@ -1624,10 +1647,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
 
           {/* the deck: share/mute on the left, YOU in the middle, volume on the right */}
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-10 border-t border-white/10 bg-[#000741] px-4 py-3">
-            {/* What you put on air, on the left. */}
+            {/* The programme's own audio, on the left. Putting things on the
+                stage moved to the + in the middle and to the Media panel in
+                the rail — a deck button per source does not survive contact
+                with a fourth source. */}
             <div className="flex items-center gap-1">
-              <DeckButton icon={ImageIcon} label="Image" onClick={() => setMediaPicker("image")} testId="button-deck-image" />
-              <DeckButton icon={Film} label="Video" active={studio?.stageMediaPlaying} onClick={() => setMediaPicker("video")} testId="button-deck-video" />
               <DeckButton
                 icon={stageMuted ? MicOff : Mic}
                 label={stageMuted ? "Unmute" : "Mute stage"}
@@ -1698,6 +1722,101 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   <span className="w-full truncate text-center">{meOnStage ? "On stage" : "Go on stage"}</span>
                 </button>
               )}
+
+              {/* Add a source. Everything that can be put on the stage lives
+                  behind one button, the way it does in every conference deck,
+                  so the bar stays the same width as sources are added. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    title="Put something on the stage"
+                    className="ml-1 flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                    data-testid="button-deck-add"
+                  >
+                    <Plus className="h-5 w-5" />
+                    <span className="w-full truncate text-center">Add</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="center" side="top">
+                  <DropdownMenuItem onSelect={() => setMediaPicker("image")} data-testid="menu-add-image">
+                    <ImageIcon className="mr-2 h-4 w-4" /> Image
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setMediaPicker("video")} data-testid="menu-add-video">
+                    <Film className="mr-2 h-4 w-4" /> Video
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => setMediaPicker("presentations")} data-testid="menu-add-presentation">
+                    <Clapperboard className="mr-2 h-4 w-4" /> Presentation
+                  </DropdownMenuItem>
+                  {studio?.stageMediaPlaying && (
+                    <DropdownMenuItem
+                      onSelect={() => putOnStage.mutate({ action: "stop" })}
+                      data-testid="menu-add-clear"
+                    >
+                      <Square className="mr-2 h-4 w-4" /> Back to the cameras
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* The handful of settings you might actually change mid-show.
+                  Everything else stays on the Set tab, where there is room to
+                  read it. */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    title="Studio settings"
+                    className="flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                    data-testid="button-deck-settings"
+                  >
+                    <Settings2 className="h-5 w-5" />
+                    <span className="w-full truncate text-center">Settings</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="center" side="top" className="w-64 space-y-3">
+                  <div>
+                    <Label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                      People on stage at once
+                    </Label>
+                    <Select
+                      value={String(studio?.maxOnStage ?? 5)}
+                      onValueChange={(v) => patchStudio.mutate({ maxOnStage: Number(v) })}
+                    >
+                      <SelectTrigger className="mt-1 h-9" data-testid="select-deck-max-on-stage">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[1, 2, 3, 4, 5, 6, 8, 10, 12].map((n) => (
+                          <SelectItem key={n} value={String(n)}>
+                            {n}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                      Studio status
+                    </Label>
+                    <Select
+                      value={studio?.status ?? "Offline"}
+                      onValueChange={(v) => patchStudio.mutate({ status: v })}
+                    >
+                      <SelectTrigger className="mt-1 h-9" data-testid="select-deck-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STUDIO_STATUSES.map((st) => (
+                          <SelectItem key={st} value={st}>
+                            {st}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
 
             {/* Where other people are, on the right — they open a tab rather

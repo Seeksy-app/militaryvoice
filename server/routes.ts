@@ -92,7 +92,7 @@ import {
 } from "./email.js";
 import { renderBroadcastEmail } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
-import type { DestinationRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
+import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   publishPhoto,
@@ -2974,6 +2974,24 @@ export function registerRoutes(app: Express): void {
     res.status(201).json(scene);
   });
 
+  /**
+   * The lower third a scene carries, as a studio patch.
+   *
+   * Taking a scene sets the banner to the scene's, and a scene with no banner
+   * takes the banner off. That is the point of binding them: the name bar is
+   * part of the look, so it changes when the look does, and a producer never
+   * has to remember to pull down the last one. The ad-lib box writes the same
+   * two fields directly, and is overwritten by the next take — which is what
+   * an ad-lib should be.
+   */
+  function bannerFor(scene: SceneRow) {
+    return {
+      bannerTitle: scene.bannerTitle ?? "",
+      bannerSubtitle: scene.bannerSubtitle ?? "",
+      bannerVisible: Boolean(scene.bannerTitle),
+    };
+  }
+
   /** One click during the show: put the stage back the way this scene had it. */
   app.post("/api/admin/scenes/:id/apply", requireAdmin, async (req, res) => {
     const scene = await storage.getScene(Number(req.params.id));
@@ -2997,6 +3015,7 @@ export function registerRoutes(app: Express): void {
           currentSceneId: scene.id,
           countdownEndsAtUtc: "",
           countdownLabel: "",
+          ...bannerFor(scene),
         });
         if (withScene) {
           const ev = await storage.getEventById(studio.eventId);
@@ -3010,6 +3029,7 @@ export function registerRoutes(app: Express): void {
     const patch =
       scene.kind === "countdown"
         ? {
+            ...bannerFor(scene),
             stageMediaPlaying: false,
             currentSceneId: scene.id,
             // Stored as the moment it hits zero, so every viewer counts down
@@ -3018,6 +3038,7 @@ export function registerRoutes(app: Express): void {
             countdownLabel: scene.name,
           }
         : {
+            ...bannerFor(scene),
             stageMediaUrl: scene.mediaUrl,
             stageMediaKind: scene.mediaKind,
             stageMediaLabel: scene.mediaLabel,
@@ -3277,6 +3298,12 @@ export function registerRoutes(app: Express): void {
       countdownEndsAtUtc: st.countdownEndsAtUtc,
       countdownLabel: st.countdownLabel,
       currentSceneId: st.currentSceneId,
+      // The rail's graphics. Each one travels only when it is switched on, so
+      // a viewer's player never has to decide whether to draw it.
+      backgroundUrl: st.backgroundVisible ? st.backgroundUrl : "",
+      bannerTitle: st.bannerVisible ? st.bannerTitle : "",
+      bannerSubtitle: st.bannerVisible ? st.bannerSubtitle : "",
+      tickerText: st.tickerVisible ? st.tickerText : "",
     };
   }
 

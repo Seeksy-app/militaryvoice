@@ -32,6 +32,13 @@ export interface RoomMeta {
   countdownEndsAtUtc?: string;
   countdownLabel?: string;
   currentSceneId?: number;
+  /** Behind the cameras. Blank when it's switched off, so the player never decides. */
+  backgroundUrl?: string;
+  /** The lower third that is on air. Blank when it's off. */
+  bannerTitle?: string;
+  bannerSubtitle?: string;
+  /** The ticker crawling along the bottom. Blank when it's off. */
+  tickerText?: string;
   stageMediaPlaying?: boolean;
   stageMediaUrl?: string;
   stageMediaKind?: string;
@@ -183,7 +190,7 @@ function gridFor(n: number): string {
   return "grid-cols-3";
 }
 
-function Tile({ tile, muted }: { tile: StageTile; muted: boolean }) {
+function Tile({ tile, muted, nameBar = true }: { tile: StageTile; muted: boolean; nameBar?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -225,8 +232,10 @@ function Tile({ tile, muted }: { tile: StageTile; muted: boolean }) {
         </div>
       )}
 
-      {/* Lower third — broadcast-style name bar */}
-      <div className="absolute bottom-0 left-0 right-0 px-3 pb-3">
+      {/* Lower third — broadcast-style name bar. Hidden while a banner from the
+          rail is up: two name bars stacked in one corner is the thing that
+          makes a stream look unmanned. */}
+      <div className={`absolute bottom-0 left-0 right-0 px-3 pb-3 ${nameBar ? "" : "hidden"}`}>
         <div className="flex items-stretch overflow-hidden rounded-md shadow-lg" style={{ maxWidth: "calc(100% - 0px)" }}>
           {/* Accent stripe */}
           <div className="w-1 shrink-0 bg-[#F0A71F]" />
@@ -368,6 +377,85 @@ function LogoOverlay({ url, corner, size }: { url: string; corner?: string; size
   );
 }
 
+/**
+ * The manual lower third: the title of the segment, the name of a caller, the
+ * thing a producer types thirty seconds before it is needed.
+ *
+ * Drawn in the same hand as the per-tile name bar — gold rule, navy slab — so
+ * one show does not look like two. Sized as a share of the frame for the same
+ * reason the logo is: this is composited at 1080p and drawn in a console panel
+ * a few hundred pixels wide.
+ */
+function BannerOverlay({ title, subtitle, lifted }: { title: string; subtitle: string; lifted: boolean }) {
+  if (!title) return null;
+  return (
+    <div
+      className={`pointer-events-none absolute left-[3%] z-20 max-w-[62%] ${lifted ? "bottom-[13%]" : "bottom-[7%]"}`}
+      data-testid="stage-banner"
+    >
+      <div className="flex items-stretch overflow-hidden rounded-md shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
+        <div className="w-[6px] shrink-0 bg-[#F0A71F]" />
+        <div className="min-w-0 bg-[#000741]/92 px-4 py-2 backdrop-blur-sm">
+          <p className="truncate text-[clamp(0.95rem,2.1cqw,1.9rem)] font-bold leading-tight text-white" style={HEADLINE_FONT}>
+            {title}
+          </p>
+          {subtitle && (
+            <p className="truncate text-[clamp(0.7rem,1.35cqw,1.15rem)] leading-tight text-[#F0A71F]" style={HEADLINE_FONT}>
+              {subtitle}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The crawl along the bottom edge.
+ *
+ * Duration scales with the length of the text so a long line does not sprint
+ * past unreadably and a short one does not crawl — roughly a constant reading
+ * speed either way. It stops moving entirely under prefers-reduced-motion,
+ * where it simply sits and is still readable.
+ */
+function TickerOverlay({ text }: { text: string }) {
+  if (!text) return null;
+  const seconds = Math.max(14, Math.round(text.length * 0.42));
+  return (
+    <div
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-20 overflow-hidden border-t border-[#F0A71F]/40 bg-[#000741]/92 py-[0.9%] backdrop-blur-sm"
+      data-testid="stage-ticker"
+    >
+      {/* w-max, not a block: the element has to be as wide as its own text
+          for translateX(-100%) to carry the whole line off the left edge.
+          A block element is as wide as the frame, and the tail never leaves. */}
+      <div
+        className="w-max whitespace-nowrap text-[clamp(0.72rem,1.4cqw,1.25rem)] font-semibold tracking-wide text-white motion-reduce:!animate-none"
+        style={{ animation: `stage-crawl ${seconds}s linear infinite`, willChange: "transform" }}
+      >
+        {/* The gap between passes, measured against the frame rather than the
+            viewport — this is composited at 1080p and drawn again in a console
+            panel a third that wide. */}
+        <span className="px-[55cqw]">{text}</span>
+      </div>
+      <style>{`@keyframes stage-crawl{from{transform:translateX(0)}to{transform:translateX(-100%)}}`}</style>
+    </div>
+  );
+}
+
+/** The room the show appears to be in. Only ever visible where cameras aren't. */
+function BackgroundLayer({ url }: { url: string }) {
+  if (!url) return null;
+  return (
+    <div
+      className="absolute inset-0 bg-cover bg-center"
+      style={{ backgroundImage: `url(${JSON.stringify(url).slice(1, -1)})` }}
+      data-testid="stage-background"
+      aria-hidden="true"
+    />
+  );
+}
+
 /** The frame itself: standby clip, break clock, played media, the stage, or a holding card. */
 export function StageGrid({
   tiles,
@@ -388,6 +476,8 @@ export function StageGrid({
   // pushed, and room metadata only changes when someone touches the studio.
   const standby = pickStandby(meta);
   const countdownEnds = meta.countdownEndsAtUtc ? Date.parse(meta.countdownEndsAtUtc) : NaN;
+  const banner = (meta.bannerTitle ?? "").trim();
+  const ticker = (meta.tickerText ?? "").trim();
 
   const body =
     meta.fallbackPlaying && standby.url ? (
@@ -411,30 +501,45 @@ export function StageGrid({
       </div>
     ) : (
       <>
-        <div className={`grid h-full w-full gap-3 p-3 ${gridFor(tiles.length)}`}>
+        {/* The background shows only between and behind the tiles, which is
+            exactly where a set would be. Media and the break clock cover the
+            frame, so they hide it without needing to be told to. */}
+        <BackgroundLayer url={meta.backgroundUrl ?? ""} />
+        <div className={`relative grid h-full w-full gap-3 p-3 ${gridFor(tiles.length)}`}>
           {tiles.map((t) => (
-            <Tile key={t.identity} tile={t} muted={muted} />
+            <Tile key={t.identity} tile={t} muted={muted} nameBar={!banner} />
           ))}
         </div>
-        <Captions caption={caption} />
+        <Captions caption={caption} lifted={Boolean(ticker)} />
       </>
     );
 
   // Graphics sit above whatever the stage is doing — that is the point of
-  // them. The server only sends a url when the logo is switched on.
+  // them. The server only sends a value when the graphic is switched on, so
+  // nothing here has to decide whether it should be drawn.
+  //
+  // The wrapper does two jobs: it is the positioning context for every overlay
+  // below, and it is the container the overlays size their type against, so a
+  // banner reads the same on a 1080p broadcast as in a 400px console panel.
   return (
-    <>
+    <div className="relative h-full w-full" style={{ containerType: "inline-size" }}>
       {body}
+      <BannerOverlay
+        title={banner}
+        subtitle={meta.bannerSubtitle ?? ""}
+        lifted={Boolean(ticker)}
+      />
+      <TickerOverlay text={ticker} />
       <LogoOverlay url={meta.logoUrl ?? ""} corner={meta.logoCorner} size={meta.logoSize} />
-    </>
+    </div>
   );
 }
 
 /** Burned into the frame, so they reach the recording and every destination. */
-function Captions({ caption }: { caption?: { speaker: string; text: string } | null }) {
+function Captions({ caption, lifted }: { caption?: { speaker: string; text: string } | null; lifted?: boolean }) {
   if (!caption?.text) return null;
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-6 pb-6">
+    <div className={`pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-6 ${lifted ? "pb-[7%]" : "pb-6"}`}>
       <p className="max-w-4xl rounded-xl bg-black/75 px-5 py-2.5 text-center text-lg leading-snug text-white backdrop-blur-sm sm:text-xl">
         {caption.speaker && <span className="mr-2 font-semibold text-[#F0A71F]">{caption.speaker}:</span>}
         {caption.text}

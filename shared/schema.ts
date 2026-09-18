@@ -737,6 +737,21 @@ export const studios = pgTable("studios", {
   logoCorner: text("logo_corner").notNull().default("top-right"),
   logoSize: integer("logo_size").notNull().default(96),
   logoVisible: boolean("logo_visible").notNull().default(false),
+  // A background that sits behind the camera tiles — the room the show
+  // appears to be in. It only shows where the cameras don't: full-frame media
+  // and the break clock cover it entirely, which is correct.
+  backgroundUrl: text("background_url").notNull().default(""),
+  backgroundVisible: boolean("background_visible").notNull().default(false),
+  // The lower third that is on air *right now*. Usually put there by taking a
+  // scene, which carries its own; the ad-lib box in the rail writes here too,
+  // for the thing nobody planned for.
+  bannerTitle: text("banner_title").notNull().default(""),
+  bannerSubtitle: text("banner_subtitle").notNull().default(""),
+  bannerVisible: boolean("banner_visible").notNull().default(false),
+  // The ticker belongs to the show, not to a scene: it runs across the
+  // handoffs, which is the whole reason to have one.
+  tickerText: text("ticker_text").notNull().default(""),
+  tickerVisible: boolean("ticker_visible").notNull().default(false),
   // Two separate egresses run off the same room: one long broadcast that goes
   // out to every destination for the whole event, and one short recording per
   // slot so each podcaster gets their own file.
@@ -780,6 +795,12 @@ export const scenes = pgTable("scenes", {
   startAtUtc: text("start_at_utc").notNull().default(""),
   /** The run-of-show row this came from, so taking a scene can still take the row. */
   runItemId: integer("run_item_id").notNull().default(0),
+  /** The lower third this scene puts up. Taking the scene puts it on air;
+   *  taking a scene with none takes the banner off. A name bar that belongs to
+   *  the moment it names is the thing every switcher gets wrong by keeping the
+   *  two in separate panels. */
+  bannerTitle: text("banner_title").notNull().default(""),
+  bannerSubtitle: text("banner_subtitle").notNull().default(""),
   createdAt: text("created_at").notNull(),
 });
 export type SceneRow = typeof scenes.$inferSelect;
@@ -1196,6 +1217,13 @@ export const studioUpdateSchema = z.object({
   logoCorner: z.enum(LOGO_CORNERS).optional(),
   logoSize: z.number().int().min(40).max(320).optional(),
   logoVisible: z.boolean().optional(),
+  backgroundUrl: z.string().trim().max(600).optional(),
+  backgroundVisible: z.boolean().optional(),
+  bannerTitle: z.string().trim().max(80).optional(),
+  bannerSubtitle: z.string().trim().max(120).optional(),
+  bannerVisible: z.boolean().optional(),
+  tickerText: z.string().trim().max(600).optional(),
+  tickerVisible: z.boolean().optional(),
 });
 
 
@@ -1209,6 +1237,8 @@ export const sceneInputSchema = z.object({
   countdownSeconds: z.number().int().min(5).max(7200).default(300),
   startAtUtc: z.string().trim().max(40).default(""),
   runItemId: z.number().int().min(0).default(0),
+  bannerTitle: z.string().trim().max(80).default(""),
+  bannerSubtitle: z.string().trim().max(120).default(""),
 });
 export const scenePatchSchema = sceneInputSchema.partial();
 
