@@ -346,3 +346,20 @@
   border-radius: 0 0.35rem 0.35rem 0;
 }
 .rich-body hr { margin: 1.2em 0; border: 0; border-top: 1px solid hsl(var(--border)); }
+
+/* The setup check's sweep over the self-view. A gradient band travelling top
+   to bottom — cheap, and it reads as "looking at this picture" in a way a
+   spinner next to the button does not. */
+@keyframes setup-scan-sweep {
+  0%   { transform: translateY(-6rem); opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { transform: translateY(100%); opacity: 0; }
+}
+.setup-scan {
+  background: linear-gradient(to bottom, transparent, rgba(240, 167, 31, 0.35), transparent);
+  animation: setup-scan-sweep 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .setup-scan { animation: none; opacity: 0.25; }
+}

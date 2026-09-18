@@ -444,6 +444,17 @@ export default function Studio({ slug }: { slug?: string }) {
    */
   const [setup, setSetup] = useState<SetupCheck[]>([]);
   const [showSetup, setShowSetup] = useState(false);
+  /**
+   * How many of the three results have been revealed.
+   *
+   * The analysis itself is instant — it is arithmetic on a 64px thumbnail —
+   * but revealing three verdicts in the same frame as the click reads as a
+   * canned answer rather than a look at your picture. Walking down the list
+   * shows what is being examined, which is also the honest description of
+   * what it does.
+   */
+  const [scanned, setScanned] = useState(0);
+  const scanning = showSetup && camOn && scanned < 3;
 
   useEffect(() => {
     if (!stream) {
@@ -456,6 +467,18 @@ export default function Studio({ slug }: { slug?: string }) {
   useEffect(() => {
     if (micOn && level > 0.06) setMicProved(true);
   }, [micOn, level]);
+
+  // Reveal one line at a time while the panel is open, and start again from
+  // the top each time it is reopened.
+  useEffect(() => {
+    if (!showSetup || !camOn) {
+      setScanned(0);
+      return;
+    }
+    if (scanned >= 3) return;
+    const t = setTimeout(() => setScanned((n) => n + 1), scanned === 0 ? 700 : 620);
+    return () => clearTimeout(t);
+  }, [showSetup, camOn, scanned]);
 
   useEffect(() => {
     if (!stream || !camOn) return;
@@ -633,8 +656,25 @@ export default function Studio({ slug }: { slug?: string }) {
              The programme is the middle because it is the thing everyone in
              here is about to be part of, and seeing it is how you know the
              room is real. Your own face and your own checks live together on
-             the left, because they are one question — am I ready. */
-          <div className="mt-5 grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+             the left, because they are one question — am I ready.
+
+             Above the stage, not below it: under the stage these pushed the
+             thing you are actually here to watch off the bottom of the screen,
+             and a green room you have to scroll is one where somebody misses
+             the producer bringing them up. */
+          <>
+          <div className="mt-4">
+            <GreenRoomTools
+              stream={stream}
+              micOn={micOn}
+              onStage={onStage}
+              peerCount={greenRoomPeers.length}
+              quality={quality}
+              slotLabel={slotLabel}
+            />
+          </div>
+
+          <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
             {/* ------------------------------------------------ left: the room */}
             <div className="order-2 flex flex-col gap-4 xl:order-1">
               <div>
@@ -644,6 +684,17 @@ export default function Studio({ slug }: { slug?: string }) {
                   }`}
                 >
                   <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+
+                  {/* The sweep runs over your own picture while the checks
+                      resolve, so it is obvious what is being looked at — and
+                      that it is this frame, not something sent somewhere. */}
+                  {scanning && (
+                    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+                      <div className="setup-scan absolute inset-x-0 h-24" />
+                      <div className="absolute inset-0 ring-2 ring-inset ring-[#F0A71F]/50" />
+                    </div>
+                  )}
+
                   {!stream && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center">
                       <VideoOff className="h-6 w-6 text-white/40" />
@@ -707,7 +758,10 @@ export default function Studio({ slug }: { slug?: string }) {
                       className={`h-8 gap-1.5 rounded-full border-white/25 text-white hover:bg-white/20 hover:text-white ${
                         warnCount > 0 ? "bg-[#F0A71F]/20 border-[#F0A71F]/50" : "bg-white/10"
                       }`}
-                      onClick={() => setShowSetup((v) => !v)}
+                      onClick={() => {
+                        setScanned(0);
+                        setShowSetup((v) => !v);
+                      }}
                       data-testid="button-setup-check"
                     >
                       <Sparkles className="h-3.5 w-3.5 text-[#F0A71F]" />
@@ -750,25 +804,46 @@ export default function Studio({ slug }: { slug?: string }) {
 
                     {!camOn ? (
                       <p className="mt-2 text-xs text-white/60">Turn your camera on and this fills in.</p>
-                    ) : setup.length === 0 ? (
-                      <p className="mt-2 text-xs text-white/60">Reading your picture…</p>
                     ) : (
                       <ul className="mt-2 flex flex-col gap-2">
-                        {setup.map((c) => (
-                          <li key={c.key} className="flex items-start gap-2 text-xs" data-testid={`setup-${c.key}`}>
-                            {c.state === "good" ? (
-                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                            ) : (
-                              <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#F0A71F]" />
-                            )}
-                            <span>
-                              <span className={c.state === "good" ? "font-medium text-white/85" : "font-medium text-white"}>
-                                {c.label}
+                        {(["light", "background", "framing"] as const).map((key, i) => {
+                          const done = scanned > i;
+                          const c = setup.find((x) => x.key === key);
+                          const label = key === "light" ? "Lighting" : key === "background" ? "Background" : "Framing";
+                          return (
+                            <li
+                              key={key}
+                              className={`flex items-start gap-2 text-xs transition-all duration-500 ${
+                                done ? "opacity-100" : scanned === i ? "opacity-100" : "opacity-35"
+                              }`}
+                              data-testid={`setup-${key}`}
+                            >
+                              {done && c ? (
+                                c.state === "good" ? (
+                                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                                ) : (
+                                  <Lightbulb className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#F0A71F]" />
+                                )
+                              ) : (
+                                <span
+                                  className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border-2 ${
+                                    scanned === i
+                                      ? "animate-spin border-[#F0A71F] border-t-transparent"
+                                      : "border-white/20"
+                                  }`}
+                                />
+                              )}
+                              <span className="min-w-0">
+                                <span className="font-medium text-white">{label}</span>
+                                {done && c ? (
+                                  <span className="text-white/60"> — {c.note}</span>
+                                ) : (
+                                  <span className="text-white/35">{scanned === i ? " — looking…" : ""}</span>
+                                )}
                               </span>
-                              <span className="text-white/60"> — {c.note}</span>
-                            </span>
-                          </li>
-                        ))}
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
 
@@ -844,18 +919,6 @@ export default function Studio({ slug }: { slug?: string }) {
                 )}
               </div>
 
-              {/* The space under the stage was empty, and the two questions
-                  everyone arrives with — does this work, can anyone hear me —
-                  went unanswered. */}
-              <GreenRoomTools
-                stream={stream}
-                micOn={micOn}
-                onStage={onStage}
-                peerCount={greenRoomPeers.length}
-                quality={quality}
-                slotLabel={slotLabel}
-              />
-
               {roomStatus === "unavailable" && (
                 <p className="mt-3 rounded-xl border border-white/15 bg-white/[0.06] p-3 text-sm text-white/60">
                   Sound and video for this event aren't switched on yet. Your camera check still works.
@@ -921,6 +984,7 @@ export default function Studio({ slug }: { slug?: string }) {
               )}
             </div>
           </div>
+          </>
         )}
       </div>
     </div>
