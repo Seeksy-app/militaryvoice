@@ -88,6 +88,7 @@ import {
   sendBroadcastEmail,
   resendApiGet,
 } from "./email.js";
+import { renderBroadcastEmail } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -780,6 +781,35 @@ export function registerRoutes(app: Express): void {
   };
   app.get("/api/cron/broadcasts", scheduledBroadcastHandler);
   app.post("/api/cron/broadcasts", scheduledBroadcastHandler);
+
+  /**
+   * Keep the sponsor pages' audience figures current on their own.
+   *
+   * They were a stored snapshot refreshed only when an admin remembered to
+   * press a button, which meant the number on a live sponsor page drifted
+   * further from the truth every time a host joined or connected an account.
+   * Once a day is the right cadence: the upstream call costs one request per
+   * podcaster, and these are 30-day rolling figures that do not move hourly.
+   */
+  const audienceRefreshHandler: RequestHandler = async (_req, res) => {
+    try {
+      const featured = await storage.getFeaturedEvent();
+      const snap = await buildAudienceSnapshot(featured?.id);
+      // A run that comes back with nothing — the provider down, the key
+      // rotated — must not wipe a good snapshot off the flyers.
+      if (snap.followers <= 0) {
+        res.json({ skipped: "no figures returned; keeping the previous snapshot" });
+        return;
+      }
+      await saveAudienceSnapshot(snap);
+      res.json({ followers: snap.followers, channels: snap.channels, shows: snap.shows });
+    } catch (err) {
+      console.error("Audience refresh failed:", err);
+      res.status(502).json({ message: (err as Error).message });
+    }
+  };
+  app.get("/api/cron/audience", audienceRefreshHandler);
+  app.post("/api/cron/audience", audienceRefreshHandler);
 
   // ---- A podcaster's own share link -------------------------------------------
   //      /s/:id unfurls with their artwork and their time, then sends the
@@ -5075,6 +5105,58 @@ export function registerRoutes(app: Express): void {
     const types = (req.query.types as string ?? "opened,clicked").split(",").map((t) => t.trim()).filter(Boolean);
     const rows = await storage.getBroadcastSendsByEngagement(Number(req.params.id), types);
     res.json(rows);
+  });
+
+  /**
+   * The email exactly as it will arrive, rendered but not sent.
+   *
+   * Returns the real HTML from the real renderer, so what the composer shows
+   * and what lands in an inbox cannot disagree. Sent as a full document
+   * because it is displayed in an iframe — the shell carries its own styles.
+   */
+  app.post("/api/admin/broadcasts/preview", requireAdmin, async (req, res) => {
+    const { subject, bodyText, sender, banner, firstName } = req.body as {
+      subject?: string; bodyText?: string; sender?: string; banner?: string; firstName?: string;
+    };
+    const senderMember = await resolveTeamSender(sender ?? "team");
+    const rendered = renderBroadcastEmail({
+      to: "preview@militaryvoice.ai",
+      firstName: (firstName ?? "Sam").trim() || "Sam",
+      subject: subject ?? "",
+      bodyText: bodyText ?? "",
+      unsubscribeUrl: "#",
+      sender,
+      banner,
+      senderMember,
+      bannerTitle: await broadcastBannerTitle(),
+    });
+    res.type("html").send(rendered.html);
+  });
+
+  /**
+   * Who is actually in a segment, by name and address.
+   *
+   * "Send to 84" is a number you have to take on trust. This is the list
+   * behind it, so whoever presses send can look at who it reaches first — and
+   * for `not-signed-up` in particular, can confirm it really has excluded the
+   * people holding slots rather than believing the arithmetic.
+   */
+  app.get("/api/admin/segment-preview", requireAdmin, async (req, res) => {
+    const segment = String(req.query.segment ?? "contacts");
+    const eventId = req.query.eventId ? Number(req.query.eventId) : null;
+    const people = await resolveBroadcastRecipients({
+      segment,
+      eventId,
+      // The resolver only reads these two fields; the rest is shape.
+    } as BroadcastRow);
+    res.json({
+      segment,
+      count: people.length,
+      people: people
+        .slice(0, 500)
+        .map((p) => ({ email: p.email, firstName: p.firstName }))
+        .sort((a, b) => a.email.localeCompare(b.email)),
+    });
   });
 
   // Resend webhook — receives email events in real time

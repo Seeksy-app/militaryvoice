@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/broadcasts",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/audience",
+      "schedule": "20 6 * * *"
     }
   ]
 }

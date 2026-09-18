@@ -776,27 +776,8 @@ const RICO_SIGNATURE = `
  * The unsubscribe token is a simple HMAC — good enough for a mailing list
  * of military podcast fans, not a compliance-grade setup.
  */
-export async function sendBroadcastEmail(opts: {
-  to: string;
-  firstName: string;
-  subject: string;
-  bodyText: string;
-  unsubscribeUrl: string;
-  sender?: string;
-  banner?: string;
-  senderMember?: { name: string; title: string; photoUrl: string } | null;
-  /** Shown large on the banner — the event and its date, not the sender. */
-  bannerTitle?: string;
-}): Promise<string | null> {
-  const isRico = opts.sender === "rico" && !opts.senderMember;
-  const member = opts.senderMember;
-  const resolvedName = opts.firstName.trim() || "Friend";
-  const resolvedBodyText = opts.bodyText.replace(/\{\{First_Name\}\}/gi, resolvedName);
-  const resolvedSubject = opts.subject.replace(/\{\{First_Name\}\}/gi, resolvedName);
-
-  // Build member signature if a team member is set
-  const memberSignature = member
-    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0 0;border-top:1px solid #e5e7eb;padding-top:20px;">
+function memberSignatureHtml(member: { name: string; title: string; photoUrl: string }): string {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0 0;border-top:1px solid #e5e7eb;padding-top:20px;">
         <tr>
           ${member.photoUrl ? `<td width="56" valign="middle" style="padding-right:14px;">
             <img src="${member.photoUrl}" width="56" height="56" alt="${escapeHtml(member.name)}" style="display:block;border-radius:50%;object-fit:cover;" />
@@ -806,21 +787,32 @@ export async function sendBroadcastEmail(opts: {
             <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">${escapeHtml(member.title)}</p>
           </td>
         </tr>
-      </table>`
-    : "";
+      </table>`;
+}
 
+/**
+ * The exact HTML a broadcast will send as, without sending it.
+ *
+ * Split out of sendBroadcastEmail so the composer's preview and the real send
+ * cannot drift: a preview built by a second renderer is a preview of something
+ * nobody receives.
+ */
+export function renderBroadcastEmail(opts: BroadcastEmailOptions): { subject: string; html: string; text: string; fromName: string } {
+  const isRico = opts.sender === "rico" && !opts.senderMember;
+  const member = opts.senderMember;
+  const resolvedName = opts.firstName.trim() || "Friend";
+  const resolvedBodyText = opts.bodyText.replace(/\{\{First_Name\}\}/gi, resolvedName);
+  const resolvedSubject = opts.subject.replace(/\{\{First_Name\}\}/gi, resolvedName);
+
+  const memberSignature = member ? memberSignatureHtml(member) : "";
   const bodyHtml = `${textToHtml(resolvedBodyText)}${isRico ? RICO_SIGNATURE : memberSignature}`;
   const bannerUrl = BROADCAST_BANNERS[opts.banner ?? "welcome"] ?? BROADCAST_BANNERS.welcome;
-  // The sender is already named in the From line and the signature; the banner
-  // is better spent on what the email is actually about.
   const eyebrow = opts.bannerTitle?.trim() || "24 Hour Podcastathon";
   const fromName = member ? `${member.name} | MilitaryVoice.ai` : isRico ? "Riccoh Player | MilitaryVoice.ai" : "MilitaryVoice.ai";
-  const fromAddress = `${fromName} <hello@militaryvoice.ai>`;
 
-  return sendRawEmail({
-    to: opts.to,
-    from: fromAddress,
+  return {
     subject: resolvedSubject,
+    fromName,
     html: emailShell({
       banner: bannerUrl,
       bannerAlt: "MilitaryVoice.ai",
@@ -831,5 +823,28 @@ export async function sendBroadcastEmail(opts: {
       footerNote: `Questions? Reply to this email. · <a href="${opts.unsubscribeUrl}" style="color:#6b7280;">Unsubscribe</a>`,
     }),
     text: `${resolvedBodyText}${member ? `\n\n— ${member.name}\n${member.title}, MilitaryVoice.ai` : isRico ? "\n\n— Riccoh Player\nHost, MilitaryVoice.ai" : ""}\n\n---\nVisit: ${SITE}\nUnsubscribe: ${opts.unsubscribeUrl}`,
+  };
+}
+
+export interface BroadcastEmailOptions {
+  to: string;
+  firstName: string;
+  subject: string;
+  bodyText: string;
+  unsubscribeUrl: string;
+  sender?: string;
+  banner?: string;
+  senderMember?: { name: string; title: string; photoUrl: string } | null;
+  bannerTitle?: string;
+}
+
+export async function sendBroadcastEmail(opts: BroadcastEmailOptions): Promise<string | null> {
+  const rendered = renderBroadcastEmail(opts);
+  return sendRawEmail({
+    to: opts.to,
+    from: `${rendered.fromName} <hello@militaryvoice.ai>`,
+    subject: rendered.subject,
+    html: rendered.html,
+    text: rendered.text,
   });
 }

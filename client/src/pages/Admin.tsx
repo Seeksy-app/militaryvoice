@@ -1125,6 +1125,205 @@ function SponsorPackagesCard({ eventId }: { eventId: number }) {
   );
 }
 
+/**
+ * The email as it will arrive.
+ *
+ * Rendered server-side by the same function the send path uses and shown in an
+ * iframe, because the email's HTML carries its own styles and would otherwise
+ * inherit the admin page's. Debounced: it re-renders while someone types, and
+ * a request per keystroke is a request per keystroke.
+ */
+function EmailPreview({ subject, bodyText, sender, banner }: {
+  subject: string;
+  bodyText: string;
+  sender: string;
+  banner: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [html, setHtml] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    const t = window.setTimeout(async () => {
+      try {
+        const res = await adminSend("POST", "/api/admin/broadcasts/preview", { subject, bodyText, sender, banner });
+        const text = await res.text();
+        if (!cancelled) setHtml(text);
+      } catch {
+        if (!cancelled) setHtml("<p style='font-family:sans-serif;padding:24px;'>Couldn't render the preview.</p>");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 600);
+    return () => { cancelled = true; window.clearTimeout(t); };
+  }, [open, subject, bodyText, sender, banner]);
+
+  return (
+    <div className="rounded-xl border border-border">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm font-medium hover-elevate"
+        data-testid="button-toggle-preview"
+      >
+        <span className="flex items-center gap-2">
+          <Eye className="h-4 w-4 text-primary" /> Preview
+          <span className="text-xs font-normal text-muted-foreground">
+            exactly how it arrives, with {"{{First_Name}}"} filled in
+          </span>
+        </span>
+        <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`} />
+      </button>
+      {open && (
+        <div className="border-t border-border bg-muted/30 p-3">
+          {loading && !html ? (
+            <Skeleton className="h-[480px] w-full rounded-lg" />
+          ) : (
+            <iframe
+              title="Email preview"
+              srcDoc={html}
+              sandbox=""
+              className="h-[560px] w-full rounded-lg border border-border bg-white"
+              data-testid="iframe-email-preview"
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Insert the marks the email renderer understands.
+ *
+ * Not a rich-text editor: the body is stored as plain text on purpose, because
+ * the same string has to survive being read back, edited, and re-rendered by a
+ * converter that builds table-based HTML for Outlook. So these buttons write
+ * the markers rather than styling a document — what you type is what gets sent.
+ */
+function BodyToolbar({ value, onChange, textareaId }: {
+  value: string;
+  onChange: (v: string) => void;
+  textareaId: string;
+}) {
+  function apply(kind: "bold" | "link" | "bullets" | "numbers") {
+    const el = document.getElementById(textareaId) as HTMLTextAreaElement | null;
+    const start = el?.selectionStart ?? value.length;
+    const end = el?.selectionEnd ?? value.length;
+    const selected = value.slice(start, end);
+    let replacement = selected;
+    let caretOffset = 0;
+
+    if (kind === "bold") {
+      replacement = `**${selected || "bold text"}**`;
+      caretOffset = selected ? replacement.length : 2;
+    } else if (kind === "link") {
+      replacement = `[${selected || "link text"}](https://)`;
+      caretOffset = replacement.length - 1;
+    } else {
+      // Lists only render when every line in the block is a list line, so a
+      // selection is converted line by line and an empty one seeds three rows.
+      const marker = (i: number) => (kind === "numbers" ? `${i + 1}. ` : "- ");
+      const lines = (selected || "First point\nSecond point\nThird point").split("\n");
+      replacement = lines.map((l, i) => `${marker(i)}${l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "")}`).join("\n");
+      caretOffset = replacement.length;
+    }
+
+    const next = value.slice(0, start) + replacement + value.slice(end);
+    onChange(next);
+    window.requestAnimationFrame(() => {
+      el?.focus();
+      const pos = start + caretOffset;
+      el?.setSelectionRange(pos, pos);
+    });
+  }
+
+  const buttons: { kind: Parameters<typeof apply>[0]; label: string; hint: string }[] = [
+    { kind: "bold", label: "Bold", hint: "**bold**" },
+    { kind: "link", label: "Link", hint: "[text](https://…)" },
+    { kind: "bullets", label: "Bullets", hint: "- one per line" },
+    { kind: "numbers", label: "Numbered", hint: "1. one per line" },
+  ];
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 rounded-t-md border border-b-0 border-input bg-muted/40 px-2 py-1.5">
+      {buttons.map((b) => (
+        <Button
+          key={b.kind}
+          type="button"
+          size="sm"
+          variant="ghost"
+          title={b.hint}
+          className="h-7 px-2 text-xs"
+          onClick={() => apply(b.kind)}
+          data-testid={`body-mark-${b.kind}`}
+        >
+          {b.label}
+        </Button>
+      ))}
+      <span className="ml-auto pr-1 text-[11px] text-muted-foreground">Markers are plain text — what you type is what sends</span>
+    </div>
+  );
+}
+
+/**
+ * The actual people behind a "Send to 84".
+ *
+ * A recipient count is a number you have to take on trust, and the one segment
+ * where trust is not enough is `not-signed-up` — the whole point of it is who
+ * it *excludes*, and that is invisible in a total. Opening the list lets
+ * whoever presses send confirm the seventeen holding slots really aren't in it.
+ */
+function SegmentPreview({ segment, eventId, label, onClose }: {
+  segment: string | null;
+  eventId: number;
+  label: string;
+  onClose: () => void;
+}) {
+  const { data, isLoading } = useQuery<{ count: number; people: { email: string; firstName: string }[] }>({
+    queryKey: ["/api/admin/segment-preview", segment, eventId],
+    queryFn: () => adminGet(`/api/admin/segment-preview?segment=${encodeURIComponent(segment!)}&eventId=${eventId}`),
+    enabled: !!segment,
+  });
+  if (!segment) return null;
+
+  return (
+    <div className="rounded-xl border-2 border-primary bg-primary/5 p-4" data-testid="panel-segment-preview">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-semibold">
+          {label}
+          {data ? ` — ${data.count} ${data.count === 1 ? "person" : "people"}` : ""}
+        </p>
+        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={onClose}>Close</Button>
+      </div>
+      {isLoading ? (
+        <p className="mt-2 text-sm text-muted-foreground">Working out who's in this…</p>
+      ) : !data?.people.length ? (
+        <p className="mt-2 text-sm text-muted-foreground">Nobody is in this segment right now.</p>
+      ) : (
+        <div className="mt-3 max-h-64 overflow-y-auto rounded-lg border border-border bg-background">
+          <table className="w-full text-sm">
+            <tbody>
+              {data.people.map((p) => (
+                <tr key={p.email} className="border-b border-border last:border-0">
+                  <td className="px-3 py-1.5 font-medium text-card-foreground">{p.firstName || "—"}</td>
+                  <td className="px-3 py-1.5 text-muted-foreground">{p.email}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {data && data.count > data.people.length && (
+        <p className="mt-2 text-xs text-muted-foreground">Showing the first {data.people.length} of {data.count}.</p>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Audience reach — the figure the sponsor pages quote
 // ---------------------------------------------------------------------------
@@ -2448,7 +2647,7 @@ function ContactDrawer({ contact, onClose, broadcastList, eventId }: {
 
 type BroadcastStats = { sent: number; delivered: number; opened: number; clicked: number; bounced: number };
 
-function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onConfirm, onDelete, onViewEngagement, onDuplicate, onSetSource }: {
+function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onConfirm, onDelete, onViewEngagement, onDuplicate, onSetSource, onSetSegment, onPreview, segmentOptions }: {
   b: BroadcastRow; eventId: number; dimmed: boolean; bBusy: boolean;
   recipientCount: (seg: string) => number;
   onEdit: (b: BroadcastRow) => void;
@@ -2457,6 +2656,9 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
   onViewEngagement: (broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) => void;
   onDuplicate: (b: BroadcastRow) => void;
   onSetSource: (b: BroadcastRow, source: string) => void;
+  onSetSegment: (b: BroadcastRow, segment: string) => void;
+  onPreview: (segment: string) => void;
+  segmentOptions: { value: string; label: string; count: number }[];
 }) {
   const cadenceKey = b.source?.startsWith("cadence:") ? b.source.slice("cadence:".length) : "";
   const step = CADENCE_STEPS.find((x) => x.key === cadenceKey);
@@ -2474,7 +2676,15 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
         <p className="font-semibold text-sm truncate">{b.subject}</p>
         <p className="text-xs text-muted-foreground mt-0.5">
           {step && <span className="mr-1 font-medium text-primary">{step.label} ·</span>}
-          {SEGMENT_LABELS[b.segment] ?? b.segment} ·{" "}
+          <button
+            type="button"
+            onClick={() => onPreview(b.segment)}
+            className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+            data-testid={`preview-segment-${b.id}`}
+          >
+            {SEGMENT_LABELS[b.segment] ?? b.segment}
+          </button>{" "}
+          ·{" "}
           {b.status === "sent"
             ? `Sent ${b.sentAt ? new Date(b.sentAt).toLocaleDateString() : ""} · ${b.recipientCount} recipients`
             : b.status === "scheduled" && b.scheduledFor
@@ -2513,19 +2723,44 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
           <Copy className="h-3 w-3" /> Duplicate
         </Button>
 
+        {/* Who it goes to, changeable without opening the editor — the most
+            common edit to a draft is its audience, not its words. */}
+        {editable && (
+          <Select value={b.segment} onValueChange={(seg) => onSetSegment(b, seg)}>
+            <SelectTrigger className="h-7 w-[13rem] text-xs" data-testid={`select-segment-${b.id}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {segmentOptions.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  <span className="flex w-full items-center justify-between gap-3">
+                    <span>{o.label}</span>
+                    <span className="tabular-nums text-muted-foreground">{o.count >= 0 ? o.count : "—"}</span>
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
         {/* A cadence slot holds one template. Putting a template into a slot
             that is taken would leave two emails on the same trigger, so taken
             slots are shown as taken rather than silently overwritten. */}
         {editable && !step && (
           <Select value="" onValueChange={(key) => onSetSource(b, cadenceSource(key))}>
-            <SelectTrigger className="h-7 w-[9.5rem] text-xs" data-testid={`select-add-cadence-${b.id}`}>
-              <span className="flex items-center gap-1 text-muted-foreground"><Plus className="h-3 w-3" /> Add to cadence</span>
+            <SelectTrigger
+              className="h-7 w-[11rem] whitespace-nowrap text-xs text-muted-foreground"
+              data-testid={`select-add-cadence-${b.id}`}
+            >
+              <SelectValue placeholder="+ Add to cadence" />
             </SelectTrigger>
             <SelectContent>
               {CADENCE_STEPS.map((st) => (
                 <SelectItem key={st.key} value={st.key}>
-                  {st.label}
-                  {st.blurb ? ` — ${st.blurb}` : ""}
+                  <span className="flex flex-col">
+                    <span className="font-medium">{st.label}</span>
+                    {st.blurb && <span className="text-xs text-muted-foreground">{st.blurb}</span>}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -2817,6 +3052,42 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     } finally { setBBusy(false); }
   }
 
+  /** The set of signed-up emails, for excluding them from a recruitment send. */
+  const signedUpEmails = useMemo(
+    () => new Set(signupContacts.map((c) => c.email.trim().toLowerCase())),
+    [signupContacts],
+  );
+  const notSignedUpCount = useMemo(
+    () => activeContacts.filter((c) => !signedUpEmails.has(c.email.trim().toLowerCase())).length,
+    [activeContacts, signedUpEmails],
+  );
+
+  /** The audiences a broadcast can go to, with live counts beside each. */
+  const segmentOptions = useMemo(
+    () => [
+      { value: "signups", label: "Signed-up podcasters", count: signupContacts.length },
+      { value: "contacts", label: "Imported contacts", count: activeContacts.length },
+      { value: "not-signed-up", label: "On the list, no slot yet", count: notSignedUpCount },
+      { value: "all", label: "Both", count: signupContacts.length + activeContacts.length },
+      ...customSegments.map((sg) => ({ value: `segment:${sg.id}`, label: sg.name, count: -1 })),
+    ],
+    [signupContacts.length, activeContacts.length, notSignedUpCount, customSegments],
+  );
+
+  /** Which segment's recipient list is open, if any. */
+  const [previewSegment, setPreviewSegment] = useState<string | null>(null);
+
+  /** Change a draft's audience from the list, without opening the editor. */
+  async function setBroadcastSegment(b: BroadcastRow, segment: string) {
+    setBBusy(true);
+    try {
+      await adminSend("PUT", `/api/admin/broadcasts/${b.id}`, { segment });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/broadcasts", eventId] });
+    } catch (err) {
+      toast({ title: "Couldn't change the audience", description: (err as Error).message, variant: "destructive" });
+    } finally { setBBusy(false); }
+  }
+
   /**
    * Wire a template into a cadence slot, or take it back out.
    *
@@ -2871,16 +3142,6 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
       toast({ title: "Test failed", description: (err as Error).message, variant: "destructive" });
     } finally { setBBusy(false); }
   }
-
-  /** The set of signed-up emails, for excluding them from a recruitment send. */
-  const signedUpEmails = useMemo(
-    () => new Set(signupContacts.map((c) => c.email.trim().toLowerCase())),
-    [signupContacts],
-  );
-  const notSignedUpCount = useMemo(
-    () => activeContacts.filter((c) => !signedUpEmails.has(c.email.trim().toLowerCase())).length,
-    [activeContacts, signedUpEmails],
-  );
 
   function recipientCount(seg: string) {
     if (seg === "signups") return signupContacts.length;
@@ -3371,6 +3632,13 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                 </div>
               )}
 
+              <SegmentPreview
+                segment={previewSegment}
+                eventId={eventId}
+                label={previewSegment ? (SEGMENT_LABELS[previewSegment] ?? previewSegment) : ""}
+                onClose={() => setPreviewSegment(null)}
+              />
+
               {orderedBroadcasts.map((b) => (
                 <BroadcastCard
                   key={b.id}
@@ -3378,6 +3646,9 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                   eventId={eventId}
                   onDuplicate={duplicateBroadcast}
                   onSetSource={setBroadcastSource}
+                  onSetSegment={setBroadcastSegment}
+                  onPreview={setPreviewSegment}
+                  segmentOptions={segmentOptions}
                   dimmed={!!(confirmBroadcast && confirmBroadcast.id !== b.id)}
                   bBusy={bBusy}
                   recipientCount={recipientCount}
@@ -3583,17 +3854,32 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                 </div>
                 <div>
                   <Label className="mb-1.5 block">Body</Label>
+                  {/* The email renderer has understood bold, links and lists
+                      all along; nothing in here said so, so every email we
+                      have sent is flat text. The toolbar is mostly a way of
+                      telling people the feature exists. */}
+                  <BodyToolbar value={bBody} onChange={setBBody} textareaId="broadcast-body" />
                   <Textarea
-                    rows={12}
+                    id="broadcast-body"
+                    rows={14}
                     value={bBody}
                     onChange={(e) => setBBody(e.target.value)}
-                    placeholder={"Hi {{First_Name}},\n\nThe 24-Hour Military Podcast Marathon is coming up and we'd love to have you on...\n\nClick below to claim your slot."}
+                    className="rounded-t-none border-t-0 font-[15px]"
+                    placeholder={"Hi {{First_Name}},\n\nThe 24-Hour Military Podcast Marathon is coming up and we'd love to have you on...\n\n- Pick any 30-minute slot\n- We run the whole broadcast\n\n**Claim your slot** at [militaryvoice.ai](https://www.militaryvoice.ai)"}
                   />
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Use <code className="bg-muted px-1 py-0.5 rounded font-mono">{"{{First_Name}}"}</code> anywhere to personalize with the recipient's first name.
-                    {" "}Separate paragraphs with a blank line. Unsubscribe link added automatically.
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    <code className="rounded bg-muted px-1 py-0.5 font-mono">{"{{First_Name}}"}</code> inserts the
+                    recipient's first name · <code className="rounded bg-muted px-1 py-0.5 font-mono">**bold**</code> ·{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 font-mono">[text](https://link)</code> ·{" "}
+                    lines starting <code className="rounded bg-muted px-1 py-0.5 font-mono">-</code> become bullets and{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 font-mono">1.</code> a numbered list, as long as every
+                    line in the block is one. Blank line between paragraphs. Unsubscribe link added automatically.
                   </p>
                 </div>
+                {/* The real renderer, in an iframe. A preview built by a
+                    second code path is a preview of something nobody gets. */}
+                <EmailPreview subject={bSubject} bodyText={bBody} sender={bSender} banner={bBanner} />
+
                 <div className="flex gap-2 flex-wrap pt-1">
                   <Button type="submit" disabled={bBusy || !bSubject.trim() || !bBody.trim()} className="gap-1.5">
                     Save draft

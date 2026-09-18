@@ -138,7 +138,7 @@ Register → militaryvoice.ai/watch`;
           <img
             src={`${API_BASE}/og/lineup.jpg?size=square`}
             alt={`All ${shows.length} shows on the lineup`}
-            className="w-full rounded-xl border border-border"
+            className="h-auto w-full self-start rounded-xl border border-border"
             data-testid="img-lineup-poster"
           />
           <div className="flex flex-col gap-3">
@@ -196,7 +196,7 @@ Register → militaryvoice.ai/watch`;
                 src={`${API_BASE}/og/spotlight/${signup.id}.jpg?size=square`}
                 alt={`Spotlight card for ${signup.podcastName}`}
                 loading="lazy"
-                className="w-full shrink-0 rounded-lg border border-border sm:w-[200px]"
+                className="h-auto w-full shrink-0 self-start rounded-lg border border-border sm:w-[200px]"
               />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
