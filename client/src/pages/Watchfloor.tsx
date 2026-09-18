@@ -107,7 +107,13 @@ const COMPARISON: { feature: string; us: string | true; restream: string | true 
 function Cell({ value, strong }: { value: string | true | false; strong?: boolean }) {
   if (value === true)
     return (
-      <span className={`inline-flex items-center justify-center rounded-full p-1 ${strong ? "bg-[#F0A71F]/25 text-[#7a5200]" : "bg-muted text-muted-foreground"}`}>
+      <span
+        className={`inline-flex items-center justify-center rounded-full p-1 ${
+          // Solid, not tinted: a dark tick on a 25% gold wash disappeared
+          // entirely against the dark theme.
+          strong ? "bg-[#F0A71F] text-[#1a1200]" : "bg-muted text-muted-foreground"
+        }`}
+      >
         <Check className="h-3.5 w-3.5" />
       </span>
     );

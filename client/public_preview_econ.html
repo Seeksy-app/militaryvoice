@@ -1,0 +1,449 @@
+<title>Watchfloor Unit Economics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ink: #0d1520;
+    --ink-2: #33404f;
+    --grey: #66717f;
+    --line: #dde2e8;
+    --line-soft: #e9edf1;
+    --paper: #f3f6f9;
+    --card: #ffffff;
+    --navy: #12315c;
+    --navy-soft: #eaeff6;
+    --amber: #a86d05;
+    --amber-soft: #fbf1dc;
+    --red: #9d3327;
+    --green: #1a6344;
+    --shadow: 0 1px 2px rgba(13, 21, 32, .05), 0 8px 24px -16px rgba(13, 21, 32, .25);
+  }
+  :root:not([data-theme="light"]) { }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #eef2f7;
+      --ink-2: #b6c1cd;
+      --grey: #8996a5;
+      --line: #27323f;
+      --line-soft: #1d2731;
+      --paper: #0b1119;
+      --card: #121a24;
+      --navy: #8fb4e8;
+      --navy-soft: #16263c;
+      --amber: #e2a838;
+      --amber-soft: #2a2114;
+      --red: #e08376;
+      --green: #62c79b;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink: #eef2f7;
+    --ink-2: #b6c1cd;
+    --grey: #8996a5;
+    --line: #27323f;
+    --line-soft: #1d2731;
+    --paper: #0b1119;
+    --card: #121a24;
+    --navy: #8fb4e8;
+    --navy-soft: #16263c;
+    --amber: #e2a838;
+    --amber-soft: #2a2114;
+    --red: #e08376;
+    --green: #62c79b;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.8);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+  h1, h2, h3, .num, th { font-family: Archivo, ui-sans-serif, system-ui, sans-serif; }
+  h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.05; font-weight: 700; letter-spacing: -.02em; margin: 0; text-wrap: balance; }
+  h2 { font-size: clamp(1.35rem, 3vw, 1.75rem); line-height: 1.2; font-weight: 600; letter-spacing: -.015em; margin: 0 0 8px; text-wrap: balance; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; letter-spacing: -.005em; }
+  p { margin: 0 0 16px; }
+  a { color: var(--navy); }
+  .mono, td.n, .num { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+
+  .eyebrow {
+    font-family: Archivo, sans-serif; font-size: .7rem; font-weight: 600;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--grey);
+  }
+
+  /* ---- masthead ---- */
+  header.top { background: var(--ink); color: #f3f6f9; padding: 48px 0 40px; }
+  header.top .eyebrow { color: #7f93ab; }
+  header.top h1 { color: #fff; margin-top: 12px; }
+  header.top .lede { color: #b9c6d6; font-size: 1.1rem; max-width: 46ch; margin-top: 18px; }
+  header.top .meta { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 10px 28px; font-size: .82rem; color: #8b9cb0; }
+
+  section { padding: 44px 0; border-bottom: 1px solid var(--line-soft); }
+  section:last-of-type { border-bottom: 0; }
+  .sub { color: var(--grey); max-width: 62ch; }
+
+  /* ---- the model ---- */
+  .model { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; margin-top: 22px; }
+  .model .head { padding: 20px 22px 18px; border-bottom: 1px solid var(--line-soft); }
+  .dial { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .dial .v { font-family: Archivo, sans-serif; font-size: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1; }
+  .dial label { font-size: .9rem; color: var(--grey); }
+  input[type=range] { width: 100%; margin: 16px 0 4px; accent-color: var(--amber); }
+  .ticks { display: flex; justify-content: space-between; font-size: .72rem; color: var(--grey); font-family: "IBM Plex Mono", monospace; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th { text-align: left; font-size: .68rem; letter-spacing: .13em; text-transform: uppercase; color: var(--grey); font-weight: 600; padding: 12px 22px 8px; }
+  th.n, td.n { text-align: right; }
+  td { padding: 9px 22px; border-top: 1px solid var(--line-soft); vertical-align: baseline; }
+  td .what { display: block; color: var(--grey); font-size: .8rem; line-height: 1.35; }
+  tr.fixed td:first-child::before { content: "fixed"; display: inline-block; font-size: .6rem; letter-spacing: .1em; text-transform: uppercase; color: var(--grey); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; margin-right: 8px; vertical-align: 1px; }
+  tr.total td { border-top: 2px solid var(--ink); font-weight: 600; font-size: 1.05rem; padding-top: 14px; padding-bottom: 16px; }
+  tr.big td.n { color: var(--red); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+
+  .split { display: grid; gap: 1px; background: var(--line-soft); border-top: 1px solid var(--line-soft); }
+  @media (min-width: 620px) { .split { grid-template-columns: 1fr 1fr 1fr; } }
+  .split > div { background: var(--card); padding: 16px 22px; }
+  .split .k { font-size: .7rem; letter-spacing: .13em; text-transform: uppercase; color: var(--grey); }
+  .split .v { font-family: Archivo, sans-serif; font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; margin-top: 2px; }
+  .split .n { font-size: .8rem; color: var(--grey); }
+
+  /* ---- findings ---- */
+  .finding { display: grid; grid-template-columns: auto 1fr; gap: 0 18px; padding: 20px 0; border-top: 1px solid var(--line-soft); }
+  .finding:first-of-type { border-top: 0; }
+  .finding .n { font-family: Archivo, sans-serif; font-size: .8rem; font-weight: 700; color: var(--amber); padding-top: 3px; font-variant-numeric: tabular-nums; }
+  .finding p:last-child { margin-bottom: 0; }
+
+  .callout { background: var(--amber-soft); border-left: 3px solid var(--amber); padding: 16px 20px; border-radius: 0 8px 8px 0; margin: 20px 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout strong { color: var(--ink); }
+
+  /* ---- pricing ---- */
+  .tiers { display: grid; gap: 14px; margin-top: 22px; }
+  @media (min-width: 720px) { .tiers { grid-template-columns: repeat(3, 1fr); } }
+  .tier { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; box-shadow: var(--shadow); }
+  .tier.pick { border-color: var(--amber); border-width: 2px; }
+  .tier .name { font-family: Archivo, sans-serif; font-weight: 600; font-size: 1.05rem; }
+  .tier .price { font-family: Archivo, sans-serif; font-size: 2rem; font-weight: 700; letter-spacing: -.03em; margin: 6px 0 2px; font-variant-numeric: tabular-nums; }
+  .tier .price span { font-size: .85rem; font-weight: 500; color: var(--grey); letter-spacing: 0; }
+  .tier ul { list-style: none; margin: 14px 0 0; padding: 0; font-size: .88rem; flex: 1; }
+  .tier li { padding: 5px 0 5px 18px; position: relative; color: var(--ink-2); }
+  .tier li::before { content: "·"; position: absolute; left: 4px; color: var(--amber); font-weight: 700; }
+  .tier .econ { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line-soft); font-size: .78rem; color: var(--grey); font-family: "IBM Plex Mono", monospace; }
+  .tier .econ b { color: var(--green); font-weight: 600; }
+
+  .market { margin-top: 26px; font-size: .9rem; }
+  .bar { display: grid; grid-template-columns: 9.5rem 1fr 4rem; align-items: center; gap: 12px; padding: 5px 0; }
+  .bar .who { color: var(--ink-2); }
+  .bar .track { background: var(--line-soft); border-radius: 3px; height: 9px; overflow: hidden; }
+  .bar .fill { height: 100%; background: var(--grey); border-radius: 3px; }
+  .bar.us .fill { background: var(--amber); }
+  .bar.us .who { font-weight: 600; color: var(--ink); }
+  .bar .amt { text-align: right; font-family: "IBM Plex Mono", monospace; font-size: .82rem; color: var(--grey); }
+  .bar.us .amt { color: var(--ink); font-weight: 600; }
+
+  .note { font-size: .84rem; color: var(--grey); }
+  ol.plain { padding-left: 1.1rem; }
+  ol.plain li { margin-bottom: 8px; }
+  footer { padding: 32px 0 60px; color: var(--grey); font-size: .84rem; }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="eyebrow">Watchfloor · internal</div>
+    <h1>What the twenty-four hours costs, and what to charge for the rest of the year</h1>
+    <p class="lede">Every rate here is published pricing, read on 17 September 2026. Every total is arithmetic you can check.</p>
+    <div class="meta">
+      <span>5 Oct 2026 · 24 hours · 48 slots</span>
+      <span>LiveKit · Deepgram · Anthropic · Supabase · Vercel</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section>
+    <div class="eyebrow">The model</div>
+    <h2>One number decides the bill</h2>
+    <p class="sub">Not the length of the event, not the number of shows — the average number of people watching <em>on our own page</em> at any moment. Every one of them is a live WebRTC subscriber we pay for by the minute and by the gigabyte. Move the dial.</p>
+
+    <div class="model">
+      <div class="head">
+        <div class="dial">
+          <span class="v" id="vv">100</span>
+          <label for="viewers">average concurrent viewers on militaryvoice.ai/watch</label>
+        </div>
+        <input type="range" id="viewers" min="10" max="600" step="10" value="100" aria-label="Average concurrent viewers">
+        <div class="ticks"><span>10</span><span>150</span><span>300</span><span>450</span><span>600</span></div>
+      </div>
+
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>Line</th><th class="n">Cost</th></tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+
+      <div class="split">
+        <div><div class="k">Fixed monthly</div><div class="v" id="sFixed">—</div><div class="n">plans we pay anyway</div></div>
+        <div><div class="k">Caused by the event</div><div class="v" id="sVar">—</div><div class="n">usage on top</div></div>
+        <div><div class="k">Per podcast slot</div><div class="v" id="sSlot">—</div><div class="n">48 slots</div></div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <p><strong>The lever.</strong> A viewer on YouTube costs us nothing. The RTMP feed out to YouTube, X and Twitch is a flat ~113&nbsp;GB for the whole day whether four people watch it or forty thousand. A viewer on our own watch page costs about <span class="mono" id="perViewer">$1.06</span> for the day.</p>
+      <p>So the watch page is the premium room — sub-second, captioned, the thing sponsors see — and YouTube is where the audience scales for free. Point the promotion at YouTube and the bill stops moving.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">What the model found</div>
+    <h2>Three things worth knowing before the day</h2>
+
+    <div class="finding">
+      <div class="n">01</div>
+      <div>
+        <h3>Transcode is the biggest line we can't avoid</h3>
+        <p>$45.60, and it barely moves with audience. Two egresses run: the 24-hour broadcast composite, and one recording per slot — 2,880 minutes against 600 included. The per-slot recordings are the product, so they stay. The broadcast egress only starts when there is at least one external destination enabled, which the code already checks, so a day with no RTMP destinations costs $17 less.</p>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="n">02</div>
+      <div>
+        <h3>Pre-recorded segments are served from storage, to every viewer separately</h3>
+        <p>A recorded episode plays as a file on the stage, and every watcher pulls it from Supabase individually. At 100 concurrent that is <span class="mono">371&nbsp;GB</span> across thirteen recorded slots; at 400 it is <span class="mono" id="prerecGb">1,485&nbsp;GB</span>. Supabase's CDN absorbs most of the cost, so the money is small — but object storage is not a video CDN, and a first-viewer cache miss on a 300&nbsp;MB file is the failure mode. Worth a rehearsal with a recorded slot and real viewers before the day.</p>
+      </div>
+    </div>
+
+    <div class="finding">
+      <div class="n">03</div>
+      <div>
+        <h3>The intelligence is the cheapest thing in the building</h3>
+        <p>Live captions for the entire 24 hours: <span class="mono">$13.82</span>. Claude reading all 48 segments and choosing the clips: <span class="mono">$4.68</span>. Together they are under 2% of the bill at 100 viewers, and they are the whole reason a podcaster would move here. The expensive part is moving pictures; the valuable part costs almost nothing.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Recurring revenue</div>
+    <h2>What to charge a podcaster to keep the studio</h2>
+    <p class="sub">Marginal cost is calculated at list overage rates — the honest worst case. In practice the plan allowances (150,000 connection minutes, 250&nbsp;GB, 600 transcode minutes) are shared across every customer, so the first several subscribers cost close to nothing on top of the fixed $115.</p>
+
+    <div class="tiers">
+      <div class="tier">
+        <div class="name">Keep the lights on</div>
+        <div class="price">$19<span> / month</span></div>
+        <ul>
+          <li>Your studio stays yours</li>
+          <li>2 hours live a month</li>
+          <li>Archive and clips stay up</li>
+          <li>Clips on anything you record</li>
+          <li>1 destination</li>
+        </ul>
+        <div class="econ">costs ~$6 · <b>68% margin</b></div>
+      </div>
+
+      <div class="tier pick">
+        <div class="name">Watchfloor</div>
+        <div class="price">$39<span> / month</span></div>
+        <ul>
+          <li>8 hours live a month</li>
+          <li>Clips on every episode</li>
+          <li>Guests get their own recording</li>
+          <li>3 destinations · your logo</li>
+          <li>Captions on the stream</li>
+        </ul>
+        <div class="econ">costs ~$16 · <b>59% margin</b></div>
+      </div>
+
+      <div class="tier">
+        <div class="name">Network</div>
+        <div class="price">$149<span> / month</span></div>
+        <ul>
+          <li>40 hours, unlimited shows</li>
+          <li>8 destinations · 5 seats</li>
+          <li>Per-host dashboards</li>
+          <li>Slot booking and public agenda</li>
+          <li>Priority clip turnaround</li>
+        </ul>
+        <div class="econ">costs ~$75 · <b>50% margin</b></div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <p><strong>Half price for verified veteran-owned shows and registered nonprofits</strong>, permanently, stated on the pricing page rather than hidden behind a code. Margin on the $39 tier at half price is still positive at typical use, and it is the only pricing decision on this page that anyone will repeat to someone else.</p>
+    </div>
+
+    <div class="market">
+      <div class="eyebrow" style="margin-bottom:10px">Monthly, against the tools they're on now</div>
+      <div class="bar"><span class="who">Restream + Clips</span><span class="track"><span class="fill" style="width:42%"></span></span><span class="amt">$38</span></div>
+      <div class="bar us"><span class="who">Watchfloor</span><span class="track"><span class="fill" style="width:43%"></span></span><span class="amt">$39</span></div>
+      <div class="bar"><span class="who">Riverside Grow</span><span class="track"><span class="fill" style="width:43%"></span></span><span class="amt">$39</span></div>
+      <div class="bar"><span class="who">StreamYard Core</span><span class="track"><span class="fill" style="width:50%"></span></span><span class="amt">$45</span></div>
+      <div class="bar"><span class="who">Restream Pro + Clips</span><span class="track"><span class="fill" style="width:87%"></span></span><span class="amt">$78</span></div>
+      <div class="bar"><span class="who">StreamYard Advanced</span><span class="track"><span class="fill" style="width:99%"></span></span><span class="amt">$89</span></div>
+      <p class="note" style="margin-top:14px">Priced to sit level with the market, not under it. Nobody switches control rooms to save six dollars; they switch because their clips are cut for them and their guests leave with their own files. Going in cheap would say the opposite about what that is worth.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">The larger number</div>
+    <h2>What to charge an organization for their own event</h2>
+    <p class="sub">A produced 24-hour event costs us between $205 and $1,075 to run. This is where the business is — one event is worth more than a hundred subscriptions, and the marathon itself is the demo.</p>
+
+    <div class="scroll">
+      <table style="margin-top:14px">
+        <thead><tr><th>Package</th><th class="n">Price</th><th class="n">Our cost</th><th class="n">Margin</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>Self-serve event<span class="what">Platform only. They run their own control room.</span></td>
+            <td class="n mono">$1,500</td><td class="n mono">~$250</td><td class="n mono">83%</td>
+          </tr>
+          <tr>
+            <td>Produced event<span class="what">We staff the studio, build the rail, cut the clips, hand over the archive.</span></td>
+            <td class="n mono">$5,000</td><td class="n mono">~$600</td><td class="n mono">88%</td>
+          </tr>
+          <tr>
+            <td>Sponsored 24-hour marathon<span class="what">Everything, plus sponsor integration, per-speaker clip packages and a post-event report.</span></td>
+            <td class="n mono">$10,000</td><td class="n mono">~$1,100</td><td class="n mono">89%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note" style="margin-top:14px">Cost excludes people. A produced event is a producer awake for 24 hours, which is the real line item and the one to price properly before saying yes to the second booking.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Break-even</div>
+    <h2>What it takes to cover the floor</h2>
+    <p class="sub">Fixed platform cost is <span class="mono">$115</span> a month — LiveKit Ship, Supabase Pro, Vercel Pro, Resend — before a single minute of anything.</p>
+    <div class="scroll">
+      <table style="margin-top:14px">
+        <thead><tr><th>To cover</th><th class="n">at $19</th><th class="n">at $39</th><th class="n">at $149</th></tr></thead>
+        <tbody>
+          <tr><td>The $115 floor</td><td class="n mono">9</td><td class="n mono">5</td><td class="n mono">2</td></tr>
+          <tr><td>The floor plus one 24-hour event a year</td><td class="n mono">11</td><td class="n mono">7</td><td class="n mono">2</td></tr>
+          <tr><td>$2,000 a month of contribution</td><td class="n mono">155</td><td class="n mono">87</td><td class="n mono">27</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note" style="margin-top:14px">Subscribers needed, using the margins above. Sixteen shows are already confirmed for October — if half of them stay on at $39, the platform pays for itself and the event budget with room over.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Working</div>
+    <h2>Assumptions, and where I'd want a second opinion</h2>
+    <ol class="plain">
+      <li><strong>Viewer bitrate 1.3&nbsp;Mbps</strong> for 720p WebRTC. If the stage runs 1080p this rises by roughly half, and bandwidth is already the largest variable line.</li>
+      <li><strong>Two people on stage on average</strong>, plus a producer and the captioning agent, for the whole 24 hours.</li>
+      <li><strong>Three RTMP destinations at 3.5&nbsp;Mbps.</strong> Each extra destination adds about 38&nbsp;GB for the day, roughly $4.50.</li>
+      <li><strong>Thirteen pre-recorded slots</strong>, matching the current booking pattern.</li>
+      <li><strong>Deepgram at the promotional streaming rate</strong> of $0.0048/min. The standard rate is $0.0077 — captions would go from $13.82 to $22.18, which changes nothing.</li>
+      <li><strong>Clip selection on Claude Opus 5.</strong> Sonnet 5 would cost $1.87 instead of $4.68 for the day. Not worth trading the quality of the pick for $2.80, but worth revisiting at a thousand shows a month.</li>
+      <li><strong>LiveKit counts a viewer's subscription as connection minutes.</strong> This is the assumption I am least certain of and it is worth confirming on the account before the day — if viewer subscriptions are metered differently, the 400-viewer scenario moves by about $216.</li>
+      <li><strong>No people costs.</strong> Nothing here prices a producer's time, and a 24-hour event needs at least two of them.</li>
+    </ol>
+  </section>
+
+  <footer>
+    Rates read 17 September 2026 from livekit.com/pricing, deepgram.com/pricing, platform.claude.com, supabase.com/pricing, riverside.com/pricing, restream.io/pricing and streamyard.com/pricing. The arithmetic is in <span class="mono">scratchpad/costs.mjs</span>.
+  </footer>
+</div>
+
+<script>
+  const RATE = {
+    ship: 50, connInc: 150000, connOver: 0.0005,
+    dataInc: 250, dataOver: 0.12,
+    transInc: 600, transOver: 0.02,
+    deepgram: 0.0048,
+    claudeIn: 5 / 1e6, claudeOut: 25 / 1e6,
+    supaPro: 25, storeInc: 8, storeOver: 0.125, egIncl: 250, egCached: 0.03,
+    vercel: 20, resend: 20,
+  };
+  const mbPerMin = (mbps) => (mbps * 60) / 8;
+  const VIEWER = 1.3, RTMP = 3.5, DESTS = 3, MINUTES = 1440, SLOTS = 48, SLOT_MIN = 30, PREREC = 13;
+  const usd = (n) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const usd0 = (n) => "$" + Math.round(n).toLocaleString("en-US");
+
+  function model(viewers) {
+    const connMin = 2 * MINUTES + 2 * MINUTES + viewers * MINUTES;
+    const connOver = Math.max(0, connMin - RATE.connInc) * RATE.connOver;
+    const viewerGb = (viewers * MINUTES * mbPerMin(VIEWER)) / 1024;
+    const rtmpGb = (DESTS * MINUTES * mbPerMin(RTMP)) / 1024;
+    const dataGb = viewerGb + rtmpGb;
+    const dataOver = Math.max(0, dataGb - RATE.dataInc) * RATE.dataOver;
+    const transMin = MINUTES + SLOTS * SLOT_MIN;
+    const transOver = Math.max(0, transMin - RATE.transInc) * RATE.transOver;
+    const deepgram = 2 * MINUTES * RATE.deepgram;
+    const claude = SLOTS * (7000 * RATE.claudeIn + 2500 * RATE.claudeOut);
+    const recGb = (SLOTS * SLOT_MIN * mbPerMin(VIEWER)) / 1024;
+    const clipGb = (SLOTS * 4 * 3 * 8) / 1024;
+    const storedGb = recGb + clipGb;
+    const storage = Math.max(0, storedGb - RATE.storeInc) * RATE.storeOver;
+    const prerecGb = (PREREC * SLOT_MIN * viewers * mbPerMin(VIEWER)) / 1024;
+    const egressGb = prerecGb + recGb + clipGb;
+    const egress = Math.max(0, egressGb - RATE.egIncl) * RATE.egCached;
+
+    return {
+      prerecGb,
+      rows: [
+        ["LiveKit Ship", "the plan itself", RATE.ship, true, false],
+        ["Connection minutes", Math.round(connMin).toLocaleString() + " used · 150,000 included", connOver, false, connOver > 60],
+        ["Data transfer", Math.round(dataGb).toLocaleString() + " GB · 250 GB included", dataOver, false, dataOver > 60],
+        ["Transcode", transMin.toLocaleString() + " min · 600 included", transOver, false, false],
+        ["Deepgram captions", "2,880 stream-minutes, live", deepgram, false, false],
+        ["Claude clip selection", SLOTS + " segments read and cut", claude, false, false],
+        ["Supabase Pro", "the plan itself", RATE.supaPro, true, false],
+        ["Storage", Math.round(storedGb) + " GB of recordings and clips kept", storage, false, false],
+        ["Storage egress", Math.round(egressGb).toLocaleString() + " GB served · 250 GB included", egress, false, false],
+        ["Vercel Pro", "the site and the API", RATE.vercel, true, false],
+        ["Resend", "the whole email cadence", RATE.resend, true, false],
+      ],
+    };
+  }
+
+  const rowsEl = document.getElementById("rows");
+  const slider = document.getElementById("viewers");
+
+  function paint() {
+    const viewers = Number(slider.value);
+    const m = model(viewers);
+    document.getElementById("vv").textContent = viewers.toLocaleString();
+
+    rowsEl.innerHTML = m.rows
+      .map(
+        ([name, what, cost, isFixed, big]) =>
+          `<tr class="${isFixed ? "fixed" : ""} ${big ? "big" : ""}"><td>${name}<span class="what">${what}</span></td><td class="n mono">${usd(cost)}</td></tr>`,
+      )
+      .join("") +
+      `<tr class="total"><td>Total for the month of the event</td><td class="n mono">${usd(m.rows.reduce((n, r) => n + r[2], 0))}</td></tr>`;
+
+    const fixed = m.rows.filter((r) => r[3]).reduce((n, r) => n + r[2], 0);
+    const total = m.rows.reduce((n, r) => n + r[2], 0);
+    document.getElementById("sFixed").textContent = usd0(fixed);
+    document.getElementById("sVar").textContent = usd0(total - fixed);
+    document.getElementById("sSlot").textContent = usd((total - fixed) / SLOTS);
+
+    // What one more viewer on our own page costs for the day, at the margin.
+    const step = model(viewers + 10);
+    const delta = step.rows.reduce((n, r) => n + r[2], 0) - total;
+    document.getElementById("perViewer").textContent = usd(Math.max(0, delta / 10));
+    document.getElementById("prerecGb").textContent = Math.round(model(400).prerecGb).toLocaleString() + " GB";
+  }
+
+  slider.addEventListener("input", paint);
+  paint();
+</script>
