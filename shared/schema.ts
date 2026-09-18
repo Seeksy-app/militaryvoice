@@ -243,6 +243,8 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
   // Without this, "no, nothing to send" left the checklist item open forever,
   // which is the one honest answer the list couldn't hear.
   mediaAnswered: boolean("media_answered").notNull().default(false),
+  /** Same for "anything you want the host to mention?" — asked once, not every visit. */
+  detailsAnswered: boolean("details_answered").notNull().default(false),
   // How they normally produce their show, so the studio team knows what to expect.
   recordingMode: text("recording_mode").notNull().default(""),
   postEdits: text("post_edits").notNull().default(""),
@@ -370,6 +372,7 @@ export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
     needsInterviewer: z.boolean(),
     shareAudienceStats: z.boolean(),
     mediaAnswered: z.boolean(),
+    detailsAnswered: z.boolean(),
     showFormat: z.enum(["live", "prerecorded"]),
     introStyle: z.enum(["virtual", "straight"]),
     recordingUrl: optionalUrl("episode"),

@@ -1973,7 +1973,22 @@ export function registerRoutes(app: Express): void {
   }
 
   /** What a speaker sees: their own state plus whether the room is live. */
-  async function speakerState(event: EventRow, studio: StudioRow, clientKey: string) {
+  async function speakerState(event: EventRow, studio: StudioRow, clientKey: string, req?: Request) {
+    // Same rule the join endpoint enforces, answered early so the page can
+    // explain rather than let someone fill in a form that will be refused.
+    let mayJoin = false;
+    if (req) {
+      const adminEmail = getAdminEmail(req);
+      if (adminEmail && (await storage.isAdminEmail(adminEmail))) mayJoin = true;
+      else {
+        const host = getSessionEmail(req);
+        mayJoin =
+          Boolean(host) &&
+          (await storage.listSignups(event.id)).some(
+            (sg) => sg.status !== "cancelled" && sg.email.trim().toLowerCase() === host!.trim().toLowerCase(),
+          );
+      }
+    }
     const all = await storage.listStudioParticipants(studio.id);
     const me = all.find((p) => p.clientKey === clientKey) ?? null;
 
@@ -2011,6 +2026,8 @@ export function registerRoutes(app: Express): void {
       // The same shape the watch page renders from, so the green room can show
       // the programme itself rather than a description of it. Read-only here.
       meta: studioMeta(event.name, studio, event),
+      /** Whether this visitor may enter — decided here, said before the door. */
+      mayJoin,
       me,
       onStage,
       mySlot,
@@ -2027,7 +2044,7 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const clientKey = typeof req.query.clientKey === "string" ? req.query.clientKey : "";
-    res.json(await speakerState(found.event, found.studio, clientKey));
+    res.json(await speakerState(found.event, found.studio, clientKey, req));
   });
 
   /**
@@ -2112,6 +2129,32 @@ export function registerRoutes(app: Express): void {
     // A signed-in podcaster is recognised and gets their show name automatically.
     const hostEmail = getSessionEmail(req);
     const profile = hostEmail ? await storage.getProfileByEmail(hostEmail) : undefined;
+
+    /**
+     * Who is allowed in.
+     *
+     * The green room carries live microphones and every other speaker's face,
+     * and it used to take anyone who typed a name. Two ways in now: a
+     * podcaster who actually holds a slot on this event, or the crew. The
+     * check is here rather than in the browser because the browser is not
+     * where a stranger would be.
+     */
+    const adminEmail = getAdminEmail(req);
+    const isCrew = Boolean(adminEmail && (await storage.isAdminEmail(adminEmail)));
+    const onTheAgenda =
+      Boolean(hostEmail) &&
+      (await storage.listSignups(found.event.id)).some(
+        (sg) => sg.status !== "cancelled" && sg.email.trim().toLowerCase() === hostEmail!.trim().toLowerCase(),
+      );
+    if (!isCrew && !onTheAgenda) {
+      res.status(403).json({
+        message: hostEmail
+          ? "The green room is for podcasters on this event's lineup. Take a time on the agenda and it opens for you."
+          : "Sign in as a podcaster to enter the green room.",
+      });
+      return;
+    }
+
     const row = await storage.upsertStudioParticipant(found.studio.id, parsed.data.clientKey, {
       ...(parsed.data.signupId ? { signupId: parsed.data.signupId } : {}),
       displayName: parsed.data.displayName || profile?.hostName || "",
@@ -4312,6 +4355,13 @@ export function registerRoutes(app: Express): void {
       hasSlides: body.hasSlides === "true",
       hasImages: body.hasImages === "true",
       needsInterviewer: body.needsInterviewer === "true",
+      // Both of these were added to the schema without being read here, so
+      // every save 400'd on a missing required field — silently, because the
+      // callers didn't surface the error. A checklist item that would not
+      // cross off was the visible half of it.
+      shareAudienceStats: body.shareAudienceStats === "true",
+      mediaAnswered: body.mediaAnswered === "true",
+      detailsAnswered: body.detailsAnswered === "true",
       socialLinks: body.socialLinks ?? "",
       rssUrl: body.rssUrl ?? "",
       youtubeUrl: body.youtubeUrl ?? "",

@@ -36,6 +36,8 @@ const HEARTBEAT_MS = 6_000;
 
 interface StudioState {
   eventName: string;
+  /** Whether this visitor is on the lineup, or crew. */
+  mayJoin?: boolean;
   studio: { name: string; status: string; fallbackPlaying: boolean; maxOnStage: number };
   /** What's actually going out, in the same shape the watch page renders. */
   meta?: RoomMeta;
@@ -451,6 +453,30 @@ export default function Studio({ slug }: { slug?: string }) {
         </div>
 
         {!joined ? (
+          state && state.mayJoin === false ? (
+          /* Said here rather than after they've filled in a name. The server
+             refuses either way; this is only so nobody is surprised by it. */
+          <div className="mx-auto mt-10 max-w-md rounded-2xl border border-white/15 bg-white/[0.06] p-6 text-center backdrop-blur">
+            <Users className="mx-auto h-8 w-8 text-white/35" />
+            <h2 className="mt-3 text-lg font-semibold">The green room is for the lineup</h2>
+            <p className="mt-2 text-sm text-white/70">
+              It carries live microphones and every other speaker's camera, so it's open to podcasters with a time on
+              this event — and the crew. Take a slot and it opens for you.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <Link href="/host/dashboard">
+                <Button className="rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]">
+                  Go to your dashboard
+                </Button>
+              </Link>
+              <Link href="/agenda">
+                <Button variant="outline" className="rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white">
+                  See the agenda
+                </Button>
+              </Link>
+            </div>
+          </div>
+        ) : (
           <div className="mx-auto mt-10 max-w-md rounded-2xl border border-white/15 bg-white/[0.06] p-6 backdrop-blur">
             <h2 className="text-lg font-semibold">Join the green room</h2>
             <p className="mt-1 text-sm text-white/70">
@@ -486,6 +512,7 @@ export default function Studio({ slug }: { slug?: string }) {
               </Button>
             </form>
           </div>
+        )
         ) : (
           /* Three columns: who's waiting, the programme, what's coming.
              The programme is the middle because it is the thing everyone in

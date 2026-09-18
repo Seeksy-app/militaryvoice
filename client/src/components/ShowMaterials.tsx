@@ -124,7 +124,7 @@ export function ShowMaterials({
   /** Answering either way is the answer. Saved so the checklist can cross it
    *  off and stay crossed off — "nothing to send" is a finished task. */
   const answerMedia = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (which: { media?: boolean; details?: boolean }) => {
       const fd = new FormData();
       fd.append("podcastName", profile.podcastName);
       fd.append("hostName", profile.hostName);
@@ -136,7 +136,8 @@ export function ShowMaterials({
       fd.append("hasImages", String(bringing.hasImages));
       fd.append("needsInterviewer", String(needsInterviewer));
       fd.append("shareAudienceStats", String(profile.shareAudienceStats));
-      fd.append("mediaAnswered", "true");
+      fd.append("mediaAnswered", String(which.media ?? profile.mediaAnswered));
+      fd.append("detailsAnswered", String(which.details ?? profile.detailsAnswered));
       fd.append("socialLinks", profile.socialLinks ?? "");
       fd.append("rssUrl", profile.rssUrl ?? "");
       fd.append("youtubeUrl", profile.youtubeUrl ?? "");
@@ -180,6 +181,9 @@ export function ShowMaterials({
       fd.append("hasSlides", String(bringing.hasSlides));
       fd.append("hasImages", String(bringing.hasImages));
       fd.append("needsInterviewer", String(needsInterviewer));
+      fd.append("shareAudienceStats", String(profile.shareAudienceStats));
+      fd.append("mediaAnswered", String(profile.mediaAnswered));
+      fd.append("detailsAnswered", String(profile.detailsAnswered));
       fd.append("socialLinks", profile.socialLinks ?? "");
       fd.append("rssUrl", profile.rssUrl ?? "");
       fd.append("youtubeUrl", profile.youtubeUrl ?? "");
@@ -219,7 +223,7 @@ export function ShowMaterials({
   // Same shape as the media question above. Anyone who has already written
   // something skips the question and sees what they wrote.
   const hasDetails = Boolean((profile.guests ?? "") || (profile.interviewQuestions ?? "") || (profile.promoNotes ?? ""));
-  const [wantsDetails, setWantsDetails] = useState<boolean | null>(null);
+  const [wantsDetails, setWantsDetails] = useState<boolean | null>(profile.detailsAnswered ? false : null);
   const showDetails = hasDetails || wantsDetails === true || openDetails;
 
   return (
@@ -283,7 +287,7 @@ export function ShowMaterials({
                   className="rounded-full"
                   onClick={() => {
                     setWantsFiles(true);
-                    answerMedia.mutate();
+                    answerMedia.mutate({ media: true });
                   }}
                   data-testid="button-media-yes"
                 >
@@ -296,7 +300,7 @@ export function ShowMaterials({
                   className="rounded-full"
                   onClick={() => {
                     setWantsFiles(false);
-                    answerMedia.mutate();
+                    answerMedia.mutate({ media: true });
                   }}
                   data-testid="button-media-no"
                 >
@@ -505,7 +509,10 @@ export function ShowMaterials({
                   size="sm"
                   variant="outline"
                   className="rounded-full"
-                  onClick={() => setWantsDetails(true)}
+                  onClick={() => {
+                    setWantsDetails(true);
+                    answerMedia.mutate({ details: true });
+                  }}
                   data-testid="button-details-yes"
                 >
                   Yes, there is
@@ -515,7 +522,10 @@ export function ShowMaterials({
                   size="sm"
                   variant={wantsDetails === false ? "default" : "outline"}
                   className="rounded-full"
-                  onClick={() => setWantsDetails(false)}
+                  onClick={() => {
+                    setWantsDetails(false);
+                    answerMedia.mutate({ details: true });
+                  }}
                   data-testid="button-details-no"
                 >
                   No, nothing to add

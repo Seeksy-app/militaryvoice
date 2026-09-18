@@ -218,6 +218,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
       youtubeUrl: profile?.youtubeUrl ?? "",
       shareAudienceStats: profile?.shareAudienceStats ?? false,
       mediaAnswered: profile?.mediaAnswered ?? false,
+      detailsAnswered: profile?.detailsAnswered ?? false,
       showFormat: (profile?.showFormat as "live" | "prerecorded") ?? "live",
       recordingUrl: profile?.recordingUrl ?? "",
       introStyle: (profile?.introStyle as "virtual" | "straight") ?? "virtual",
@@ -350,6 +351,11 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
       formData.append("hasSlides", String(prerecorded ? false : values.hasSlides));
       formData.append("hasImages", String(prerecorded ? false : values.hasImages));
       formData.append("needsInterviewer", String(prerecorded ? false : values.needsInterviewer));
+      // Carried through rather than defaulted: saving the profile form must
+      // not quietly undo a consent toggle or a question already answered.
+      formData.append("shareAudienceStats", String(values.shareAudienceStats ?? false));
+      formData.append("mediaAnswered", String(values.mediaAnswered ?? false));
+      formData.append("detailsAnswered", String(values.detailsAnswered ?? false));
       formData.append("socialLinks", values.socialLinks ?? "");
       formData.append("rssUrl", values.rssUrl ?? "");
       formData.append("youtubeUrl", values.youtubeUrl ?? "");
