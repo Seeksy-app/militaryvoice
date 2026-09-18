@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { SponsorDialog } from "@/components/SponsorDialog";
+import { AudienceReach } from "@/components/AudienceReach";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import { slotStart, totalSlots, formatTimeInZone } from "@/lib/schedule";
@@ -252,6 +253,9 @@ export default function Sponsor() {
           </div>
         </section>
       )}
+
+      {/* --------------------------------------------------- AUDIENCE REACH */}
+      <AudienceReach />
 
       {/* ------------------------------------------------------------ TIERS */}
       <section id="tiers" className="scroll-mt-16 py-16 lg:py-20" style={{ backgroundColor: NAVY }}>

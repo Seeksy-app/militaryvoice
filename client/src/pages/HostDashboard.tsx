@@ -443,6 +443,15 @@ export default function HostDashboard() {
     enabled: !!data,
   });
 
+  // Whether their own channel is wired up, for the checklist. StreamStatusRow
+  // asks the same question lower down; both read the one cached answer.
+  const { data: youtube } = useQuery<{ connected: boolean; channelTitle?: string }>({
+    queryKey: ["/api/host/youtube"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/youtube")).json(),
+    retry: false,
+    enabled: !!data,
+  });
+
   // Public events list so the held slot can be described before sign-in.
   const { data: events } = useQuery<PublicEvent[]>({ queryKey: ["/api/events"] });
 
@@ -842,7 +851,10 @@ export default function HostDashboard() {
                 <SocialTiles accounts={social.accounts} onConnect={() => connectSocial.mutate()} connecting={connectSocial.isPending} />
                 {social.accounts.length > 0 && profile && <AudienceConsent profile={profile} />}
 
-                <h2 className="mb-2 mt-10 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+                <h2
+                  id="section-going-out-live"
+                  className="mb-2 mt-10 flex scroll-mt-24 items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground"
+                >
                   <Radio className="h-4 w-4" /> Going out live
                 </h2>
                 <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
@@ -1170,6 +1182,7 @@ export default function HostDashboard() {
                 // Answering "nothing to send" finishes this step as truly as
                 // uploading does. The list should hear both answers.
                 hasMaterials: (hostAssets?.length ?? 0) > 0 || Boolean(profile?.mediaAnswered),
+                hasYouTube: Boolean(youtube?.connected),
               }}
               onGoEvents={() => goTo("events")}
               onGoIntegrations={() => goTo("integrations")}

@@ -64,6 +64,10 @@ function event({ viewers, hours = 24, slotMin = 30, prerecordedSlots = 13 }) {
   const egressGb = prerecGb + clipGb;
   const egress = Math.max(0, egressGb - RATE.supabase.egressGbInc) * RATE.supabase.cachedGbOver;
 
+  // Rendering the clips: a 2 vCPU box running ffmpeg, held for the day plus a
+  // day of catch-up. Flat, like everything else about making a clip.
+  const clipWorker = 0.09 * 48;
+
   const lines = [
     ["LiveKit Ship (monthly plan)", RATE.livekit.ship],
     [`LiveKit connection minutes (${Math.round(connMin).toLocaleString()}, ${RATE.livekit.connMinInc.toLocaleString()} included)`, connOver],
@@ -71,6 +75,7 @@ function event({ viewers, hours = 24, slotMin = 30, prerecordedSlots = 13 }) {
     [`LiveKit transcode (${transcodeMin.toLocaleString()} min, 600 included)`, transcodeOver],
     [`Deepgram live captions (${(2 * minutes).toLocaleString()} min)`, deepgram],
     [`Claude clip selection (${slots} segments)`, claude],
+    ["Clip rendering (48 h of worker time, three aspect ratios)", clipWorker],
     ["Supabase Pro (monthly plan)", RATE.supabase.pro],
     [`Cloudflare R2 — recordings (${Math.round(recordingGb)} GB, egress free)`, r2],
     [`Supabase storage — clips (${Math.round(clipGb)} GB, 8 GB included)`, storage],

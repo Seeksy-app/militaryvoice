@@ -24,9 +24,10 @@ import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi";
 import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
+import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
-import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send } from "lucide-react";
+import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw } from "lucide-react";
 import { CADENCE_STEPS, cadenceSource } from "@shared/schema";
 import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, SponsorPackageWithSold, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
@@ -1123,6 +1124,90 @@ function SponsorPackagesCard({ eventId }: { eventId: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// Audience reach — the figure the sponsor pages quote
+// ---------------------------------------------------------------------------
+
+/**
+ * Recompute what the lineup reaches, and say plainly what was left out.
+ *
+ * This costs an Upload-Post call per connected podcaster, so it is a button
+ * rather than something that happens on its own. The drop counts are shown
+ * next to the total on purpose: a figure that went up because the sanitiser
+ * stopped rejecting a bad feed is a different thing from one that went up
+ * because another host joined, and only the counts tell them apart.
+ */
+function AudienceSnapshotPanel({ eventId }: { eventId: number }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const { data } = useQuery<{ snapshot: AudienceSnapshot | null; windowDays: number }>({
+    queryKey: ["/api/admin/audience"],
+    queryFn: () => adminGet<{ snapshot: AudienceSnapshot | null; windowDays: number }>("/api/admin/audience"),
+  });
+  const snap = data?.snapshot ?? null;
+
+  async function refreshNow() {
+    setBusy(true);
+    try {
+      const res = await adminSend("POST", "/api/admin/audience/refresh", { eventId });
+      const next = (await res.json()) as AudienceSnapshot;
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/audience"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/audience/summary"] });
+      toast({
+        title: `${next.followers.toLocaleString()} combined following`,
+        description: `${next.channels} channels across ${next.shows} shows. Live on the sponsor pages now.`,
+      });
+    } catch (err) {
+      toast({ title: "Couldn't refresh the figures", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/30 p-4" data-testid="panel-audience-snapshot">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-medium">What the lineup reaches</div>
+          <div className="text-xs text-muted-foreground">
+            Shown on /sponsor and /vfw. Read from each host's own connected accounts — no names or per-show figures
+            leave the server.
+          </div>
+        </div>
+        <Button size="sm" variant="outline" onClick={refreshNow} disabled={busy} data-testid="button-audience-refresh">
+          <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
+          {busy ? "Reading accounts…" : "Refresh"}
+        </Button>
+      </div>
+
+      {snap ? (
+        <div className="mt-3 flex flex-wrap items-baseline gap-x-6 gap-y-1 text-sm">
+          <span>
+            <span className="text-lg font-bold tabular-nums">{snap.followers.toLocaleString()}</span>{" "}
+            <span className="text-muted-foreground">combined following</span>
+          </span>
+          <span className="text-muted-foreground">
+            {snap.channels} channels · {snap.shows} of {snap.showsTotal} shows
+          </span>
+          <span className="text-muted-foreground">
+            {snap.impressions.toLocaleString()} impressions · {snap.reach.toLocaleString()} reached
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {snap.dropped > 0 ? `${snap.dropped} left out as implausible · ` : ""}
+            {snap.unavailable > 0 ? `${snap.unavailable} wouldn't report · ` : ""}
+            as of {new Date(snap.generatedAt).toLocaleDateString()}
+          </span>
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-muted-foreground">
+          Nothing pulled yet — the sponsor pages leave the section out entirely until there is a figure to show.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Sponsors — logos on the homepage, split across the three tiers
 // ---------------------------------------------------------------------------
 function SponsorsCard({ eventId }: { eventId: number }) {
@@ -1246,6 +1331,7 @@ function SponsorsCard({ eventId }: { eventId: number }) {
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-6">
+        <AudienceSnapshotPanel eventId={eventId} />
         <form onSubmit={handleAdd} className="grid gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-4 sm:grid-cols-[auto_1fr_1fr_auto_auto] sm:items-end">
           <div>
             <Label className="text-xs">Logo</Label>

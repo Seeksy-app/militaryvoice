@@ -21,6 +21,10 @@ const RATE = {
   supaPro: 25, storeInc: 8, storeOver: 0.125, egIncl: 250, egCached: 0.03,
   r2PerGb: 0.015,
   vercel: 20, resend: 20, uploadPost: 50,
+  // The clip worker: a 2 vCPU / 4 GB box running ffmpeg. Held up for the day
+  // itself plus a day of catch-up, because the last slot's clips are cut after
+  // the last slot ends.
+  workerPerHour: 0.09, workerHours: 48,
 };
 const VIEWER_MBPS = 1.3;
 const RTMP_MBPS = 3.5;
@@ -36,6 +40,8 @@ interface Line {
   cost: number;
   fixed?: boolean;
   big?: boolean;
+  /** This line moves with how many people watch. Everything else does not. */
+  audience?: boolean;
 }
 
 function model(viewers: number, hours: number, slotMin: number, prerecorded: number) {
@@ -56,6 +62,11 @@ function model(viewers: number, hours: number, slotMin: number, prerecorded: num
   const deepgram = 2 * minutes * RATE.deepgram;
   const claude = slots * (7000 * RATE.claudeIn + 2500 * RATE.claudeOut);
 
+  // Rendering the clips. Each segment is downloaded once and cut into wide,
+  // vertical and square, which is ffmpeg time on a machine we rent by the
+  // hour — the same work whether one person watched or a hundred thousand.
+  const clipWorker = RATE.workerPerHour * RATE.workerHours;
+
   const recGb = (slots * slotMin * mbPerMin(VIEWER_MBPS)) / 1024;
   const clipGb = (slots * 4 * 3 * 8) / 1024;
   const r2 = recGb * RATE.r2PerGb;
@@ -67,22 +78,27 @@ function model(viewers: number, hours: number, slotMin: number, prerecorded: num
 
   const lines: Line[] = [
     { label: "LiveKit Ship", note: "the plan itself", cost: RATE.ship, fixed: true },
-    { label: "Connection minutes", note: `${Math.round(connMin).toLocaleString()} used · 150,000 included`, cost: connOver, big: connOver > 60 },
-    { label: "Data transfer", note: `${Math.round(dataGb).toLocaleString()} GB · 250 GB included`, cost: dataOver, big: dataOver > 60 },
+    { label: "Connection minutes", note: `${Math.round(connMin).toLocaleString()} used · 150,000 included`, cost: connOver, big: connOver > 60, audience: true },
+    { label: "Data transfer", note: `${Math.round(dataGb).toLocaleString()} GB · 250 GB included`, cost: dataOver, big: dataOver > 60, audience: true },
     { label: "Transcode", note: `${transMin.toLocaleString()} min · 600 included`, cost: transOver },
     { label: "Deepgram captions", note: `${(2 * minutes).toLocaleString()} stream-minutes, live`, cost: deepgram },
     { label: "Claude clip selection", note: `${slots} segments read and cut`, cost: claude },
+    { label: "Clip rendering", note: `${RATE.workerHours} h of worker time · ffmpeg, three aspect ratios`, cost: clipWorker },
     { label: "Supabase Pro", note: "the plan itself", cost: RATE.supaPro, fixed: true },
     { label: "Cloudflare R2", note: `${Math.round(recGb)} GB of recordings · egress free`, cost: r2 },
     { label: "Supabase storage", note: `${Math.round(clipGb)} GB of clips · 8 GB included`, cost: storage },
-    { label: "Supabase egress", note: `${Math.round(egressGb).toLocaleString()} GB served · 250 GB included`, cost: egress },
+    { label: "Supabase egress", note: `${Math.round(egressGb).toLocaleString()} GB served · 250 GB included`, cost: egress, audience: true },
     { label: "Upload-Post", note: "posting and social analytics · 25 profiles", cost: RATE.uploadPost, fixed: true },
     { label: "Vercel Pro", note: "the site and the API", cost: RATE.vercel, fixed: true },
     { label: "Resend", note: "the whole email cadence", cost: RATE.resend, fixed: true },
   ];
   const total = lines.reduce((n, l) => n + l.cost, 0);
   const fixed = lines.filter((l) => l.fixed).reduce((n, l) => n + l.cost, 0);
-  return { lines, total, fixed, variable: total - fixed, slots, prerecGb };
+  // The split that actually decides the price of a show: recording, captioning
+  // and cutting cost the same for an empty room as for a full one. Only the
+  // three `audience` lines move, and only for people watching on our own page.
+  const audience = lines.filter((l) => l.audience).reduce((n, l) => n + l.cost, 0);
+  return { lines, total, fixed, variable: total - fixed, audience, flat: total - audience, slots, prerecGb };
 }
 
 const TIERS = [
@@ -148,6 +164,11 @@ export function FinancesCard({ event }: { event: PublicEvent }) {
                           fixed
                         </span>
                       )}
+                      {l.audience && (
+                        <span className="mr-2 rounded border border-[#F0A71F] bg-[#F0A71F]/15 px-1 text-[10px] uppercase tracking-wide text-[#8a5f00] dark:text-[#F0A71F]">
+                          audience
+                        </span>
+                      )}
                       {l.label}
                       <span className="block text-xs text-muted-foreground">{l.note}</span>
                     </td>
@@ -164,6 +185,29 @@ export function FinancesCard({ event }: { event: PublicEvent }) {
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          {/* The split worth knowing before you price anything: almost all of
+              this bill is the same for an empty room as for a full one. */}
+          <div className="grid gap-px border-t border-border bg-border sm:grid-cols-2">
+            <div className="bg-card p-4">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                The same at any audience
+              </div>
+              <div className="mt-0.5 text-2xl font-bold tabular-nums" data-testid="finance-flat">{usd0(m.flat)}</div>
+              <div className="text-xs text-muted-foreground">
+                Recording, captioning, clip selection and rendering. We pay this to cut {m.slots} shows into clips
+                whether one person watches or a hundred thousand.
+              </div>
+            </div>
+            <div className="bg-card p-4">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Moves with the audience</div>
+              <div className="mt-0.5 text-2xl font-bold tabular-nums" data-testid="finance-audience">{usd0(m.audience)}</div>
+              <div className="text-xs text-muted-foreground">
+                Connection minutes, data transfer and egress — and only for people watching on our own page.
+                {" "}{Math.round((m.audience / m.total) * 100)}% of the bill at this setting.
+              </div>
+            </div>
           </div>
 
           <div className="grid gap-px border-t border-border bg-border sm:grid-cols-3">

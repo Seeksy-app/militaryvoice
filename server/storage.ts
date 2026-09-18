@@ -749,6 +749,7 @@ export interface IStorage {
   getIngressRow(id: number): Promise<IngressRow | undefined>;
   createIngressRow(v: Omit<IngressRow, "id" | "createdAt">): Promise<IngressRow>;
   deleteIngressRow(id: number): Promise<void>;
+  listAllProfiles(): Promise<ProfileRow[]>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
 }
@@ -959,6 +960,12 @@ class DatabaseStorage implements IStorage {
       .from(podcasterProfiles)
       .where(eq(podcasterProfiles.email, email.trim().toLowerCase()));
     return row;
+  }
+
+  /** Every profile, for aggregates that span the whole lineup. */
+  async listAllProfiles(): Promise<ProfileRow[]> {
+    await ready();
+    return db.select().from(podcasterProfiles).orderBy(podcasterProfiles.createdAt);
   }
 
   /** Profiles that have everything a public card needs (name, host, photo). */

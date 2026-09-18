@@ -9,6 +9,7 @@ export interface StepState {
   hasSlot: boolean;
   hasAccounts: boolean;
   hasMaterials: boolean;
+  hasYouTube: boolean;
 }
 
 /**
@@ -23,6 +24,7 @@ export const STEP_ANCHOR = {
   slot: "your-time-slot",
   materials: "section-media",
   accounts: "section-social-accounts",
+  youtube: "section-going-out-live",
   share: "section-share-slot",
 } as const;
 
@@ -88,10 +90,10 @@ export function NextSteps({
     },
     {
       key: "materials",
-      label: "Send us your show materials",
+      label: "Send us your media",
       detail: "Intro, outro, slides — anything you want us to roll. All optional.",
       done: state.hasMaterials,
-      cta: "Add materials",
+      cta: "Upload your media",
       go: onGoEvents,
     },
     {
@@ -100,6 +102,14 @@ export function NextSteps({
       detail: "They become follow buttons on your card in the public lineup.",
       done: state.hasAccounts,
       cta: "Connect accounts",
+      go: onGoIntegrations,
+    },
+    {
+      key: "youtube",
+      label: "Connect your YouTube to stream to",
+      detail: "We open a broadcast on your own channel when your slot starts. Optional — it airs here either way.",
+      done: state.hasYouTube,
+      cta: "Connect YouTube",
       go: onGoIntegrations,
     },
     {

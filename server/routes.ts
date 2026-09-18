@@ -46,6 +46,7 @@ import {
 } from "../shared/schema.js";
 import { isLiveOnlySlot, LIVE_ONLY_LABEL } from "../shared/slots.js";
 import { isConfigured as isInfluencersConfigured, credits, enrichHandle } from "./influencers.js";
+import { buildAudienceSnapshot, readAudienceSnapshot, saveAudienceSnapshot, AUDIENCE_WINDOW_DAYS } from "./audience.js";
 import { fromError } from "zod-validation-error";
 import { z } from "zod";
 import {
@@ -3580,6 +3581,35 @@ export function registerRoutes(app: Express): void {
     publicCache(res, 60);
     const out: PublicSettings = { sponsorsVisible: (await storage.getSetting("sponsorsVisible")) === "true" };
     res.json(out);
+  });
+
+  // --------------------------------------------------------- audience reach
+  // What the lineup's own channels reach, for the sponsor pages. Public reads
+  // a stored snapshot; only an admin pays for the upstream calls that make one.
+  app.get("/api/audience/summary", async (_req, res) => {
+    const snap = await readAudienceSnapshot();
+    if (!snap) {
+      noStore(res);
+      res.json(null);
+      return;
+    }
+    publicCache(res, 600);
+    res.json(snap);
+  });
+
+  app.post("/api/admin/audience/refresh", requireAdmin, async (req, res) => {
+    try {
+      const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent())?.id;
+      const snap = await buildAudienceSnapshot(eventId);
+      await saveAudienceSnapshot(snap);
+      res.json(snap);
+    } catch (err) {
+      res.status(502).json({ message: (err as Error).message });
+    }
+  });
+
+  app.get("/api/admin/audience", requireAdmin, async (_req, res) => {
+    res.json({ snapshot: await readAudienceSnapshot(), windowDays: AUDIENCE_WINDOW_DAYS });
   });
 
   app.get("/api/admin/settings", requireAdmin, async (_req, res) => {

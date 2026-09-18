@@ -214,6 +214,18 @@ async function pinFacebookPage(username: string, pageId: string): Promise<void> 
   }
 }
 
+/**
+ * The untouched analytics payload for a set of platforms.
+ *
+ * `enrichWithFollowers` below reads one field out of this. The audience
+ * snapshot needs the rest of it — reach, impressions, engagement — and needs
+ * to see the failure blocks too, so it can tell "this account reports nothing"
+ * apart from "this account wasn't asked".
+ */
+export async function rawAnalytics(username: string, platforms: string[], pageId?: string): Promise<Record<string, unknown>> {
+  return (await analytics(username, platforms, pageId)) as unknown as Record<string, unknown>;
+}
+
 /** Adds `followers` to each account where the platform reports it. Never throws. */
 export async function enrichWithFollowers(username: string, accounts: SocialAccount[]): Promise<SocialAccount[]> {
   if (accounts.length === 0) return accounts;
