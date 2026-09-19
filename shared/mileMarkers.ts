@@ -48,7 +48,10 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
   return slots.map((s, i) => {
     if (i === first) return { kind: "start", label: "START", sub: "the line" };
     if (i === last) return { kind: "finish", label: "FINISH", sub: "26.2" };
-    if (isBonus(s.signup)) return { kind: "point-two", label: ".2", sub: "385 yd" };
+    // "B", not ".2". The fraction is the distance the bonuses add up to, not a
+    // name for any one of them — a slot reading ".2" was labelling a session
+    // with an arithmetic fact about the course.
+    if (isBonus(s.signup)) return { kind: "point-two", label: "B", sub: "bonus" };
     if (!s.signup) return { kind: "open", label: "—", sub: "open" };
     mile += 1;
     return { kind: "mile", n: mile, label: String(mile), sub: "mile" };

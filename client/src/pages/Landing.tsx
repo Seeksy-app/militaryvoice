@@ -231,6 +231,10 @@ export default function Landing({ slug }: Props) {
     }));
   }, [lineup, podcasters]);
 
+  // Before anyone is booked the strip is profiles, not shows, and there are no
+  // miles to count — then the number of cards is the honest number.
+  const shownCount = showCount || spotlight.length;
+
   // Small podcaster cards under the event card: up to MINI_CARDS at a time,
   // rotating through pages every 7s once there are more than fit.
   const [miniPage, setMiniPage] = useState(0);
@@ -382,7 +386,7 @@ export default function Landing({ slug }: Props) {
 
               <motion.div variants={FADE_UP} className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-base text-white/75">
                 <span className="inline-flex items-center gap-1.5">
-                  <Users className="h-4 w-4 text-[#F0A71F]" /> {dataReady ? booked.length : "…"} confirmed
+                  <Users className="h-4 w-4 text-[#F0A71F]" /> {dataReady ? showCount : "…"} confirmed
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Clock className="h-4 w-4 text-[#F0A71F]" /> {dataReady ? `${openCount} of ${slotCount}` : "…"} slots open
@@ -492,7 +496,7 @@ export default function Landing({ slug }: Props) {
                         eleven shows when there are twenty-seven. The number
                         beside a lineup heading has to be the lineup. */}
                     <span className="tabular-nums normal-case tracking-normal text-white/55">
-                      {spotlight.length} {spotlight.length === 1 ? "show" : "shows"}
+                      {shownCount} {shownCount === 1 ? "show" : "shows"}
                     </span>
                   </div>
                   <div className={`grid gap-2 ${miniItems.length === 1 ? "grid-cols-1" : miniItems.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
