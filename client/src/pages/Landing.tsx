@@ -14,6 +14,8 @@ import { PodcasterDialog } from "@/components/PodcasterDialog";
 import { useCountdown } from "@/hooks/use-countdown";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, PublicPodcaster, PublicSponsor, SocialPlatform } from "@shared/schema";
+import { mileMarkers } from "@shared/mileMarkers";
+import { MileMarker } from "@/components/MileMarker";
 import {
   detectLocalTimeZone,
   slotStart,
@@ -209,6 +211,12 @@ export default function Landing({ slug }: Props) {
   // put people under a heading that says "On the lineup" who aren't on it.
   // With nobody booked at all the heading already changes to "Joining the
   // marathon", and that is when the profiles are the right thing to show.
+  // The bookings are not all shows. Two are Riccoh's ceremonies and one is a
+  // held bonus slot, so counting rows said "30 shows confirmed" when there
+  // were twenty-seven — an overstatement on the most public number we print.
+  const markers = useMemo(() => mileMarkers(lineup.map((l) => ({ signup: l.signup }))), [lineup]);
+  const showCount = useMemo(() => markers.filter((m) => m.kind === "mile").length, [markers]);
+
   const spotlight = useMemo<SpotlightItem[]>(() => {
     if (lineup.length > 0) return lineup.map(({ signup, start }) => spotlightFromSignup(signup, start));
     return (podcasters ?? []).map<SpotlightItem>((p) => ({
@@ -700,7 +708,7 @@ export default function Landing({ slug }: Props) {
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">The lineup</div>
               <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
-                {booked.length === 0 ? "The lineup is filling up." : `${booked.length} show${booked.length === 1 ? "" : "s"} confirmed so far`}
+                {showCount === 0 ? "The lineup is filling up." : `${showCount} show${showCount === 1 ? "" : "s"} confirmed so far`}
               </h2>
             </div>
             <Link href={agendaHref}>
@@ -736,6 +744,11 @@ export default function Landing({ slug }: Props) {
                   className="group flex flex-col items-center rounded-2xl border border-border bg-card p-5 text-center transition-shadow hover:border-primary/40 hover:shadow-md"
                   data-testid={`card-lineup-${signup.id}`}
                 >
+                  {markers[i] && markers[i].kind !== "open" && (
+                    <div className="mb-2 self-start">
+                      <MileMarker marker={markers[i]} size={40} />
+                    </div>
+                  )}
                   {/* The socials below are real links, so only this part is the
                       button — an anchor inside a button is invalid markup. */}
                   <button
