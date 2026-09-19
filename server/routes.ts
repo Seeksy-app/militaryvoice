@@ -5422,6 +5422,10 @@ export function registerRoutes(app: Express): void {
           subject: `[TEST] ${broadcast.subject}`,
           bodyText: broadcast.bodyText,
           unsubscribeUrl: `${origin}/unsubscribe?token=test`,
+          // Signed for the tester's own address, so the remind-me link in a
+          // test is the real one and can actually be clicked. A preview that
+          // silently drops the control you are testing is not a preview.
+          remindUrl: followUpUrl(req, to, id),
           sender: broadcast.sender ?? "team",
           banner: broadcast.banner ?? "welcome",
           senderMember: senderMember ?? undefined,
