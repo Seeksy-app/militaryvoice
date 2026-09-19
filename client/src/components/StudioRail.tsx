@@ -111,17 +111,17 @@ export function StudioRail({
     <>
       {open && (
         <aside
-          className="flex w-[330px] shrink-0 flex-col border-l border-white/10 bg-[#04102b]"
+          className="flex w-[330px] shrink-0 flex-col border-l border-white/20 bg-[#04102b]"
           data-testid={`rail-panel-${open}`}
         >
-          <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/10 pl-3 pr-1.5">
+          <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/20 pl-3 pr-1.5">
             <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/60">
               {TABS.find((t) => t.key === open)?.label}
             </span>
             <button
               type="button"
               onClick={() => setOpen(null)}
-              className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-md p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
               aria-label="Close the panel"
               data-testid="button-rail-close"
             >
@@ -178,7 +178,7 @@ export function StudioRail({
       {/* The strip itself. Always visible, always in the same place — that is
           the whole value of it during a show. */}
       <nav
-        className="flex w-[5.5rem] shrink-0 flex-col items-center gap-1 border-l border-white/10 bg-[#000741] py-3"
+        className="flex w-[5.5rem] shrink-0 flex-col items-center gap-1 border-l border-white/20 bg-[#000741] py-3"
         aria-label="Graphics"
       >
         {TABS.map(({ key, icon: Icon, label }) => {
@@ -297,7 +297,7 @@ function UploadTile({
       <Button
         size="sm"
         variant="outline"
-        className="h-8 gap-1.5 rounded-full border-white/20 bg-transparent text-xs text-white hover:bg-white/10 hover:text-white"
+        className="h-8 gap-1.5 rounded-full border-white/30 bg-transparent text-xs text-white hover:bg-white/10 hover:text-white"
         disabled={pct > 0}
         onClick={() => ref.current?.click()}
         data-testid={testId}
@@ -309,14 +309,14 @@ function UploadTile({
           <div className="h-full rounded-full bg-[#F0A71F] transition-[width]" style={{ width: `${pct}%` }} />
         </div>
       )}
-      <p className="text-[11px] leading-snug text-white/35">{hint}</p>
+      <p className="text-[11px] leading-snug text-white/55">{hint}</p>
     </div>
   );
 }
 
 const FIELD =
-  "h-8 border-white/15 bg-white/5 text-[13px] text-white placeholder:text-white/30 focus-visible:ring-[#F0A71F]";
-const CAP = "text-[10px] font-semibold uppercase tracking-[0.1em] text-white/45";
+  "h-8 border-white/25 bg-white/5 text-[13px] text-white placeholder:text-white/55 focus-visible:ring-[#F0A71F]";
+const CAP = "text-[10px] font-semibold uppercase tracking-[0.1em] text-white/65";
 
 function BannerPanel({
   studio,
@@ -405,7 +405,7 @@ function BannerPanel({
         <Button
           size="sm"
           variant="outline"
-          className="h-8 shrink-0 rounded-full border-white/20 bg-transparent px-3 text-xs text-white hover:bg-white/10 hover:text-white"
+          className="h-8 shrink-0 rounded-full border-white/30 bg-transparent px-3 text-xs text-white hover:bg-white/10 hover:text-white"
           disabled={!onAir}
           onClick={() => patch({ bannerVisible: false })}
           data-testid="button-banner-down"
@@ -432,7 +432,7 @@ function BannerPanel({
       </div>
 
       {saved.length === 0 ? (
-        <p className="rounded-lg border border-dashed border-white/15 p-3 text-center text-[11px] text-white/35">
+        <p className="rounded-lg border border-dashed border-white/25 p-3 text-center text-[11px] text-white/55">
           Nothing saved yet. Type one above and press <span className="text-white/60">Add another</span>.
         </p>
       ) : (
@@ -443,7 +443,7 @@ function BannerPanel({
               <div
                 key={t.id}
                 className={`group flex items-center gap-1 rounded-lg border px-2 py-1.5 ${
-                  live ? "border-[#ED1C24]/60 bg-[#ED1C24]/10" : "border-white/10 bg-white/[0.04]"
+                  live ? "border-[#ED1C24]/60 bg-[#ED1C24]/10" : "border-white/20 bg-white/[0.04]"
                 }`}
                 data-testid={`saved-third-${t.id}`}
               >
@@ -461,13 +461,13 @@ function BannerPanel({
                     On air
                   </span>
                 ) : (
-                  <span className="shrink-0 text-[10px] font-semibold text-white/40 group-hover:text-white/70">Show</span>
+                  <span className="shrink-0 text-[10px] font-semibold text-white/60 group-hover:text-white/70">Show</span>
                 )}
                 <Hint label="Load it into the boxes above" side="left">
                   <button
                     type="button"
                     onClick={() => { setTitle(t.title); setSub(t.subtitle); }}
-                    className="shrink-0 rounded p-1 text-white/35 hover:bg-white/10 hover:text-white"
+                    className="shrink-0 rounded p-1 text-white/55 hover:bg-white/10 hover:text-white"
                     aria-label={`Edit ${t.title}`}
                     data-testid={`button-saved-third-edit-${t.id}`}
                   >
@@ -478,7 +478,7 @@ function BannerPanel({
                   <button
                     type="button"
                     onClick={() => dropOne.mutate(t.id)}
-                    className="shrink-0 rounded p-1 text-white/35 hover:bg-white/10 hover:text-[#ED1C24]"
+                    className="shrink-0 rounded p-1 text-white/55 hover:bg-white/10 hover:text-[#ED1C24]"
                     aria-label={`Delete ${t.title}`}
                     data-testid={`button-saved-third-delete-${t.id}`}
                   >
@@ -492,12 +492,12 @@ function BannerPanel({
       )}
 
       {sceneBanner && (
-        <p className="text-[11px] leading-snug text-white/40">
+        <p className="text-[11px] leading-snug text-white/60">
           On air from <span className="font-semibold text-white/65">{sceneBanner.name}</span>. Taking another scene
           replaces it.
         </p>
       )}
-      <p className="text-[11px] leading-snug text-white/35">
+      <p className="text-[11px] leading-snug text-white/55">
         Scenes carry their own — the box above is for what nobody planned.
       </p>
     </div>
@@ -512,7 +512,7 @@ function TickerPanel({ studio, patch }: { studio: StudioRow | null; patch: (p: P
   return (
     <div className="flex flex-col gap-2">
       <textarea
-        className="min-h-[4.5rem] w-full rounded-md border border-white/15 bg-white/5 px-2.5 py-2 text-[13px] text-white placeholder:text-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A71F]"
+        className="min-h-[4.5rem] w-full rounded-md border border-white/25 bg-white/5 px-2.5 py-2 text-[13px] text-white placeholder:text-white/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A71F]"
         value={text}
         maxLength={600}
         placeholder="Donate at militaryvoice.ai/give · Next up at 8:00 — Former Action Guys"
@@ -532,7 +532,7 @@ function TickerPanel({ studio, patch }: { studio: StudioRow | null; patch: (p: P
         <Button
           size="sm"
           variant="outline"
-          className="h-8 shrink-0 rounded-full border-white/20 bg-transparent px-3 text-xs text-white hover:bg-white/10 hover:text-white"
+          className="h-8 shrink-0 rounded-full border-white/30 bg-transparent px-3 text-xs text-white hover:bg-white/10 hover:text-white"
           disabled={!on}
           onClick={() => patch({ tickerVisible: false })}
           data-testid="button-ticker-stop"
@@ -540,7 +540,7 @@ function TickerPanel({ studio, patch }: { studio: StudioRow | null; patch: (p: P
           Stop
         </Button>
       </div>
-      <p className="text-[11px] leading-snug text-white/35">
+      <p className="text-[11px] leading-snug text-white/55">
         Crawls along the bottom and keeps running through every scene change. {600 - text.length} characters left.
       </p>
     </div>
@@ -580,7 +580,7 @@ function BackgroundPanel({
           type="button"
           onClick={() => patch({ backgroundUrl: "", backgroundVisible: false })}
           className={`flex h-14 items-center justify-center rounded-md border text-[11px] font-medium transition-colors ${
-            current ? "border-white/15 text-white/50 hover:bg-white/10" : "border-[#F0A71F] bg-[#F0A71F]/15 text-white"
+            current ? "border-white/25 text-white/50 hover:bg-white/10" : "border-[#F0A71F] bg-[#F0A71F]/15 text-white"
           }`}
           data-testid="button-background-none"
         >
@@ -593,7 +593,7 @@ function BackgroundPanel({
             onClick={() => patch({ backgroundUrl: m.url, backgroundVisible: true })}
             title={m.label}
             className={`relative h-14 overflow-hidden rounded-md border transition-colors ${
-              current === m.url ? "border-[#F0A71F]" : "border-white/15 hover:border-white/40"
+              current === m.url ? "border-[#F0A71F]" : "border-white/25 hover:border-white/40"
             }`}
             data-testid={`button-background-${m.id}`}
           >
@@ -614,7 +614,7 @@ function BackgroundPanel({
         testId="button-background-upload"
       />
 
-      <p className="text-[11px] leading-snug text-white/35">
+      <p className="text-[11px] leading-snug text-white/55">
         {images.length === 0
           ? "Nothing here yet. Upload one, or add images from the media library."
           : "Sits behind the cameras. A clip or the break clock covers it."}
@@ -639,7 +639,7 @@ function LogoPanel({
   return (
     <div className="flex flex-col gap-2">
       <div
-        className="relative flex h-20 w-full items-center justify-center overflow-hidden rounded-lg border border-white/10"
+        className="relative flex h-20 w-full items-center justify-center overflow-hidden rounded-lg border border-white/20"
         style={{ background: "linear-gradient(135deg,#0a1628 0%,#1a2a4a 100%)" }}
       >
         {studio?.logoUrl ? (
@@ -659,7 +659,7 @@ function LogoPanel({
             }`}
           />
         ) : (
-          <span className="text-[11px] text-white/40">No logo yet</span>
+          <span className="text-[11px] text-white/60">No logo yet</span>
         )}
       </div>
 
@@ -679,7 +679,7 @@ function LogoPanel({
         <Button
           size="sm"
           variant="outline"
-          className="h-8 flex-1 gap-1.5 rounded-full border-white/20 bg-transparent text-xs text-white hover:bg-white/10 hover:text-white"
+          className="h-8 flex-1 gap-1.5 rounded-full border-white/30 bg-transparent text-xs text-white hover:bg-white/10 hover:text-white"
           disabled={logoBusy}
           onClick={() => fileRef.current?.click()}
           data-testid="button-rail-upload-logo"
@@ -708,7 +708,7 @@ function LogoPanel({
                   className={`rounded-full border px-2 py-1 text-[11px] font-medium capitalize transition-colors ${
                     (studio.logoCorner || "top-right") === c
                       ? "border-[#F0A71F] bg-[#F0A71F]/15 text-white"
-                      : "border-white/15 text-white/65 hover:bg-white/10"
+                      : "border-white/25 text-white/65 hover:bg-white/10"
                   }`}
                   data-testid={`button-rail-corner-${c}`}
                 >
