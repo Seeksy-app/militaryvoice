@@ -27,11 +27,12 @@
 //
 //   read -rs AGENT_TOKEN && export AGENT_TOKEN
 //   read -rs ANTHROPIC_API_KEY && export ANTHROPIC_API_KEY
-//   read -rs DEEPGRAM_API_KEY && export DEEPGRAM_API_KEY
+//   read -rs ELEVENLABS_API_KEY && export ELEVENLABS_API_KEY
 //   API_BASE=https://www.militaryvoice.ai npx tsx agent/clipper.ts
 //
-// DEEPGRAM_API_KEY is only needed for a recording that has no live transcript
-// — an old episode, or anything staged for a test.
+// ELEVENLABS_API_KEY is only needed for a recording that has no live
+// transcript — an old episode, or anything staged for a test. Order is live
+// transcript, then Scribe, then Deepgram, then local whisper.
 //
 // With no ANTHROPIC_API_KEY it still runs, falling back to picking the
 // densest stretches of speech. That is worse, and it says so.
@@ -430,6 +431,72 @@ export function transcriptCovers(lines: Line[], durationSec: number): boolean {
 }
 
 /**
+ * Transcribe with ElevenLabs Scribe.
+ *
+ * Preferred over Deepgram for a finished file, on evidence rather than
+ * reputation: run over 90 seconds of a real two-person episode it kept every
+ * filler with a timestamp, diarised both speakers, timed all 381 tokens, and
+ * came back in 2.5 seconds. Deepgram does the first three too.
+ *
+ * What decided it is the fourth thing. Scribe marks false starts with a
+ * trailing hyphen — "honest-", "A-", "ex-" — nine of them in that ninety
+ * seconds, each with a start and end. Deepgram tags seven filler tokens and
+ * nothing else, so cutting false starts there means an LLM pass over the
+ * transcript guessing at what got abandoned. Here it is a field.
+ *
+ * Deepgram keeps the live captions: that is a streaming job with an official
+ * LiveKit plugin already wired, and a different problem from reading a file.
+ */
+export async function transcribeWithScribe(file: string, dir: string): Promise<Line[]> {
+  const key = (process.env.ELEVENLABS_API_KEY || "").trim();
+  if (!key) throw new Error("ELEVENLABS_API_KEY is not set.");
+
+  const wav = path.join(dir, "scribe.wav");
+  await ffmpeg(["-i", file, "-ac", "1", "-ar", "16000", "-vn", wav]);
+
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(await fs.readFile(wav))], { type: "audio/wav" }), "audio.wav");
+  form.append("model_id", "scribe_v1");
+  form.append("diarize", "true");
+  form.append("timestamps_granularity", "word");
+
+  const res = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
+    method: "POST",
+    headers: { "xi-api-key": key },
+    body: form,
+  });
+  if (!res.ok) throw new Error(`ElevenLabs ${res.status}: ${(await res.text()).slice(0, 200)}`);
+
+  const body = (await res.json()) as {
+    words?: { text: string; start: number; end: number; type: string; speaker_id?: string }[];
+  };
+
+  // Scribe answers per word; the picker and the .srt both want spoken lines.
+  // Broken on a speaker change, on sentence-ending punctuation, or on a pause
+  // long enough to be a new thought — which is what a caption line is.
+  const lines: Line[] = [];
+  let cur: Line | null = null;
+  for (const w of body.words ?? []) {
+    if (w.type !== "word") continue;
+    const speaker = w.speaker_id ?? "";
+    const gap = cur ? w.start - cur.endSec : 0;
+    if (!cur || speaker !== cur.speaker || gap > 0.8 || cur.text.length > 180) {
+      if (cur) lines.push(cur);
+      cur = { speaker, text: w.text, startSec: w.start, endSec: w.end };
+    } else {
+      cur.text += ` ${w.text}`;
+      cur.endSec = w.end;
+    }
+    if (/[.!?]$/.test(w.text) && cur.text.length > 40) {
+      lines.push(cur);
+      cur = null;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+/**
  * Transcribe with Deepgram, which is what the live captions already use.
  *
  * The clipper was written to lean on the transcript the captions agent leaves
@@ -720,6 +787,13 @@ async function handle(job: Job): Promise<void> {
     let lines = job.transcript;
     if (transcriptCovers(lines, job.durationSec)) {
       console.log(`[${job.recordingId}] using the live transcript (${lines.length} lines)`);
+    } else if (process.env.ELEVENLABS_API_KEY) {
+      console.log(`[${job.recordingId}] no live transcript — reading it with Scribe`);
+      lines = await transcribeWithScribe(source, dir).catch(async (err) => {
+        console.warn(`[${job.recordingId}] Scribe failed: ${err.message} — falling back`);
+        if (process.env.DEEPGRAM_API_KEY) return transcribeWithDeepgram(source, dir).catch(() => job.transcript);
+        return transcribeLocally(source, dir).catch(() => job.transcript);
+      });
     } else if (process.env.DEEPGRAM_API_KEY) {
       console.log(`[${job.recordingId}] no live transcript — reading it with Deepgram`);
       lines = await transcribeWithDeepgram(source, dir).catch(async (err) => {
