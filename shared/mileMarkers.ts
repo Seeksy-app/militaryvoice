@@ -27,7 +27,12 @@ interface Booking {
 }
 
 const isCeremony = (b?: Booking | null) => !!b && /ceremon/i.test(b.podcastName ?? "");
-const isBonus = (b?: Booking | null) => !!b && /\bbonus\b/i.test(b.podcastName ?? "");
+// The .2 sessions. They have real names now — "The Flag Carry" — and a name is
+// what a reader sees, so the test has to know them by name rather than by the
+// word "bonus", which was only ever a placeholder. "bonus" stays in the pattern
+// so a slot still marked TBD keeps its place on the course.
+const POINT_TWO = /\bbonus\b|flag carry|roll call/i;
+const isBonus = (b?: Booking | null) => !!b && POINT_TWO.test(b.podcastName ?? "");
 
 /**
  * A marker for every slot, in running order.
