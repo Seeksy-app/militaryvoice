@@ -642,6 +642,7 @@ export interface IStorage {
     patch: Partial<InsertProfile> & { photoUrl?: string; uploadPostUsername?: string; socialAccounts?: string },
   ): Promise<ProfileRow>;
   updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void>;
+  moveSignupSlots(eventId: number, moves: { id: number; slotIndex: number }[]): Promise<number>;
   syncSignupsFromProfile(email: string, profile: ProfileRow): Promise<number>;
   syncSignupsFromEventShow(email: string, eventId: number, show: EventShowRow): Promise<number>;
   listCompleteProfiles(): Promise<ProfileRow[]>;
@@ -2073,6 +2074,38 @@ class DatabaseStorage implements IStorage {
       .where(and(eq(signups.email, key), eq(signups.eventId, eventId), ne(signups.status, "cancelled")))
       .returning({ id: signups.id });
     return rows.length;
+  }
+
+  /**
+   * Re-lay a whole running order in one go.
+   *
+   * Every booking is parked on a negative index first, then placed. Doing it
+   * in one pass would mean reasoning about whether each target slot happens to
+   * be free at that instant — fine while the moves all shift one direction,
+   * wrong the first time somebody swaps two shows. Parking removes the
+   * question. It is one transaction because a half-applied running order is
+   * worse than none: two shows on the same slot, or a gap where a booking was.
+   */
+  async moveSignupSlots(eventId: number, moves: { id: number; slotIndex: number }[]): Promise<number> {
+    await ready();
+    return db.transaction(async (tx) => {
+      for (const m of moves) {
+        await tx
+          .update(signups)
+          .set({ slotIndex: -1000 - m.id })
+          .where(and(eq(signups.id, m.id), eq(signups.eventId, eventId)));
+      }
+      let moved = 0;
+      for (const m of moves) {
+        const rows = await tx
+          .update(signups)
+          .set({ slotIndex: m.slotIndex })
+          .where(and(eq(signups.id, m.id), eq(signups.eventId, eventId)))
+          .returning();
+        moved += rows.length;
+      }
+      return moved;
+    });
   }
 
   async updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void> {

@@ -4846,6 +4846,43 @@ export function registerRoutes(app: Express): void {
     );
   });
 
+  /**
+   * Move a set of bookings to new slots, all or nothing.
+   *
+   * There was no way to reschedule at all — only cancel and delete — so
+   * reshaping a day meant deleting real bookings and making them again, which
+   * loses everything attached to them and re-fires confirmations at people who
+   * did nothing wrong.
+   */
+  app.post("/api/admin/events/:id/reschedule", requireAdmin, async (req, res) => {
+    const eventId = Number(req.params.id);
+    const parsed = z
+      .object({
+        moves: z
+          .array(z.object({ id: z.number().int().positive(), slotIndex: z.number().int().min(0) }))
+          .min(1)
+          .max(200),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    // Two bookings sent to one slot is a caller bug, and finding out after the
+    // write means an unpickable running order.
+    const targets = parsed.data.moves.map((m) => m.slotIndex);
+    if (new Set(targets).size !== targets.length) {
+      res.status(400).json({ message: "Two bookings were sent to the same slot." });
+      return;
+    }
+    try {
+      res.json({ moved: await storage.moveSignupSlots(eventId, parsed.data.moves) });
+    } catch (err) {
+      console.error("Reschedule failed:", err);
+      res.status(502).json({ message: "Couldn't apply the new running order — nothing was changed." });
+    }
+  });
+
   app.patch("/api/admin/signups/:id/cancel", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const updated = await storage.cancelSignup(id);
