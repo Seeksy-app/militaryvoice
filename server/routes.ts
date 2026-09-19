@@ -70,7 +70,7 @@ import {
   listIngressForRoom,
   webhooks,
 } from "./livekit.js";
-import { ensureRecordingsBucket, signedRecordingUrl } from "./recordingStorage.js";
+import { ensureRecordingsBucket, signedRecordingUrl, signedRecordingUpload } from "./recordingStorage.js";
 import {
   isYoutubeConfigured,
   consentUrl,
@@ -1746,12 +1746,50 @@ export function registerRoutes(app: Express): void {
    */
   app.post("/api/host/assets/upload-url", requireHostSession, async (req, res) => {
     const name = String(req.body?.fileName ?? "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
-    const key = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${name}`;
+    const key = `show-assets/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${name}`;
     try {
-      res.json(await signedAssetUpload(key));
+      // R2, not Supabase. Supabase caps objects at 48MB across the whole
+      // project — the bucket asks for more and is refused — and a
+      // pre-recorded episode is several times that. Recordings have always
+      // gone to R2 for exactly this reason.
+      res.json({ uploadUrl: signedRecordingUpload(key), storageKey: key });
     } catch (err) {
       console.error("Could not sign an asset upload:", err);
       res.status(502).json({ message: "Couldn't start the upload. Try again in a moment." });
+    }
+  });
+
+  /**
+   * A permanent link to a file that only has temporary ones.
+   *
+   * R2 is private and its signatures expire, so the URL stored on the row
+   * cannot be a signed one — it would work for two hours and then rot. This
+   * redirects to a freshly signed link each time, which means every existing
+   * consumer keeps treating fileUrl as an ordinary href.
+   */
+  app.get("/api/assets/:id/file", async (req, res) => {
+    const asset = await storage.getAsset(Number(req.params.id));
+    if (!asset?.storageKey) {
+      res.status(404).json({ message: "No such file." });
+      return;
+    }
+    // The old Supabase bucket was public, so this is stricter than what it
+    // replaces: the podcaster it belongs to, or somebody on the crew.
+    const sessionEmail = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const adminEmail = getAdminEmail(req);
+    const allowed =
+      (sessionEmail && sessionEmail === asset.email.trim().toLowerCase()) ||
+      (adminEmail && (await storage.isAdminEmail(adminEmail)));
+    if (!allowed) {
+      res.status(403).json({ message: "Sign in to open this file." });
+      return;
+    }
+    try {
+      noStore(res);
+      res.redirect(302, await signedRecordingUrl(asset.storageKey, 3600));
+    } catch (err) {
+      console.error("Could not sign an asset for download:", err);
+      res.status(502).json({ message: "Couldn't open that file." });
     }
   });
 
@@ -1800,9 +1838,23 @@ export function registerRoutes(app: Express): void {
         return;
       }
 
+      // The browser uploaded straight to R2 and is telling us the key. Only
+      // our own prefix is accepted: this value decides what the studio plays
+      // on air, so it cannot be an arbitrary path somebody posts here.
+      const storageKey = String(body.storageKey ?? "").trim();
+      const fromR2 = /^show-assets\/[A-Za-z0-9._\-]+$/.test(storageKey);
+      if (storageKey && !fromR2) {
+        res.status(400).json({ message: "That upload didn't come from us. Try again." });
+        return;
+      }
+      if (!req.file && !linkUrl && !fromOurBucket && !fromR2) {
+        res.status(400).json({ message: "Choose a file first." });
+        return;
+      }
+
       let fileUrl = fromOurBucket ? uploadedUrl : "";
-      let fileName = fromOurBucket ? String(body.fileName ?? "").slice(0, 200) : "";
-      let sizeBytes = fromOurBucket ? Number(body.sizeBytes) || 0 : 0;
+      let fileName = fromOurBucket || fromR2 ? String(body.fileName ?? "").slice(0, 200) : "";
+      let sizeBytes = fromOurBucket || fromR2 ? Number(body.sizeBytes) || 0 : 0;
       if (req.file) {
         const safe = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
         const key = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${safe}`;
@@ -1817,7 +1869,15 @@ export function registerRoutes(app: Express): void {
         sizeBytes = req.file.size;
       }
 
-      const created = await storage.createAsset({ email, kind, label, fileUrl, linkUrl, fileName, sizeBytes });
+      const created = await storage.createAsset({
+        email, kind, label, fileUrl, storageKey: fromR2 ? storageKey : "", linkUrl, fileName, sizeBytes,
+      });
+      // The link needs the row's own id, so it is set the moment there is one.
+      if (fromR2) {
+        const href = `/api/assets/${created.id}/file`;
+        await storage.setAssetFileUrl(created.id, href);
+        created.fileUrl = href;
+      }
       res.status(201).json(created);
     },
   );
@@ -3056,6 +3116,7 @@ export function registerRoutes(app: Express): void {
       kind,
       label,
       fileUrl: uploadedUrl,
+      storageKey: "",
       linkUrl: "",
       fileName,
       sizeBytes: Number(req.body?.sizeBytes) || 0,

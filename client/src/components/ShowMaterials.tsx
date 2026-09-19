@@ -35,14 +35,15 @@ import {
 } from "lucide-react";
 
 /**
- * The real ceiling, and it is not ours to choose.
+ * Two gigabytes, and this time the storage agrees.
  *
- * Supabase caps object size at the project level — the bucket asks for 2GB
- * and is refused — so this is the number the upload will actually accept.
- * Saying "full episodes are fine" here was wrong: a 79MB episode fails, which
- * is precisely the file people are being asked to send.
+ * Show material used to go to Supabase, which caps objects at 48MB across the
+ * whole project and refuses any bucket that asks for more — so the form was
+ * inviting people to send whole episodes to a ceiling a third the size of a
+ * real one. It goes to R2 now, where recordings have always gone, precisely
+ * because it has no such limit.
  */
-const MAX_MB = 48;
+const MAX_MB = 2048;
 
 /**
  * PUT a file to a signed storage URL, reporting progress.
@@ -145,9 +146,9 @@ export function ShowMaterials({
       if (file) {
         setProgress(1);
         const signed = await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name });
-        const { uploadUrl, publicUrl } = (await signed.json()) as { uploadUrl: string; publicUrl: string };
+        const { uploadUrl, storageKey } = (await signed.json()) as { uploadUrl: string; storageKey: string };
         await putWithProgress(uploadUrl, file, setProgress);
-        fd.append("uploadedUrl", publicUrl);
+        fd.append("storageKey", storageKey);
         fd.append("fileName", file.name);
         fd.append("sizeBytes", String(file.size));
       }
@@ -477,7 +478,7 @@ export function ShowMaterials({
                   )}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Up to {MAX_MB}MB. Longer episodes: send us a link and we'll fetch it.
+                  Full episodes are fine — up to 2GB, straight to us.
                 </p>
               </div>
             </div>

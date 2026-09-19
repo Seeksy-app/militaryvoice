@@ -664,6 +664,8 @@ export interface IStorage {
   listAssetsByEmail(email: string): Promise<ShowAssetRow[]>;
   listAllAssets(): Promise<ShowAssetRow[]>;
   createAsset(a: Omit<ShowAssetRow, "id" | "createdAt">): Promise<ShowAssetRow>;
+  getAsset(id: number): Promise<ShowAssetRow | undefined>;
+  setAssetFileUrl(id: number, fileUrl: string): Promise<void>;
   deleteAsset(id: number, email?: string): Promise<boolean>;
   listRunOfShow(eventId: number): Promise<RunItemRow[]>;
   mergeRunOfShow(eventId: number, generated: GeneratedRunItem[]): Promise<RunItemRow[]>;
@@ -1010,6 +1012,18 @@ class DatabaseStorage implements IStorage {
       .values({ ...a, email: a.email.trim().toLowerCase(), createdAt: new Date().toISOString() })
       .returning();
     return row;
+  }
+
+  async getAsset(id: number): Promise<ShowAssetRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(showAssets).where(eq(showAssets.id, id)).limit(1);
+    return row;
+  }
+
+  /** Set once, straight after insert: the link needs the row's own id in it. */
+  async setAssetFileUrl(id: number, fileUrl: string): Promise<void> {
+    await ready();
+    await db.update(showAssets).set({ fileUrl }).where(eq(showAssets.id, id));
   }
 
   /** `email` scopes the delete so a podcaster can only remove their own. */

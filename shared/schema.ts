@@ -628,7 +628,14 @@ export const showAssets = pgTable("show_assets", {
   email: text("email").notNull(),
   kind: text("kind").notNull().default("Other"),
   label: text("label").notNull().default(""),
+  /** Where the browser sends people. For anything in R2 this is our own
+   *  /api/assets/:id/file, which redirects to a freshly signed link — the
+   *  signature expires, a stored URL must not. */
   fileUrl: text("file_url").notNull().default(""),
+  /** The R2 object key, when the file lives there rather than in Supabase.
+   *  Supabase caps objects at 48MB project-wide, which is smaller than the
+   *  episodes podcasters are being asked to send. */
+  storageKey: text("storage_key").notNull().default(""),
   linkUrl: text("link_url").notNull().default(""),
   fileName: text("file_name").notNull().default(""),
   sizeBytes: integer("size_bytes").notNull().default(0),
