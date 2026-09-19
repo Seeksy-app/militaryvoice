@@ -380,6 +380,9 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
  * send-now route — which is how `not-signed-up` would have ended up working in
  * one and silently missing from the other. One reader, both callers.
  */
+/** The address the event's own ceremony slots are booked under. */
+const HOUSE_EMAIL = "hello@militaryvoice.ai";
+
 async function resolveBroadcastRecipients(broadcast: BroadcastRow): Promise<{ email: string; firstName: string }[]> {
   const deduped = new Map<string, { email: string; firstName: string }>();
   const seg = broadcast.segment;
@@ -405,6 +408,35 @@ async function resolveBroadcastRecipients(broadcast: BroadcastRow): Promise<{ em
       for (const r of await storage.listSignupContactsForEvent(broadcast.eventId)) {
         deduped.delete(r.email.toLowerCase());
       }
+    }
+  }
+
+  // The shows we cannot count.
+  //
+  // A sponsor's first question is who they are reaching, and a podcaster who
+  // never pasted a link is simply absent from that number — not because their
+  // audience is small, but because we have nothing to look up. This segment is
+  // the chase list, and it empties itself: the moment a link comes in and gets
+  // enriched, they drop out of it, so the same email can be sent again later
+  // without landing on anyone who already did what it asked.
+  if (seg === "no-audience-link" && broadcast.eventId) {
+    const counted = new Set(
+      (await storage.listSocialMetrics())
+        .filter((m) => !m.error && m.followers > 0)
+        .map((m) => m.email.trim().toLowerCase()),
+    );
+    const signups = await storage.listSignups(broadcast.eventId);
+    const connected = new Set(
+      signups
+        .filter((sg) => String(sg.socialAccounts ?? "").trim().length > 2)
+        .map((sg) => sg.email.trim().toLowerCase()),
+    );
+    for (const r of await storage.listSignupContactsForEvent(broadcast.eventId)) {
+      const key = r.email.toLowerCase();
+      // The ceremony slots are ours, not a podcaster's — never write to them.
+      if (key === HOUSE_EMAIL) continue;
+      if (counted.has(key) || connected.has(key)) continue;
+      deduped.set(key, r);
     }
   }
 

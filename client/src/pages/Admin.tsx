@@ -1944,6 +1944,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   contacts: "Imported contacts",
   all: "Both (signed up + imported)",
   "not-signed-up": "On the list, no slot yet",
+  "no-audience-link": "Booked, but no social link on file",
 };
 
 function BroadcastsSection({
@@ -3210,6 +3211,9 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
       { value: "signups", label: "Signed-up podcasters", count: signupContacts.length },
       { value: "contacts", label: "Imported contacts", count: activeContacts.length },
       { value: "not-signed-up", label: "On the list, no slot yet", count: notSignedUpCount },
+      // Counted on the server, where the follower figures live. -1 means
+      // "ask when you send" rather than a number this page could only guess.
+      { value: "no-audience-link", label: "Booked, but no social link on file", count: -1 },
       { value: "all", label: "Both", count: signupContacts.length + activeContacts.length },
       ...customSegments.map((sg) => ({ value: `segment:${sg.id}`, label: sg.name, count: -1 })),
     ],
@@ -3289,6 +3293,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
     if (seg === "signups") return signupContacts.length;
     if (seg === "contacts") return activeContacts.length;
     if (seg === "not-signed-up") return notSignedUpCount;
+    if (seg === "no-audience-link") return -1; // the server knows; this page doesn't
     if (seg.startsWith("engagement:")) return -1; // unknown until send
     return signupContacts.length + activeContacts.length;
   }
@@ -3964,6 +3969,10 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                               slot. Asking someone to sign up when they already
                               have is the fastest way to look like nobody's home. */}
                           <SelectItem value="not-signed-up">On the list, no slot yet ({notSignedUpCount})</SelectItem>
+                          {/* Empties itself: the moment a link comes in and is
+                              looked up, that person drops out, so this can be
+                              sent again without nagging anyone who complied. */}
+                          <SelectItem value="no-audience-link">Booked, but no social link on file</SelectItem>
                           <SelectItem value="all">Both — {signupContacts.length + activeContacts.length} total</SelectItem>
                         </SelectContent>
                       </Select>
