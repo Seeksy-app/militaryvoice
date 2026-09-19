@@ -54,6 +54,7 @@ import { ShowMaterials } from "@/components/ShowMaterials";
 import { EventSettings } from "@/components/EventSettings";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { NextSteps } from "@/components/NextSteps";
+import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { AudienceConsent } from "@/components/AudienceConsent";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
@@ -1313,6 +1314,25 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           </>
         )}
       </div>
+
+      {/* The same checklist as the section above, following them across every
+          screen. The section is read once on the day they sign up and then
+          never again — which is how most of the lineup reached three weeks
+          out with no link, no media and no YouTube. */}
+      {workspace && (
+        <FloatingChecklist
+          state={{
+            hasShow: !!hostEvents?.some((e) => !!e.show?.showName),
+            hasSlot: (data?.mySignups.length ?? 0) > 0,
+            hasAccounts: (social?.accounts?.length ?? 0) > 0,
+            hasMaterials: (hostAssets?.length ?? 0) > 0 || Boolean(profile?.mediaAnswered),
+            hasYouTube: Boolean(youtube?.connected),
+          }}
+          onGoEvents={() => goTo("events")}
+          onGoIntegrations={() => goTo("integrations")}
+          onGoPromotion={() => goTo("promotion")}
+        />
+      )}
 
       {/* Half-finished is the failure mode here: a profile and no show means
           no slot, and nobody chases it. Ask once, with the door open. */}
