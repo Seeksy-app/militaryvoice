@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
+import { LogoLockup } from "@/components/Logo";
+import { Link } from "wouter";
 import { useAdminAuth } from "@/lib/admin-auth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2754,7 +2756,7 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
 type CrmView = "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "broadcasts" | "cadence" | "activity" | "compose";
 
 /**
- * Everything that has actually gone out, newest first.
+ * Everything that has actually gone out, in the order it went.
  *
  * The Templates tab is a place to write; it lists drafts and sends together
  * because a draft becomes a send. That makes it the wrong place to answer
@@ -2773,14 +2775,48 @@ function ActivityLog({
   broadcasts: BroadcastRow[];
   onViewEngagement: (broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) => void;
 }) {
+  // Oldest at the top. This is a log: reading it top to bottom should be
+  // reading the campaign forwards, the way it happened.
   const sent = useMemo(
     () =>
       broadcasts
         .filter((b) => b.status === "sent" && (b.recipientCount ?? 0) > 0)
-        .sort((a, b) => Date.parse(b.sentAt ?? b.createdAt) - Date.parse(a.sentAt ?? a.createdAt)),
+        .sort((a, b) => Date.parse(a.sentAt ?? a.createdAt) - Date.parse(b.sentAt ?? b.createdAt)),
     [broadcasts],
   );
-  const total = sent.reduce((n, b) => n + (b.recipientCount ?? 0), 0);
+
+  // The same queries the rows make, hoisted so the total can be added up.
+  // Identical cache keys, so this costs no extra requests — and the rows are
+  // handed the result rather than asking for it again.
+  const statsQueries = useQueries({
+    queries: sent.map((b) => ({
+      queryKey: ["/api/admin/broadcasts", b.id, "stats"],
+      queryFn: () => adminGet<BroadcastStats>(`/api/admin/broadcasts/${b.id}/stats`),
+      staleTime: 60_000,
+    })),
+  });
+
+  const totals = useMemo(() => {
+    let emails = 0;
+    let delivered = 0;
+    let opened = 0;
+    let clicked = 0;
+    let tracked = 0;
+    sent.forEach((b, i) => {
+      emails += b.recipientCount ?? 0;
+      const st = statsQueries[i]?.data;
+      // The automatic emails fire one at a time and leave no broadcast_sends
+      // rows, so they contribute to the email count and to nothing else. The
+      // rates below have to be honest about which sends they describe.
+      if (st && st.delivered > 0) {
+        delivered += st.delivered;
+        opened += st.opened;
+        clicked += st.clicked;
+        tracked += 1;
+      }
+    });
+    return { emails, delivered, opened, clicked, tracked };
+  }, [sent, statsQueries]);
 
   if (sent.length === 0) {
     return (
@@ -2792,16 +2828,45 @@ function ActivityLog({
     );
   }
 
+  const pct = (n: number) => (totals.delivered > 0 ? `${Math.round((n / totals.delivered) * 100)}%` : "—");
+
   return (
     <>
-      <p className="text-sm text-muted-foreground">
-        {sent.length} send{sent.length === 1 ? "" : "s"} · {total.toLocaleString()} emails in total
+      {/* The four numbers you actually came for, before the list of rows you
+          would otherwise have to add up in your head. */}
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
+        {[
+          { label: "sends", value: sent.length.toLocaleString(), note: "campaigns and automatic" },
+          { label: "emails", value: totals.emails.toLocaleString(), note: "delivered to inboxes" },
+          { label: "opened", value: totals.opened.toLocaleString(), note: `${pct(totals.opened)} of tracked` },
+          { label: "clicked", value: totals.clicked.toLocaleString(), note: `${pct(totals.clicked)} of tracked` },
+        ].map((f) => (
+          <div key={f.label} className="bg-background px-4 py-3" data-testid={`activity-total-${f.label}`}>
+            <div className="text-2xl font-bold tabular-nums tracking-tight">{f.value}</div>
+            <div className="text-xs font-medium">{f.label}</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">{f.note}</div>
+          </div>
+        ))}
+      </div>
+      <p className="-mt-1 text-xs text-muted-foreground">
+        Opens and clicks cover the {totals.tracked} send{totals.tracked === 1 ? "" : "s"} we can measure. The automatic
+        emails go out one at a time as people book, so they count towards emails sent and nothing else.
       </p>
+
       <div className="flex flex-col gap-2">
-        {sent.map((b) => {
+        {sent.map((b, i) => {
           const auto = b.source?.startsWith("cadence:");
           const when = b.sentAt ? new Date(b.sentAt) : null;
-          return <ActivityRow key={b.id} b={b} auto={!!auto} when={when} onViewEngagement={onViewEngagement} />;
+          return (
+            <ActivityRow
+              key={b.id}
+              b={b}
+              auto={!!auto}
+              when={when}
+              stats={statsQueries[i]?.data}
+              onViewEngagement={onViewEngagement}
+            />
+          );
         })}
       </div>
     </>
@@ -2813,19 +2878,15 @@ function ActivityRow({
   b,
   auto,
   when,
+  stats,
   onViewEngagement,
 }: {
   b: BroadcastRow;
   auto: boolean;
   when: Date | null;
+  stats?: BroadcastStats;
   onViewEngagement: (broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) => void;
 }) {
-  const { data: stats } = useQuery<BroadcastStats>({
-    queryKey: ["/api/admin/broadcasts", b.id, "stats"],
-    queryFn: () => adminGet<BroadcastStats>(`/api/admin/broadcasts/${b.id}/stats`),
-    staleTime: 60_000,
-  });
-
   return (
     <div className="rounded-xl border border-border px-4 py-3" data-testid={`activity-${b.id}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -3611,16 +3672,22 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
         <div className="flex flex-col gap-4">
           <BroadcastSubNav view={view} setView={setView} />
           <p className="text-sm text-muted-foreground">
-            Everything a podcaster receives, in the order it reaches them. The numbered steps are yours to write; the
-            first one goes out automatically the moment they take a slot.
+            Everything a podcaster receives, in the order it reaches them.
           </p>
 
-          {/* The automatic emails are shown because leaving them out made the
-              sequence look like it starts with the welcome — it doesn't, and
-              somebody writing step one needs to know the reader has already
-              had their slot confirmed. They are not editable here: their
-              wording lives in server/email.ts because it carries the slot
-              time and calendar links a template cannot. */}
+          {/* Two different things were sitting in one list with nothing to
+              tell them apart, and the question that came back was exactly the
+              right one: what is "wording is built in" and how is it different
+              from the numbered steps? Each group gets a heading that answers
+              it before the rows start. */}
+          <div>
+            <h3 className="text-sm font-bold">Sent for you, automatically</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              These four fire on their own at the right moment. Nothing to write and nothing to schedule — their
+              wording lives in the code because each one carries that podcaster's own slot time and calendar links,
+              which a template can't do.
+            </p>
+          </div>
           <div className="flex flex-col gap-2">
             {CADENCE_AUTOMATIC.map((step) => {
               const b = cadenceBySource.get(cadenceSource(step.key));
@@ -3638,7 +3705,9 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                       <span className="text-sm font-semibold">{step.label}</span>
                       <Badge variant="secondary" className="text-[11px]">Automatic</Badge>
                       {typeof b?.recipientCount === "number" && b.recipientCount > 0 && (
-                        <span className="text-xs text-muted-foreground">{b.recipientCount} sent so far</span>
+                        <span className="text-xs text-muted-foreground">
+                          Sent to {b.recipientCount} {b.recipientCount === 1 ? "podcaster" : "podcasters"} so far
+                        </span>
                       )}
                     </div>
                     <p className="truncate text-xs text-muted-foreground">{step.blurb}</p>
@@ -3649,6 +3718,14 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
             })}
           </div>
 
+          <div className="mt-2">
+            <h3 className="text-sm font-bold">Yours to write</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Eight emails you control, in the order they go out. <span className="font-medium">Draft</span> means it
+              hasn't left yet — open it, write it, and it sends to everyone who has taken a slot.{" "}
+              <span className="font-medium">Sent</span> means it already went.
+            </p>
+          </div>
           <div className="flex flex-col gap-2">
             {CADENCE_STEPS.map((step, i) => {
               const b = cadenceBySource.get(cadenceSource(step.key));
@@ -4097,7 +4174,11 @@ export default function Admin({ tab }: { tab?: string } = {}) {
 
   return (
     <div className="min-h-screen">
-      <NavBar />
+      {/* The public nav is for people deciding whether to take part. Somebody
+          who is already signed in loses a whole band of screen to a row of
+          links they will never press — so it shows only on the way in, the
+          same rule the podcasters' dashboard follows. */}
+      {!isAuthenticated && <NavBar />}
       {isLoading ? (
         <div className="mx-auto mt-16 max-w-sm px-4">
           <Skeleton className="h-48 w-full rounded-xl" />
@@ -4107,26 +4188,51 @@ export default function Admin({ tab }: { tab?: string } = {}) {
       ) : (
         // Wider than it was: the rail spends ~13.5rem, and the run of show and
         // the CRM tables were already using every pixel of max-w-7xl.
-        <div className="mx-auto max-w-[94rem] px-4 py-10 sm:px-6">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
-                Admin dashboard
-              </h1>
-              {admin && (
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  Signed in as {admin.name || admin.email}
-                  {admin.isOwner ? " · Owner" : ""}
-                </p>
-              )}
+        <div className="mx-auto max-w-[94rem] px-4 py-5 sm:px-6">
+          {/* One line at the top: the mark, and who you are. "Admin dashboard"
+              is gone — the rail below already says which section you are in,
+              and the mark says which product. */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <Link href="/" className="shrink-0" title="Back to the public site" data-testid="link-admin-home">
+              <LogoLockup className="h-8 w-auto" />
+            </Link>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-xs font-bold text-[#053877] dark:bg-white/10 dark:text-white">
+                {(admin?.name || admin?.email || "?").trim().charAt(0).toUpperCase()}
+              </span>
+              <span className="hidden min-w-0 sm:block">
+                <span className="block truncate text-sm font-semibold">{admin?.name || admin?.email}</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {admin?.isOwner ? "Owner" : "Admin"}
+                </span>
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={logout}
+                className="ml-1 shrink-0 gap-1.5 rounded-full"
+                data-testid="button-admin-logout"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Sign out</span>
+              </Button>
             </div>
-            <Button variant="ghost" size="sm" onClick={logout} className="gap-1.5" data-testid="button-admin-logout">
-              <LogOut className="h-3.5 w-3.5" /> Log out
-            </Button>
           </div>
 
           {selectedEventId && selectedEvent ? (
             <>
+              <Tabs value={eventTab} onValueChange={setEventTab}>
+                <div className="flex flex-col gap-4 lg:flex-row lg:gap-7">
+                  <AdminNav
+                    groups={EVENT_GROUPS}
+                    value={eventTab}
+                    onChange={setEventTab}
+                    isMobile={isMobile}
+                  />
+                  <div className="min-w-0 flex-1">
+                {/* The event header lives in the content column, not above the
+                    whole shell: left-justified with the tiles it belongs to,
+                    rather than floating over the rail. */}
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <button
@@ -4178,15 +4284,6 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   )}
                 </div>
               </div>
-              <Tabs value={eventTab} onValueChange={setEventTab}>
-                <div className="flex flex-col gap-4 lg:flex-row lg:gap-7">
-                  <AdminNav
-                    groups={EVENT_GROUPS}
-                    value={eventTab}
-                    onChange={setEventTab}
-                    isMobile={isMobile}
-                  />
-                  <div className="min-w-0 flex-1">
                 <TabsContent value="overview" className="mt-2 lg:mt-0">
                   <EventOverview eventId={selectedEventId} event={selectedEvent} go={setEventTab} />
                 </TabsContent>

@@ -752,7 +752,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
 
   return (
     <div className="min-h-screen">
-      {!workspace && <NavBar />}
+      {/* Signed in is the rule, not "finished setting up": somebody mid-setup
+          is no more a visitor deciding whether to take part than somebody with
+          a slot, and the band of public links costs them the same screen. */}
+      {!data && <NavBar />}
       <div className={`mx-auto max-w-6xl px-4 sm:px-6 ${workspace ? "py-5" : "py-10"}`}>
         {workspace ? (
           /* One line: the mark, who you are, and the way out. The page title

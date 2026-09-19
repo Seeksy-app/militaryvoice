@@ -203,24 +203,24 @@ export default function Landing({ slug }: Props) {
       });
   }, [booked, event]);
 
-  // Everyone with a claimed slot (first), then podcasters who've finished a
-  // profile but haven't picked a time yet.
+  // The strip is the lineup. It used to be the lineup *plus* anyone with a
+  // finished profile and no slot yet, which made sense when there were five
+  // shows and the row looked bare — and stopped making sense at 27, where it
+  // put people under a heading that says "On the lineup" who aren't on it.
+  // With nobody booked at all the heading already changes to "Joining the
+  // podcastathon", and that is when the profiles are the right thing to show.
   const spotlight = useMemo<SpotlightItem[]>(() => {
-    const fromSlots = lineup.map(({ signup, start }) => spotlightFromSignup(signup, start));
-    const seen = new Set(fromSlots.map((i) => `${i.podcastName}|${i.hostName}`.toLowerCase()));
-    const fromProfiles = (podcasters ?? [])
-      .filter((p) => !seen.has(`${p.podcastName}|${p.hostName}`.toLowerCase()))
-      .map<SpotlightItem>((p) => ({
-        key: `profile-${p.id}`,
-        podcastName: p.podcastName,
-        hostName: p.hostName,
-        photoUrl: p.photoUrl,
-        numPeople: p.numPeople,
-        socialAccounts: p.socialAccounts,
-        rssUrl: p.rssUrl,
-        youtubeUrl: p.youtubeUrl,
-      }));
-    return [...fromSlots, ...fromProfiles];
+    if (lineup.length > 0) return lineup.map(({ signup, start }) => spotlightFromSignup(signup, start));
+    return (podcasters ?? []).map<SpotlightItem>((p) => ({
+      key: `profile-${p.id}`,
+      podcastName: p.podcastName,
+      hostName: p.hostName,
+      photoUrl: p.photoUrl,
+      numPeople: p.numPeople,
+      socialAccounts: p.socialAccounts,
+      rssUrl: p.rssUrl,
+      youtubeUrl: p.youtubeUrl,
+    }));
   }, [lineup, podcasters]);
 
   // Small podcaster cards under the event card: up to MINI_CARDS at a time,
@@ -480,11 +480,12 @@ export default function Landing({ slug }: Props) {
                       <Radio className="h-3.5 w-3.5 text-[#F0A71F]" />
                       {booked.length > 0 ? "On the lineup" : "Joining the podcastathon"}
                     </span>
-                    {spotlight.length > MINI_CARDS && (
-                      <span className="tabular-nums normal-case tracking-normal">
-                        {miniPage + 1}/{Math.ceil(spotlight.length / MINI_CARDS)}
-                      </span>
-                    )}
+                    {/* This said "4/11" — the page number — and read as
+                        eleven shows when there are twenty-seven. The number
+                        beside a lineup heading has to be the lineup. */}
+                    <span className="tabular-nums normal-case tracking-normal text-white/55">
+                      {spotlight.length} {spotlight.length === 1 ? "show" : "shows"}
+                    </span>
                   </div>
                   <div className={`grid gap-2 ${miniItems.length === 1 ? "grid-cols-1" : miniItems.length === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
                     <AnimatePresence mode="popLayout" initial={false}>
@@ -521,6 +522,23 @@ export default function Landing({ slug }: Props) {
                       ))}
                     </AnimatePresence>
                   </div>
+                  {miniPages > 1 && (
+                    <div className="mt-2 flex items-center justify-center gap-1.5">
+                      {Array.from({ length: miniPages }, (_, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setMiniPage(i)}
+                          aria-label={`Show podcasters ${i * MINI_CARDS + 1}–${Math.min((i + 1) * MINI_CARDS, spotlight.length)}`}
+                          aria-current={i === miniPage}
+                          className={`h-1.5 rounded-full transition-all ${
+                            i === miniPage ? "w-4 bg-[#F0A71F]" : "w-1.5 bg-white/25 hover:bg-white/45"
+                          }`}
+                          data-testid={`dot-mini-${i}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </motion.div>
