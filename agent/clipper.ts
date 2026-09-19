@@ -45,7 +45,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
-import { textPath, fitSize } from "../server/textPath.js";
+import { textPath, fitSize, textWidth } from "../server/textPath.js";
 
 const API_BASE = (process.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "");
 const AGENT_TOKEN = process.env.AGENT_TOKEN || "";
@@ -176,6 +176,127 @@ export async function titleBand(text: string, width: number, height: number, sub
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
+/** h264 will not encode an odd dimension, and stacking halves one twice. */
+const even = (n: number) => Math.max(2, Math.floor(n / 2) * 2);
+
+/**
+ * Where the actual picture is inside the frame.
+ *
+ * Recorders letterbox. This source is a 1920x1080 file whose content is
+ * 1920x758 with 270px of black on top — and scaling *that* into a vertical
+ * canvas means carefully blurring a black bar and placing a postage stamp in
+ * the middle of it. Everything downstream works off the real rectangle.
+ *
+ * Sampled a few seconds in, because the first frames of a cut are often a
+ * transition and can read as smaller than the shot.
+ */
+export async function contentRect(
+  source: string,
+  atSec: number,
+  within?: { w: number; h: number; x: number; y: number },
+): Promise<{ w: number; h: number; x: number; y: number } | null> {
+  try {
+    const pre = within ? `crop=${within.w}:${within.h}:${within.x}:${within.y},` : "";
+    const out = await run("ffmpeg", [
+      "-hide_banner", "-ss", String(atSec + 2), "-t", "3", "-i", source,
+      "-vf", `${pre}cropdetect=24:2:0`, "-f", "null", "-",
+    ]);
+    const found = [...out.matchAll(/crop=(\d+):(\d+):(\d+):(\d+)/g)].pop();
+    if (!found) return null;
+    const [, w, h, x, y] = found.map(Number);
+    return w > 0 && h > 0 ? { w, h, x, y } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * One caption, drawn as vector outlines on transparency.
+ *
+ * This ffmpeg has 489 filters and none of them is `subtitles` — the build
+ * carries no libass — so burning words in with an .ass file is not available
+ * here and would not be guaranteed on whatever host this runs on next either.
+ * The title band already solved the same problem the same way: outlines travel
+ * with the code, need no font installed, and look identical everywhere.
+ *
+ * White with a heavy dark stroke rather than a box. A box is easier and reads
+ * as a caption; a stroke reads as the video, which is the difference between
+ * these and something that looks captioned after the fact.
+ */
+export async function captionPng(text: string, W: number, H: number): Promise<{ buf: Buffer; h: number }> {
+  const size = Math.round(H * 0.042);
+  const boxW = Math.round(W * 0.86);
+  const lead = Math.round(size * 1.22);
+
+  // Two lines at most. Three covers a face, which is the thing the clip is of.
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    const next = cur ? `${cur} ${w}` : w;
+    if (textWidth(next, size, "bold") <= boxW || !cur) cur = next;
+    else {
+      lines.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+  while (lines.length > 2) lines.splice(1, 2, `${lines[1]} ${lines[2]}`);
+
+  const h = lead * lines.length + Math.round(size * 0.5);
+  const stroke = Math.max(3, Math.round(size * 0.16));
+  const body = lines
+    .map((line, i) => {
+      const y = Math.round(size * 0.95) + i * lead;
+      const path = textPath(line, { x: W / 2, y, size, weight: "bold", fill: "#ffffff", anchor: "middle" });
+      const d = path.match(/d="([^"]*)"/)?.[1] ?? "";
+      // Stroke first, fill over it, so the outline sits behind the letterform
+      // instead of eating into it.
+      return `<path d="${d}" fill="none" stroke="#000000" stroke-width="${stroke}" stroke-linejoin="round" opacity="0.85"/>${path}`;
+    })
+    .join("");
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${h}">${body}</svg>`;
+  return { buf: await sharp(Buffer.from(svg)).png().toBuffer(), h };
+}
+
+/**
+ * The geometry of one moment: the picture, and each speaker's panel inside it.
+ *
+ * Splitting the overall content rect down the middle was the obvious move and
+ * it is wrong. On this source the whole rect is 1920x758 but each speaker's
+ * tile is only 960x540 — the extra 218px is the show's logo sitting in the
+ * corner. Halving the tall rect therefore stacked two panels each carrying a
+ * band of black, which is exactly the dead space the stacking was meant to
+ * remove.
+ *
+ * So each half is measured on its own. Slower by two ffmpeg calls per moment
+ * and worth it: this is the difference between two faces filling the frame and
+ * two faces with a black stripe between them.
+ */
+export async function frameGeometry(source: string, atSec: number) {
+  const whole = await contentRect(source, atSec);
+  if (!whole) return { whole: null, left: null, right: null, stack: false };
+
+  // Wider than 2:1 is a side-by-side two-shot. One camera does not produce
+  // that; two panels beside each other always do.
+  const stack = whole.w / whole.h >= 2;
+  if (!stack) return { whole, left: null, right: null, stack };
+
+  const mid = Math.floor(whole.w / 2);
+  const [l, r] = await Promise.all([
+    contentRect(source, atSec, { w: mid, h: whole.h, x: whole.x, y: whole.y }),
+    contentRect(source, atSec, { w: whole.w - mid, h: whole.h, x: whole.x + mid, y: whole.y }),
+  ]);
+  // A half that reads as empty falls back to its share of the whole, which is
+  // the old behaviour and still better than failing the render.
+  const left = l ? { ...l, x: l.x + whole.x, y: l.y + whole.y } : { w: mid, h: whole.h, x: whole.x, y: whole.y };
+  const right = r
+    ? { ...r, x: r.x + whole.x + mid, y: r.y + whole.y }
+    : { w: whole.w - mid, h: whole.h, x: whole.x + mid, y: whole.y };
+  return { whole, left, right, stack };
+}
+
 /** Cut one moment into one shape. */
 export async function render(
   source: string,
@@ -183,29 +304,90 @@ export async function render(
   m: Moment,
   shape: "wide" | "vertical" | "square",
   band?: { file: string; height: number },
+  geo?: Awaited<ReturnType<typeof frameGeometry>>,
+  captions?: { text: string; startSec: number; endSec: number }[],
+  dir?: string,
 ): Promise<void> {
   const dur = (m.endSec - m.startSec).toFixed(2);
   const size = shape === "wide" ? [1920, 1080] : shape === "vertical" ? [1080, 1920] : [1080, 1080];
   const [W, H] = size;
+  const videoH = even(band ? H - band.height : H);
 
-  // The picture is letterboxed onto a blurred copy of itself rather than
-  // cropped. A centre crop is how a vertical clip loses the guest: two people
-  // side by side, and one of them is simply gone. Letterboxing keeps the frame
-  // the producer actually cut, and the blur stops the bars reading as a fault.
-  const videoH = band ? H - band.height : H;
-  const chain = [
-    `[0:v]scale=${W}:${videoH}:force_original_aspect_ratio=increase,crop=${W}:${videoH},boxblur=28:2,setsar=1[bg]`,
-    `[0:v]scale=${W}:${videoH}:force_original_aspect_ratio=decrease,setsar=1[fg]`,
-    `[bg][fg]overlay=(W-w)/2:(H-h)/2[stage]`,
-  ];
+  // Everything starts from the real picture, not the file's frame. See
+  // contentRect: recorders letterbox, and blurring a black bar to fill a
+  // vertical canvas is how you get a postage stamp floating in grey.
+  const r = geo?.whole ?? null;
+  const cut = r ? `crop=${even(r.w)}:${even(r.h)}:${r.x}:${r.y},` : "";
+
+  const chain: string[] = [];
+  if (shape === "wide") {
+    // A wide shot in a wide frame keeps its letterbox — cropping a two-shot to
+    // 16:9 is how one of the two people disappears. The blur is of real
+    // picture now rather than of the black bar it used to be given.
+    chain.push(
+      `[0:v]${cut}scale=${W}:${videoH}:force_original_aspect_ratio=increase,crop=${W}:${videoH},boxblur=28:2,setsar=1[bg]`,
+      `[0:v]${cut}scale=${W}:${videoH}:force_original_aspect_ratio=decrease,setsar=1[fg]`,
+      `[bg][fg]overlay=(W-w)/2:(H-h)/2[stage]`,
+    );
+  } else if (geo?.stack && geo.left && geo.right) {
+    // Two panels stacked, each cropped to the speaker's own tile rather than
+    // to half the overall rect — see frameGeometry for why that distinction
+    // is the whole ballgame. Each fills 1080 wide and half the remaining
+    // height, so two faces end up roughly four times the size letterboxing
+    // gave them.
+    const panel = even(videoH / 2);
+    const box = (b: { w: number; h: number; x: number; y: number }) =>
+      `crop=${even(b.w)}:${even(b.h)}:${b.x}:${b.y},scale=${W}:${panel}:force_original_aspect_ratio=increase,crop=${W}:${panel},setsar=1`;
+    chain.length = 0;
+    chain.push(
+      `[0:v]split=2[l][rr]`,
+      `[l]${box(geo.left)}[top]`,
+      `[rr]${box(geo.right)}[bot]`,
+      `[top][bot]vstack=inputs=2[stage]`,
+    );
+  } else {
+    // One camera: fill the frame and let the sides go. A single speaker sits
+    // in the middle of their own shot, so the edges are wall.
+    chain.push(
+      `[0:v]${cut}scale=${W}:${videoH}:force_original_aspect_ratio=increase,crop=${W}:${videoH},setsar=1[stage]`,
+    );
+  }
 
   const args = ["-ss", String(m.startSec), "-t", dur, "-i", source];
+  let last = "[stage]";
   if (band) {
     args.push("-i", band.file);
     chain.push(`[stage]pad=${W}:${H}:0:${band.height}:color=#000741[padded]`);
-    chain.push(`[padded][1:v]overlay=0:0[v]`);
+    chain.push(`[padded][1:v]overlay=0:0[banded]`);
+    last = "[banded]";
+  }
+
+  // Burned in, not a sidecar. Most of these are watched with the sound off,
+  // and a clip nobody can read is a clip nobody finishes. Sized against a
+  // fixed PlayRes so the same style lands identically at 1080x1920 and
+  // 1920x1080 instead of being tiny in one of them.
+  // Each caption is its own overlay, switched on for the seconds it belongs
+  // to. Forty is the cap: a filter graph of a few dozen overlays is nothing,
+  // a few hundred is a parser that takes longer than the encode.
+  const caps = (captions ?? []).filter((c) => c.text.trim()).slice(0, 40);
+  if (caps.length && dir) {
+    let prev = last;
+    for (let i = 0; i < caps.length; i++) {
+      const c = caps[i];
+      const { buf, h: ch } = await captionPng(c.text, W, H);
+      const f = path.join(dir, `cap-${shape}-${i}.png`);
+      await fs.writeFile(f, buf);
+      args.push("-i", f);
+      const idx = args.filter((a) => a === "-i").length - 1;
+      const from = Math.max(0, c.startSec - m.startSec).toFixed(2);
+      const to = Math.max(0, c.endSec - m.startSec).toFixed(2);
+      const y = H - Math.round(H * 0.055) - ch;
+      const label = i === caps.length - 1 ? "[v]" : `[c${i}]`;
+      chain.push(`${prev}[${idx}:v]overlay=(W-w)/2:${y}:enable='between(t,${from},${to})'${label}`);
+      prev = `[c${i}]`;
+    }
   } else {
-    chain.push(`[stage]null[v]`);
+    chain.push(`${last}null[v]`);
   }
 
   args.push(
@@ -336,6 +518,64 @@ export function srt(lines: Line[], offset: number): string {
   return lines
     .map((l, i) => `${i + 1}\n${stamp(l.startSec - offset)} --> ${stamp(l.endSec - offset)}\n${l.text}\n`)
     .join("\n");
+}
+
+/**
+ * The same words as an ASS file, for burning in.
+ *
+ * SRT plus ffmpeg's force_style was the obvious route and it does not survive
+ * contact with the filter parser: the commas inside a style string are read as
+ * filter separators, so the graph fails to build. Escaping them is possible
+ * and miserable. An ASS file carries its own style block instead, which means
+ * no escaping, and — the part that actually matters — PlayResX/Y let the type
+ * be sized against the canvas. Fontsize 78 is 78 units of a 1920-tall frame
+ * here, not a number libass has to guess a scale for.
+ *
+ * Two lines at a time, because three lines of burned-in caption covers a face.
+ */
+export function assSubtitles(lines: Line[], offset: number, W: number, H: number): string {
+  const stamp = (s: number) => {
+    const cs = Math.max(0, Math.round(s * 100));
+    const h = Math.floor(cs / 360000);
+    const m = Math.floor((cs % 360000) / 6000);
+    const sec = Math.floor((cs % 6000) / 100);
+    return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}.${String(cs % 100).padStart(2, "0")}`;
+  };
+  // Sized off the frame so a vertical and a wide clip read the same.
+  const font = Math.round(H * 0.041);
+  const margin = Math.round(W * 0.07);
+  // Sat above the lower edge, and higher still on a stacked vertical so it
+  // does not land across the bottom speaker's mouth.
+  const marginV = H > W ? Math.round(H * 0.06) : Math.round(H * 0.05);
+
+  const head = [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    `PlayResX: ${W}`,
+    `PlayResY: ${H}`,
+    "WrapStyle: 0",
+    "ScaledBorderAndShadow: yes",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    // White on a heavy black outline: legible over a bright shirt and over a
+    // dark wall without a box, which is the short-form house style everywhere.
+    `Style: Cap,Helvetica,${font},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,${Math.round(font * 0.14)},0,2,${margin},${margin},${marginV},1`,
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+  ].join("\n");
+
+  const events = lines
+    .map((l) => {
+      const text = l.text.replace(/[\r\n]+/g, " ").replace(/\{/g, "(").replace(/\}/g, ")").trim();
+      if (!text) return "";
+      return `Dialogue: 0,${stamp(l.startSec - offset)},${stamp(l.endSec - offset)},Cap,,0,0,0,,${text}`;
+    })
+    .filter(Boolean)
+    .join("\n");
+
+  return `${head}\n${events}\n`;
 }
 
 // ---------------------------------------------------------------------------
@@ -515,10 +755,22 @@ async function handle(job: Job): Promise<void> {
       const square = path.join(dir, `${stem}-square.mp4`);
       const subs = path.join(dir, `${stem}.srt`);
 
-      await render(source, wide, m, "wide");
-      await render(source, vertical, m, "vertical", { file: bandFile, height: 220 });
-      await render(source, square, m, "square", { file: bandFile, height: 220 });
+      // Written before the renders, not after: they burn it in now, so a
+      // sidecar that does not exist yet is three clips with no words on them.
       await fs.writeFile(subs, srt(within, m.startSec));
+
+      // Measured per moment rather than once per file. A layout can change
+      // mid-episode — a solo intro becoming a two-shot — and one cropdetect
+      // call is cheaper than getting the framing wrong for the rest of it.
+      const geo = await frameGeometry(source, m.startSec);
+
+      // The same words go into all three, drawn per shape because the type is
+      // sized against the canvas it lands on.
+      const capDir = path.join(dir, stem);
+      await fs.mkdir(capDir, { recursive: true });
+      await render(source, wide, m, "wide", undefined, geo, within, capDir);
+      await render(source, vertical, m, "vertical", { file: bandFile, height: 220 }, geo, within, capDir);
+      await render(source, square, m, "square", { file: bandFile, height: 220 }, geo, within, capDir);
 
       out.push({
         title: m.title,
