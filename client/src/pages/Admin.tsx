@@ -33,6 +33,7 @@ import { RichBody } from "@/components/RichBody";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
+import { AudienceFigures } from "@/components/AudienceFigures";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
 import { CADENCE_STEPS, CADENCE_AUTOMATIC, cadenceSource } from "@shared/schema";
@@ -690,6 +691,19 @@ function EventSettingsCard({ eventId }: { eventId: number }) {
       </CardContent>
     </Card>
   );
+}
+
+/** The panel needs the lineup; this is the query the signups card already makes. */
+function AudienceFiguresPanel({ eventId }: { eventId: number }) {
+  const { data: signups } = useQuery<SignupRow[]>({
+    queryKey: ["/api/admin/signups", eventId],
+    queryFn: () => adminGet<SignupRow[]>(`/api/admin/signups?eventId=${eventId}`),
+  });
+  const rows = (signups ?? [])
+    .filter((s) => s.status !== "cancelled")
+    .map((s) => ({ id: s.id, email: s.email, podcastName: s.podcastName, hostName: s.hostName }));
+  if (rows.length === 0) return null;
+  return <AudienceFigures signups={rows} />;
 }
 
 function SignupsCard({ eventId }: { eventId: number }) {
@@ -4312,8 +4326,9 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                 <TabsContent value="setup" className="mt-2 lg:mt-0">
                   <EventSettingsCard eventId={selectedEventId} />
                 </TabsContent>
-                <TabsContent value="signups" className="mt-2 lg:mt-0">
+                <TabsContent value="signups" className="mt-2 flex flex-col gap-8 lg:mt-0">
                   <SignupsCard eventId={selectedEventId} />
+                  <AudienceFiguresPanel eventId={selectedEventId} />
                 </TabsContent>
                 <TabsContent value="sponsors" className="mt-2 flex flex-col gap-8 lg:mt-0">
                   <SponsorPackagesCard eventId={selectedEventId} />
