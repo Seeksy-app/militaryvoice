@@ -4401,7 +4401,19 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
-    const updated = await storage.updateSponsorPackage(Number(req.params.id), parsed.data);
+    // .partial() makes every key optional but does NOT stop .default() filling
+    // the ones you left out — so a PATCH of {checkoutUrl} came back carrying
+    // price: 0 and wrote it. Sending one field quietly reset the rest of the
+    // row, which on a sponsorship package means a $10,000 tier advertising
+    // itself as free. Only keys the caller actually sent are applied.
+    const sent = Object.fromEntries(
+      Object.entries(parsed.data).filter(([k]) => Object.prototype.hasOwnProperty.call(req.body ?? {}, k)),
+    );
+    if (Object.keys(sent).length === 0) {
+      res.status(400).json({ message: "Nothing to update." });
+      return;
+    }
+    const updated = await storage.updateSponsorPackage(Number(req.params.id), sent);
     if (!updated) {
       res.status(404).json({ message: "Package not found" });
       return;
