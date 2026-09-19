@@ -39,6 +39,7 @@ import {
   insertEventShowSchema,
   clipResultSchema,
   transcriptBatchSchema,
+  lowerThirdInputSchema,
   sceneInputSchema,
   scenePatchSchema,
   NUDGE_KINDS,
@@ -2953,6 +2954,47 @@ export function registerRoutes(app: Express): void {
   });
 
   /**
+   * Put something in the media library from the studio itself.
+   *
+   * Everything in here used to arrive from a podcaster's own dashboard, which
+   * is right for their intro and useless for a background or a sponsor card
+   * the producer wants at 3am. Same two-step upload as the host side: the
+   * browser PUTs straight to storage and only tells us where it landed, so a
+   * 400MB reel is not trying to squeeze through a request body.
+   */
+  app.post("/api/admin/media/upload-url", requireAdmin, async (req, res) => {
+    const name = String(req.body?.fileName ?? "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+    const key = `studio/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${name}`;
+    try {
+      res.json(await signedAssetUpload(key));
+    } catch (err) {
+      console.error("Could not sign a studio upload:", err);
+      res.status(502).json({ message: "Couldn't start the upload. Try again in a moment." });
+    }
+  });
+
+  app.post("/api/admin/media", requireAdmin, async (req, res) => {
+    const uploadedUrl = String(req.body?.uploadedUrl ?? "").trim();
+    if (!/^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\/object\/public\/show-assets\//i.test(uploadedUrl)) {
+      res.status(400).json({ message: "That upload didn't come from us. Try again." });
+      return;
+    }
+    const fileName = String(req.body?.fileName ?? "").slice(0, 200);
+    const label = String(req.body?.label ?? "").trim().slice(0, 120) || fileName.replace(/\.[^.]+$/, "");
+    const kind = (ASSET_KINDS as readonly string[]).includes(String(req.body?.kind)) ? String(req.body.kind) : "Other";
+    const created = await storage.createAsset({
+      email: HOUSE_EMAIL,
+      kind,
+      label,
+      fileUrl: uploadedUrl,
+      linkUrl: "",
+      fileName,
+      sizeBytes: Number(req.body?.sizeBytes) || 0,
+    });
+    res.status(201).json(created);
+  });
+
+  /**
    * Kill the sound coming off the stage without taking anyone off it. The
    * classic use is a guest whose dog starts barking mid-answer: you want them
    * silent on air in one press, not removed from the show.
@@ -2986,6 +3028,45 @@ export function registerRoutes(app: Express): void {
   // ---- Scenes ---------------------------------------------------------------
   //      A scene is the stage saved as it stands, so during the show it's one
   //      button rather than three decisions.
+  // ---- Saved lower thirds ---------------------------------------------------
+  //      The cards a producer re-uses all day. Scenes carry their own name bar
+  //      for everything on the run of show; this is for the sponsor read and
+  //      the "back in five" that come up nine times and should not be retyped.
+  app.get("/api/admin/lower-thirds", requireAdmin, async (req, res) => {
+    noStore(res);
+    const { studio } = await adminStudio(req);
+    res.json(await storage.listLowerThirds(studio.id));
+  });
+
+  app.post("/api/admin/lower-thirds", requireAdmin, async (req, res) => {
+    const parsed = lowerThirdInputSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const { studio } = await adminStudio(req);
+    res.status(201).json(await storage.createLowerThird({ studioId: studio.id, ...parsed.data }));
+  });
+
+  app.patch("/api/admin/lower-thirds/:id", requireAdmin, async (req, res) => {
+    const parsed = lowerThirdInputSchema.partial().safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ message: fromError(parsed.error).toString() });
+      return;
+    }
+    const row = await storage.updateLowerThird(Number(req.params.id), parsed.data);
+    if (!row) {
+      res.status(404).json({ message: "Not found" });
+      return;
+    }
+    res.json(row);
+  });
+
+  app.delete("/api/admin/lower-thirds/:id", requireAdmin, async (req, res) => {
+    await storage.deleteLowerThird(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
   app.get("/api/admin/scenes", requireAdmin, async (req, res) => {
     noStore(res);
     const { studio } = await adminStudio(req);

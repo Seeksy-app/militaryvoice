@@ -812,6 +812,30 @@ export const scenes = pgTable("scenes", {
   createdAt: text("created_at").notNull(),
 });
 export type SceneRow = typeof scenes.$inferSelect;
+/**
+ * Saved lower thirds, kept per studio.
+ *
+ * Scenes carry their own name bar, which covers everything on the run of
+ * show. This is the other half: the handful of cards a producer re-uses all
+ * day and does not want to retype — the sponsor read, the "back in five", the
+ * donate line. Typing one into the ad-lib box and losing it the moment the
+ * next scene is taken is fine for a genuine ad-lib and useless for a card you
+ * put up nine times.
+ */
+export const lowerThirds = pgTable("lower_thirds", {
+  id: serial("id").primaryKey(),
+  studioId: integer("studio_id").notNull(),
+  title: text("title").notNull().default(""),
+  subtitle: text("subtitle").notNull().default(""),
+  sortIndex: integer("sort_index").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+});
+export type LowerThirdRow = typeof lowerThirds.$inferSelect;
+export const lowerThirdInputSchema = z.object({
+  title: z.string().trim().min(1, "Give it a name").max(80),
+  subtitle: z.string().trim().max(120).default(""),
+});
+
 export const SCENE_KINDS = ["camera", "media", "countdown"] as const;
 export type SceneKind = (typeof SCENE_KINDS)[number];
 

@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
 import { LOGO_CORNERS, type StudioRow } from "@shared/schema";
-import { Captions, Image as ImageIcon, Layers, ScrollText, Upload, X, Check } from "lucide-react";
+import { Captions, Image as ImageIcon, Layers, ScrollText, Upload, X, Check, Plus, Pencil, Trash2 } from "lucide-react";
 
 // The graphics rail, down the right-hand side of the stage.
 //
@@ -23,6 +26,39 @@ import { Captions, Image as ImageIcon, Layers, ScrollText, Upload, X, Check } fr
 // The ticker stays studio-level on purpose. It runs across the handoffs,
 // which is the only reason to have one.
 
+/**
+ * A hover tip that actually appears.
+ *
+ * `title=` leaves it to the browser: about a second of delay, rendered in the
+ * OS's own light chrome, and on a dark fullscreen console it either never
+ * shows or shows somewhere unhelpful. This is the app's tooltip, at 250ms,
+ * which is the difference between a hint and a thing nobody knew was there.
+ */
+export function Hint({
+  label,
+  children,
+  side = "left",
+}: {
+  label: string;
+  children: React.ReactNode;
+  side?: "top" | "right" | "bottom" | "left";
+}) {
+  return (
+    <Tooltip delayDuration={250}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side={side} className="max-w-[16rem] text-xs leading-snug">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+interface SavedThird {
+  id: number;
+  title: string;
+  subtitle: string;
+}
+
 export type RailPanel = "banner" | "ticker" | "background" | "logo" | "media";
 
 interface Props {
@@ -38,6 +74,15 @@ interface Props {
   studioId: number | null;
   onMediaChanged: () => void;
 }
+
+/** A tooltip that repeats the label teaches nobody anything. */
+const HELP: Record<RailPanel, string> = {
+  banner: "The name bar across the bottom of the frame. Scenes carry their own; this is for anything unplanned.",
+  ticker: "A line of text crawling along the bottom, running through every scene change.",
+  background: "An image behind the cameras, visible in the gaps around the tiles.",
+  logo: "Your mark in a corner of the frame, burned into the recording and every destination.",
+  media: "Clips, slides and sponsor cards you can put on the stage — and where you upload new ones.",
+};
 
 const TABS: { key: RailPanel; icon: typeof Captions; label: string }[] = [
   { key: "banner", icon: Captions, label: "Lower third" },
@@ -66,7 +111,7 @@ export function StudioRail({
     <>
       {open && (
         <aside
-          className="flex w-[272px] shrink-0 flex-col border-l border-white/10 bg-[#04102b]"
+          className="flex w-[330px] shrink-0 flex-col border-l border-white/10 bg-[#04102b]"
           data-testid={`rail-panel-${open}`}
         >
           <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/10 pl-3 pr-1.5">
@@ -85,16 +130,35 @@ export function StudioRail({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5">
-            {open === "banner" && <BannerPanel studio={studio} sceneBanner={sceneBanner} patch={patch} />}
+            {open === "banner" && (
+              <BannerPanel
+                studio={studio}
+                sceneBanner={sceneBanner}
+                patch={patch}
+                adminGet={adminGet}
+                adminSend={adminSend}
+              />
+            )}
             {open === "ticker" && <TickerPanel studio={studio} patch={patch} />}
-            {open === "background" && <BackgroundPanel studio={studio} media={media} patch={patch} />}
+            {open === "background" && (
+              <BackgroundPanel studio={studio} media={media} patch={patch} adminSend={adminSend} onMediaChanged={onMediaChanged} />
+            )}
             {open === "logo" && (
               <LogoPanel studio={studio} patch={patch} uploadLogo={uploadLogo} logoBusy={logoBusy} fileRef={logoFileRef} />
             )}
             {open === "media" && (
               // The library is a light surface on purpose: it is a list of
               // files to read, not a control you hit in the dark mid-take.
-              <div className="rounded-lg bg-background p-2.5 text-foreground">
+              <div className="flex flex-col gap-2.5">
+                <UploadTile
+                  accept="video/*,image/*"
+                  kind="Other"
+                  hint="Clips, sponsor cards, slides. Full episodes are fine — it uploads straight to us."
+                  adminSend={adminSend}
+                  onDone={onMediaChanged}
+                  testId="button-media-upload"
+                />
+                <div className="rounded-lg bg-background p-2.5 text-foreground">
                 <MediaLibrary
                   adminGet={adminGet}
                   adminSend={adminSend}
@@ -104,6 +168,7 @@ export function StudioRail({
                   onChanged={onMediaChanged}
                   compact
                 />
+                </div>
               </div>
             )}
           </div>
@@ -113,7 +178,7 @@ export function StudioRail({
       {/* The strip itself. Always visible, always in the same place — that is
           the whole value of it during a show. */}
       <nav
-        className="flex w-[4.25rem] shrink-0 flex-col items-center gap-0.5 border-l border-white/10 bg-[#000741] py-2"
+        className="flex w-[5.5rem] shrink-0 flex-col items-center gap-1 border-l border-white/10 bg-[#000741] py-3"
         aria-label="Graphics"
       >
         {TABS.map(({ key, icon: Icon, label }) => {
@@ -124,17 +189,16 @@ export function StudioRail({
             (key === "logo" && studio?.logoVisible && studio?.logoUrl) ||
             (key === "media" && studio?.stageMediaPlaying);
           return (
+            <Hint key={key} label={HELP[key]} side="left">
             <button
-              key={key}
               type="button"
               onClick={() => setOpen((v) => (v === key ? null : key))}
-              title={label}
-              className={`relative flex w-[3.75rem] flex-col items-center gap-1 rounded-lg px-0.5 py-2 text-[10px] font-medium leading-[1.15] transition-colors ${
+              className={`relative flex w-[4.75rem] flex-col items-center gap-1.5 rounded-xl px-1 py-2.5 text-[11px] font-medium leading-[1.15] transition-colors ${
                 open === key ? "bg-white/15 text-white" : "text-white/60 hover:bg-white/10 hover:text-white"
               }`}
               data-testid={`button-rail-${key}`}
             >
-              <Icon className="h-[19px] w-[19px]" />
+              <Icon className="h-5 w-5" />
               <span className="w-full text-balance text-center">{label}</span>
               {/* A dot, not a colour change: the producer needs to know what is
                   on air without opening anything. */}
@@ -142,10 +206,111 @@ export function StudioRail({
                 <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#ED1C24]" aria-hidden="true" />
               )}
             </button>
+            </Hint>
           );
         })}
       </nav>
     </>
+  );
+}
+
+/**
+ * Straight to storage, then tell the API where it landed.
+ *
+ * Same shape as the podcasters' upload and for the same reason: a sponsor reel
+ * is hundreds of megabytes and a serverless request body is not.
+ */
+async function uploadToLibrary(
+  file: File,
+  kind: string,
+  adminSend: (method: string, path: string, body?: unknown) => Promise<Response>,
+  onProgress: (pct: number) => void,
+): Promise<void> {
+  onProgress(1);
+  const signed = await (await adminSend("POST", "/api/admin/media/upload-url", { fileName: file.name })).json();
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", signed.uploadUrl);
+    xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
+    // fetch cannot report upload progress, which on a big file is the
+    // difference between a bar and a page that looks hung.
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.max(1, Math.round((e.loaded / e.total) * 100)));
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status}).`));
+    xhr.onerror = () => reject(new Error("The upload was interrupted."));
+    xhr.send(file);
+  });
+  await adminSend("POST", "/api/admin/media", {
+    uploadedUrl: signed.publicUrl,
+    fileName: file.name,
+    label: file.name.replace(/\.[^.]+$/, ""),
+    kind,
+    sizeBytes: file.size,
+  });
+}
+
+/** A file picker that looks like the rest of the rail. */
+function UploadTile({
+  accept,
+  kind,
+  hint,
+  adminSend,
+  onDone,
+  testId,
+}: {
+  accept: string;
+  kind: string;
+  hint: string;
+  adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
+  onDone: () => void;
+  testId: string;
+}) {
+  const { toast } = useToast();
+  const ref = useRef<HTMLInputElement | null>(null);
+  const [pct, setPct] = useState(0);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <input
+        ref={ref}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={async (e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (!f) return;
+          try {
+            await uploadToLibrary(f, kind, adminSend, setPct);
+            onDone();
+            toast({ title: "Added to the library", description: f.name });
+          } catch (err) {
+            toast({ title: "Couldn't upload that", description: (err as Error).message, variant: "destructive" });
+          } finally {
+            setPct(0);
+          }
+        }}
+        data-testid={`${testId}-input`}
+      />
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8 gap-1.5 rounded-full border-white/20 bg-transparent text-xs text-white hover:bg-white/10 hover:text-white"
+        disabled={pct > 0}
+        onClick={() => ref.current?.click()}
+        data-testid={testId}
+      >
+        <Upload className="h-3.5 w-3.5" /> {pct > 0 ? `Uploading — ${pct}%` : "Upload"}
+      </Button>
+      {pct > 0 && (
+        <div className="h-1 overflow-hidden rounded-full bg-white/10">
+          <div className="h-full rounded-full bg-[#F0A71F] transition-[width]" style={{ width: `${pct}%` }} />
+        </div>
+      )}
+      <p className="text-[11px] leading-snug text-white/35">{hint}</p>
+    </div>
   );
 }
 
@@ -157,11 +322,32 @@ function BannerPanel({
   studio,
   sceneBanner,
   patch,
+  adminGet,
+  adminSend,
 }: {
   studio: StudioRow | null;
   sceneBanner: { name: string; title: string } | null;
   patch: (p: Partial<StudioRow>) => void;
+  adminGet: <T>(path: string) => Promise<T>;
+  adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
 }) {
+  const queryClient = useQueryClient();
+  // The cards worth keeping. Scenes cover the run of show; these are the
+  // sponsor read and the "back in five" that come up nine times a day and
+  // should never be retyped.
+  const { data: saved = [] } = useQuery<SavedThird[]>({
+    queryKey: ["/api/admin/lower-thirds"],
+    queryFn: () => adminGet<SavedThird[]>("/api/admin/lower-thirds"),
+  });
+  const refreshSaved = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/lower-thirds"] });
+  const saveOne = useMutation({
+    mutationFn: async () => adminSend("POST", "/api/admin/lower-thirds", { title: title.trim(), subtitle: sub.trim() }),
+    onSuccess: refreshSaved,
+  });
+  const dropOne = useMutation({
+    mutationFn: async (id: number) => adminSend("DELETE", `/api/admin/lower-thirds/${id}`),
+    onSuccess: refreshSaved,
+  });
   // Local, because the producer is typing this while something else is on air
   // and a keystroke-by-keystroke write would put half-typed words on the
   // broadcast. It goes up when they say it goes up.
@@ -228,6 +414,83 @@ function BannerPanel({
         </Button>
       </div>
 
+      {/* Saved cards. "Add another" takes whatever is in the boxes above, so
+          the thing you just typed and liked becomes reusable in one press —
+          rather than making you retype it into a separate "new card" form. */}
+      <div className="mt-1 flex items-center justify-between">
+        <span className={CAP}>Saved</span>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 gap-1 px-2 text-[11px] text-white/70 hover:bg-white/10 hover:text-white"
+          disabled={!title.trim() || saveOne.isPending}
+          onClick={() => saveOne.mutate()}
+          data-testid="button-banner-save"
+        >
+          <Plus className="h-3 w-3" /> Add another
+        </Button>
+      </div>
+
+      {saved.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-white/15 p-3 text-center text-[11px] text-white/35">
+          Nothing saved yet. Type one above and press <span className="text-white/60">Add another</span>.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {saved.map((t) => {
+            const live = onAir && studio?.bannerTitle === t.title && (studio?.bannerSubtitle ?? "") === t.subtitle;
+            return (
+              <div
+                key={t.id}
+                className={`group flex items-center gap-1 rounded-lg border px-2 py-1.5 ${
+                  live ? "border-[#ED1C24]/60 bg-[#ED1C24]/10" : "border-white/10 bg-white/[0.04]"
+                }`}
+                data-testid={`saved-third-${t.id}`}
+              >
+                <button
+                  type="button"
+                  onClick={() => patch({ bannerTitle: t.title, bannerSubtitle: t.subtitle, bannerVisible: true })}
+                  className="min-w-0 flex-1 text-left"
+                  data-testid={`button-saved-third-show-${t.id}`}
+                >
+                  <div className="truncate text-[13px] font-semibold text-white">{t.title}</div>
+                  {t.subtitle && <div className="truncate text-[11px] text-[#F0A71F]">{t.subtitle}</div>}
+                </button>
+                {live ? (
+                  <span className="shrink-0 rounded px-1.5 text-[9px] font-black uppercase tracking-wide text-[#ED1C24]">
+                    On air
+                  </span>
+                ) : (
+                  <span className="shrink-0 text-[10px] font-semibold text-white/40 group-hover:text-white/70">Show</span>
+                )}
+                <Hint label="Load it into the boxes above" side="left">
+                  <button
+                    type="button"
+                    onClick={() => { setTitle(t.title); setSub(t.subtitle); }}
+                    className="shrink-0 rounded p-1 text-white/35 hover:bg-white/10 hover:text-white"
+                    aria-label={`Edit ${t.title}`}
+                    data-testid={`button-saved-third-edit-${t.id}`}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                </Hint>
+                <Hint label="Delete this saved card" side="left">
+                  <button
+                    type="button"
+                    onClick={() => dropOne.mutate(t.id)}
+                    className="shrink-0 rounded p-1 text-white/35 hover:bg-white/10 hover:text-[#ED1C24]"
+                    aria-label={`Delete ${t.title}`}
+                    data-testid={`button-saved-third-delete-${t.id}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </Hint>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {sceneBanner && (
         <p className="text-[11px] leading-snug text-white/40">
           On air from <span className="font-semibold text-white/65">{sceneBanner.name}</span>. Taking another scene
@@ -235,7 +498,7 @@ function BannerPanel({
         </p>
       )}
       <p className="text-[11px] leading-snug text-white/35">
-        Scenes carry their own — this box is for what nobody planned.
+        Scenes carry their own — the box above is for what nobody planned.
       </p>
     </div>
   );
@@ -288,10 +551,14 @@ function BackgroundPanel({
   studio,
   media,
   patch,
+  adminSend,
+  onMediaChanged,
 }: {
   studio: StudioRow | null;
   media: MediaItem[];
   patch: (p: Partial<StudioRow>) => void;
+  adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
+  onMediaChanged: () => void;
 }) {
   const images = media.filter((m) => m.kind === "image");
   const current = studio?.backgroundUrl ?? "";
@@ -335,9 +602,21 @@ function BackgroundPanel({
         ))}
       </div>
 
+      <UploadTile
+        accept="image/png,image/jpeg,image/webp"
+        kind="Image"
+        // The one number nobody can guess and everybody needs. A 600px photo
+        // stretched across a 1080p frame is the commonest way a background
+        // looks cheap, and the fix is telling people before they pick.
+        hint="1920 × 1080 (16:9) works best — anything smaller gets stretched. PNG or JPG."
+        adminSend={adminSend}
+        onDone={onMediaChanged}
+        testId="button-background-upload"
+      />
+
       <p className="text-[11px] leading-snug text-white/35">
         {images.length === 0
-          ? "No images in the media library yet — anything uploaded there shows up here."
+          ? "Nothing here yet. Upload one, or add images from the media library."
           : "Sits behind the cameras. A clip or the break clock covers it."}
       </p>
     </div>

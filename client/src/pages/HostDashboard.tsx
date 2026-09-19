@@ -53,7 +53,6 @@ import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
 import { ShowMaterials } from "@/components/ShowMaterials";
 import { EventSettings } from "@/components/EventSettings";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
-import { NextSteps } from "@/components/NextSteps";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { AudienceConsent } from "@/components/AudienceConsent";
@@ -1295,20 +1294,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
               </div>
             </section>
 
-            <NextSteps
-              state={{
-                hasShow: !!hostEvents?.some((e) => !!e.show?.showName),
-                hasSlot: data.mySignups.length > 0,
-                hasAccounts: (social?.accounts?.length ?? 0) > 0,
-                // Answering "nothing to send" finishes this step as truly as
-                // uploading does. The list should hear both answers.
-                hasMaterials: (hostAssets?.length ?? 0) > 0 || Boolean(profile?.mediaAnswered),
-                hasYouTube: Boolean(youtube?.connected),
-              }}
-              onGoEvents={() => goTo("events")}
-              onGoIntegrations={() => goTo("integrations")}
-              onGoPromotion={() => goTo("promotion")}
-            />
 
 
           </>

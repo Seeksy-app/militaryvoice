@@ -28,7 +28,7 @@ import { Destinations } from "@/components/Destinations";
 import { StageGrid, youtubeId, clockText, type StageTile } from "@/components/StageView";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
 import { SceneRail, type SceneSpec } from "@/components/SceneRail";
-import { StudioRail } from "@/components/StudioRail";
+import { StudioRail, Hint } from "@/components/StudioRail";
 import { stageMetaFromStudio } from "@shared/stageMeta";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { STUDIO_STATUSES, LOGO_CORNERS, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow, type SceneRow } from "@shared/schema";
@@ -311,24 +311,25 @@ function BarButton({
   testId: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      aria-label={label}
-      aria-pressed={!!active}
-      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors disabled:opacity-35 ${
-        active
-          ? amber
-            ? "bg-[#F0A71F] text-[#1a1200]"
-            : "bg-[#ED1C24] text-white"
-          : "text-white/60 hover:bg-white/10 hover:text-white"
-      }`}
-      data-testid={testId}
-    >
-      <Icon className="h-4 w-4" />
-    </button>
+    <Hint label={label} side="bottom">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label}
+        aria-pressed={!!active}
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors disabled:opacity-35 ${
+          active
+            ? amber
+              ? "bg-[#F0A71F] text-[#1a1200]"
+              : "bg-[#ED1C24] text-white"
+            : "text-white/60 hover:bg-white/10 hover:text-white"
+        }`}
+        data-testid={testId}
+      >
+        <Icon className="h-4 w-4" />
+      </button>
+    </Hint>
   );
 }
 

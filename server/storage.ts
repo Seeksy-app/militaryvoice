@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -36,6 +36,7 @@ import type {
   NudgeRow,
   NudgeKind,
   FollowUpRow,
+  LowerThirdRow,
   SponsorInquiryRow,
   InsertSponsorInquiry,
   ContactRow,
@@ -686,6 +687,10 @@ export interface IStorage {
   claimNudge(signupId: number, kind: NudgeKind, emailed: boolean): Promise<boolean>;
   /** Give a claim back so the next run retries it. */
   releaseNudge(signupId: number, kind: NudgeKind): Promise<void>;
+  listLowerThirds(studioId: number): Promise<LowerThirdRow[]>;
+  createLowerThird(v: { studioId: number; title: string; subtitle: string }): Promise<LowerThirdRow>;
+  updateLowerThird(id: number, patch: { title?: string; subtitle?: string }): Promise<LowerThirdRow | undefined>;
+  deleteLowerThird(id: number): Promise<void>;
   /** "Remind me later" on a broadcast. False when one is already queued. */
   queueFollowUp(email: string, broadcastId: number, dueAtUtc: string): Promise<boolean>;
   listDueFollowUps(nowIso: string): Promise<FollowUpRow[]>;
@@ -1235,6 +1240,31 @@ class DatabaseStorage implements IStorage {
     await ready();
     if (signupIds.length === 0) return [];
     return db.select().from(nudges).where(inArray(nudges.signupId, signupIds));
+  }
+
+  async listLowerThirds(studioId: number): Promise<LowerThirdRow[]> {
+    await ready();
+    return db.select().from(lowerThirds).where(eq(lowerThirds.studioId, studioId))
+      .orderBy(asc(lowerThirds.sortIndex), asc(lowerThirds.id));
+  }
+
+  async createLowerThird(v: { studioId: number; title: string; subtitle: string }): Promise<LowerThirdRow> {
+    await ready();
+    const existing = await this.listLowerThirds(v.studioId);
+    const [row] = await db.insert(lowerThirds)
+      .values({ ...v, sortIndex: existing.length, createdAt: new Date().toISOString() }).returning();
+    return row;
+  }
+
+  async updateLowerThird(id: number, patch: { title?: string; subtitle?: string }): Promise<LowerThirdRow | undefined> {
+    await ready();
+    const [row] = await db.update(lowerThirds).set(patch).where(eq(lowerThirds.id, id)).returning();
+    return row;
+  }
+
+  async deleteLowerThird(id: number): Promise<void> {
+    await ready();
+    await db.delete(lowerThirds).where(eq(lowerThirds.id, id));
   }
 
   /** Queue a "remind me in three days". A second click is a no-op, not a second email. */
