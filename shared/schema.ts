@@ -260,6 +260,11 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
   promoNotes: text("promo_notes").notNull().default(""),
   notes: text("notes").notNull().default(""),
   photoUrl: text("photo_url").notNull().default(""),
+  /** The upload as sent: uncropped, up to 2400px. photoUrl beside it is a
+   *  720px square crop — 2.4in at 300dpi, too small for a printed page.
+   *  Lives only here, because syncSignupsFromProfile deliberately does not
+   *  carry artwork to the bookings; anything needing print joins on email. */
+  photoOriginalUrl: text("photo_original_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

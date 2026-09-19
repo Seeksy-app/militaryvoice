@@ -122,16 +122,45 @@ const upload = multer({
 // "Enhance" a submitted photo: normalize exposure/contrast, sharpen slightly,
 // crop to a consistent square, re-encode as a reasonably sized JPEG, and store
 // it in Supabase Storage so it survives across serverless invocations.
-async function enhanceAndSavePhoto(buffer: Buffer): Promise<string> {
-  const filename = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}.jpg`;
-  const processed = await sharp(buffer)
-    .rotate() // respect EXIF orientation
+/**
+ * Two copies: the square one the site uses, and the one print will need.
+ *
+ * This used to keep only a 720x720 centre crop and throw the upload away —
+ * which is 2.4 inches at 300dpi, so a printed page could never show anybody
+ * larger than a postage stamp, and the original was already gone by the time
+ * anyone noticed. The web copy is unchanged; the original is kept beside it,
+ * uncropped, bounded at 2400px so a phone photo does not cost 12MB of storage.
+ *
+ * Uncropped matters as much as the resolution. "attention" crops to a face,
+ * which is right for a circular avatar and wrong for a magazine page where the
+ * designer wants the shoulders and the room.
+ */
+async function enhanceAndSavePhoto(buffer: Buffer): Promise<{ url: string; originalUrl: string }> {
+  const stem = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
+  const upright = await sharp(buffer).rotate().toBuffer();
+
+  const web = await sharp(upright)
     .resize(720, 720, { fit: "cover", position: "attention" })
     .normalize() // auto-level contrast
     .sharpen()
     .jpeg({ quality: 88 })
     .toBuffer();
-  return uploadPhoto(filename, processed);
+
+  const url = await uploadPhoto(`${stem}.jpg`, web);
+
+  let originalUrl = "";
+  try {
+    const full = await sharp(upright)
+      .resize(2400, 2400, { fit: "inside", withoutEnlargement: true })
+      .jpeg({ quality: 92 })
+      .toBuffer();
+    originalUrl = await uploadPhoto(`${stem}-print.jpg`, full);
+  } catch (err) {
+    // The web copy is what the site needs; losing the print copy should not
+    // fail somebody's signup. It is recoverable by re-uploading.
+    console.warn("Could not keep a print-resolution copy:", (err as Error).message);
+  }
+  return { url, originalUrl };
 }
 
 function toPublicEvent(event: EventRow): PublicEvent {
@@ -5277,9 +5306,12 @@ export function registerRoutes(app: Express): void {
     const existing = await storage.getProfileByEmail(email);
 
     let photoUrl: string | undefined;
+    let photoOriginalUrl: string | undefined;
     if (req.file) {
       try {
-        photoUrl = await enhanceAndSavePhoto(req.file.buffer);
+        const saved = await enhanceAndSavePhoto(req.file.buffer);
+        photoUrl = saved.url;
+        photoOriginalUrl = saved.originalUrl;
       } catch (err) {
         res.status(400).json({ message: "That photo couldn't be processed — try a different file." });
         return;
@@ -5292,6 +5324,7 @@ export function registerRoutes(app: Express): void {
     const updated = await storage.upsertProfile(email, {
       ...parsed.data,
       ...(photoUrl ? { photoUrl } : {}),
+      ...(photoOriginalUrl ? { photoOriginalUrl } : {}),
     });
     // Keep any slots they already hold in step with the profile.
     await storage.syncSignupsFromProfile(email, updated);
@@ -5390,7 +5423,7 @@ export function registerRoutes(app: Express): void {
       let imageUrl: string | undefined;
       if (req.file) {
         try {
-          imageUrl = await enhanceAndSavePhoto(req.file.buffer);
+          imageUrl = (await enhanceAndSavePhoto(req.file.buffer)).url;
         } catch {
           res.status(400).json({ message: "That image couldn't be processed — try a different file." });
           return;
