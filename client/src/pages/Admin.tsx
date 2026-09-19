@@ -19,7 +19,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi";
 import { RunOfShow } from "@/components/RunOfShow";
@@ -29,6 +30,7 @@ import { RiccohImages } from "@/components/RiccohImages";
 import { RichBody } from "@/components/RichBody";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
+import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
 import { CADENCE_STEPS, CADENCE_AUTOMATIC, cadenceSource } from "@shared/schema";
@@ -4015,7 +4017,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
   );
 }
 
-export default function Admin() {
+export default function Admin({ tab }: { tab?: string } = {}) {
   const { isAuthenticated, isLoading, admin, logout } = useAdminAuth();
   const isMobile = useIsMobile();
   // Which event's dashboard is open. Remembered so a refresh doesn't bounce
@@ -4035,7 +4037,17 @@ export default function Admin() {
     enabled: isAuthenticated,
   });
   const selectedEvent = adminEvents?.find((e) => e.id === selectedEventId) ?? null;
-  const [eventTab, setEventTab] = useState("overview");
+  // The URL is the source of truth for which section is open, so /admin/finances
+  // can be bookmarked, linked in a note, and reached with the back button —
+  // the same thing the podcasters' dashboard got.
+  const [, navigate] = useLocation();
+  const slug = (tab ?? "").toLowerCase();
+  // Checked against the level you are actually on: the two levels share "crm"
+  // and "team", and only one of them has "rooms".
+  const eventTab = EVENT_SECTION_KEYS.has(slug) ? slug : "overview";
+  const topTab = TOP_SECTION_KEYS.has(slug) ? slug : "events";
+  const setEventTab = (key: string) =>
+    navigate(key === "overview" || key === "events" ? "/admin" : `/admin/${key}`);
   const [openRoomId, setOpenRoomId] = useState<number | null>(null);
   const openRoom = (id: number | null) => {
     if (id) {
@@ -4093,7 +4105,9 @@ export default function Admin() {
       ) : !isAuthenticated ? (
         <LoginCard />
       ) : (
-        <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
+        // Wider than it was: the rail spends ~13.5rem, and the run of show and
+        // the CRM tables were already using every pixel of max-w-7xl.
+        <div className="mx-auto max-w-[94rem] px-4 py-10 sm:px-6">
           <div className="mb-6 flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
@@ -4165,91 +4179,75 @@ export default function Admin() {
                 </div>
               </div>
               <Tabs value={eventTab} onValueChange={setEventTab}>
-                <TabsList className={`grid w-full ${isMobile ? "grid-cols-5" : "grid-cols-10"}`}>
-                  <TabsTrigger value="overview" data-testid="tab-admin-overview">Overview</TabsTrigger>
-                  <TabsTrigger value="studio" data-testid="tab-admin-studio">Studio</TabsTrigger>
-                  <TabsTrigger value="run" data-testid="tab-admin-run">Run of show</TabsTrigger>
-                  <TabsTrigger value="team" data-testid="tab-admin-team">Team</TabsTrigger>
-                  <TabsTrigger value="crm" data-testid="tab-admin-event-crm">CRM</TabsTrigger>
-                  {!isMobile && (
-                    <>
-                      <TabsTrigger value="promotion" data-testid="tab-admin-promotion">Promotion</TabsTrigger>
-                      <TabsTrigger value="finances" data-testid="tab-admin-finances">Finances</TabsTrigger>
-                      <TabsTrigger value="setup" data-testid="tab-admin-setup">Event details</TabsTrigger>
-                      <TabsTrigger value="signups" data-testid="tab-admin-signups">Podcasters</TabsTrigger>
-                      <TabsTrigger value="sponsors" data-testid="tab-admin-sponsors">Sponsors</TabsTrigger>
-                    </>
-                  )}
-                </TabsList>
-                <TabsContent value="overview" className="mt-6">
+                <div className="flex flex-col gap-4 lg:flex-row lg:gap-7">
+                  <AdminNav
+                    groups={EVENT_GROUPS}
+                    value={eventTab}
+                    onChange={setEventTab}
+                    isMobile={isMobile}
+                  />
+                  <div className="min-w-0 flex-1">
+                <TabsContent value="overview" className="mt-2 lg:mt-0">
                   <EventOverview eventId={selectedEventId} event={selectedEvent} go={setEventTab} />
-                  {isMobile && (
-                    <div className="mt-6 flex flex-col gap-6">
-                      <EventSettingsCard eventId={selectedEventId} />
-                      <SignupsCard eventId={selectedEventId} />
-                      <SponsorPackagesCard eventId={selectedEventId} />
-                      <SponsorsCard eventId={selectedEventId} />
-                    </div>
-                  )}
                 </TabsContent>
-                <TabsContent value="studio" className="mt-6">
+                <TabsContent value="studio" className="mt-2 lg:mt-0">
                   <StudioConsole key={`ev-${selectedEventId}`} adminGet={adminGet} adminSend={adminSend} view="live" eventId={selectedEventId} kind="event" onLeave={() => setEventTab("overview")} />
                 </TabsContent>
-                <TabsContent value="run" className="mt-6">
+                <TabsContent value="run" className="mt-2 lg:mt-0">
                   <RunOfShow adminGet={adminGet} adminSend={adminSend} eventId={selectedEventId} />
                 </TabsContent>
-                <TabsContent value="team" className="mt-6">
+                <TabsContent value="team" className="mt-2 lg:mt-0">
                   <EventTeamPanel eventId={selectedEventId} />
                 </TabsContent>
-                <TabsContent value="promotion" className="mt-6 flex flex-col gap-12">
+                <TabsContent value="promotion" className="mt-2 flex flex-col gap-12 lg:mt-0">
                   <RiccohImages event={selectedEvent} />
                   <RiccohPosts event={selectedEvent} />
                 </TabsContent>
-                <TabsContent value="finances" className="mt-6">
+                <TabsContent value="finances" className="mt-2 lg:mt-0">
                   <FinancesCard event={selectedEvent} />
                 </TabsContent>
-                <TabsContent value="crm" className="mt-6">
+                <TabsContent value="crm" className="mt-2 lg:mt-0">
                   <CrmEventPanel eventId={selectedEventId} />
                 </TabsContent>
-                {!isMobile && (
-                  <>
-                    <TabsContent value="setup" className="mt-6">
-                      <EventSettingsCard eventId={selectedEventId} />
-                    </TabsContent>
-                    <TabsContent value="signups" className="mt-6">
-                      <SignupsCard eventId={selectedEventId} />
-                    </TabsContent>
-                    <TabsContent value="sponsors" className="mt-6">
-                      <SponsorPackagesCard eventId={selectedEventId} />
-                      <SponsorsCard eventId={selectedEventId} />
-                    </TabsContent>
-                  </>
-                )}
+                {/* These four used to be desktop-only, reachable on a phone
+                    only by hunting for a tile on Overview. The rail lists
+                    everything at every width, so they are simply here. */}
+                <TabsContent value="setup" className="mt-2 lg:mt-0">
+                  <EventSettingsCard eventId={selectedEventId} />
+                </TabsContent>
+                <TabsContent value="signups" className="mt-2 lg:mt-0">
+                  <SignupsCard eventId={selectedEventId} />
+                </TabsContent>
+                <TabsContent value="sponsors" className="mt-2 flex flex-col gap-8 lg:mt-0">
+                  <SponsorPackagesCard eventId={selectedEventId} />
+                  <SponsorsCard eventId={selectedEventId} />
+                </TabsContent>
+                  </div>
+                </div>
               </Tabs>
             </>
           ) : openRoomId ? (
             <RoomView roomId={openRoomId} onBack={() => openRoom(null)} />
           ) : (
-            <Tabs defaultValue="events">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="events" data-testid="tab-admin-events">Events</TabsTrigger>
-                <TabsTrigger value="rooms" data-testid="tab-admin-rooms">Rooms</TabsTrigger>
-                <TabsTrigger value="crm" data-testid="tab-admin-crm">CRM</TabsTrigger>
-                <TabsTrigger value="team" data-testid="tab-admin-team">Team</TabsTrigger>
-              </TabsList>
-              <TabsContent value="events" className="mt-6 flex flex-col gap-8">
-                <EventPicker onOpen={(id) => { setEventTab("overview"); pickEvent(id); }} />
-                <NewEventCard />
-              </TabsContent>
-              <TabsContent value="rooms" className="mt-6">
-                <RoomsPanel onOpen={openRoom} />
-              </TabsContent>
-              <TabsContent value="crm" className="mt-6">
-                <CrmPanel />
-              </TabsContent>
-              <TabsContent value="team" className="mt-6">
-                <TeamCard />
-              </TabsContent>
+            <Tabs value={topTab} onValueChange={setEventTab}>
+              <div className="flex flex-col gap-4 lg:flex-row lg:gap-7">
+                <AdminNav groups={TOP_GROUPS} value={topTab} onChange={setEventTab} isMobile={isMobile} />
+                <div className="min-w-0 flex-1">
+                  <TabsContent value="events" className="mt-2 flex flex-col gap-8 lg:mt-0">
+                    <EventPicker onOpen={(id) => { setEventTab("overview"); pickEvent(id); }} />
+                    <NewEventCard />
+                  </TabsContent>
+                  <TabsContent value="rooms" className="mt-2 lg:mt-0">
+                    <RoomsPanel onOpen={openRoom} />
+                  </TabsContent>
+                  <TabsContent value="crm" className="mt-2 lg:mt-0">
+                    <CrmPanel />
+                  </TabsContent>
+                  <TabsContent value="team" className="mt-2 lg:mt-0">
+                    <TeamCard />
+                  </TabsContent>
+                </div>
+              </div>
             </Tabs>
           )}
         </div>
