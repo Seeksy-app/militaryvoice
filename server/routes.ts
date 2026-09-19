@@ -384,14 +384,65 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
 /** The address the event's own ceremony slots are booked under. */
 const HOUSE_EMAIL = "hello@militaryvoice.ai";
 
-async function resolveBroadcastRecipients(broadcast: BroadcastRow): Promise<{ email: string; firstName: string }[]> {
-  const deduped = new Map<string, { email: string; firstName: string }>();
+/**
+ * When a booking is on air, written for the person who booked it.
+ *
+ * In their own time zone where they gave us one, and always with the zone
+ * named — "2:00 PM" means two different hours to a host in San Diego and one
+ * in Norfolk, and a slot time that is wrong by three hours is worse than no
+ * slot time at all.
+ */
+async function slotTimeLabel(
+  ev: { startAtUtc: string; slotMinutes: number },
+  slotIndex: number,
+  timezone?: string | null,
+): Promise<string> {
+  const start = Date.parse(ev.startAtUtc);
+  if (!Number.isFinite(start)) return "";
+  const at = new Date(start + slotIndex * ev.slotMinutes * 60000);
+  const zone = (timezone || "").trim() || "America/New_York";
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "long", month: "long", day: "numeric",
+      hour: "numeric", minute: "2-digit", timeZoneName: "short", timeZone: zone,
+    }).format(at);
+  } catch {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "long", month: "long", day: "numeric",
+      hour: "numeric", minute: "2-digit", timeZoneName: "short", timeZone: "America/New_York",
+    }).format(at);
+  }
+}
+
+/** One booking's air time, by the address that holds it. */
+async function slotLabelForEmail(eventId: number | null | undefined, email: string): Promise<string> {
+  if (!eventId) return "";
+  const ev = await storage.getEventById(eventId);
+  if (!ev) return "";
+  const key = email.trim().toLowerCase();
+  const booking = (await storage.listSignups(eventId)).find(
+    (x) => x.status !== "cancelled" && x.email.trim().toLowerCase() === key,
+  );
+  return booking ? slotTimeLabel(ev, booking.slotIndex, booking.timezone) : "";
+}
+
+async function resolveBroadcastRecipients(
+  broadcast: BroadcastRow,
+): Promise<{ email: string; firstName: string; slotLabel?: string }[]> {
+  const deduped = new Map<string, { email: string; firstName: string; slotLabel?: string }>();
   const seg = broadcast.segment;
 
   if (seg === "signups" || seg === "all") {
     if (broadcast.eventId) {
+      // Straight from the bookings rather than the contact list, because the
+      // slot index and the host's time zone only exist here.
+      const ev = await storage.getEventById(broadcast.eventId);
+      const rows = await storage.listSignups(broadcast.eventId);
       for (const r of await storage.listSignupContactsForEvent(broadcast.eventId)) {
-        deduped.set(r.email.toLowerCase(), r);
+        const key = r.email.toLowerCase();
+        const booking = rows.find((x) => x.status !== "cancelled" && x.email.trim().toLowerCase() === key);
+        const slotLabel = ev && booking ? await slotTimeLabel(ev, booking.slotIndex, booking.timezone) : "";
+        deduped.set(key, { ...r, slotLabel });
       }
     }
   }
@@ -794,6 +845,7 @@ export function registerRoutes(app: Express): void {
           const resendId = await sendBroadcastEmail({
             to: r.email,
             firstName: r.firstName,
+            slotLabel: r.slotLabel,
             subject: broadcast.subject,
             bodyText: broadcast.bodyText,
             unsubscribeUrl: `${origin}/unsubscribe?token=scheduled`,
@@ -848,6 +900,7 @@ export function registerRoutes(app: Express): void {
         const resendId = await sendBroadcastEmail({
           to: f.email,
           firstName: "",
+          slotLabel: await slotLabelForEmail(broadcast.eventId, f.email),
           subject: broadcast.subject,
           bodyText: broadcast.bodyText,
           unsubscribeUrl: `${origin}/unsubscribe?token=followup`,
@@ -5692,12 +5745,24 @@ export function registerRoutes(app: Express): void {
     const origin = `${req.protocol}://${req.get("host")}`;
     const senderMember = await resolveTeamSender(broadcast.sender ?? "team");
     const bannerTitle = await broadcastBannerTitle();
+    const firstBooking = broadcast.eventId
+      ? (await storage.listSignups(broadcast.eventId)).find((x) => x.status !== "cancelled")
+      : undefined;
+    const evForSample = broadcast.eventId ? await storage.getEventById(broadcast.eventId) : null;
+    const sampleSlotLabel =
+      evForSample && firstBooking
+        ? await slotTimeLabel(evForSample, firstBooking.slotIndex, firstBooking.timezone)
+        : "";
     const results = await Promise.all(
       recipients.map(async (to) => ({
         to,
         ok: await sendBroadcastEmail({
           to,
           firstName: "Friend",
+          // The tester's own booking if they have one, otherwise the first on
+          // the board. A test whose merge field reads "your slot time" proves
+          // only that the fallback works, which is not the thing being tested.
+          slotLabel: (await slotLabelForEmail(broadcast.eventId, to)) || sampleSlotLabel,
           subject: `[TEST] ${broadcast.subject}`,
           bodyText: broadcast.bodyText,
           unsubscribeUrl: `${origin}/unsubscribe?token=test`,
@@ -5738,6 +5803,7 @@ export function registerRoutes(app: Express): void {
       const resendId = await sendBroadcastEmail({
         to: r.email,
         firstName: r.firstName,
+        slotLabel: r.slotLabel,
         subject: broadcast.subject,
         bodyText: broadcast.bodyText,
         unsubscribeUrl: unsubscribeUrl(req, r.email),

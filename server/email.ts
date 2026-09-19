@@ -903,8 +903,15 @@ export function renderBroadcastEmail(opts: BroadcastEmailOptions): { subject: st
   const withRemind = opts.remindUrl
     ? opts.bodyText.replace(/\{\{Remind_Me_Later\}\}/gi, `[Remind me in three days](${opts.remindUrl})`)
     : opts.bodyText.replace(/^.*\{\{Remind_Me_Later\}\}.*$/gim, "").replace(/\n{3,}/g, "\n\n");
-  const resolvedBodyText = withRemind.replace(/\{\{First_Name\}\}/gi, resolvedName);
-  const resolvedSubject = opts.subject.replace(/\{\{First_Name\}\}/gi, resolvedName);
+  // {{Slot_Time}} is the host's own air time, already formatted in their zone
+  // by the caller. A test send and the composer preview have no booking to
+  // look up, so it falls back to wording that still reads as a sentence
+  // rather than leaking the token.
+  const withSlot = withRemind.replace(/\{\{Slot_Time\}\}/gi, opts.slotLabel?.trim() || "your slot time");
+  const resolvedBodyText = withSlot.replace(/\{\{First_Name\}\}/gi, resolvedName);
+  const resolvedSubject = opts.subject
+    .replace(/\{\{First_Name\}\}/gi, resolvedName)
+    .replace(/\{\{Slot_Time\}\}/gi, opts.slotLabel?.trim() || "your slot time");
 
   const memberSignature = member ? memberSignatureHtml(member) : "";
   const bodyHtml = `${textToHtml(resolvedBodyText)}${isRico ? RICO_SIGNATURE : memberSignature}`;
@@ -931,6 +938,8 @@ export function renderBroadcastEmail(opts: BroadcastEmailOptions): { subject: st
 export interface BroadcastEmailOptions {
   to: string;
   firstName: string;
+  /** This recipient's air time, already formatted in their own zone. */
+  slotLabel?: string;
   subject: string;
   bodyText: string;
   unsubscribeUrl: string;
