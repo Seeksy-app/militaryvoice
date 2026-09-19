@@ -876,8 +876,15 @@ async function handle(job: Job): Promise<void> {
       });
     }
     if (lines.length === 0) throw new Error("no transcript, so nothing to choose from");
+    console.log(`[${job.recordingId}] ${lines.length} lines of transcript`);
 
+    // The longest remaining silence in the job: one Opus call over the whole
+    // transcript. Three separate runs have been killed during a quiet stretch
+    // that was the worker working, so every stage that takes real time says so
+    // before it starts rather than after it finishes.
+    console.log(`[${job.recordingId}] choosing moments…`);
     const moments = await pickMoments(job, lines);
+    console.log(`[${job.recordingId}] picked ${moments.length}`);
     if (moments.length === 0) {
       console.log(`[${job.recordingId}] nothing stood alone — no clips`);
       await api("POST", `/api/agent/clip-jobs/${job.recordingId}/done`, { clips: [] });
@@ -904,6 +911,7 @@ async function handle(job: Job): Promise<void> {
       // Measured per moment rather than once per file. A layout can change
       // mid-episode — a solo intro becoming a two-shot — and one cropdetect
       // call is cheaper than getting the framing wrong for the rest of it.
+      console.log(`[${job.recordingId}] rendering ${i + 1}/${moments.length} — ${m.title}`);
       const geo = await frameGeometry(source, m.startSec);
 
       // The same words go into all three, drawn per shape because the type is
