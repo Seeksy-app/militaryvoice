@@ -21,6 +21,8 @@ import {
   zoneLabel,
   onAirWindow,
 } from "@/lib/schedule";
+import { mileMarkers } from "@shared/mileMarkers";
+import { MileMarker } from "@/components/MileMarker";
 import { isLiveOnlyBlock } from "@shared/slots";
 import { SiteFooter } from "@/components/SiteFooter";
 
@@ -145,6 +147,8 @@ export default function Agenda({ slug }: Props) {
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
   }, [deepLinkSlot, slots]);
+
+  const markers = useMemo(() => mileMarkers(slots), [slots]);
 
   const groups = useMemo(() => {
     const out: { dateLabel: string; items: typeof slots }[] = [];
@@ -288,11 +292,14 @@ export default function Agenda({ slug }: Props) {
                         data-testid={`row-agenda-${s.index}`}
                         className="flex h-full flex-col overflow-hidden rounded-2xl border-2 border-primary/15 bg-card shadow-md transition-shadow hover:shadow-lg"
                       >
-                        <div className="flex items-center justify-between bg-[#053877] px-4 py-2.5 text-white">
-                          <span className="text-sm font-bold tabular-nums">
-                            {formatTimeInZone(s.start, viewZone)}
-                            <span className="text-white/60"> – {formatTimeInZone(s.end, viewZone)}</span>
-                          </span>
+                        <div className="flex items-center justify-between gap-2 bg-[#053877] px-3 py-2 text-white">
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <MileMarker marker={markers[s.index]} size={42} className="shrink-0" />
+                            <span className="text-sm font-bold tabular-nums">
+                              {formatTimeInZone(s.start, viewZone)}
+                              <span className="text-white/60"> – {formatTimeInZone(s.end, viewZone)}</span>
+                            </span>
+                          </div>
                           <SlotBadge start={s.start} end={s.end} showFormat={signup.showFormat} now={now} />
                         </div>
 
