@@ -3818,7 +3818,15 @@ export function registerRoutes(app: Express): void {
     }
     let downloadUrl = "";
     try {
-      downloadUrl = rec.url ? await signedRecordingUrl(rec.url, 7200) : "";
+      // Normally a storage path that gets signed. An absolute URL is passed
+      // straight through, which is what lets a clip job be pointed at a file
+      // that never came from an egress — an old episode, or a test run before
+      // anybody has actually been on air.
+      downloadUrl = !rec.url
+        ? ""
+        : /^https?:\/\//i.test(rec.url)
+          ? rec.url
+          : await signedRecordingUrl(rec.url, 7200);
     } catch (err) {
       console.error("Couldn't sign a recording for the clipper:", err);
     }

@@ -220,7 +220,15 @@ export async function transcribeLocally(file: string, dir: string): Promise<Line
   const wav = path.join(dir, "audio.wav");
   await ffmpeg(["-i", file, "-ac", "1", "-ar", "16000", "-vn", wav]);
   const base = path.join(dir, "whisper");
-  const model = process.env.WHISPER_MODEL || "base.en";
+  // whisper.cpp's -m takes a path to a .bin, not a model name: the old default
+  // of "base.en" could never resolve, so this branch has only ever failed.
+  const model = process.env.WHISPER_MODEL;
+  if (!model) {
+    throw new Error(
+      "No live transcript, and WHISPER_MODEL is not set. Point it at a whisper.cpp model file " +
+        "(e.g. ggml-base.en.bin) to transcribe here instead.",
+    );
+  }
   await run("whisper-cli", ["-m", model, "-f", wav, "-ocsv", "-of", base]);
   const csv = await fs.readFile(`${base}.csv`, "utf8");
   return csv
