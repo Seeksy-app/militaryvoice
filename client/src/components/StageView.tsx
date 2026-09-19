@@ -492,12 +492,17 @@ export function StageGrid({
         muted={muted}
       />
     ) : tiles.length === 0 ? (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-5 px-6 text-center">
-        <img src="/logo-wave.png?v=2" alt="" className="h-20 w-auto opacity-90" />
-        <p className="text-2xl font-semibold text-white/85 sm:text-3xl" style={HEADLINE_FONT}>
+      <div className="relative flex h-full w-full flex-col items-center justify-center gap-5 px-6 text-center">
+        {/* The holding card gets the background too. Without it, a producer
+            setting one up in an empty studio — which is exactly when you set
+            one up — sees no change at all. */}
+        <BackgroundLayer url={meta.backgroundUrl ?? ""} />
+        <div className="absolute inset-0 bg-[#04102b]/70" aria-hidden="true" />
+        <img src="/logo-wave.png?v=2" alt="" className="relative h-20 w-auto opacity-90" />
+        <p className="relative text-2xl font-semibold text-white/85 sm:text-3xl" style={HEADLINE_FONT}>
           {idleTitle ?? meta.eventName ?? "Back shortly"}
         </p>
-        <p className="text-base text-white/50">We'll be right back.</p>
+        <p className="relative text-base text-white/50">We'll be right back.</p>
       </div>
     ) : (
       <>

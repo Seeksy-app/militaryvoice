@@ -29,6 +29,7 @@ import { StageGrid, youtubeId, clockText, type StageTile } from "@/components/St
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
 import { SceneRail, type SceneSpec } from "@/components/SceneRail";
 import { StudioRail } from "@/components/StudioRail";
+import { stageMetaFromStudio } from "@shared/stageMeta";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { STUDIO_STATUSES, LOGO_CORNERS, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow, type SceneRow } from "@shared/schema";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
@@ -208,19 +209,28 @@ function GreenRoomStrip({
   roomConnected: boolean;
   onStage: (id: number) => void;
 }) {
+  // Empty is the normal state for most of a show, so it says so in a tooltip
+  // rather than spending a pill on it.
   if (people.length === 0) {
     return (
-      <span className="flex items-center gap-2 rounded-xl bg-white/[0.06] px-3 py-2 text-xs font-medium text-white/45">
-        <Users className="h-4 w-4" /> Green room empty
+      <span
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-white/35"
+        title="Green room empty — nobody waiting to come on"
+        data-testid="green-room-empty"
+      >
+        <Users className="h-4 w-4" />
       </span>
     );
   }
   return (
-    <span className="flex items-center gap-2" data-testid="green-room-strip">
-      <span className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.14em] text-white/45">
-        <Users className="h-3.5 w-3.5" /> {people.length}
+    <span className="flex items-center gap-1.5" data-testid="green-room-strip">
+      <span
+        className="flex h-8 items-center gap-1 pl-1 text-[12px] font-bold tabular-nums text-white/55"
+        title={`${people.length} waiting in the green room`}
+      >
+        <Users className="h-4 w-4" /> {people.length}
       </span>
-      <span className="flex flex-wrap items-center gap-1.5">
+      <span className="flex items-center gap-1">
         {people.map((p) => {
           const name = p.displayName || "Unnamed";
           // Said in the tooltip rather than on screen: at a glance the ring is
@@ -237,7 +247,7 @@ function GreenRoomStrip({
                 <button
                   type="button"
                   title={trouble ? `${name} — ${trouble}` : `${name} — ready`}
-                  className={`relative h-9 w-9 shrink-0 overflow-hidden rounded-full ring-2 transition-transform hover:scale-105 ${
+                  className={`relative h-8 w-8 shrink-0 overflow-hidden rounded-full ring-2 transition-transform hover:scale-105 ${
                     ready ? "ring-emerald-400" : "ring-[#F0A71F]"
                   }`}
                   data-testid={`green-room-avatar-${p.id}`}
@@ -268,6 +278,50 @@ function GreenRoomStrip({
         })}
       </span>
     </span>
+  );
+}
+
+/**
+ * One icon in the top bar. No word underneath — the bar is the thing that was
+ * eating the room, and "No standby clip set" spelled out in 11px told a
+ * producer nothing they could act on anyway. The tooltip says it in full.
+ */
+function BarButton({
+  icon: Icon,
+  label,
+  onClick,
+  active,
+  amber,
+  disabled,
+  testId,
+}: {
+  icon: typeof Disc;
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+  amber?: boolean;
+  disabled?: boolean;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={label}
+      aria-label={label}
+      aria-pressed={!!active}
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors disabled:opacity-35 ${
+        active
+          ? amber
+            ? "bg-[#F0A71F] text-[#1a1200]"
+            : "bg-[#ED1C24] text-white"
+          : "text-white/60 hover:bg-white/10 hover:text-white"
+      }`}
+      data-testid={testId}
+    >
+      <Icon className="h-4 w-4" />
+    </button>
   );
 }
 
@@ -998,20 +1052,26 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     >
       {/* ---------------------------------------------------- the control bar */}
       <div
-        className={`relative bg-[#000741] px-5 py-4 text-white ${
+        className={`relative bg-[#000741] text-white ${isLive ? "px-4 py-2" : "px-5 py-4"} ${
           broadcasting ? "border-t-[3px] border-[#ED1C24]" : ""
         }`}
       >
         <div className="relative flex flex-wrap items-center gap-x-4 gap-y-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10">
+            <div
+              className={`flex shrink-0 items-center justify-center rounded-xl bg-white/10 ${
+                isLive ? "h-8 w-8" : "h-9 w-9"
+              }`}
+            >
               <MonitorPlay className="h-4.5 w-4.5 text-[#F0A71F]" />
             </div>
             <div className="min-w-0">
               {renaming === null ? (
                 <button
                   type="button"
-                  className="-mx-1 block truncate rounded px-1 text-lg font-bold leading-tight hover:bg-white/10"
+                  className={`-mx-1 block truncate rounded px-1 font-bold leading-tight hover:bg-white/10 ${
+                    isLive ? "text-[15px]" : "text-lg"
+                  }`}
                   style={HEADLINE_FONT}
                   title="Rename this studio"
                   onClick={() => setRenaming(currentStudio?.name ?? "")}
@@ -1057,6 +1117,59 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               </div>
             </div>
           </div>
+
+          {/* What used to be two full-width strips under this bar: a standby
+              button, a logo button, the countdown and the green room. They
+              cost about 70px of stage for four controls, and the two with
+              words under them ("No standby clip set", "Logo off") were the two
+              nobody could read anyway. Icons, in the bar, with tooltips. */}
+          {isLive && (
+            <div className="flex shrink-0 items-center gap-0.5">
+              {!isRoom && (
+                <BarButton
+                  icon={PlayCircle}
+                  label={
+                    studio?.fallbackPlaying
+                      ? "Stop the standby clip"
+                      : studio?.fallbackVideoUrl
+                        ? "Roll the standby clip"
+                        : "No standby clip set — add one under Studio set"
+                  }
+                  active={studio?.fallbackPlaying}
+                  amber
+                  disabled={!studio?.fallbackVideoUrl}
+                  onClick={() => patchStudio.mutate({ fallbackPlaying: !studio?.fallbackPlaying })}
+                  testId="button-deck-standby"
+                />
+              )}
+              {!isRoom && studio?.logoUrl && (
+                <BarButton
+                  icon={ImageIcon}
+                  label={studio.logoVisible ? "Logo is on the frame — switch it off" : "Put the logo on the frame"}
+                  active={studio.logoVisible}
+                  amber
+                  onClick={() => patchStudio.mutate({ logoVisible: !studio.logoVisible })}
+                  testId="button-deck-logo"
+                />
+              )}
+              {countdownEnds !== null && (
+                <CountdownChip
+                  endsAt={countdownEnds}
+                  label={studio?.countdownLabel ?? ""}
+                  onClear={() => clearCountdown.mutate()}
+                />
+              )}
+              <span className="mx-1 h-6 w-px bg-white/15" aria-hidden="true" />
+              <GreenRoomStrip
+                people={greenRoom}
+                feeds={feeds}
+                stageFull={stageFull}
+                maxOnStage={studio?.maxOnStage ?? 5}
+                roomConnected={roomStatus === "connected"}
+                onStage={(id) => setState.mutate({ id, state: "On stage" })}
+              />
+            </div>
+          )}
 
           {(broadcasting || (isRoom && recording)) && (
             <span className="inline-flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.14em]">
@@ -1455,66 +1568,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             focus ? "min-h-0 flex-1" : "h-[calc(100vh-15rem)] min-h-[520px]"
           }`}
         >
-          {isPrimary && (current || next) && (
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-white/10 bg-[#000741] px-4 py-2 text-xs">
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="font-bold uppercase tracking-[0.14em] text-[#ED1C24]">Now</span>
-                <span className="truncate text-white/85">{current?.title ?? "Nothing scheduled"}</span>
-              </span>
-              {next && (
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className="font-bold uppercase tracking-[0.14em] text-white/40">Next</span>
-                  <span className="truncate text-white/60">
-                    {formatTimeInZone(new Date(next.startAtUtc), zone)} · {next.title}
-                  </span>
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Links row — above the picture */}
-          <div className="flex flex-wrap items-center gap-1.5 border-b border-white/10 bg-[#04102b] px-3 py-1.5">
-            {!isRoom && (
-              <DeckButton
-                icon={PlayCircle}
-                label={studio?.fallbackPlaying ? "Stop standby" : studio?.fallbackVideoUrl ? "Roll standby" : "No standby set"}
-                active={studio?.fallbackPlaying}
-                amber
-                onClick={() => patchStudio.mutate({ fallbackPlaying: !studio?.fallbackPlaying })}
-                testId="button-deck-standby"
-              />
-            )}
-            {!isRoom && studio?.logoUrl && (
-              <DeckButton
-                icon={ImageIcon}
-                label={studio.logoVisible ? "Logo on" : "Logo off"}
-                active={studio.logoVisible}
-                amber
-                onClick={() => patchStudio.mutate({ logoVisible: !studio.logoVisible })}
-                testId="button-deck-logo"
-              />
-            )}
-            {countdownEnds !== null && (
-              <CountdownChip
-                endsAt={countdownEnds}
-                label={studio?.countdownLabel ?? ""}
-                onClear={() => clearCountdown.mutate()}
-              />
-            )}
-            <span className="mx-1 h-6 w-px bg-white/15" aria-hidden="true" />
-            <GreenRoomStrip
-              people={greenRoom}
-              feeds={feeds}
-              stageFull={stageFull}
-              maxOnStage={studio?.maxOnStage ?? 5}
-              roomConnected={roomStatus === "connected"}
-              onStage={(id) => setState.mutate({ id, state: "On stage" })}
-            />
-            {/* The same two links live on the deck. Having them here as well
-                put the least urgent thing on screen in the most prominent
-                strip, twice. */}
-          </div>
-
           <div className="flex min-h-0 flex-1">
             {/* green room, down the left, where a producer's eye already is */}
             <aside className="flex w-[300px] shrink-0 flex-col border-r border-white/10">
@@ -1583,23 +1636,13 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             <div className="relative min-w-0 flex-1 bg-black">
               <StageGrid
                 tiles={monitorTiles}
-                meta={{
-                  fallbackPlaying: studio?.fallbackPlaying,
-                  fallbackVideoUrl: studio?.fallbackVideoUrl,
-                  fallbackLabel: studio?.fallbackLabel,
-                  stageMediaPlaying: studio?.stageMediaPlaying,
-                  stageMediaUrl: studio?.stageMediaUrl,
-                  stageMediaKind: studio?.stageMediaKind,
-                  stageMediaLabel: studio?.stageMediaLabel,
-                  // The monitor has to be the programme, not an approximation
-                  // of it: whatever the audience gets, the producer sees.
-                  countdownEndsAtUtc: studio?.countdownEndsAtUtc,
-                  countdownLabel: studio?.countdownLabel,
-                  logoUrl: studio?.logoVisible ? studio?.logoUrl : "",
-                  logoCorner: studio?.logoCorner,
-                  logoSize: studio?.logoSize,
-                  eventName: currentStudio?.name,
-                }}
+                // The monitor has to be the programme, not an approximation of
+                // it: whatever the audience gets, the producer sees. Built by
+                // the same function that builds the room's metadata, because
+                // the hand-copied version of this object silently fell behind
+                // and the rail's graphics reached air without ever reaching
+                // the screen the producer was watching.
+                meta={{ ...(studio ? stageMetaFromStudio(studio) : {}), eventName: currentStudio?.name }}
                 muted={monitorMuted}
                 idleTitle={currentStudio?.name}
               />

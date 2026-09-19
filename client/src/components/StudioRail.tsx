@@ -66,25 +66,25 @@ export function StudioRail({
     <>
       {open && (
         <aside
-          className="flex w-[330px] shrink-0 flex-col border-l border-white/10 bg-[#04102b]"
+          className="flex w-[272px] shrink-0 flex-col border-l border-white/10 bg-[#04102b]"
           data-testid={`rail-panel-${open}`}
         >
-          <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-3 py-2">
-            <span className="text-[12px] font-bold uppercase tracking-[0.14em] text-white/70">
+          <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/10 pl-3 pr-1.5">
+            <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/60">
               {TABS.find((t) => t.key === open)?.label}
             </span>
             <button
               type="button"
               onClick={() => setOpen(null)}
-              className="rounded-full p-1 text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-md p-1.5 text-white/40 transition-colors hover:bg-white/10 hover:text-white"
               aria-label="Close the panel"
               data-testid="button-rail-close"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2.5">
             {open === "banner" && <BannerPanel studio={studio} sceneBanner={sceneBanner} patch={patch} />}
             {open === "ticker" && <TickerPanel studio={studio} patch={patch} />}
             {open === "background" && <BackgroundPanel studio={studio} media={media} patch={patch} />}
@@ -94,7 +94,7 @@ export function StudioRail({
             {open === "media" && (
               // The library is a light surface on purpose: it is a list of
               // files to read, not a control you hit in the dark mid-take.
-              <div className="rounded-xl bg-background p-3 text-foreground">
+              <div className="rounded-lg bg-background p-2.5 text-foreground">
                 <MediaLibrary
                   adminGet={adminGet}
                   adminSend={adminSend}
@@ -113,7 +113,7 @@ export function StudioRail({
       {/* The strip itself. Always visible, always in the same place — that is
           the whole value of it during a show. */}
       <nav
-        className="flex w-[4.5rem] shrink-0 flex-col items-center gap-1 border-l border-white/10 bg-[#000741] py-3"
+        className="flex w-[4.25rem] shrink-0 flex-col items-center gap-0.5 border-l border-white/10 bg-[#000741] py-2"
         aria-label="Graphics"
       >
         {TABS.map(({ key, icon: Icon, label }) => {
@@ -129,17 +129,17 @@ export function StudioRail({
               type="button"
               onClick={() => setOpen((v) => (v === key ? null : key))}
               title={label}
-              className={`relative flex w-[3.9rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-colors ${
-                open === key ? "bg-white/15 text-white" : "text-white/65 hover:bg-white/10 hover:text-white"
+              className={`relative flex w-[3.75rem] flex-col items-center gap-1 rounded-lg px-0.5 py-2 text-[10px] font-medium leading-[1.15] transition-colors ${
+                open === key ? "bg-white/15 text-white" : "text-white/60 hover:bg-white/10 hover:text-white"
               }`}
               data-testid={`button-rail-${key}`}
             >
-              <Icon className="h-5 w-5" />
-              <span className="w-full truncate text-center">{label}</span>
+              <Icon className="h-[19px] w-[19px]" />
+              <span className="w-full text-balance text-center">{label}</span>
               {/* A dot, not a colour change: the producer needs to know what is
                   on air without opening anything. */}
               {live && (
-                <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#ED1C24]" aria-hidden="true" />
+                <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#ED1C24]" aria-hidden="true" />
               )}
             </button>
           );
@@ -150,8 +150,8 @@ export function StudioRail({
 }
 
 const FIELD =
-  "h-9 border-white/15 bg-white/5 text-white placeholder:text-white/35 focus-visible:ring-[#F0A71F]";
-const CAP = "text-[11px] font-semibold uppercase tracking-[0.1em] text-white/50";
+  "h-8 border-white/15 bg-white/5 text-[13px] text-white placeholder:text-white/30 focus-visible:ring-[#F0A71F]";
+const CAP = "text-[10px] font-semibold uppercase tracking-[0.1em] text-white/45";
 
 function BannerPanel({
   studio,
@@ -178,58 +178,38 @@ function BannerPanel({
   }, [studio?.bannerTitle, studio?.bannerSubtitle]);
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-xs leading-relaxed text-white/50">
-        Scenes carry their own name bar — taking one puts it up, and taking a scene without one takes it down. This
-        box is for what nobody planned.
-      </p>
+    <div className="flex flex-col gap-2">
+      <Input
+        className={FIELD}
+        value={title}
+        maxLength={80}
+        placeholder="Name on air"
+        onChange={(e) => setTitle(e.target.value)}
+        data-testid="input-banner-title"
+      />
+      <Input
+        className={FIELD}
+        value={sub}
+        maxLength={120}
+        placeholder="Underneath — Host · Semper Fi Radio"
+        onChange={(e) => setSub(e.target.value)}
+        data-testid="input-banner-subtitle"
+      />
 
-      {sceneBanner && (
-        <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/60">
-          <span className="text-white/40">From the scene</span>{" "}
-          <span className="font-semibold text-white/85">{sceneBanner.name}</span>: {sceneBanner.title}
-        </div>
-      )}
-
-      <div>
-        <Label className={CAP}>Name</Label>
-        <Input
-          className={`mt-1 ${FIELD}`}
-          value={title}
-          maxLength={80}
-          placeholder="Gunnery Sgt. Dana Reyes"
-          onChange={(e) => setTitle(e.target.value)}
-          data-testid="input-banner-title"
-        />
-      </div>
-      <div>
-        <Label className={CAP}>Underneath</Label>
-        <Input
-          className={`mt-1 ${FIELD}`}
-          value={sub}
-          maxLength={120}
-          placeholder="Host · Semper Fi Radio"
-          onChange={(e) => setSub(e.target.value)}
-          data-testid="input-banner-subtitle"
-        />
-      </div>
-
-      {/* What it will look like, in the colours it will actually be. */}
-      <div className="rounded-xl border border-white/10 bg-black/40 p-3">
-        <div className={CAP}>Preview</div>
-        <div className="mt-2 flex items-stretch overflow-hidden rounded-md">
-          <div className="w-1 shrink-0 bg-[#F0A71F]" />
-          <div className="min-w-0 bg-[#000741] px-3 py-1.5">
-            <p className="truncate text-sm font-bold leading-tight text-white">{title || "Nothing typed yet"}</p>
-            {sub && <p className="truncate text-xs leading-tight text-[#F0A71F]">{sub}</p>}
-          </div>
+      {/* The preview is the label. A caption saying "preview" above a thing
+          that obviously is one was just a line of height. */}
+      <div className="flex items-stretch overflow-hidden rounded-md">
+        <div className="w-1 shrink-0 bg-[#F0A71F]" />
+        <div className="min-w-0 flex-1 bg-black/45 px-2.5 py-1.5">
+          <p className="truncate text-[13px] font-bold leading-tight text-white">{title || "Nothing typed yet"}</p>
+          {sub && <p className="truncate text-[11px] leading-tight text-[#F0A71F]">{sub}</p>}
         </div>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-1.5">
         <Button
           size="sm"
-          className="flex-1 gap-1.5 rounded-full bg-[#ED1C24] text-xs font-semibold text-white hover:bg-[#c81820]"
+          className="h-8 flex-1 gap-1.5 rounded-full bg-[#ED1C24] text-xs font-semibold text-white hover:bg-[#c81820]"
           disabled={!title.trim()}
           onClick={() => patch({ bannerTitle: title.trim(), bannerSubtitle: sub.trim(), bannerVisible: true })}
           data-testid="button-banner-air"
@@ -239,14 +219,24 @@ function BannerPanel({
         <Button
           size="sm"
           variant="outline"
-          className="rounded-full border-white/20 bg-transparent text-xs text-white hover:bg-white/10 hover:text-white"
+          className="h-8 shrink-0 rounded-full border-white/20 bg-transparent px-3 text-xs text-white hover:bg-white/10 hover:text-white"
           disabled={!onAir}
           onClick={() => patch({ bannerVisible: false })}
           data-testid="button-banner-down"
         >
-          Take it down
+          Down
         </Button>
       </div>
+
+      {sceneBanner && (
+        <p className="text-[11px] leading-snug text-white/40">
+          On air from <span className="font-semibold text-white/65">{sceneBanner.name}</span>. Taking another scene
+          replaces it.
+        </p>
+      )}
+      <p className="text-[11px] leading-snug text-white/35">
+        Scenes carry their own — this box is for what nobody planned.
+      </p>
     </div>
   );
 }
@@ -257,27 +247,19 @@ function TickerPanel({ studio, patch }: { studio: StudioRow | null; patch: (p: P
   useEffect(() => setText(studio?.tickerText ?? ""), [studio?.tickerText]);
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-xs leading-relaxed text-white/50">
-        Crawls along the bottom of the frame and keeps running through every scene change — the one graphic that
-        belongs to the show rather than to a moment in it.
-      </p>
-      <div>
-        <Label className={CAP}>Text</Label>
-        <textarea
-          className="mt-1 min-h-[5.5rem] w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A71F]"
-          value={text}
-          maxLength={600}
-          placeholder="Donate at militaryvoice.ai/give · Next up at 8:00 — Former Action Guys"
-          onChange={(e) => setText(e.target.value)}
-          data-testid="input-ticker-text"
-        />
-        <p className="mt-1 text-[11px] text-white/35">{600 - text.length} characters left</p>
-      </div>
-      <div className="flex gap-2">
+    <div className="flex flex-col gap-2">
+      <textarea
+        className="min-h-[4.5rem] w-full rounded-md border border-white/15 bg-white/5 px-2.5 py-2 text-[13px] text-white placeholder:text-white/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A71F]"
+        value={text}
+        maxLength={600}
+        placeholder="Donate at militaryvoice.ai/give · Next up at 8:00 — Former Action Guys"
+        onChange={(e) => setText(e.target.value)}
+        data-testid="input-ticker-text"
+      />
+      <div className="flex gap-1.5">
         <Button
           size="sm"
-          className="flex-1 rounded-full bg-[#ED1C24] text-xs font-semibold text-white hover:bg-[#c81820]"
+          className="h-8 flex-1 rounded-full bg-[#ED1C24] text-xs font-semibold text-white hover:bg-[#c81820]"
           disabled={!text.trim()}
           onClick={() => patch({ tickerText: text.trim(), tickerVisible: true })}
           data-testid="button-ticker-air"
@@ -287,14 +269,17 @@ function TickerPanel({ studio, patch }: { studio: StudioRow | null; patch: (p: P
         <Button
           size="sm"
           variant="outline"
-          className="rounded-full border-white/20 bg-transparent text-xs text-white hover:bg-white/10 hover:text-white"
+          className="h-8 shrink-0 rounded-full border-white/20 bg-transparent px-3 text-xs text-white hover:bg-white/10 hover:text-white"
           disabled={!on}
           onClick={() => patch({ tickerVisible: false })}
           data-testid="button-ticker-stop"
         >
-          Stop it
+          Stop
         </Button>
       </div>
+      <p className="text-[11px] leading-snug text-white/35">
+        Crawls along the bottom and keeps running through every scene change. {600 - text.length} characters left.
+      </p>
     </div>
   );
 }
@@ -312,28 +297,23 @@ function BackgroundPanel({
   const current = studio?.backgroundUrl ?? "";
 
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-xs leading-relaxed text-white/50">
-        Sits behind the cameras — visible in the gaps around the tiles, hidden the moment a clip or the break clock
-        fills the frame. Anything uploaded to the media library shows up here.
-      </p>
-
-      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-        <span className="text-xs font-medium text-white/80">{studio?.backgroundVisible ? "On air" : "Off"}</span>
+    <div className="flex flex-col gap-2">
+      <label className="flex items-center justify-between rounded-lg bg-white/5 px-2.5 py-1.5">
+        <span className="text-xs font-medium text-white/75">{studio?.backgroundVisible ? "On air" : "Off"}</span>
         <Switch
           checked={Boolean(studio?.backgroundVisible)}
           disabled={!current}
           onCheckedChange={(v) => patch({ backgroundVisible: v })}
           data-testid="switch-background"
         />
-      </div>
+      </label>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-1.5">
         <button
           type="button"
           onClick={() => patch({ backgroundUrl: "", backgroundVisible: false })}
-          className={`flex h-[4.5rem] items-center justify-center rounded-lg border text-[11px] font-medium transition-colors ${
-            current ? "border-white/15 text-white/55 hover:bg-white/10" : "border-[#F0A71F] bg-[#F0A71F]/15 text-white"
+          className={`flex h-14 items-center justify-center rounded-md border text-[11px] font-medium transition-colors ${
+            current ? "border-white/15 text-white/50 hover:bg-white/10" : "border-[#F0A71F] bg-[#F0A71F]/15 text-white"
           }`}
           data-testid="button-background-none"
         >
@@ -345,24 +325,21 @@ function BackgroundPanel({
             type="button"
             onClick={() => patch({ backgroundUrl: m.url, backgroundVisible: true })}
             title={m.label}
-            className={`relative h-[4.5rem] overflow-hidden rounded-lg border transition-colors ${
+            className={`relative h-14 overflow-hidden rounded-md border transition-colors ${
               current === m.url ? "border-[#F0A71F]" : "border-white/15 hover:border-white/40"
             }`}
             data-testid={`button-background-${m.id}`}
           >
             <img src={m.url} alt="" className="h-full w-full object-cover" />
-            <span className="absolute inset-x-0 bottom-0 truncate bg-black/65 px-1.5 py-0.5 text-left text-[10px] text-white">
-              {m.label}
-            </span>
           </button>
         ))}
       </div>
 
-      {images.length === 0 && (
-        <p className="rounded-xl border border-dashed border-white/15 p-4 text-center text-xs text-white/40">
-          No images in the library yet.
-        </p>
-      )}
+      <p className="text-[11px] leading-snug text-white/35">
+        {images.length === 0
+          ? "No images in the media library yet — anything uploaded there shows up here."
+          : "Sits behind the cameras. A clip or the break clock covers it."}
+      </p>
     </div>
   );
 }
@@ -381,9 +358,9 @@ function LogoPanel({
   fileRef: React.MutableRefObject<HTMLInputElement | null>;
 }) {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       <div
-        className="relative flex h-24 w-full items-center justify-center overflow-hidden rounded-xl border border-white/10"
+        className="relative flex h-20 w-full items-center justify-center overflow-hidden rounded-lg border border-white/10"
         style={{ background: "linear-gradient(135deg,#0a1628 0%,#1a2a4a 100%)" }}
       >
         {studio?.logoUrl ? (
@@ -443,7 +420,7 @@ function LogoPanel({
         <>
           <div>
             <Label className={CAP}>Corner</Label>
-            <div className="mt-1 grid grid-cols-2 gap-1.5">
+            <div className="mt-1 grid grid-cols-2 gap-1">
               {LOGO_CORNERS.map((c) => (
                 <button
                   key={c}
@@ -462,7 +439,7 @@ function LogoPanel({
             </div>
           </div>
           <div>
-            <Label className={CAP}>Size — {studio.logoSize || 96}px on a 1280-wide frame</Label>
+            <Label className={CAP}>Size · {studio.logoSize || 96}px at 1280 wide</Label>
             <input
               type="range"
               min={40}

@@ -1,33 +1,29 @@
 // Crop the ceremony portrait for the places it actually appears.
 //
-// The cards are circles, so a 3:4 portrait loses the top of the head and the
-// shoulders to the mask. "attention" finds the face and crops square around
-// it, which is the one thing a headshot must survive.
+// The cards are circles, so the crop has to survive a circular mask: a circle
+// inscribed in a square touches the top edge at its midpoint, which on a
+// headshot is the crown. The first attempt solved that by insetting the photo
+// and filling the gap with a blurred copy of itself — which read, correctly,
+// as a blurry halo round his head.
+//
+// The real fix is framing, not fill. The portrait is 2316 wide by 3088 tall,
+// and a square taken at full width from the very top puts the crown about 9%
+// down and the shoulders on the bottom edge. Everything the mask cuts is
+// plaster wall.
 import sharp from "sharp";
 
-const SRC = "Riccoh.jpeg";
+const SRC = "media/riccoh-headshot-source.jpeg";
 const OUT = "client/public/riccoh-host.jpg";
-
-const meta = await sharp(SRC).metadata();
-console.log(`source: ${meta.width}x${meta.height}`);
-
 const SIZE = 800;
-const INSET = 0.88; // how much of the square the photo itself fills
 
-// A circle inscribed in a square touches the edges at their midpoints — which
-// on a headshot is the top of the head. Cropping flush to the square looks
-// fine as a square and decapitates him as a circle, so the photo is inset and
-// the gap filled with a blurred copy of itself rather than a flat colour the
-// textured wall behind him would fight with.
-const base = sharp(SRC).rotate();
-const bg = await base.clone().resize(SIZE, SIZE, { fit: "cover", position: "attention" }).blur(28).modulate({ brightness: 1.04 }).toBuffer();
-const fg = await base
-  .clone()
-  .resize(Math.round(SIZE * INSET), Math.round(SIZE * INSET), { fit: "cover", position: "attention" })
-  .toBuffer();
+const upright = await sharp(SRC).rotate().toBuffer();
+const meta = await sharp(upright).metadata();
+const side = Math.min(meta.width!, meta.height!);
+console.log(`source: ${meta.width}x${meta.height} → square ${side} from the top`);
 
-await sharp(bg)
-  .composite([{ input: fg, gravity: "south" }])
+await sharp(upright)
+  .extract({ left: Math.round((meta.width! - side) / 2), top: 0, width: side, height: side })
+  .resize(SIZE, SIZE)
   .jpeg({ quality: 88, mozjpeg: true })
   .toFile(OUT);
 

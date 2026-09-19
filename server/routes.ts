@@ -93,6 +93,7 @@ import {
 import { renderBroadcastEmail } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
+import { stageMetaFromStudio } from "../shared/stageMeta.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   publishPhoto,
@@ -3271,15 +3272,9 @@ export function registerRoutes(app: Express): void {
     const startMs = ev?.startAtUtc ? Date.parse(ev.startAtUtc) : NaN;
     return {
       eventName,
-      studioName: st.name,
-      status: st.status,
-      fallbackPlaying: st.fallbackPlaying,
-      fallbackVideoUrl: st.fallbackVideoUrl,
-      fallbackLabel: st.fallbackLabel,
-      // Both standbys travel together with the start time; the player picks,
-      // so the changeover needs no scheduled job and cannot go stale.
-      preVideoUrl: st.preVideoUrl,
-      preLabel: st.preLabel,
+      // The stage and its graphics come from one place, shared with the
+      // console's own monitor — see shared/stageMeta.ts for why.
+      ...stageMetaFromStudio(st),
       // The event's own window travels with the metadata so the page can be
       // honest about the clock without another request: which standby to play,
       // and whether "Live" is even possible yet.
@@ -3287,23 +3282,6 @@ export function registerRoutes(app: Express): void {
       eventEndAtUtc: Number.isFinite(startMs)
         ? new Date(startMs + (ev?.durationHours ?? 24) * 3600000).toISOString()
         : "",
-      stageMediaPlaying: st.stageMediaPlaying,
-      stageMediaUrl: st.stageMediaUrl,
-      stageMediaKind: st.stageMediaKind,
-      stageMediaLabel: st.stageMediaLabel,
-      // Graphics sit above whatever scene is up, so they travel separately.
-      logoUrl: st.logoVisible ? st.logoUrl : "",
-      logoCorner: st.logoCorner,
-      logoSize: st.logoSize,
-      countdownEndsAtUtc: st.countdownEndsAtUtc,
-      countdownLabel: st.countdownLabel,
-      currentSceneId: st.currentSceneId,
-      // The rail's graphics. Each one travels only when it is switched on, so
-      // a viewer's player never has to decide whether to draw it.
-      backgroundUrl: st.backgroundVisible ? st.backgroundUrl : "",
-      bannerTitle: st.bannerVisible ? st.bannerTitle : "",
-      bannerSubtitle: st.bannerVisible ? st.bannerSubtitle : "",
-      tickerText: st.tickerVisible ? st.tickerText : "",
     };
   }
 
