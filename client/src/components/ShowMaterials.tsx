@@ -35,6 +35,16 @@ import {
 } from "lucide-react";
 
 /**
+ * The real ceiling, and it is not ours to choose.
+ *
+ * Supabase caps object size at the project level — the bucket asks for 2GB
+ * and is refused — so this is the number the upload will actually accept.
+ * Saying "full episodes are fine" here was wrong: a 79MB episode fails, which
+ * is precisely the file people are being asked to send.
+ */
+const MAX_MB = 48;
+
+/**
  * PUT a file to a signed storage URL, reporting progress.
  *
  * XHR rather than fetch, for the one reason XHR is still worth reaching for:
@@ -467,7 +477,7 @@ export function ShowMaterials({
                   )}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Full episodes are fine — it uploads straight to us.
+                  Up to {MAX_MB}MB. Longer episodes: send us a link and we'll fetch it.
                 </p>
               </div>
             </div>
