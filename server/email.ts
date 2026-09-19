@@ -332,6 +332,44 @@ export async function sendReminderConfirmationEmail(raw: ReminderEmailInput): Pr
 }
 
 /** Tell the admin team a sponsor asked to get involved. Never throws. */
+/**
+ * Their copy of the enquiry, with the way to pay in it.
+ *
+ * The team's alert already goes out; this is the half the sponsor sees. It
+ * carries the checkout link when they picked a package and deliberately does
+ * not when they didn't — somebody who chose "not sure yet" said they wanted a
+ * conversation, and answering that with a payment button is how you lose them.
+ */
+export async function sendSponsorThanksEmail(input: {
+  to: string;
+  name: string;
+  packageName: string;
+  checkoutUrl: string;
+}): Promise<boolean> {
+  const first = input.name.trim().split(/\s+/)[0] || "there";
+  const pay =
+    input.checkoutUrl && input.packageName
+      ? `<p style="margin:20px 0 0;color:#374151;font-size:15px;line-height:1.65;">You asked about <strong>${escapeHtml(input.packageName)}</strong>. When you're ready, this is the link:</p>
+         <p style="margin:16px 0 0;"><a href="${escapeHtml(input.checkoutUrl)}" style="display:inline-block;background:#F0A71F;color:#1a1200;font-weight:700;font-size:15px;text-decoration:none;padding:13px 26px;border-radius:999px;">Complete your sponsorship</a></p>
+         <p style="margin:12px 0 0;color:#9ca3af;font-size:12px;">No rush — the link stays good, and Riccoh will be in touch either way.</p>`
+      : `<p style="margin:20px 0 0;color:#374151;font-size:15px;line-height:1.65;">Riccoh will be in touch shortly to walk you through the packages and find the one that fits.</p>`;
+
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
+    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoice.ai</p>
+    <h1 style="margin:0 0 16px;color:#111827;font-size:20px;font-weight:700;">Thanks, ${escapeHtml(first)} — we've got it.</h1>
+    <p style="margin:0;color:#374151;font-size:15px;line-height:1.65;">Twenty-four hours of military and veteran podcasters, going out back to back on National Military Podcast Day. Your name sits with it.</p>
+    ${pay}
+    <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;">Reply to this email and it reaches us directly.</p>
+  </div>`;
+  const text = `Thanks, ${first} — we've got it.\n\n${
+    input.checkoutUrl && input.packageName
+      ? `You asked about ${input.packageName}. When you're ready:\n${input.checkoutUrl}\n`
+      : "Riccoh will be in touch shortly to walk you through the packages.\n"
+  }\nReply to this email and it reaches us directly.\n`;
+  return sendEmail({ to: input.to, subject: "Thanks for your interest in sponsoring", html, text });
+}
+
 export async function sendSponsorInquiryEmail(input: {
   to: string[];
   name: string;

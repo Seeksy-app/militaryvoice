@@ -61,6 +61,7 @@ export function SponsorDialog({
   const [message, setMessage] = useState("");
   const [packageId, setPackageId] = useState(0);
   const [sent, setSent] = useState(false);
+  const [paid, setPaid] = useState<{ url: string; label: string } | null>(null);
 
   // The tiers, if there are any. Until somebody fills them in this query
   // returns nothing and the form is exactly what it was — which is the right
@@ -89,20 +90,26 @@ export function SponsorDialog({
       return res.json();
     },
     onSettled: () => setHumanReset((n) => n + 1),
-    onSuccess: () => {
+    onSuccess: (r: { checkoutUrl?: string; packageName?: string }) => {
       setSent(true);
+      setPaid({ url: r?.checkoutUrl ?? "", label: r?.packageName ?? "" });
       toast({ title: sentTitle, description: sentDescription });
-      setTimeout(() => {
-        setOpen(false);
-        setSent(false);
-        setName("");
-        setCompany("");
-        setJobTitle("");
-        setEmail("");
-        setPhone("");
-        setMessage("");
-        setPackageId(0);
-      }, 1600);
+      // Only close itself when there is nothing left to do. With a payment
+      // link on screen, closing the dialog out from under someone two seconds
+      // after handing them one is the whole funnel thrown away.
+      if (!r?.checkoutUrl) {
+        setTimeout(() => {
+          setOpen(false);
+          setSent(false);
+          setName("");
+          setCompany("");
+          setJobTitle("");
+          setEmail("");
+          setPhone("");
+          setMessage("");
+          setPackageId(0);
+        }, 1600);
+      }
     },
     onError: (err: Error) => toast({ title: "Couldn't send that", description: err.message, variant: "destructive" }),
   });
@@ -124,6 +131,28 @@ export function SponsorDialog({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
+        {paid?.url ? (
+          <div className="flex flex-col items-center gap-4 py-2 text-center" data-testid="sponsor-checkout">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <Check className="h-6 w-6 text-primary" />
+            </span>
+            <div>
+              <p className="text-base font-semibold">We've got it — thanks.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {paid.label ? <>You picked <span className="font-medium text-foreground">{paid.label}</span>. </> : null}
+                Riccoh will be in touch either way. If you'd rather lock it in now:
+              </p>
+            </div>
+            <Button asChild size="lg" className="w-full gap-2 rounded-full">
+              <a href={paid.url} target="_blank" rel="noreferrer" data-testid="link-sponsor-checkout">
+                Complete your sponsorship
+              </a>
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              We've emailed you the same link — no rush, it stays good.
+            </p>
+          </div>
+        ) : (
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -251,6 +280,7 @@ export function SponsorDialog({
             </Button>
           </DialogFooter>
         </form>
+        )}
       </DialogContent>
     </Dialog>
   );

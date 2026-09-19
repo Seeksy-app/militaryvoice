@@ -92,7 +92,7 @@ import {
   resendApiGet,
 } from "./email.js";
 import { renderBroadcastEmail } from "./email.js";
-import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
+import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -1620,10 +1620,14 @@ export function registerRoutes(app: Express): void {
     // or retired, and the enquiry has to keep saying what was on the page when
     // they read it. An id that no longer resolves is not a record of anything.
     let packageName = "";
+    let checkoutUrl = "";
     if (parsed.data.packageId) {
       const featured = await storage.getFeaturedEvent();
       const pack = (await storage.listSponsorPackages(featured.id)).find((p) => p.id === parsed.data.packageId);
-      if (pack) packageName = `${pack.name}${pack.price ? ` · $${pack.price.toLocaleString()}` : ""}`;
+      if (pack) {
+        packageName = `${pack.name}${pack.price ? ` · $${pack.price.toLocaleString()}` : ""}`;
+        checkoutUrl = pack.checkoutUrl ?? "";
+      }
     }
     const created = await storage.createSponsorInquiry({ ...parsed.data, packageName });
     // Send before responding: see the note on /api/reminders. Work started
@@ -1644,7 +1648,19 @@ export function registerRoutes(app: Express): void {
       console.error("Failed to send sponsor inquiry email:", err);
     }
 
-    res.status(201).json({ id: created.id });
+    // Their own copy, with the way to pay in it. Before the response for the
+    // same reason as the alert above: work started after the response is
+    // flushed is not guaranteed to run on serverless.
+    try {
+      await sendSponsorThanksEmail({ to: parsed.data.email, name: parsed.data.name, packageName, checkoutUrl });
+    } catch (err) {
+      console.error("Failed to send the sponsor thank-you:", err);
+    }
+
+    // The link comes back on the response too, so the dialog can show it at
+    // once. Somebody who has just decided should not have to go and find an
+    // email to act on it.
+    res.status(201).json({ id: created.id, checkoutUrl, packageName });
   });
 
   app.get("/api/admin/sponsor-inquiries", requireAdmin, async (_req, res) => {

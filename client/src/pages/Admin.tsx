@@ -1001,7 +1001,7 @@ function SponsorPackagesCard({ eventId }: { eventId: number }) {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<SponsorPackageWithSold | null>(null);
-  const [form, setForm] = useState({ name: "", price: "", totalSlots: "1", tier: "official", description: "" });
+  const [form, setForm] = useState({ name: "", price: "", totalSlots: "1", tier: "official", description: "", checkoutUrl: "" });
   const [busy, setBusy] = useState(false);
 
   function refresh() {
@@ -1011,13 +1011,13 @@ function SponsorPackagesCard({ eventId }: { eventId: number }) {
 
   function startAdd() {
     setEditing(null);
-    setForm({ name: "", price: "", totalSlots: "1", tier: "official", description: "" });
+    setForm({ name: "", price: "", totalSlots: "1", tier: "official", description: "", checkoutUrl: "" });
     setOpen(true);
   }
 
   function startEdit(p: SponsorPackageWithSold) {
     setEditing(p);
-    setForm({ name: p.name, price: String(p.price || ""), totalSlots: String(p.totalSlots), tier: p.tier, description: p.description });
+    setForm({ name: p.name, price: String(p.price || ""), totalSlots: String(p.totalSlots), tier: p.tier, description: p.description, checkoutUrl: (p as { checkoutUrl?: string }).checkoutUrl ?? "" });
     setOpen(true);
   }
 
@@ -1035,6 +1035,7 @@ function SponsorPackagesCard({ eventId }: { eventId: number }) {
         totalSlots: Math.max(1, Number(form.totalSlots) || 1),
         tier: form.tier,
         description: form.description.trim(),
+        checkoutUrl: form.checkoutUrl.trim(),
         eventId,
       };
       if (editing) await adminSend("PATCH", `/api/admin/sponsor-packages/${editing.id}`, body);
@@ -1147,6 +1148,23 @@ function SponsorPackagesCard({ eventId }: { eventId: number }) {
             <div>
               <Label htmlFor="pkg-desc" className="text-xs">Description (optional)</Label>
               <Input id="pkg-desc" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What the sponsor gets" className="mt-1" />
+            </div>
+            <div>
+              {/* Handed over once an enquiry is in, never listed publicly —
+                  the point of the form is knowing who is buying. */}
+              <Label htmlFor="pkg-checkout" className="text-xs">Payment link</Label>
+              <Input
+                id="pkg-checkout"
+                value={form.checkoutUrl}
+                onChange={(e) => setForm({ ...form, checkoutUrl: e.target.value })}
+                placeholder="https://checkout.seeksy.io/b/…"
+                className="mt-1"
+                data-testid="input-package-checkout"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Shown to them the moment they submit, and in their thank-you email. Leave it blank and they just get a
+                reply from Riccoh.
+              </p>
             </div>
             <div className="mt-1 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>

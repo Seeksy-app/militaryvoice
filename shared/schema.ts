@@ -450,6 +450,9 @@ export const sponsorPackages = pgTable("sponsor_packages", {
   /** Which tier a sponsor lands in when this package is assigned to them. */
   tier: text("tier").notNull().default("official"),
   description: text("description").notNull().default(""),
+  /** Where they pay. Handed over once an enquiry is in, not published in the
+   *  packages list — the point of the form is to know who is buying. */
+  checkoutUrl: text("checkout_url").notNull().default(""),
   sortOrder: integer("sort_order").notNull().default(0),
   active: boolean("active").notNull().default(true),
   createdAt: text("created_at").notNull(),
@@ -461,6 +464,7 @@ export const upsertSponsorPackageSchema = z.object({
   totalSlots: z.number().int().min(1).default(1),
   tier: z.enum(SPONSOR_TIERS).default("official"),
   description: z.string().trim().default(""),
+  checkoutUrl: z.string().trim().max(600).default(""),
   sortOrder: z.number().int().default(0),
   active: z.boolean().default(true),
 });
