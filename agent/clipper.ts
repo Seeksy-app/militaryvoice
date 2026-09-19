@@ -131,17 +131,30 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
   return (await res.json()) as T;
 }
 
+/**
+ * Straight to storage, not through the API.
+ *
+ * Posting the file to the function capped every clip at 4.5MB — Vercel's
+ * request body limit — and a vertical with burned-in captions is past that.
+ * The job would do all its work and fail on the last step. The worker still
+ * holds nothing but its token: it asks for a signed URL and uploads to that.
+ */
 async function uploadFile(file: string, contentType: string): Promise<string> {
-  const form = new FormData();
-  form.append("file", new Blob([await fs.readFile(file)], { type: contentType }), path.basename(file));
-  form.append("name", path.basename(file));
-  const res = await fetch(`${API_BASE}/api/agent/clip-files`, {
-    method: "POST",
-    headers: { "x-agent-token": AGENT_TOKEN },
-    body: form,
+  const name = path.basename(file);
+  const signed = await api<{ uploadUrl: string; publicUrl: string }>(
+    "POST",
+    "/api/agent/clip-files/upload-url",
+    { name },
+  );
+  const body = await fs.readFile(file);
+  const res = await fetch(signed.uploadUrl, {
+    method: "PUT",
+    headers: { "content-type": contentType },
+    body: new Uint8Array(body),
   });
   if (!res.ok) throw new Error(`upload failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
-  return ((await res.json()) as { url: string }).url;
+  console.log(`   uploaded ${name} (${(body.length / 1048576).toFixed(1)}MB)`);
+  return signed.publicUrl;
 }
 
 // ---------------------------------------------------------------------------

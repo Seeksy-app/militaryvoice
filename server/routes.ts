@@ -3991,6 +3991,29 @@ export function registerRoutes(app: Express): void {
     });
   });
 
+  /**
+   * A URL the worker PUTs a finished clip straight to.
+   *
+   * Clips used to be POSTed through this function, which caps request bodies
+   * at 4.5MB. A 72-second vertical with a stacked layout and burned-in
+   * captions is bigger than that, so the whole job — download, transcribe,
+   * pick, nine renders — completed and then threw the work away on the last
+   * step with FUNCTION_PAYLOAD_TOO_LARGE.
+   *
+   * The worker still holds only its token: it asks for a signed URL and the
+   * bytes go to storage without passing through us.
+   */
+  app.post("/api/agent/clip-files/upload-url", requireAgent, async (req, res) => {
+    const safe = String(req.body?.name ?? "clip.mp4").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-90);
+    const key = `clips/${Date.now()}-${crypto.randomBytes(5).toString("hex")}-${safe}`;
+    try {
+      res.json(await signedAssetUpload(key));
+    } catch (err) {
+      console.error("Could not sign a clip upload:", err);
+      res.status(502).json({ message: "Couldn't start the upload." });
+    }
+  });
+
   /** One rendered clip, uploaded straight into the asset bucket. */
   app.post(
     "/api/agent/clip-files",
