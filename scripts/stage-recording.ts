@@ -39,7 +39,22 @@ if (!file) {
   process.exit(1);
 }
 
-const bytes = (await fs.stat(file)).size;
+// Checked before anything else, because the two ways this goes wrong are
+// pasting the runbook's placeholder path verbatim and running from the wrong
+// directory — and node's raw ENOENT stack explains neither.
+if (/\/full\/path\/to\/|your-episode|<.*>/.test(file)) {
+  console.error(`"${file}" is the example path, not a real one.`);
+  console.error("Tip: type the command, then drag the video into the Terminal window — it pastes the real path.");
+  process.exit(1);
+}
+const bytes = await fs
+  .stat(file)
+  .then((st) => st.size)
+  .catch(() => {
+    console.error(`Can't find ${file}`);
+    console.error(`Working directory is ${process.cwd()} — run this from the militaryvoice folder.`);
+    process.exit(1);
+  });
 
 /** ffprobe, because the clipper trusts durationSec when it decides what to cut. */
 const { stdout } = await run("ffprobe", [
