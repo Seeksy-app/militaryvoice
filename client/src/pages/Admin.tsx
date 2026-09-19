@@ -1641,6 +1641,18 @@ function SponsorsCard({ eventId }: { eventId: number }) {
                         </a>
                         {q.phone ? ` · ${q.phone}` : ""} · {new Date(q.createdAt).toLocaleDateString()}
                       </div>
+                      {/* The first thing you want before picking up the phone:
+                          whether they arrived with a tier in mind or want to be
+                          talked through it. Those are different calls. */}
+                      <div className="mt-1.5">
+                        {(q as { packageName?: string }).packageName ? (
+                          <Badge variant="secondary" className="text-[11px]">
+                            {(q as { packageName?: string }).packageName}
+                          </Badge>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">No package picked</span>
+                        )}
+                      </div>
                     </div>
                     <Button
                       variant="ghost"

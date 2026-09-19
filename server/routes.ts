@@ -1589,6 +1589,25 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Public: "become a sponsor" form ------------------------------------------
+  /**
+   * The packages, for the public pitch.
+   *
+   * Active ones only, and the sold count is deliberately not here: how many
+   * are left is a negotiating position, not a fact a prospect needs before
+   * they have spoken to anyone.
+   */
+  app.get("/api/sponsor-packages", async (req, res) => {
+    const featured = await storage.getFeaturedEvent();
+    const eventId = Number(req.query.eventId) || featured.id;
+    const rows = await storage.listSponsorPackages(eventId);
+    publicCache(res, 300);
+    res.json(
+      rows
+        .filter((p) => p.active)
+        .map((p) => ({ id: p.id, name: p.name, price: p.price, tier: p.tier, description: p.description })),
+    );
+  });
+
   app.post("/api/sponsor-inquiries", async (req, res) => {
     const parsed = insertSponsorInquirySchema.safeParse(req.body);
     if (!parsed.success) {
@@ -1596,7 +1615,16 @@ export function registerRoutes(app: Express): void {
       return;
     }
     if (!(await requireHuman(req, res))) return;
-    const created = await storage.createSponsorInquiry(parsed.data);
+    // The name is copied in, not looked up later: the package can be renamed
+    // or retired, and the enquiry has to keep saying what was on the page when
+    // they read it. An id that no longer resolves is not a record of anything.
+    let packageName = "";
+    if (parsed.data.packageId) {
+      const featured = await storage.getFeaturedEvent();
+      const pack = (await storage.listSponsorPackages(featured.id)).find((p) => p.id === parsed.data.packageId);
+      if (pack) packageName = `${pack.name}${pack.price ? ` · $${pack.price.toLocaleString()}` : ""}`;
+    }
+    const created = await storage.createSponsorInquiry({ ...parsed.data, packageName });
     // Send before responding: see the note on /api/reminders. Work started
     // after the response is flushed is not guaranteed to run on serverless.
     try {
@@ -1607,7 +1635,9 @@ export function registerRoutes(app: Express): void {
         company: parsed.data.company ?? "",
         email: parsed.data.email,
         phone: parsed.data.phone ?? "",
-        message: parsed.data.message ?? "",
+        message: packageName
+          ? `Interested in: ${packageName}\n\n${parsed.data.message ?? ""}`.trim()
+          : parsed.data.message ?? "",
       });
     } catch (err) {
       console.error("Failed to send sponsor inquiry email:", err);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,14 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Handshake, Check, Send } from "lucide-react";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
+
+interface SponsorPackage {
+  id: number;
+  name: string;
+  price: number;
+  tier: string;
+  description: string;
+}
 
 interface Props {
   children: React.ReactNode;
@@ -51,7 +59,17 @@ export function SponsorDialog({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
+  const [packageId, setPackageId] = useState(0);
   const [sent, setSent] = useState(false);
+
+  // The tiers, if there are any. Until somebody fills them in this query
+  // returns nothing and the form is exactly what it was — which is the right
+  // failure mode for a picker whose options live in an admin screen.
+  const { data: packages = [] } = useQuery<SponsorPackage[]>({
+    queryKey: ["/api/sponsor-packages"],
+    queryFn: async () => (await apiRequest("GET", "/api/sponsor-packages")).json(),
+    staleTime: 5 * 60 * 1000,
+  });
   const siteKey = useTurnstileSiteKey();
   const [human, setHuman] = useState<string | null>(null);
   const [humanReset, setHumanReset] = useState(0);
@@ -65,6 +83,7 @@ export function SponsorDialog({
         email,
         phone,
         message,
+        packageId,
         turnstileToken: human,
       });
       return res.json();
@@ -82,6 +101,7 @@ export function SponsorDialog({
         setEmail("");
         setPhone("");
         setMessage("");
+        setPackageId(0);
       }, 1600);
     },
     onError: (err: Error) => toast({ title: "Couldn't send that", description: err.message, variant: "destructive" }),
@@ -111,6 +131,60 @@ export function SponsorDialog({
           }}
           className="flex flex-col gap-4"
         >
+          {/* Asked first, because it is the question they came with. A prospect
+              who has already decided which tier interests them is a different
+              conversation from one who wants to be talked through it, and
+              knowing which before you call is most of the value. */}
+          {packages.length > 0 && (
+            <div>
+              <Label className="text-xs">Which package interests you?</Label>
+              <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+                {packages.map((pk) => {
+                  const picked = packageId === pk.id;
+                  return (
+                    <button
+                      key={pk.id}
+                      type="button"
+                      onClick={() => setPackageId(picked ? 0 : pk.id)}
+                      aria-pressed={picked}
+                      className={`rounded-xl border p-3 text-left transition-colors ${
+                        picked ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
+                      }`}
+                      data-testid={`button-sponsor-package-${pk.id}`}
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-semibold">{pk.name}</span>
+                        {pk.price > 0 && (
+                          <span className="shrink-0 text-sm font-bold tabular-nums text-primary">
+                            ${pk.price.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                      {pk.description && (
+                        <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{pk.description}</p>
+                      )}
+                    </button>
+                  );
+                })}
+                {/* Not an absence of an answer — an answer. Somebody who wants
+                    to talk it through should be able to say so without
+                    guessing at a number first. */}
+                <button
+                  type="button"
+                  onClick={() => setPackageId(0)}
+                  aria-pressed={packageId === 0}
+                  className={`rounded-xl border border-dashed p-3 text-left text-sm transition-colors ${
+                    packageId === 0 ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:border-primary/40"
+                  }`}
+                  data-testid="button-sponsor-package-none"
+                >
+                  <span className="font-medium">Not sure yet</span>
+                  <p className="mt-0.5 text-xs leading-snug text-muted-foreground">Talk me through the options.</p>
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="sp-name" className="text-xs">

@@ -573,6 +573,13 @@ export const sponsorInquiries = pgTable("sponsor_inquiries", {
   email: text("email").notNull(),
   phone: text("phone").notNull().default(""),
   message: text("message").notNull().default(""),
+  /** Which package they asked about. 0 = they didn't say, which is a real
+   *  answer and the one Phil Randazzo gave, because the form never asked. */
+  packageId: integer("package_id").notNull().default(0),
+  /** The package's name as it stood at the time. Kept flat on purpose: a
+   *  package can be renamed or retired, and an enquiry has to keep saying
+   *  what was actually on the page when they read it. */
+  packageName: text("package_name").notNull().default(""),
   handled: boolean("handled").notNull().default(false),
   createdAt: text("created_at").notNull(),
 });
@@ -586,6 +593,7 @@ export const insertSponsorInquirySchema = createInsertSchema(sponsorInquiries)
     email: z.string().trim().email("Enter a valid email"),
     phone: z.string().trim().default(""),
     message: z.string().trim().max(2000).default(""),
+    packageId: z.number().int().min(0).default(0),
   });
 export type InsertSponsorInquiry = z.infer<typeof insertSponsorInquirySchema>;
 export type SponsorInquiryRow = typeof sponsorInquiries.$inferSelect;
