@@ -456,15 +456,22 @@ export async function transcribeWithScribe(file: string, dir: string): Promise<L
   const key = (process.env.ELEVENLABS_API_KEY || "").trim();
   if (!key) throw new Error("ELEVENLABS_API_KEY is not set.");
 
-  const wav = path.join(dir, "scribe.wav");
-  await ffmpeg(["-i", file, "-ac", "1", "-ar", "16000", "-vn", wav]);
+  // Compressed, not raw. Twenty minutes of 16kHz mono wav is ~38MB and the
+  // upload was taking minutes on a domestic connection — far longer than the
+  // recognition itself, which ran 90 seconds of audio in 2.1. Mono mp3 at 48k
+  // is about a fifth the size and speech recognition cannot tell the
+  // difference; the models are trained on worse.
+  const audio = path.join(dir, "scribe.mp3");
+  await ffmpeg(["-i", file, "-ac", "1", "-ar", "16000", "-b:a", "48k", "-vn", audio]);
 
   const form = new FormData();
-  form.append("file", new Blob([new Uint8Array(await fs.readFile(wav))], { type: "audio/wav" }), "audio.wav");
+  form.append("file", new Blob([new Uint8Array(await fs.readFile(audio))], { type: "audio/mpeg" }), "audio.mp3");
   form.append("model_id", "scribe_v1");
   form.append("diarize", "true");
   form.append("timestamps_granularity", "word");
 
+  const mb = ((await fs.stat(audio)).size / 1048576).toFixed(1);
+  console.log(`   uploading ${mb}MB to Scribe…`);
   const res = await fetch("https://api.elevenlabs.io/v1/speech-to-text", {
     method: "POST",
     headers: { "xi-api-key": key },
@@ -520,13 +527,13 @@ async function transcribeWithDeepgram(file: string, dir: string): Promise<Line[]
 
   // Mono 16k is all speech recognition uses, and it makes a 400MB video into
   // a few megabytes of upload.
-  const wav = path.join(dir, "dg.wav");
-  await ffmpeg(["-i", file, "-ac", "1", "-ar", "16000", "-vn", wav]);
+  const wav = path.join(dir, "dg.mp3");
+  await ffmpeg(["-i", file, "-ac", "1", "-ar", "16000", "-b:a", "48k", "-vn", wav]);
 
   const q = new URLSearchParams({ model: "nova-3", smart_format: "true", utterances: "true", diarize: "true" });
   const res = await fetch(`https://api.deepgram.com/v1/listen?${q}`, {
     method: "POST",
-    headers: { authorization: `Token ${key}`, "content-type": "audio/wav" },
+    headers: { authorization: `Token ${key}`, "content-type": "audio/mpeg" },
     body: await fs.readFile(wav),
   });
   if (!res.ok) throw new Error(`Deepgram ${res.status}: ${(await res.text()).slice(0, 200)}`);
