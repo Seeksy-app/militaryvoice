@@ -52,8 +52,14 @@ function uriEncode(v: string, encodeSlash: boolean): string {
     .join("");
 }
 
-/** A presigned GET, signed by hand so we don't carry the AWS SDK for one call. */
-function presignS3Get(path: string, expiresInSeconds: number): string {
+/**
+ * A presigned S3 URL, signed by hand so we don't carry the AWS SDK for it.
+ *
+ * GET for reading a recording back, PUT for putting one there — the signature
+ * is identical bar the verb, which is why this takes it as an argument rather
+ * than existing twice.
+ */
+function presignS3(method: "GET" | "PUT", path: string, expiresInSeconds: number): string {
   const t = storageTarget();
   if (!t) throw new Error("No recording storage configured.");
 
@@ -80,7 +86,7 @@ function presignS3Get(path: string, expiresInSeconds: number): string {
     .join("&");
 
   const canonicalRequest = [
-    "GET",
+    method,
     canonicalUri,
     canonicalQuery,
     `host:${url.host}\n`,
@@ -95,9 +101,23 @@ function presignS3Get(path: string, expiresInSeconds: number): string {
   return `${url.origin}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
 }
 
+/**
+ * A URL to PUT a recording to.
+ *
+ * Nothing in the product uploads here — LiveKit's egress writes recordings
+ * directly. This exists so a file that was never an egress can be put where
+ * recordings live: an old episode, or one staged to exercise the clipper.
+ * R2 only; Supabase storage has a project-wide per-file cap that an episode
+ * goes straight past.
+ */
+export function signedRecordingUpload(path: string, expiresInSeconds = 7_200): string {
+  if (!usingR2()) throw new Error("Recording uploads need R2 — Supabase caps file size project-wide.");
+  return presignS3("PUT", path, expiresInSeconds);
+}
+
 /** A time-limited download link. Default two hours, plenty for a big MP4. */
 export async function signedRecordingUrl(path: string, expiresInSeconds = 7_200): Promise<string> {
-  if (usingR2()) return presignS3Get(path, expiresInSeconds);
+  if (usingR2()) return presignS3("GET", path, expiresInSeconds);
 
   const supabase = getClient();
   const { data, error } = await supabase.storage

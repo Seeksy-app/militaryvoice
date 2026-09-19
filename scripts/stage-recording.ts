@@ -24,7 +24,7 @@ import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
 import postgres from "postgres";
-import { createClient } from "@supabase/supabase-js";
+import { signedRecordingUpload } from "../server/recordingStorage.js";
 
 const run = promisify(execFile);
 const args = process.argv.slice(2);
@@ -63,18 +63,26 @@ const { stdout } = await run("ffprobe", [
 const durationSec = Math.round(Number(stdout.trim()) || 0);
 if (!durationSec) throw new Error("ffprobe could not read a duration from that file.");
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-if (!SUPABASE_URL || !KEY) throw new Error("Supabase is not configured in this .env.");
-const supabase = createClient(SUPABASE_URL, KEY, { auth: { persistSession: false } });
-
+// Straight into R2, where recordings actually live.
+//
+// The first attempt put it in the Supabase asset bucket, which was wrong on
+// two counts. It is not where recordings go — an egress writes them to R2 and
+// the clipper reads them back through a signed R2 path — and Supabase refuses
+// anything of this size: the bucket is capped at 50MB and raising it is
+// rejected project-wide, so an ordinary episode cannot be stored there at all.
+// R2 took 24MB in three seconds in testing and has no such ceiling.
 const key = `staged/${Date.now()}-${path.basename(file).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-console.log(`uploading ${(bytes / 1_048_576).toFixed(1)}MB · ${durationSec}s → show-assets/${key}`);
-const { error } = await supabase.storage
-  .from("show-assets")
-  .upload(key, await fs.readFile(file), { contentType: "video/mp4", upsert: true });
-if (error) throw error;
-const url = supabase.storage.from("show-assets").getPublicUrl(key).data.publicUrl;
+console.log(`uploading ${(bytes / 1_048_576).toFixed(1)}MB · ${durationSec}s → r2:${key}`);
+
+// curl, not fetch: node's own TLS gives up part-way through an upload this
+// size, and shelling out is a great deal less work than fixing that here.
+// -H "Expect:" stops curl waiting on a 100-continue R2 does not send.
+await run("curl", [
+  "-sS", "--fail-with-body", "-H", "Expect:",
+  "-X", "PUT", "--data-binary", `@${file}`,
+  signedRecordingUpload(key),
+]);
+console.log("  uploaded");
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1 });
 const [event] = await sql`SELECT id FROM events WHERE is_featured = true`;
@@ -88,13 +96,18 @@ const [rec] = await sql`
                           duration_sec, size_bytes, started_at, ended_at, clip_status)
   VALUES (${event.id}, ${studioId}, ${signupId}, ${signup?.email ?? ""},
           ${flag("title") || signup?.podcast_name || path.basename(file)},
-          ${`STAGED_${Date.now()}`}, 'Ready', ${url}, ${durationSec}, ${String(bytes)},
+          ${`STAGED_${Date.now()}`}, 'Ready', ${key}, ${durationSec}, ${String(bytes)},
           ${new Date(now.getTime() - durationSec * 1000).toISOString()}, ${now.toISOString()}, 'queued')
   RETURNING id`;
 await sql.end();
 
 console.log(`\nrecording #${rec.id} is Ready and queued for clipping.`);
-console.log(`  ${url}`);
-console.log(`\nNow run the worker (it will claim this job):`);
-console.log(`  AGENT_TOKEN=… ANTHROPIC_API_KEY=… API_BASE=https://www.militaryvoice.ai \\`);
-console.log(`    WHISPER_MODEL=/path/to/ggml-base.en.bin npx tsx agent/clipper.ts`);
+console.log(`  r2:${key}`);
+// Printed without placeholders on purpose. Every "…" in a runnable line is a
+// thing somebody pastes verbatim, and read -rs keeps the keys out of both the
+// command line and the scrollback.
+console.log(`\nNow run the worker — it will claim this job:\n`);
+console.log(`  read -rs AGENT_TOKEN && export AGENT_TOKEN`);
+console.log(`  read -rs ANTHROPIC_API_KEY && export ANTHROPIC_API_KEY`);
+console.log(`  read -rs DEEPGRAM_API_KEY && export DEEPGRAM_API_KEY`);
+console.log(`  API_BASE=https://www.militaryvoice.ai npx tsx agent/clipper.ts`);

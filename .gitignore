@@ -11,3 +11,10 @@ uploads/
 .env
 .env.local
 .vercel
+
+# Video dropped in the project root to be staged into the clip pipeline.
+# 80MB of episode does not belong in the repo, and `git add -A` would have
+# taken it without asking.
+/*.mp4
+/*.mov
+/*.m4v
