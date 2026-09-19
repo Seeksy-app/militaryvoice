@@ -244,24 +244,42 @@ export async function contentRect(
  * these and something that looks captioned after the fact.
  */
 export async function captionPng(text: string, W: number, H: number): Promise<{ buf: Buffer; h: number }> {
-  const size = Math.round(H * 0.042);
   const boxW = Math.round(W * 0.86);
-  const lead = Math.round(size * 1.22);
 
-  // Two lines at most. Three covers a face, which is the thing the clip is of.
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let cur = "";
-  for (const w of words) {
-    const next = cur ? `${cur} ${w}` : w;
-    if (textWidth(next, size, "bold") <= boxW || !cur) cur = next;
-    else {
-      lines.push(cur);
-      cur = w;
+  /** Wrap at a given size, honestly — no line wider than the box. */
+  const wrapAt = (size: number): string[] => {
+    const out: string[] = [];
+    let cur = "";
+    for (const w of text.split(/\s+/).filter(Boolean)) {
+      const next = cur ? `${cur} ${w}` : w;
+      if (textWidth(next, size, "bold") <= boxW || !cur) cur = next;
+      else {
+        out.push(cur);
+        cur = w;
+      }
     }
+    if (cur) out.push(cur);
+    return out;
+  };
+
+  // Two lines at most — three covers a face, which is the thing the clip is
+  // of. The way that used to be enforced was to glue the overflow lines
+  // together: `lines.splice(1, 2, lines[1] + " " + lines[2])`. Nothing
+  // re-measured the result, so a caption that wrapped to three lines produced
+  // a second line far wider than the box and it ran straight off both edges of
+  // the frame. Shrinking until it genuinely fits is the honest version.
+  const ideal = Math.round(H * 0.042);
+  const floor = Math.round(H * 0.026);
+  let size = ideal;
+  let lines = wrapAt(size);
+  while (lines.length > 2 && size > floor) {
+    size = Math.round(size * 0.93);
+    lines = wrapAt(size);
   }
-  if (cur) lines.push(cur);
-  while (lines.length > 2) lines.splice(1, 2, `${lines[1]} ${lines[2]}`);
+  // Still too long at the smallest readable size: a caption line this long is
+  // a transcript bug, not a design problem. Keep two lines and say so.
+  if (lines.length > 2) lines = [lines[0], `${lines[1]} …`];
+  const lead = Math.round(size * 1.22);
 
   const h = lead * lines.length + Math.round(size * 0.5);
   const stroke = Math.max(3, Math.round(size * 0.16));
