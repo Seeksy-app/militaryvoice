@@ -22,8 +22,12 @@
 // and minutes. Anywhere that runs Node works: LiveKit Cloud Agents, Fly,
 // Railway, a small VM.
 //
-//   AGENT_TOKEN=…  API_BASE=https://www.militaryvoice.ai  ANTHROPIC_API_KEY=…
-//   npx tsx agent/clipper.ts
+// Put the two secrets in your shell first, so neither ends up in scrollback
+// or in a file — read -rs does not echo what you paste:
+//
+//   read -rs AGENT_TOKEN && export AGENT_TOKEN
+//   read -rs ANTHROPIC_API_KEY && export ANTHROPIC_API_KEY
+//   API_BASE=https://www.militaryvoice.ai npx tsx agent/clipper.ts
 //
 // With no ANTHROPIC_API_KEY it still runs, falling back to picking the
 // densest stretches of speech. That is worse, and it says so.
@@ -47,10 +51,34 @@ const WANTED = Number(process.env.CLIP_COUNT || 4);
 const MIN_SEC = 20;
 const MAX_SEC = 75;
 
+/**
+ * Fail before the first poll, with a sentence that says what to do.
+ *
+ * "Set" was the only test, and a placeholder is set. Pasting a runbook line
+ * with AGENT_TOKEN=… straight into a shell puts a literal ellipsis in the
+ * header, and every poll then dies with "Cannot convert argument to a
+ * ByteString because the character at index 0 has a value of 8230" — which is
+ * a true statement about UTF-8 and tells you nothing about what you did.
+ */
 function requireToken(): void {
-  if (AGENT_TOKEN) return;
-  console.error("AGENT_TOKEN is not set. The worker has no way to authenticate.");
-  process.exit(1);
+  if (!AGENT_TOKEN) {
+    console.error("AGENT_TOKEN is not set. The worker has no way to authenticate.");
+    console.error("Find it in Vercel → militaryvoice → Settings → Environment Variables.");
+    process.exit(1);
+  }
+  // HTTP header values are Latin-1. Anything outside it was pasted, not typed.
+  const bad = [...AGENT_TOKEN].find((c) => c.charCodeAt(0) > 255);
+  if (bad) {
+    console.error(
+      `AGENT_TOKEN contains "${bad}", which can't go in an HTTP header — ` +
+        "it looks like a placeholder was pasted instead of the real token.",
+    );
+    process.exit(1);
+  }
+  if (process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY.startsWith("sk-ant-")) {
+    console.error("ANTHROPIC_API_KEY doesn't look like a key (it should start with sk-ant-).");
+    process.exit(1);
+  }
 }
 
 interface Line {
