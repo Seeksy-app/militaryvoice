@@ -37,6 +37,11 @@
 // With no ANTHROPIC_API_KEY it still runs, falling back to picking the
 // densest stretches of speech. That is worse, and it says so.
 
+// A .env if there is one, the platform's own environment if there is not.
+// Without this the worker reads only the shell it was launched from, so every
+// new terminal starts with no keys and no token — and the token is the one
+// thing that cannot be read back out of Vercel once it is marked sensitive.
+import "dotenv/config";
 import { spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
