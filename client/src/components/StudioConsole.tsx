@@ -235,10 +235,17 @@ function GreenRoomStrip({
           const name = p.displayName || "Unnamed";
           // Said in the tooltip rather than on screen: at a glance the ring is
           // enough, and the detail is there when the producer wants it.
-          const trouble = !p.camReady && !p.micReady
-            ? "camera not on yet"
-            : roomConnected && !feeds.has(`p-${p.id}`)
-              ? "on the page but not in the room — ask them to reload"
+          // Order matters, and it was wrong. Somebody who has not joined the
+          // media room also reports cam=false, so the "camera not on yet"
+          // branch caught them first and sent the producer looking for a
+          // camera button on a page that never connected. Not being in the
+          // room is the bigger fact and the one with a different fix, so it
+          // is tested first.
+          const inRoom = feeds.has(`p-${p.id}`);
+          const trouble = roomConnected && !inRoom
+            ? "hasn't joined the media room — ask them to reload their link"
+            : !p.camReady && !p.micReady
+              ? "camera not on yet"
               : "";
           const ready = p.camReady && p.micReady && !trouble;
           return (
