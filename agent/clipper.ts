@@ -27,7 +27,11 @@
 //
 //   read -rs AGENT_TOKEN && export AGENT_TOKEN
 //   read -rs ANTHROPIC_API_KEY && export ANTHROPIC_API_KEY
+//   read -rs DEEPGRAM_API_KEY && export DEEPGRAM_API_KEY
 //   API_BASE=https://www.militaryvoice.ai npx tsx agent/clipper.ts
+//
+// DEEPGRAM_API_KEY is only needed for a recording that has no live transcript
+// — an old episode, or anything staged for a test.
 //
 // With no ANTHROPIC_API_KEY it still runs, falling back to picking the
 // densest stretches of speech. That is worse, and it says so.
@@ -243,6 +247,50 @@ export function transcriptCovers(lines: Line[], durationSec: number): boolean {
   return spoken > durationSec * 0.2;
 }
 
+/**
+ * Transcribe with Deepgram, which is what the live captions already use.
+ *
+ * The clipper was written to lean on the transcript the captions agent leaves
+ * behind, and to fall back to whisper.cpp when there isn't one. But there is
+ * never one for a file that didn't go out live — an old episode, a staged
+ * test — and whisper means a 150MB model on the host before anything runs.
+ * The same key that captions the show can read a file in one request.
+ *
+ * utterances=true is the point: it returns speech segments with start and end
+ * times, which is exactly the shape the clip picker needs. A word-level
+ * transcript would have to be re-grouped into sentences here, badly.
+ */
+async function transcribeWithDeepgram(file: string, dir: string): Promise<Line[]> {
+  const key = (process.env.DEEPGRAM_API_KEY || "").trim();
+  if (!key) throw new Error("DEEPGRAM_API_KEY is not set.");
+
+  // Mono 16k is all speech recognition uses, and it makes a 400MB video into
+  // a few megabytes of upload.
+  const wav = path.join(dir, "dg.wav");
+  await ffmpeg(["-i", file, "-ac", "1", "-ar", "16000", "-vn", wav]);
+
+  const q = new URLSearchParams({ model: "nova-3", smart_format: "true", utterances: "true", diarize: "true" });
+  const res = await fetch(`https://api.deepgram.com/v1/listen?${q}`, {
+    method: "POST",
+    headers: { authorization: `Token ${key}`, "content-type": "audio/wav" },
+    body: await fs.readFile(wav),
+  });
+  if (!res.ok) throw new Error(`Deepgram ${res.status}: ${(await res.text()).slice(0, 200)}`);
+
+  const body = (await res.json()) as {
+    results?: { utterances?: { start: number; end: number; transcript: string; speaker?: number }[] };
+  };
+  const utterances = body.results?.utterances ?? [];
+  return utterances
+    .filter((u) => u.transcript?.trim())
+    .map((u) => ({
+      speaker: typeof u.speaker === "number" ? `Speaker ${u.speaker + 1}` : "",
+      text: u.transcript.trim(),
+      startSec: u.start,
+      endSec: u.end,
+    }));
+}
+
 /** Last resort: transcribe the file here. Needs whisper-cli on the host. */
 export async function transcribeLocally(file: string, dir: string): Promise<Line[]> {
   const wav = path.join(dir, "audio.wav");
@@ -432,8 +480,14 @@ async function handle(job: Job): Promise<void> {
     let lines = job.transcript;
     if (transcriptCovers(lines, job.durationSec)) {
       console.log(`[${job.recordingId}] using the live transcript (${lines.length} lines)`);
+    } else if (process.env.DEEPGRAM_API_KEY) {
+      console.log(`[${job.recordingId}] no live transcript — reading it with Deepgram`);
+      lines = await transcribeWithDeepgram(source, dir).catch(async (err) => {
+        console.warn(`[${job.recordingId}] Deepgram failed: ${err.message} — trying whisper`);
+        return transcribeLocally(source, dir).catch(() => job.transcript);
+      });
     } else {
-      console.log(`[${job.recordingId}] live captions were thin — transcribing here`);
+      console.log(`[${job.recordingId}] no live transcript and no Deepgram key — transcribing here`);
       lines = await transcribeLocally(source, dir).catch((err) => {
         console.warn(`[${job.recordingId}] local transcription failed: ${err.message}`);
         return job.transcript;
