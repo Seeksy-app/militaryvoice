@@ -22,9 +22,7 @@ import { apiRequest, apiUpload } from "@/lib/queryClient";
 import { ASSET_KINDS, type ShowAssetRow, type ProfileRow } from "@shared/schema";
 import {
   Upload,
-  Link2,
   Trash2,
-  FileVideo,
   ImageIcon,
   Paperclip,
   Save,
@@ -36,7 +34,30 @@ import {
   Check,
 } from "lucide-react";
 
-const MAX_MB = 50;
+/**
+ * PUT a file to a signed storage URL, reporting progress.
+ *
+ * XHR rather than fetch, for the one reason XHR is still worth reaching for:
+ * fetch cannot report upload progress. On a 400MB episode that is the
+ * difference between a progress bar and a page that appears to have hung.
+ */
+function putWithProgress(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.max(1, Math.round((e.loaded / e.total) * 100)));
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(xhr.status === 413 ? "That file is larger than storage will accept." : `Upload failed (${xhr.status}).`));
+    xhr.onerror = () => reject(new Error("The upload was interrupted. Check your connection and try again."));
+    xhr.send(file);
+  });
+}
+
 
 function prettySize(bytes: number): string {
   if (!bytes) return "";
@@ -65,8 +86,10 @@ export function ShowMaterials({
 
   const [kind, setKind] = useState<string>("");
   const [label, setLabel] = useState("");
-  const [linkUrl, setLinkUrl] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  /** 0 = idle, 1-100 = uploading. A 400MB file over a hotel wifi is a long
+   *  silence otherwise, and silence is when people close the tab. */
+  const [progress, setProgress] = useState(0);
 
   // What the segment contains, and whether they want an interviewer. These
   // describe one slot, so they belong here next to the files rather than in
@@ -104,8 +127,20 @@ export function ShowMaterials({
       const fd = new FormData();
       fd.append("kind", kind);
       fd.append("label", label);
-      fd.append("linkUrl", linkUrl.trim());
-      if (file) fd.append("file", file);
+
+      // The file goes straight to storage rather than through the API. An
+      // episode is hundreds of megabytes and a serverless request body is
+      // tens, so routing the bytes through us is the thing that caps the
+      // upload — not the storage behind it.
+      if (file) {
+        setProgress(1);
+        const signed = await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name });
+        const { uploadUrl, publicUrl } = (await signed.json()) as { uploadUrl: string; publicUrl: string };
+        await putWithProgress(uploadUrl, file, setProgress);
+        fd.append("uploadedUrl", publicUrl);
+        fd.append("fileName", file.name);
+        fd.append("sizeBytes", String(file.size));
+      }
       const res = await apiUpload("POST", "/api/host/assets", fd);
       return res.json();
     },
@@ -113,12 +148,15 @@ export function ShowMaterials({
       queryClient.invalidateQueries({ queryKey: ["/api/host/assets"] });
       setKind("");
       setLabel("");
-      setLinkUrl("");
       setFile(null);
+      setProgress(0);
       if (fileRef.current) fileRef.current.value = "";
       toast({ title: "Added", description: "The studio team can see it now." });
     },
-    onError: (err: Error) => toast({ title: "Couldn't add that", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => {
+      setProgress(0);
+      toast({ title: "Couldn't add that", description: err.message, variant: "destructive" });
+    },
   });
 
   /** Answering either way is the answer. Saved so the checklist can cross it
@@ -408,7 +446,7 @@ export function ShowMaterials({
               </div>
             </div>
 
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="mt-3">
               <div>
                 <Label className="text-xs font-semibold text-foreground">Upload a file</Label>
                 <div className="mt-1 flex items-center gap-2">
@@ -428,46 +466,44 @@ export function ShowMaterials({
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">Up to {MAX_MB}MB.</p>
-              </div>
-              <div>
-                <Label className="text-xs font-semibold text-foreground">…or paste a link</Label>
-                <Input
-                  className="mt-1"
-                  placeholder="Drive, Dropbox, WeTransfer, YouTube"
-                  inputMode="url"
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  data-testid="input-asset-link"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">Best for anything larger.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Full episodes are fine — it uploads straight to us.
+                </p>
               </div>
             </div>
 
+            {/* The bar replaces the guessing. "Adding…" on a 400MB file over
+                hotel wifi is two minutes of a page that looks frozen. */}
+            {progress > 0 && (
+              <div className="mt-4">
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-primary transition-[width] duration-200"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {progress < 100 ? `Uploading — ${progress}%` : "Almost there…"}
+                </p>
+              </div>
+            )}
+
+            {/* The hint that used to sit beside this button said "Pick what it
+                is first", which read as a separate instruction rather than the
+                reason the button was grey. It is on the button now, where the
+                thing it explains actually is. */}
             <Button
               type="button"
               size="sm"
-              variant={!kind || (!file && !linkUrl.trim()) ? "outline" : "default"}
               className="mt-4 gap-1.5 rounded-full"
-              disabled={add.isPending || !kind || (!file && !linkUrl.trim())}
+              disabled={add.isPending || !kind || !file}
               onClick={() => add.mutate()}
               data-testid="button-add-asset"
             >
-              {file ? <Upload className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
-              {add.isPending ? "Adding…" : "Add to my slot"}
+              <Upload className="h-3.5 w-3.5" />
+              {add.isPending ? "Uploading…" : !kind ? "Choose a type above" : !file ? "Choose a file" : "Add to my slot"}
             </Button>
-            {(!kind || (!file && !linkUrl.trim())) && (
-              <span className="ml-3 text-xs text-muted-foreground">
-                {!kind ? "Pick what it is first." : "Choose a file or paste a link first."}
-              </span>
-            )}
           </div>
-
-          <p className="mt-3 flex items-start gap-2 text-xs text-muted-foreground">
-            <FileVideo className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            Pick the right type for each file. It's what tells the studio whether to roll it before you start, part-way
-            through, or at the end.
-          </p>
           </>
           )}
         </div>

@@ -7,7 +7,7 @@ import { storage } from "./storage.js";
 import { requireHuman, turnstileSiteKey } from "./turnstile.js";
 import { answerHelp, isHelpAgentConfigured, type HelpTurn } from "./help.js";
 import { KINDS, effectiveSchedule, cardInput, caption as campaignCaption, isKind, type CampaignContext } from "./campaign.js";
-import { uploadPhoto, uploadShowAsset, deleteShowAsset } from "./photoStorage.js";
+import { uploadPhoto, uploadShowAsset, signedAssetUpload, deleteShowAsset } from "./photoStorage.js";
 import {
   insertSignupSchema,
   insertReminderSchema,
@@ -1638,6 +1638,23 @@ export function registerRoutes(app: Express): void {
     res.json(await storage.listAssetsByEmail(email));
   });
 
+  /**
+   * A URL the browser uploads to directly, for anything too big for a request
+   * body — which a pre-recorded episode always is. The bytes never touch this
+   * function; it only hands out the signed URL and, afterwards, records where
+   * the file landed.
+   */
+  app.post("/api/host/assets/upload-url", requireHostSession, async (req, res) => {
+    const name = String(req.body?.fileName ?? "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+    const key = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${name}`;
+    try {
+      res.json(await signedAssetUpload(key));
+    } catch (err) {
+      console.error("Could not sign an asset upload:", err);
+      res.status(502).json({ message: "Couldn't start the upload. Try again in a moment." });
+    }
+  });
+
   app.post(
     "/api/host/assets",
     requireHostSession,
@@ -1661,9 +1678,21 @@ export function registerRoutes(app: Express): void {
       const kind = (ASSET_KINDS as readonly string[]).includes(body.kind) ? body.kind : "Other";
       const label = (body.label ?? "").trim().slice(0, 120);
       const linkUrl = (body.linkUrl ?? "").trim();
+      // Set when the browser uploaded straight to storage and is now telling
+      // us where it put it. Only our own bucket is accepted — this field
+      // writes a URL we will later play on air, so it cannot be an arbitrary
+      // address somebody posts here.
+      const uploadedUrl = (body.uploadedUrl ?? "").trim();
+      const fromOurBucket =
+        uploadedUrl &&
+        /^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\/object\/public\/show-assets\//i.test(uploadedUrl);
 
-      if (!req.file && !linkUrl) {
-        res.status(400).json({ message: "Attach a file or paste a link." });
+      if (uploadedUrl && !fromOurBucket) {
+        res.status(400).json({ message: "That upload didn't come from us. Try again." });
+        return;
+      }
+      if (!req.file && !linkUrl && !fromOurBucket) {
+        res.status(400).json({ message: "Choose a file first." });
         return;
       }
       if (linkUrl && !/^https?:\/\//i.test(linkUrl)) {
@@ -1671,9 +1700,9 @@ export function registerRoutes(app: Express): void {
         return;
       }
 
-      let fileUrl = "";
-      let fileName = "";
-      let sizeBytes = 0;
+      let fileUrl = fromOurBucket ? uploadedUrl : "";
+      let fileName = fromOurBucket ? String(body.fileName ?? "").slice(0, 200) : "";
+      let sizeBytes = fromOurBucket ? Number(body.sizeBytes) || 0 : 0;
       if (req.file) {
         const safe = req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
         const key = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${safe}`;

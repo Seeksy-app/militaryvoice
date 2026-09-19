@@ -75,6 +75,17 @@ export async function uploadPhoto(filename: string, buffer: Buffer, contentType 
 const ASSET_BUCKET = "show-assets";
 let assetBucketReady: Promise<void> | null = null;
 
+/**
+ * 2GB, because a pre-recorded episode is a pre-recorded episode.
+ *
+ * The bucket was made at 50MB back when this only held intro stings, and the
+ * form covered the gap with a "paste a Drive link" box. Links are a worse
+ * answer than they look: they expire, they get their sharing revoked, and on
+ * show day nobody finds out until the clip does not roll. So the file comes
+ * to us — which means the ceiling has to be big enough to hold a real one.
+ */
+const ASSET_SIZE_LIMIT = "2GB";
+
 async function ensureAssetBucket(): Promise<void> {
   if (!assetBucketReady) {
     assetBucketReady = (async () => {
@@ -83,16 +94,43 @@ async function ensureAssetBucket(): Promise<void> {
       if (!buckets?.some((b) => b.name === ASSET_BUCKET)) {
         const { error } = await supabase.storage.createBucket(ASSET_BUCKET, {
           public: true,
-          fileSizeLimit: "50MB",
+          fileSizeLimit: ASSET_SIZE_LIMIT,
         });
         if (error && !/already exists/i.test(error.message)) {
           assetBucketReady = null;
           throw error;
         }
+      } else {
+        // The bucket already exists at whatever limit it was created with, and
+        // createBucket will not revisit that. Raising it is best-effort: the
+        // project's own global limit still wins, and if this fails the upload
+        // simply reports the real ceiling rather than the boot failing.
+        const { error } = await supabase.storage.updateBucket(ASSET_BUCKET, {
+          public: true,
+          fileSizeLimit: ASSET_SIZE_LIMIT,
+        });
+        if (error) console.warn(`Could not raise ${ASSET_BUCKET} size limit:`, error.message);
       }
     })();
   }
   return assetBucketReady;
+}
+
+/**
+ * A URL the browser can PUT a file straight to.
+ *
+ * Big files cannot come through the API: a serverless function has a request
+ * body limit measured in tens of megabytes, and an episode is measured in
+ * hundreds. This hands the browser a short-lived signed URL so the bytes go
+ * to storage directly and never touch our function at all.
+ */
+export async function signedAssetUpload(filename: string): Promise<{ uploadUrl: string; publicUrl: string }> {
+  await ensureAssetBucket();
+  const supabase = getClient();
+  const { data, error } = await supabase.storage.from(ASSET_BUCKET).createSignedUploadUrl(filename);
+  if (error || !data) throw error ?? new Error("Could not create an upload URL.");
+  const { data: pub } = supabase.storage.from(ASSET_BUCKET).getPublicUrl(filename);
+  return { uploadUrl: data.signedUrl, publicUrl: pub.publicUrl };
 }
 
 export async function uploadShowAsset(filename: string, buffer: Buffer, contentType: string): Promise<string> {
