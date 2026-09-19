@@ -530,7 +530,13 @@ export function SceneRail({
           title={nextScene ? `Take "${nextScene.name}"` : "That was the last scene"}
           data-testid="button-next-scene"
         >
-          {nextScene ? `Next · ${nextScene.name}` : "End of the rail"}
+          {/* The button is whitespace-nowrap like every other button, so a
+              long scene name ran out of both ends of the pill rather than
+              being cut — "Next · Welcome & introduction — Riccoh Player" was
+              wider than the rail it sits in. */}
+          <span className="min-w-0 truncate">
+            {nextScene ? `Next · ${nextScene.name}` : "End of the rail"}
+          </span>
           <ArrowRight className="h-3.5 w-3.5 shrink-0" />
         </Button>
         <p className="mt-1.5 text-center text-[10px] text-white/35">Press 1–9 to cut straight to a scene</p>
