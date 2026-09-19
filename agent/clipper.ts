@@ -49,6 +49,7 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { Transform } from "node:stream";
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import { textPath, fitSize, textWidth } from "../server/textPath.js";
@@ -791,10 +792,34 @@ async function handle(job: Job): Promise<void> {
   try {
     console.log(`[${job.recordingId}] ${job.show} — ${Math.round(job.durationSec)}s`);
 
+    // Narrated, because it is the longest silent stretch in the job. Eighty
+    // megabytes over a domestic connection is minutes, and a log that says
+    // nothing between "here is the job" and "here is the transcript" reads as
+    // a hang — which is how three separate runs got killed at exactly the
+    // point where they were working correctly.
     const source = path.join(dir, "segment.mp4");
     const res = await fetch(job.downloadUrl);
     if (!res.ok || !res.body) throw new Error(`couldn't download the recording: ${res.status}`);
-    await pipeline(Readable.fromWeb(res.body as never), createWriteStream(source));
+    const total = Number(res.headers.get("content-length") || 0);
+    const started = Date.now();
+    let got = 0;
+    let shown = 0;
+    const meter = new Transform({
+      transform(chunk, _enc, cb) {
+        got += chunk.length;
+        const mb = got / 1048576;
+        if (mb - shown >= 10) {
+          shown = mb;
+          const rate = mb / ((Date.now() - started) / 1000);
+          const of = total ? ` of ${(total / 1048576).toFixed(0)}MB` : "";
+          console.log(`[${job.recordingId}]   downloaded ${mb.toFixed(0)}MB${of} · ${rate.toFixed(1)}MB/s`);
+        }
+        cb(null, chunk);
+      },
+    });
+    console.log(`[${job.recordingId}] downloading ${total ? (total / 1048576).toFixed(0) + "MB" : "the recording"}…`);
+    await pipeline(Readable.fromWeb(res.body as never), meter, createWriteStream(source));
+    console.log(`[${job.recordingId}] downloaded in ${Math.round((Date.now() - started) / 1000)}s`);
 
     let lines = job.transcript;
     if (transcriptCovers(lines, job.durationSec)) {
