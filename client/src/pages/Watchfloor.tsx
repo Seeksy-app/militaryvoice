@@ -167,7 +167,7 @@ export default function Watchfloor() {
               </Link>
             </div>
             <p className="mt-5 text-sm text-white/45">
-              Every podcaster on the 24 Hour Podcastathon gets the whole thing for their slot. Nothing to install.
+              Every podcaster on the Podcast Marathon gets the whole thing for their slot. Nothing to install.
             </p>
           </div>
         </div>
@@ -179,7 +179,7 @@ export default function Watchfloor() {
           <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
             <span className="font-semibold text-foreground">Why "Watchfloor".</span> A watch is a span of time somebody
             is responsible for, and the watchfloor is where that responsibility sits. A watch bill says who has which
-            hours; relieving the watch is the handover. That is the whole shape of a 24-hour marathon, and of a weekly
+            hours; relieving the watch is the handover. That is the whole shape of a broadcast marathon, and of a weekly
             show: a schedule, a handoff, and somebody awake at the desk.
           </p>
         </div>
@@ -371,7 +371,7 @@ export default function Watchfloor() {
             The fastest way to see it is to be on it
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-white/70">
-            Take a slot on the 24 Hour Podcastathon. You get the studio, your own recording and your clips — and
+            Take a slot on the Podcast Marathon. You get the studio, your own recording and your clips — and
             twenty-four hours of this community listening.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">

@@ -1,4 +1,4 @@
-// What the 24 hours costs, and what one podcaster costs per month.
+// What the marathon costs, and what one podcaster costs per month.
 // Rates taken from each vendor's published pricing, 17 Sep 2026.
 
 const RATE = {

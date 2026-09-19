@@ -58,7 +58,7 @@ const HIDDEN_ON = ["/studio", "/watch", "/admin"];
 
 const OPENER: Msg = {
   role: "assistant",
-  content: "Hi — ask me anything about the Podcastathon: claiming a slot, how show day works, reminders. If I can't help, I'll get you to a person.",
+  content: "Hi — ask me anything about the Podcast Marathon: claiming a slot, how show day works, reminders. If I can't help, I'll get you to a person.",
 };
 
 export function HelpChat() {

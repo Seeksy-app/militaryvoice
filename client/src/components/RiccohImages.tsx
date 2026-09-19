@@ -101,7 +101,7 @@ export function RiccohImages({ event }: Props) {
 
 ${s.podcastName}${s.hostName ? ` — with ${s.hostName}` : ""} is on at ${airLabel(s)} on ${eventDate}.
 
-24 hours of military and veteran podcasts, back to back, free to watch. Who's tuning in for this one?
+26.2 miles of military and veteran stories, back to back, free to watch. Who's tuning in for this one?
 
 Register to watch → militaryvoice.ai/watch`;
   }
@@ -117,7 +117,7 @@ Register to watch → militaryvoice.ai/watch`;
    */
   const posterCaption = `${shows.length} shows. One day. ${eventDate}.
 
-This is the board for the 24-Hour Mil/Vet Podcastathon. Combat vets, military spouses, Gold Star families — going out back to back for a full day and night.
+This is the start line for the Mil/Vet Podcast Marathon. Combat vets, military spouses, Gold Star families — going out back to back for a full day and night.
 
 ${shows.map((s) => `• ${s.podcastName}`).join("\n")}
 

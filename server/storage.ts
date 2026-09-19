@@ -767,7 +767,7 @@ export interface IStorage {
   setSetting(key: string, value: string): Promise<void>;
 }
 
-// Default marathon: kicks off the next Saturday at 12:00 PM Eastern for 24 hours,
+// Default marathon: kicks off the next Saturday at 12:00 PM Eastern for 16 hours,
 // one slot per hour. Admin can change all of this from the dashboard.
 function defaultStartAtUtc(): string {
   const now = new Date();
@@ -786,7 +786,7 @@ class DatabaseStorage implements IStorage {
     await db.insert(events).values({
       slug: DEFAULT_EVENT_SLUG,
       isFeatured: true,
-      name: "MilitaryVoice.ai 24-Hour Podcast Marathon",
+      name: "MilitaryVoice.ai Podcast Marathon",
       tagline: "One mic, every time zone, twenty-four hours straight.",
       description:
         "Claim your hour. We'll build the on-air agenda automatically as podcasters sign up around the clock.",

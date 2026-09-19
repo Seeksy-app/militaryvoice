@@ -91,7 +91,7 @@ export function cardInput(kind: CampaignKind, c: CampaignContext): CardInput {
         ...base,
         eyebrow: occasion(c),
         podcastName: `What is ${occasion(c)}?`,
-        subline: `${c.event.name} — 24 hours, live`,
+        subline: `${c.event.name} — 26.2 miles of stories`,
         whenLabel: `${c.eventDateLabel} · militaryvoice.ai`,
       };
     case "twoweeks":
@@ -113,7 +113,7 @@ export function caption(kind: CampaignKind, c: CampaignContext): string {
     case "share":
       return `Know someone who'd want to hear this? Pass it on. ${show} — live ${c.whenLabel} for ${day}. ${c.shareUrl}`;
     case "about":
-      return `What is ${day}? One day, 24 hours of live shows, one stage for the military and veteran podcast community. Here's the story and how to take part: ${c.aboutUrl}`;
+      return `What is ${day}? One day, 26.2 miles of stories, one stage for the military and veteran podcast community. Here's the story and how to take part: ${c.aboutUrl}`;
     case "twoweeks":
       return `Two weeks from now ${show} is live on ${day} — ${c.whenLabel}. Set a reminder so you don't miss it: ${c.shareUrl}`;
     case "thisweek":

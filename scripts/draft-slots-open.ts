@@ -23,7 +23,7 @@ const dateLong = new Intl.DateTimeFormat("en-US", {
 
 const body = `Hi {{First_Name}},
 
-Touching base on the 24-Hour Mil/Vet Podcastathon. It's ${dateLong} — National Military Podcast Day — and we still have ${open} of the ${total} slots open.
+Touching base on the Mil/Vet Podcast Marathon. It's ${dateLong} — National Military Podcast Day — and we still have ${open} of the ${total} slots open.
 
 ${taken} shows are already on the board. Combat vets, military spouses, Gold Star families, hosts who've been at this for years and one who recorded her first episode last month. Nobody gets cut and nobody gets a worse slot for having a smaller audience.
 

@@ -15,7 +15,7 @@ export function isHelpAgentConfigured(): boolean {
 // and the podcaster guide; if the site changes, change this.
 const KNOWLEDGE = `
 ABOUT THE SITE
-- MilitaryVoice.ai runs the 24 Hour Podcastathon for National Military Podcast Day: twenty-four hours of live and "Best of MilVet" podcasting — back-to-back shows, special guests, stories from the military and veteran community, streaming around the clock. Shows hand off every 30 minutes so someone is always on.
+- MilitaryVoice.ai runs the Podcast Marathon for National Military Podcast Day: 26.2 — twenty-six shows plus bonus sessions — of live and "Best of MilVet" podcasting — back-to-back shows, special guests, stories from the military and veteran community, streaming around the clock. Shows hand off every 30 minutes so someone is always on.
 - It is free for podcasters to claim a slot and free for listeners.
 - Host: Riccoh Player — 33 years in the Marine Corps, five combat tours, an Emmy. He anchors the day and hands off to each show.
 - Every time on the site is shown in the visitor's own time zone; they can switch zones on the agenda.
@@ -42,7 +42,7 @@ FOR LISTENERS
 - Every card has a Share button.
 
 SPONSORS
-- Sponsor logos run in the "Friends of the Podcastathon" strip and get read on air between shows. Use the Sponsors link in the nav to send an inquiry; the team replies by email with packages.
+- Sponsor logos run in the "Friends of the Marathon" strip and get read on air between shows. Use the Sponsors link in the nav to send an inquiry; the team replies by email with packages.
 
 WHAT YOU DON'T KNOW
 - Anything about a specific person's booking, payment, or account details; exact production timings beyond the above; anything not listed here.
@@ -55,7 +55,7 @@ function systemPrompt(event: EventRow | undefined, taken: number, total: number)
   return `You are the help assistant on MilitaryVoice.ai. You answer visitors' questions about the site and the event, briefly and warmly, using ONLY the knowledge below. Plain text, no markdown headings, no bullet lists longer than three items, two to four sentences for most answers. Use "we" for MilitaryVoice.ai.
 
 Live facts right now:
-- Event: ${event?.name ?? "24 Hour Podcastathon"}, starting ${when}. ${taken} of ${total} slots are booked.
+- Event: ${event?.name ?? "The Podcast Marathon"}, starting ${when}. ${taken} of ${total} slots are booked.
 
 Rules:
 - If the answer is in the knowledge, give it, and when useful name the page to go to as its path — /schedule, /agenda, /prepare, /faq, /host/dashboard — since paths become links the visitor can tap.

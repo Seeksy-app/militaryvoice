@@ -50,7 +50,7 @@ const EVENT_FALLBACK: PublicEvent = {
   isFeatured: true,
   visible: true,
   imageUrl: "/event-marathon.jpg",
-  name: "24 Hour Podcastathon",
+  name: "The Podcast Marathon",
   tagline: "Twenty-four hours of live and ‘Best of MilVet’ podcasting for National Military Podcast Day.",
   description:
     "Twenty-four hours of live and ‘Best of MilVet’ podcasting for National Military Podcast Day—featuring back-to-back shows, special guests, and stories from the military and veteran community, streaming around the clock.",
@@ -343,8 +343,8 @@ export default function Landing({ slug }: Props) {
                 style={HEADLINE_FONT}
                 data-testid="text-landing-title"
               >
-                <span className="block">24 Hour</span>
-                <span className="block text-[#F0A71F]">Podcastathon</span>
+                <span className="block">The Podcast</span>
+                <span className="block text-[#F0A71F]">Marathon</span>
               </motion.h1>
               <motion.p variants={FADE_UP} className="mt-7 max-w-2xl text-xl leading-relaxed text-white/90 sm:text-2xl sm:leading-relaxed" data-testid="text-landing-tagline">
                 {event.description || event.tagline}
@@ -904,7 +904,7 @@ export default function Landing({ slug }: Props) {
             <>
               <div className={`mx-auto max-w-6xl px-4 text-center sm:px-6 ${paidSponsors.length > 0 ? "mt-16 border-t border-white/10 pt-14" : ""}`}>
                 <div className="text-xs font-semibold uppercase tracking-[0.3em] text-white/55">
-                  Friends of the <span className="text-[#F0A71F]">Podcastathon</span>
+                  Friends of the <span className="text-[#F0A71F]">Marathon</span>
                 </div>
               </div>
               <div className="relative mt-8">
@@ -942,7 +942,7 @@ export default function Landing({ slug }: Props) {
         zone={zone}
         shareText={
           selectedPodcaster
-            ? `I'm tuning in to ${selectedPodcaster.signup.hostName} on ${selectedPodcaster.signup.podcastName} during the MilitaryVoice.ai 24 Hour Podcastathon! ${
+            ? `I'm tuning in to ${selectedPodcaster.signup.hostName} on ${selectedPodcaster.signup.podcastName} during the MilitaryVoice.ai Podcast Marathon! ${
                 typeof window !== "undefined" ? window.location.href : ""
               }`
             : undefined

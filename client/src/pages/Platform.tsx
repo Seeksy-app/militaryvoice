@@ -236,14 +236,14 @@ export default function Platform() {
         <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-24">
           <div className="max-w-2xl">
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 text-[#F0A71F]" /> The platform behind the Podcastathon
+              <Sparkles className="h-3.5 w-3.5 text-[#F0A71F]" /> The platform behind the Marathonon
             </div>
             <h1 className="text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl" style={HEADLINE_FONT}>
               Stage a live, multi-speaker event
               <span className="block text-[#F0A71F]">without running it yourself</span>
             </h1>
             <p className="mt-6 text-lg leading-relaxed text-white/90">
-              MilitaryVoice.ai is the software we built to put a twenty-four hour Podcastathon on the air with one small
+              MilitaryVoice.ai is the software we built to put a podcast marathon on the air with one small
               team — and it doesn't care what shape your event is. Live, pre-recorded, or the two side by side. A single
               session or a hundred across three days. Scheduling, promotion, a studio, and a run of show the control
               room can actually follow.
@@ -385,7 +385,7 @@ export default function Platform() {
               We use it ourselves, in public
             </h2>
             <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-              The 24 Hour Podcastathon runs on this platform: forty-eight slots, speakers in every time zone, live shows
+              The Podcast Marathon runs on this platform: thirty-two slots, speakers in every time zone, live shows
               and pre-recorded episodes side by side, all of it visible to anyone who visits. If you want to know whether
               it works, go and look at it.
             </p>

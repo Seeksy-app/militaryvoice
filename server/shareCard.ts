@@ -4,7 +4,7 @@ import { fitSize, textPath, textWidth } from "./textPath.js";
 // The card a podcaster's share link unfurls with, and the image we post to
 // their accounts. Their artwork and their on-air time, not the generic event
 // card — a link that says "Rucksack Radio, 8:00 AM" earns a click in a way
-// "24 Hour Podcastathon" does not.
+// "The Podcast Marathon" does not.
 //
 // All type is drawn as outlines (see textPath) because the runtime has no
 // fonts. That also means we know exactly how wide every line is, so the pill
@@ -23,7 +23,7 @@ export const CARD_SIZES = {
 export type CardSize = keyof typeof CARD_SIZES;
 
 const DEFAULT_EYEBROW = "LIVE ON NATIONAL MILITARY PODCAST DAY";
-const DEFAULT_FOOTER = "24 Hour Podcastathon · militaryvoice.ai";
+const DEFAULT_FOOTER = "The Podcast Marathon · militaryvoice.ai";
 
 /** Trim to fit the card without wrapping — the card has one line for each. */
 function fit(v: string, max: number): string {
@@ -263,15 +263,19 @@ export async function buildLineupCard(
   const AV = Math.round(Math.max(40 * k, Math.min(cellW, cellH) * 0.82));
 
   const eyebrow = `NATIONAL MILITARY PODCAST DAY · ${input.dateLabel.toUpperCase()}`;
-  const title = `${shows.length} SHOWS. ONE DAY.`;
-  const footer = input.footer ?? "24 hours, free to watch · militaryvoice.ai";
+  // "26.2" rather than a show count, because the count is the one number on
+  // this card that keeps changing — it read "24 SHOWS" with twenty-nine on
+  // the board once already. The brand is a fixed figure; the faces below it
+  // do the work of saying how many.
+  const title = "26.2 MILES OF STORIES";
+  const footer = input.footer ?? "26.2 miles of stories · free to watch";
 
   const parts: string[] = [];
   const layers: OverlayOptions[] = [];
 
   // Two fixed baselines, and the title is capped to the gap between them.
   // Sizing the title independently and hoping 0.74 of the header cleared 0.36
-  // of it is what put "24 SHOWS. ONE DAY." straight through the date line.
+  // of it is what put the title straight through the date line.
   const yE = Math.round(headH * 0.34);
   const yT = Math.round(headH * 0.86);
   const sE = fitSize(eyebrow, "bold", Math.round(26 * k), Math.round(15 * k), W - 80 * k);

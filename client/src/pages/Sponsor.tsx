@@ -29,7 +29,7 @@ const SLOT_PRICE = 250;
 
 const PARTNER_BENEFITS = [
   "Title billing all day — “National Military Podcast Day, presented by you” on the stream, the site and every announcement",
-  "Your logo on the broadcast lower third for all 24 hours",
+  "Your logo on the broadcast lower third for all 26.2",
   "Named in the opening and closing of every show on the schedule",
   "Top placement on the homepage, the agenda and the watch page",
   "Your logo in the “coming up next” bumper that runs between every show",
@@ -187,7 +187,7 @@ export default function Sponsor() {
               telling military stories in their own words.
             </p>
             <p>
-              The Podcastathon is how we mark it: {slotCount || 48} half-hour slots running back to back for a full day,
+              The Marathon is how we mark it: {slotCount || 32} half-hour slots running back to back for a full day,
               each one hosted by a different show. Hosts broadcast from wherever they are, we handle the production, and
               the whole thing streams free on our own watch page and out to every host's channels at the same time.
             </p>
@@ -306,7 +306,7 @@ export default function Sponsor() {
                 name: "Supporting sponsor",
                 price: SUPPORTING_PRICE,
                 note: "limited",
-                blurb: "A presence across the full 24 hours, without taking the title.",
+                blurb: "A presence across the whole marathon, without taking the title.",
                 benefits: SUPPORTING_BENEFITS,
                 featured: false,
               },

@@ -102,7 +102,7 @@ export default function Agenda({ slug }: Props) {
   const deepLinked = useRef(false);
 
   // A slot goes on air and comes off it while the page is open — on the day
-  // this page sits on a screen for 24 hours, so the badges have to move
+  // this page sits on a screen all day, so the badges have to move
   // without a reload. Half a minute is plenty for 30-minute slots.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -278,7 +278,7 @@ export default function Agenda({ slug }: Props) {
                     const shareText = `I'm tuning in to ${signup.hostName} on ${signup.podcastName} — ${s.dateLabel}, ${formatTimeInZone(
                       s.start,
                       viewZone
-                    )} ${zoneLabel(viewZone)}, during the MilitaryVoice.ai 24 Hour Podcastathon! ${
+                    )} ${zoneLabel(viewZone)}, during the MilitaryVoice.ai Podcast Marathon! ${
                       typeof window !== "undefined" ? window.location.href : ""
                     }`;
 
@@ -363,7 +363,7 @@ export default function Agenda({ slug }: Props) {
         zone={viewZone}
         shareText={
           selected
-            ? `I'm tuning in to ${selected.signup.hostName} on ${selected.signup.podcastName} during the MilitaryVoice.ai 24 Hour Podcastathon! ${
+            ? `I'm tuning in to ${selected.signup.hostName} on ${selected.signup.podcastName} during the MilitaryVoice.ai Podcast Marathon! ${
                 typeof window !== "undefined" ? window.location.href : ""
               }`
             : undefined

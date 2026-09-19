@@ -303,7 +303,7 @@ export function FinancesCard({ event }: { event: PublicEvent }) {
               {[
                 ["Self-serve event", "Platform only. They run their own control room.", "$1,500", "~$250", "83%"],
                 ["Produced event", "We staff the studio, build the rail, cut the clips, hand over the archive.", "$5,000", "~$600", "88%"],
-                ["Sponsored 24-hour marathon", "Everything, plus sponsor integration and a post-event report.", "$10,000", "~$1,100", "89%"],
+                ["Sponsored marathon", "Everything, plus sponsor integration and a post-event report.", "$10,000", "~$1,100", "89%"],
               ].map(([name, note, price, cost, margin]) => (
                 <tr key={name} className="border-b border-border last:border-0">
                   <td className="px-5 py-3">
@@ -319,7 +319,7 @@ export function FinancesCard({ event }: { event: PublicEvent }) {
           </table>
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          Cost excludes people. A produced event is a producer awake for 24 hours, which is the real line item and the
+          Cost excludes people. A produced event is a producer awake for the whole day, which is the real line item and the
           one to price properly before saying yes to a second booking.
         </p>
       </section>

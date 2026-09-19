@@ -86,7 +86,7 @@ export function emailShell(o: {
         <tr><td style="background:#053877;padding:20px 32px;">
           <img src="${SITE}/logo-wave.png" width="54" alt="" style="display:block;border:0;margin:0 0 8px;">
           <p style="margin:0;color:#ffffff;font-size:14px;font-weight:700;">MilitaryVoice.ai</p>
-          <p style="margin:2px 0 0;color:#c8d8ee;font-size:12px;line-height:1.6;">24 Hour Podcastathon for National Military Podcast Day ·
+          <p style="margin:2px 0 0;color:#c8d8ee;font-size:12px;line-height:1.6;">The Podcast Marathon for National Military Podcast Day ·
             <a href="${SITE}/agenda" style="color:#F0A71F;text-decoration:none;">Agenda</a> ·
             <a href="${SITE}/host/dashboard" style="color:#F0A71F;text-decoration:none;">Your dashboard</a></p>
         </td></tr>
@@ -455,7 +455,7 @@ export interface NudgeInput {
 function nudgeShell(opts: { eyebrow: string; heading: string; body: string; cta?: { href: string; label: string } }): string {
   return emailShell({
     banner: EMAIL_BANNERS.podcasters,
-    bannerAlt: "24 Hour Podcastathon",
+    bannerAlt: "The Podcast Marathon",
     eyebrow: opts.eyebrow,
     heading: opts.heading,
     body: opts.body,
@@ -638,7 +638,7 @@ export async function sendScheduleReference(to: string): Promise<boolean> {
     subject: "Your automatic sends: nudges and posting plan dates",
     html: emailShell({
       banner: EMAIL_BANNERS.podcasters,
-      eyebrow: "24 Hour Podcastathon · reference",
+      eyebrow: "The Podcast Marathon · reference",
       heading: "When every automatic email and post goes out",
       body,
       cta: { href: `${SITE}/admin`, label: "Open the admin dashboard" },
@@ -711,7 +711,7 @@ export async function sendListenerStartingSoon(v: StartingSoonInput): Promise<bo
       heading: `${v.podcastName} goes live ${soon}`,
       body: `
         <p style="margin:0 0 14px;">Hi ${escapeHtml(first)} — you asked us to give you a nudge. <strong>${escapeHtml(v.podcastName)}</strong>
-          with ${escapeHtml(v.hostName)} is on at <strong>${escapeHtml(v.timeLabel)}</strong> as part of the 24 Hour Podcastathon.</p>
+          with ${escapeHtml(v.hostName)} is on at <strong>${escapeHtml(v.timeLabel)}</strong> as part of the Podcast Marathon.</p>
         <p style="margin:0;">The stream is on the agenda; the show's card has the host's channels if you'd rather watch there.</p>`,
       cta: { href: v.watchUrl, label: "Watch live" },
       secondary: `<p style="margin:0;font-size:14px;"><a href="${v.cardUrl}" style="color:#053877;font-weight:600;">Open the show's card</a>${
@@ -909,7 +909,7 @@ export function renderBroadcastEmail(opts: BroadcastEmailOptions): { subject: st
   const memberSignature = member ? memberSignatureHtml(member) : "";
   const bodyHtml = `${textToHtml(resolvedBodyText)}${isRico ? RICO_SIGNATURE : memberSignature}`;
   const bannerUrl = BROADCAST_BANNERS[opts.banner ?? "welcome"] ?? BROADCAST_BANNERS.welcome;
-  const eyebrow = opts.bannerTitle?.trim() || "24 Hour Podcastathon";
+  const eyebrow = opts.bannerTitle?.trim() || "The Podcast Marathon";
   const fromName = member ? `${member.name} | MilitaryVoice.ai` : isRico ? "Riccoh Player | MilitaryVoice.ai" : "MilitaryVoice.ai";
 
   return {

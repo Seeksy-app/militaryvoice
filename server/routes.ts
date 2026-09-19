@@ -459,7 +459,7 @@ async function resolveBroadcastRecipients(broadcast: BroadcastRow): Promise<{ em
   return Array.from(deduped.values());
 }
 
-/** "24 Hour Podcastathon · Oct 5, 2026" — the banner line on broadcast emails,
+/** "The Podcast Marathon · Oct 5, 2026" — the banner line on broadcast emails,
  *  read from the event so it can never contradict the schedule. */
 async function broadcastBannerTitle(): Promise<string> {
   try {
@@ -469,7 +469,7 @@ async function broadcastBannerTitle(): Promise<string> {
     }).format(new Date(ev.startAtUtc));
     return `${ev.name} · ${when}`;
   } catch {
-    return "24 Hour Podcastathon";
+    return "The Podcast Marathon";
   }
 }
 
@@ -1574,7 +1574,7 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
-  // ---- Public: sponsor logos ("Friends of the Podcastathon") -------------------
+  // ---- Public: sponsor logos ("Friends of the Marathon") ----------------------
   app.get("/api/sponsors", async (_req, res) => {
     publicCache(res, 60);
     // Master switch: off by default until there's something worth showing.
@@ -4691,7 +4691,7 @@ export function registerRoutes(app: Express): void {
       `DTSTART:${toIcsUtcStamp(start)}`,
       `DTEND:${toIcsUtcStamp(end)}`,
       `SUMMARY:${icsEscape(`${signup.podcastName} — MilitaryVoice.ai Podcast Marathon`)}`,
-      `DESCRIPTION:${icsEscape(`${signup.hostName} is live on the MilitaryVoice.ai 24-Hour Podcast Marathon. Tune in!${bufferNote}`)}`,
+      `DESCRIPTION:${icsEscape(`${signup.hostName} is live on the MilitaryVoice.ai Podcast Marathon. Tune in!${bufferNote}`)}`,
       "END:VEVENT",
       "END:VCALENDAR",
     ].join("\r\n");

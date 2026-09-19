@@ -35,14 +35,14 @@ function buildPosts(dateLong: string, dateShort: string, slots: number, url: str
       id: "announce",
       when: "Now — the announcement",
       purpose: "Says what the day is in one breath. Everything else builds on this one.",
-      caption: `On ${dateLong}, we are not going off the air for 24 hours.
+      caption: `On ${dateLong}, we are running 26.2.
 
 ${slots} military and veteran podcasters. Back to back. One show hands to the next, all day and all night, and nobody gets skipped because their audience is small or their timeslot is 3 a.m.
 
-That's the Podcastathon. National Military Podcast Day, and this year we're doing it live.
+That's the Podcast Marathon. National Military Podcast Day, and this year we're doing it live.
 
 Free to watch. Free to be on.`,
-      hashtags: `${CORE_TAGS} #Podcastathon #VeteranPodcaster #MilitaryCommunity`,
+      hashtags: `${CORE_TAGS} #PodcastMarathon #VeteranPodcaster #MilitaryCommunity`,
       comment: `Watch it free here → ${url}
 
 If you host a military or veteran show and you want a slot, that link takes you there too.`,
@@ -55,7 +55,7 @@ If you host a military or veteran show and you want a slot, that link takes you 
 
 The stories I carry from those years are not the ones that made the news. They're the ones somebody told me at 2 a.m. on a flight line, and then never told anybody again.
 
-That's what this day is for. ${slots} shows, 24 hours, ${dateShort}. Every one of them hosted by somebody who served or loves somebody who did.
+That's what this day is for. ${slots} shows, 26.2, ${dateShort}. Every one of them hosted by somebody who served or loves somebody who did.
 
 We are done waiting for permission to tell our own stories.`,
       hashtags: `${CORE_TAGS} #VeteranOwned #MarineCorps #TellYourStory`,
@@ -108,7 +108,7 @@ Look at this lineup. Combat vets. Military spouses. Gold Star families. Guys who
 That last part matters. This is not a curated showcase of the biggest shows. It's the community, the whole community, in the order they signed up.
 
 Twenty-four hours. Nobody gets cut.`,
-      hashtags: `${CORE_TAGS} #Podcastathon #MilitaryFamilies #VeteranVoices`,
+      hashtags: `${CORE_TAGS} #PodcastMarathon #MilitaryFamilies #VeteranVoices`,
       comment: `Full lineup and times → ${url}
 
 Tag a show that belongs on this board.`,
@@ -119,12 +119,12 @@ Tag a show that belongs on this board.`,
       purpose: "Countdown. Short, high-energy, no new information.",
       caption: `One week.
 
-${dateLong}. ${slots} shows. 24 hours. One continuous broadcast.
+${dateLong}. ${slots} shows. 26.2 miles of stories. One continuous broadcast.
 
 I have done a lot of hard things in uniform. Staying awake for this one is going to be its own kind of hard, and I would not miss it.
 
 Set a reminder. I'm serious.`,
-      hashtags: `${CORE_TAGS} #OneWeek #Podcastathon #MilitaryPodcast`,
+      hashtags: `${CORE_TAGS} #OneWeek #PodcastMarathon #MilitaryPodcast`,
       comment: `Set your reminder here and we'll text you before it starts → ${url}`,
     },
     {
@@ -141,7 +141,7 @@ That is not dead air. That is the watch.
 
 We've all stood it. On ${dateShort}, somebody will be talking the whole time.`,
       hashtags: `${CORE_TAGS} #StandingWatch #NightShift #VeteranMentalHealth #MilitaryCommunity`,
-      comment: `Full 24-hour schedule, every hour of it → ${url}
+      comment: `The full route, mile by mile → ${url}
 
 Find your 0300. Somebody will be on.`,
     },
@@ -165,12 +165,12 @@ There are shows on ${dateShort} hosted by you, about you, and I want you watchin
       purpose: "The go-live post. Pin it and re-share it through the day.",
       caption: `We're live.
 
-24 hours. ${slots} shows. Starting now and not stopping until this time tomorrow.
+26.2. ${slots} shows. Starting now and not stopping until the finish line tonight.
 
 Drop in whenever. Leave whenever. Come back at 2 a.m. and somebody will still be talking.
 
 This is what it sounds like when we tell our own stories.`,
-      hashtags: `${CORE_TAGS} #LiveNow #Podcastathon #MilitaryPodcast`,
+      hashtags: `${CORE_TAGS} #LiveNow #PodcastMarathon #MilitaryPodcast`,
       comment: `Watching here → ${url}
 
 Tell me in the comments where you're listening from. I'll read them on air.`,
@@ -179,14 +179,14 @@ Tell me in the comments where you're listening from. I'll read them on air.`,
       id: "thanks",
       when: "The day after",
       purpose: "Closes the loop and points at the replays, which keep earning for months.",
-      caption: `We did it. 24 hours, ${slots} shows, not one minute of dead air.
+      caption: `We did it. 26.2, ${slots} shows, not one minute of dead air.
 
 To every host who gave up a day to be part of this — you built something. To everyone who watched at 3 a.m. — I saw the numbers, and I see you.
 
 Every single show is up and free to watch. Start anywhere.
 
 Same time next year. Bring somebody.`,
-      hashtags: `${CORE_TAGS} #ThankYou #Podcastathon #VeteranVoices`,
+      hashtags: `${CORE_TAGS} #ThankYou #PodcastMarathon #VeteranVoices`,
       comment: `Every show from the day, free → ${url}
 
 Tell me which one you're starting with.`,

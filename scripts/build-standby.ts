@@ -134,7 +134,7 @@ async function buildPanel(group: typeof shows, index: number, total: number): Pr
   const svg: string[] = [];
 
   svg.push(textPath(`TUNE IN ${dateLabel}`, { x: W / 2, y: 296, size: 94, weight: "bold", fill: "#ffffff", anchor: "middle" }));
-  svg.push(textPath("24 HOURS OF MILITARY AND VETERAN PODCASTS · MILITARYVOICE.AI", {
+  svg.push(textPath("26.2 MILES OF STORIES · MILITARYVOICE.AI", {
     x: W / 2, y: 352, size: 25, weight: "bold", fill: GOLD, anchor: "middle", letterSpacing: 4,
   }));
   svg.push(textPath("ON THE LINEUP", {

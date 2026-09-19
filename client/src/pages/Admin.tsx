@@ -1495,7 +1495,7 @@ function SponsorsCard({ eventId }: { eventId: number }) {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Handshake className="h-4 w-4 text-primary" /> Friends of the Podcastathon
+          <Handshake className="h-4 w-4 text-primary" /> Friends of the Marathon
         </CardTitle>
         <CardDescription>
           Sponsor logos scroll in a strip on the homepage, under the host section. PNG or SVG with a transparent
@@ -2084,7 +2084,7 @@ function BroadcastsSection({
                   rows={10}
                   value={bBody}
                   onChange={(e) => setBBody(e.target.value)}
-                  placeholder={"Hi there,\n\nThe 24-Hour Military Podcast Marathon is coming up..."}
+                  placeholder={"Hi there,\n\nThe Military Podcast Marathon is coming up..."}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">Paragraphs separated by a blank line. An unsubscribe link is added automatically.</p>
               </div>
@@ -4088,7 +4088,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                       rows={3}
                       value={aiPrompt}
                       onChange={(e) => setAiPrompt(e.target.value)}
-                      placeholder="Invite military podcasters to claim a slot for the October 5 Podcastathon. Keep it warm and personal. Mention it's one slot per show."
+                      placeholder="Invite military podcasters to claim a slot for the October 5 Marathtathon. Keep it warm and personal. Mention it's one slot per show."
                       className="text-sm"
                     />
                     <div className="flex gap-2">

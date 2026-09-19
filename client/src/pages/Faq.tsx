@@ -25,7 +25,7 @@ export default function Faq() {
 
   const general: QA[] = [
     {
-      q: "What is the 24 Hour Podcastathon?",
+      q: "What is the Podcast Marathon?",
       a: (
         <>
           Twenty-four hours of live and &lsquo;Best of MilVet&rsquo; podcasting for National Military Podcast
@@ -43,7 +43,7 @@ export default function Faq() {
           on the schedule and agenda.
         </>
       ) : (
-        <>October 5, 2026, running for 24 hours. Every time on this site is shown in your own time zone.</>
+        <>October 5, 2026, 7:00 AM to about 10:45 PM Eastern. Every time on this site is shown in your own time zone.</>
       ),
     },
     {
@@ -262,7 +262,7 @@ export default function Faq() {
             Questions, answered.
           </h1>
           <p className="mt-3 max-w-2xl text-base text-white/75 sm:text-lg">
-            Everything podcasters and listeners ask about the 24 Hour Podcastathon. Jump to your section.
+            Everything podcasters and listeners ask about the Podcast Marathon. Jump to your section.
           </p>
           <div className="mt-6 flex flex-wrap gap-2">
             {[

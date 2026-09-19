@@ -38,7 +38,7 @@ const WAYS_TO_CELEBRATE = [
   },
   {
     icon: Users,
-    title: "Join the Podcastathon",
+    title: "Join the Marathon",
     body: "Claim a 30-minute live slot on MilitaryVoice.ai and broadcast to the whole community on October 5th — from anywhere, free of charge. One day. Every mic. All in.",
   },
 ];
@@ -123,7 +123,7 @@ export default function NationalMilitaryPodcastDay() {
                 className="rounded-full bg-[#F0A71F] px-8 font-bold text-[#1a1200] hover:bg-[#f7b73a]"
                 style={HEADLINE_FONT}
               >
-                <Mic2 className="mr-2 h-4 w-4" /> Join the Podcastathon
+                <Mic2 className="mr-2 h-4 w-4" /> Join the Marathon
               </Button>
             </Link>
             <a
@@ -202,7 +202,7 @@ export default function NationalMilitaryPodcastDay() {
             <div>
               <p className="mb-1 text-xs font-bold uppercase tracking-[0.18em] text-[#F0A71F]">Live stream</p>
               <h2 className="text-2xl font-black text-white sm:text-3xl" style={HEADLINE_FONT}>
-                Watch the Podcastathon
+                Watch the Marathon
               </h2>
             </div>
             <div className="flex items-center gap-2 rounded-full border border-[#ED1C24]/40 bg-[#ED1C24]/10 px-4 py-2">
