@@ -230,6 +230,60 @@ export async function contentRect(
   }
 }
 
+/** Wrap honestly — no line wider than the box. */
+export function wrapCaption(text: string, size: number, boxW: number): string[] {
+  const out: string[] = [];
+  let cur = "";
+  for (const w of text.split(/\s+/).filter(Boolean)) {
+    const next = cur ? `${cur} ${w}` : w;
+    if (textWidth(next, size, "bold") <= boxW || !cur) cur = next;
+    else {
+      out.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+/**
+ * One spoken line becomes as many captions as it needs.
+ *
+ * Every transcript line used to be exactly one caption, and a line too long
+ * for two display lines was shrunk until it fitted — then, if it still did
+ * not, truncated with an ellipsis. That silently dropped the end of what
+ * somebody said off the bottom of their own clip. Speech is not optional
+ * content.
+ *
+ * So a long line is split into successive captions of two display lines each,
+ * and the line's duration is shared out by character count — which tracks how
+ * long each part took to say closely enough that the words stay under the
+ * voice.
+ */
+export function splitCaptions(caps: Line[], W: number, H: number): Line[] {
+  const size = Math.round(H * 0.042);
+  const boxW = Math.round(W * 0.86);
+  const out: Line[] = [];
+  for (const c of caps) {
+    const wrapped = wrapCaption(c.text, size, boxW);
+    if (wrapped.length <= 2) {
+      out.push(c);
+      continue;
+    }
+    const chunks: string[] = [];
+    for (let i = 0; i < wrapped.length; i += 2) chunks.push(wrapped.slice(i, i + 2).join(" "));
+    const total = chunks.reduce((n, t) => n + t.length, 0) || 1;
+    let at = c.startSec;
+    const span = Math.max(0.1, c.endSec - c.startSec);
+    chunks.forEach((text, i) => {
+      const share = i === chunks.length - 1 ? c.endSec - at : span * (text.length / total);
+      out.push({ speaker: c.speaker, text, startSec: at, endSec: at + share });
+      at += share;
+    });
+  }
+  return out;
+}
+
 /**
  * One caption, drawn as vector outlines on transparency.
  *
@@ -245,22 +299,7 @@ export async function contentRect(
  */
 export async function captionPng(text: string, W: number, H: number): Promise<{ buf: Buffer; h: number }> {
   const boxW = Math.round(W * 0.86);
-
-  /** Wrap at a given size, honestly — no line wider than the box. */
-  const wrapAt = (size: number): string[] => {
-    const out: string[] = [];
-    let cur = "";
-    for (const w of text.split(/\s+/).filter(Boolean)) {
-      const next = cur ? `${cur} ${w}` : w;
-      if (textWidth(next, size, "bold") <= boxW || !cur) cur = next;
-      else {
-        out.push(cur);
-        cur = w;
-      }
-    }
-    if (cur) out.push(cur);
-    return out;
-  };
+  const wrapAt = (size: number): string[] => wrapCaption(text, size, boxW);
 
   // Two lines at most — three covers a face, which is the thing the clip is
   // of. The way that used to be enforced was to glue the overflow lines
@@ -407,7 +446,7 @@ export async function render(
   // Each caption is its own overlay, switched on for the seconds it belongs
   // to. Forty is the cap: a filter graph of a few dozen overlays is nothing,
   // a few hundred is a parser that takes longer than the encode.
-  const caps = (captions ?? []).filter((c) => c.text.trim()).slice(0, 40);
+  const caps = splitCaptions((captions ?? []).filter((c) => c.text.trim()), W, H).slice(0, 40);
   if (caps.length && dir) {
     let prev = last;
     for (let i = 0; i < caps.length; i++) {
