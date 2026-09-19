@@ -1,23 +1,24 @@
 import type { Marker } from "@shared/mileMarkers";
 
-// A course marker, drawn rather than borrowed.
+// A race bib, drawn rather than borrowed.
 //
-// The shape is the one every road race uses — a tall panel on a short post,
-// a small word above a big number — because that is what makes it read as a
-// mile marker at a glance rather than as a badge. The colours and the type are
-// ours; real races' signage is their own branding.
+// The first version was a roadside sign, and side by side the bib won on two
+// counts. It is the only shape that is light on dark, so against the navy card
+// header it reads as an object rather than as an outline inside it. And it is
+// the better metaphor: a sign is something you run past, a bib is something you
+// are given with your number on it. For a slot a podcaster screenshots and
+// posts, belonging beats passing.
+//
+// The shape is the generic one — light card, big number, perforated tear-off,
+// two pin holes. Colours and type are ours.
 
 const NAVY = "#000741";
 const GOLD = "#F0A71F";
+const PAPER = "#FAF7F0";
 
-/**
- * @param tone  `solid` for the numbered miles, `quiet` for the bookends and
- *              the open slots — so scanning the column gives you the shape of
- *              the day before you read a word of it.
- */
 export function MileMarker({
   marker,
-  size = 56,
+  size = 48,
   className = "",
 }: {
   marker: Marker;
@@ -25,35 +26,25 @@ export function MileMarker({
   className?: string;
 }) {
   const quiet = marker.kind === "open";
-  const accent = marker.kind === "point-two" ? GOLD : marker.kind === "mile" ? GOLD : "#ffffff";
-  const panel = quiet ? "transparent" : NAVY;
-  const stroke = quiet ? "#ffffff38" : GOLD;
 
-  // A long label has to sit on one line inside a fixed panel, so the type
-  // shrinks for words and stays big for numbers — "FINISH" and "14" cannot
-  // share a size and both look deliberate.
-  // Below about 50px the small caps stop being letters and become texture, so
-  // the sign drops to just its number rather than printing something nobody
-  // can read.
-  const showSub = size >= 50 && !!marker.sub;
+  // Below about 40px the small caps stop being letters and become texture, so
+  // the bib drops to its number alone rather than printing something nobody can
+  // read. Same rule the sign needed, for the same reason.
+  const showSub = size >= 40 && !!marker.sub;
+
+  // Fitted, not guessed — a flat size for words put START through both edges.
+  // 38 of the 44 usable units, so a word sits inside the card with air around
+  // it instead of against its borders.
   const isWord = marker.label.length > 2;
-  // Fitted, not guessed. A flat 12 for words put "START" through both edges of
-  // the panel and spilled "FINISH" — the same mistake as the burned-in
-  // captions earlier: picking a size that happens to suit the shortest case.
-  // 0.68em is a fair average advance for bold sans at these sizes, and the
-  // usable width is the panel less its stroke and a little air.
-  // 34, not the full 38 of usable panel: solving for the exact width leaves a
-  // word touching both edges, which reads as a mistake even when it technically
-  // fits. The margin is the difference between fitting and looking placed.
-  const INNER = 34;
+  const INNER = 38;
   const numSize = isWord
-    ? Math.min(12, INNER / (marker.label.length * 0.68))
+    ? Math.min(13, INNER / (marker.label.length * 0.68))
     : marker.label.length > 1
-      ? 21
+      ? 22
       : 26;
 
-  const W = 46;
-  const H = 62;
+  const W = 54;
+  const H = 48;
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
@@ -66,40 +57,56 @@ export function MileMarker({
       }
       data-testid={`mile-marker-${marker.kind}${marker.n ? `-${marker.n}` : ""}`}
     >
-      {/* The post, behind the panel so the panel's corner radius reads. */}
-      <rect x={W / 2 - 1.6} y={H - 16} width="3.2" height="16" rx="1.4" fill={quiet ? "#ffffff30" : GOLD} />
       <rect
         x="1.5"
         y="1.5"
         width={W - 3}
-        height={H - 19}
-        rx="6"
-        fill={panel}
-        stroke={stroke}
-        strokeWidth="2"
+        height={H - 3}
+        rx="4"
+        fill={quiet ? "transparent" : PAPER}
+        stroke={quiet ? "#ffffff40" : NAVY}
+        strokeWidth="1.5"
+        strokeDasharray={quiet ? "3 2.6" : undefined}
       />
+      {/* The tear-off strip and the pin holes. Small, but they are what stop it
+          reading as a plain white chip with a number on it. */}
+      {!quiet && (
+        <>
+          <line
+            x1="4"
+            y1={H - 11}
+            x2={W - 4}
+            y2={H - 11}
+            stroke={NAVY}
+            strokeWidth="0.8"
+            strokeDasharray="1.6 1.8"
+            opacity="0.45"
+          />
+          <circle cx="6" cy="6" r="1.1" fill={NAVY} opacity="0.3" />
+          <circle cx={W - 6} cy="6" r="1.1" fill={NAVY} opacity="0.3" />
+        </>
+      )}
       {!quiet && showSub && (
         <text
           x={W / 2}
-          y="15"
+          y="10"
           textAnchor="middle"
           fill={GOLD}
-          fontSize="7"
-          fontWeight="700"
-          letterSpacing="1.1"
-          style={{ textTransform: "uppercase" }}
+          fontSize="6.2"
+          fontWeight="800"
+          letterSpacing="1.2"
         >
           {marker.sub?.toUpperCase()}
         </text>
       )}
       <text
         x={W / 2}
-        y={quiet ? 28 : showSub ? 34 : 29}
+        y={quiet ? 30 : showSub ? (isWord ? 29 : 31) : 30}
         textAnchor="middle"
-        fill={quiet ? "#ffffff55" : accent}
+        fill={quiet ? "#ffffff55" : NAVY}
         fontSize={numSize}
         fontWeight="800"
-        letterSpacing={isWord ? "0.6" : "-0.5"}
+        letterSpacing={isWord ? "0.4" : "-0.5"}
         style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}
       >
         {marker.label}
