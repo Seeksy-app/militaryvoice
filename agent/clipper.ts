@@ -967,7 +967,11 @@ async function release(): Promise<void> {
   );
 }
 
-for (const sig of ["SIGINT", "SIGTERM"] as const) {
+// SIGHUP included: closing a terminal window sends that, not SIGINT, and a
+// worker killed by a closed window stranded its job exactly as a Ctrl-C used
+// to — which is the more likely way to lose one, since nobody thinks of
+// closing a window as killing something.
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
   process.on(sig, () => {
     void release().finally(() => process.exit(0));
   });
