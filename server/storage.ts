@@ -1663,7 +1663,11 @@ class DatabaseStorage implements IStorage {
    */
   async claimClipJob(): Promise<RecordingRow | undefined> {
     await ready();
-    const stale = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    // Ten minutes, not sixty. This is the backstop for a worker that died
+    // without handing its job back — a crash, a closed laptop, a kill -9. An
+    // hour of a recording sitting untouched because someone pressed Ctrl-C is
+    // a long time to look like nothing is happening.
+    const stale = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const [row] = await db
       .update(recordings)
       .set({ clipStatus: "running", clipClaimedAt: new Date().toISOString() })

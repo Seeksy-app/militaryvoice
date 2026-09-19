@@ -4061,6 +4061,15 @@ export function registerRoutes(app: Express): void {
       res.status(404).json({ message: "No such recording." });
       return;
     }
+    // A worker that is being shut down hands the job back rather than failing
+    // it. Ctrl-C used to leave the recording marked running with nobody on it,
+    // and the only way back was the stale-claim timeout — so stopping the
+    // worker to change something cost an hour before it could try again.
+    if (req.body?.requeue) {
+      await storage.setClipStatus(rec.id, "queued", "");
+      res.json({ ok: true, requeued: true });
+      return;
+    }
     await storage.setClipStatus(rec.id, "failed", String(req.body?.error ?? "").slice(0, 500));
     res.json({ ok: true });
   });

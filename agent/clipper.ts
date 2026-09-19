@@ -882,12 +882,42 @@ async function handle(job: Job): Promise<void> {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * The job this process is holding, so a shutdown can hand it back.
+ *
+ * Without this, Ctrl-C leaves the recording marked running with nobody on it,
+ * and the only route back is the stale-claim timeout. Stopping the worker to
+ * change something therefore cost ten minutes before it could try again —
+ * which it did, three times in one afternoon, each time looking like the
+ * queue was broken rather than like the last worker had been killed.
+ */
+let holding: number | null = null;
+
+async function release(): Promise<void> {
+  if (holding === null) return;
+  const id = holding;
+  holding = null;
+  console.log(`\nhanding #${id} back to the queue…`);
+  await api("POST", `/api/agent/clip-jobs/${id}/failed`, { requeue: true }).catch((err) =>
+    console.error(`could not release #${id}: ${(err as Error).message} — it will be reclaimed in 10 minutes`),
+  );
+}
+
+for (const sig of ["SIGINT", "SIGTERM"] as const) {
+  process.on(sig, () => {
+    void release().finally(() => process.exit(0));
+  });
+}
+
 async function tick(): Promise<boolean> {
   const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim");
   if (!job) return false;
+  holding = job.recordingId;
   try {
     await handle(job);
+    holding = null;
   } catch (err) {
+    holding = null;
     const message = (err as Error).message ?? String(err);
     console.error(`[${job.recordingId}] failed: ${message}`);
     await api("POST", `/api/agent/clip-jobs/${job.recordingId}/failed`, { error: message }).catch(() => {});
