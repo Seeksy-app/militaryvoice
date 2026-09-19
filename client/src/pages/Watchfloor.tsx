@@ -372,7 +372,7 @@ export default function Watchfloor() {
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-white/70">
             Take a slot on the Podcast Marathon. You get the studio, your own recording and your clips — and
-            twenty-four hours of this community listening.
+            a whole marathon of this community listening.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link href="/host/dashboard">

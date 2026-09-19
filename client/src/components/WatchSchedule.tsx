@@ -137,7 +137,7 @@ export function WatchSchedule({ slug }: { slug?: string }) {
                       <span className="shrink-0">
                         <AgendaSignupActions
                           signup={r.signup}
-                          shareText={`${r.signup.podcastName} is on at ${formatTimeInZone(r.start, zone)} during the 24 Hour Podcastathon — watch free at militaryvoice.ai/watch`}
+                          shareText={`${r.signup.podcastName} is on at ${formatTimeInZone(r.start, zone)} during the Podcast Marathon — watch free at militaryvoice.ai/watch`}
                         />
                       </span>
                     )}

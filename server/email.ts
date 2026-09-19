@@ -358,7 +358,7 @@ export async function sendSponsorThanksEmail(input: {
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
     <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoice.ai</p>
     <h1 style="margin:0 0 16px;color:#111827;font-size:20px;font-weight:700;">Thanks, ${escapeHtml(first)} — we've got it.</h1>
-    <p style="margin:0;color:#374151;font-size:15px;line-height:1.65;">Twenty-four hours of military and veteran podcasters, going out back to back on National Military Podcast Day. Your name sits with it.</p>
+    <p style="margin:0;color:#374151;font-size:15px;line-height:1.65;">26.2 miles of military and veteran stories, going out back to back on National Military Podcast Day. Your name sits with it.</p>
     ${pay}
     <p style="margin:24px 0 0;color:#9ca3af;font-size:12px;">Reply to this email and it reaches us directly.</p>
   </div>`;

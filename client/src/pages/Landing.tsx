@@ -51,9 +51,9 @@ const EVENT_FALLBACK: PublicEvent = {
   visible: true,
   imageUrl: "/event-marathon.jpg",
   name: "The Podcast Marathon",
-  tagline: "Twenty-four hours of live and ‘Best of MilVet’ podcasting for National Military Podcast Day.",
+  tagline: "26.2 miles of stories for National Military Podcast Day.",
   description:
-    "Twenty-four hours of live and ‘Best of MilVet’ podcasting for National Military Podcast Day—featuring back-to-back shows, special guests, and stories from the military and veteran community, streaming around the clock.",
+    "26.2 miles of stories for National Military Podcast Day—twenty-six shows and the bonus sessions that make the point-two, back to back, special guests, and stories from the military and veteran community, streaming around the clock.",
   startAtUtc: "2026-10-05T11:00:00.000Z",
   durationHours: 24,
   slotMinutes: 30,
@@ -208,7 +208,7 @@ export default function Landing({ slug }: Props) {
   // shows and the row looked bare — and stopped making sense at 27, where it
   // put people under a heading that says "On the lineup" who aren't on it.
   // With nobody booked at all the heading already changes to "Joining the
-  // podcastathon", and that is when the profiles are the right thing to show.
+  // marathon", and that is when the profiles are the right thing to show.
   const spotlight = useMemo<SpotlightItem[]>(() => {
     if (lineup.length > 0) return lineup.map(({ signup, start }) => spotlightFromSignup(signup, start));
     return (podcasters ?? []).map<SpotlightItem>((p) => ({
@@ -478,7 +478,7 @@ export default function Landing({ slug }: Props) {
                   <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-white/70">
                     <span className="inline-flex items-center gap-1.5">
                       <Radio className="h-3.5 w-3.5 text-[#F0A71F]" />
-                      {booked.length > 0 ? "On the lineup" : "Joining the podcastathon"}
+                      {booked.length > 0 ? "On the lineup" : "Joining the marathon"}
                     </span>
                     {/* This said "4/11" — the page number — and read as
                         eleven shows when there are twenty-seven. The number

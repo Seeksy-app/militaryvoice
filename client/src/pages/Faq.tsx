@@ -28,7 +28,7 @@ export default function Faq() {
       q: "What is the Podcast Marathon?",
       a: (
         <>
-          Twenty-four hours of live and &lsquo;Best of MilVet&rsquo; podcasting for National Military Podcast
+          26.2 miles of live and &lsquo;Best of MilVet&rsquo; podcasting for National Military Podcast
           Day&mdash;featuring back-to-back shows, special guests, and stories from the military and veteran community,
           streaming around the clock. Shows hand off to each other every {slotMin} minutes, so someone is always on the air.
         </>

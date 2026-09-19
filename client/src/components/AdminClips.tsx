@@ -10,7 +10,7 @@ import { Film, RefreshCw, Download, Clock, AlertTriangle, Loader2 } from "lucide
 // The endpoint for this existed for weeks and nothing rendered it, so the only
 // way to see a clip was to call the API by hand. That is survivable while one
 // person is testing one recording. On the day it is forty-eight segments
-// finishing inside twenty-four hours with no way to tell a good pick from a
+// finishing across one long day with no way to tell a good pick from a
 // bad one, and no way to ask for another pass.
 
 interface Clip {

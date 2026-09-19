@@ -4106,7 +4106,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
 
                 <div>
                   <Label className="mb-1.5 block">Subject line</Label>
-                  <Input value={bSubject} onChange={(e) => setBSubject(e.target.value)} placeholder="You're invited to the 24-Hour Podcastathon" />
+                  <Input value={bSubject} onChange={(e) => setBSubject(e.target.value)} placeholder="You're invited to the Podcast Marathon" />
                 </div>
                 <div>
                   <Label className="mb-1.5 block">Body</Label>

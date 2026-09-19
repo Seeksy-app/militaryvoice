@@ -35,7 +35,7 @@ const body = `Hi {{First_Name}},
 
 It's not too late.
 
-${dateLong} is ${days} days away and we still have **${open} of the ${total} slots** open on the Mil/Vet Podcast Marathour Mil/Vet Podcastathon. ${taken} shows are [already on the board](${AGENDA}).
+${dateLong} is ${days} days away and we still have **${open} of the ${total} slots** open on the Mil/Vet Podcast Marathon. ${taken} shows are [already on the board](${AGENDA}).
 
 If you've been meaning to grab a time and haven't got round to it, this is the part where I say it plainly: I'd like you on the schedule.
 

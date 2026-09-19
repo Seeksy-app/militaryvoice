@@ -107,7 +107,7 @@ Look at this lineup. Combat vets. Military spouses. Gold Star families. Guys who
 
 That last part matters. This is not a curated showcase of the biggest shows. It's the community, the whole community, in the order they signed up.
 
-Twenty-four hours. Nobody gets cut.`,
+26.2 miles. Nobody gets cut.`,
       hashtags: `${CORE_TAGS} #PodcastMarathon #MilitaryFamilies #VeteranVoices`,
       comment: `Full lineup and times → ${url}
 
