@@ -70,7 +70,7 @@ import {
   listIngressForRoom,
   webhooks,
 } from "./livekit.js";
-import { ensureRecordingsBucket, signedRecordingUrl, signedRecordingUpload } from "./recordingStorage.js";
+import { ensureRecordingsBucket, signedRecordingUrl, signedRecordingUpload, deleteRecordingObject } from "./recordingStorage.js";
 import {
   isYoutubeConfigured,
   consentUrl,
@@ -2258,12 +2258,15 @@ export function registerRoutes(app: Express): void {
       return;
     }
     await storage.deleteAsset(id, email);
-    if (mine.fileUrl) {
-      try {
-        await deleteShowAsset(mine.fileUrl);
-      } catch (err) {
-        console.error("Couldn't remove the stored file:", err);
-      }
+    // Two stores, two ways out. deleteShowAsset parses a Supabase URL, and an
+    // R2-backed asset's fileUrl is our own redirect — so without the key
+    // branch the row would vanish and the object would sit in the bucket for
+    // good, paid for and unreachable.
+    try {
+      if (mine.storageKey) await deleteRecordingObject(mine.storageKey);
+      else if (mine.fileUrl) await deleteShowAsset(mine.fileUrl);
+    } catch (err) {
+      console.error("Couldn't remove the stored file:", err);
     }
     res.json({ ok: true });
   });

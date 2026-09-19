@@ -59,7 +59,7 @@ function uriEncode(v: string, encodeSlash: boolean): string {
  * is identical bar the verb, which is why this takes it as an argument rather
  * than existing twice.
  */
-function presignS3(method: "GET" | "PUT", path: string, expiresInSeconds: number): string {
+function presignS3(method: "GET" | "PUT" | "DELETE", path: string, expiresInSeconds: number): string {
   const t = storageTarget();
   if (!t) throw new Error("No recording storage configured.");
 
@@ -113,6 +113,29 @@ function presignS3(method: "GET" | "PUT", path: string, expiresInSeconds: number
 export function signedRecordingUpload(path: string, expiresInSeconds = 7_200): string {
   if (!usingR2()) throw new Error("Recording uploads need R2 — Supabase caps file size project-wide.");
   return presignS3("PUT", path, expiresInSeconds);
+}
+
+/**
+ * Remove an object.
+ *
+ * Without this there is no way to delete from R2 at all, which was survivable
+ * while only egress wrote there — recordings are meant to be kept. Show
+ * material is not: a podcaster who uploads the wrong episode and removes it
+ * would otherwise leave the file sitting in the bucket for good, paid for and
+ * unreachable.
+ */
+export async function deleteRecordingObject(path: string): Promise<void> {
+  if (!usingR2()) {
+    const supabase = getClient();
+    await supabase.storage.from(recordingsBucket()).remove([path]);
+    return;
+  }
+  const res = await fetch(presignS3("DELETE", path, 300), { method: "DELETE" });
+  // 404 is success for our purposes: the object is not there, which is the
+  // state we were asking for.
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`R2 delete ${res.status}: ${(await res.text()).slice(0, 160)}`);
+  }
 }
 
 /** A time-limited download link. Default two hours, plenty for a big MP4. */
