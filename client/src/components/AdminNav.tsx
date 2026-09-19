@@ -13,8 +13,7 @@ import {
   CalendarDays,
   DoorOpen,
   PanelLeftClose,
-  PanelLeftOpen,
-} from "lucide-react";
+  PanelLeftOpen, Film,} from "lucide-react";
 
 // The admin's nav, down the left.
 //
@@ -43,6 +42,7 @@ export const EVENT_GROUPS: { title: string; items: AdminSection[] }[] = [
       { key: "overview", label: "Overview", icon: LayoutDashboard },
       { key: "studio", label: "Studio", icon: MonitorPlay },
       { key: "run", label: "Run of show", icon: ListOrdered },
+      { key: "clips", label: "Recordings & clips", icon: Film },
     ],
   },
   {

@@ -4110,6 +4110,40 @@ export function registerRoutes(app: Express): void {
   });
 
   /** Re-run the clipper on a recording — after a failure, or for a second opinion. */
+  /**
+   * Every recording with its clips, in one call.
+   *
+   * There was no way to see a clip in the admin at all — the per-recording
+   * endpoint existed and nothing rendered it, so checking what the clipper
+   * produced meant calling the API by hand. On the day that is forty-eight
+   * segments finishing with nobody able to tell a good pick from a bad one.
+   */
+  app.get("/api/admin/clips", requireAdmin, async (req, res) => {
+    noStore(res);
+    const featured = await storage.getFeaturedEvent();
+    const eventId = Number(req.query.eventId) || featured.id;
+    const recordings = (await storage.listRecordings(eventId)).filter(
+      (r) => r.clipStatus !== "none" || r.status === "Ready",
+    );
+    const withClips = await Promise.all(
+      recordings.map(async (r) => ({
+        id: r.id,
+        title: r.title,
+        status: r.status,
+        durationSec: r.durationSec,
+        sizeBytes: r.sizeBytes,
+        startedAt: r.startedAt,
+        signupId: r.signupId,
+        email: r.email,
+        clipStatus: r.clipStatus,
+        clipError: r.clipError,
+        clipClaimedAt: r.clipClaimedAt,
+        clips: await storage.listClips(r.id),
+      })),
+    );
+    res.json(withClips);
+  });
+
   app.post("/api/admin/recordings/:id/reclip", requireAdmin, async (req, res) => {
     const rec = await storage.getRecording(Number(req.params.id));
     if (!rec || rec.status !== "Ready") {

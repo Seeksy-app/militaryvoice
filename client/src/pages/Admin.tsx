@@ -32,6 +32,7 @@ import { RiccohImages } from "@/components/RiccohImages";
 import { RichBody } from "@/components/RichBody";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
+import { AdminClips } from "@/components/AdminClips";
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
 import { AudienceFigures } from "@/components/AudienceFigures";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
@@ -4342,6 +4343,9 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                 </TabsContent>
                 <TabsContent value="studio" className="mt-2 lg:mt-0">
                   <StudioConsole key={`ev-${selectedEventId}`} adminGet={adminGet} adminSend={adminSend} view="live" eventId={selectedEventId} kind="event" onLeave={() => setEventTab("overview")} />
+                </TabsContent>
+                <TabsContent value="clips" className="mt-2 lg:mt-0">
+                  <AdminClips eventId={selectedEventId} adminGet={adminGet} adminSend={adminSend} />
                 </TabsContent>
                 <TabsContent value="run" className="mt-2 lg:mt-0">
                   <RunOfShow adminGet={adminGet} adminSend={adminSend} eventId={selectedEventId} />
