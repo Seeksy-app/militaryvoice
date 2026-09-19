@@ -106,9 +106,20 @@ ${s.podcastName}${s.hostName ? ` — with ${s.hostName}` : ""} is on at ${airLab
 Register to watch → militaryvoice.ai/watch`;
   }
 
+  /**
+   * The names live here, not on the poster.
+   *
+   * Setting twenty-nine show names under twenty-nine faces meant wrapping,
+   * truncating, and faces half the size they should be — all to render text
+   * nobody can read at thumbnail size anyway. In the caption they are
+   * searchable, they are taggable, and every host can find their own show,
+   * which is the thing that actually gets a lineup post reshared.
+   */
   const posterCaption = `${shows.length} shows. One day. ${eventDate}.
 
 This is the board for the 24-Hour Mil/Vet Podcastathon. Combat vets, military spouses, Gold Star families — going out back to back for a full day and night.
+
+${shows.map((s) => `• ${s.podcastName}`).join("\n")}
 
 Every one of them is free to watch, and so is the whole day.
 

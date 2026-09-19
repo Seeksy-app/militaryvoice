@@ -12,7 +12,9 @@ const rows = await sql`
   WHERE event_id = ${event.id} AND status <> 'cancelled' ORDER BY slot_index`;
 await sql.end();
 
-const origin = "https://www.militaryvoice.ai";
+// Overridable, because relative photo paths are fetched from it and the
+// apex is not always reachable from where this runs.
+const origin = (process.env.ASSET_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "");
 const shows = rows.map((r: any) => ({
   podcastName: String(r.podcast_name),
   photoUrl: r.photo_url ? (String(r.photo_url).startsWith("http") ? String(r.photo_url) : origin + r.photo_url) : undefined,
