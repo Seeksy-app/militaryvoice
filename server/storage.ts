@@ -48,7 +48,7 @@ import type {
 } from "../shared/schema.js";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { and, eq, ne, or, asc, desc, isNull, inArray, lte, lt } from "drizzle-orm";
+import { and, eq, ne, or, asc, desc, isNull, inArray, lte, lt, sql as sqlExpr } from "drizzle-orm";
 import { ensureSchema as syncSchemaFromDefinitions, schemaFingerprint } from "./schemaSync.js";
 
 // Resolve the Postgres connection string lazily (not at module load) so a
@@ -1645,6 +1645,22 @@ class DatabaseStorage implements IStorage {
    * breath. The claim time is what makes a dead worker recoverable: a job that
    * has been "running" for over an hour is reclaimed rather than stuck.
    */
+  /**
+   * Take exactly one clip job.
+   *
+   * This used to be an UPDATE with no limit. It matched every eligible
+   * recording, set them all to "running", and then took the first row off the
+   * returning() array and dropped the rest — so a single poll marked the whole
+   * backlog as in-progress and gave one of them to a worker. The others sat
+   * there claimed by nobody until the hour-long staleness window let them go.
+   *
+   * Nobody would have seen it with one recording at a time. On the day, the
+   * first poll after the show would strand forty-seven slots for an hour each.
+   *
+   * The subquery is what bounds it, and FOR UPDATE SKIP LOCKED is what makes a
+   * second worker safe: two pollers land on different rows instead of fighting
+   * over one.
+   */
   async claimClipJob(): Promise<RecordingRow | undefined> {
     await ready();
     const stale = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -1652,10 +1668,15 @@ class DatabaseStorage implements IStorage {
       .update(recordings)
       .set({ clipStatus: "running", clipClaimedAt: new Date().toISOString() })
       .where(
-        and(
-          eq(recordings.status, "Ready"),
-          or(eq(recordings.clipStatus, "queued"), and(eq(recordings.clipStatus, "running"), lt(recordings.clipClaimedAt, stale))),
-        ),
+        sqlExpr`${recordings.id} = (
+          SELECT id FROM recordings
+          WHERE status = 'Ready'
+            AND (clip_status = 'queued'
+                 OR (clip_status = 'running' AND clip_claimed_at < ${stale}))
+          ORDER BY id
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED
+        )`,
       )
       .returning();
     return row;
