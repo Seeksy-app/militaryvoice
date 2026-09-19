@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -35,6 +35,7 @@ import type {
   EventShowRow,
   NudgeRow,
   NudgeKind,
+  FollowUpRow,
   SponsorInquiryRow,
   InsertSponsorInquiry,
   ContactRow,
@@ -685,6 +686,10 @@ export interface IStorage {
   claimNudge(signupId: number, kind: NudgeKind, emailed: boolean): Promise<boolean>;
   /** Give a claim back so the next run retries it. */
   releaseNudge(signupId: number, kind: NudgeKind): Promise<void>;
+  /** "Remind me later" on a broadcast. False when one is already queued. */
+  queueFollowUp(email: string, broadcastId: number, dueAtUtc: string): Promise<boolean>;
+  listDueFollowUps(nowIso: string): Promise<FollowUpRow[]>;
+  claimFollowUp(id: number): Promise<boolean>;
   listCampaignPosts(signupId: number): Promise<CampaignPostRow[]>;
   listAllStudios(): Promise<StudioRow[]>;
   listUnfinishedRecordings(): Promise<RecordingRow[]>;
@@ -1230,6 +1235,36 @@ class DatabaseStorage implements IStorage {
     await ready();
     if (signupIds.length === 0) return [];
     return db.select().from(nudges).where(inArray(nudges.signupId, signupIds));
+  }
+
+  /** Queue a "remind me in three days". A second click is a no-op, not a second email. */
+  async queueFollowUp(email: string, broadcastId: number, dueAtUtc: string): Promise<boolean> {
+    await ready();
+    const rows = await db
+      .insert(followUps)
+      .values({ email: email.trim().toLowerCase(), broadcastId, dueAtUtc, createdAt: new Date().toISOString() })
+      .onConflictDoNothing({ target: [followUps.email, followUps.broadcastId] })
+      .returning({ id: followUps.id });
+    return rows.length > 0;
+  }
+
+  async listDueFollowUps(nowIso: string): Promise<FollowUpRow[]> {
+    await ready();
+    return db
+      .select()
+      .from(followUps)
+      .where(and(eq(followUps.sentAt, ""), lte(followUps.dueAtUtc, nowIso)));
+  }
+
+  /** Claimed before sending: a failed send loses one follow-up rather than repeating it. */
+  async claimFollowUp(id: number): Promise<boolean> {
+    await ready();
+    const rows = await db
+      .update(followUps)
+      .set({ sentAt: new Date().toISOString() })
+      .where(and(eq(followUps.id, id), eq(followUps.sentAt, "")))
+      .returning({ id: followUps.id });
+    return rows.length > 0;
   }
 
   async claimNudge(signupId: number, kind: NudgeKind, emailed: boolean): Promise<boolean> {

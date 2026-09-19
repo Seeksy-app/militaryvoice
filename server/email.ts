@@ -858,7 +858,14 @@ export function renderBroadcastEmail(opts: BroadcastEmailOptions): { subject: st
   const isRico = opts.sender === "rico" && !opts.senderMember;
   const member = opts.senderMember;
   const resolvedName = opts.firstName.trim() || "Friend";
-  const resolvedBodyText = opts.bodyText.replace(/\{\{First_Name\}\}/gi, resolvedName);
+  // {{Remind_Me_Later}} becomes a real link when the caller has a signed URL
+  // for this recipient, and disappears cleanly when it doesn't — a test send
+  // and the composer's preview have no recipient to sign for, and neither
+  // should show a dead link or the raw token.
+  const withRemind = opts.remindUrl
+    ? opts.bodyText.replace(/\{\{Remind_Me_Later\}\}/gi, `[Remind me in three days](${opts.remindUrl})`)
+    : opts.bodyText.replace(/^.*\{\{Remind_Me_Later\}\}.*$/gim, "").replace(/\n{3,}/g, "\n\n");
+  const resolvedBodyText = withRemind.replace(/\{\{First_Name\}\}/gi, resolvedName);
   const resolvedSubject = opts.subject.replace(/\{\{First_Name\}\}/gi, resolvedName);
 
   const memberSignature = member ? memberSignatureHtml(member) : "";
@@ -889,6 +896,8 @@ export interface BroadcastEmailOptions {
   subject: string;
   bodyText: string;
   unsubscribeUrl: string;
+  /** Signed, per-recipient "remind me in three days" link. */
+  remindUrl?: string;
   sender?: string;
   banner?: string;
   senderMember?: { name: string; title: string; photoUrl: string } | null;

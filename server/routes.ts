@@ -818,6 +818,57 @@ export function registerRoutes(app: Express): void {
   app.post("/api/cron/broadcasts", scheduledBroadcastHandler);
 
   /**
+   * Hourly cron: send the "remind me later" follow-ups whose three days are up.
+   *
+   * It re-sends the same broadcast to the one person who asked for it, which
+   * is what they actually said yes to — a differently-worded second attempt
+   * would be a new email they never agreed to receive. The follow-up itself
+   * carries no further "remind me later" link: once is a courtesy, twice is a
+   * loop somebody can sit in forever without us ever noticing.
+   */
+  const followUpHandler: RequestHandler = async (req, res) => {
+    const cronSecret = process.env.CRON_SECRET;
+    const auth = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
+    if (cronSecret && auth !== cronSecret) {
+      res.status(401).json({ message: "Not authorised." });
+      return;
+    }
+    const due = await storage.listDueFollowUps(new Date().toISOString());
+    const origin = `${req.protocol}://${req.get("host")}`;
+    let sent = 0;
+    for (const f of due) {
+      // Claimed first: a send that then fails loses one follow-up rather than
+      // repeating it every hour until somebody notices.
+      if (!(await storage.claimFollowUp(f.id))) continue;
+      try {
+        const broadcast = (await storage.listBroadcasts(null)).find((b) => b.id === f.broadcastId);
+        if (!broadcast) continue;
+        const senderMember = await resolveTeamSender(broadcast.sender ?? "team");
+        const resendId = await sendBroadcastEmail({
+          to: f.email,
+          firstName: "",
+          subject: broadcast.subject,
+          bodyText: broadcast.bodyText,
+          unsubscribeUrl: `${origin}/unsubscribe?token=followup`,
+          sender: broadcast.sender ?? "team",
+          banner: broadcast.banner ?? "welcome",
+          senderMember: senderMember ?? undefined,
+          bannerTitle: await broadcastBannerTitle(),
+        });
+        if (resendId) {
+          sent++;
+          await storage.recordBroadcastSend(broadcast.id, f.email, resendId);
+        }
+      } catch (err) {
+        console.error(`Follow-up ${f.id} failed:`, err);
+      }
+    }
+    res.json({ sent, due: due.length });
+  };
+  app.get("/api/cron/follow-ups", followUpHandler);
+  app.post("/api/cron/follow-ups", followUpHandler);
+
+  /**
    * Keep the sponsor pages' audience figures current on their own.
    *
    * They were a stored snapshot refreshed only when an admin remembered to
@@ -5115,6 +5166,52 @@ export function registerRoutes(app: Express): void {
     return `${origin}/api/unsubscribe?email=${encodeURIComponent(email)}&token=${unsubscribeToken(email)}`;
   }
 
+  /**
+   * "Remind me later", signed per recipient.
+   *
+   * Same shape as unsubscribe and for the same reason: the click has to work
+   * from an email client with no session, and the signature is what stops the
+   * link being edited into somebody else's address.
+   */
+  function followUpToken(email: string, broadcastId: number): string {
+    const secret = process.env.SESSION_SECRET || "mv-unsub-secret";
+    return crypto
+      .createHmac("sha256", secret)
+      .update(`later:${email.toLowerCase()}:${broadcastId}`)
+      .digest("hex")
+      .slice(0, 32);
+  }
+
+  function followUpUrl(req: Request, email: string, broadcastId: number): string {
+    const origin = process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`;
+    return `${origin}/api/remind-later?email=${encodeURIComponent(email)}&b=${broadcastId}&token=${followUpToken(email, broadcastId)}`;
+  }
+
+  /** Three days, which is long enough to stop feeling like the same email. */
+  const FOLLOW_UP_DAYS = 3;
+
+  app.get("/api/remind-later", async (req, res) => {
+    const { email, b, token } = req.query as { email?: string; b?: string; token?: string };
+    const broadcastId = Number(b);
+    if (!email || !Number.isFinite(broadcastId) || token !== followUpToken(email, broadcastId)) {
+      return res.status(400).send("Invalid link.");
+    }
+    const due = new Date(Date.now() + FOLLOW_UP_DAYS * 86400000);
+    await storage.queueFollowUp(email, broadcastId, due.toISOString());
+    const when = new Intl.DateTimeFormat("en-US", {
+      weekday: "long", month: "long", day: "numeric", timeZone: "America/New_York",
+    }).format(due);
+    // A second click lands here too and says the same thing, because the
+    // honest answer to "did that work?" is the same either way.
+    res.send(
+      `<html><body style="font-family:system-ui,sans-serif;text-align:center;padding:64px 20px;color:#0b1220">` +
+        `<h2 style="margin:0 0 10px">Got it — we'll ask again on ${when}.</h2>` +
+        `<p style="color:#6b7280;margin:0">Nothing else to do. If you'd rather deal with it now, ` +
+        `<a href="${process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai"}/host/dashboard/profile" style="color:#053877">open your profile</a>.</p>` +
+        `</body></html>`,
+    );
+  });
+
   app.get("/api/admin/contacts", requireAdmin, async (_req, res) => {
     const rows = await storage.listContacts();
     res.json(rows);
@@ -5361,6 +5458,7 @@ export function registerRoutes(app: Express): void {
         subject: broadcast.subject,
         bodyText: broadcast.bodyText,
         unsubscribeUrl: unsubscribeUrl(req, r.email),
+        remindUrl: followUpUrl(req, r.email, id),
         sender: broadcast.sender ?? "team",
         banner: broadcast.banner ?? "welcome",
         senderMember: senderMember ?? undefined,

@@ -1065,6 +1065,31 @@ export const insertEventShowSchema = eventShowFieldsSchema.superRefine((v, ctx) 
  * rests on this: the sender is idempotent because it checks here first, so a
  * cron that fires twice, or a redeploy mid-run, cannot email anyone twice.
  */
+/**
+ * "Remind me later" on a broadcast.
+ *
+ * Distinct from `reminders`, which is a *fan* asking to be told before a show
+ * starts. This is a podcaster saying "not now" to something we asked them for
+ * — so it re-sends the same email three days on rather than nagging them the
+ * next morning or, worse, never following up at all.
+ *
+ * Keyed one per (email, broadcast): clicking twice queues one follow-up, and
+ * the unique index is what enforces it rather than a check that two concurrent
+ * clicks could both pass.
+ */
+export const followUps = pgTable("follow_ups", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  broadcastId: integer("broadcast_id").notNull(),
+  dueAtUtc: text("due_at_utc").notNull(),
+  createdAt: text("created_at").notNull(),
+  /** Empty until it goes out; the claim that sets it is what stops a double send. */
+  sentAt: text("sent_at").notNull().default(""),
+}, (t) => ({
+  once: uniqueIndex("follow_ups_email_broadcast_idx").on(t.email, t.broadcastId),
+}));
+export type FollowUpRow = typeof followUps.$inferSelect;
+
 export const nudges = pgTable("nudges", {
   id: serial("id").primaryKey(),
   signupId: integer("signup_id").notNull(),
