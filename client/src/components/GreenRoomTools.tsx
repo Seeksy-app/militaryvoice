@@ -5,7 +5,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, formatDateInZone, formatTimeInZone } from "@/lib/schedule";
 import type { SceneRow } from "@shared/schema";
-import { Headphones, Play, Square, RotateCcw, Radio, Clapperboard, Image as ImageIcon } from "lucide-react";
+import { describeDrift, type ShowClock } from "@shared/showClock";
+import { Headphones, Play, Square, RotateCcw, Radio, Clapperboard, Image as ImageIcon, Clock } from "lucide-react";
 
 // What a podcaster waiting in the green room actually needs above the fold.
 //
@@ -167,6 +168,7 @@ export function PlaybackButton({ stream, camOn }: { stream: MediaStream | null; 
 interface ScenesPayload {
   scenes: SceneRow[];
   currentSceneId: number;
+  clock?: ShowClock | null;
   runItems?: { id: number; signupId: number | null }[];
   signups?: { id: number; podcastName: string; hostName: string; photoUrl: string }[];
 }
@@ -325,11 +327,35 @@ export function UpNext({ slug, studioId }: { slug?: string; studioId?: number })
 
   if (!cards?.length) return null;
 
+  const clock = data?.clock;
+  // Only when it matters. "On time" is the expected state and saying so every
+  // fifteen seconds trains people to stop reading the line that will one day
+  // say something else.
+  const late = clock && Math.abs(clock.driftSeconds) >= 60;
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2" data-testid="green-room-upnext">
-      {cards.map((c) => (
-        <Card key={c.key} label={c.label} scene={c.scene} who={c.who} thumb={c.thumb} zone={zone} now={now} />
-      ))}
+    <div data-testid="green-room-upnext">
+      {late && (
+        <div
+          className={`mb-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold ${
+            clock!.driftSeconds > 0
+              ? "border-[#F0A71F]/40 bg-[#F0A71F]/[0.10] text-[#F0A71F]"
+              : "border-white/15 bg-white/[0.06] text-white/75"
+          }`}
+          data-testid="chip-show-drift"
+        >
+          <Clock className="h-4 w-4 shrink-0" />
+          The show is running {describeDrift(clock!.driftSeconds)}.
+          <span className="font-normal opacity-80">
+            Your start time doesn't move — Alex takes it out of the handover.
+          </span>
+        </div>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {cards.map((c) => (
+          <Card key={c.key} label={c.label} scene={c.scene} who={c.who} thumb={c.thumb} zone={zone} now={now} />
+        ))}
+      </div>
     </div>
   );
 }

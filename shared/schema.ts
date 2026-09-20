@@ -802,6 +802,10 @@ export const studios = pgTable("studios", {
   // stage: two scenes can put the same thing there, and the rail has to mark
   // the one that was actually pressed.
   currentSceneId: integer("current_scene_id").notNull().default(0),
+  // When that scene actually went on air, which is not when the agenda wanted
+  // it to. The difference between the two is the show clock: it is what tells
+  // Alex whether she has ninety seconds to fill or none at all.
+  currentSceneTakenAtUtc: text("current_scene_taken_at_utc").notNull().default(""),
   // A running countdown, as the instant it reaches zero. The clock is drawn by
   // every viewer against their own time, so it stays in step without a tick
   // being pushed to anyone.

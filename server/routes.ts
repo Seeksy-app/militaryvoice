@@ -46,6 +46,7 @@ import {
   type NudgeKind,
 } from "../shared/schema.js";
 import { isLiveOnlySlot, LIVE_ONLY_LABEL } from "../shared/slots.js";
+import { showClock } from "../shared/showClock.js";
 import { isConfigured as isInfluencersConfigured, credits, enrichHandle } from "./influencers.js";
 import { deriveSocialAccounts } from "../shared/socialLinks.js";
 import { buildAudienceSnapshot, readAudienceSnapshot, saveAudienceSnapshot, AUDIENCE_WINDOW_DAYS } from "./audience.js";
@@ -2704,9 +2705,20 @@ export function registerRoutes(app: Express): void {
     // Only the green room reads this. The producer's own console takes the
     // studio row directly and still sees the last scene it took.
     const live = found.studio.status === "Live";
+    const allScenes = await storage.listScenes(found.studio.id);
     res.json({
       currentSceneId: live ? found.studio.currentSceneId : 0,
-      scenes: await storage.listScenes(found.studio.id),
+      // The clock travels with the running order so the green room, the
+      // producer and Alex are all reading one number rather than three
+      // arrived at separately. Off air there is nothing to be late for.
+      clock: live
+        ? showClock(
+            allScenes.map((sc) => ({ id: sc.id, name: sc.name, startAtUtc: sc.startAtUtc })),
+            found.studio.currentSceneId,
+            found.studio.currentSceneTakenAtUtc,
+          )
+        : null,
+      scenes: allScenes,
       runItems: await storage.listRunOfShow(found.studio.eventId),
       signups: (await storage.listSignups(found.studio.eventId)).filter((x) => x.status !== "cancelled"),
     });
@@ -3509,6 +3521,7 @@ export function registerRoutes(app: Express): void {
         const taken = await takeRunRow(studio, row);
         const withScene = await storage.updateStudio(studio.id, {
           currentSceneId: scene.id,
+            currentSceneTakenAtUtc: new Date().toISOString(),
           countdownEndsAtUtc: "",
           countdownLabel: "",
           // A scene carrying a file rolls it, agenda row or not. This branch
@@ -3536,6 +3549,7 @@ export function registerRoutes(app: Express): void {
             ...bannerFor(scene),
             stageMediaPlaying: false,
             currentSceneId: scene.id,
+            currentSceneTakenAtUtc: new Date().toISOString(),
             // Stored as the moment it hits zero, so every viewer counts down
             // against their own clock and nothing has to be ticked at them.
             countdownEndsAtUtc: new Date(Date.now() + scene.countdownSeconds * 1000).toISOString(),
@@ -3549,6 +3563,7 @@ export function registerRoutes(app: Express): void {
             // A scene with no media is "back to the cameras".
             stageMediaPlaying: Boolean(scene.mediaUrl),
             currentSceneId: scene.id,
+            currentSceneTakenAtUtc: new Date().toISOString(),
             countdownEndsAtUtc: "",
             countdownLabel: "",
           };
