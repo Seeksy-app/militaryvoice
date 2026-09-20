@@ -5610,6 +5610,48 @@ export function registerRoutes(app: Express): void {
     res.json(out);
   });
 
+  /**
+   * Does Adobe answer us?
+   *
+   * Checked on the server because that is where the secret is. The alternative
+   * is pulling it onto a laptop to try it, which defeats the point of it being
+   * a secret at all — and Vercel deliberately will not let you.
+   *
+   * PDF Services takes the client id and secret straight to its own /token,
+   * with no scopes, and hands back a bearer token. Nothing here creates a job
+   * or spends a transaction from the free tier's 500.
+   */
+  app.get("/api/admin/adobe/check", requireAdmin, async (_req, res) => {
+    noStore(res);
+    const id = process.env.ADOBE_CLIENT_ID ?? "";
+    const secret = process.env.ADOBE_CLIENT_SECRET ?? "";
+    if (!id || !secret) {
+      res.json({ ok: false, reason: `missing ${!id ? "ADOBE_CLIENT_ID" : ""}${!id && !secret ? " and " : ""}${!secret ? "ADOBE_CLIENT_SECRET" : ""}` });
+      return;
+    }
+    try {
+      const r = await fetch("https://pdf-services.adobe.io/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ client_id: id, client_secret: secret }),
+      });
+      const text = await r.text();
+      if (!r.ok) {
+        res.json({ ok: false, status: r.status, reason: text.slice(0, 300) });
+        return;
+      }
+      const body = JSON.parse(text) as { access_token?: string; expires_in?: number };
+      res.json({
+        ok: Boolean(body.access_token),
+        expiresInMinutes: body.expires_in ? Math.round(body.expires_in / 60) : null,
+        // Never the token itself — only that one arrived and how long it lasts.
+        idTail: id.slice(-4),
+      });
+    } catch (err) {
+      res.json({ ok: false, reason: (err as Error).message });
+    }
+  });
+
   /** Who the link is for, so the page can greet them by name. */
   app.get("/api/headshot/:token", async (req, res) => {
     noStore(res);
