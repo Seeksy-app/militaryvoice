@@ -27,6 +27,11 @@ export function MileMarker({
 }) {
   const quiet = marker.kind === "open";
 
+  // The Flag Carry gets the thing itself rather than its initial. It is the one
+  // marker on the course that is a picture, which is the point — it reads at
+  // bib size from across a scrolling page, where a letter has to be spelled out.
+  const isFlag = marker.kind === "flag";
+
   // Below about 40px the small caps stop being letters and become texture, so
   // the bib drops to its number alone rather than printing something nobody can
   // read. Same rule the sign needed, for the same reason.
@@ -42,6 +47,19 @@ export function MileMarker({
     : marker.label.length > 1
       ? 22
       : 26;
+
+  // The sub-label is fitted too. It was a flat 6.2, which was fine while every
+  // tag was one short word and runs straight off both edges on "FINAL STRETCH".
+  // Letter-spacing scales with the size, so the whole string scales together.
+  const subText = (marker.sub ?? "").toUpperCase();
+  const fit = (t: string) => Math.min(6.2, INNER / (t.length * 0.79));
+  // A two-word tag goes on two lines rather than being shrunk to fit. "FINAL
+  // STRETCH" on one line measures three pixels on screen at agenda size, which
+  // is a grey smudge where a label should be; split, both halves read.
+  const subLines =
+    fit(subText) < 4.6 && subText.includes(" ") ? subText.split(/\s+/) : [subText];
+  const subSize = Math.min(...subLines.map(fit));
+  const subTrack = subSize * 0.19;
 
   const W = 54;
   const H = 48;
@@ -59,7 +77,9 @@ export function MileMarker({
             ? "Open slot"
             : marker.kind === "medal"
               ? "Thank you"
-              : marker.label
+              : marker.kind === "flag"
+                ? "The Flag Carry"
+                : marker.label
       }
       data-testid={`mile-marker-${marker.kind}${marker.n ? `-${marker.n}` : ""}`}
     >
@@ -95,21 +115,37 @@ export function MileMarker({
       {!quiet && showSub && (
         <text
           x={W / 2}
-          y="10"
+          y={subLines.length > 1 ? 8.4 : 10}
           textAnchor="middle"
           fill={GOLD}
-          fontSize="6.2"
+          fontSize={subSize}
           fontWeight="800"
-          letterSpacing="1.2"
+          letterSpacing={subTrack}
         >
-          {marker.sub?.toUpperCase()}
+          {subLines.map((line, i) => (
+            <tspan key={line} x={W / 2} dy={i === 0 ? 0 : subSize * 1.05}>
+              {line}
+            </tspan>
+          ))}
         </text>
       )}
+      {isFlag ? (
+        <g
+          stroke={NAVY}
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          transform={showSub ? "translate(0 1)" : ""}
+        >
+          <line x1="18.5" y1="13.5" x2="18.5" y2="33" />
+          <path d="M19.2 15C24.2 11.8 29.2 17.6 34.2 14.4L34.2 23.6C29.2 26.8 24.2 21 19.2 24.2Z" fill={NAVY} />
+        </g>
+      ) : (
       <text
         x={W / 2}
         y={quiet ? 30 : showSub ? (isWord ? 29 : 31) : 30}
         textAnchor="middle"
-        fill={quiet ? "#ffffff55" : NAVY}
+        fill={quiet ? "#ffffff55" : marker.kind === "medal" ? GOLD : NAVY}
         fontSize={numSize}
         fontWeight="800"
         letterSpacing={isWord ? "0.4" : "-0.5"}
@@ -117,6 +153,7 @@ export function MileMarker({
       >
         {marker.label}
       </text>
+      )}
     </svg>
   );
 }

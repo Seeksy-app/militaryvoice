@@ -9,7 +9,7 @@
 // tacked on in 1908 so the finish would sit in front of the royal box. The
 // bonus sessions are that: the bit after the miles that is still the race.
 
-export type MarkerKind = "start" | "mile" | "extra" | "point-two" | "finish" | "open" | "medal";
+export type MarkerKind = "start" | "mile" | "extra" | "point-two" | "flag" | "finish" | "open" | "medal";
 
 /** The distance. Twenty-six miles and the point-two, and it does not move. */
 export const MILES = 26;
@@ -78,7 +78,7 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
   let leg = 0;
   return slots.map((s, i) => {
     if (i === first) return { kind: "start", label: "START", sub: "the line" };
-    if (i === last) return { kind: "finish", label: "FINISH", sub: "26.2" };
+    if (i === last) return { kind: "finish", label: "FINISH", sub: "the tape" };
     // "B", not ".2". The fraction is the distance the bonuses add up to, not a
     // name for any one of them — a slot reading ".2" was labelling a session
     // with an arithmetic fact about the course.
@@ -86,7 +86,7 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
       // The Flag Carry is the one leg of the point-two that has a name, so it
       // gets its own letter. A row of identical Bs makes the reader work out
       // which one is the colours coming in; an F does not.
-      if (isFlagCarry(s.signup)) return { kind: "point-two", label: "F", sub: "flag" };
+      if (isFlagCarry(s.signup)) return { kind: "flag", label: "F", sub: "flag" };
       if (i < lastMile || legs < 2) return { kind: "point-two", label: "B", sub: "bonus" };
       leg += 1;
       return { kind: "point-two", label: `B${leg}`, sub: "bonus" };
@@ -98,10 +98,13 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
 
     // Past the twenty-sixth. The distance is fixed — a marathon does not become
     // a longer marathon because more people entered — so the shows beyond it
-    // count up from the finish instead of inventing Mile 27. Booking number
-    // twenty-nine is "+3", and the course is still 26.2.
+    // take the fraction instead of inventing Mile 27: 26.1, then 26.2, the way
+    // the last stretch of a real course is written. The finish gives up "26.2"
+    // as its sub-label to make room, since two markers reading 26.2 is worse
+    // than a finish line that says what it is.
     extra += 1;
-    return { kind: "extra", n: extra, label: `+${extra}`, sub: "extra" };
+    const tag = extra === 1 ? "final stretch" : extra === 2 ? "finish" : "extra";
+    return { kind: "extra", n: extra, label: `26.${extra}`, sub: tag };
   });
 }
 
