@@ -38,6 +38,8 @@ const isBonus = (b?: Booking | null) => !!b && POINT_TWO.test(b.podcastName ?? "
 // medal round your neck and thanks you for coming — it is part of the race day
 // and it is not a mile, so it gets its own marker rather than quietly becoming
 // a twenty-seventh.
+const isFlagCarry = (b?: Booking | null) => !!b && /flag carry/i.test(b.podcastName ?? "");
+
 const isThanks = (b?: Booking | null) => !!b && /thank you/i.test(b.podcastName ?? "");
 
 /**
@@ -77,6 +79,10 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
     // name for any one of them — a slot reading ".2" was labelling a session
     // with an arithmetic fact about the course.
     if (isBonus(s.signup)) {
+      // The Flag Carry is the one leg of the point-two that has a name, so it
+      // gets its own letter. A row of identical Bs makes the reader work out
+      // which one is the colours coming in; an F does not.
+      if (isFlagCarry(s.signup)) return { kind: "point-two", label: "F", sub: "flag" };
       if (i < lastMile || legs < 2) return { kind: "point-two", label: "B", sub: "bonus" };
       leg += 1;
       return { kind: "point-two", label: `B${leg}`, sub: "bonus" };
