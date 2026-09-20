@@ -17,6 +17,12 @@ import postgres from "postgres";
 import { uploadPhoto } from "../server/photoStorage.js";
 
 const apply = process.argv.includes("--apply");
+// Re-hosting means an upload, and an upload from this laptop dies on `bad
+// record mac` — something on the network inspects TLS. So the default records
+// where the artwork is, which needs no upload and works from anywhere, and
+// --rehost takes our own copy when this is run somewhere that can (the VPS,
+// which is where upload-via-vps.ts sends bytes for the same reason).
+const rehost = process.argv.includes("--rehost");
 const MIN_EDGE = 1400; // below this it is not worth storing a second copy
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1, onnotice: () => {} });
@@ -87,11 +93,14 @@ for (const r of rows) {
     took++;
     if (!apply) continue;
 
-    const type = buf[0] === 0x89 ? "image/png" : "image/jpeg";
-    const ext = type === "image/png" ? "png" : "jpg";
-    const name = `artwork/${Date.now()}-${r.email.replace(/[^a-z0-9]/gi, "").slice(0, 12)}.${ext}`;
-    const url = await uploadPhoto(name, buf, type);
-    await sql`UPDATE podcaster_profiles SET artwork_print_url = ${url} WHERE email = ${r.email}`;
+    let stored = href;
+    if (rehost) {
+      const type = buf[0] === 0x89 ? "image/png" : "image/jpeg";
+      const ext = type === "image/png" ? "png" : "jpg";
+      const name = `artwork/${Date.now()}-${r.email.replace(/[^a-z0-9]/gi, "").slice(0, 12)}.${ext}`;
+      stored = await uploadPhoto(name, buf, type);
+    }
+    await sql`UPDATE podcaster_profiles SET artwork_print_url = ${stored} WHERE email = ${r.email}`;
   } catch (err) {
     failed++;
     console.log(`  err    ${label} ${(err as Error).name}`);
