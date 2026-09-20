@@ -49,14 +49,30 @@ function wav(pcm: Buffer, rate: number): Buffer {
 }
 
 async function main() {
-  const live = ((await svc.listRooms().catch(() => [])) as any[]).filter((r) => r.numParticipants > 0);
-  if (!live.length) { say("Nobody in any studio room."); process.exit(0); }
-  const room = live.sort((a, b) => b.numParticipants - a.numParticipants)[0].name;
-  say(`room ${room}`);
+  // The room with a person in it, not the room with the most connections.
+  //
+  // Headcount sent her to a studio whose only occupant was a stale producer
+  // tab publishing nothing, while the actual podcaster sat alone in another
+  // room. A participant who publishes no audio is furniture; she should go
+  // where someone is talking.
+  let room = "";
+  let best = 0;
+  for (const r of ((await svc.listRooms().catch(() => [])) as any[])) {
+    const ps = ((await svc.listParticipants(r.name).catch(() => [])) as any[])
+      .filter((p) => !p.identity.startsWith("marianne"))
+      .filter((p) => p.tracks.some((t: any) => t.type === 0));
+    if (ps.length > best) { best = ps.length; room = r.name; }
+  }
+  if (!room) { say("Nobody is publishing audio in any studio room."); process.exit(0); }
+  say(`room ${room} — ${best} live mic(s)`);
+  const roomName = room;
 
   // Her avatar: publishes, never listens.
   const face = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, { identity: "marianne", name: "Marianne" });
-  face.addGrant({ room, roomJoin: true, canPublish: true, canPublishData: true, canSubscribe: false });
+  // canSubscribe is not optional: LiveAvatar validates the token and refuses
+  // one without it. So she cannot be made deaf at the token, and if her media
+  // server turns out to echo the room, that has to be solved somewhere else.
+  face.addGrant({ room, roomJoin: true, canPublish: true, canPublishData: true, canSubscribe: true });
   const r1 = await fetch("https://api.liveavatar.com/v1/sessions/token", {
     method: "POST", headers: { "X-API-KEY": K, "content-type": "application/json" },
     body: JSON.stringify({ avatar_id: MARIANNE, mode: "LITE", max_session_duration: SECONDS,
@@ -74,10 +90,22 @@ async function main() {
   await new Promise<void>((res, rej) => { ws.once("open", () => res()); ws.once("error", rej); });
   const anthropic = new Anthropic();
   let busy = false;
+  let openUntil = 0;
 
-  async function reply(heard: string) {
+  async function reply(heard: string, askedBy?: string) {
     if (busy) return;
     busy = true;
+    // Only the person who asked hears the answer. Five people wait in a green
+    // room and four of them are mid-conversation; a voice answering somebody
+    // else's question out loud is an interruption, not a service.
+    if (askedBy) {
+      const all = (await svc.listParticipants(roomName).catch(() => [])) as any[];
+      const hers = all.find((p) => p.identity === "marianne")?.tracks?.filter((t: any) => t.type === 0).map((t: any) => t.sid) ?? [];
+      for (const p of all) {
+        if (p.identity.startsWith("marianne")) continue;
+        await svc.updateSubscriptions(roomName, p.identity, hers, p.identity === askedBy).catch(() => {});
+      }
+    }
     try {
       say(`  heard: "${heard}"`);
       const msg = await anthropic.messages.create({
@@ -134,7 +162,19 @@ async function main() {
             method: "POST", headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY! }, body: fd });
           if (!st.ok) { say(`  STT ${st.status}`); continue; }
           const text = String(((await st.json()) as any).text ?? "").trim();
-          if (text.length > 2) await reply(text);
+          if (text.length <= 2) continue;
+
+          // She answers when addressed, and for a short while afterwards.
+          //
+          // Without this she replies to whatever anyone says, including two
+          // podcasters talking to each other. Her name is how people already
+          // address her — "Marianne, can you hear me?" — so it costs nothing
+          // to learn, and the window means a follow-up does not need it again.
+          const named = /\bmarianne\b/i.test(text);
+          if (named) openUntil = Date.now() + 25000;
+          if (!named && Date.now() > openUntil) { say(`  (not for her: "${text.slice(0, 48)}")`); continue; }
+          openUntil = Date.now() + 25000;
+          await reply(text, participant.identity);
         }
         if (buf.length > 900) buf = []; // never hoard more than ~20s
       }

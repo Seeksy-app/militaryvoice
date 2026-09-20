@@ -465,7 +465,15 @@ export default function Studio({ slug }: { slug?: string }) {
    */
   const isViewer = (p: RoomPeer) => p.identity.startsWith("viewer-");
   const onAirPeers = peers.filter((p) => p.state === "On stage" && !isViewer(p));
-  const greenRoomPeers = peers.filter((p) => p.state !== "On stage" && !isViewer(p));
+  const isCohost = (p: { identity: string }) => p.identity === "marianne";
+  // The listening leg is plumbing — a second connection she needs in order to
+  // hear, publishing nothing. It showed up as an empty box with initials
+  // beside her, which reads as a broken second guest.
+  const isCohostEar = (p: { identity: string }) => p.identity === "marianne-ears";
+  const greenRoomPeers = peers.filter(
+    (p) => p.state !== "On stage" && !isViewer(p) && !isCohost(p) && !isCohostEar(p),
+  );
+  const cohost = peers.find((p) => isCohost(p) && !isViewer(p));
   const watchingCount = peers.filter(isViewer).length;
   // Whether we're listening to the programme while we wait. Off by default:
   // hearing the show and the room at once is a mess, and the show is what
@@ -630,6 +638,21 @@ export default function Studio({ slug }: { slug?: string }) {
               {state?.studio.name ? ` · ${state.studio.name}` : ""}
             </p>
           </div>
+          {/* The co-host sits with the room's name, not in the queue of people
+              waiting to go on. She is staff. */}
+          {cohost && (
+            <div className="flex items-center gap-3 rounded-2xl border border-[#F0A71F]/30 bg-[#F0A71F]/[0.06] py-2 pl-2 pr-4">
+              <div className="h-14 w-24 shrink-0 overflow-hidden rounded-xl bg-black/40">
+                <PeerTile peer={cohost} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold leading-tight">Marianne</div>
+                <div className="text-[11px] leading-tight text-white/55">
+                  Your co-host · say “Marianne” to ask her anything
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-2">
             {/* What's true from where they're standing. The studio's own status
                 said "Live" while standby was rolling and nobody was on stage,
