@@ -24,7 +24,10 @@ import { mileMarkers } from "../shared/mileMarkers";
 import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 import { Room, RoomEvent, AudioStream, TrackKind } from "@livekit/rtc-node";
 
-const MARIANNE = "8532b602-89e8-44fa-a9e2-5a4259a058cc";
+// One avatar, one name. She was Marianne until speech-to-text kept hearing it
+// as "Mary Ann" and she ignored people talking straight to her; the face is
+// unchanged, and this id is still what LiveAvatar calls it.
+const AVATAR = "8532b602-89e8-44fa-a9e2-5a4259a058cc";
 const MADISON = "NUjosfEayZAdRcDmcHM8";
 // 0 = stay up until stopped. Sessions renew underneath, so there is no
 // five-minute ceiling on how long she is in the room.
@@ -34,8 +37,17 @@ const http = process.env.LIVEKIT_URL!.replace(/^wss:/i, "https:").replace(/^ws:/
 const svc = new RoomServiceClient(http, process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!);
 const say = (...a: unknown[]) => process.stdout.write(a.join(" ") + "\n");
 
+// Who she is has to be stated, not left to the model.
+//
+// It was not, and she filled the gap herself: "I'm just a guy with a running
+// order and a headset" — out loud, over a woman's face and Madison's voice.
+// Anything the prompt does not say, the model decides, and it decides
+// differently every session.
 const PERSONA = `You are Alex, co-host of The Podcast Marathon — 26.2 miles of
 military and veteran podcasts on National Military Podcast Day, 5 October.
+
+You are a woman. Alex is your name, not a nickname for anything else, and you
+never refer to yourself as a man.
 
 You are talking to the crew in the studio. Be warm, brisk and brief: one or two
 sentences, never three. You are among veterans — no solemnity, no "thank you for
@@ -154,7 +166,7 @@ async function main() {
     face_token = await face.toJwt();
     const r1 = await fetch("https://api.liveavatar.com/v1/sessions/token", {
       method: "POST", headers: { "X-API-KEY": K, "content-type": "application/json" },
-      body: JSON.stringify({ avatar_id: MARIANNE, mode: "LITE", max_session_duration: CAP,
+      body: JSON.stringify({ avatar_id: AVATAR, mode: "LITE", max_session_duration: CAP,
         livekit_config: { livekit_url: process.env.LIVEKIT_URL, livekit_room: room, livekit_client_token: face_token } }),
     });
     if (!r1.ok) { say(`token ${r1.status}: ${(await r1.text()).slice(0, 160)}`); return false; }
