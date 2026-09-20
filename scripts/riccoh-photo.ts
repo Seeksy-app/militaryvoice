@@ -1,31 +1,29 @@
-// Crop the ceremony portrait for the places it actually appears.
+// One photo of Riccoh on both ceremony cards.
 //
-// The cards are circles, so the crop has to survive a circular mask: a circle
-// inscribed in a square touches the top edge at its midpoint, which on a
-// headshot is the crown. The first attempt solved that by insetting the photo
-// and filling the gap with a blurred copy of itself — which read, correctly,
-// as a blurry halo round his head.
+//   npx tsx scripts/riccoh-photo.ts           # dry run
+//   npx tsx scripts/riccoh-photo.ts --apply
 //
-// The real fix is framing, not fill. The portrait is 2316 wide by 3088 tall,
-// and a square taken at full width from the very top puts the crown about 9%
-// down and the shoulders on the bottom edge. Everything the mask cuts is
-// plaster wall.
-import sharp from "sharp";
+// The opening carried /riccoh-host.jpg and the closing carried his podcast
+// logo, so the day opened on his face and closed on a cartoon bulldog. Both
+// now point at the same headshot.
+import "dotenv/config";
+import postgres from "postgres";
 
-const SRC = "media/riccoh-headshot-source.jpeg";
-const OUT = "client/public/riccoh-host.jpg";
-const SIZE = 800;
+const PHOTO = "/riccoh.jpeg";
 
-const upright = await sharp(SRC).rotate().toBuffer();
-const meta = await sharp(upright).metadata();
-const side = Math.min(meta.width!, meta.height!);
-console.log(`source: ${meta.width}x${meta.height} → square ${side} from the top`);
-
-await sharp(upright)
-  .extract({ left: Math.round((meta.width! - side) / 2), top: 0, width: side, height: side })
-  .resize(SIZE, SIZE)
-  .jpeg({ quality: 88, mozjpeg: true })
-  .toFile(OUT);
-
-const out = await sharp(OUT).metadata();
-console.log(`wrote ${OUT}: ${out.width}x${out.height}`);
+async function main() {
+  const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1 });
+  const rows = await sql`SELECT id, slot_index, podcast_name, photo_url FROM signups
+    WHERE status <> 'cancelled' AND (podcast_name ILIKE '%ceremon%' OR podcast_name ILIKE '%awards%')
+    ORDER BY slot_index`;
+  for (const r of rows as any[]) {
+    console.log(`#${r.id} ${String(r.podcast_name).padEnd(30)}`);
+    console.log(`     was ${r.photo_url || "(none)"}`);
+    console.log(`     now ${PHOTO}`);
+  }
+  if (!process.argv.includes("--apply")) { console.log("\nDry run — pass --apply."); await sql.end(); return; }
+  for (const r of rows as any[]) await sql`UPDATE signups SET photo_url = ${PHOTO} WHERE id = ${r.id}`;
+  console.log(`\nSet on ${rows.length} card(s).`);
+  await sql.end();
+}
+main();
