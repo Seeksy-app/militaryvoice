@@ -34,7 +34,12 @@ const FILES = [
 const API = process.env.MV_API ?? "https://militaryvoice.ai";
 const MB = (n: number) => `${(n / 1048576).toFixed(1)}MB`;
 
+// Twelve attempts, not three. The resets are intermittent rather than
+// size-related — a 321MB file went through while a 170MB one failed in the
+// same run — so the only thing that separates success from failure is how
+// many times a part is willing to try again.
 const s3 = new S3Client({
+  maxAttempts: 12,
   region: "auto",
   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
   credentials: {
@@ -48,8 +53,11 @@ async function put(file: string, key: string, size: number): Promise<void> {
   const up = new Upload({
     client: s3,
     params: { Bucket: process.env.R2_BUCKET!, Key: key, Body: createReadStream(file), ContentType: "video/mp4" },
-    partSize: 16 * 1024 * 1024, // A few seconds a part at the measured rate.
-    queueSize: 3,
+    // Small parts, one at a time. Three in parallel is three connections for
+    // whatever is resetting them to pick from, and a failed 8MB part is a
+    // cheaper retry than a failed 16MB one.
+    partSize: 8 * 1024 * 1024,
+    queueSize: 1,
     leavePartsOnError: false,
   });
   up.on("httpUploadProgress", (p) => {
@@ -81,12 +89,16 @@ async function main() {
     const name = basename(p.f);
     const key = `studio/${Date.now()}-${name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80)}`;
     console.log(`\n${name}`);
-    try {
-      await put(p.f, key, p.size);
-    } catch (err: any) {
-      console.log(`\n    FAILED: ${String(err?.message ?? err).slice(0, 200)}`);
-      continue;
+    let ok = false;
+    for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
+      try {
+        await put(p.f, key, p.size);
+        ok = true;
+      } catch (err: any) {
+        console.log(`\n    attempt ${attempt} failed: ${String(err?.message ?? err).slice(0, 120)}`);
+      }
     }
+    if (!ok) { console.log(`    GAVE UP on ${name}`); continue; }
     const reg = await fetch(`${API}/api/admin/media`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
