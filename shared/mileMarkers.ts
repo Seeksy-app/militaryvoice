@@ -49,14 +49,28 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
   const first = ceremonies[0];
   const last = ceremonies.length > 1 ? ceremonies[ceremonies.length - 1] : -1;
 
+  // The .2 is the fraction *after* the twenty-six miles, so only the bonuses
+  // past the last mile are part of it, and those are the ones worth numbering
+  // — B1 then B2. A bonus earlier in the day is a held slot, not a leg of the
+  // finish, and it stays a plain B so it never takes B1 off the closing run.
+  let lastMile = -1;
+  slots.forEach((s, i) => {
+    if (i !== first && i !== last && s.signup && !isBonus(s.signup)) lastMile = i;
+  });
+
   let mile = 0;
+  let leg = 0;
   return slots.map((s, i) => {
     if (i === first) return { kind: "start", label: "START", sub: "the line" };
     if (i === last) return { kind: "finish", label: "FINISH", sub: "26.2" };
     // "B", not ".2". The fraction is the distance the bonuses add up to, not a
     // name for any one of them — a slot reading ".2" was labelling a session
     // with an arithmetic fact about the course.
-    if (isBonus(s.signup)) return { kind: "point-two", label: "B", sub: "bonus" };
+    if (isBonus(s.signup)) {
+      if (i < lastMile) return { kind: "point-two", label: "B", sub: "bonus" };
+      leg += 1;
+      return { kind: "point-two", label: `B${leg}`, sub: "bonus" };
+    }
     if (!s.signup) return { kind: "open", label: "—", sub: "open" };
     mile += 1;
     return { kind: "mile", n: mile, label: String(mile), sub: "mile" };
