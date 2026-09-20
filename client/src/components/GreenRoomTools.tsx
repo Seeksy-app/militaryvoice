@@ -1,15 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Headphones, MessageSquare, Wifi, Play, Square, RotateCcw, Clock } from "lucide-react";
+import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
+import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
+import type { SceneRow } from "@shared/schema";
+import { Headphones, Play, Square, RotateCcw, Radio, Clapperboard, Image as ImageIcon } from "lucide-react";
 
-// The four things worth knowing before you go on, in one strip above the fold.
+// What a podcaster waiting in the green room actually needs above the fold.
 //
-// These were a grid of paragraphs under the stage, which read fine and pushed
-// the stage off screen — and a green room you have to scroll is one where
-// somebody misses the producer bringing them up. So each box is now a label
-// and a value, nothing else: the explanation only appears where it changes
-// what you'd do, and the one tool that needs room opens in a dialog.
+// This was four boxes — check yourself, talking in here, your connection, when
+// you're on — and between them they took the whole width to answer questions
+// nobody was asking. Two of them restated what the buttons under your own
+// picture already say: a muted mic and a dark camera are not facts you learn
+// from a card. What they did not answer is the only question anybody in a
+// green room has, which is "how long have I got".
+//
+// So the strip is now the running order: what is on air, what is on deck, what
+// follows, each with the picture and a countdown. The connection reading and
+// your own slot moved onto your own card, where the rest of your personal
+// state already lives.
 
 const RECORD_SECONDS = 6;
 
@@ -22,7 +32,7 @@ export interface Quality {
 /**
  * Record a few seconds and play it back.
  *
- * The only check that answers the real question. Every other box reports a
+ * The only check that answers the real question. Every other reading is a
  * measurement; nobody believes a green tick about their own microphone the
  * way they believe hearing themselves. Never leaves the browser — the blob is
  * played from memory and dropped.
@@ -123,129 +133,208 @@ function PlaybackDialog({ stream, camOn, open, onOpenChange }: {
   );
 }
 
-function Box({
-  icon: Icon,
-  label,
-  value,
-  tone = "plain",
-  hint,
-  onClick,
-  testId,
-}: {
-  icon: typeof Wifi;
-  label: string;
-  value: string;
-  tone?: "plain" | "good" | "warn" | "bad";
-  hint?: string;
-  onClick?: () => void;
-  testId?: string;
-}) {
-  const colour =
-    tone === "good" ? "text-emerald-400" : tone === "warn" ? "text-[#F0A71F]" : tone === "bad" ? "text-[#ED1C24]" : "text-white";
-  const body = (
+/** The record-yourself test, as a button that sits beside "Check my setup". */
+export function PlaybackButton({ stream, camOn }: { stream: MediaStream | null; camOn: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!stream) return null;
+  return (
     <>
-      <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
-        <Icon className="h-3 w-3 text-[#F0A71F]" /> {label}
-      </span>
-      <span className={`mt-1 block truncate text-sm font-semibold ${colour}`}>{value}</span>
-      {/* Only where it changes what you'd do — "plenty of headroom" under
-          "Strong" is a sentence nobody acts on. */}
-      {hint && <span className="mt-0.5 block truncate text-[11px] text-white/45">{hint}</span>}
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 gap-1.5 rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+        onClick={() => setOpen(true)}
+        data-testid="button-playback"
+      >
+        <Headphones className="h-3.5 w-3.5 text-[#F0A71F]" />
+        Hear myself back
+      </Button>
+      <PlaybackDialog stream={stream} camOn={camOn} open={open} onOpenChange={setOpen} />
     </>
-  );
-  const shell = "min-w-0 rounded-xl border border-white/12 bg-white/[0.04] px-3 py-2 text-left";
-  return onClick ? (
-    <button type="button" onClick={onClick} className={`${shell} transition-colors hover:bg-white/[0.09]`} data-testid={testId}>
-      {body}
-    </button>
-  ) : (
-    <div className={shell} data-testid={testId}>{body}</div>
   );
 }
 
-export function GreenRoomTools({
-  stream,
-  micOn,
-  onStage,
-  peerCount,
-  quality,
-  slotLabel,
-  signedInAs,
-  isCrew,
-  camOn,
+// ---------------------------------------------------------------------------
+// On air · On deck · Following
+// ---------------------------------------------------------------------------
+
+interface ScenesPayload {
+  scenes: SceneRow[];
+  currentSceneId: number;
+  runItems?: { id: number; signupId: number | null }[];
+  signups?: { id: number; podcastName: string; hostName: string; photoUrl: string }[];
+}
+
+function isImage(sc: SceneRow): boolean {
+  return sc.mediaKind === "image" || /\.(jpe?g|png|webp|gif|svg)(\?|$)/i.test(sc.mediaUrl);
+}
+
+/**
+ * How long until something, said the way somebody waiting would say it.
+ *
+ * Seconds appear under two minutes and not before: a countdown reading 47:19
+ * invites you to watch it, and the only number that matters at that range is
+ * roughly how many songs long it is.
+ */
+function until(ms: number): string {
+  if (ms <= 0) return "now";
+  const secs = Math.round(ms / 1000);
+  if (secs < 120) return `${secs}s`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.floor(mins / 60);
+  const rem = mins % 60;
+  return rem ? `${hours}h ${rem}m` : `${hours}h`;
+}
+
+const SLOTS = [
+  { key: "air", label: "On air" },
+  { key: "deck", label: "On deck" },
+  { key: "next", label: "Following" },
+] as const;
+
+function Card({
+  label,
+  scene,
+  who,
+  thumb,
+  zone,
+  now,
+  live,
 }: {
-  stream: MediaStream | null;
-  micOn: boolean;
-  onStage: boolean;
-  peerCount: number;
-  quality: Quality | null;
-  slotLabel: string;
-  signedInAs: string;
-  isCrew: boolean;
-  camOn: boolean;
+  label: string;
+  scene: SceneRow | undefined;
+  who: string;
+  thumb: string | null;
+  zone: string;
+  now: number;
+  live: boolean;
 }) {
-  const [testOpen, setTestOpen] = useState(false);
+  const starts = scene?.startAtUtc ? Date.parse(scene.startAtUtc) : NaN;
+  const hasTime = Number.isFinite(starts);
+  const onAir = label === "On air";
 
   return (
-    <>
-      <div className="mb-4 grid grid-cols-2 gap-2 lg:grid-cols-4" data-testid="green-room-tools">
-        {/* A camera that is switched off still has a track, and MediaRecorder
-            happily records six seconds of black from it. The button offered
-            the test anyway, so the answer to "does my camera work" was a black
-            rectangle — which looks like the test is broken rather than the
-            camera being off. */}
-        <Box
-          icon={Headphones}
-          label="Check yourself"
-          value={!stream ? "Turn your camera on" : camOn ? "Record 6 seconds" : "Camera is off"}
-          hint={!stream ? undefined : camOn ? "See and hear it back" : "Turn it on to record a test"}
-          onClick={stream ? () => setTestOpen(true) : undefined}
-          testId="tool-playback"
-        />
-        <Box
-          icon={MessageSquare}
-          label="Talking in here"
-          value={onStage ? "You're on air" : micOn ? "Mic open to the room" : "Muted"}
-          tone={onStage ? "bad" : micOn ? "good" : "plain"}
-          hint={
-            onStage
-              ? "Everything you say is going out"
-              : peerCount === 0
-                ? "Only you in here · the audience can't hear this"
-                : `${peerCount} ${peerCount === 1 ? "other" : "others"} in here · the audience can't hear this`
-          }
-          testId="tool-talking"
-        />
-        <Box
-          icon={Wifi}
-          label="Your connection"
-          value={quality?.label ?? "Checking…"}
-          tone={quality?.tone === "good" ? "good" : quality?.tone === "poor" ? "bad" : "plain"}
-          // Only a struggling connection gets an explanation; a strong one
-          // needs no advice and saying something anyway just fills the box.
-          hint={quality?.tone === "poor" ? "A cable beats wi-fi" : undefined}
-          testId="tool-connection"
-        />
-        {/* When there's no slot, name the account that was checked. Somebody
-            who holds one under a different sign-in reads a bare "no slot" as
-            the page being wrong, and there is no way to tell from the screen
-            which of two sessions they are in. */}
-        <Box
-          icon={Clock}
-          label="When you're on"
-          value={slotLabel || "No slot for this sign-in"}
-          hint={
-            slotLabel
-              ? "Wait here — the producer brings you up"
-              : signedInAs
-                ? `${signedInAs}${isCrew ? " · crew" : ""}`
-                : "Sign in to see your slot"
-          }
-          testId="tool-slot"
-        />
-      </div>
+    <div
+      className={`flex min-w-0 items-center gap-3 rounded-xl border px-3 py-2.5 ${
+        onAir && live
+          ? "border-[#ED1C24]/50 bg-[#ED1C24]/[0.08]"
+          : onAir
+            ? "border-white/20 bg-white/[0.06]"
+            : "border-white/12 bg-white/[0.035]"
+      }`}
+      data-testid={`upnext-${label.toLowerCase().replace(/\s+/g, "-")}`}
+    >
+      {/* 16:9, because it is a picture of what goes on the screen. */}
+      <span className="relative aspect-video w-[72px] shrink-0 overflow-hidden rounded-lg bg-[#04102b] ring-1 ring-white/10">
+        {thumb ? (
+          <img src={resolveUploadUrl(thumb)} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-white/25">
+            {scene && scene.mediaUrl ? <Clapperboard className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+          </span>
+        )}
+      </span>
 
-      <PlaybackDialog stream={stream} camOn={camOn} open={testOpen} onOpenChange={setTestOpen} />
-    </>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+          {onAir && live ? (
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#ED1C24]" />
+          ) : (
+            <Radio className="h-3 w-3 text-[#F0A71F]" />
+          )}
+          {label}
+        </span>
+        <span className="mt-0.5 block truncate text-sm font-semibold text-white">
+          {scene?.name?.trim() || "Nothing scheduled"}
+        </span>
+        <span className="mt-0.5 block truncate text-[11px] text-white/45">
+          {who || (hasTime ? formatTimeInZone(new Date(starts), zone) : "—")}
+        </span>
+      </span>
+
+      {/* The only number anybody in a green room is looking for. */}
+      {hasTime && (
+        <span className="shrink-0 text-right">
+          <span
+            className={`block text-sm font-bold tabular-nums ${
+              onAir && live ? "text-[#ED1C24]" : starts - now < 5 * 60_000 ? "text-[#F0A71F]" : "text-white/85"
+            }`}
+          >
+            {onAir && live ? "Live" : until(starts - now)}
+          </span>
+          <span className="block text-[10px] uppercase tracking-[0.1em] text-white/35">
+            {formatTimeInZone(new Date(starts), zone)}
+          </span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The three that matter, from the producer's own rail.
+ *
+ * Read off the same `/api/studio/scenes` the scene list uses — react-query
+ * shares the key, so this costs no extra request — because a podcaster being
+ * told something different from what the control room is following is worse
+ * than being told nothing.
+ */
+export function UpNext({ slug, studioId, live }: { slug?: string; studioId?: number; live: boolean }) {
+  const zone = useMemo(detectLocalTimeZone, []);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const { data } = useQuery<ScenesPayload>({
+    queryKey: ["/api/studio/scenes", slug ?? "featured", studioId ?? 0],
+    queryFn: async () => {
+      const q = new URLSearchParams();
+      if (slug) q.set("slug", slug);
+      if (studioId) q.set("studioId", String(studioId));
+      return (await apiRequest("GET", `/api/studio/scenes?${q}`)).json();
+    },
+    refetchInterval: 15_000,
+  });
+
+  const cards = useMemo(() => {
+    const scenes = data?.scenes ?? [];
+    if (!scenes.length) return null;
+    // Where the producer is, or the top of the rail before they have taken
+    // anything — never -1, which would hand back the last three scenes.
+    const at = Math.max(0, scenes.findIndex((s) => s.id === data?.currentSceneId));
+    return SLOTS.map((slot, i) => {
+      const sc = scenes[at + i];
+      const item = sc?.runItemId ? data?.runItems?.find((r) => r.id === sc.runItemId) : undefined;
+      const sg = item?.signupId ? data?.signups?.find((x) => x.id === item.signupId) : undefined;
+      const sceneImage = sc && sc.mediaUrl && isImage(sc) ? sc.mediaUrl : null;
+      return {
+        ...slot,
+        scene: sc,
+        who: sg ? `${sg.podcastName}${sg.hostName ? ` · ${sg.hostName}` : ""}` : "",
+        thumb: sceneImage ?? sg?.photoUrl ?? null,
+      };
+    });
+  }, [data]);
+
+  if (!cards) return null;
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="green-room-upnext">
+      {cards.map((c) => (
+        <Card
+          key={c.key}
+          label={c.label}
+          scene={c.scene}
+          who={c.who}
+          thumb={c.thumb}
+          zone={zone}
+          now={now}
+          live={live}
+        />
+      ))}
+    </div>
   );
 }

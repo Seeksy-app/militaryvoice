@@ -10,7 +10,7 @@ import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { useStudioRoom, type RoomPeer } from "@/hooks/use-studio-room";
 import { StageGrid, type RoomMeta } from "@/components/StageView";
 import { SceneRail } from "@/components/SceneRail";
-import { GreenRoomTools } from "@/components/GreenRoomTools";
+import { UpNext, PlaybackButton } from "@/components/GreenRoomTools";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
 import type { StudioParticipantRow, SceneRow } from "@shared/schema";
 import {
@@ -34,6 +34,7 @@ import {
   Headphones,
   MessageSquare,
   Wifi,
+  Clock,
 } from "lucide-react";
 
 export interface SetupCheck {
@@ -719,6 +720,25 @@ export default function Studio({ slug }: { slug?: string }) {
           )}
           </div>
           <div className="flex items-center gap-2">
+            {/* The connection reading, which lost its card. A strong one needs
+                no words; a struggling one is the single most useful thing on
+                this page, so it keeps its colour and gains an instruction. */}
+            {quality && (
+              <span
+                className={`hidden items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold sm:inline-flex ${
+                  quality.tone === "good"
+                    ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+                    : quality.tone === "poor"
+                      ? "border-[#ED1C24]/40 bg-[#ED1C24]/10 text-[#ff8a8f]"
+                      : "border-white/20 bg-white/10 text-white/70"
+                }`}
+                data-testid="chip-connection"
+              >
+                <Wifi className="h-3.5 w-3.5" />
+                {quality.label}
+                {quality.tone === "poor" && <span className="font-normal opacity-80">· a cable beats wi-fi</span>}
+              </span>
+            )}
             {/* What's true from where they're standing. The studio's own status
                 said "Live" while standby was rolling and nobody was on stage,
                 which reads as "you are being broadcast" — the one thing it must
@@ -820,18 +840,8 @@ export default function Studio({ slug }: { slug?: string }) {
              and a green room you have to scroll is one where somebody misses
              the producer bringing them up. */
           <>
-          <div className="mt-4">
-            <GreenRoomTools
-              stream={stream}
-              micOn={micOn}
-              onStage={onStage}
-              peerCount={greenRoomPeers.length}
-              quality={quality}
-              slotLabel={slotLabel}
-              signedInAs={state?.myEmail ?? ""}
-              isCrew={!!state?.isCrew}
-              camOn={camOn}
-            />
+          <div className="mb-4 mt-4">
+            <UpNext slug={slug} studioId={studioId} live={showIsLive} />
           </div>
 
           <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
@@ -1018,6 +1028,27 @@ export default function Studio({ slug }: { slug?: string }) {
                       )}
                     </Button>
                   )}
+                  <PlaybackButton stream={stream} camOn={camOn} />
+                </div>
+
+                {/* When there's no slot, name the account that was checked.
+                    Somebody who holds one under a different sign-in reads a
+                    bare "no slot" as the page being wrong, and there is no way
+                    to tell from the screen which of two sessions they are in. */}
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-white/12 bg-white/[0.04] px-2.5 py-1.5">
+                  <Clock className="h-3.5 w-3.5 shrink-0 text-[#F0A71F]" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold text-white">
+                      {slotLabel || "No slot for this sign-in"}
+                    </span>
+                    <span className="block truncate text-[11px] text-white/45">
+                      {slotLabel
+                        ? "Wait here — the producer brings you up"
+                        : state?.myEmail
+                          ? `${state.myEmail}${state?.isCrew ? " · crew" : ""}`
+                          : "Sign in to see your slot"}
+                    </span>
+                  </span>
                 </div>
 
                 <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px]">

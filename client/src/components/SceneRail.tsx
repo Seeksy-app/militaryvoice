@@ -132,14 +132,27 @@ export function SceneRail({
   const [bannerDraft, setBannerDraft] = useState({ title: "", sub: "" });
   const [draft, setDraft] = useState("");
   const liveRef = useRef<HTMLDivElement | null>(null);
+  const railRef = useRef<HTMLDivElement | null>(null);
 
   const liveIndex = scenes.findIndex((s) => s.id === currentSceneId);
 
-  // Keep the scene on air in view. A 48-slot marathon is a long rail, and a
-  // producer should never have to hunt for where they are in it.
+  // Put the scene on air at the top of the rail, with what is coming
+  // underneath it.
+  //
+  // `scrollIntoView({ block: "nearest" })` did the least work that counted as
+  // "visible", which on a rail this long means the live card lands wherever it
+  // happens to be — usually the bottom edge, with the whole column above it
+  // showing shows that have already been and gone. What anybody reads this for
+  // is what is next, so the live card is pinned to the top and the future
+  // fills the rest. Scrolling the container rather than calling scrollIntoView
+  // keeps the page itself still: `block: "start"` would drag the whole window
+  // up to satisfy the request.
   useEffect(() => {
-    liveRef.current?.scrollIntoView({ block: "nearest" });
-  }, [currentSceneId]);
+    const el = liveRef.current;
+    const box = railRef.current;
+    if (!el || !box) return;
+    box.scrollTo({ top: Math.max(0, el.offsetTop - box.offsetTop - 8), behavior: "smooth" });
+  }, [currentSceneId, scenes.length]);
 
   // 1–9 take a scene. Guarded against anything typed into a field, so renaming
   // a scene called "Segment 3" doesn't cut the programme to scene 3.
@@ -275,7 +288,7 @@ export function SceneRail({
         </div>
       )}
 
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3" data-testid="scene-rail">
+      <div ref={railRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3" data-testid="scene-rail">
         {scenes.length === 0 && (
           <div className="rounded-xl border border-dashed border-white/15 p-4 text-center">
             <p className="text-xs text-white/60">No scenes yet.</p>
