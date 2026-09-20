@@ -1690,7 +1690,12 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 // and the rail's graphics reached air without ever reaching
                 // the screen the producer was watching.
                 meta={{ ...(studio ? stageMetaFromStudio(studio) : {}), eventName: currentStudio?.name }}
-                muted={meOnStage}
+                // Mute unless we positively know you are off the stage. `me`
+                // resolves by matching a presence row to selfKey, and either
+                // can be missing for a moment after joining — which made this
+                // fail open, monitoring the programme at you while you were on
+                // it. Not knowing where you are is a reason for silence.
+                muted={!me || meOnStage}
                 idleTitle={currentStudio?.name}
               />
               {recording && (
