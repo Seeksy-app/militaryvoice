@@ -241,7 +241,14 @@ function PeerTile({ peer, muted = false }: { peer: RoomPeer; muted?: boolean }) 
 
   return (
     <div className="relative aspect-video overflow-hidden rounded-xl border border-white/15 bg-black">
-      <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
+      {/* muted, because srcObject is the raw getUserMedia stream and that
+          carries the microphone as well as the camera. Without it the preview
+          plays your own mic out of your own speakers: instant rather than
+          delayed, so it does not sound like an echo — it sounds like the room
+          is broken. Headphones do not help, muting in the app does not help,
+          and you can hear yourself typing. Every other video in this codebase
+          is muted; this one was missed. */}
+      <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
       <audio ref={audioRef} autoPlay muted={muted} />
       {/* Their initials rather than a crossed-out camera icon. Four tiles all
           showing the same grey icon tell you nothing about who is in the room;
