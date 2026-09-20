@@ -20,7 +20,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, slotEnd, onAirWindow, totalSlots } from "@/lib/schedule";
 import { isLiveOnlyBlock } from "@shared/slots";
 import type { PublicEvent } from "@shared/schema";
-import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2, Headphones, Megaphone } from "lucide-react";
+import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2, Headphones, Megaphone, Rocket } from "lucide-react";
 
 // Choose an event, then set up the show you're bringing to it. Everything
 // about one event lives behind its own card, so a podcaster in two events
@@ -211,7 +211,31 @@ export function EventSettings({
               You haven't joined an event yet. Pick one below and set your show up for it.
             </p>
           ) : (
-            <div className="flex flex-col gap-3">{mine.map(card)}</div>
+            <div className="flex flex-col gap-3">
+              {mine.map(card)}
+              {/* The lineup is closed, so for most people this list is now one
+                  card and nothing to do. The next thing they might want is
+                  their own event, and this is the only place they are already
+                  looking. */}
+              <a
+                href="/platform"
+                className="group flex items-center gap-4 rounded-2xl border-2 border-dashed border-border bg-muted/20 p-5 text-left transition-colors hover:border-primary/40 hover:bg-muted/40"
+                data-testid="link-host-your-own"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-border text-muted-foreground transition-colors group-hover:border-primary/40 group-hover:text-primary">
+                  <Rocket className="h-5 w-5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-foreground">
+                    Learn how to host your own event
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    The scheduling, the studio and the green room, run under your own name.
+                  </span>
+                </span>
+                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+              </a>
+            </div>
           )}
         </div>
 
