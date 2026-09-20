@@ -574,6 +574,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
    * loop, which is the exact problem it exists to solve.
    */
   const [hearSelf, setHearSelf] = useState(false);
+  const gateRaf = useRef(0);
   useEffect(() => {
     if (!hearSelf || !micTrack || !micOn) return;
     // Web Audio, not an <audio> element. An element buffers for smooth
@@ -586,7 +587,37 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     try {
       ctx = new AudioContext({ latencyHint: "interactive" });
       const src = ctx.createMediaStreamSource(new MediaStream([micTrack]));
-      src.connect(ctx.destination);
+
+      // Gated, the way a mixer's monitor is. Monitoring plays whatever the
+      // microphone hears, and between words that is the room — a fan, a
+      // keyboard, the street. Opening only while you are actually speaking
+      // leaves your voice and drops the rest, which is the difference between
+      // a monitor you can leave on and one you switch off in irritation.
+      const gate = ctx.createGain();
+      gate.gain.value = 0;
+      const watch = ctx.createAnalyser();
+      watch.fftSize = 512;
+      src.connect(watch);
+      src.connect(gate);
+      gate.connect(ctx.destination);
+
+      const buf = new Uint8Array(watch.frequencyBinCount);
+      let raf = 0;
+      const OPEN = 0.05; // below this is room tone, not speech
+      const tick = () => {
+        watch.getByteTimeDomainData(buf);
+        let peak = 0;
+        for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i] - 128));
+        const speaking = peak / 64 > OPEN;
+        // Quick to open so no syllable is clipped, slow to close so the tail
+        // of a word is not chopped off.
+        const now = ctx!.currentTime;
+        gate.gain.cancelScheduledValues(now);
+        gate.gain.setTargetAtTime(speaking ? 1 : 0, now, speaking ? 0.01 : 0.12);
+        raf = requestAnimationFrame(tick);
+      };
+      tick();
+      gateRaf.current = raf;
       // Moving off an <audio> element for latency cost the speaker routing
       // with it: a bare AudioContext plays to the system default and ignores
       // the device you picked. So the monitor came out of the laptop while
@@ -598,7 +629,10 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     } catch {
       /* no audio context — the toggle simply does nothing */
     }
-    return () => { void ctx?.close().catch(() => {}); };
+    return () => {
+      cancelAnimationFrame(gateRaf.current);
+      void ctx?.close().catch(() => {});
+    };
   }, [hearSelf, micTrack, micOn, activeDevice]);
   const stale = (data?.participants ?? []).filter((p) => !p.present);
 
