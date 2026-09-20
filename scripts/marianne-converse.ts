@@ -182,9 +182,43 @@ async function main() {
   }
 
   if (!(await startAvatar())) process.exit(1);
-  // Twenty seconds of headroom: the new one is up and publishing before the
-  // old one is cut, so there is no moment where the room has no co-host.
-  setInterval(() => { void startAvatar(); }, (CAP - 20) * 1000);
+  async function peopleHere(): Promise<number> {
+    return ((await svc.listParticipants(room).catch(() => [])) as any[])
+      .filter((p) => !p.identity.startsWith("marianne"))
+      .filter((p) => p.tracks.some((t: any) => t.type === 0)).length;
+  }
+
+  async function standDown() {
+    const going = avatar;
+    avatar = null;
+    if (!going) return;
+    going.ws.close();
+    await fetch("https://api.liveavatar.com/v1/sessions/stop", {
+      method: "POST", headers: { "X-API-KEY": K, "content-type": "application/json" },
+      body: JSON.stringify({ session_id: going.id }) }).catch(() => {});
+    say("nobody here — stood down");
+  }
+
+  // She costs a credit a minute from the moment she connects, so she does not
+  // sit in an empty room all night. Out when the last person leaves, back when
+  // somebody arrives, and renewed while they are there.
+  let sinceEmpty = 0;
+  setInterval(() => {
+    void (async () => {
+      const here = await peopleHere();
+      if (here === 0) {
+        sinceEmpty += 15;
+        if (avatar && sinceEmpty >= 60) await standDown();
+        return;
+      }
+      sinceEmpty = 0;
+      if (!avatar) { say("someone arrived"); await startAvatar(); }
+    })();
+  }, 15000);
+
+  // Twenty seconds of headroom before the cap, so a conversation is never cut
+  // off mid-sentence by the session simply expiring.
+  setInterval(() => { if (avatar) void startAvatar(); }, (CAP - 20) * 1000);
   const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1 });
   const show = await loadShow(sql);
   await sql.end();
