@@ -103,8 +103,7 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
     // as its sub-label to make room, since two markers reading 26.2 is worse
     // than a finish line that says what it is.
     extra += 1;
-    const tag = extra === 1 ? "final stretch" : extra === 2 ? "finish" : "extra";
-    return { kind: "extra", n: extra, label: `26.${extra}`, sub: tag };
+    return { kind: "extra", n: extra, label: `26.${extra}`, sub: "mile" };
   });
 }
 
