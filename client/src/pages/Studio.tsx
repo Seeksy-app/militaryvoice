@@ -641,13 +641,17 @@ export default function Studio({ slug }: { slug?: string }) {
           {/* The co-host sits with the room's name, not in the queue of people
               waiting to go on. She is staff. */}
           {cohost && (
-            <div className="flex items-center gap-3 rounded-2xl border border-[#F0A71F]/30 bg-[#F0A71F]/[0.06] py-2 pl-2 pr-4">
-              <div className="h-14 w-24 shrink-0 overflow-hidden rounded-xl bg-black/40">
+            <div className="flex items-stretch overflow-hidden rounded-2xl border border-[#F0A71F]/30 bg-[#F0A71F]/[0.06]">
+              {/* Flush to the card's edges and its full height. Inset in a
+                  padded box she was a thumbnail of a person rather than a
+                  person — the point of her being here is that you can see her
+                  face well enough to talk to it. */}
+              <div className="w-40 shrink-0 self-stretch bg-black/40 sm:w-48">
                 <PeerTile peer={cohost} />
               </div>
-              <div className="min-w-0">
-                <div className="text-sm font-semibold leading-tight">Marianne</div>
-                <div className="text-[11px] leading-tight text-white/55">
+              <div className="flex min-w-0 flex-col justify-center px-4 py-3">
+                <div className="text-base font-semibold leading-tight">Marianne</div>
+                <div className="mt-0.5 text-xs leading-snug text-white/55">
                   Your co-host · say “Marianne” to ask her anything
                 </div>
               </div>
