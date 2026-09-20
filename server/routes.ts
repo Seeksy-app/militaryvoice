@@ -5582,6 +5582,34 @@ export function registerRoutes(app: Express): void {
     },
   });
 
+  /**
+   * The links themselves, minted by the server that validates them.
+   *
+   * A script cannot make these. It would have to hold SESSION_SECRET, and the
+   * one on a laptop is not the one on Vercel — so every link it produced
+   * looked right, and every one of them was dead on arrival.
+   */
+  app.get("/api/admin/headshot-links", requireAdmin, async (_req, res) => {
+    noStore(res);
+    const signups = (await storage.listSignups(1)).filter((x) => x.status !== "cancelled");
+    const seen = new Set<string>();
+    const out: { email: string; hostName: string; podcastName: string; token: string; printable: boolean }[] = [];
+    for (const s of signups) {
+      const email = s.email.trim().toLowerCase();
+      if (!email || seen.has(email)) continue;
+      seen.add(email);
+      const profile = await storage.getProfileByEmail(email);
+      out.push({
+        email,
+        hostName: profile?.hostName || s.hostName || "",
+        podcastName: s.podcastName || "",
+        token: headshotToken(email),
+        printable: Boolean(profile?.photoOriginalUrl),
+      });
+    }
+    res.json(out);
+  });
+
   /** Who the link is for, so the page can greet them by name. */
   app.get("/api/headshot/:token", async (req, res) => {
     noStore(res);

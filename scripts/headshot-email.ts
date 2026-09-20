@@ -13,7 +13,6 @@
 // stops being read.
 import "dotenv/config";
 import postgres from "postgres";
-import { headshotToken } from "../server/routes.js";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
 const args = process.argv.slice(2);
@@ -29,19 +28,27 @@ const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1, onnoti
 
 interface Row {
   email: string;
-  host_name: string;
-  podcast_name: string;
-  photo_original_url: string;
+  hostName: string;
+  podcastName: string;
+  token: string;
+  printable: boolean;
 }
 
-const rows = await sql<Row[]>`
-  SELECT DISTINCT ON (s.email) s.email, s.host_name, s.podcast_name,
-         coalesce(p.photo_original_url, '') AS photo_original_url
-  FROM signups s LEFT JOIN podcaster_profiles p ON p.email = s.email
-  WHERE s.event_id = 1 AND s.status <> 'cancelled' AND s.email <> ''
-  ORDER BY s.email, s.slot_index`;
+const [ev] = await sql<{ admin_password: string }[]>`SELECT admin_password FROM events WHERE id = 1`;
 
-const needed = rows.filter((r) => !r.photo_original_url);
+// The links come from the server, not from here. Minting them locally means
+// holding SESSION_SECRET, and the one on a laptop is not the one on Vercel —
+// so every link looked right and every one was dead.
+const linkRes = await fetch(`${API}/api/admin/headshot-links`, {
+  headers: { "x-admin-password": ev.admin_password },
+});
+if (!linkRes.ok) {
+  console.error(`Couldn't get the links: ${linkRes.status} ${await linkRes.text()}`);
+  await sql.end();
+  process.exit(1);
+}
+const rows = (await linkRes.json()) as Row[];
+const needed = rows.filter((r) => !r.printable);
 
 /**
  * Short, and it says what the photo is for.
@@ -51,7 +58,7 @@ const needed = rows.filter((r) => !r.photo_original_url);
  * go wrong if they sent the wrong thing.
  */
 function body(r: Row): string {
-  const first = (r.host_name || "").trim().split(/\s+/)[0] || "there";
+  const first = (r.hostName || "").trim().split(/\s+/)[0] || "there";
   return `<p>${first},</p>
 
 <p>We're putting together a printed keepsake magazine for the Podcast Marathon —
@@ -74,14 +81,14 @@ On the page you get, you're nine inches across.</p>
 }
 
 function textOf(r: Row): string {
-  const first = (r.host_name || "").trim().split(/\s+/)[0] || "there";
+  const first = (r.hostName || "").trim().split(/\s+/)[0] || "there";
   return `${first},
 
 We're putting together a printed keepsake magazine for the Podcast Marathon — one page per show, yours included.
 
 We need a better photo of you. The one we have is 720 pixels wide, which prints about the size of a postage stamp. On your page you're nine inches across.
 
-Send it here (no sign-in): ${BASE}/headshot/${headshotToken(r.email)}
+Send it here (no sign-in): ${BASE}/headshot/${r.token}
 
 - The biggest file you have, straight off the camera or phone.
 - A photograph of you, not your show artwork — we already pulled that from your feed.
@@ -96,7 +103,7 @@ function htmlFor(r: Row): string {
     eyebrow: "The Podcast Marathon · print edition",
     heading: "One photo, for your page",
     body: body(r),
-    cta: { href: `${BASE}/headshot/${headshotToken(r.email)}`, label: "Send us your photo" },
+    cta: { href: `${BASE}/headshot/${r.token}`, label: "Send us your photo" },
   });
 }
 
@@ -104,8 +111,8 @@ const SUBJECT = "One photo, for your page in the magazine";
 
 console.log(`${rows.length} podcasters · ${needed.length} still need a print-quality photo\n`);
 for (const r of needed) {
-  console.log(`  ${r.email.padEnd(34)} ${r.podcast_name.slice(0, 34)}`);
-  console.log(`     ${BASE}/headshot/${headshotToken(r.email)}`);
+  console.log(`  ${r.email.padEnd(34)} ${r.podcastName.slice(0, 34)}`);
+  console.log(`     ${BASE}/headshot/${r.token}`);
 }
 
 if (preview) {
@@ -119,9 +126,6 @@ if (!test && !apply) {
   await sql.end();
   process.exit(0);
 }
-
-const [ev] = await sql<{ admin_password: string }[]>`
-  SELECT admin_password FROM events WHERE id = 1`;
 
 // A test goes to the owner, never to a podcaster. Sending the real thing to a
 // real recipient to "check it" is a send you cannot take back.
