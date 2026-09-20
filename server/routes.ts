@@ -92,7 +92,7 @@ import {
   resendApiGet,
 } from "./email.js";
 import { renderBroadcastEmail } from "./email.js";
-import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, buildCalendarLinks } from "./email.js";
+import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -754,6 +754,27 @@ export function registerRoutes(app: Express): void {
    * going out later, and it only ever mails the address you name.
    */
   // Send one of the outward emails to an address you name, to see the design.
+  /** Send one hand-written email. Admin only, one recipient, no templating. */
+  app.post("/api/admin/emails/send-one", requireAdmin, async (req, res) => {
+    const to = String(req.body?.to ?? "").trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
+      return res.status(400).json({ message: "Need one valid email address." });
+    }
+    const subject = String(req.body?.subject ?? "").trim().slice(0, 200);
+    const html = String(req.body?.html ?? "");
+    const text = String(req.body?.text ?? "");
+    if (!subject || (!html && !text)) {
+      return res.status(400).json({ message: "Need a subject and a body." });
+    }
+    if (html.length > 200_000 || text.length > 100_000) {
+      return res.status(413).json({ message: "That email is too long to send." });
+    }
+    const id = await sendOneOffEmail({ to, subject, html, text, replyTo: String(req.body?.replyTo ?? "") || undefined });
+    if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
+    console.log(`One-off email sent to ${to}: ${subject}`);
+    res.json({ id, to });
+  });
+
   app.post("/api/admin/emails/preview", requireAdmin, async (req, res) => {
     const to = String(req.body?.to || "").trim();
     const kind = String(req.body?.kind || "welcome");

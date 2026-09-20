@@ -239,6 +239,29 @@ async function sendEmail(opts: Parameters<typeof sendRawEmail>[0]): Promise<bool
   return (await sendRawEmail(opts)) !== null;
 }
 
+/**
+ * One email, to one person, written by hand.
+ *
+ * Everything else in here renders a template, and the broadcast tools resolve
+ * an audience segment and attach an unsubscribe footer — right for the
+ * forty-person send, wrong for "which episode did you want?". This is the gap
+ * between the two, and without it the only way to send a single note was to
+ * hold a copy of the Resend key somewhere outside the server, which is how a
+ * key ends up in a shell history or a .env that gets committed.
+ *
+ * One recipient, deliberately. A list parameter here is how this quietly
+ * becomes a second broadcast sender with none of the unsubscribe handling.
+ */
+export async function sendOneOffEmail(o: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  replyTo?: string;
+}): Promise<string | null> {
+  return sendRawEmail(o);
+}
+
 export async function resendApiGet(path: string): Promise<unknown> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (RESEND_API_KEY) headers["Authorization"] = `Bearer ${RESEND_API_KEY}`;

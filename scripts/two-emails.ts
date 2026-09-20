@@ -3,9 +3,10 @@
 //   npx tsx scripts/two-emails.ts           # print them
 //   npx tsx scripts/two-emails.ts --apply   # send
 import "dotenv/config";
+import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
-const FROM = "MilitaryVoice.ai <hello@militaryvoice.ai>";
+const API = process.env.MV_API ?? "https://militaryvoice.ai";
 const AGENDA = "https://militaryvoice.ai/agenda";
 
 const notes: { to: string; subject: string; html: string; text: string }[] = [
@@ -74,14 +75,24 @@ async function main() {
     console.log(`\n${"=".repeat(64)}\nTo:      ${n.to}\nSubject: ${n.subject}\n${"-".repeat(64)}\n${n.text}`);
   }
   if (!apply) { console.log(`\n${"=".repeat(64)}\nDry run — pass --apply to send.`); return; }
+
+  // Sent by the server, not from here. The Resend key is marked sensitive in
+  // Vercel, so it is write-only — `env pull` hands back a placeholder and the
+  // dashboard will not show it either. That is the right setting and it is not
+  // worth weakening to send two emails, so the send goes where the key already
+  // lives instead of dragging a copy of the key out to this machine.
+  const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1 });
+  const [ev] = await sql`SELECT admin_password FROM events WHERE is_featured = true`;
+  await sql.end();
+
   for (const n of notes) {
-    const res = await fetch("https://api.resend.com/emails", {
+    const res = await fetch(`${API}/api/admin/emails/send-one`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: FROM, to: [n.to], subject: n.subject, html: n.html, text: n.text }),
+      headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+      body: JSON.stringify({ to: n.to, subject: n.subject, html: n.html, text: n.text }),
     });
-    const body = (await res.json().catch(() => ({}))) as { id?: string };
-    console.log(res.ok ? `sent → ${n.to}  (${body.id})` : `FAILED ${n.to}: ${res.status}`);
+    const body = (await res.json().catch(() => ({}))) as { id?: string; message?: string };
+    console.log(res.ok ? `sent → ${n.to}  (${body.id})` : `FAILED ${n.to}: ${res.status} ${body.message ?? ""}`);
   }
 }
 
