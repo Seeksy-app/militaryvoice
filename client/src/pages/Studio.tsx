@@ -351,7 +351,17 @@ export default function Studio({ slug }: { slug?: string }) {
   const startMedia = useCallback(async () => {
     setMediaError(null);
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // Bare `audio: true` leaves the browser's defaults, and the default
+      // that hurts is auto gain: in a quiet room it winds the gain up until
+      // the noise floor itself is audible, which is heard as a constant
+      // whisper that is always there and never loud enough to place. Off, with
+      // suppression and cancellation left on, the room goes quiet between
+      // words. Everything is a hint — a device that cannot do it ignores it
+      // rather than failing the request.
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false },
+      });
       streamRef.current = s;
       setStream(s);
       if (videoRef.current) videoRef.current.srcObject = s;
