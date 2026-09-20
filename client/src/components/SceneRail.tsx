@@ -298,10 +298,18 @@ export function SceneRail({
         {shown.map(({ sc, i }) => {
           const on = sc.id === currentSceneId;
           const k = kindOf(sc);
-          const thumb = k === "media" && isImage(sc) ? sc.mediaUrl : null;
           const sg = sc.runItemId
             ? signups.find((x) => x.id === runItems.find((r) => r.id === sc.runItemId)?.signupId)
             : undefined;
+          // A camera scene has nothing to show until it is on air, and a rail of
+          // identical grey rectangles with a camera glyph makes a producer read
+          // every title to find the one they want. The podcaster's own picture
+          // is already here for the presence dot, so the card wears it: at a
+          // hundred and forty-six scenes, recognising a face is faster than
+          // reading a line of text.
+          const sceneImage = k === "media" && isImage(sc) ? sc.mediaUrl : null;
+          const thumb = sceneImage ?? sg?.photoUrl ?? null;
+          const isFace = !sceneImage && !!thumb;
           const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
           const here = sg
             ? presentNames.some(
@@ -324,7 +332,20 @@ export function SceneRail({
               >
                 <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
                   {thumb ? (
-                    <img src={thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                    <>
+                      <img
+                        src={thumb}
+                        alt=""
+                        // A headshot cropped to 16:9 down the middle takes the
+                        // chin and loses the eyes, so a face sits high.
+                        className={`absolute inset-0 h-full w-full object-cover ${
+                          isFace ? "object-[50%_28%]" : ""
+                        }`}
+                      />
+                      {isFace && (
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/25" />
+                      )}
+                    </>
                   ) : (
                     <div
                       className="absolute inset-0 flex items-center justify-center"
