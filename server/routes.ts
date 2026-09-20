@@ -4371,6 +4371,98 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
+  /** Forwarded mail is somebody else's text going into an HTML email of ours. */
+  const esc = (v: string) =>
+    v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  // ---- Resend inbound ------------------------------------------------------------
+  //      Mail to hello@ is received by Resend, which POSTs a metadata-only
+  //      event and keeps the body behind an API call. Nothing read those, so
+  //      every reply a podcaster sent went into Resend and stopped there —
+  //      including the ones our own emails asked for ("reply with the episode
+  //      name", "reply with your handles").
+  //
+  //      This forwards them to a person. Reply-to is set to whoever wrote in,
+  //      so hitting reply in the forwarded copy goes back to them and not to
+  //      ourselves, which is the whole point of a forward.
+  app.post("/api/webhooks/resend-inbound", async (req, res) => {
+    const secret = process.env.RESEND_WEBHOOK_SECRET ?? "";
+    const id = req.get("svix-id") ?? "";
+    const ts = req.get("svix-timestamp") ?? "";
+    const sigHeader = req.get("svix-signature") ?? "";
+    const raw = (req as any).rawBody as Buffer | undefined;
+
+    if (!secret || !id || !ts || !sigHeader || !raw) {
+      res.status(401).json({ message: "Unsigned." });
+      return;
+    }
+    // Five minutes, so a captured POST cannot be replayed at us tomorrow.
+    if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) {
+      res.status(401).json({ message: "Stale." });
+      return;
+    }
+    const key = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+    const expected = crypto.createHmac("sha256", key).update(`${id}.${ts}.${raw.toString("utf8")}`).digest("base64");
+    // Header is a space-separated list of "v1,<sig>" — more than one while a
+    // secret is being rotated.
+    const offered = sigHeader.split(" ").map((p) => p.split(",")[1]).filter(Boolean);
+    const ok = offered.some((sig) => {
+      const a = Buffer.from(sig);
+      const b = Buffer.from(expected);
+      return a.length === b.length && crypto.timingSafeEqual(a, b);
+    });
+    if (!ok) {
+      res.status(401).json({ message: "Bad signature." });
+      return;
+    }
+
+    // Acknowledge before doing any work: Resend retries, and a retry storm on
+    // a bug of ours is worse than one missed forward.
+    res.json({ ok: true });
+
+    try {
+      const evt = JSON.parse(raw.toString("utf8")) as any;
+      if (evt?.type !== "email.received") return;
+      const d = evt.data ?? {};
+      const emailId = d.email_id ?? d.id ?? "";
+      const from = Array.isArray(d.from) ? d.from.join(", ") : String(d.from ?? "unknown");
+      const to = Array.isArray(d.to) ? d.to.join(", ") : String(d.to ?? "");
+      const subject = String(d.subject ?? "(no subject)");
+
+      // The body lives behind a second call. If that shape ever changes we
+      // still forward what the event carried, because a forward with only a
+      // subject line beats silence.
+      let body = "";
+      if (emailId && process.env.RESEND_API_KEY) {
+        try {
+          const r = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
+            headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+          });
+          if (r.ok) {
+            const full = (await r.json()) as any;
+            body = String(full.text ?? full.html ?? "");
+          } else {
+            body = `(Couldn't fetch the body: HTTP ${r.status}. Open it in Resend — id ${emailId}.)`;
+          }
+        } catch (err) {
+          body = `(Couldn't fetch the body. Open it in Resend — id ${emailId}.)`;
+        }
+      }
+
+      const header = `From: ${from}\nTo: ${to}\nSubject: ${subject}\n\n`;
+      await sendOneOffEmail({
+        to: process.env.FORWARD_INBOX || "andrew@podlogix.co",
+        subject: `Fwd: ${subject}`,
+        text: header + body,
+        html: `<p style="color:#555;font-size:13px">From: ${esc(from)}<br>To: ${esc(to)}<br>Subject: ${esc(subject)}</p><hr><pre style="white-space:pre-wrap;font-family:inherit">${esc(body)}</pre>`,
+        replyTo: Array.isArray(d.from) ? d.from[0] : String(d.from ?? ""),
+      });
+      console.log(`Forwarded inbound mail from ${from}: ${subject}`);
+    } catch (err) {
+      console.error("Inbound forward failed:", err);
+    }
+  });
+
   // ---- LiveKit webhook ----------------------------------------------------------
   //      LiveKit signs this with the same API key pair, and sends it as
   //      application/webhook+json — which express.json() leaves alone, so the
