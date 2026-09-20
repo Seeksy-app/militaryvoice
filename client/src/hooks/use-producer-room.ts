@@ -100,7 +100,21 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
 
       room = new Room({ adaptiveStream: true });
       roomRef.current = room;
-      const refresh = () => room && snapshot(room);
+      // Your own camera and mic state has to come off the room, not off the
+      // buttons that change it. setCamOn only ever ran inside toggleCam, so
+      // anything else that enabled the camera — going on stage does exactly
+      // that — left the deck reading "Camera off" over a live picture. The
+      // events that already fire on publish and mute now carry it.
+      const syncSelf = () => {
+        if (!room) return;
+        setCamOn(room.localParticipant.isCameraEnabled);
+        setMicOn(room.localParticipant.isMicrophoneEnabled);
+      };
+      const refresh = () => {
+        if (!room) return;
+        snapshot(room);
+        syncSelf();
+      };
       room
         .on(RoomEvent.ParticipantConnected, refresh)
         .on(RoomEvent.ParticipantDisconnected, refresh)

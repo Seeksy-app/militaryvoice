@@ -449,7 +449,10 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   // Setup is a form you scroll. Live is a control surface that must never
   // scroll — once you're on air you can't go hunting for a button.
   const isLive = view === "live";
-  const [monitorMuted, setMonitorMuted] = useState(true);
+  // The stage monitor is a rule, not a button. You want to hear the show; you
+  // never want to hear it while you are the one making it, because that is
+  // your own voice back at you half a second late. So it follows where you
+  // are, and the Listen toggle that used to get this wrong is gone.
 
   /**
    * Another console open in this browser, publishing.
@@ -1652,7 +1655,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 // and the rail's graphics reached air without ever reaching
                 // the screen the producer was watching.
                 meta={{ ...(studio ? stageMetaFromStudio(studio) : {}), eventName: currentStudio?.name }}
-                muted={monitorMuted}
+                muted={meOnStage}
                 idleTitle={currentStudio?.name}
               />
               {recording && (
@@ -1703,23 +1706,12 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 stage moved to the + in the middle and to the Media panel in
                 the rail — a deck button per source does not survive contact
                 with a fourth source. */}
-            <div className="flex items-center gap-1">
-              <DeckButton
-                icon={stageMuted ? MicOff : Mic}
-                label={stageMuted ? "Unmute" : "Mute stage"}
-                active={stageMuted}
-                onClick={() => muteStage.mutate(!stageMuted)}
-                testId="button-deck-mute-stage"
-              />
-              <DeckButton
-                icon={monitorMuted ? VolumeX : Volume2}
-                label={monitorMuted ? "Listen" : "Listening"}
-                active={!monitorMuted}
-                amber
-                onClick={() => setMonitorMuted((v) => !v)}
-                testId="button-deck-volume"
-              />
-            </div>
+            {/* Mute stage and Listen used to sit here. Listen monitors the
+                stage, and when the producer is the stage it plays their own
+                voice back half a second late — every time, read as a fault in
+                the room. The level meter answers "is my mic on" without
+                putting sound in anyone's ears, so the monitor went with it. */}
+            <div />
 
             {/* Zoom-style cam + mic toggles — always visible, first click joins the room */}
             {/* Your own camera and mic, the way every conference app draws
