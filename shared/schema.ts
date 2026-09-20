@@ -271,6 +271,13 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
    *  Lives only here, because syncSignupsFromProfile deliberately does not
    *  carry artwork to the bookings; anything needing print joins on email. */
   photoOriginalUrl: text("photo_original_url").notNull().default(""),
+  // Their show artwork at print resolution, pulled from their own RSS feed.
+  //
+  // A podcast feed carries its cover art at 1400–3000px square because Apple
+  // insists on it, which makes it the one high-resolution image of a show that
+  // already exists and needs nobody to be emailed. The copy the site uses is
+  // 720px and cannot be printed; this one can.
+  artworkPrintUrl: text("artwork_print_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
