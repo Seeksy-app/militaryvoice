@@ -145,7 +145,7 @@ export function MileMarker({
         x={W / 2}
         y={quiet ? 30 : showSub ? (isWord ? 29 : 31) : 30}
         textAnchor="middle"
-        fill={quiet ? "#ffffff55" : marker.kind === "medal" ? GOLD : NAVY}
+        fill={quiet ? "#ffffff55" : NAVY}
         fontSize={numSize}
         fontWeight="800"
         letterSpacing={isWord ? "0.4" : "-0.5"}

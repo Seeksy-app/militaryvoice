@@ -150,6 +150,25 @@ export default function Agenda({ slug }: Props) {
 
   const markers = useMemo(() => mileMarkers(slots), [slots]);
 
+  // The closing sequence runs short. The grid is half-hour slots because the
+  // day is a whole number of hours and 30 divides into it, but the goodbye and
+  // the thank-you are a quarter hour each — so the schedule would otherwise
+  // read as running to 11pm when the day is finished at 10:30. Nothing reads
+  // these times back, so the cards show the real length and the slot keeps its
+  // index.
+  const closingTimes = useMemo(() => {
+    const out = new Map<number, { start: Date; end: Date }>();
+    const finish = markers.findIndex((m) => m.kind === "finish");
+    if (finish < 0 || !slots[finish]) return out;
+    const q = 15 * 60000;
+    const t0 = slots[finish].start.getTime();
+    out.set(finish, { start: new Date(t0), end: new Date(t0 + q) });
+    const medal = markers.findIndex((m) => m.kind === "medal");
+    if (medal >= 0) out.set(medal, { start: new Date(t0 + q), end: new Date(t0 + 2 * q) });
+    return out;
+  }, [markers, slots]);
+
+
   const groups = useMemo(() => {
     const out: { dateLabel: string; items: typeof slots }[] = [];
     for (const s of slots) {
@@ -295,22 +314,20 @@ export default function Agenda({ slug }: Props) {
                         <div className="flex items-center justify-between gap-2 bg-[#053877] px-3 py-2 text-white">
                           <div className="flex min-w-0 items-center gap-2.5">
                             <MileMarker marker={markers[s.index]} size={42} className="shrink-0" />
-                            {markers[s.index]?.kind === "medal" ? (
-                              // The thank-you happens when the day is already done.
-                              // Printing a clock on it makes the schedule read as
-                              // running half an hour past the goodbye, which is the
-                              // one thing it must not say.
-                              <span className="text-sm font-bold">After the finish</span>
-                            ) : (
-                              <span className="text-sm font-bold tabular-nums">
-                                {formatTimeInZone(s.start, viewZone)}
-                                <span className="text-white/60"> – {formatTimeInZone(s.end, viewZone)}</span>
+                            <span className="text-sm font-bold tabular-nums">
+                              {formatTimeInZone(closingTimes.get(s.index)?.start ?? s.start, viewZone)}
+                              <span className="text-white/60">
+                                {" – "}
+                                {formatTimeInZone(closingTimes.get(s.index)?.end ?? s.end, viewZone)}
                               </span>
-                            )}
+                            </span>
                           </div>
-                          {markers[s.index]?.kind !== "medal" && (
-                            <SlotBadge start={s.start} end={s.end} showFormat={signup.showFormat} now={now} />
-                          )}
+                          <SlotBadge
+                            start={closingTimes.get(s.index)?.start ?? s.start}
+                            end={closingTimes.get(s.index)?.end ?? s.end}
+                            showFormat={signup.showFormat}
+                            now={now}
+                          />
                         </div>
 
                         <button
@@ -354,7 +371,7 @@ export default function Agenda({ slug }: Props) {
                               signup.youtubeUrl,
                             )}
                           />
-                          {onAir && markers[s.index]?.kind !== "medal" && (
+                          {onAir && !closingTimes.has(s.index) && (
                             <div className="text-xs text-muted-foreground" data-testid={`text-agenda-onair-${s.index}`}>
                               On air {formatTimeInZone(onAir.start, viewZone)}–{formatTimeInZone(onAir.end, viewZone)}
                             </div>
