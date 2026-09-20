@@ -127,3 +127,70 @@ export function describeDrift(driftSeconds: number): string {
   if (Math.abs(driftSeconds) < 60) return "on time";
   return `${mins} min ${driftSeconds > 0 ? "behind" : "ahead"}`;
 }
+
+// ---------------------------------------------------------------------------
+// Alex as the producer
+// ---------------------------------------------------------------------------
+//
+// In a day that ran perfectly the scenes would change themselves, on the
+// minute, and nobody would touch anything. Days do not run perfectly, and the
+// three ways they go wrong each want a different answer:
+//
+//   late   — somebody is mid-sentence when their slot ends. Hold. Cutting a
+//            veteran off in the middle of a story to protect a timetable is
+//            the worst thing this system could do on air.
+//   early  — they finished with room to spare. Go, but only if the next
+//            podcaster is actually there and their camera and mic are proved.
+//            Taking a scene to an empty chair is worse than a short wait.
+//   on time— take it.
+//
+// Holding cannot be unlimited. One runaway show would eat the afternoon, so
+// past the limit this stops being Alex's call and becomes a person's.
+
+export interface AdvanceInput {
+  /** Seconds until the next scene is due. Negative once it is overdue. */
+  windowSeconds: number;
+  /** Is anybody on stage still talking? From LiveKit's active speakers. */
+  stageSpeaking: boolean;
+  /** Is the next podcaster in the green room with camera and mic proved? */
+  nextHostReady: boolean;
+  /** How long we have already been holding past the due time. */
+  heldSeconds: number;
+}
+
+export type AdvanceAction = "wait" | "take" | "take-early" | "hold" | "escalate";
+
+export interface AdvanceDecision {
+  action: AdvanceAction;
+  why: string;
+}
+
+/** Past this much overrun it is a person's decision, not Alex's. */
+export const HOLD_LIMIT_SECONDS = 180;
+
+/** How early she will go when the room is ready and the stage has gone quiet. */
+export const EARLY_WINDOW_SECONDS = 120;
+
+export function decideAdvance(i: AdvanceInput): AdvanceDecision {
+  // Overdue.
+  if (i.windowSeconds <= 0) {
+    if (!i.stageSpeaking) return { action: "take", why: "due, and the stage has gone quiet" };
+    if (i.heldSeconds >= HOLD_LIMIT_SECONDS) {
+      return {
+        action: "escalate",
+        why: `held ${Math.round(i.heldSeconds / 60)} min and they are still going — a person decides this`,
+      };
+    }
+    return { action: "hold", why: "due, but somebody is still talking" };
+  }
+
+  // Not due yet.
+  if (i.stageSpeaking) return { action: "wait", why: "still on air, and not due yet" };
+  if (i.windowSeconds <= EARLY_WINDOW_SECONDS && i.nextHostReady) {
+    return { action: "take-early", why: `finished early and the next host is ready` };
+  }
+  if (i.windowSeconds <= EARLY_WINDOW_SECONDS) {
+    return { action: "wait", why: "finished early, but the next host is not ready" };
+  }
+  return { action: "wait", why: "nothing due" };
+}
