@@ -710,6 +710,50 @@ export type GeneratedRunItem = RunItemInput & { sourceKey: string };
 // ---------------------------------------------------------------------------
 // Interest in the platform itself — "register my event" and beta sign-ups.
 // ---------------------------------------------------------------------------
+/**
+ * What Alex says between segments, written before the day.
+ *
+ * Three lengths of the same handover, because the show clock decides which
+ * one she reads at the moment she reads it: twelve seconds when the last
+ * podcaster overran, seventy-five when they finished early and she is hosting
+ * rather than filling. Generating them live would put a model round-trip
+ * between one show ending and the next beginning, which is exactly the moment
+ * that cannot afford one.
+ *
+ * Written ahead also means a person can read them before the day, which is the
+ * only real check on a line that is about to be said out loud to an audience.
+ */
+export const cohostLines = pgTable(
+  "cohost_lines",
+  {
+    id: serial("id").primaryKey(),
+    eventId: integer("event_id").notNull(),
+    /** The agenda row this introduces. */
+    runItemId: integer("run_item_id").notNull().default(0),
+    /** "intro" — handing to the next show. More kinds to come: sponsor, handover. */
+    kind: text("kind").notNull().default("intro"),
+    /** Roughly 12 seconds: the name and the time, nothing else. */
+    short: text("short").notNull().default(""),
+    /** Roughly 30 seconds: the written introduction. */
+    standard: text("standard").notNull().default(""),
+    /** Roughly 75 seconds: introduction, sponsor read, room for banter. */
+    stretch: text("stretch").notNull().default(""),
+    /** Whether she carries this one alone, or hands to a live host. */
+    soloIntro: boolean("solo_intro").notNull().default(false),
+    /** Set once a human changes the wording; regeneration then leaves it be. */
+    edited: boolean("edited").notNull().default(false),
+    approved: boolean("approved").notNull().default(false),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull().default(""),
+  },
+  (t) => ({
+    // One set per row per kind. Regeneration updates rather than stacking a
+    // second copy nobody notices until she reads the wrong one.
+    rowKind: uniqueIndex("cohost_lines_row_kind").on(t.eventId, t.runItemId, t.kind),
+  }),
+);
+export type CohostLineRow = typeof cohostLines.$inferSelect;
+
 export const platformInterest = pgTable("platform_interest", {
   id: serial("id").primaryKey(),
   intent: text("intent").notNull().default("beta"), // register | beta
