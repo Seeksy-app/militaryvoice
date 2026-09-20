@@ -869,7 +869,23 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   }`}
                   data-testid={`nav-host-${value}`}
                 >
-                  <span className="text-sm font-semibold">{label}</span>
+                  <span className="flex items-center gap-1.5 text-sm font-semibold">
+                    {label}
+                    {/* The count is here because the green room button lives
+                        one click inside this tab, and nothing on the outside
+                        suggested there was anything in there to open. A number
+                        is the cheapest way to say "this concerns you". */}
+                    {value === "events" && (hostEvents?.length ?? 0) > 0 && (
+                      <span
+                        className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-bold leading-none ${
+                          active ? "bg-white text-[#053877]" : "bg-[#F0A71F] text-[#1a1200]"
+                        }`}
+                        data-testid="badge-host-events-count"
+                      >
+                        {hostEvents!.length}
+                      </span>
+                    )}
+                  </span>
                   <span className="hidden text-[12px] font-normal opacity-70 sm:block">{hint}</span>
                 </a>
               );

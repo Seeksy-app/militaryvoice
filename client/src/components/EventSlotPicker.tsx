@@ -48,6 +48,7 @@ export function EventSlotPicker({
     [event, signups],
   );
   const open = slots.filter((s) => !s.signup);
+  const full = slots.length > 0 && open.length === 0;
 
   const claim = useMutation({
     mutationFn: async (slotIndex: number) =>
@@ -70,6 +71,20 @@ export function EventSlotPicker({
 
   return (
     <div>
+      {/* Said plainly, once, at the top. A grid of thirty-two greyed-out
+          buttons is not an answer to "when can I go on" — somebody has to read
+          every one of them to work out there is nothing left. */}
+      {full && (
+        <p
+          className="mb-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm font-semibold text-foreground"
+          data-testid="text-all-slots-taken"
+        >
+          All slots are taken.{" "}
+          <span className="font-normal text-muted-foreground">
+            Every time on this event is spoken for. If one frees up it will appear here.
+          </span>
+        </p>
+      )}
       <p className="mb-3 text-sm text-muted-foreground">
         {open.length} open · {slots.length - open.length} taken.{" "}
         {recorded
