@@ -147,12 +147,28 @@ export function SceneRail({
   // fills the rest. Scrolling the container rather than calling scrollIntoView
   // keeps the page itself still: `block: "start"` would drag the whole window
   // up to satisfy the request.
+  const anchored = useRef(false);
   useEffect(() => {
-    const el = liveRef.current;
-    const box = railRef.current;
-    if (!el || !box) return;
-    const delta = el.getBoundingClientRect().top - box.getBoundingClientRect().top;
-    box.scrollTo({ top: Math.max(0, box.scrollTop + delta - 8), behavior: "smooth" });
+    // A frame later, so the measurement is taken against a laid-out rail
+    // rather than the one React has only just described.
+    const raf = requestAnimationFrame(() => {
+      const el = liveRef.current;
+      const box = railRef.current;
+      if (!el || !box) return;
+      const delta = el.getBoundingClientRect().top - box.getBoundingClientRect().top;
+      if (Math.abs(delta - 8) < 2) return;
+      box.scrollTo({
+        top: Math.max(0, box.scrollTop + delta - 8),
+        // Arriving is a jump; moving on is a journey. Scene forty-one of
+        // ninety-eight sits seven thousand pixels down, and smooth-scrolling
+        // that on arrival is both an animation nobody asked to watch and one
+        // the browser abandons the moment anything else re-renders — which is
+        // how the rail kept ending up back at the top.
+        behavior: anchored.current ? "smooth" : "auto",
+      });
+      anchored.current = true;
+    });
+    return () => cancelAnimationFrame(raf);
   }, [currentSceneId, scenes.length]);
 
   // 1–9 take a scene. Guarded against anything typed into a field, so renaming
