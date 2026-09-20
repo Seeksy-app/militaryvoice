@@ -4386,7 +4386,9 @@ export function registerRoutes(app: Express): void {
   //      so hitting reply in the forwarded copy goes back to them and not to
   //      ourselves, which is the whole point of a forward.
   app.post("/api/webhooks/resend-inbound", async (req, res) => {
-    const secret = process.env.RESEND_WEBHOOK_SECRET ?? "";
+    // Its own secret. Svix issues one per endpoint, so the variable the
+    // tracking webhook uses will not verify this one.
+    const secret = process.env.RESEND_INBOUND_SECRET ?? "";
     const id = req.get("svix-id") ?? "";
     const ts = req.get("svix-timestamp") ?? "";
     const sigHeader = req.get("svix-signature") ?? "";
