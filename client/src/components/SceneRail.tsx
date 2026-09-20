@@ -151,7 +151,13 @@ export function SceneRail({
   useEffect(() => {
     // A frame later, so the measurement is taken against a laid-out rail
     // rather than the one React has only just described.
-    const raf = requestAnimationFrame(() => {
+    // Checked again over the first second rather than once. A single frame
+    // is one guess at when the rail has settled, and when it guesses wrong it
+    // gives up silently and leaves you at the top of a ninety-eight scene
+    // list — which looks exactly like a rail that was never meant to move.
+    let raf = 0;
+    const timers: number[] = [];
+    const anchor = () => {
       const el = liveRef.current;
       const box = railRef.current;
       if (!el || !box) return;
@@ -167,8 +173,15 @@ export function SceneRail({
         behavior: anchored.current ? "smooth" : "auto",
       });
       anchored.current = true;
+    };
+    raf = requestAnimationFrame(() => {
+      anchor();
+      for (const ms of [120, 400, 900]) timers.push(window.setTimeout(anchor, ms));
     });
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      for (const t of timers) window.clearTimeout(t);
+    };
   }, [currentSceneId, scenes.length]);
 
   // 1–9 take a scene. Guarded against anything typed into a field, so renaming

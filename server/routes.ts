@@ -2664,8 +2664,18 @@ export function registerRoutes(app: Express): void {
     // scene to its podcaster through those two, and that is what puts a face
     // on the card. Without them the green room drew the same list as a column
     // of identical camera glyphs — the same rail in name only.
+    // A scene the producer took in some earlier session is not on air now.
+    // Reporting it anyway put an ON AIR badge on a 1:30pm segment while the
+    // header two inches above said OFF AIR, sent the green room's rail into
+    // the middle of the running order, and had the countdown cards counting
+    // down to a pair from the middle of the afternoon. Off air there is no
+    // current scene, and the day starts at the top where it actually starts.
+    //
+    // Only the green room reads this. The producer's own console takes the
+    // studio row directly and still sees the last scene it took.
+    const live = found.studio.status === "Live";
     res.json({
-      currentSceneId: found.studio.currentSceneId,
+      currentSceneId: live ? found.studio.currentSceneId : 0,
       scenes: await storage.listScenes(found.studio.id),
       runItems: await storage.listRunOfShow(found.studio.eventId),
       signups: (await storage.listSignups(found.studio.eventId)).filter((x) => x.status !== "cancelled"),
