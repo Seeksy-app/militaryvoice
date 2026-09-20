@@ -524,6 +524,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     toggleCam,
     toggleMic,
     selfKey,
+    level,
   } = useProducerRoom({ enabled: isLive, adminSend, studioId, publish: onCamera, displayName: "Host" });
 
   const studio = data?.studio;
@@ -1749,6 +1750,32 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 {onCamera && micOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5 text-[#ED1C24]" />}
                 <span className="w-full truncate text-center">{onCamera && micOn ? "Mic" : "Muted"}</span>
               </button>
+
+              {/* Are you actually making a sound?
+                  Without this the only way to answer that is Listen, which
+                  plays the stage back — and when you are the stage, that is
+                  your own voice half a second late. It reads as a fault, and
+                  it is the reason a producer ends up debugging an echo
+                  instead of checking a microphone. Bars move, mic works. */}
+              <span
+                className="flex h-9 items-end gap-[3px] self-center px-1"
+                title={onCamera && micOn ? "Your microphone level" : "Unmute to see your level"}
+                aria-label="Microphone level"
+                data-testid="deck-mic-level"
+              >
+                {Array.from({ length: 7 }).map((_, i) => {
+                  const lit = onCamera && micOn && level * 7 > i;
+                  return (
+                    <span
+                      key={i}
+                      className={`w-[3px] rounded-full transition-[height,background-color] duration-75 ${
+                        lit ? "bg-[#F0A71F]" : "bg-white/20"
+                      }`}
+                      style={{ height: `${6 + i * 3}px` }}
+                    />
+                  );
+                })}
+              </span>
 
               {/* Onto the stage, from where you are. */}
               {onCamera && me && (

@@ -32,6 +32,14 @@ interface Args {
 
 export function useProducerRoom({ enabled, adminSend, studioId, publish, displayName }: Args) {
   const roomRef = useRef<Room | null>(null);
+  // How loud you actually are, 0..1.
+  //
+  // Without this the only way to know your microphone works is to turn on
+  // Listen, which plays the stage back at you — and when you are the stage,
+  // that is you, half a second late. Every person who tried it read the echo
+  // as a fault in the studio. A meter answers the question the echo was being
+  // used to answer, and answers it silently.
+  const [level, setLevel] = useState(0);
   const [status, setStatus] = useState<Status>("idle");
   const [feeds, setFeeds] = useState<Map<string, ProducerFeed>>(new Map());
   const [camOn, setCamOn] = useState(false);
@@ -150,5 +158,38 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
     setMicOn(room.localParticipant.isMicrophoneEnabled);
   }
 
-  return { status, feeds, camOn, micOn, toggleCam, toggleMic, selfKey };
+  useEffect(() => {
+    const room = roomRef.current;
+    const track = room?.localParticipant?.getTrackPublication(Track.Source.Microphone)?.track;
+    const mst = (track as any)?.mediaStreamTrack as MediaStreamTrack | undefined;
+    if (!mst || !micOn) { setLevel(0); return; }
+
+    let ctx: AudioContext | null = null;
+    let raf = 0;
+    try {
+      ctx = new AudioContext();
+      const src = ctx.createMediaStreamSource(new MediaStream([mst]));
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      src.connect(analyser);
+      const buf = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteTimeDomainData(buf);
+        let peak = 0;
+        for (let i = 0; i < buf.length; i++) peak = Math.max(peak, Math.abs(buf[i] - 128));
+        setLevel(Math.min(1, peak / 64));
+        raf = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch {
+      /* no audio context (autoplay policy, no device) — the meter just stays flat */
+    }
+    return () => {
+      cancelAnimationFrame(raf);
+      void ctx?.close().catch(() => {});
+      setLevel(0);
+    };
+  }, [micOn, status]);
+
+  return { status, feeds, camOn, micOn, toggleCam, toggleMic, selfKey, level };
 }
