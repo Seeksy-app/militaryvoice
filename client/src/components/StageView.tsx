@@ -357,7 +357,11 @@ function FullFrameMedia({
       )}
       {label && (
         <div
-          className="pointer-events-none absolute bottom-8 left-8 rounded-lg bg-[#000741]/85 px-5 py-3 text-xl font-semibold text-white backdrop-blur-sm"
+          // Small enough to sit under the artwork rather than across it. At
+          // text-xl with that padding it reached the middle of the frame and
+          // covered whichever podcaster's logo happened to be bottom-left —
+          // the standby reel is a grid of faces, so something always lost.
+          className="pointer-events-none absolute bottom-4 left-4 rounded-md bg-[#000741]/85 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm sm:bottom-5 sm:left-5 sm:text-base"
           style={HEADLINE_FONT}
         >
           {label}
