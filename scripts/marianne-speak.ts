@@ -1,7 +1,7 @@
-// Marianne, with a voice.
+// Alex, with a voice.
 //
-//   npx tsx scripts/marianne-speak.ts "line to say"
-//   npx tsx scripts/marianne-speak.ts            # uses a written transition
+//   npx tsx scripts/alex-speak.ts "line to say"
+//   npx tsx scripts/alex-speak.ts            # uses a written transition
 //
 // The last leg. Her video already publishes into our own LiveKit room; what
 // was missing was the audio, which does not travel over WebRTC at all. Her
@@ -51,7 +51,7 @@ async function main() {
   say(`  ${(pcm.length / 48000).toFixed(1)}s of audio (${(pcm.length / 1024).toFixed(0)}KB)`);
 
   const at = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, {
-    identity: "marianne", name: "Marianne",
+    identity: "alex", name: "Alex",
   });
   at.addGrant({ room, roomJoin: true, canPublish: true, canPublishData: true,
       // Deaf on purpose. Her audio arrives over the media-server websocket,
@@ -89,8 +89,8 @@ async function main() {
     for (let i = 0; i < 12; i++) {
       await new Promise((r) => setTimeout(r, 1500));
       const ps = (await svc.listParticipants(room).catch(() => [])) as any[];
-      if (ps.some((p) => p.identity === "marianne")) {
-        await svc.updateParticipant(room, "marianne", { attributes: { state: "On stage", avatar: "1" } }).catch(() => {});
+      if (ps.some((p) => p.identity === "alex")) {
+        await svc.updateParticipant(room, "alex", { attributes: { state: "On stage", avatar: "1" } }).catch(() => {});
         say("she is on stage");
         return;
       }

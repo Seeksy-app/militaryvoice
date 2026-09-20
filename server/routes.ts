@@ -2659,9 +2659,16 @@ export function registerRoutes(app: Express): void {
     // The same rows the producer's rail renders, so the green room shows the
     // running order itself rather than a summary of it. Read-only by route:
     // there is no write side here at all.
+    //
+    // The run items and signups travel with them because the rail resolves a
+    // scene to its podcaster through those two, and that is what puts a face
+    // on the card. Without them the green room drew the same list as a column
+    // of identical camera glyphs — the same rail in name only.
     res.json({
       currentSceneId: found.studio.currentSceneId,
       scenes: await storage.listScenes(found.studio.id),
+      runItems: await storage.listRunOfShow(found.studio.eventId),
+      signups: (await storage.listSignups(found.studio.eventId)).filter((x) => x.status !== "cancelled"),
     });
   });
 

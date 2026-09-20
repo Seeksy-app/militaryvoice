@@ -1,6 +1,6 @@
-// Can Marianne stand on our stage?
+// Can Alex stand on our stage?
 //
-//   npx tsx scripts/marianne-join.ts
+//   npx tsx scripts/alex-join.ts
 //
 // LiveAvatar publishes the avatar's video into a LiveKit room. By default that
 // is a room it provisions, which would leave us bridging two rooms and paying
@@ -15,13 +15,13 @@
 import "dotenv/config";
 import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 
-const ROOM = `marianne-probe-${Date.now()}`;
+const ROOM = `alex-probe-${Date.now()}`;
 const MARIANNE = "8532b602-89e8-44fa-a9e2-5a4259a058cc";
 const httpUrl = process.env.LIVEKIT_URL!.replace(/^wss:/i, "https:").replace(/^ws:/i, "http:");
 
 async function main() {
   const at = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, {
-    identity: "marianne", name: "Marianne",
+    identity: "alex", name: "Alex",
   });
   // canPublishData is not optional here — LiveAvatar validates the token
   // before it will accept the config, and rejects one without it. Her video is

@@ -1,6 +1,6 @@
-// Put Marianne on the stage the producer is actually standing on.
+// Put Alex on the stage the producer is actually standing on.
 //
-//   npx tsx scripts/marianne-live.ts [seconds]
+//   npx tsx scripts/alex-live.ts [seconds]
 //
 // Finds the room with a live producer in it, mints her a token the way the
 // studio mints one for a podcaster, and points a LITE session at that room so
@@ -28,7 +28,7 @@ async function main() {
   say(`joining ${room} (${live.find((r) => r.name === room).numParticipants} already in)`);
 
   const at = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, {
-    identity: "marianne", name: "Marianne",
+    identity: "alex", name: "Alex",
   });
   at.addGrant({ room, roomJoin: true, canPublish: true, canPublishData: true,
       // Deaf on purpose. Her audio arrives over the media-server websocket,
@@ -59,9 +59,9 @@ async function main() {
   for (let i = 0; i < 10; i++) {
     await new Promise((r) => setTimeout(r, 2000));
     const ps = (await svc.listParticipants(room).catch(() => [])) as any[];
-    const her = ps.find((p) => p.identity === "marianne");
+    const her = ps.find((p) => p.identity === "alex");
     if (her) {
-      await svc.updateParticipant(room, "marianne", { attributes: { state: "On stage", avatar: "1" } }).catch(() => {});
+      await svc.updateParticipant(room, "alex", { attributes: { state: "On stage", avatar: "1" } }).catch(() => {});
       say(`she is in — tracks: ${her.tracks.map((t: any) => (t.type === 1 ? "video" : "audio")).join(", ") || "none yet"}`);
       say(`everyone here: ${ps.map((p: any) => `${p.identity}${p.attributes?.state === "On stage" ? "*" : ""}`).join(", ")}  (* = on stage)`);
       break;

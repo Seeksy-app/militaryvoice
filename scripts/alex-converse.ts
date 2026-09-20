@@ -1,6 +1,6 @@
-// Marianne, listening.
+// Alex, listening.
 //
-//   npx tsx scripts/marianne-converse.ts [seconds]
+//   npx tsx scripts/alex-converse.ts [seconds]
 //
 // Her mouth was the hard part and it is done. This gives her ears, which needs
 // a second connection: her own participant is deliberately deaf — it publishes
@@ -11,7 +11,7 @@
 // cannot feed itself.
 //
 // The loop: audio in → wait for a gap → transcribe → Claude → Madison → push
-// to Marianne's media socket. Turn-taking is an energy gate rather than a
+// to Alex's media socket. Turn-taking is an energy gate rather than a
 // trained detector: speech is loud, the gap after a sentence is not, and 900ms
 // of quiet is a reasonable guess at "your turn". It will occasionally answer
 // a dramatic pause. That is the right failure for a green room and the wrong
@@ -34,7 +34,7 @@ const http = process.env.LIVEKIT_URL!.replace(/^wss:/i, "https:").replace(/^ws:/
 const svc = new RoomServiceClient(http, process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!);
 const say = (...a: unknown[]) => process.stdout.write(a.join(" ") + "\n");
 
-const PERSONA = `You are Marianne, co-host of The Podcast Marathon — 26.2 miles of
+const PERSONA = `You are Alex, co-host of The Podcast Marathon — 26.2 miles of
 military and veteran podcasts on National Military Podcast Day, 5 October.
 
 You are talking to the crew in the studio. Be warm, brisk and brief: one or two
@@ -106,7 +106,7 @@ async function main() {
   for (let wait = 0; wait < 60 && !room; wait++) {
     for (const r of ((await svc.listRooms().catch(() => [])) as any[])) {
       const ps = ((await svc.listParticipants(r.name).catch(() => [])) as any[])
-        .filter((p) => !p.identity.startsWith("marianne"))
+        .filter((p) => !p.identity.startsWith("alex"))
         .filter((p) => p.tracks.some((t: any) => t.type === 0));
       if (ps.length > best) { best = ps.length; room = r.name; }
     }
@@ -117,7 +117,7 @@ async function main() {
   const roomName = room;
 
   // Her avatar: publishes, never listens.
-  const face = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, { identity: "marianne", name: "Marianne" });
+  const face = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, { identity: "alex", name: "Alex" });
   // canSubscribe is not optional: LiveAvatar validates the token and refuses
   // one without it. So she cannot be made deaf at the token, and if her media
   // server turns out to echo the room, that has to be solved somewhere else.
@@ -137,7 +137,7 @@ async function main() {
   async function startAvatar(): Promise<boolean> {
     // Retire the old session before opening the new one.
     //
-    // Both join LiveKit as "marianne", so the second evicts the first — and
+    // Both join LiveKit as "alex", so the second evicts the first — and
     // then stopping the first disconnects the participant that is now the
     // second. She renewed herself straight out of the room. Sequencing it the
     // other way costs a few seconds of absence and actually works.
@@ -169,9 +169,9 @@ async function main() {
     say(retiring ? `renewed → ${d1.session_id.slice(0, 8)}` : `avatar session ${d1.session_id}`);
     // She is not really back until LiveKit says she is publishing again.
     for (let i = 0; i < 16; i++) {
-      const her = ((await svc.listParticipants(room).catch(() => [])) as any[]).find((p) => p.identity === "marianne");
+      const her = ((await svc.listParticipants(room).catch(() => [])) as any[]).find((p) => p.identity === "alex");
       if (her?.tracks?.some((t: any) => t.type === 1)) {
-        await svc.updateParticipant(room, "marianne", { attributes: { state: "Green room", avatar: "1" } }).catch(() => {});
+        await svc.updateParticipant(room, "alex", { attributes: { state: "Green room", avatar: "1" } }).catch(() => {});
         if (retiring) say("  back on screen");
         return true;
       }
@@ -184,7 +184,7 @@ async function main() {
   if (!(await startAvatar())) process.exit(1);
   async function peopleHere(): Promise<number> {
     return ((await svc.listParticipants(room).catch(() => [])) as any[])
-      .filter((p) => !p.identity.startsWith("marianne"))
+      .filter((p) => !p.identity.startsWith("alex"))
       .filter((p) => p.tracks.some((t: any) => t.type === 0)).length;
   }
 
@@ -244,9 +244,9 @@ async function main() {
     // else's question out loud is an interruption, not a service.
     if (askedBy) {
       const all = (await svc.listParticipants(roomName).catch(() => [])) as any[];
-      const hers = all.find((p) => p.identity === "marianne")?.tracks?.filter((t: any) => t.type === 0).map((t: any) => t.sid) ?? [];
+      const hers = all.find((p) => p.identity === "alex")?.tracks?.filter((t: any) => t.type === 0).map((t: any) => t.sid) ?? [];
       for (const p of all) {
-        if (p.identity.startsWith("marianne")) continue;
+        if (p.identity.startsWith("alex")) continue;
         await svc.updateSubscriptions(roomName, p.identity, hers, p.identity === askedBy).catch(() => {});
       }
     }
@@ -289,7 +289,7 @@ async function main() {
   }
 
   // The listener: subscribes, never publishes, so it cannot hear itself.
-  const ears = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, { identity: "marianne-ears", name: "Marianne (listening)" });
+  const ears = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, { identity: "alex-ears", name: "Alex (listening)" });
   ears.addGrant({ room, roomJoin: true, canPublish: false, canSubscribe: true });
   // Declared before the handler is registered. It was below, so a
   // TrackSubscribed firing during connect hit the temporal dead zone, threw
@@ -311,9 +311,9 @@ async function main() {
     for (const pub of p.trackPublications.values()) if (pub.track) ears_on(pub.track, p);
   }
   for (let i = 0; i < 20; i++) {
-    const her = ((await svc.listParticipants(room).catch(() => [])) as any[]).find((p) => p.identity === "marianne");
+    const her = ((await svc.listParticipants(room).catch(() => [])) as any[]).find((p) => p.identity === "alex");
     if (her?.tracks?.some((t: any) => t.type === 1)) {
-      await svc.updateParticipant(room, "marianne", { attributes: { state: "Green room", avatar: "1" } }).catch(() => {});
+      await svc.updateParticipant(room, "alex", { attributes: { state: "Green room", avatar: "1" } }).catch(() => {});
       say("she is on screen");
       break;
     }
@@ -322,7 +322,7 @@ async function main() {
   say("listening\n");
 
   function listenTo(track: any, participant: any) {
-    if (track.kind !== TrackKind.KIND_AUDIO || participant.identity.startsWith("marianne")) return;
+    if (track.kind !== TrackKind.KIND_AUDIO || participant.identity.startsWith("alex")) return;
     // Both the sweep and the event fire for a track already published, and two
     // ears on one mouth transcribe everything twice.
     if (eared.has(participant.identity)) return;
@@ -357,14 +357,12 @@ async function main() {
           //
           // Without this she replies to whatever anyone says, including two
           // podcasters talking to each other. Her name is how people already
-          // address her — "Marianne, can you hear me?" — so it costs nothing
+          // address her — "Alex, can you hear me?" — so it costs nothing
           // to learn, and the window means a follow-up does not need it again.
-          // Speech-to-text does not know how she spells it. Scribe returned
-          // "Mary Ann" for a clear "Marianne", so an exact match meant she
-          // ignored somebody talking straight to her. Generous on purpose:
-          // answering when not quite addressed costs a sentence, not
-          // answering at all costs the whole feature.
-          const named = /\bmar(i|y|ie)[\s-]?(anne?|ann|on|ana)\b/i.test(text);
+          // One syllable, spelled one way. "Alex" came back from Scribe as
+          // "Mary Ann" often enough that she ignored people talking straight
+          // to her; this is the name transcription cannot get wrong.
+          const named = /\balex\b/i.test(text);
           if (named) openUntil = Date.now() + 25000;
           if (!named && Date.now() > openUntil) { say(`  (not for her: "${text.slice(0, 48)}")`); continue; }
           openUntil = Date.now() + 25000;

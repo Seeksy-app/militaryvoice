@@ -181,7 +181,7 @@ function clientKey(): string {
  */
 function RunningOrder({ slug, studioId, searchable = false }: { slug?: string; studioId?: number; searchable?: boolean }) {
   const zone = useMemo(detectLocalTimeZone, []);
-  const { data } = useQuery<{ scenes: SceneRow[]; currentSceneId: number }>({
+  const { data } = useQuery<{ scenes: SceneRow[]; currentSceneId: number; runItems?: any[]; signups?: any[] }>({
     queryKey: ["/api/studio/scenes", slug ?? "featured", studioId ?? 0],
     queryFn: async () => {
       const q = new URLSearchParams();
@@ -199,8 +199,8 @@ function RunningOrder({ slug, studioId, searchable = false }: { slug?: string; s
         scenes={data.scenes}
         currentSceneId={data.currentSceneId}
         zone={zone}
-        runItems={[]}
-        signups={[]}
+        runItems={data.runItems ?? []}
+        signups={data.signups ?? []}
         presentNames={[]}
         media={[]}
         readOnly
@@ -524,11 +524,11 @@ export default function Studio({ slug }: { slug?: string }) {
    */
   const isViewer = (p: RoomPeer) => p.identity.startsWith("viewer-");
   const onAirPeers = peers.filter((p) => p.state === "On stage" && !isViewer(p));
-  const isCohost = (p: { identity: string }) => p.identity === "marianne";
+  const isCohost = (p: { identity: string }) => p.identity === "alex";
   // The listening leg is plumbing — a second connection she needs in order to
   // hear, publishing nothing. It showed up as an empty box with initials
   // beside her, which reads as a broken second guest.
-  const isCohostEar = (p: { identity: string }) => p.identity === "marianne-ears";
+  const isCohostEar = (p: { identity: string }) => p.identity === "alex-ears";
   const greenRoomPeers = peers.filter(
     (p) => p.state !== "On stage" && !isViewer(p) && !isCohost(p) && !isCohostEar(p),
   );
@@ -710,9 +710,9 @@ export default function Studio({ slug }: { slug?: string }) {
                 <PeerTile peer={cohost} fill keyed />
               </div>
               <div className="flex min-w-0 flex-col justify-center px-4 py-3">
-                <div className="text-base font-semibold leading-tight">Marianne</div>
+                <div className="text-base font-semibold leading-tight">Alex</div>
                 <div className="mt-0.5 text-xs leading-snug text-white/55">
-                  Your co-host · say “Marianne” to ask her anything
+                  Your co-host · say “Alex” to ask anything
                 </div>
               </div>
             </div>
