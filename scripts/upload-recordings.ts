@@ -12,7 +12,8 @@
 // it does it on the third file rather than forty minutes into the first, and
 // three episodes in the library beat one.
 import "dotenv/config";
-import { createReadStream, statSync } from "node:fs";
+import { statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { basename } from "node:path";
 import postgres from "postgres";
 
@@ -56,14 +57,19 @@ async function main() {
     if (!signRes.ok) { console.log(`FAILED ${signRes.status} ${await signRes.text()}`); continue; }
     const { uploadUrl, publicUrl } = (await signRes.json()) as { uploadUrl: string; publicUrl: string };
 
-    process.stdout.write(`ok\n  uploading ${MB(p.size)}… `);
-    const put = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "content-type": "video/mp4", "content-length": String(p.size) },
-      body: createReadStream(p.f) as any,
-      duplex: "half",
-    } as any);
-    if (!put.ok) { console.log(`FAILED ${put.status} ${(await put.text()).slice(0, 300)}`); continue; }
+    // curl, not fetch. Streaming a gigabyte through Node's fetch died on a TLS
+    // "bad record mac" a third of the way into the first file — the stream and
+    // whatever inspects TLS on this network do not get along. curl retries a
+    // broken transfer itself and draws a progress bar, which on a 40-minute
+    // upload is the difference between watching it and wondering about it.
+    console.log(`ok\n  uploading ${MB(p.size)}…`);
+    const put = spawnSync("curl", [
+      "--fail-with-body", "--retry", "5", "--retry-all-errors", "--retry-delay", "3",
+      "--progress-bar", "-X", "PUT",
+      "-H", "content-type: video/mp4",
+      "--upload-file", p.f, uploadUrl,
+    ], { stdio: ["ignore", "pipe", "inherit"], encoding: "utf8", maxBuffer: 1 << 24 });
+    if (put.status !== 0) { console.log(`  FAILED curl exit ${put.status} ${(put.stdout ?? "").slice(0, 300)}`); continue; }
 
     process.stdout.write("ok\n  registering… ");
     const reg = await fetch(`${API}/api/admin/media`, {
