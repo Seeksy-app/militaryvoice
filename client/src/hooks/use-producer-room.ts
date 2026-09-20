@@ -42,6 +42,35 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
   const [level, setLevel] = useState(0);
   /** The raw published mic track, so the deck can play it back locally. */
   const [micTrack, setMicTrack] = useState<MediaStreamTrack | null>(null);
+
+  // Which microphone, camera and speaker are in play.
+  //
+  // Until now the browser picked and nobody could see what it picked. Every
+  // audio problem then starts as a guess — wrong mic, wrong output, or a real
+  // fault — and they are indistinguishable from the outside. The choice is
+  // remembered, because the answer to most studio problems today has been
+  // "reload", and a setting that does not survive that is not a setting.
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [activeDevice, setActiveDevice] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const read = async () => {
+      const list = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+      setDevices(list.filter((d) => d.deviceId));
+    };
+    void read();
+    navigator.mediaDevices.addEventListener?.("devicechange", read);
+    return () => navigator.mediaDevices.removeEventListener?.("devicechange", read);
+  }, []);
+
+  async function switchDevice(kind: MediaDeviceKind, deviceId: string) {
+    const room = roomRef.current;
+    setActiveDevice((prev) => ({ ...prev, [kind]: deviceId }));
+    try { localStorage.setItem(`mv-device-${kind}`, deviceId); } catch { /* private window */ }
+    await room?.switchActiveDevice(kind, deviceId).catch(() => {});
+  }
+
+
   const [status, setStatus] = useState<Status>("idle");
   const [feeds, setFeeds] = useState<Map<string, ProducerFeed>>(new Map());
   const [camOn, setCamOn] = useState(false);
@@ -208,5 +237,19 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
     };
   }, [micOn, status]);
 
-  return { status, feeds, camOn, micOn, toggleCam, toggleMic, selfKey, level, micTrack };
+  // Re-apply the remembered devices once the room is up. Declared here because
+  // it reads `status`, which is set up further down.
+  useEffect(() => {
+    const room = roomRef.current;
+    if (!room || status !== "connected") return;
+    for (const kind of ["audioinput", "videoinput", "audiooutput"] as MediaDeviceKind[]) {
+      let saved: string | null = null;
+      try { saved = localStorage.getItem(`mv-device-${kind}`); } catch { /* ignore */ }
+      if (!saved) continue;
+      setActiveDevice((prev) => ({ ...prev, [kind]: saved }));
+      void room.switchActiveDevice(kind, saved).catch(() => {});
+    }
+  }, [status]);
+
+  return { status, feeds, camOn, micOn, toggleCam, toggleMic, selfKey, level, micTrack, devices, activeDevice, switchDevice };
 }

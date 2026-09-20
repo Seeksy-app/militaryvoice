@@ -530,6 +530,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     selfKey,
     level,
     micTrack,
+    devices,
+    activeDevice,
+    switchDevice,
   } = useProducerRoom({ enabled: isLive, adminSend, studioId, publish: onCamera, displayName: "Host" });
 
   const studio = data?.studio;
@@ -1899,8 +1902,42 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     <span className="w-full truncate text-center">Settings</span>
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="center" side="top" className="w-64 space-y-3">
-                  <div>
+                <PopoverContent align="center" side="top" className="w-72 space-y-3">
+                  {/* Which microphone, speaker and camera. The browser used to
+                      pick silently, so every audio problem started as a guess:
+                      wrong device, wrong output, or a real fault, and no way
+                      to tell them apart from the outside. */}
+                  {([
+                    ["audioinput", "Microphone"],
+                    ["audiooutput", "Speaker"],
+                    ["videoinput", "Camera"],
+                  ] as const).map(([kind, label]) => {
+                    const list = devices.filter((d) => d.kind === kind);
+                    if (!list.length) return null;
+                    return (
+                      <div key={kind}>
+                        <Label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                          {label}
+                        </Label>
+                        <Select
+                          value={activeDevice[kind] ?? list[0]?.deviceId}
+                          onValueChange={(v) => void switchDevice(kind, v)}
+                        >
+                          <SelectTrigger className="mt-1 h-9" data-testid={`select-device-${kind}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {list.map((d, i) => (
+                              <SelectItem key={d.deviceId} value={d.deviceId}>
+                                {d.label || `${label} ${i + 1}`}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                  <div className="border-t border-border pt-3">
                     <Label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                       People on stage at once
                     </Label>
