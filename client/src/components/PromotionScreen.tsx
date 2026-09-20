@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -107,6 +107,15 @@ export function PromotionScreen({ contacts }: { contacts: Contact[] }) {
   const [fansOpen, setFansOpen] = useState(false);
   const [eventId, setEventId] = useState<number | null>(null);
 
+  // Anchors in the URL, not just from the buttons on this page.
+  //
+  // The ids were already here, but nothing acted on location.hash — an
+  // in-page button called scrollIntoView directly. So a link from an email
+  // landed at the top of the page and the reader had to go looking, which for
+  // "turn on auto-post" means most of them simply did not.
+  //
+  // It waits for the content: this screen renders a skeleton first, and
+  // scrolling to an element that has not been drawn scrolls nowhere.
   const { data: entries, isLoading } = useQuery<EventEntry[]>({
     queryKey: ["/api/host/events"],
     queryFn: async () => (await apiRequest("GET", "/api/host/events")).json(),
@@ -126,6 +135,18 @@ export function PromotionScreen({ contacts }: { contacts: Contact[] }) {
         return `${formatDateInZone(air.start, zone)} · ${formatTimeInZone(air.start, zone)}`;
       })()
     : "";
+
+  useEffect(() => {
+    if (isLoading) return;
+    const id = window.location.hash.replace(/^#/, "");
+    if (!id) return;
+    // One frame, so the tree this depends on is actually on the page.
+    const t = window.setTimeout(
+      () => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      120,
+    );
+    return () => window.clearTimeout(t);
+  }, [isLoading]);
 
   return (
     <section className="mt-6 flex flex-col gap-10">
@@ -197,6 +218,7 @@ export function PromotionScreen({ contacts }: { contacts: Contact[] }) {
                   ? "Nobody has asked for a reminder yet"
                   : `${contacts.length} ${contacts.length === 1 ? "person has" : "people have"} asked for a reminder — see their emails`}
               </button>
+              <div id="section-autopost" className="scroll-mt-24" />
               <CampaignPlanner signupId={chosen.signupId!} />
             </>
           )}
