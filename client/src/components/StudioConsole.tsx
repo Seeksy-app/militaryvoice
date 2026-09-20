@@ -571,14 +571,24 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
    * loop, which is the exact problem it exists to solve.
    */
   const [hearSelf, setHearSelf] = useState(false);
-  const selfMonitorRef = useRef<HTMLAudioElement | null>(null);
   useEffect(() => {
-    const el = selfMonitorRef.current;
-    if (!el) return;
-    if (!hearSelf || !micTrack || !micOn) { el.srcObject = null; return; }
-    el.srcObject = new MediaStream([micTrack]);
-    void el.play().catch(() => {});
-    return () => { el.srcObject = null; };
+    if (!hearSelf || !micTrack || !micOn) return;
+    // Web Audio, not an <audio> element. An element buffers for smooth
+    // playback, which is right for a stream off the network and wrong for
+    // your own voice — the buffer is pure added delay on a path that has
+    // nowhere to go. Routing the source straight at the destination, with
+    // interactive latency asked for explicitly, is the shortest path the
+    // browser offers.
+    let ctx: AudioContext | null = null;
+    try {
+      ctx = new AudioContext({ latencyHint: "interactive" });
+      const src = ctx.createMediaStreamSource(new MediaStream([micTrack]));
+      src.connect(ctx.destination);
+      void ctx.resume().catch(() => {});
+    } catch {
+      /* no audio context — the toggle simply does nothing */
+    }
+    return () => { void ctx?.close().catch(() => {}); };
   }, [hearSelf, micTrack, micOn]);
   const stale = (data?.participants ?? []).filter((p) => !p.present);
 
@@ -1808,7 +1818,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 {hearSelf ? <Headphones className="h-5 w-5" /> : <Headphones className="h-5 w-5 opacity-60" />}
                 <span className="w-full truncate text-center">{hearSelf ? "Hearing" : "Hear me"}</span>
               </button>
-              <audio ref={selfMonitorRef} autoPlay />
 
               {/* Onto the stage, from where you are. */}
               {onCamera && me && (
