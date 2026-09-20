@@ -36,8 +36,27 @@ function find(obj, key) {
   return null;
 }
 
+/** `client_secrets: ["p8e-…"]` — the first live one. */
+function findFirstOf(obj, key) {
+  if (!obj || typeof obj !== "object") return null;
+  const v = obj[key];
+  if (Array.isArray(v) && typeof v[0] === "string") return v[0];
+  if (Array.isArray(v) && v[0] && typeof v[0] === "object") {
+    const inner = v[0].client_secret ?? v[0].secret ?? v[0].value;
+    if (typeof inner === "string") return inner;
+  }
+  for (const nested of Object.values(obj)) {
+    const hit = findFirstOf(nested, key);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 const id = find(json, "client_id");
-const secret = find(json, "client_secret");
+// The Console's project export calls it client_secrets and makes it an array
+// — a credential can hold two while you rotate. The single-credential file
+// Adobe hands out separately uses the singular. Accept both.
+const secret = find(json, "client_secret") ?? findFirstOf(json, "client_secrets");
 
 if (!id || !secret) {
   console.error("That file has no client_id / client_secret in it.");
