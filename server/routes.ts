@@ -1817,6 +1817,33 @@ export function registerRoutes(app: Express): void {
    * redirects to a freshly signed link each time, which means every existing
    * consumer keeps treating fileUrl as an ordinary href.
    */
+  /**
+   * Show media, for anyone watching.
+   *
+   * /api/assets/:id/file is admin-or-owner, which is right for a podcaster's
+   * own files and wrong for the thing being broadcast: the stage plays from
+   * the public watch page and from a headless browser doing the egress
+   * composite, and neither carries a cookie. An episode that 403s at 9am
+   * because nobody was signed in is not a security win.
+   *
+   * Narrow on purpose. House-owned only, studio/ prefix only, redirect only —
+   * so it can reach the four pre-recorded episodes and nothing a podcaster
+   * uploaded to their own profile.
+   */
+  app.get("/api/studio/media/:id", async (req, res) => {
+    const asset = await storage.getAsset(Number(req.params.id));
+    if (!asset?.storageKey || asset.email !== HOUSE_EMAIL || !asset.storageKey.startsWith("studio/")) {
+      res.status(404).json({ message: "No such file." });
+      return;
+    }
+    try {
+      res.redirect(302, await signedRecordingUrl(asset.storageKey, 6 * 3600));
+    } catch (err) {
+      console.error("Could not sign studio media:", err);
+      res.status(502).json({ message: "Couldn't open that file." });
+    }
+  });
+
   app.get("/api/assets/:id/file", async (req, res) => {
     const asset = await storage.getAsset(Number(req.params.id));
     if (!asset?.storageKey) {
@@ -3437,6 +3464,14 @@ export function registerRoutes(app: Express): void {
           currentSceneId: scene.id,
           countdownEndsAtUtc: "",
           countdownLabel: "",
+          // A scene carrying a file rolls it, agenda row or not. This branch
+          // returns before the patch below, so a pre-recorded segment used to
+          // move everybody into place and then sit on the cameras with the
+          // episode still in the library.
+          stageMediaUrl: scene.mediaUrl,
+          stageMediaKind: scene.mediaKind,
+          stageMediaLabel: scene.mediaLabel,
+          stageMediaPlaying: Boolean(scene.mediaUrl),
           ...bannerFor(scene),
         });
         if (withScene) {
