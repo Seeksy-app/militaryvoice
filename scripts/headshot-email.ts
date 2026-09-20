@@ -81,6 +81,10 @@ On the page you get, you're nine inches across.</p>
   <li>Don't crop it. We'll do that, and the designer wants the shoulders and the room.</li>
 </ul>
 
+<p><strong>Haven't got one?</strong> Your phone will do it. Use the back camera
+rather than the selfie camera — it's several times sharper — stand facing a
+window, and get someone else to press the button.</p>
+
 <p>Takes about a minute, and it's the last thing we need from you before print.</p>`;
 }
 
@@ -97,6 +101,8 @@ Send it here (no sign-in): ${BASE}/headshot/${r.token}
 - The biggest file you have, straight off the camera or phone.
 - A photograph of you, not your show artwork — we already pulled that from your feed.
 - Don't crop it. We'll do that.
+
+Haven't got one? Your phone will do it. Use the back camera rather than the selfie camera — it's several times sharper — stand facing a window, and get someone else to press the button.
 
 Takes about a minute.`;
 }

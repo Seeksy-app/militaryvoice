@@ -96,6 +96,15 @@ export default function Headshot({ token }: { token: string }) {
               <li>· Don't crop it. We'll do that, and a designer wants the shoulders and the room.</li>
             </ul>
 
+            {/* Most people here have no headshot, and the one thing they get
+                wrong is the camera they use: the selfie camera is a fraction
+                of the resolution of the one on the back. */}
+            <p className="mt-4 rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">Haven't got one?</span> Your phone will do it.
+              Use the back camera rather than the selfie camera — it's several times sharper — stand facing a
+              window, and get someone else to press the button.
+            </p>
+
             <div className="mt-7 rounded-2xl border-2 border-dashed border-border bg-muted/20 p-6">
               <div className="flex flex-wrap items-center gap-5">
                 <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl bg-muted">
