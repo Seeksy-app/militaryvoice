@@ -6,19 +6,23 @@
 // They go to R2, not Supabase. Supabase caps a file at 50MB and the bucket
 // cannot be raised past it — asking for 2GB comes back "the object exceeded
 // the maximum allowed size", because the project's own limit wins. Chunking
-// does not help either: the 413 is thrown on the declared size at the start of
-// a resumable upload, before any bytes move.
+// does not get round that either: the 413 lands on the declared size when a
+// resumable upload is created, before any bytes move.
 //
-// R2 has no such ceiling, already holds the recordings, and is fast on the
-// same connection that Supabase was refusing — measured at 60MB in ten
-// seconds. /api/assets/:id/file signs a URL and redirects to it, so nothing
-// about R2 being private gets in the way of playing one on the stage.
+// Multipart, because one long request does not survive this connection. A 60MB
+// probe to R2 finished in ten seconds and passed; every real file — 170MB and
+// up — was reset mid-send with curl 55/56. The limit is on how long a single
+// upload stays open, not on the destination, so each part is its own short
+// request and a dropped one costs 16MB and a retry instead of the whole file.
+//
+// /api/assets/:id/file signs a URL and redirects to it, so a private bucket
+// costs nothing at playback.
 import "dotenv/config";
-import { statSync } from "node:fs";
+import { createReadStream, statSync } from "node:fs";
 import { basename } from "node:path";
-import { spawnSync } from "node:child_process";
 import postgres from "postgres";
-import { signedRecordingUpload } from "../server/recordingStorage";
+import { S3Client } from "@aws-sdk/client-s3";
+import { Upload } from "@aws-sdk/lib-storage";
 
 const FILES = [
   "Devil Dawg Double Dare Podcast Ep 4 Major Life Changes with Phil Randazzo.mp4",
@@ -29,6 +33,35 @@ const FILES = [
 
 const API = process.env.MV_API ?? "https://militaryvoice.ai";
 const MB = (n: number) => `${(n / 1048576).toFixed(1)}MB`;
+
+const s3 = new S3Client({
+  region: "auto",
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+  },
+});
+
+async function put(file: string, key: string, size: number): Promise<void> {
+  let shown = -1;
+  const up = new Upload({
+    client: s3,
+    params: { Bucket: process.env.R2_BUCKET!, Key: key, Body: createReadStream(file), ContentType: "video/mp4" },
+    partSize: 16 * 1024 * 1024, // A few seconds a part at the measured rate.
+    queueSize: 3,
+    leavePartsOnError: false,
+  });
+  up.on("httpUploadProgress", (p) => {
+    const pct = Math.floor(((p.loaded ?? 0) / size) * 100);
+    if (pct !== shown && pct % 5 === 0) {
+      shown = pct;
+      process.stdout.write(`\r    ${String(pct).padStart(3)}%  ${MB(p.loaded ?? 0)} / ${MB(size)}   `);
+    }
+  });
+  await up.done();
+  process.stdout.write(`\r    100%  ${MB(size)}                         \n`);
+}
 
 async function main() {
   const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1 });
@@ -41,23 +74,19 @@ async function main() {
     .sort((a, b) => a.size - b.size);
   for (const p of plan) console.log(`  ${p.done ? "skip" : "send"}  ${MB(p.size).padStart(9)}  ${basename(p.f)}`);
   const todo = plan.filter((p) => !p.done);
-  console.log(`\n${todo.length} to upload, ${MB(todo.reduce((n, p) => n + p.size, 0))} → R2`);
+  console.log(`\n${todo.length} to upload, ${MB(todo.reduce((n, p) => n + p.size, 0))} → R2 in 16MB parts`);
   if (!process.argv.includes("--apply")) { console.log("\nDry run — pass --apply."); return; }
 
   for (const p of todo) {
     const name = basename(p.f);
     const key = `studio/${Date.now()}-${name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80)}`;
     console.log(`\n${name}`);
-    // Room for the big one: a gigabyte at the measured rate is a few minutes,
-    // and a signed URL that expires mid-transfer fails at 99%.
-    const url = signedRecordingUpload(key, 4 * 3600);
-    const put = spawnSync("curl", [
-      "--fail-with-body", "--retry", "3", "--retry-all-errors", "--retry-delay", "3",
-      "--progress-bar", "-X", "PUT", "-H", "content-type: video/mp4",
-      "--upload-file", p.f, url,
-    ], { stdio: ["ignore", "pipe", "inherit"], encoding: "utf8", maxBuffer: 1 << 24 });
-    if (put.status !== 0) { console.log(`    FAILED curl exit ${put.status} ${(put.stdout ?? "").slice(0, 300)}`); continue; }
-
+    try {
+      await put(p.f, key, p.size);
+    } catch (err: any) {
+      console.log(`\n    FAILED: ${String(err?.message ?? err).slice(0, 200)}`);
+      continue;
+    }
     const reg = await fetch(`${API}/api/admin/media`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },

@@ -37,13 +37,12 @@ const isCeremony = (b?: Booking | null) => !!b && /ceremon/i.test(b.podcastName 
 const POINT_TWO = /\bbonus\b|flag carry|roll call/i;
 const isBonus = (b?: Booking | null) => !!b && POINT_TWO.test(b.podcastName ?? "");
 
-// The half hour after the tape. You cross the line, and then somebody hangs a
-// medal round your neck and thanks you for coming — it is part of the race day
-// and it is not a mile, so it gets its own marker rather than quietly becoming
-// a twenty-seventh.
+// The quarter hour after the tape. You cross the line, and then somebody hangs
+// a medal round your neck — it is part of race day and it is not a mile, so it
+// gets its own marker rather than quietly becoming a twenty-seventh.
 const isFlagCarry = (b?: Booking | null) => !!b && /flag carry/i.test(b.podcastName ?? "");
 
-const isThanks = (b?: Booking | null) => !!b && /thank you/i.test(b.podcastName ?? "");
+const isAwards = (b?: Booking | null) => !!b && /awards|thank you/i.test(b.podcastName ?? "");
 
 /**
  * A marker for every slot, in running order.
@@ -66,7 +65,7 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
   // finish, and it stays a plain B so it never takes B1 off the closing run.
   let lastMile = -1;
   slots.forEach((s, i) => {
-    if (i !== first && i !== last && s.signup && !isBonus(s.signup) && !isThanks(s.signup)) lastMile = i;
+    if (i !== first && i !== last && s.signup && !isBonus(s.signup) && !isAwards(s.signup)) lastMile = i;
   });
 
   // Numbered only when there is more than one — a lone "B1" implies a B2 that
@@ -91,7 +90,7 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
       leg += 1;
       return { kind: "point-two", label: `B${leg}`, sub: "bonus" };
     }
-    if (isThanks(s.signup)) return { kind: "medal", label: "★", sub: "thanks" };
+    if (isAwards(s.signup)) return { kind: "medal", label: "★", sub: "awards" };
     if (!s.signup) return { kind: "open", label: "—", sub: "open" };
     mile += 1;
     if (mile <= MILES) return { kind: "mile", n: mile, label: String(mile), sub: "mile" };

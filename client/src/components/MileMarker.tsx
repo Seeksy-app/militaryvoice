@@ -32,6 +32,10 @@ export function MileMarker({
   // bib size from across a scrolling page, where a letter has to be spelled out.
   const isFlag = marker.kind === "flag";
 
+  // The awards bib wears the medal itself. A star is a rating; a medal on a
+  // ribbon is the thing you are handed at the end of a race.
+  const isMedal = marker.kind === "medal";
+
   // Below about 40px the small caps stop being letters and become texture, so
   // the bib drops to its number alone rather than printing something nobody can
   // read. Same rule the sign needed, for the same reason.
@@ -129,7 +133,14 @@ export function MileMarker({
           ))}
         </text>
       )}
-      {isFlag ? (
+      {isMedal ? (
+        <g stroke={NAVY} strokeLinecap="butt" strokeLinejoin="round" fill="none">
+          {/* Thick enough to read as ribbon. At two units they were antennae. */}
+          <path d="M21.8 13.4 L25.4 22.2" strokeWidth="3.6" />
+          <path d="M32.2 13.4 L28.6 22.2" strokeWidth="3.6" />
+          <circle cx="27" cy="27.8" r="6" fill={NAVY} stroke="none" />
+        </g>
+      ) : isFlag ? (
         <g
           stroke={NAVY}
           strokeWidth="2.2"
