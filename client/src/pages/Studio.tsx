@@ -637,6 +637,7 @@ export default function Studio({ slug }: { slug?: string }) {
           <ArrowLeft className="h-3.5 w-3.5" /> Back to your dashboard
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
               Green Room
@@ -649,7 +650,7 @@ export default function Studio({ slug }: { slug?: string }) {
           {/* The co-host sits with the room's name, not in the queue of people
               waiting to go on. She is staff. */}
           {cohost && (
-            <div className="flex items-stretch overflow-hidden rounded-2xl border border-[#F0A71F]/30 bg-[#F0A71F]/[0.06]">
+            <div className="flex h-24 items-stretch overflow-hidden rounded-2xl border border-[#F0A71F]/30 bg-[#F0A71F]/[0.06]">
               {/* Flush to the card's edges and its full height. Inset in a
                   padded box she was a thumbnail of a person rather than a
                   person — the point of her being here is that you can see her
@@ -665,6 +666,7 @@ export default function Studio({ slug }: { slug?: string }) {
               </div>
             </div>
           )}
+          </div>
           <div className="flex items-center gap-2">
             {/* What's true from where they're standing. The studio's own status
                 said "Live" while standby was rolling and nobody was on stage,

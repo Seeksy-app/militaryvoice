@@ -208,8 +208,13 @@ async function main() {
   }
   say("listening\n");
 
+  const eared = new Set<string>();
   function listenTo(track: any, participant: any) {
     if (track.kind !== TrackKind.KIND_AUDIO || participant.identity.startsWith("marianne")) return;
+    // Both the sweep and the event fire for a track already published, and two
+    // ears on one mouth transcribe everything twice.
+    if (eared.has(participant.identity)) return;
+    eared.add(participant.identity);
     say(`  ear on ${participant.identity}`);
     (async () => {
       const stream = new AudioStream(track);
@@ -242,7 +247,12 @@ async function main() {
           // podcasters talking to each other. Her name is how people already
           // address her — "Marianne, can you hear me?" — so it costs nothing
           // to learn, and the window means a follow-up does not need it again.
-          const named = /\bmarianne\b/i.test(text);
+          // Speech-to-text does not know how she spells it. Scribe returned
+          // "Mary Ann" for a clear "Marianne", so an exact match meant she
+          // ignored somebody talking straight to her. Generous on purpose:
+          // answering when not quite addressed costs a sentence, not
+          // answering at all costs the whole feature.
+          const named = /\bmar(i|y|ie)[\s-]?(anne?|ann|on|ana)\b/i.test(text);
           if (named) openUntil = Date.now() + 25000;
           if (!named && Date.now() > openUntil) { say(`  (not for her: "${text.slice(0, 48)}")`); continue; }
           openUntil = Date.now() + 25000;
