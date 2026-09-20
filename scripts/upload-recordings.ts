@@ -3,19 +3,22 @@
 //   npx tsx scripts/upload-recordings.ts           # dry run
 //   npx tsx scripts/upload-recordings.ts --apply
 //
-// The files go straight from this machine to storage on a signed URL. They do
-// not pass through the API: a Vercel function takes a 4.5MB request body and
-// the smallest of these is a hundred and seventy megabytes, so routing them
-// through the server is not a slow version of this, it is a 413.
+// They go to R2, not Supabase. Supabase caps a file at 50MB and the bucket
+// cannot be raised past it — asking for 2GB comes back "the object exceeded
+// the maximum allowed size", because the project's own limit wins. Chunking
+// does not help either: the 413 is thrown on the declared size at the start of
+// a resumable upload, before any bytes move.
 //
-// Smallest first, deliberately. If the project is going to run out of storage
-// it does it on the third file rather than forty minutes into the first, and
-// three episodes in the library beat one.
+// R2 has no such ceiling, already holds the recordings, and is fast on the
+// same connection that Supabase was refusing — measured at 60MB in ten
+// seconds. /api/assets/:id/file signs a URL and redirects to it, so nothing
+// about R2 being private gets in the way of playing one on the stage.
 import "dotenv/config";
 import { statSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import { basename } from "node:path";
+import { spawnSync } from "node:child_process";
 import postgres from "postgres";
+import { signedRecordingUpload } from "../server/recordingStorage";
 
 const FILES = [
   "Devil Dawg Double Dare Podcast Ep 4 Major Life Changes with Phil Randazzo.mp4",
@@ -33,57 +36,41 @@ async function main() {
   const have = await sql`SELECT file_name FROM show_assets WHERE file_name <> ''`;
   await sql.end();
   const already = new Set((have as any[]).map((r) => r.file_name));
-  const pw = ev?.admin_password;
-  if (!pw) throw new Error("No admin password on the featured event.");
 
-  const apply = process.argv.includes("--apply");
   const plan = FILES.map((f) => ({ f, size: statSync(f).size, done: already.has(basename(f)) }))
     .sort((a, b) => a.size - b.size);
-
-  console.log(`${API}\n`);
-  for (const p of plan) console.log(`  ${p.done ? "skip (already up)" : "upload"}  ${MB(p.size).padStart(8)}  ${basename(p.f)}`);
+  for (const p of plan) console.log(`  ${p.done ? "skip" : "send"}  ${MB(p.size).padStart(9)}  ${basename(p.f)}`);
   const todo = plan.filter((p) => !p.done);
-  console.log(`\n${todo.length} to upload, ${MB(todo.reduce((n, p) => n + p.size, 0))} total`);
-  if (!apply) { console.log("\nDry run — pass --apply."); return; }
+  console.log(`\n${todo.length} to upload, ${MB(todo.reduce((n, p) => n + p.size, 0))} → R2`);
+  if (!process.argv.includes("--apply")) { console.log("\nDry run — pass --apply."); return; }
 
   for (const p of todo) {
     const name = basename(p.f);
-    process.stdout.write(`\n${name}\n  signing… `);
-    const signRes = await fetch(`${API}/api/admin/media/upload-url`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-admin-password": pw },
-      body: JSON.stringify({ fileName: name }),
-    });
-    if (!signRes.ok) { console.log(`FAILED ${signRes.status} ${await signRes.text()}`); continue; }
-    const { uploadUrl, publicUrl } = (await signRes.json()) as { uploadUrl: string; publicUrl: string };
-
-    // curl, not fetch. Streaming a gigabyte through Node's fetch died on a TLS
-    // "bad record mac" a third of the way into the first file — the stream and
-    // whatever inspects TLS on this network do not get along. curl retries a
-    // broken transfer itself and draws a progress bar, which on a 40-minute
-    // upload is the difference between watching it and wondering about it.
-    console.log(`ok\n  uploading ${MB(p.size)}…`);
+    const key = `studio/${Date.now()}-${name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80)}`;
+    console.log(`\n${name}`);
+    // Room for the big one: a gigabyte at the measured rate is a few minutes,
+    // and a signed URL that expires mid-transfer fails at 99%.
+    const url = signedRecordingUpload(key, 4 * 3600);
     const put = spawnSync("curl", [
-      "--fail-with-body", "--retry", "5", "--retry-all-errors", "--retry-delay", "3",
-      "--progress-bar", "-X", "PUT",
-      "-H", "content-type: video/mp4",
-      "--upload-file", p.f, uploadUrl,
+      "--fail-with-body", "--retry", "3", "--retry-all-errors", "--retry-delay", "3",
+      "--progress-bar", "-X", "PUT", "-H", "content-type: video/mp4",
+      "--upload-file", p.f, url,
     ], { stdio: ["ignore", "pipe", "inherit"], encoding: "utf8", maxBuffer: 1 << 24 });
-    if (put.status !== 0) { console.log(`  FAILED curl exit ${put.status} ${(put.stdout ?? "").slice(0, 300)}`); continue; }
+    if (put.status !== 0) { console.log(`    FAILED curl exit ${put.status} ${(put.stdout ?? "").slice(0, 300)}`); continue; }
 
-    process.stdout.write("ok\n  registering… ");
     const reg = await fetch(`${API}/api/admin/media`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-admin-password": pw },
+      headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
       body: JSON.stringify({
-        uploadedUrl: publicUrl,
+        storageKey: key,
         fileName: name,
         label: name.replace(/\.[^.]+$/, "").replace(/\s*-\s*\d{4}-\d{2}-\d{2}.*$/, "").trim(),
-        kind: "Other", // ASSET_KINDS has no Episode; the route coerces anything else to this anyway
+        kind: "Other",
         sizeBytes: p.size,
       }),
     });
-    console.log(reg.ok ? "done" : `FAILED ${reg.status} ${await reg.text()}`);
+    const body = (await reg.json().catch(() => ({}))) as { id?: number; message?: string };
+    console.log(reg.ok ? `    in the library as asset #${body.id}` : `    uploaded but register FAILED ${reg.status} ${body.message ?? ""}`);
   }
 }
 

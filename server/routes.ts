@@ -3156,8 +3156,23 @@ export function registerRoutes(app: Express): void {
   });
 
   app.post("/api/admin/media", requireAdmin, async (req, res) => {
+    // Two homes, because they have different ceilings. Supabase holds the
+    // small stuff and caps a file at 50MB — a limit the bucket cannot be
+    // raised above, since the project's own limit wins and refuses the change.
+    // A pre-recorded episode is hundreds of megabytes, so those go to R2, the
+    // same bucket the recordings use, and are served through
+    // /api/assets/:id/file which signs a URL on the way past.
     const uploadedUrl = String(req.body?.uploadedUrl ?? "").trim();
-    if (!/^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\/object\/public\/show-assets\//i.test(uploadedUrl)) {
+    const storageKey = String(req.body?.storageKey ?? "").trim();
+    if (!uploadedUrl && !storageKey) {
+      res.status(400).json({ message: "Need an uploaded file." });
+      return;
+    }
+    if (storageKey && !/^studio\/[A-Za-z0-9._\/-]{1,200}$/.test(storageKey)) {
+      res.status(400).json({ message: "That storage key isn't one of ours." });
+      return;
+    }
+    if (uploadedUrl && !/^https:\/\/[a-z0-9-]+\.supabase\.co\/storage\/v1\/object\/public\/show-assets\//i.test(uploadedUrl)) {
       res.status(400).json({ message: "That upload didn't come from us. Try again." });
       return;
     }
@@ -3169,7 +3184,7 @@ export function registerRoutes(app: Express): void {
       kind,
       label,
       fileUrl: uploadedUrl,
-      storageKey: "",
+      storageKey,
       linkUrl: "",
       fileName,
       sizeBytes: Number(req.body?.sizeBytes) || 0,
