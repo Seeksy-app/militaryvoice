@@ -587,12 +587,19 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
       ctx = new AudioContext({ latencyHint: "interactive" });
       const src = ctx.createMediaStreamSource(new MediaStream([micTrack]));
       src.connect(ctx.destination);
+      // Moving off an <audio> element for latency cost the speaker routing
+      // with it: a bare AudioContext plays to the system default and ignores
+      // the device you picked. So the monitor came out of the laptop while
+      // the picker said Bluetooth. setSinkId puts it back where you asked.
+      const out = activeDevice["audiooutput"];
+      const withSink = ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+      if (out && typeof withSink.setSinkId === "function") void withSink.setSinkId(out).catch(() => {});
       void ctx.resume().catch(() => {});
     } catch {
       /* no audio context — the toggle simply does nothing */
     }
     return () => { void ctx?.close().catch(() => {}); };
-  }, [hearSelf, micTrack, micOn]);
+  }, [hearSelf, micTrack, micOn, activeDevice]);
   const stale = (data?.participants ?? []).filter((p) => !p.present);
 
   // What the control room should be doing right now, and next.
