@@ -841,7 +841,7 @@ export default function Studio({ slug }: { slug?: string }) {
              the producer bringing them up. */
           <>
           <div className="mb-4 mt-4">
-            <UpNext slug={slug} studioId={studioId} live={showIsLive} />
+            <UpNext slug={slug} studioId={studioId} />
           </div>
 
           <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px]">

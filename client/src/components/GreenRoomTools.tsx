@@ -155,8 +155,14 @@ export function PlaybackButton({ stream, camOn }: { stream: MediaStream | null; 
 }
 
 // ---------------------------------------------------------------------------
-// On air · On deck · Following
+// Up next · Following
 // ---------------------------------------------------------------------------
+//
+// Two cards, not three. The scene on air is already the top card of the rail
+// down the right-hand side, pinned there and full width — repeating it here
+// spent a third of the strip saying something the page says better a few
+// hundred pixels away. What is left is the pair nobody can see anywhere else,
+// and with the room to be read from across a desk.
 
 interface ScenesPayload {
   scenes: SceneRow[];
@@ -195,70 +201,58 @@ function until(ms: number): string | null {
 }
 
 const SLOTS = [
-  { key: "air", label: "On air", offAir: "Up first" },
-  { key: "deck", label: "On deck", offAir: "Then" },
-  { key: "next", label: "Following", offAir: "Then" },
+  { key: "next", label: "Up next", offset: 1 },
+  { key: "after", label: "Following", offset: 2 },
 ] as const;
 
 function Card({
   label,
-  onAir,
   scene,
   who,
   thumb,
   zone,
   now,
-  live,
 }: {
   label: string;
-  /** The first card, which is the one that may be going out right now. */
-  onAir: boolean;
   scene: SceneRow | undefined;
   who: string;
   thumb: string | null;
   zone: string;
   now: number;
-  live: boolean;
 }) {
   const starts = scene?.startAtUtc ? Date.parse(scene.startAtUtc) : NaN;
   const hasTime = Number.isFinite(starts);
   const countdown = hasTime ? until(starts - now) : null;
+  // Inside five minutes it stops being information and becomes a cue.
+  const imminent = hasTime && starts > now && starts - now < 5 * 60_000;
 
   return (
     <div
-      className={`flex min-w-0 items-center gap-3 rounded-xl border px-3 py-2.5 ${
-        onAir && live
-          ? "border-[#ED1C24]/50 bg-[#ED1C24]/[0.08]"
-          : onAir
-            ? "border-white/20 bg-white/[0.06]"
-            : "border-white/12 bg-white/[0.035]"
+      className={`flex min-w-0 items-center gap-4 rounded-2xl border px-4 py-3.5 ${
+        imminent ? "border-[#F0A71F]/60 bg-[#F0A71F]/[0.08]" : "border-white/12 bg-white/[0.04]"
       }`}
       data-testid={`upnext-${label.toLowerCase().replace(/\s+/g, "-")}`}
     >
       {/* 16:9, because it is a picture of what goes on the screen. */}
-      <span className="relative aspect-video w-[72px] shrink-0 overflow-hidden rounded-lg bg-[#04102b] ring-1 ring-white/10">
+      <span className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-xl bg-[#04102b] ring-1 ring-white/10 sm:w-36">
         {thumb ? (
-          <img src={resolveUploadUrl(thumb)} alt="" className="h-full w-full object-cover" />
+          <img src={resolveUploadUrl(thumb)} alt="" className="h-full w-full object-cover object-[50%_28%]" />
         ) : (
           <span className="flex h-full w-full items-center justify-center text-white/25">
-            {scene && scene.mediaUrl ? <Clapperboard className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+            {scene && scene.mediaUrl ? <Clapperboard className="h-6 w-6" /> : <ImageIcon className="h-6 w-6" />}
           </span>
         )}
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
-          {onAir && live ? (
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#ED1C24]" />
-          ) : (
-            <Radio className="h-3 w-3 text-[#F0A71F]" />
-          )}
+        <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
+          <Radio className={`h-3.5 w-3.5 ${imminent ? "text-[#F0A71F]" : "text-[#F0A71F]/70"}`} />
           {label}
         </span>
-        <span className="mt-0.5 block truncate text-sm font-semibold text-white">
+        <span className="mt-1 block truncate text-base font-bold leading-tight text-white sm:text-lg">
           {scene?.name?.trim() || "Nothing scheduled"}
         </span>
-        <span className="mt-0.5 block truncate text-[11px] text-white/45">
+        <span className="mt-1 block truncate text-[12px] text-white/50">
           {who || (hasTime ? formatTimeInZone(new Date(starts), zone) : "—")}
         </span>
       </span>
@@ -267,17 +261,13 @@ function Card({
       {hasTime && (
         <span className="shrink-0 text-right">
           <span
-            className={`block text-sm font-bold tabular-nums ${
-              onAir && live
-                ? "text-[#ED1C24]"
-                : starts - now < 5 * 60_000 && starts > now
-                  ? "text-[#F0A71F]"
-                  : "text-white/85"
+            className={`block text-2xl font-bold leading-none tabular-nums ${
+              imminent ? "text-[#F0A71F]" : "text-white/90"
             }`}
           >
-            {onAir && live ? "Live" : (countdown ?? formatDateInZone(new Date(starts), zone))}
+            {countdown ?? formatDateInZone(new Date(starts), zone)}
           </span>
-          <span className="block text-[10px] uppercase tracking-[0.1em] text-white/35">
+          <span className="mt-1 block text-[11px] uppercase tracking-[0.1em] text-white/35">
             {formatTimeInZone(new Date(starts), zone)}
           </span>
         </span>
@@ -287,14 +277,14 @@ function Card({
 }
 
 /**
- * The three that matter, from the producer's own rail.
+ * The two that matter, from the producer's own rail.
  *
  * Read off the same `/api/studio/scenes` the scene list uses — react-query
  * shares the key, so this costs no extra request — because a podcaster being
  * told something different from what the control room is following is worse
  * than being told nothing.
  */
-export function UpNext({ slug, studioId, live }: { slug?: string; studioId?: number; live: boolean }) {
+export function UpNext({ slug, studioId }: { slug?: string; studioId?: number }) {
   const zone = useMemo(detectLocalTimeZone, []);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -317,10 +307,10 @@ export function UpNext({ slug, studioId, live }: { slug?: string; studioId?: num
     const scenes = data?.scenes ?? [];
     if (!scenes.length) return null;
     // Where the producer is, or the top of the rail before they have taken
-    // anything — never -1, which would hand back the last three scenes.
+    // anything — never -1, which would hand back the end of the running order.
     const at = Math.max(0, scenes.findIndex((s) => s.id === data?.currentSceneId));
-    return SLOTS.map((slot, i) => {
-      const sc = scenes[at + i];
+    return SLOTS.map((slot) => {
+      const sc = scenes[at + slot.offset];
       const item = sc?.runItemId ? data?.runItems?.find((r) => r.id === sc.runItemId) : undefined;
       const sg = item?.signupId ? data?.signups?.find((x) => x.id === item.signupId) : undefined;
       const sceneImage = sc && sc.mediaUrl && isImage(sc) ? sc.mediaUrl : null;
@@ -330,25 +320,15 @@ export function UpNext({ slug, studioId, live }: { slug?: string; studioId?: num
         who: sg ? `${sg.podcastName}${sg.hostName ? ` · ${sg.hostName}` : ""}` : "",
         thumb: sceneImage ?? sg?.photoUrl ?? null,
       };
-    });
+    }).filter((c) => c.scene);
   }, [data]);
 
-  if (!cards) return null;
+  if (!cards?.length) return null;
 
   return (
-    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="green-room-upnext">
+    <div className="grid gap-3 sm:grid-cols-2" data-testid="green-room-upnext">
       {cards.map((c) => (
-        <Card
-          key={c.key}
-          label={live ? c.label : c.offAir}
-          onAir={c.key === "air"}
-          scene={c.scene}
-          who={c.who}
-          thumb={c.thumb}
-          zone={zone}
-          now={now}
-          live={live}
-        />
+        <Card key={c.key} label={c.label} scene={c.scene} who={c.who} thumb={c.thumb} zone={zone} now={now} />
       ))}
     </div>
   );
