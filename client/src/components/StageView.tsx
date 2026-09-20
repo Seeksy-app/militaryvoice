@@ -67,6 +67,8 @@ export interface StageTile {
   video: Track | null;
   audio: Track | null;
   speaking: boolean;
+  /** An avatar, whose feed arrives on a chroma-key green background. */
+  keyed?: boolean;
 }
 
 /**
@@ -116,7 +118,16 @@ export function useStageRoom(url: string | null, token: string | null, muted: bo
           if (pub.kind === Track.Kind.Video) video = pub.track;
           if (pub.kind === Track.Kind.Audio) audio = pub.track;
         });
-        next.push({ identity: p.identity, name: p.name || p.identity, displayTitle: p.attributes?.displayTitle || "", video, audio, speaking: p.isSpeaking });
+        next.push({
+          identity: p.identity,
+          name: p.name || p.identity,
+          displayTitle: p.attributes?.displayTitle || "",
+          video, audio, speaking: p.isSpeaking,
+          // The avatar renders on green — that is the right output for a
+          // source meant to be composited, not a shortcoming. It gets keyed
+          // here so she sits on our stage instead of a wall of green.
+          keyed: p.attributes?.avatar === "1",
+        });
       });
       next.sort((a, b) => a.identity.localeCompare(b.identity));
       setTiles(next);
@@ -194,6 +205,8 @@ function Tile({ tile, muted, nameBar = true }: { tile: StageTile; muted: boolean
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
   useEffect(() => {
     const el = videoRef.current;
     if (!el || !tile.video) return;
@@ -202,6 +215,52 @@ function Tile({ tile, muted, nameBar = true }: { tile: StageTile; muted: boolean
       tile.video?.detach(el);
     };
   }, [tile.video]);
+
+  // Keying the avatar's green out, frame by frame.
+  //
+  // Done on a canvas rather than with a CSS blend, because a blend cannot
+  // produce real transparency — it can only darken or lighten, which leaves a
+  // green cast on her hair and a hard edge everywhere else. Comparing green
+  // against the other two channels drops the background and keeps skin, which
+  // is also green-ish in absolute terms and would vanish under a naive
+  // threshold.
+  useEffect(() => {
+    if (!tile.keyed) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return;
+
+    let raf = 0;
+    const draw = () => {
+      raf = requestAnimationFrame(draw);
+      const w = video.videoWidth, h = video.videoHeight;
+      if (!w || !h) return;
+      // Half resolution: this runs every frame and she is one tile in a grid,
+      // not the thing anyone is squinting at.
+      const cw = Math.min(w, 640), ch = Math.round((cw / w) * h);
+      if (canvas.width !== cw) { canvas.width = cw; canvas.height = ch; }
+      ctx.drawImage(video, 0, 0, cw, ch);
+      const frame = ctx.getImageData(0, 0, cw, ch);
+      const d = frame.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        // Green well ahead of both neighbours, and bright enough to be the
+        // backdrop rather than a shadow on it.
+        if (g > 90 && g > r * 1.35 && g > b * 1.35) {
+          d[i + 3] = 0;
+        } else if (g > r * 1.1 && g > b * 1.1) {
+          // The spill fringe: keep the pixel, pull the green back toward its
+          // neighbours so she has no lime halo.
+          d[i + 1] = Math.max(r, b);
+        }
+      }
+      ctx.putImageData(frame, 0, 0);
+    };
+    draw();
+    return () => cancelAnimationFrame(raf);
+  }, [tile.keyed, tile.video]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -221,7 +280,14 @@ function Tile({ tile, muted, nameBar = true }: { tile: StageTile; muted: boolean
       {/* contain, not cover: a camera that isn't exactly 16:9 gets letterboxed
           rather than cropped. Losing the top of someone's head on air is worse
           than a black bar. */}
-      <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-contain" />
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={`h-full w-full object-contain ${tile.keyed ? "invisible absolute" : ""}`}
+      />
+      {tile.keyed && <canvas ref={canvasRef} className="h-full w-full object-contain" />}
       <audio ref={audioRef} autoPlay muted={muted} />
 
       {!tile.video && (
