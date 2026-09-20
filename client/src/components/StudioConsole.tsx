@@ -36,6 +36,7 @@ import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
 import {
   MonitorPlay,
   Users,
+  Headphones,
   Mic,
   MicOff,
   Video,
@@ -528,6 +529,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     toggleMic,
     selfKey,
     level,
+    micTrack,
   } = useProducerRoom({ enabled: isLive, adminSend, studioId, publish: onCamera, displayName: "Host" });
 
   const studio = data?.studio;
@@ -555,6 +557,29 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
    */
   const me = selfKey ? present.find((p) => p.clientKey === selfKey) : undefined;
   const meOnStage = me?.state === "On stage";
+
+  /**
+   * Hearing yourself, the way a mixer does it.
+   *
+   * The stage monitor is a network round trip — up to LiveKit, mixed, back
+   * down — so your own voice arrives about a second late. Delayed like that it
+   * does not read as monitoring, it disrupts your speech, and the instinct is
+   * to call the room broken. This plays the microphone straight back on the
+   * machine it came from: no server, no mix, just the local audio path.
+   *
+   * Off by default and headphones-only on purpose. Through speakers it is a
+   * loop, which is the exact problem it exists to solve.
+   */
+  const [hearSelf, setHearSelf] = useState(false);
+  const selfMonitorRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    const el = selfMonitorRef.current;
+    if (!el) return;
+    if (!hearSelf || !micTrack || !micOn) { el.srcObject = null; return; }
+    el.srcObject = new MediaStream([micTrack]);
+    void el.play().catch(() => {});
+    return () => { el.srcObject = null; };
+  }, [hearSelf, micTrack, micOn]);
   const stale = (data?.participants ?? []).filter((p) => !p.present);
 
   // What the control room should be doing right now, and next.
@@ -1768,6 +1793,22 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   );
                 })}
               </span>
+
+              <button
+                type="button"
+                onClick={() => setHearSelf((v) => !v)}
+                title={hearSelf ? "Stop hearing yourself" : "Hear yourself in your headphones (no delay)"}
+                aria-label="Hear yourself"
+                aria-pressed={hearSelf}
+                className={`flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-colors hover:bg-white/10 ${
+                  hearSelf ? "text-[#F0A71F]" : "text-white/70 hover:text-white"
+                }`}
+                data-testid="button-deck-hear-self"
+              >
+                {hearSelf ? <Headphones className="h-5 w-5" /> : <Headphones className="h-5 w-5 opacity-60" />}
+                <span className="w-full truncate text-center">{hearSelf ? "Hearing" : "Hear me"}</span>
+              </button>
+              <audio ref={selfMonitorRef} autoPlay />
 
               {/* Onto the stage, from where you are. */}
               {onCamera && me && (

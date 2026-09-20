@@ -40,6 +40,8 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
   // as a fault in the studio. A meter answers the question the echo was being
   // used to answer, and answers it silently.
   const [level, setLevel] = useState(0);
+  /** The raw published mic track, so the deck can play it back locally. */
+  const [micTrack, setMicTrack] = useState<MediaStreamTrack | null>(null);
   const [status, setStatus] = useState<Status>("idle");
   const [feeds, setFeeds] = useState<Map<string, ProducerFeed>>(new Map());
   const [camOn, setCamOn] = useState(false);
@@ -176,6 +178,7 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
     const room = roomRef.current;
     const track = room?.localParticipant?.getTrackPublication(Track.Source.Microphone)?.track;
     const mst = (track as any)?.mediaStreamTrack as MediaStreamTrack | undefined;
+    setMicTrack(mst ?? null);
     if (!mst || !micOn) { setLevel(0); return; }
 
     let ctx: AudioContext | null = null;
@@ -205,5 +208,5 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
     };
   }, [micOn, status]);
 
-  return { status, feeds, camOn, micOn, toggleCam, toggleMic, selfKey, level };
+  return { status, feeds, camOn, micOn, toggleCam, toggleMic, selfKey, level, micTrack };
 }
