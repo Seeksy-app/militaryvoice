@@ -24,6 +24,7 @@ const GOLD = "#F0A71F";
 const NAVY = "#000741";
 
 const PARTNER_PRICE = 10000;
+const LIVESTREAM_PRICE = 5000;
 const SUPPORTING_PRICE = 2500;
 const SLOT_PRICE = 250;
 
@@ -35,6 +36,14 @@ const PARTNER_BENEFITS = [
   "Your logo in the “coming up next” bumper that runs between every show",
   "Named in the promotional campaign across all participating podcasters' channels",
   "First right of refusal on the 2027 event",
+];
+
+const LIVESTREAM_BENEFITS = [
+  "Your logo on the stream itself, on screen for all 26.2",
+  "Your own thirty-second spot, played between shows through the day",
+  "Named in the hourly sponsor read",
+  "Your logo on the watch page and the agenda",
+  "Included in the post-event thank-you across our channels",
 ];
 
 const SUPPORTING_BENEFITS = [
@@ -288,11 +297,11 @@ export default function Sponsor() {
               Sponsorship
             </div>
             <h2 className="mt-3 text-3xl font-bold leading-[1.25] tracking-tight text-foreground sm:text-4xl sm:leading-[1.25]" style={HEADLINE_FONT}>
-              Three ways in. All start on {eventDate}.
+              Four ways in. All start on {eventDate}.
             </h2>
           </div>
 
-          <div className="mt-12 grid gap-6 lg:grid-cols-3">
+          <div className="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
             {[
               {
                 name: "Partner sponsor",
@@ -301,6 +310,14 @@ export default function Sponsor() {
                 blurb: "Your name on the whole day, from the first show to the last.",
                 benefits: PARTNER_BENEFITS,
                 featured: true,
+              },
+              {
+                name: "Live stream sponsor",
+                price: LIVESTREAM_PRICE,
+                note: "four available",
+                blurb: "Your name on the stream itself, every mile of the way.",
+                benefits: LIVESTREAM_BENEFITS,
+                featured: false,
               },
               {
                 name: "Supporting sponsor",
