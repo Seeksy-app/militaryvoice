@@ -17,7 +17,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { apiRequest } from "@/lib/queryClient";
-import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, slotEnd, onAirWindow } from "@/lib/schedule";
+import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, slotEnd, onAirWindow, totalSlots } from "@/lib/schedule";
 import { isLiveOnlyBlock } from "@shared/slots";
 import type { PublicEvent } from "@shared/schema";
 import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2, Headphones, Megaphone } from "lucide-react";
@@ -75,6 +75,14 @@ export function EventSettings({
       toast({ title: "Couldn't release that time", description: err.message, variant: "destructive" }),
   });
 
+  // Is the open event full? Needed before the early return, so it keys on the
+  // id rather than the resolved entry.
+  const { data: openSignups } = useQuery<{ slotIndex: number; status: string }[]>({
+    queryKey: ["/api/signups", openId],
+    queryFn: async () => (await apiRequest("GET", `/api/signups?eventId=${openId}`)).json(),
+    enabled: openId != null,
+  });
+
   if (isLoading) {
     return (
       <div className="mt-6 space-y-3">
@@ -85,6 +93,10 @@ export function EventSettings({
   }
 
   const open = entries?.find((e) => e.event.id === openId) ?? null;
+  const eventFull =
+    !!open &&
+    (openSignups ?? []).filter((x) => x.status !== "cancelled").length >=
+      totalSlots(open.event.durationHours, open.event.slotMinutes);
 
   const onAirLabel =
     open?.slotIndex != null
@@ -309,7 +321,20 @@ export function EventSettings({
         </div>
       )}
 
-      {openShow && (
+      {/* Nothing to set up for an event you cannot get on to. Leaving the form
+          live invites somebody to fill in a show, artwork and a format for a
+          day that has no room for them. */}
+      {openShow && open.slotIndex == null && eventFull && (
+        <p className="mt-6 rounded-2xl border border-border bg-muted/40 p-5 text-sm">
+          <span className="font-semibold text-foreground">This event is full.</span>{" "}
+          <span className="text-muted-foreground">
+            Every time is taken, so there is nothing to set up here yet. If a slot frees up it will
+            appear above and this opens again.
+          </span>
+        </p>
+      )}
+
+      {openShow && !(open.slotIndex == null && eventFull) && (
         <div className="mt-6">
           <EventShowForm
             eventId={open.event.id}

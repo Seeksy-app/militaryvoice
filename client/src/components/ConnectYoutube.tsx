@@ -16,7 +16,7 @@ interface Status {
   channelTitle: string;
 }
 
-export function ConnectYoutube() {
+export function ConnectYoutube({ locked = false, lockedReason = "" }: { locked?: boolean; lockedReason?: string } = {}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -90,6 +90,8 @@ export function ConnectYoutube() {
       ) : (
         <Button
           size="sm"
+          disabled={locked}
+          title={locked ? lockedReason : undefined}
           className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]"
           onClick={() => {
             window.location.href = "/api/host/youtube/start";

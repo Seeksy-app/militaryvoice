@@ -492,6 +492,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     enabled: !!data,
   });
 
+  // Is there anywhere left to stand? Everything a podcaster sets up — their
+  // show, their YouTube, their artwork — only means something attached to a
+  // slot. With none free and none held, the whole setup is a form leading
+  // nowhere, so it switches off rather than inviting the work.
+  const { data: featuredSignups } = useQuery<{ slotIndex: number; status: string }[]>({
+    queryKey: ["/api/signups", "featured-fill"],
+    queryFn: async () => (await apiRequest("GET", "/api/signups")).json(),
+  });
   // Just enough to know what's still outstanding for the checklist.
   const { data: hostEvents } = useQuery<{ show: { showName?: string } | null; slotIndex: number | null }[]>({
     queryKey: ["/api/host/events"],
@@ -520,6 +528,12 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
 
   // Public events list so the held slot can be described before sign-in.
   const { data: events } = useQuery<PublicEvent[]>({ queryKey: ["/api/events"] });
+  const featured = (events ?? []).find((e) => e.isFeatured);
+  const eventIsFull =
+    !!featured &&
+    (featuredSignups ?? []).filter((x) => x.status !== "cancelled").length >=
+      totalSlots(featured.durationHours, featured.slotMinutes);
+  const noWayIn = eventIsFull && (data?.mySignups.length ?? 0) === 0;
 
   const pendingEvent: PublicEvent | undefined = useMemo(() => {
     if (!pending) return undefined;
@@ -1015,7 +1029,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   Do you want your slot to go out on your own channel as well as ours? Optional — it airs on
                   MilitaryVoice.ai either way.
                 </p>
-                <ConnectYoutube />
+                <ConnectYoutube
+                  locked={noWayIn}
+                  lockedReason="Claim a time slot first — the event is full at the moment."
+                />
                 {social.accounts.length === 0 && (
                   <p className="mt-2 text-sm text-muted-foreground">
                     Nothing linked yet. Connected accounts light up here and show as follow buttons on your card in the lineup.
@@ -1325,6 +1342,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           state={{
             hasShow: !!hostEvents?.some((e) => !!e.show?.showName),
             hasSlot: (data?.mySignups.length ?? 0) > 0,
+            slotsOpen: !eventIsFull,
             hasAccounts: (social?.accounts?.length ?? 0) > 0,
             hasMaterials: (hostAssets?.length ?? 0) > 0 || Boolean(profile?.mediaAnswered),
             hasYouTube: Boolean(youtube?.connected),

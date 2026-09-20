@@ -14,6 +14,8 @@ export interface StepState {
   hasAccounts: boolean;
   hasMaterials: boolean;
   hasYouTube: boolean;
+  /** False when the event is full, so there is nothing left to claim. */
+  slotsOpen?: boolean;
 }
 
 /**
@@ -88,14 +90,19 @@ export function buildSteps(state: StepState, nav: StepNav): Step[] {
       cta: "Set up your show",
       go: nav.onGoEvents,
     },
-    {
-      key: "slot",
-      label: "Claim your time slot",
-      detail: "Pick when you want to be on air. You can move it later.",
-      done: state.hasSlot,
-      cta: "Choose a time",
-      go: nav.onGoEvents,
-    },
+    // Only worth listing while there is something to claim. Telling somebody
+    // to pick a time on a full schedule is a to-do they cannot do, and it sits
+    // at the top of their list unticked for a fortnight.
+    ...(state.hasSlot || state.slotsOpen !== false
+      ? ([{
+          key: "slot",
+          label: "Claim your time slot",
+          detail: "Pick when you want to be on air. You can move it later.",
+          done: state.hasSlot,
+          cta: "Choose a time",
+          go: nav.onGoEvents,
+        }] as Step[])
+      : []),
     {
       key: "materials",
       label: "Send us your media",
