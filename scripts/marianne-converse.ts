@@ -143,9 +143,17 @@ async function main() {
   const anthropic = new Anthropic();
   let busy = false;
   let openUntil = 0;
+  // What has been said so far. Without it every reply was a standalone
+  // request: she could answer a question and then have no idea what it was,
+  // so "who's on before me?" arrived with nothing to refer back to. That is
+  // the difference between a search box and a conversation.
+  const history: { role: "user" | "assistant"; content: string }[] = [];
+  let pending: { text: string; who?: string } | null = null;
 
   async function reply(heard: string, askedBy?: string) {
-    if (busy) return;
+    // Mid-sentence, hold it rather than lose it. People carry on talking while
+    // she is still answering, and dropping that turn made her feel deaf.
+    if (busy) { pending = { text: heard, who: askedBy }; return; }
     busy = true;
     // Only the person who asked hears the answer. Five people wait in a green
     // room and four of them are mid-conversation; a voice answering somebody
@@ -163,11 +171,17 @@ async function main() {
       const msg = await anthropic.messages.create({
         model: "claude-opus-5", max_tokens: 200,
         system: `${PERSONA}\n\nThe running order for ${show.eventName}, all times Eastern:\n${show.sheet}\n\nThis is the confirmed sheet. Answer from it directly — never say you will go and check.`,
-        messages: [{ role: "user", content:
-          `${askedBy && show.whoIs.get(askedBy) ? `You are speaking to ${show.whoIs.get(askedBy)}.` : "You do not know who this is."}\n\nThey said: "${heard}"\n\nReply out loud. Only the words you say.` }],
+        messages: [
+          ...history,
+          { role: "user" as const, content:
+            `${askedBy && show.whoIs.get(askedBy) ? `You are speaking to ${show.whoIs.get(askedBy)}.` : "You do not know who this is."}\n\nThey said: "${heard}"\n\nReply out loud. Only the words you say.` },
+        ],
       });
       const line = msg.content.filter((b) => b.type === "text").map((b) => (b as any).text).join("").trim();
       say(`  says:  "${line}"`);
+      history.push({ role: "user", content: heard }, { role: "assistant", content: line });
+      // Enough to hold a thread, not so much that the prompt grows all night.
+      while (history.length > 12) history.shift();
       const tts = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${MADISON}?output_format=pcm_24000`, {
         method: "POST", headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY!, "content-type": "application/json" },
         body: JSON.stringify({ text: line, model_id: "eleven_turbo_v2_5" }) });
@@ -180,7 +194,12 @@ async function main() {
       }
       ws.send(JSON.stringify({ type: "agent.speak_end" }));
     } catch (e: any) { say(`  reply failed: ${String(e?.message ?? e).slice(0, 140)}`); }
-    finally { busy = false; }
+    finally {
+      busy = false;
+      const next = pending;
+      pending = null;
+      if (next) { openUntil = Date.now() + 25000; await reply(next.text, next.who); }
+    }
   }
 
   // The listener: subscribes, never publishes, so it cannot hear itself.
