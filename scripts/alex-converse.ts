@@ -246,6 +246,83 @@ async function main() {
   const history: { role: "user" | "assistant"; content: string }[] = [];
   let pending: { text: string; who?: string } | null = null;
 
+  /**
+   * Say one line to one person, with no model in the way.
+   *
+   * A five-minute warning is a fact, not a conversation. Sending it through
+   * Claude would cost a round-trip, risk a different sentence every time, and
+   * put a paraphrase between the clock and the person who has to act on it.
+   */
+  async function sayTo(line: string, who: string) {
+    if (busy) return false;
+    busy = true;
+    try {
+      const all = (await svc.listParticipants(roomName).catch(() => [])) as any[];
+      const hers = all.find((p) => p.identity === "alex")?.tracks?.filter((t: any) => t.type === 0).map((t: any) => t.sid) ?? [];
+      for (const p of all) {
+        if (p.identity.startsWith("alex")) continue;
+        await svc.updateSubscriptions(roomName, p.identity, hers, p.identity === who).catch(() => {});
+      }
+      say(`  → ${who}: "${line}"`);
+      const tts = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${MADISON}?output_format=pcm_24000`, {
+        method: "POST", headers: { "xi-api-key": process.env.ELEVENLABS_API_KEY!, "content-type": "application/json" },
+        body: JSON.stringify({ text: line, model_id: "eleven_turbo_v2_5" }) });
+      if (!tts.ok) { say(`  TTS ${tts.status}`); return false; }
+      const pcm = Buffer.from(await tts.arrayBuffer());
+      const ws = avatar?.ws;
+      if (!ws) { say("  no avatar session"); return false; }
+      ws.send(JSON.stringify({ type: "start", encoding: "pcm_s16le", sample_rate: 24000, channels: 1 }));
+      for (let o = 0; o < pcm.length; o += 38400) {
+        ws.send(JSON.stringify({ type: "agent.speak", audio: pcm.subarray(o, o + 38400).toString("base64") }));
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      ws.send(JSON.stringify({ type: "agent.speak_end" }));
+      return true;
+    } catch (e: any) { say(`  warning failed: ${String(e?.message ?? e).slice(0, 120)}`); return false; }
+    finally { busy = false; }
+  }
+
+  /**
+   * The five-minute warning, to the one person it is about.
+   *
+   * Read off the same clock the green room and the producer read, rather than
+   * her own arithmetic — three components working out independently what time
+   * it is, is three components that can disagree on air.
+   *
+   * Fired once per segment. Somebody told they are up in five minutes, twice,
+   * stops believing the first one.
+   */
+  const warned = new Set<number>();
+  const API = process.env.API_BASE || "https://www.militaryvoice.ai";
+  const studioId = Number(roomName.replace(/^mv-studio-/, "")) || 0;
+
+  async function checkClock() {
+    if (!avatar || !studioId) return;
+    try {
+      const res = await fetch(`${API}/api/studio/scenes?studioId=${studioId}`, { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) return;
+      const data = (await res.json()) as { clock?: { fiveMinuteWarning: boolean; nextSceneId: number; nextStartAtUtc: string; nextSceneName: string } | null };
+      const clock = data.clock;
+      if (!clock?.fiveMinuteWarning || !clock.nextSceneId || warned.has(clock.nextSceneId)) return;
+
+      // Only to somebody who is actually here. Announcing it to an empty room
+      // burns the one warning on nobody.
+      const here = (await svc.listParticipants(roomName).catch(() => [])) as any[];
+      const target = here.find((p) => !p.identity.startsWith("alex") && show.whoIs.has(p.identity) &&
+        (show.whoIs.get(p.identity) ?? "").includes(clock.nextSceneName.replace(/^Intro to\s+/i, "").slice(0, 18)));
+      if (!target) return;
+
+      const at = clock.nextStartAtUtc
+        ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(clock.nextStartAtUtc))
+        : "";
+      const first = (show.whoIs.get(target.identity) ?? "").split(",")[0].split(/\s+/)[0];
+      if (await sayTo(`${first} — five minutes. You're on at ${at}.`, target.identity)) {
+        warned.add(clock.nextSceneId);
+      }
+    } catch { /* the clock is advisory; a failed poll is not an event */ }
+  }
+  setInterval(() => void checkClock(), 20000);
+
   async function reply(heard: string, askedBy?: string) {
     // Mid-sentence, hold it rather than lose it. People carry on talking while
     // she is still answering, and dropping that turn made her feel deaf.
