@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
-import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
+import { detectLocalTimeZone, formatDateInZone, formatTimeInZone } from "@/lib/schedule";
 import type { SceneRow } from "@shared/schema";
 import { Headphones, Play, Square, RotateCcw, Radio, Clapperboard, Image as ImageIcon } from "lucide-react";
 
@@ -175,26 +175,34 @@ function isImage(sc: SceneRow): boolean {
  * Seconds appear under two minutes and not before: a countdown reading 47:19
  * invites you to watch it, and the only number that matters at that range is
  * roughly how many songs long it is.
+ *
+ * And it stops being a countdown at twelve hours. Fifteen days out the honest
+ * arithmetic is "365h 29m", which is a number nobody has ever wanted — past a
+ * day the answer to "when am I on" is a date, so the caller shows one instead.
  */
-function until(ms: number): string {
+function until(ms: number): string | null {
   if (ms <= 0) return "now";
   const secs = Math.round(ms / 1000);
   if (secs < 120) return `${secs}s`;
   const mins = Math.round(secs / 60);
   if (mins < 60) return `${mins} min`;
-  const hours = Math.floor(mins / 60);
-  const rem = mins % 60;
-  return rem ? `${hours}h ${rem}m` : `${hours}h`;
+  if (mins < 12 * 60) {
+    const hours = Math.floor(mins / 60);
+    const rem = mins % 60;
+    return rem ? `${hours}h ${rem}m` : `${hours}h`;
+  }
+  return null;
 }
 
 const SLOTS = [
-  { key: "air", label: "On air" },
-  { key: "deck", label: "On deck" },
-  { key: "next", label: "Following" },
+  { key: "air", label: "On air", offAir: "Up first" },
+  { key: "deck", label: "On deck", offAir: "Then" },
+  { key: "next", label: "Following", offAir: "Then" },
 ] as const;
 
 function Card({
   label,
+  onAir,
   scene,
   who,
   thumb,
@@ -203,6 +211,8 @@ function Card({
   live,
 }: {
   label: string;
+  /** The first card, which is the one that may be going out right now. */
+  onAir: boolean;
   scene: SceneRow | undefined;
   who: string;
   thumb: string | null;
@@ -212,7 +222,7 @@ function Card({
 }) {
   const starts = scene?.startAtUtc ? Date.parse(scene.startAtUtc) : NaN;
   const hasTime = Number.isFinite(starts);
-  const onAir = label === "On air";
+  const countdown = hasTime ? until(starts - now) : null;
 
   return (
     <div
@@ -258,10 +268,14 @@ function Card({
         <span className="shrink-0 text-right">
           <span
             className={`block text-sm font-bold tabular-nums ${
-              onAir && live ? "text-[#ED1C24]" : starts - now < 5 * 60_000 ? "text-[#F0A71F]" : "text-white/85"
+              onAir && live
+                ? "text-[#ED1C24]"
+                : starts - now < 5 * 60_000 && starts > now
+                  ? "text-[#F0A71F]"
+                  : "text-white/85"
             }`}
           >
-            {onAir && live ? "Live" : until(starts - now)}
+            {onAir && live ? "Live" : (countdown ?? formatDateInZone(new Date(starts), zone))}
           </span>
           <span className="block text-[10px] uppercase tracking-[0.1em] text-white/35">
             {formatTimeInZone(new Date(starts), zone)}
@@ -326,7 +340,8 @@ export function UpNext({ slug, studioId, live }: { slug?: string; studioId?: num
       {cards.map((c) => (
         <Card
           key={c.key}
-          label={c.label}
+          label={live ? c.label : c.offAir}
+          onAir={c.key === "air"}
           scene={c.scene}
           who={c.who}
           thumb={c.thumb}

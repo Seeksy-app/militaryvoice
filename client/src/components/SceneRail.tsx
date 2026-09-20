@@ -151,7 +151,8 @@ export function SceneRail({
     const el = liveRef.current;
     const box = railRef.current;
     if (!el || !box) return;
-    box.scrollTo({ top: Math.max(0, el.offsetTop - box.offsetTop - 8), behavior: "smooth" });
+    const delta = el.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    box.scrollTo({ top: Math.max(0, box.scrollTop + delta - 8), behavior: "smooth" });
   }, [currentSceneId, scenes.length]);
 
   // 1–9 take a scene. Guarded against anything typed into a field, so renaming
