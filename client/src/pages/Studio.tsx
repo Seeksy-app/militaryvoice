@@ -217,7 +217,7 @@ function RunningOrder({ slug, studioId, searchable = false }: { slug?: string; s
 }
 
 /** Attaches a subscribed LiveKit track to a real media element. */
-function PeerTile({ peer, muted = false }: { peer: RoomPeer; muted?: boolean }) {
+function PeerTile({ peer, muted = false, fill = false }: { peer: RoomPeer; muted?: boolean; fill?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -240,7 +240,13 @@ function PeerTile({ peer, muted = false }: { peer: RoomPeer; muted?: boolean }) 
   }, [peer.audioTrack]);
 
   return (
-    <div className="relative aspect-video overflow-hidden rounded-xl border border-white/15 bg-black">
+    <div
+      className={`relative overflow-hidden bg-black ${
+        // aspect-video is right for a grid of equal tiles and wrong inside a
+        // card that sets its own height — it letterboxed her into a strip.
+        fill ? "h-full w-full" : "aspect-video rounded-xl border border-white/15"
+      }`}
+    >
       {/* muted, because srcObject is the raw getUserMedia stream and that
           carries the microphone as well as the camera. Without it the preview
           plays your own mic out of your own speakers: instant rather than
@@ -260,9 +266,11 @@ function PeerTile({ peer, muted = false }: { peer: RoomPeer; muted?: boolean }) 
           </span>
         </div>
       )}
-      <span className="absolute inset-x-1.5 bottom-1.5 truncate rounded bg-black/60 px-1.5 py-0.5 text-[12px] text-white">
-        {peer.name}
-      </span>
+      {!fill && (
+        <span className="absolute inset-x-1.5 bottom-1.5 truncate rounded bg-black/60 px-1.5 py-0.5 text-[12px] text-white">
+          {peer.name}
+        </span>
+      )}
     </div>
   );
 }
@@ -647,7 +655,7 @@ export default function Studio({ slug }: { slug?: string }) {
                   person — the point of her being here is that you can see her
                   face well enough to talk to it. */}
               <div className="w-40 shrink-0 self-stretch bg-black/40 sm:w-48">
-                <PeerTile peer={cohost} />
+                <PeerTile peer={cohost} fill />
               </div>
               <div className="flex min-w-0 flex-col justify-center px-4 py-3">
                 <div className="text-base font-semibold leading-tight">Marianne</div>

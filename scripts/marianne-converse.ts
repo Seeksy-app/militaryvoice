@@ -19,6 +19,8 @@
 import "dotenv/config";
 import WebSocket from "ws";
 import Anthropic from "@anthropic-ai/sdk";
+import postgres from "postgres";
+import { mileMarkers } from "../shared/mileMarkers";
 import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 import { Room, RoomEvent, AudioStream, TrackKind } from "@livekit/rtc-node";
 
@@ -48,6 +50,44 @@ function wav(pcm: Buffer, rate: number): Buffer {
   return Buffer.concat([h, pcm]);
 }
 
+/**
+ * Everything she should know without being told.
+ *
+ * She had a persona and no facts, so "what time am I on?" got a graceful
+ * dodge — she offered to go and find the running order. The running order is
+ * one query away, and a co-host who cannot answer that question is a
+ * decoration.
+ */
+async function loadShow(sql: ReturnType<typeof postgres>) {
+  const [ev] = await sql`SELECT id, name, start_at_utc, slot_minutes, duration_hours FROM events WHERE is_featured = true`;
+  const n = Math.round((ev.duration_hours * 60) / ev.slot_minutes);
+  const rows = await sql`SELECT slot_index, podcast_name, host_name, branch, service_status, show_format, email
+    FROM signups WHERE event_id = ${ev.id} AND status <> 'cancelled' ORDER BY slot_index`;
+  const at = (i: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
+    .format(new Date(new Date(ev.start_at_utc).getTime() + i * ev.slot_minutes * 60000));
+  const markers = mileMarkers(Array.from({ length: n }, (_, i) => {
+    const r = (rows as any[]).find((x) => x.slot_index === i);
+    return { signup: r ? { podcastName: r.podcast_name } : null };
+  }));
+  const lines = (rows as any[]).map((r) => {
+    const m = markers[r.slot_index];
+    const where = m?.kind === "mile" ? `Mile ${m.n}` : m?.kind === "extra" ? m.label
+      : m?.kind === "flag" ? "the Flag Carry" : m?.kind === "start" ? "the start"
+      : m?.kind === "finish" ? "the finish" : m?.kind === "medal" ? "after the finish" : "";
+    const who = [r.branch, r.service_status].filter(Boolean).join(" ");
+    return `${at(r.slot_index)} ET · ${where} · ${r.podcast_name} — ${r.host_name}${who ? ` (${who})` : ""} · ${r.show_format === "prerecorded" ? "pre-recorded" : "live"}`;
+  });
+  // identity -> who that actually is, so she can greet by name
+  const parts = await sql`SELECT p.id, s.host_name, s.podcast_name, s.slot_index
+    FROM studio_participants p LEFT JOIN signups s ON s.id = p.signup_id`;
+  const whoIs = new Map<string, string>();
+  for (const p of parts as any[]) {
+    if (!p.host_name) continue;
+    whoIs.set(`p-${p.id}`, `${p.host_name}, who hosts ${p.podcast_name}${p.slot_index != null ? `, on at ${at(p.slot_index)} ET` : ""}`);
+  }
+  return { eventName: ev.name, sheet: lines.join("\n"), whoIs };
+}
+
 async function main() {
   // The room with a person in it, not the room with the most connections.
   //
@@ -55,15 +95,22 @@ async function main() {
   // tab publishing nothing, while the actual podcaster sat alone in another
   // room. A participant who publishes no audio is furniture; she should go
   // where someone is talking.
+  // Wait for a person rather than giving up on an empty room. Starting her
+  // costs credits from the moment she connects, so she should not be burning
+  // them in an empty green room — but exiting means somebody has to run this
+  // again at exactly the right moment, which is worse.
   let room = "";
   let best = 0;
-  for (const r of ((await svc.listRooms().catch(() => [])) as any[])) {
-    const ps = ((await svc.listParticipants(r.name).catch(() => [])) as any[])
-      .filter((p) => !p.identity.startsWith("marianne"))
-      .filter((p) => p.tracks.some((t: any) => t.type === 0));
-    if (ps.length > best) { best = ps.length; room = r.name; }
+  for (let wait = 0; wait < 60 && !room; wait++) {
+    for (const r of ((await svc.listRooms().catch(() => [])) as any[])) {
+      const ps = ((await svc.listParticipants(r.name).catch(() => [])) as any[])
+        .filter((p) => !p.identity.startsWith("marianne"))
+        .filter((p) => p.tracks.some((t: any) => t.type === 0));
+      if (ps.length > best) { best = ps.length; room = r.name; }
+    }
+    if (!room) { if (wait === 0) say("waiting for someone with a mic on…"); await new Promise((x) => setTimeout(x, 3000)); }
   }
-  if (!room) { say("Nobody is publishing audio in any studio room."); process.exit(0); }
+  if (!room) { say("Nobody turned up."); process.exit(0); }
   say(`room ${room} — ${best} live mic(s)`);
   const roomName = room;
 
@@ -88,6 +135,11 @@ async function main() {
 
   const ws = new WebSocket(d2.ws_url);
   await new Promise<void>((res, rej) => { ws.once("open", () => res()); ws.once("error", rej); });
+  const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1 });
+  const show = await loadShow(sql);
+  await sql.end();
+  say(`schedule loaded — ${show.sheet.split("\n").length} segments`);
+
   const anthropic = new Anthropic();
   let busy = false;
   let openUntil = 0;
@@ -109,8 +161,10 @@ async function main() {
     try {
       say(`  heard: "${heard}"`);
       const msg = await anthropic.messages.create({
-        model: "claude-opus-5", max_tokens: 200, system: PERSONA,
-        messages: [{ role: "user", content: `Someone in the studio said: "${heard}"\n\nReply out loud. Only the words you say.` }],
+        model: "claude-opus-5", max_tokens: 200,
+        system: `${PERSONA}\n\nThe running order for ${show.eventName}, all times Eastern:\n${show.sheet}\n\nThis is the confirmed sheet. Answer from it directly — never say you will go and check.`,
+        messages: [{ role: "user", content:
+          `${askedBy && show.whoIs.get(askedBy) ? `You are speaking to ${show.whoIs.get(askedBy)}.` : "You do not know who this is."}\n\nThey said: "${heard}"\n\nReply out loud. Only the words you say.` }],
       });
       const line = msg.content.filter((b) => b.type === "text").map((b) => (b as any).text).join("").trim();
       say(`  says:  "${line}"`);
@@ -133,11 +187,29 @@ async function main() {
   const ears = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, { identity: "marianne-ears", name: "Marianne (listening)" });
   ears.addGrant({ room, roomJoin: true, canPublish: false, canSubscribe: true });
   const listener = new Room();
+  // Handler before connect, and a sweep afterwards. Tracks that already exist
+  // are subscribed during connect, so a handler attached after it never hears
+  // about them — she worked when somebody joined after her and sat deaf when
+  // they were already in the room, which is the normal case.
+  const ears_on = (track: any, participant: any) => listenTo(track, participant);
+  listener.on(RoomEvent.TrackSubscribed, (track: any, _pub: any, participant: any) => ears_on(track, participant));
   await listener.connect(process.env.LIVEKIT_URL!, await ears.toJwt(), { autoSubscribe: true, dynacast: false });
+  for (const p of listener.remoteParticipants.values()) {
+    for (const pub of p.trackPublications.values()) if (pub.track) ears_on(pub.track, p);
+  }
+  for (let i = 0; i < 20; i++) {
+    const her = ((await svc.listParticipants(room).catch(() => [])) as any[]).find((p) => p.identity === "marianne");
+    if (her?.tracks?.some((t: any) => t.type === 1)) {
+      await svc.updateParticipant(room, "marianne", { attributes: { state: "Green room", avatar: "1" } }).catch(() => {});
+      say("she is on screen");
+      break;
+    }
+    await new Promise((x) => setTimeout(x, 1500));
+  }
   say("listening\n");
 
-  listener.on(RoomEvent.TrackSubscribed, (track: any, _pub: any, participant: any) => {
-    if (track.kind !== TrackKind.KIND_AUDIO || participant.identity === "marianne") return;
+  function listenTo(track: any, participant: any) {
+    if (track.kind !== TrackKind.KIND_AUDIO || participant.identity.startsWith("marianne")) return;
     say(`  ear on ${participant.identity}`);
     (async () => {
       const stream = new AudioStream(track);
@@ -179,7 +251,7 @@ async function main() {
         if (buf.length > 900) buf = []; // never hoard more than ~20s
       }
     })().catch((e) => say(`ear failed: ${String(e?.message ?? e).slice(0, 140)}`));
-  });
+  }
 
   setTimeout(async () => {
     await listener.disconnect().catch(() => {});
