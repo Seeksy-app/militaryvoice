@@ -18,7 +18,7 @@ export default function StudioComposite() {
 
   // Headless Chrome has no speakers to protect, so the composite is unmuted —
   // this is the one place audio must actually flow.
-  const { tiles, meta, connected, failed, caption } = useStageRoom(url, token, false);
+  const { tiles, meta, connected, failed, caption } = useStageRoom(url, token, false, undefined, true);
 
   const started = useRef(false);
   useEffect(() => {

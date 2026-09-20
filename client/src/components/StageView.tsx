@@ -75,7 +75,14 @@ export interface StageTile {
  * Joins a room read-only and reports whoever the producer has put on stage.
  * Green room participants are deliberately never returned: they are not on air.
  */
-export function useStageRoom(url: string | null, token: string | null, muted: boolean, seedMeta?: RoomMeta) {
+export function useStageRoom(
+  url: string | null,
+  token: string | null,
+  muted: boolean,
+  seedMeta?: RoomMeta,
+  /** The recorder's copy of the stage, rather than a viewer's. */
+  forRecording = false,
+) {
   const [tiles, setTiles] = useState<StageTile[]>([]);
   // Seeded from the record, then overwritten by the room's own metadata once
   // there is a room to read it from. Before the event there is not.
@@ -94,7 +101,12 @@ export function useStageRoom(url: string | null, token: string | null, muted: bo
 
   useEffect(() => {
     if (!url || !token) return;
-    const room = new Room({ adaptiveStream: true, dynacast: true });
+    // Adaptive stream and dynacast are a viewer's economy: they ask for a
+    // smaller layer when a tile is small, and stop a track the page is not
+    // showing. The recorder has no such budget, and a six-way stage is exactly
+    // the case that makes every tile small — so the more people are on, the
+    // softer it would film them. It takes the full layer of every tile.
+    const room = new Room({ adaptiveStream: !forRecording, dynacast: !forRecording });
     roomRef.current = room;
     let cancelled = false;
 
