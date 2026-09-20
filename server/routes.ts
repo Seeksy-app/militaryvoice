@@ -5637,7 +5637,20 @@ export function registerRoutes(app: Express): void {
       });
       const text = await r.text();
       if (!r.ok) {
-        res.json({ ok: false, status: r.status, reason: text.slice(0, 300) });
+        // The shape of what we hold, never the value. "invalid client_id" has
+        // two very different causes — a credential Adobe does not recognise,
+        // and a value that arrived here mangled — and the length tells them
+        // apart without anyone pasting a secret anywhere to find out.
+        res.json({
+          ok: false,
+          status: r.status,
+          reason: text.slice(0, 300),
+          idLength: id.length,
+          idTail: id.slice(-4),
+          idLooksHex: /^[0-9a-f]+$/i.test(id),
+          secretLength: secret.length,
+          secretPrefix: secret.slice(0, 4),
+        });
         return;
       }
       const body = JSON.parse(text) as { access_token?: string; expires_in?: number };
