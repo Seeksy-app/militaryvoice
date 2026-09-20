@@ -135,6 +135,36 @@ const upload = multer({
  * which is right for a circular avatar and wrong for a magazine page where the
  * designer wants the shoulders and the room.
  */
+// ---- Headshot links ---------------------------------------------------------
+// Signed with SESSION_SECRET rather than stored, so there is no table to keep
+// and no row to leak. Rotating the secret invalidates every outstanding link
+// at once, which is the only revocation this needs.
+
+function headshotSecret(): string {
+  return process.env.SESSION_SECRET ?? "";
+}
+
+/** The token that stands in for one podcaster's email. */
+export function headshotToken(email: string): string {
+  const body = Buffer.from(email.trim().toLowerCase()).toString("base64url");
+  const sig = crypto.createHmac("sha256", headshotSecret()).update(body).digest("base64url").slice(0, 24);
+  return `${body}.${sig}`;
+}
+
+function emailFromToken(token: string): string | null {
+  if (!headshotSecret()) return null;
+  const [body, sig] = String(token ?? "").split(".");
+  if (!body || !sig) return null;
+  const want = crypto.createHmac("sha256", headshotSecret()).update(body).digest("base64url").slice(0, 24);
+  // Fixed-length compare: both are 24 base64url characters by construction.
+  if (sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
+  try {
+    return Buffer.from(body, "base64url").toString("utf8").toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 async function enhanceAndSavePhoto(buffer: Buffer): Promise<{ url: string; originalUrl: string }> {
   const stem = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
   const upright = await sharp(buffer).rotate().toBuffer();
@@ -5524,6 +5554,84 @@ export function registerRoutes(app: Express): void {
     // Keep any slots they already hold in step with the profile.
     await storage.syncSignupsFromProfile(email, updated);
     res.json(updated);
+  });
+
+  // ---- The headshot link -------------------------------------------------------
+  //      A page a podcaster can reach from an email without signing in, whose
+  //      only job is to take one good photograph of them.
+  //
+  //      Sign-in is the reason these requests fail. Asking thirty busy people
+  //      to remember which address they used, wait for a code, find the right
+  //      screen and then upload is four chances to give up before the thing we
+  //      actually need. The link is the screen.
+  //
+  //      It carries no session and grants nothing: the token names one email
+  //      and the only thing it can do is replace that person's photo. Rotating
+  //      SESSION_SECRET invalidates every one of them at once.
+
+  /** A 25MB cap rather than 10: a print headshot off a real camera is bigger. */
+  const headshotUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 25 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      if (!file.mimetype.startsWith("image/")) {
+        cb(new Error("Please upload an image file."));
+        return;
+      }
+      cb(null, true);
+    },
+  });
+
+  /** Who the link is for, so the page can greet them by name. */
+  app.get("/api/headshot/:token", async (req, res) => {
+    noStore(res);
+    const email = emailFromToken(req.params.token);
+    if (!email) {
+      res.status(404).json({ message: "That link isn't valid. Ask us for a new one." });
+      return;
+    }
+    const profile = await storage.getProfileByEmail(email);
+    const [signup] = (await storage.listSignups(1)).filter(
+      (x) => x.status !== "cancelled" && x.email.trim().toLowerCase() === email,
+    );
+    res.json({
+      hostName: profile?.hostName ?? signup?.hostName ?? "",
+      podcastName: signup?.podcastName ?? profile?.podcastName ?? "",
+      currentPhotoUrl: profile?.photoUrl ?? signup?.photoUrl ?? "",
+      // Whether what we hold could already be printed, so somebody who has
+      // already done this is told so rather than asked twice.
+      alreadyPrintable: Boolean(profile?.photoOriginalUrl),
+    });
+  });
+
+  app.post("/api/headshot/:token", headshotUpload.single("photo"), async (req, res) => {
+    const email = emailFromToken(String(req.params.token ?? ""));
+    if (!email) {
+      res.status(404).json({ message: "That link isn't valid. Ask us for a new one." });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({ message: "Pick a photo first." });
+      return;
+    }
+    try {
+      const saved = await enhanceAndSavePhoto(req.file.buffer);
+      if (!saved.originalUrl) {
+        // The print copy is the entire point of this page. Losing it quietly
+        // here would mean somebody does the work and we still cannot print.
+        res.status(500).json({ message: "We couldn't keep a print copy of that. Try again, or send it to us directly." });
+        return;
+      }
+      const updated = await storage.upsertProfile(email, {
+        photoUrl: saved.url,
+        photoOriginalUrl: saved.originalUrl,
+      } as never);
+      await storage.syncSignupsFromProfile(email, updated);
+      res.json({ ok: true, photoUrl: saved.url });
+    } catch (err) {
+      console.error("Headshot upload failed:", err);
+      res.status(400).json({ message: "That photo couldn't be processed — try a different file." });
+    }
   });
 
   // ---- Host: per-event shows ---------------------------------------------------
