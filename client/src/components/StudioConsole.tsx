@@ -1700,12 +1700,16 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 // and the rail's graphics reached air without ever reaching
                 // the screen the producer was watching.
                 meta={{ ...(studio ? stageMetaFromStudio(studio) : {}), eventName: currentStudio?.name }}
-                // Mute unless we positively know you are off the stage. `me`
-                // resolves by matching a presence row to selfKey, and either
-                // can be missing for a moment after joining — which made this
-                // fail open, monitoring the programme at you while you were on
-                // it. Not knowing where you are is a reason for silence.
-                muted={!me || meOnStage}
+                // Never muted. This carries other people's microphones and
+                // nothing else — StageView builds its tiles from
+                // room.remoteParticipants, so your own voice cannot be in it.
+                //
+                // Gating it on whether you were on stage was a mistake that
+                // cost a live test: the producer went on stage, the monitor
+                // muted, and they could no longer hear their guest. The echo
+                // this was meant to prevent came from the self-preview and the
+                // Hear me toggle, both of which are fixed at the source.
+                muted={false}
                 idleTitle={currentStudio?.name}
               />
               {recording && (
