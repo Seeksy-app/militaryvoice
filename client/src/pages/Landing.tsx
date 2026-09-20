@@ -51,6 +51,9 @@ const EVENT_FALLBACK: PublicEvent = {
   slug: "marathon",
   isFeatured: true,
   visible: true,
+  // The real event is closed; the placeholder says so rather than flashing an
+  // open lineup for the second before the fetch lands.
+  closed: true,
   imageUrl: "/event-marathon.jpg",
   name: "The Podcast Marathon",
   tagline: "26.2 miles of stories for National Military Podcast Day.",

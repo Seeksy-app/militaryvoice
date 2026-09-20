@@ -4212,6 +4212,21 @@ export default function Admin({ tab }: { tab?: string } = {}) {
     }
   }
 
+  async function setEventClosed(id: number, closed: boolean) {
+    try {
+      await adminSend("PUT", `/api/admin/events/${id}`, { closed } as UpdateEvent);
+      await refreshEventQueries();
+      toastTop({
+        title: closed ? "Lineup closed" : "Lineup open",
+        description: closed
+          ? "Nobody can claim a slot, including one freed by a cancellation. The picker says so rather than offering a time."
+          : "Slots can be claimed again. Anything a cancellation freed is back on the board.",
+      });
+    } catch (err) {
+      toastTop({ title: "Couldn't change that", description: (err as Error).message, variant: "destructive" });
+    }
+  }
+
   async function makeLive(id: number) {
     try {
       await adminSend("PUT", `/api/admin/events/${id}`, { isFeatured: true } as UpdateEvent);
@@ -4329,6 +4344,21 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                     />
                     <span className={selectedEvent.visible !== false ? "font-semibold text-[#15834f] dark:text-[#3ac486]" : "text-muted-foreground"}>
                       {selectedEvent.visible !== false ? "Public" : "Hidden"}
+                    </span>
+                  </label>
+                  {/* Visible and closed answer different questions — whether
+                      anyone can find it, and whether anyone can still get on
+                      it. A full event stays public all the way through the
+                      show; it just stops taking people. */}
+                  <label className="flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm font-medium">
+                    <Switch
+                      checked={selectedEvent.closed === true}
+                      onCheckedChange={(v) => setEventClosed(selectedEvent.id, v)}
+                      className="data-[state=checked]:bg-[#ED1C24]"
+                      data-testid="switch-event-closed"
+                    />
+                    <span className={selectedEvent.closed === true ? "font-semibold text-[#ED1C24]" : "text-muted-foreground"}>
+                      {selectedEvent.closed === true ? "Lineup closed" : "Taking signups"}
                     </span>
                   </label>
                   {!selectedEvent.isFeatured && (

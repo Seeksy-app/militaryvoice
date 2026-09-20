@@ -49,6 +49,9 @@ export function EventSlotPicker({
   );
   const open = slots.filter((s) => !s.signup);
   const full = slots.length > 0 && open.length === 0;
+  // Closed outranks full. Full is a count and a cancellation undoes it; closed
+  // is somebody's decision that the lineup is set, and it has to survive one.
+  const closed = event.closed === true;
 
   const claim = useMutation({
     mutationFn: async (slotIndex: number) =>
@@ -74,23 +77,38 @@ export function EventSlotPicker({
       {/* Said plainly, once, at the top. A grid of thirty-two greyed-out
           buttons is not an answer to "when can I go on" — somebody has to read
           every one of them to work out there is nothing left. */}
-      {full && (
+      {closed ? (
         <p
           className="mb-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm font-semibold text-foreground"
-          data-testid="text-all-slots-taken"
+          data-testid="text-lineup-closed"
         >
-          All slots are taken.{" "}
+          The lineup is closed.{" "}
           <span className="font-normal text-muted-foreground">
-            Every time on this event is spoken for. If one frees up it will appear here.
+            Every slot is spoken for and the running order is set. Nothing further is being
+            taken, and a slot that frees up stays closed.
           </span>
         </p>
+      ) : (
+        full && (
+          <p
+            className="mb-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm font-semibold text-foreground"
+            data-testid="text-all-slots-taken"
+          >
+            All slots are taken.{" "}
+            <span className="font-normal text-muted-foreground">
+              Every time on this event is spoken for. If one frees up it will appear here.
+            </span>
+          </p>
+        )
       )}
-      <p className="mb-3 text-sm text-muted-foreground">
-        {open.length} open · {slots.length - open.length} taken.{" "}
-        {recorded
-          ? `Times between ${LIVE_ONLY_LABEL} are live only, so they're closed to a recorded episode.`
-          : `Times between ${LIVE_ONLY_LABEL} are live only.`}
-      </p>
+      {!closed && (
+        <p className="mb-3 text-sm text-muted-foreground">
+          {open.length} open · {slots.length - open.length} taken.{" "}
+          {recorded
+            ? `Times between ${LIVE_ONLY_LABEL} are live only, so they're closed to a recorded episode.`
+            : `Times between ${LIVE_ONLY_LABEL} are live only.`}
+        </p>
+      )}
       <div className="grid grid-cols-1 items-start gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {slots.map((s) => {
           const air = onAirWindow(s.start, {
@@ -126,6 +144,23 @@ export function EventSlotPicker({
                     <span className="block truncate text-xs text-muted-foreground">{s.signup.hostName}</span>
                   </span>
                 </div>
+              </div>
+            );
+          }
+
+          // Empty, but not on offer. Rendered as a tile rather than a
+          // disabled button so nobody clicks it hoping.
+          if (closed) {
+            return (
+              <div
+                key={s.index}
+                className="rounded-lg border border-dashed border-border bg-muted/30 p-3 text-sm opacity-70"
+                data-testid={`slot-closed-${s.index}`}
+              >
+                {header}
+                <span className="mt-2 inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                  <Lock className="h-3 w-3" /> Closed
+                </span>
               </div>
             );
           }

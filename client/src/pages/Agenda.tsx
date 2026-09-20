@@ -263,6 +263,33 @@ export default function Agenda({ slug }: Props) {
                     const signup = s.signup;
                     const onAir = onAirSettings ? onAirWindow(s.start, onAirSettings) : null;
 
+                    // A hole left by a cancellation on a closed event is not
+                    // an invitation. Shown as a gap rather than a link, so the
+                    // public lineup never advertises a slot the server would
+                    // refuse.
+                    if (!signup && event?.closed) {
+                      return (
+                        <div
+                          key={s.index}
+                          className="flex h-full flex-col overflow-hidden rounded-2xl border-2 border-dashed border-border bg-muted/20 opacity-70"
+                          data-testid={`card-closed-${s.index}`}
+                        >
+                          <div className="flex items-center justify-between bg-muted/60 px-4 py-2.5">
+                            <span className="text-sm font-bold tabular-nums text-muted-foreground">
+                              {formatTimeInZone(s.start, viewZone)}
+                              <span className="opacity-60"> – {formatTimeInZone(s.end, viewZone)}</span>
+                            </span>
+                            <span className="rounded-full border border-border px-2 py-0.5 text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              Closed
+                            </span>
+                          </div>
+                          <div className="flex flex-1 flex-col items-center justify-center gap-2 p-5 text-center">
+                            <div className="text-sm font-semibold text-muted-foreground">Not on the lineup</div>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     if (!signup) {
                       return (
                         <Link

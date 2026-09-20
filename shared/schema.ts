@@ -14,6 +14,12 @@ export const events = pgTable("events", {
   // listing *and* from a direct link — a hidden event is not a secret URL, it
   // is not reachable. Defaults on, so nothing that exists today changes.
   visible: boolean("visible").notNull().default(true),
+  // Whether anybody may still claim a slot. Separate from "full", which is
+  // arithmetic — every slot taken — and comes undone the moment one person
+  // cancels. Closed is a decision: the lineup is set, the running order has
+  // been printed and mailed, and a cancellation leaves a hole rather than
+  // reopening the door. Only an admin turns it back on.
+  closed: boolean("closed").notNull().default(false),
   name: text("name").notNull(),
   tagline: text("tagline").notNull().default(""),
   description: text("description").notNull().default(""),

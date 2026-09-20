@@ -4904,6 +4904,19 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: "That event no longer exists." });
       return;
     }
+
+    // Closed beats every other reason a slot might look takeable. "Full" is
+    // arithmetic and undoes itself the moment somebody cancels — which is
+    // exactly the case this exists for, because by then the running order has
+    // been printed, mailed and rehearsed against, and a freed slot is a hole
+    // in the schedule rather than an opening. Checked on the server because
+    // the picker can be a stale tab.
+    if (event.closed) {
+      res.status(409).json({
+        message: "The lineup for this event is closed — no more slots are being taken.",
+      });
+      return;
+    }
     const totalSlots = Math.floor((event.durationHours * 60) / event.slotMinutes);
     if (parsed.data.slotIndex >= totalSlots) {
       res.status(400).json({ message: "That slot doesn't exist on the current schedule." });
