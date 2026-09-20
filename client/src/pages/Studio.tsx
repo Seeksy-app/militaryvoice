@@ -296,7 +296,16 @@ function PeerTile({ peer, muted = false, fill = false, keyed = false }: { peer: 
         muted
         className={`h-full w-full object-cover ${keyed ? "invisible absolute" : ""}`}
       />
-      {keyed && <canvas ref={canvasRef} className="h-full w-full object-cover" />}
+      {keyed && (
+        // Scaled up and anchored to her head. The source frames her small with
+        // a lot of headroom, so at natural size she floated in the middle of
+        // the card with space above and below; cropping in makes her fill it.
+        <canvas
+          ref={canvasRef}
+          className="h-full w-full object-cover"
+          style={{ transform: "scale(1.75)", transformOrigin: "center 34%" }}
+        />
+      )}
       <audio ref={audioRef} autoPlay muted={muted} />
       {/* Their initials rather than a crossed-out camera icon. Four tiles all
           showing the same grey icon tell you nothing about who is in the room;

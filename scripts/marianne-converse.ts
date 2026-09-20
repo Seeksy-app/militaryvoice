@@ -257,12 +257,20 @@ async function main() {
   // The listener: subscribes, never publishes, so it cannot hear itself.
   const ears = new AccessToken(process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!, { identity: "marianne-ears", name: "Marianne (listening)" });
   ears.addGrant({ room, roomJoin: true, canPublish: false, canSubscribe: true });
+  // Declared before the handler is registered. It was below, so a
+  // TrackSubscribed firing during connect hit the temporal dead zone, threw
+  // inside LiveKit's own handler and was swallowed as a warning — she sat
+  // there listening to nothing and the log said "listening".
+  const eared = new Set<string>();
   const listener = new Room();
   // Handler before connect, and a sweep afterwards. Tracks that already exist
   // are subscribed during connect, so a handler attached after it never hears
   // about them — she worked when somebody joined after her and sat deaf when
   // they were already in the room, which is the normal case.
-  const ears_on = (track: any, participant: any) => listenTo(track, participant);
+  const ears_on = (track: any, participant: any) => {
+    try { listenTo(track, participant); }
+    catch (e: any) { say(`ear handler threw: ${String(e?.message ?? e).slice(0, 120)}`); }
+  };
   listener.on(RoomEvent.TrackSubscribed, (track: any, _pub: any, participant: any) => ears_on(track, participant));
   await listener.connect(process.env.LIVEKIT_URL!, await ears.toJwt(), { autoSubscribe: true, dynacast: false });
   for (const p of listener.remoteParticipants.values()) {
@@ -279,7 +287,6 @@ async function main() {
   }
   say("listening\n");
 
-  const eared = new Set<string>();
   function listenTo(track: any, participant: any) {
     if (track.kind !== TrackKind.KIND_AUDIO || participant.identity.startsWith("marianne")) return;
     // Both the sweep and the event fire for a track already published, and two
