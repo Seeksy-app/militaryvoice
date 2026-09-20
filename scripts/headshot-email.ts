@@ -53,6 +53,10 @@ const needed = rows.filter((r) => !r.printable);
 /**
  * Short, and it says what the photo is for.
  *
+ * It does not mention advertising. What the magazine funds is our side of it;
+ * to a podcaster this is a page about their show, and putting a revenue model
+ * in front of the ask makes it read like a pitch instead of a favour.
+ *
  * "Please upload a photo" gets a screenshot of a logo. "We are printing you
  * nine inches across" gets a photograph, because it tells somebody what would
  * go wrong if they sent the wrong thing.
@@ -62,8 +66,8 @@ function body(r: Row): string {
   return `<p>${first},</p>
 
 <p>We're putting together a printed keepsake magazine for the Podcast Marathon —
-one page per show, yours included. It's the thing people keep on a shelf, and
-it's what we're selling advertising against.</p>
+one page per show, yours included. It's the kind of thing people keep on a
+shelf, and something you can share with your fans.</p>
 
 <p><strong>We need a better photo of you.</strong> The one we have is 720 pixels
 wide. That looks fine on the site and prints about the size of a postage stamp.
@@ -84,7 +88,7 @@ function textOf(r: Row): string {
   const first = (r.hostName || "").trim().split(/\s+/)[0] || "there";
   return `${first},
 
-We're putting together a printed keepsake magazine for the Podcast Marathon — one page per show, yours included.
+We're putting together a printed keepsake magazine for the Podcast Marathon — one page per show, yours included. It's the kind of thing people keep on a shelf, and something you can share with your fans.
 
 We need a better photo of you. The one we have is 720 pixels wide, which prints about the size of a postage stamp. On your page you're nine inches across.
 
