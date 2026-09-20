@@ -135,6 +135,22 @@ async function main() {
   let avatar: { id: string; ws: WebSocket } | null = null;
 
   async function startAvatar(): Promise<boolean> {
+    // Retire the old session before opening the new one.
+    //
+    // Both join LiveKit as "marianne", so the second evicts the first — and
+    // then stopping the first disconnects the participant that is now the
+    // second. She renewed herself straight out of the room. Sequencing it the
+    // other way costs a few seconds of absence and actually works.
+    const retiring = avatar;
+    avatar = null;
+    if (retiring) {
+      retiring.ws.close();
+      await fetch("https://api.liveavatar.com/v1/sessions/stop", {
+        method: "POST", headers: { "X-API-KEY": K, "content-type": "application/json" },
+        body: JSON.stringify({ session_id: retiring.id }) }).catch(() => {});
+      await new Promise((r) => setTimeout(r, 1200));
+    }
+
     face_token = await face.toJwt();
     const r1 = await fetch("https://api.liveavatar.com/v1/sessions/token", {
       method: "POST", headers: { "X-API-KEY": K, "content-type": "application/json" },
@@ -149,17 +165,19 @@ async function main() {
     const d2 = (await r2.json() as any).data;
     const sock = new WebSocket(d2.ws_url);
     await new Promise<void>((res, rej) => { sock.once("open", () => res()); sock.once("error", rej); });
-    const old = avatar;
     avatar = { id: d1.session_id, ws: sock };
-    if (old) {
-      old.ws.close();
-      await fetch("https://api.liveavatar.com/v1/sessions/stop", {
-        method: "POST", headers: { "X-API-KEY": K, "content-type": "application/json" },
-        body: JSON.stringify({ session_id: old.id }) }).catch(() => {});
-      say(`renewed → ${d1.session_id.slice(0, 8)}`);
-    } else {
-      say(`avatar session ${d1.session_id}`);
+    say(retiring ? `renewed → ${d1.session_id.slice(0, 8)}` : `avatar session ${d1.session_id}`);
+    // She is not really back until LiveKit says she is publishing again.
+    for (let i = 0; i < 16; i++) {
+      const her = ((await svc.listParticipants(room).catch(() => [])) as any[]).find((p) => p.identity === "marianne");
+      if (her?.tracks?.some((t: any) => t.type === 1)) {
+        await svc.updateParticipant(room, "marianne", { attributes: { state: "Green room", avatar: "1" } }).catch(() => {});
+        if (retiring) say("  back on screen");
+        return true;
+      }
+      await new Promise((r) => setTimeout(r, 1500));
     }
+    say("  she did not come back on screen");
     return true;
   }
 
