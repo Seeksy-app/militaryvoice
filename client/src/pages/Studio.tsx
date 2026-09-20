@@ -217,9 +217,10 @@ function RunningOrder({ slug, studioId, searchable = false }: { slug?: string; s
 }
 
 /** Attaches a subscribed LiveKit track to a real media element. */
-function PeerTile({ peer, muted = false, fill = false }: { peer: RoomPeer; muted?: boolean; fill?: boolean }) {
+function PeerTile({ peer, muted = false, fill = false, keyed = false }: { peer: RoomPeer; muted?: boolean; fill?: boolean; keyed?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -229,6 +230,40 @@ function PeerTile({ peer, muted = false, fill = false }: { peer: RoomPeer; muted
       peer.videoTrack?.detach(el);
     };
   }, [peer.videoTrack]);
+
+  // The avatar arrives on chroma-key green — that is the right output for a
+  // source meant to be composited, and LiveAvatar offers no alternative. The
+  // stage keys it already; the green room is a different component and was
+  // still showing her against a wall of green.
+  useEffect(() => {
+    if (!keyed) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return;
+    let raf = 0;
+    const draw = () => {
+      raf = requestAnimationFrame(draw);
+      const w = video.videoWidth, h = video.videoHeight;
+      if (!w || !h) return;
+      const cw = Math.min(w, 480), ch = Math.round((cw / w) * h);
+      if (canvas.width !== cw) { canvas.width = cw; canvas.height = ch; }
+      ctx.drawImage(video, 0, 0, cw, ch);
+      const frame = ctx.getImageData(0, 0, cw, ch);
+      const d = frame.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        // Green measured against its neighbours, not in absolute terms — skin
+        // is green-ish and a flat threshold takes her face with the backdrop.
+        if (g > 90 && g > r * 1.35 && g > b * 1.35) d[i + 3] = 0;
+        else if (g > r * 1.1 && g > b * 1.1) d[i + 1] = Math.max(r, b);
+      }
+      ctx.putImageData(frame, 0, 0);
+    };
+    draw();
+    return () => cancelAnimationFrame(raf);
+  }, [keyed, peer.videoTrack]);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -254,7 +289,14 @@ function PeerTile({ peer, muted = false, fill = false }: { peer: RoomPeer; muted
           is broken. Headphones do not help, muting in the app does not help,
           and you can hear yourself typing. Every other video in this codebase
           is muted; this one was missed. */}
-      <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={`h-full w-full object-cover ${keyed ? "invisible absolute" : ""}`}
+      />
+      {keyed && <canvas ref={canvasRef} className="h-full w-full object-cover" />}
       <audio ref={audioRef} autoPlay muted={muted} />
       {/* Their initials rather than a crossed-out camera icon. Four tiles all
           showing the same grey icon tell you nothing about who is in the room;
@@ -656,7 +698,7 @@ export default function Studio({ slug }: { slug?: string }) {
                   person — the point of her being here is that you can see her
                   face well enough to talk to it. */}
               <div className="w-40 shrink-0 self-stretch bg-black/40 sm:w-48">
-                <PeerTile peer={cohost} fill />
+                <PeerTile peer={cohost} fill keyed />
               </div>
               <div className="flex min-w-0 flex-col justify-center px-4 py-3">
                 <div className="text-base font-semibold leading-tight">Marianne</div>

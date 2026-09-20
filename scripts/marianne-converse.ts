@@ -26,7 +26,9 @@ import { Room, RoomEvent, AudioStream, TrackKind } from "@livekit/rtc-node";
 
 const MARIANNE = "8532b602-89e8-44fa-a9e2-5a4259a058cc";
 const MADISON = "NUjosfEayZAdRcDmcHM8";
-const SECONDS = Math.min(Number(process.argv[2] ?? 300), 300);
+// 0 = stay up until stopped. Sessions renew underneath, so there is no
+// five-minute ceiling on how long she is in the room.
+const SECONDS = Number(process.argv[2] ?? 0);
 const K = process.env.LIVEAVATAR_API_KEY!;
 const http = process.env.LIVEKIT_URL!.replace(/^wss:/i, "https:").replace(/^ws:/i, "http:");
 const svc = new RoomServiceClient(http, process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!);
@@ -120,21 +122,51 @@ async function main() {
   // one without it. So she cannot be made deaf at the token, and if her media
   // server turns out to echo the room, that has to be solved somewhere else.
   face.addGrant({ room, roomJoin: true, canPublish: true, canPublishData: true, canSubscribe: true });
-  const r1 = await fetch("https://api.liveavatar.com/v1/sessions/token", {
-    method: "POST", headers: { "X-API-KEY": K, "content-type": "application/json" },
-    body: JSON.stringify({ avatar_id: MARIANNE, mode: "LITE", max_session_duration: SECONDS,
-      livekit_config: { livekit_url: process.env.LIVEKIT_URL, livekit_room: room, livekit_client_token: await face.toJwt() } }),
-  });
-  if (!r1.ok) { say(`token ${r1.status}: ${(await r1.text()).slice(0, 200)}`); process.exit(1); }
-  const d1 = (await r1.json() as any).data;
-  const r2 = await fetch("https://api.liveavatar.com/v1/sessions/start", {
-    method: "POST", headers: { Authorization: `Bearer ${d1.session_token}`, "content-type": "application/json" }, body: "{}" });
-  if (!r2.ok) { say(`start ${r2.status}: ${(await r2.text()).slice(0, 200)}`); process.exit(1); }
-  const d2 = (await r2.json() as any).data;
-  say(`avatar session ${d1.session_id}`);
+  // She renews herself.
+  //
+  // A session is capped at five minutes on this plan, and she was simply
+  // disappearing when it ran out — mid-conversation, with no warning, and
+  // somebody had to notice and restart her. A green room co-host who vanishes
+  // every five minutes is a demo. This starts the next session shortly before
+  // the current one expires and swaps to it, so from the room she is just
+  // there.
+  const CAP = 290;
+  let face_token = "";
+  let avatar: { id: string; ws: WebSocket } | null = null;
 
-  const ws = new WebSocket(d2.ws_url);
-  await new Promise<void>((res, rej) => { ws.once("open", () => res()); ws.once("error", rej); });
+  async function startAvatar(): Promise<boolean> {
+    face_token = await face.toJwt();
+    const r1 = await fetch("https://api.liveavatar.com/v1/sessions/token", {
+      method: "POST", headers: { "X-API-KEY": K, "content-type": "application/json" },
+      body: JSON.stringify({ avatar_id: MARIANNE, mode: "LITE", max_session_duration: CAP,
+        livekit_config: { livekit_url: process.env.LIVEKIT_URL, livekit_room: room, livekit_client_token: face_token } }),
+    });
+    if (!r1.ok) { say(`token ${r1.status}: ${(await r1.text()).slice(0, 160)}`); return false; }
+    const d1 = (await r1.json() as any).data;
+    const r2 = await fetch("https://api.liveavatar.com/v1/sessions/start", {
+      method: "POST", headers: { Authorization: `Bearer ${d1.session_token}`, "content-type": "application/json" }, body: "{}" });
+    if (!r2.ok) { say(`start ${r2.status}: ${(await r2.text()).slice(0, 160)}`); return false; }
+    const d2 = (await r2.json() as any).data;
+    const sock = new WebSocket(d2.ws_url);
+    await new Promise<void>((res, rej) => { sock.once("open", () => res()); sock.once("error", rej); });
+    const old = avatar;
+    avatar = { id: d1.session_id, ws: sock };
+    if (old) {
+      old.ws.close();
+      await fetch("https://api.liveavatar.com/v1/sessions/stop", {
+        method: "POST", headers: { "X-API-KEY": K, "content-type": "application/json" },
+        body: JSON.stringify({ session_id: old.id }) }).catch(() => {});
+      say(`renewed → ${d1.session_id.slice(0, 8)}`);
+    } else {
+      say(`avatar session ${d1.session_id}`);
+    }
+    return true;
+  }
+
+  if (!(await startAvatar())) process.exit(1);
+  // Twenty seconds of headroom: the new one is up and publishing before the
+  // old one is cut, so there is no moment where the room has no co-host.
+  setInterval(() => { void startAvatar(); }, (CAP - 20) * 1000);
   const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1 });
   const show = await loadShow(sql);
   await sql.end();
@@ -187,6 +219,8 @@ async function main() {
         body: JSON.stringify({ text: line, model_id: "eleven_turbo_v2_5" }) });
       if (!tts.ok) { say(`  TTS ${tts.status}`); return; }
       const pcm = Buffer.from(await tts.arrayBuffer());
+      const ws = avatar?.ws;
+      if (!ws) { say("  no avatar session"); return; }
       ws.send(JSON.stringify({ type: "start", encoding: "pcm_s16le", sample_rate: 24000, channels: 1 }));
       for (let o = 0; o < pcm.length; o += 38400) {
         ws.send(JSON.stringify({ type: "agent.speak", audio: pcm.subarray(o, o + 38400).toString("base64") }));
@@ -282,14 +316,21 @@ async function main() {
     })().catch((e) => say(`ear failed: ${String(e?.message ?? e).slice(0, 140)}`));
   }
 
-  setTimeout(async () => {
+  async function shutDown(why: string) {
+    say(`\n${why}`);
     await listener.disconnect().catch(() => {});
-    ws.close();
-    await fetch("https://api.liveavatar.com/v1/sessions/stop", {
-      method: "POST", headers: { "X-API-KEY": K, "content-type": "application/json" },
-      body: JSON.stringify({ session_id: d1.session_id }) }).catch(() => {});
-    say("\nsession over");
+    if (avatar) {
+      avatar.ws.close();
+      await fetch("https://api.liveavatar.com/v1/sessions/stop", {
+        method: "POST", headers: { "X-API-KEY": K, "content-type": "application/json" },
+        body: JSON.stringify({ session_id: avatar.id }) }).catch(() => {});
+    }
     process.exit(0);
-  }, SECONDS * 1000);
+  }
+
+  // Ctrl-C leaves a session running and billing otherwise.
+  process.on("SIGINT", () => void shutDown("stopped"));
+  process.on("SIGTERM", () => void shutDown("stopped"));
+  if (SECONDS > 0) setTimeout(() => void shutDown("time up"), SECONDS * 1000);
 }
 main();
