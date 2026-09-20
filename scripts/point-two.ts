@@ -18,10 +18,16 @@
 // count comes back to twenty-six miles, and the finish reads as one person
 // carrying the colours in and then closing the day.
 //
-// That house row is not deleted, it is moved: the closing stretch wants two
-// legs to make the point-two, and the row already exists, so it slides into the
-// 9:30 slot as the second. Deleting it and inserting another would be the same
-// schedule by a longer route.
+// The closing stretch is one leg, not two: 9:00 open for a late booking, the
+// Flag Carry at 9:30, Riccoh closing at 10:00. The second bonus this script
+// invented comes back out.
+//
+// The last half hour is a thank-you to the podcasters and the sponsors. It is
+// there because the day cannot simply stop at 10:30: the schedule is a whole
+// number of hours and the slots are half an hour, so 7:00 to 10:30 is fifteen
+// and a half, and duration_hours is an integer column. The choice was an empty
+// "this could be you" card sitting after the goodbye or something worth
+// watching in it, and the credits after the finish are the better answer.
 import "dotenv/config";
 import postgres from "postgres";
 
@@ -36,37 +42,30 @@ async function main() {
 
   // The house slot this script created on its first run. Identified by address
   // rather than by name so it can never match a podcaster's booking.
-  // The house row this script created on its first run, identified by address
-  // so it can never match a podcaster's booking.
-  const [stray] = await sql`
-    SELECT id, slot_index FROM signups
-    WHERE event_id = ${event.id} AND status <> 'cancelled'
-      AND email = 'hello@militaryvoice.ai' AND podcast_name = 'The Flag Carry'`;
+  const rows = await sql`
+    SELECT id, slot_index, podcast_name FROM signups
+    WHERE event_id = ${event.id} AND status <> 'cancelled' AND slot_index >= 27
+    ORDER BY slot_index`;
+  const find = (re: RegExp) => rows.find((r: any) => re.test(r.podcast_name ?? ""));
+  const flag = find(/flag carry/i);
+  const spare = find(/^bonus session/i);
+  const closing = rows.find((r: any) => /ceremon/i.test(r.podcast_name ?? ""));
 
-  const [devilDawg] = await sql`
-    SELECT id, slot_index, podcast_name, host_name, email FROM signups
-    WHERE event_id = ${event.id} AND status <> 'cancelled'
-      AND podcast_name ILIKE '%devil dawg%'`;
-
-  // Where the second leg goes: the first free slot after the Flag Carry.
-  const slots = Math.round((event.duration_hours * 60) / event.slot_minutes);
-  const taken = new Set(
-    (await sql`SELECT slot_index FROM signups WHERE event_id = ${event.id} AND status <> 'cancelled'`)
-      .map((r: any) => r.slot_index),
-  );
-  const from = devilDawg ? devilDawg.slot_index : 0;
-  let legTwo = -1;
-  for (let i = from + 1; i < slots; i++) {
-    if (!taken.has(i) || (stray && stray.slot_index === i)) { legTwo = i; break; }
-  }
+  // 9:00 open · 9:30 Flag Carry · 10:00 closing · done at 10:30.
+  const FLAG_AT = 29;
+  const CLOSE_AT = 30;
+  const THANKS_AT = 31;
+  const THANKS = "Thank You — Our Podcasters & Sponsors";
 
   console.log(`${event.name}\n`);
-  console.log(devilDawg
-    ? `rename  #${devilDawg.id} slot ${devilDawg.slot_index} · ${when(devilDawg.slot_index)} · ${devilDawg.podcast_name}\n        → The Flag Carry / ${devilDawg.host_name} <${devilDawg.email}>   [B1]`
-    : `rename  nothing — Devil Dawg not found`);
-  console.log(stray && legTwo >= 0
-    ? `move    #${stray.id} slot ${stray.slot_index} → ${legTwo} · ${when(legTwo)}\n        → Bonus Session — TBD   [B2]`
-    : `move    nothing — no house row to reuse, or no free slot after the Flag Carry`);
+  console.log(spare ? `delete  #${spare.id} slot ${spare.slot_index} · ${spare.podcast_name}` : `delete  nothing`);
+  console.log(flag ? `move    #${flag.id} ${flag.slot_index} → ${FLAG_AT} · ${when(FLAG_AT)} · The Flag Carry` : `move    no Flag Carry row`);
+  console.log(closing ? `move    #${closing.id} ${closing.slot_index} → ${CLOSE_AT} · ${when(CLOSE_AT)} · ${closing.podcast_name}` : `move    no closing row`);
+  const thanks = find(/^thank you/i);
+  console.log(thanks
+    ? `keep    #${thanks.id} slot ${thanks.slot_index} · ${thanks.podcast_name}`
+    : `create  slot ${THANKS_AT} · ${when(THANKS_AT)} · ${THANKS}`);
+  console.log(`leaves  slot 28 · ${when(28)} open for a late booking`);
 
   if (!process.argv.includes("--apply")) {
     console.log("\nDry run — pass --apply.");
@@ -74,14 +73,18 @@ async function main() {
     return;
   }
 
-  if (devilDawg) {
-    await sql`UPDATE signups SET podcast_name = 'The Flag Carry' WHERE id = ${devilDawg.id}`;
-    console.log(`\nRenamed #${devilDawg.id} → The Flag Carry`);
-  }
-  if (stray && legTwo >= 0) {
-    await sql`UPDATE signups SET slot_index = ${legTwo}, podcast_name = 'Bonus Session — TBD',
-                 host_name = '', photo_url = '' WHERE id = ${stray.id}`;
-    console.log(`Moved #${stray.id} → slot ${legTwo}, Bonus Session — TBD`);
+  // Order matters: the spare comes out before anything slides into its slot.
+  if (spare) { await sql`DELETE FROM signups WHERE id = ${spare.id}`; console.log(`\nDeleted #${spare.id}`); }
+  if (flag) { await sql`UPDATE signups SET slot_index = ${FLAG_AT} WHERE id = ${flag.id}`; console.log(`Moved #${flag.id} → ${FLAG_AT}`); }
+  if (closing) { await sql`UPDATE signups SET slot_index = ${CLOSE_AT} WHERE id = ${closing.id}`; console.log(`Moved #${closing.id} → ${CLOSE_AT}`); }
+  if (!thanks) {
+    const [row] = await sql`
+      INSERT INTO signups (event_id, slot_index, podcast_name, host_name, email, photo_url,
+                           num_people, status, show_format, intro_style, timezone, created_at)
+      VALUES (${event.id}, ${THANKS_AT}, ${THANKS}, '', 'hello@militaryvoice.ai', '',
+              1, 'confirmed', 'live', 'virtual', 'America/New_York', ${new Date().toISOString()})
+      RETURNING id`;
+    console.log(`Created #${row.id} → ${THANKS}`);
   }
   await sql.end();
 }

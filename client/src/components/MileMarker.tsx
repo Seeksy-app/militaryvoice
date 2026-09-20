@@ -53,7 +53,13 @@ export function MileMarker({
       className={className}
       role="img"
       aria-label={
-        marker.kind === "mile" ? `Mile ${marker.n}` : marker.kind === "open" ? "Open slot" : marker.label
+        marker.kind === "mile"
+          ? `Mile ${marker.n}`
+          : marker.kind === "open"
+            ? "Open slot"
+            : marker.kind === "medal"
+              ? "Thank you"
+              : marker.label
       }
       data-testid={`mile-marker-${marker.kind}${marker.n ? `-${marker.n}` : ""}`}
     >

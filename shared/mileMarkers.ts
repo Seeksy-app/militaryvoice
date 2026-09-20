@@ -9,7 +9,7 @@
 // tacked on in 1908 so the finish would sit in front of the royal box. The
 // bonus sessions are that: the bit after the miles that is still the race.
 
-export type MarkerKind = "start" | "mile" | "point-two" | "finish" | "open";
+export type MarkerKind = "start" | "mile" | "point-two" | "finish" | "open" | "medal";
 
 export interface Marker {
   kind: MarkerKind;
@@ -34,6 +34,12 @@ const isCeremony = (b?: Booking | null) => !!b && /ceremon/i.test(b.podcastName 
 const POINT_TWO = /\bbonus\b|flag carry|roll call/i;
 const isBonus = (b?: Booking | null) => !!b && POINT_TWO.test(b.podcastName ?? "");
 
+// The half hour after the tape. You cross the line, and then somebody hangs a
+// medal round your neck and thanks you for coming — it is part of the race day
+// and it is not a mile, so it gets its own marker rather than quietly becoming
+// a twenty-seventh.
+const isThanks = (b?: Booking | null) => !!b && /thank you/i.test(b.podcastName ?? "");
+
 /**
  * A marker for every slot, in running order.
  *
@@ -55,8 +61,12 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
   // finish, and it stays a plain B so it never takes B1 off the closing run.
   let lastMile = -1;
   slots.forEach((s, i) => {
-    if (i !== first && i !== last && s.signup && !isBonus(s.signup)) lastMile = i;
+    if (i !== first && i !== last && s.signup && !isBonus(s.signup) && !isThanks(s.signup)) lastMile = i;
   });
+
+  // Numbered only when there is more than one — a lone "B1" implies a B2 that
+  // does not exist.
+  const legs = slots.filter((s, i) => i > lastMile && i !== last && isBonus(s.signup)).length;
 
   let mile = 0;
   let leg = 0;
@@ -67,12 +77,14 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
     // name for any one of them — a slot reading ".2" was labelling a session
     // with an arithmetic fact about the course.
     if (isBonus(s.signup)) {
-      if (i < lastMile) return { kind: "point-two", label: "B", sub: "bonus" };
+      if (i < lastMile || legs < 2) return { kind: "point-two", label: "B", sub: "bonus" };
       leg += 1;
       return { kind: "point-two", label: `B${leg}`, sub: "bonus" };
     }
+    if (isThanks(s.signup)) return { kind: "medal", label: "★", sub: "thanks" };
     if (!s.signup) return { kind: "open", label: "—", sub: "open" };
     mile += 1;
     return { kind: "mile", n: mile, label: String(mile), sub: "mile" };
   });
 }
+
