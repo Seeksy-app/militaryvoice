@@ -9,7 +9,10 @@
 // tacked on in 1908 so the finish would sit in front of the royal box. The
 // bonus sessions are that: the bit after the miles that is still the race.
 
-export type MarkerKind = "start" | "mile" | "point-two" | "finish" | "open" | "medal";
+export type MarkerKind = "start" | "mile" | "extra" | "point-two" | "finish" | "open" | "medal";
+
+/** The distance. Twenty-six miles and the point-two, and it does not move. */
+export const MILES = 26;
 
 export interface Marker {
   kind: MarkerKind;
@@ -71,6 +74,7 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
   const legs = slots.filter((s, i) => i > lastMile && i !== last && isBonus(s.signup)).length;
 
   let mile = 0;
+  let extra = 0;
   let leg = 0;
   return slots.map((s, i) => {
     if (i === first) return { kind: "start", label: "START", sub: "the line" };
@@ -90,7 +94,14 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
     if (isThanks(s.signup)) return { kind: "medal", label: "★", sub: "thanks" };
     if (!s.signup) return { kind: "open", label: "—", sub: "open" };
     mile += 1;
-    return { kind: "mile", n: mile, label: String(mile), sub: "mile" };
+    if (mile <= MILES) return { kind: "mile", n: mile, label: String(mile), sub: "mile" };
+
+    // Past the twenty-sixth. The distance is fixed — a marathon does not become
+    // a longer marathon because more people entered — so the shows beyond it
+    // count up from the finish instead of inventing Mile 27. Booking number
+    // twenty-nine is "+3", and the course is still 26.2.
+    extra += 1;
+    return { kind: "extra", n: extra, label: `+${extra}`, sub: "extra" };
   });
 }
 

@@ -295,12 +295,22 @@ export default function Agenda({ slug }: Props) {
                         <div className="flex items-center justify-between gap-2 bg-[#053877] px-3 py-2 text-white">
                           <div className="flex min-w-0 items-center gap-2.5">
                             <MileMarker marker={markers[s.index]} size={42} className="shrink-0" />
-                            <span className="text-sm font-bold tabular-nums">
-                              {formatTimeInZone(s.start, viewZone)}
-                              <span className="text-white/60"> – {formatTimeInZone(s.end, viewZone)}</span>
-                            </span>
+                            {markers[s.index]?.kind === "medal" ? (
+                              // The thank-you happens when the day is already done.
+                              // Printing a clock on it makes the schedule read as
+                              // running half an hour past the goodbye, which is the
+                              // one thing it must not say.
+                              <span className="text-sm font-bold">After the finish</span>
+                            ) : (
+                              <span className="text-sm font-bold tabular-nums">
+                                {formatTimeInZone(s.start, viewZone)}
+                                <span className="text-white/60"> – {formatTimeInZone(s.end, viewZone)}</span>
+                              </span>
+                            )}
                           </div>
-                          <SlotBadge start={s.start} end={s.end} showFormat={signup.showFormat} now={now} />
+                          {markers[s.index]?.kind !== "medal" && (
+                            <SlotBadge start={s.start} end={s.end} showFormat={signup.showFormat} now={now} />
+                          )}
                         </div>
 
                         <button
@@ -344,7 +354,7 @@ export default function Agenda({ slug }: Props) {
                               signup.youtubeUrl,
                             )}
                           />
-                          {onAir && (
+                          {onAir && markers[s.index]?.kind !== "medal" && (
                             <div className="text-xs text-muted-foreground" data-testid={`text-agenda-onair-${s.index}`}>
                               On air {formatTimeInZone(onAir.start, viewZone)}–{formatTimeInZone(onAir.end, viewZone)}
                             </div>
