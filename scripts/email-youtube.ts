@@ -28,6 +28,8 @@ interface Row { email: string; host_name: string; podcast_name: string; slot_ind
 const [ev] = await sql<{ name: string; start_at_utc: string; slot_minutes: number; duration_hours: number; admin_password: string }[]>`
   SELECT name, start_at_utc, slot_minutes, duration_hours, admin_password FROM events WHERE id = 1`;
 const EVENT = ev.name.trim();
+// "The Podcast Marathon team", not "The The".
+const TEAM = /^the\s/i.test(EVENT) ? `${EVENT} team` : `${TEAM}`;
 const total = Math.floor((ev.duration_hours * 60) / ev.slot_minutes);
 const rows = (await sql<Row[]>`
   SELECT DISTINCT ON (s.email) s.email, s.host_name, s.podcast_name, s.slot_index FROM signups s
@@ -71,7 +73,7 @@ reply if you want one of those and we'll set it up with you.</p>
 
 <p>Optional, of course. Your slot goes out on ${EVENT} either way.</p>
 
-<p>The ${EVENT} team</p>`;
+<p>${TEAM}</p>`;
 }
 function textOf(r: Row): string {
   const first = (r.host_name || "").trim().split(/\s+/)[0] || "there";
@@ -91,13 +93,13 @@ Two more things. Your channel needs live streaming switched on — YouTube asks 
 
 Optional, of course. Your slot goes out on ${EVENT} either way.
 
-The ${EVENT} team`;
+${TEAM}`;
 }
 const htmlFor = (r: Row) => emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: SUBJECT, body: body(r) });
 
 console.log(`${rows.length} podcasters\n`);
 for (const r of rows) console.log(`   ${r.email.padEnd(34)} ${r.podcast_name.slice(0, 38)}`);
-if (preview) { console.log("\n──────── as the first person will read it ────────\n"); console.log(`From: The ${EVENT} team\nSubject: ${SUBJECT}\n\n${textOf(rows[0])}`); }
+if (preview) { console.log("\n──────── as the first person will read it ────────\n"); console.log(`From: ${TEAM}\nSubject: ${SUBJECT}\n\n${textOf(rows[0])}`); }
 // --html <path>: the rendered email, to look at in a browser.
 const htmlAt = args[args.indexOf("--html") + 1];
 if (args.includes("--html") && htmlAt) { (await import("node:fs")).writeFileSync(htmlAt, htmlFor(rows[0])); console.log(`\nHTML written to ${htmlAt}`); }
