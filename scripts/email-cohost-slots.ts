@@ -37,7 +37,7 @@ const missing = wanted.filter((w) => !rows.some((r) => r.email.toLowerCase() ===
 if (missing.length) console.log(`Not on the lineup, skipped: ${missing.join(", ")}\n`);
 
 const SUBJECT = "Pick your co-host hour";
-const LINK = `${BASE}/dashboard`;
+const LINK = `${BASE}/host/dashboard`;
 
 function body(r: Row): string {
   const first = (r.host_name || "").trim().split(/\s+/)[0] || "there";
