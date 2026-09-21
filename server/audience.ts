@@ -338,7 +338,11 @@ export async function buildAudienceSnapshot(eventId?: number): Promise<AudienceS
   if (eventId) {
     const signups = await storage.listSignups(eventId);
     const active = signups.filter((s) => s.status !== "cancelled");
-    empty.showsTotal = active.length;
+    // A booking past the end of the day — the organisers' own show parked at
+    // midnight so they can see the dashboard as a podcaster does — is not a
+    // show on the lineup, and the sponsor page should not count it as one.
+    const totalSlots = Math.floor((event.durationHours * 60) / event.slotMinutes);
+    empty.showsTotal = active.filter((s) => s.slotIndex < totalSlots).length;
     // A feed can be on the signup (the host typed it when they booked) or on
     // the profile (we found it later), and the two do not agree — a feed added
     // to the profile went uncounted here for as long as the signup's own
