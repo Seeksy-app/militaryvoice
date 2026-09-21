@@ -38,6 +38,7 @@ import { AudienceFigures } from "@/components/AudienceFigures";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
 import { CADENCE, CADENCE_STEPS, cadenceSource } from "@shared/schema";
+import { GreenRoomButton } from "@/components/GreenRoomButton";
 import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, SponsorPackageWithSold, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
@@ -1933,7 +1934,7 @@ function EventOverview({ eventId, event, go }: { eventId: number; event: PublicE
         {tile("Sponsors", (sponsors ?? []).length, "Logos in the strip and read on air", "sponsors")}
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button className="rounded-full" onClick={() => go("studio")} data-testid="overview-open-studio">Open the studio</Button>
+        <GreenRoomButton label="Open the studio" onClick={() => go("studio")} testId="overview-open-studio" />
         <Button variant="outline" className="rounded-full" onClick={() => go("run")}>Run of show</Button>
         <Button variant="outline" className="rounded-full" onClick={() => go("setup")}>Event details</Button>
         <Button variant="outline" className="rounded-full" asChild>

@@ -20,7 +20,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, slotEnd, onAirWindow, totalSlots } from "@/lib/schedule";
 import { isLiveOnlyBlock } from "@shared/slots";
 import type { PublicEvent } from "@shared/schema";
-import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2, Headphones, Megaphone, Rocket } from "lucide-react";
+import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2, Megaphone, Rocket } from "lucide-react";
+import { GreenRoomButton } from "@/components/GreenRoomButton";
 
 // Choose an event, then set up the show you're bringing to it. Everything
 // about one event lives behind its own card, so a podcaster in two events
@@ -290,11 +291,7 @@ export function EventSettings({
 
           <span className="hidden h-8 w-px bg-border sm:block" aria-hidden="true" />
 
-          <a href={greenRoomHref} target="_blank" rel="noreferrer" data-testid="link-green-room">
-            <Button className="gap-1.5 rounded-full">
-              <Headphones className="h-4 w-4" /> Enter the green room
-            </Button>
-          </a>
+          <GreenRoomButton href={greenRoomHref} testId="link-green-room" />
           <span className="min-w-0 flex-1 text-xs text-muted-foreground">
             Check your camera, mic and lighting. Open any time — nothing in there goes on air.
           </span>

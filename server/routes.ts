@@ -95,6 +95,7 @@ import {
 } from "./email.js";
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
 import { alexAnswer, type AlexTurn } from "./alex.js";
+import { emailShell, EMAIL_BANNERS } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
@@ -5345,6 +5346,40 @@ export function registerRoutes(app: Express): void {
       });
     } catch (err) {
       console.error("Failed to send reminder confirmation email:", err);
+    }
+
+    // Tell the podcaster. A contact is the one result the share card
+    // produces, and it used to land silently in a table at the bottom of a
+    // page. At most one note an hour per show: the fifth fan in ten minutes
+    // is good news, not five emails.
+    try {
+      const hourAgo = Date.now() - 3600_000;
+      const recent = (await storage.listReminders()).filter(
+        (r) => r.signupId === signup.id && r.id !== created.id && Date.parse(r.createdAt) > hourAgo,
+      );
+      if (!recent.length && signup.email.includes("@")) {
+        const escapeHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        const total = (await storage.listReminders()).filter((r) => r.signupId === signup.id).length;
+        const who = parsed.data.name?.trim() || parsed.data.email;
+        const origin = `${req.protocol}://${req.get("host")}`;
+        const first = (signup.hostName || "").trim().split(/\s+/)[0] || "there";
+        await sendOneOffEmail({
+          to: signup.email,
+          subject: `${who} asked to be reminded about ${signup.podcastName}`,
+          text: `${first},\n\n${who} just asked us to remind them when ${signup.podcastName} is on. That's ${total} ${total === 1 ? "person" : "people"} so far. They get the reminder from us; the list is yours, under Contacts on your dashboard.\n\n${origin}/host/dashboard/contacts`,
+          html: emailShell({
+            banner: EMAIL_BANNERS.podcasters,
+            eyebrow: "The Podcast Marathon · 5 October",
+            heading: "Somebody wants a reminder",
+            body: `<p>${escapeHtml(first)},</p>
+<p><strong>${escapeHtml(who)}</strong> just asked us to remind them when <strong>${escapeHtml(signup.podcastName)}</strong> is on. That's ${total} ${total === 1 ? "person" : "people"} so far.</p>
+<p>They get the reminder from us; the list is yours, under <strong>Contacts</strong> on your dashboard.</p>`,
+            cta: { href: `${origin}/host/dashboard/contacts`, label: "See your contacts" },
+          }),
+        });
+      }
+    } catch (err) {
+      console.error("Failed to tell the podcaster about a reminder:", err);
     }
 
     res.status(201).json({ id: created.id });

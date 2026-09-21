@@ -1,4 +1,5 @@
 import { AlexChat } from "@/components/AlexChat";
+import { GreenRoomButton } from "@/components/GreenRoomButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -817,14 +818,7 @@ export default function Studio({ slug }: { slug?: string }) {
                   data-testid="input-studio-name"
                 />
               </div>
-              <Button
-                type="submit"
-                disabled={!name.trim()}
-                className="rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]"
-                data-testid="button-studio-join"
-              >
-                Enter the green room
-              </Button>
+              <GreenRoomButton type="submit" disabled={!name.trim()} testId="button-studio-join" />
             </form>
           </div>
         )

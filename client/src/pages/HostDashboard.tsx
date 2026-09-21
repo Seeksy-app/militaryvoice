@@ -56,6 +56,8 @@ import { EventSettings } from "@/components/EventSettings";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
+import { ContactsScreen } from "@/components/ContactsScreen";
+import { StudioIcon } from "@/components/GreenRoomButton";
 import { AudienceConsent } from "@/components/AudienceConsent";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -429,7 +431,7 @@ function AnchoredHeading({ id, icon: Icon, label }: { id: string; icon: typeof R
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "claim"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "contacts", "claim"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -440,6 +442,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   promotion: "promotion",
   recordings: "recordings",
   integrations: "integrations",
+  contacts: "contacts",
   claim: "claim",
 };
 const SLUG_SCREEN = new Map<string, Screen>(
@@ -859,6 +862,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 ["integrations", "Integrations", "Your connected accounts"],
                 ["promotion", "Promotion", "Get people watching"],
                 ["recordings", "Recordings & clips", "Yours after the show"],
+                // Only once there is somebody in it. An empty Contacts tab is
+                // a promise; a tab that appears with the first name is news.
+                ...((data?.contacts?.length ?? 0) > 0 ? ([["contacts", "Contacts", `${data!.contacts.length} asked for a reminder`]] as const) : []),
               ] as const
             ).map(([value, label, hint]) => {
               const active = screen === value;
@@ -1043,6 +1049,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     )}
 
           </section>
+        ) : screen === "contacts" ? (
+          <ContactsScreen contacts={data?.contacts ?? []} />
         ) : screen === "promotion" ? (
           <PromotionScreen contacts={data.contacts} />
         ) : screen === "events" ? (
@@ -1218,9 +1226,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                         data-testid="link-dashboard-green-room"
                       >
                         <span className="flex min-w-0 items-center gap-3">
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F0A71F] text-[#1a1200]">
-                            <Headphones className="h-4.5 w-4.5" />
-                          </span>
+                          <StudioIcon />
                           <span className="min-w-0">
                             <span className="block text-sm font-semibold text-card-foreground">Enter the green room</span>
                             <span className="block text-sm text-muted-foreground">

@@ -149,7 +149,7 @@ export function PromotionScreen({ contacts }: { contacts: Contact[] }) {
   }, [isLoading]);
 
   return (
-    <section className="mt-6 flex flex-col gap-10">
+    <section className="mt-6 flex flex-col gap-6">
       {/* --------------------------------------------------- share the slot */}
       {isLoading ? (
         <Skeleton className="h-40 w-full rounded-2xl" />
@@ -198,41 +198,12 @@ export function PromotionScreen({ contacts }: { contacts: Contact[] }) {
                 whenLabel={whenLabel}
               />
 
-              {/* Where the share card leads. Everybody who taps it can ask to
-                  be told when this show is on, and that list is the one thing
-                  on this page that is a result rather than a task — so it is
-                  named here, next to the thing that produces it. */}
-              <button
-                type="button"
-                onClick={() => {
-                  setFansOpen(true);
-                  window.requestAnimationFrame(() =>
-                    document.getElementById("section-fans")?.scrollIntoView({ behavior: "smooth", block: "center" }),
-                  );
-                }}
-                className="-mt-4 inline-flex w-fit items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                data-testid="link-see-fans"
-              >
-                <Users className="h-3.5 w-3.5" />
-                {contacts.length === 0
-                  ? "Nobody has asked for a reminder yet"
-                  : `${contacts.length} ${contacts.length === 1 ? "person has" : "people have"} asked for a reminder — see their emails`}
-              </button>
               <div id="section-autopost" className="scroll-mt-24" />
               <CampaignPlanner signupId={chosen.signupId!} />
             </>
           )}
         </>
       )}
-
-      {/* ---------------------------------------------------------- the fans */}
-      {/* A list of email addresses is a thing you go and get, not a thing you
-          read on the way past. It was a permanent block under the work; it is
-          a line now, and it opens when somebody wants it — which also keeps
-          it out of the nav, where it would be a seventh tab for a table. */}
-      <div id="section-fans" className="scroll-mt-24">
-        <FansPanel contacts={contacts} open={fansOpen} onToggle={() => setFansOpen((v) => !v)} />
-      </div>
 
     </section>
   );
