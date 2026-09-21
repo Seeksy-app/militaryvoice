@@ -47,35 +47,37 @@ function body(r: Row): string {
 
 <p>We're putting a sponsor on each segment of the marathon — named on air,
 on the agenda, and on the "coming up next" card that runs before your show.
-It's <strong>$250</strong> a segment.</p>
+It's <strong>$250*</strong> a segment.</p>
 
-<p><strong>If you bring the sponsor, you earn a share of it.</strong> You don't
-have to sell anything or negotiate anything — send me a name and I'll take it
-from there.</p>
+<p><strong>If you bring the sponsor, you earn a share of it</strong> — half of
+whatever comes in.</p>
 
-<p>Here's what each one pays you:</p>
+<p>If they'd rather have the whole day than one segment, those packages are
+bigger and pay you ten percent:</p>
 
 <table style="margin:0 0 20px;border-collapse:collapse;font-size:15px;color:#374151">
-  <tr><td style="padding:6px 18px 6px 0"><strong>Your segment</strong> · $250</td><td style="padding:6px 0"><strong>you keep $125</strong></td></tr>
   <tr><td style="padding:6px 18px 6px 0">Supporting sponsor · $2,500</td><td style="padding:6px 0"><strong>you keep $250</strong></td></tr>
   <tr><td style="padding:6px 18px 6px 0">Live stream sponsor · $5,000</td><td style="padding:6px 0"><strong>you keep $500</strong></td></tr>
   <tr><td style="padding:6px 18px 6px 0">Partner sponsor · $10,000</td><td style="padding:6px 0"><strong>you keep $1,000</strong></td></tr>
 </table>
 
-<p>The bigger ones pay you more than your own segment does — on purpose. Don't
-talk anyone down to fit the $250 slot.</p>
-
 <p>Who to think of: anyone who already advertises with you, the veteran-owned
 business you actually rate, a company that's been trying to reach this audience
 and hasn't worked out how. It doesn't have to be big.</p>
 
-<p><strong>Reply to this email with a name and I'll do the rest.</strong> I need
+<p><strong>Reply with a name and I'll do the rest</strong> — you don't have to
+sell or negotiate anything. I need
 them by <strong>${DEADLINE}</strong> so their artwork makes the graphics and the
 run of show.</p>
 
 <p>Paid out in one go the week after the event.</p>
 
-<p>Riccoh</p>`;
+<p>Riccoh</p>
+
+<p style="margin:26px 0 0;padding-top:14px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:13px;line-height:1.6">
+* There's no limit on the segment rate. $250 is the starting point — if your
+sponsor is worth more than that, suggest any amount you think is right.
+</p>`;
 }
 
 function textOf(r: Row): string {
@@ -84,26 +86,25 @@ function textOf(r: Row): string {
 
 Riccoh here. Quick one, and there's money in it for you.
 
-We're putting a sponsor on each segment of the marathon — named on air, on the agenda, and on the "coming up next" card before your show. It's $250 a segment.
+We're putting a sponsor on each segment of the marathon — named on air, on the agenda, and on the "coming up next" card before your show. It's $250* a segment.
 
-If you bring the sponsor, you earn a share of it. You don't have to sell or negotiate anything — send me a name and I'll take it from there.
+If you bring the sponsor, you earn a share of it — half of whatever comes in.
 
-Here's what each one pays you:
+If they'd rather have the whole day than one segment, those packages are bigger and pay you ten percent:
 
-  Your segment          $250     you keep $125
   Supporting sponsor    $2,500   you keep $250
   Live stream sponsor   $5,000   you keep $500
   Partner sponsor       $10,000  you keep $1,000
 
-The bigger ones pay you more than your own segment does — on purpose. Don't talk anyone down to fit the $250 slot.
-
 Who to think of: anyone who already advertises with you, the veteran-owned business you actually rate, a company that's been trying to reach this audience and hasn't worked out how. It doesn't have to be big.
 
-Reply to this email with a name and I'll do the rest. I need them by ${DEADLINE} so their artwork makes the graphics and the run of show.
+Reply with a name and I'll do the rest — you don't have to sell or negotiate anything. I need them by ${DEADLINE} so their artwork makes the graphics and the run of show.
 
 Paid out in one go the week after the event.
 
-Riccoh`;
+Riccoh
+
+* There's no limit on the segment rate. $250 is the starting point — if your sponsor is worth more than that, suggest any amount you think is right.`;
 }
 
 function htmlFor(r: Row): string {
