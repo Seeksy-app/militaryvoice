@@ -29,8 +29,6 @@ export function CommandCenter({
   serviceLine,
   eventName,
   eventStartUtc,
-  stats,
-  onGo,
 }: {
   firstName: string;
   photoUrl: string;
@@ -39,8 +37,6 @@ export function CommandCenter({
   serviceLine: string;
   eventName: string;
   eventStartUtc: string;
-  stats: { key: string; value: string; label: string; screen: Screen; muted?: boolean }[];
-  onGo: (screen: Screen) => void;
 }) {
   const now = new Date();
   const daysToGo = Math.max(0, Math.ceil((Date.parse(eventStartUtc) - now.getTime()) / 86_400_000));
@@ -77,99 +73,49 @@ export function CommandCenter({
             </p>
           </div>
         </div>
-        {/* Bright on purpose: the first cut used quarter-strength white and the
-            numbers vanished into the navy. */}
-        {stats.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {stats.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => onGo(s.screen)}
-                className="flex items-baseline gap-2 rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-left transition-colors hover:bg-white/20"
-                data-testid={`stat-${s.key}`}
-              >
-                <span className={`text-2xl font-bold tabular-nums ${s.muted ? "text-white" : "text-[#F0A71F]"}`} style={HEADLINE_FONT}>{s.value}</span>
-                <span className="text-sm text-white">{s.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
       </div>
     </section>
   );
 }
 
 /**
- * Four doors, overlapping the bottom of the dark card so the two read as one
- * piece rather than a block and a row.
+ * Small doors in a row: the slot, the green room, the accounts, the co-host
+ * hours. Four cards took a third of the screen to say four words; a row of
+ * icons says them in a line, and the accounts — the part worth looking at —
+ * get the space instead.
  */
-export function QuickCards({
+export function QuickDoors({
   greenRoomHref,
-  accountsCount,
   slotLabel,
+  accountsCount,
   cohost,
   onGo,
   onCohost,
 }: {
   greenRoomHref: string | null;
-  accountsCount: number;
   slotLabel: string | null;
+  accountsCount: number;
   cohost: { open: number; mine: number; total: number } | null;
   onGo: (screen: Screen) => void;
   onCohost: () => void;
 }) {
-  const cards: { key: string; title: string; body: string; icon: React.ReactNode; onClick?: () => void; href?: string; accent?: boolean }[] = [
-    {
-      key: "green-room",
-      title: "Green room",
-      body: greenRoomHref ? "Check camera, mic and lighting. Open any time." : "Opens once you hold a slot.",
-      icon: <StudioIcon className="h-10 w-10" />,
-      href: greenRoomHref ?? undefined,
-      accent: true,
-    },
-    {
-      key: "accounts",
-      title: accountsCount > 0 ? `${accountsCount} account${accountsCount === 1 ? "" : "s"} connected` : "Connect your accounts",
-      body: accountsCount > 0 ? "Follow buttons on your card; we post your promo cards for you." : "Follow buttons on your card, and we post your promo cards for you.",
-      icon: <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877]"><Link2 className="h-5 w-5" /></span>,
-      onClick: () => onGo("integrations"),
-    },
-    {
-      key: "events",
-      title: slotLabel ? slotLabel : "Pick your slot",
-      body: slotLabel ? "Your show, your time, what you're bringing." : "Take a time on the schedule and set your show up.",
-      icon: <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877]"><CalendarDays className="h-5 w-5" /></span>,
-      onClick: () => onGo("events"),
-    },
-    {
-      key: "cohost",
-      title: cohost && cohost.mine > 0 ? `You're co-hosting ${cohost.mine} hour${cohost.mine === 1 ? "" : "s"}` : "Co-host opportunities",
-      body: cohost ? `${cohost.open} of ${cohost.total} hours still open on the main stage with Alex or Riccoh.` : "Take an hour on the main stage between shows.",
-      icon: <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877]"><Mic2 className="h-5 w-5" /></span>,
-      onClick: onCohost,
-    },
+  const doors: { key: string; label: string; icon: React.ReactNode; onClick?: () => void; href?: string; accent?: boolean }[] = [
+    { key: "slot", label: slotLabel ?? "Pick your slot", icon: <CalendarDays className="h-4 w-4" />, onClick: () => onGo("events") },
+    ...(greenRoomHref ? [{ key: "green-room", label: "Green room", icon: <StudioIcon className="h-6 w-6 rounded-md" />, href: greenRoomHref, accent: true }] : []),
+    { key: "accounts", label: accountsCount > 0 ? "Manage accounts" : "Connect accounts", icon: <Link2 className="h-4 w-4" />, onClick: () => onGo("integrations") },
+    { key: "cohost", label: cohost && cohost.mine > 0 ? `Co-hosting ${cohost.mine}h` : "Co-host an hour", icon: <Mic2 className="h-4 w-4" />, onClick: onCohost },
   ];
   return (
-    <div className="relative z-10 -mt-8 grid gap-3 px-3 sm:grid-cols-2 sm:px-5 xl:grid-cols-4" data-testid="quick-cards">
-      {cards.map((c) => {
-        const inner = (
-          <>
-            {c.icon}
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-card-foreground">{c.title}</span>
-              <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{c.body}</span>
-            </span>
-            <ArrowRight className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
-          </>
-        );
-        const cls = `flex items-center gap-3 rounded-2xl border bg-card p-4 text-left shadow-sm transition-colors ${
-          c.accent ? "border-[#F0A71F] hover:bg-[#F0A71F]/10" : "border-border hover:border-[#053877]/40 hover:bg-[#053877]/[0.03]"
+    <div className="mt-3 flex flex-wrap gap-2" data-testid="quick-doors">
+      {doors.map((d) => {
+        const cls = `inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors ${
+          d.accent ? "border-[#F0A71F] bg-[#F0A71F]/10 text-foreground hover:bg-[#F0A71F]/20" : "border-border bg-card text-foreground hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]"
         }`;
-        return c.href ? (
-          <a key={c.key} href={c.href} target="_blank" rel="noreferrer" className={cls} data-testid={`quick-${c.key}`}>{inner}</a>
+        const inner = (<>{d.icon}<span>{d.label}</span></>);
+        return d.href ? (
+          <a key={d.key} href={d.href} target="_blank" rel="noreferrer" className={cls} data-testid={`door-${d.key}`}>{inner}</a>
         ) : (
-          <button key={c.key} type="button" onClick={c.onClick} className={cls} data-testid={`quick-${c.key}`}>{inner}</button>
+          <button key={d.key} type="button" onClick={d.onClick} className={cls} data-testid={`door-${d.key}`}>{inner}</button>
         );
       })}
     </div>

@@ -57,7 +57,7 @@ import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { ContactsScreen } from "@/components/ContactsScreen";
-import { CommandCenter, QuickCards, TodoStrip } from "@/components/CommandCenter";
+import { CommandCenter, QuickDoors, TodoStrip } from "@/components/CommandCenter";
 import { HostNav } from "@/components/HostNav";
 import { ProScreen } from "@/components/ProScreen";
 import { AudienceConsent } from "@/components/AudienceConsent";
@@ -800,7 +800,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           is no more a visitor deciding whether to take part than somebody with
           a slot, and the band of public links costs them the same screen. */}
       {!data && <NavBar />}
-      <div className={`mx-auto max-w-6xl px-4 sm:px-6 ${workspace ? "py-5" : "py-10"}`}>
+      {/* Wide, like the admin: with a column of nav on the left, 1152px left
+          the page itself narrower than a phone in landscape. */}
+      <div className={`mx-auto max-w-[1560px] px-4 sm:px-6 ${workspace ? "py-5" : "py-10"}`}>
         {workspace ? (
           /* One line: the mark, who you are, and the way out. The page title
              is gone because the highlighted tab below already says
@@ -1158,42 +1160,30 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     serviceLine={[profile?.serviceStatus, profile?.branch].filter((v) => v && v !== "Not applicable").join(" · ")}
                     eventName={data.event.name.trim()}
                     eventStartUtc={data.event.startAtUtc}
-                    stats={(() => {
-                const contacts = data.contacts?.length ?? 0;
-                const posts = plan?.posts ?? [];
-                const posted = posts.filter((p) => p.status === "posted").length;
-                const queued = posts.filter((p) => p.selected && p.status !== "posted").length;
-                const out: { key: string; value: string; label: string; screen: "contacts" | "promotion"; muted?: boolean }[] = [
-                  { key: "contacts", value: String(contacts), label: contacts === 1 ? "person asked for a reminder" : "people asked for a reminder", screen: "contacts", muted: contacts === 0 },
-                ];
-                if (posts.length > 0) {
-                  out.push({
-                    key: "posts",
-                    value: `${posted + queued}/${posts.length}`,
-                    label: posted > 0 ? `posts on the calendar · ${posted} out` : "posts on the calendar",
-                    screen: "promotion",
-                    muted: posted + queued === 0,
-                  });
-                }
-                return out;
-              })()}
-                    onGo={(sc) => goTo(sc)}
                   />
-                  <QuickCards
-                    greenRoomHref={greenRoomHref}
-                    accountsCount={social?.accounts?.length ?? 0}
-                    slotLabel={mySlot ? `${formatDateInZone(mySlot.start, zone)} · ${formatTimeInZone(mySlot.start, zone)}` : null}
-                    cohost={cohost}
-                    onGo={(sc) => goTo(sc)}
-                    onCohost={() => document.getElementById("section-cohost")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                  />
-                  {/* The accounts, with faces, right under the door that
-                      manages them — where the eye lands after the cards. */}
-                  {social?.configured && (social.accounts?.length ?? 0) > 0 && (
-                    <div className="mt-4 px-3 sm:px-5">
-                      <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} />
+                  {/* The accounts, with faces, sit over the bottom of the
+                      dark card — the part of a dashboard worth looking at,
+                      where four cards used to say four words. */}
+                  <div className="relative z-10 -mt-8 px-3 sm:px-5">
+                    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                      {social?.configured && (social.accounts?.length ?? 0) > 0 ? (
+                        <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} />
+                      ) : (
+                        <button type="button" onClick={() => goTo("integrations")} className="flex w-full items-center gap-3 text-left text-sm text-muted-foreground hover:text-foreground" data-testid="button-connect-accounts">
+                          <Link2 className="h-4 w-4 text-[#053877]" /> Connect the accounts you post from — they show as follow buttons on your card, and we post your promo cards for you.
+                          <ArrowRight className="ml-auto h-4 w-4" />
+                        </button>
+                      )}
+                      <QuickDoors
+                        greenRoomHref={greenRoomHref}
+                        slotLabel={mySlot ? `${formatDateInZone(mySlot.start, zone)} · ${formatTimeInZone(mySlot.start, zone)}` : null}
+                        accountsCount={social?.accounts?.length ?? 0}
+                        cohost={cohost}
+                        onGo={(sc) => goTo(sc)}
+                        onCohost={() => document.getElementById("section-cohost")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      />
                     </div>
-                  )}
+                  </div>
                   <div className="mt-6">
                     <TodoStrip
                       todos={(() => {
