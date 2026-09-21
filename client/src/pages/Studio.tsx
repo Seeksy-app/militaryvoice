@@ -710,10 +710,13 @@ export default function Studio({ slug }: { slug?: string }) {
               waiting to go on. She is staff. By text here: her rendered face
               took seven seconds to answer, and the stage is where the face
               matters. */}
-          <AlexChat studioId={studioId} />
+          {/* Only once they are in the room. On the "add your name" screen
+              she answered questions about a green room the person had not
+              entered yet. */}
+          {joined ? <AlexChat studioId={studioId} /> : <div />}
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-[260px] flex-1">
-              <UpNext slug={slug} studioId={studioId} compact />
+              {joined && <UpNext slug={slug} studioId={studioId} compact />}
             </div>
           <div className="flex items-center gap-2">
             {/* The connection reading, which lost its card. A strong one needs
