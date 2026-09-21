@@ -3316,7 +3316,7 @@ function CadenceList({
           const canSchedule = !step.auto && !!b && b.status === "draft" && !!b.bodyText.trim() && day !== null && day.getTime() >= today;
 
           const status = step.auto
-            ? <Badge variant="secondary" className="text-[11px]">Automatic</Badge>
+            ? <Badge variant="secondary" className="gap-1 text-[11px]"><Zap className="h-3 w-3" /> Automatic</Badge>
             : b?.status === "sent" ? <Badge className="text-[11px]">Sent</Badge>
             : b?.status === "scheduled" ? <Badge variant="secondary" className="text-[11px]">Scheduled</Badge>
             : b ? <Badge variant="outline" className={`text-[11px] ${overdue ? "border-amber-500 text-amber-700 dark:text-amber-400" : ""}`}>Draft</Badge>
@@ -3340,8 +3340,10 @@ function CadenceList({
               className={`grid grid-cols-1 items-center gap-2 rounded-xl border p-3 sm:grid-cols-[2rem_1fr_9rem_7rem_11rem_9rem] sm:gap-3 ${step.auto ? "border-dashed bg-muted/20" : "border-border"} ${overdue ? "border-amber-400/60" : ""}`}
               data-testid={`row-cadence-${step.key}`}
             >
+              {/* Every row is numbered: the order is the point of the page,
+                  and a bolt where a number should be made it read 1, 3, 5. */}
               <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${step.auto ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>
-                {step.auto ? <Zap className="h-4 w-4" /> : i + 1}
+                {i + 1}
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold">{step.label}</p>
