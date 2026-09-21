@@ -37,7 +37,7 @@ import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEY
 import { AudienceFigures } from "@/components/AudienceFigures";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
-import { CADENCE_STEPS, CADENCE_AUTOMATIC, cadenceSource } from "@shared/schema";
+import { CADENCE, CADENCE_STEPS, cadenceSource } from "@shared/schema";
 import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, SponsorPackageWithSold, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
@@ -3227,6 +3227,188 @@ function ActivityRow({
   );
 }
 
+/**
+ * Nine in the morning, in the event's own zone, on the given calendar day.
+ *
+ * Send dates come from the cadence as "N days from the event", and the hour
+ * has to be a sensible one for the people receiving it, not for UTC.
+ */
+function nineAmInZone(day: Date, tz: string): string {
+  const y = day.getUTCFullYear(), m = day.getUTCMonth(), d = day.getUTCDate();
+  // What the zone's clock says at this UTC instant tells us the offset.
+  const probe = new Date(Date.UTC(y, m, d, 9, 0));
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hour12: false, minute: "numeric" }).formatToParts(probe);
+  const h = Number(parts.find((x) => x.type === "hour")?.value ?? "9") % 24;
+  const offsetHours = h - 9; // zone is ahead of UTC by this much at 09:00Z
+  return new Date(Date.UTC(y, m, d, 9 - offsetHours, 0)).toISOString();
+}
+
+/**
+ * Everything a podcaster receives, in the order it reaches them.
+ *
+ * One list, not two. The split between "sent for you automatically" and
+ * "yours to write" described how each email is built, which is our problem
+ * and nobody else's — and it hid that two of them were aimed at the same
+ * moment. What the person running the event needs from this page is three
+ * things per email: when it goes, whether it has, and what it says.
+ */
+function CadenceList({
+  event,
+  cadenceBySource,
+  onEdit,
+  onWrite,
+  onSchedule,
+}: {
+  event: PublicEvent | null | undefined;
+  cadenceBySource: Map<string, BroadcastRow>;
+  onEdit: (b: BroadcastRow) => void;
+  onWrite: (source: string) => void;
+  onSchedule: (b: BroadcastRow, whenIso: string) => Promise<void>;
+}) {
+  const tz = "America/New_York";
+  const start = event?.startAtUtc ? new Date(event.startAtUtc) : null;
+  // The event's calendar day in its own zone, as a UTC-midnight date we can
+  // add days to without the arithmetic slipping across a zone boundary.
+  const eventDay = useMemo(() => {
+    if (!start) return null;
+    const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(start);
+    return new Date(`${ymd}T00:00:00Z`);
+  }, [start?.getTime()]);
+  const dayFor = (days: number | null) => {
+    if (days === null || !eventDay) return null;
+    return new Date(eventDay.getTime() + days * 86400_000);
+  };
+  const today = useMemo(() => {
+    const ymd = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    return new Date(`${ymd}T00:00:00Z`).getTime();
+  }, []);
+  const fmtDay = (d: Date) => d.toLocaleDateString(undefined, { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
+
+  const rows = CADENCE.map((step) => ({ step, b: cadenceBySource.get(cadenceSource(step.key)) }));
+  const statsQueries = useQueries({
+    queries: rows.map(({ b }) => ({
+      queryKey: ["/api/admin/broadcasts", b?.id ?? 0, "stats"],
+      queryFn: () => adminGet<BroadcastStats>(`/api/admin/broadcasts/${b!.id}/stats`),
+      enabled: !!b && b.status === "sent",
+      staleTime: 60_000,
+    })),
+  });
+  const [preview, setPreview] = useState<{ broadcastId?: number; cadence?: string; title: string } | null>(null);
+  const [scheduling, setScheduling] = useState<number | null>(null);
+
+  return (
+    <>
+      <div className="hidden grid-cols-[2rem_1fr_9rem_7rem_11rem_9rem] gap-3 px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground sm:grid">
+        <span />
+        <span>Email</span>
+        <span>Send date</span>
+        <span>Status</span>
+        <span>Numbers</span>
+        <span />
+      </div>
+      <div className="flex flex-col gap-2">
+        {rows.map(({ step, b }, i) => {
+          const day = dayFor(step.days);
+          const stats = statsQueries[i]?.data;
+          const sentCount = Math.max(b?.recipientCount ?? 0, stats?.sent ?? 0);
+          const overdue = !step.auto && day !== null && day.getTime() < today && b?.status !== "sent";
+          const dueToday = !step.auto && day !== null && day.getTime() === today && b?.status !== "sent";
+          const canSchedule = !step.auto && !!b && b.status === "draft" && !!b.bodyText.trim() && day !== null && day.getTime() >= today;
+
+          const status = step.auto
+            ? <Badge variant="secondary" className="text-[11px]">Automatic</Badge>
+            : b?.status === "sent" ? <Badge className="text-[11px]">Sent</Badge>
+            : b?.status === "scheduled" ? <Badge variant="secondary" className="text-[11px]">Scheduled</Badge>
+            : b ? <Badge variant="outline" className={`text-[11px] ${overdue ? "border-amber-500 text-amber-700 dark:text-amber-400" : ""}`}>Draft</Badge>
+            : <Badge variant="outline" className="text-[11px] text-muted-foreground">Not written</Badge>;
+
+          const when = step.days === null
+            ? <span className="text-muted-foreground">When they book</span>
+            : b?.status === "sent" && b.sentAt
+              ? <span>{new Date(b.sentAt).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}</span>
+              : b?.status === "scheduled" && b.scheduledFor
+                ? <span>{new Date(b.scheduledFor).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}</span>
+                : day
+                  ? <span className={overdue ? "font-medium text-amber-700 dark:text-amber-400" : dueToday ? "font-medium" : ""}>
+                      {fmtDay(day)}{step.auto ? <span className="block text-[11px] text-muted-foreground">before their slot</span> : dueToday ? <span className="block text-[11px]">today</span> : overdue ? <span className="block text-[11px]">passed, not sent</span> : null}
+                    </span>
+                  : <span className="text-muted-foreground">—</span>;
+
+          return (
+            <div
+              key={step.key}
+              className={`grid grid-cols-1 items-center gap-2 rounded-xl border p-3 sm:grid-cols-[2rem_1fr_9rem_7rem_11rem_9rem] sm:gap-3 ${step.auto ? "border-dashed bg-muted/20" : "border-border"} ${overdue ? "border-amber-400/60" : ""}`}
+              data-testid={`row-cadence-${step.key}`}
+            >
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${step.auto ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}`}>
+                {step.auto ? <Zap className="h-4 w-4" /> : i + 1}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">{step.label}</p>
+                <p className="truncate text-xs text-muted-foreground">{b?.subject || step.blurb}</p>
+              </div>
+              <div className="text-xs">{when}</div>
+              <div>{status}</div>
+              <div className="text-xs text-muted-foreground">
+                {sentCount > 0 ? (
+                  <>
+                    <span className="font-medium text-foreground">{sentCount}</span> sent
+                    {stats && stats.delivered > 0 && <> · <span className="font-medium text-foreground">{stats.opened}</span> opened</>}
+                    {stats && stats.clicked > 0 && <> · {stats.clicked} clicked</>}
+                  </>
+                ) : (
+                  <span>—</span>
+                )}
+              </div>
+              <div className="flex items-center justify-end gap-1.5">
+                {(step.auto || b) && (
+                  <button
+                    type="button"
+                    onClick={() => setPreview(step.auto ? { cadence: step.key, title: step.label } : { broadcastId: b!.id, title: b!.subject })}
+                    title="Preview this email"
+                    className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                    data-testid={`preview-cadence-${step.key}`}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                )}
+                {canSchedule && day && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    disabled={scheduling === b!.id}
+                    onClick={async () => { setScheduling(b!.id); try { await onSchedule(b!, nineAmInZone(day, tz)); } finally { setScheduling(null); } }}
+                    data-testid={`schedule-cadence-${step.key}`}
+                  >
+                    <Send className="h-3.5 w-3.5" /> Schedule
+                  </Button>
+                )}
+                {!step.auto && (
+                  <Button
+                    size="sm"
+                    variant={b ? "outline" : "default"}
+                    className="gap-1.5"
+                    onClick={() => (b ? onEdit(b) : onWrite(cadenceSource(step.key)))}
+                    data-testid={`button-cadence-${step.key}`}
+                  >
+                    {b ? <><Pencil className="h-3.5 w-3.5" /> Edit</> : <><Plus className="h-3.5 w-3.5" /> Write</>}
+                  </Button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Automatic emails carry each podcaster's own slot time, so their wording lives in the code — the eye shows it.
+        Schedule sends a draft at 9:00 AM Eastern on its date; Edit changes the date or the words.
+      </p>
+      <EmailPreviewDialog target={preview} onClose={() => setPreview(null)} />
+    </>
+  );
+}
+
 /** Three jobs: write the emails, wire them into the sequence, and see what
  *  has actually gone out. */
 function BroadcastSubNav({ view, setView }: { view: CrmView; setView: (v: CrmView) => void }) {
@@ -3255,7 +3437,7 @@ function BroadcastSubNav({ view, setView }: { view: CrmView; setView: (v: CrmVie
   );
 }
 
-function CrmEventPanel({ eventId }: { eventId: number }) {
+function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEvent | null }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -3990,94 +4172,19 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
             Everything a podcaster receives, in the order it reaches them.
           </p>
 
-          {/* Two different things were sitting in one list with nothing to
-              tell them apart, and the question that came back was exactly the
-              right one: what is "wording is built in" and how is it different
-              from the numbered steps? Each group gets a heading that answers
-              it before the rows start. */}
-          <div>
-            <h3 className="text-sm font-bold">Sent for you, automatically</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              These four fire on their own at the right moment. Nothing to write and nothing to schedule — their
-              wording lives in the code because each one carries that podcaster's own slot time and calendar links,
-              which a template can't do.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2">
-            {CADENCE_AUTOMATIC.map((step) => {
-              const b = cadenceBySource.get(cadenceSource(step.key));
-              return (
-                <div
-                  key={step.key}
-                  className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 p-3"
-                  data-testid={`row-cadence-auto-${step.key}`}
-                >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                    <Zap className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold">{step.label}</span>
-                      <Badge variant="secondary" className="text-[11px]">Automatic</Badge>
-                      {typeof b?.recipientCount === "number" && b.recipientCount > 0 && (
-                        <span className="text-xs text-muted-foreground">
-                          Sent to {b.recipientCount} {b.recipientCount === 1 ? "podcaster" : "podcasters"} so far
-                        </span>
-                      )}
-                    </div>
-                    <p className="truncate text-xs text-muted-foreground">{step.blurb}</p>
-                  </div>
-                  <span className="shrink-0 text-xs text-muted-foreground">Wording is built in</span>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="mt-2">
-            <h3 className="text-sm font-bold">Yours to write</h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Eight emails you control, in the order they go out. <span className="font-medium">Draft</span> means it
-              hasn't left yet — open it, write it, and it sends to everyone who has taken a slot.{" "}
-              <span className="font-medium">Sent</span> means it already went.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2">
-            {CADENCE_STEPS.map((step, i) => {
-              const b = cadenceBySource.get(cadenceSource(step.key));
-              return (
-                <div
-                  key={step.key}
-                  className="flex items-center gap-3 rounded-xl border border-border p-3"
-                  data-testid={`row-cadence-${step.key}`}
-                >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                    {i + 1}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold">{step.label}</span>
-                      {b?.status === "sent" && <Badge variant="secondary" className="text-[11px]">Sent</Badge>}
-                      {b?.status === "scheduled" && <Badge variant="secondary" className="text-[11px]">Scheduled</Badge>}
-                      {b && b.status === "draft" && <Badge variant="outline" className="text-[11px]">Draft</Badge>}
-                      {!b && <Badge variant="outline" className="text-[11px] text-muted-foreground">Empty</Badge>}
-                    </div>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {b?.subject || step.blurb || "Nothing written yet"}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant={b ? "outline" : "default"}
-                    className="shrink-0 gap-1.5"
-                    onClick={() => (b ? openEdit(b) : openCompose(undefined, cadenceSource(step.key)))}
-                    data-testid={`button-cadence-${step.key}`}
-                  >
-                    {b ? <><Pencil className="h-3.5 w-3.5" /> Edit</> : <><Plus className="h-3.5 w-3.5" /> Write</>}
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
+          <CadenceList
+            event={event}
+            cadenceBySource={cadenceBySource}
+            onEdit={openEdit}
+            onWrite={(source) => openCompose(undefined, source)}
+            onSchedule={async (b, whenIso) => {
+              // Only the date: the update route treats a missing scheduledFor
+              // as "unschedule", and every other field is left as it is.
+              await adminSend("PUT", `/api/admin/broadcasts/${b.id}`, { scheduledFor: whenIso });
+              await queryClient.invalidateQueries({ queryKey: ["/api/admin/broadcasts", eventId] });
+              toast({ title: "Scheduled ✓", description: `"${b.subject}" goes ${new Date(whenIso).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit" })}.` });
+            }}
+          />
         </div>
       )}
 
@@ -4668,7 +4775,7 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   <FinancesCard event={selectedEvent} />
                 </TabsContent>
                 <TabsContent value="crm" className="mt-2 lg:mt-0">
-                  <CrmEventPanel eventId={selectedEventId} />
+                  <CrmEventPanel eventId={selectedEventId} event={selectedEvent} />
                 </TabsContent>
                 {/* These four used to be desktop-only, reachable on a phone
                     only by hunting for a tile on Overview. The rail lists
