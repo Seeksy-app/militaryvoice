@@ -289,7 +289,7 @@ function Card({
  * told something different from what the control room is following is worse
  * than being told nothing.
  */
-export function UpNext({ slug, studioId, compact = false }: { slug?: string; studioId?: number; compact?: boolean }) {
+export function UpNext({ slug, studioId, compact = false, fill = false }: { slug?: string; studioId?: number; compact?: boolean; fill?: boolean }) {
   const zone = useMemo(detectLocalTimeZone, []);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -337,7 +337,7 @@ export function UpNext({ slug, studioId, compact = false }: { slug?: string; stu
   const late = clock && Math.abs(clock.driftSeconds) >= 60;
 
   return (
-    <div data-testid="green-room-upnext">
+    <div data-testid="green-room-upnext" className={fill ? "flex h-full flex-col" : undefined}>
       {late && (
         <div
           className={`mb-2 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold ${
@@ -354,9 +354,11 @@ export function UpNext({ slug, studioId, compact = false }: { slug?: string; stu
           </span>
         </div>
       )}
-      <div className={compact ? "flex flex-col gap-2" : "grid gap-3 sm:grid-cols-2"}>
+      <div className={compact ? `flex flex-col gap-2 ${fill ? "min-h-0 flex-1" : ""}` : "grid gap-3 sm:grid-cols-2"}>
         {cards.map((c) => (
-          <Card key={c.key} label={c.label} scene={c.scene} who={c.who} thumb={c.thumb} zone={zone} now={now} compact={compact} />
+          <div key={c.key} className={fill ? "flex min-h-0 flex-1 flex-col [&>*]:flex-1" : undefined}>
+            <Card label={c.label} scene={c.scene} who={c.who} thumb={c.thumb} zone={zone} now={now} compact={compact} />
+          </div>
         ))}
       </div>
     </div>

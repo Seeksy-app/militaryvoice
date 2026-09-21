@@ -57,7 +57,7 @@ import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { ContactsScreen } from "@/components/ContactsScreen";
-import { CommandCenter } from "@/components/CommandCenter";
+import { CommandCenter, QuickCards, TodoStrip } from "@/components/CommandCenter";
 import { AudienceConsent } from "@/components/AudienceConsent";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -519,6 +519,17 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     queryKey: ["/api/host/social"],
     retry: false,
     enabled: !!data,
+  });
+
+  const { data: cohostBoard } = useQuery<{ blocks: { mine: boolean; takenBy: unknown; yourShow: boolean }[] }>({
+    queryKey: ["/api/host/cohost-slots", data?.event.id],
+    queryFn: async () => {
+      const r = await fetch(`/api/host/cohost-slots/${data!.event.id}`, { credentials: "include" });
+      if (!r.ok) throw new Error("no board");
+      return r.json();
+    },
+    enabled: !!data && (data.mySignups.length ?? 0) > 0,
+    retry: false,
   });
 
   // The posting plan, for the number on the command center. Same query the
@@ -1171,38 +1182,27 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           </section>
         ) : (
           <>
-            <CommandCenter
-              firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || "there"}
-              eventName={data.event.name.trim()}
-              eventStartUtc={data.event.startAtUtc}
-              slot={
-                data.mySignups.length > 0
-                  ? {
-                      start: slotStart(data.event.startAtUtc, data.event.slotMinutes, data.mySignups[0].slotIndex),
-                      end: slotEnd(data.event.startAtUtc, data.event.slotMinutes, data.mySignups[0].slotIndex),
-                    }
-                  : null
-              }
-              zone={zone}
-              accounts={social?.accounts ?? []}
-              socialConfigured={!!social?.configured}
-              greenRoomHref={
-                data.mySignups.length > 0
-                  ? data.event.isFeatured === false && data.event.slug ? `/event/${data.event.slug}/studio` : "/studio"
-                  : null
-              }
-              todos={(() => {
-                const t: { key: string; label: string; screen: "editProfile" | "promotion" | "integrations" | "events"; optional?: boolean }[] = [];
-                const show = hostEvents?.find((e) => e.slotIndex != null)?.show ?? hostEvents?.[0]?.show ?? null;
-                if (!show?.showName) t.push({ key: "show", label: "Set up your show", screen: "events" });
-                if (show?.showFormat === "prerecorded" && !show.recordingUrl) t.push({ key: "file", label: "Send us your recorded episode", screen: "events" });
-                if (!profile?.photoOriginalUrl) t.push({ key: "headshot", label: "Add a print-quality headshot", screen: "editProfile" });
-                if ((social?.accounts?.length ?? 0) === 0) t.push({ key: "accounts", label: "Connect your social accounts", screen: "integrations" });
-                if ((hostAssets?.length ?? 0) === 0 && !profile?.mediaAnswered) t.push({ key: "materials", label: "Upload an intro, outro or images", screen: "events" });
-                if (!youtube?.connected) t.push({ key: "youtube", label: "Send your slot to your own YouTube", screen: "integrations", optional: true });
-                return t;
-              })()}
-              stats={(() => {
+            {(() => {
+              const mySlot = data.mySignups.length > 0
+                ? {
+                    start: slotStart(data.event.startAtUtc, data.event.slotMinutes, data.mySignups[0].slotIndex),
+                    end: slotEnd(data.event.startAtUtc, data.event.slotMinutes, data.mySignups[0].slotIndex),
+                  }
+                : null;
+              const greenRoomHref = data.mySignups.length > 0
+                ? data.event.isFeatured === false && data.event.slug ? `/event/${data.event.slug}/studio` : "/studio"
+                : null;
+              const blocks = cohostBoard?.blocks ?? [];
+              const cohost = blocks.length
+                ? { open: blocks.filter((b) => !b.takenBy && !b.mine).length, mine: blocks.filter((b) => b.mine).length, total: blocks.length }
+                : null;
+              return (
+                <>
+                  <CommandCenter
+                    firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || "there"}
+                    eventName={data.event.name.trim()}
+                    eventStartUtc={data.event.startAtUtc}
+                    stats={(() => {
                 const contacts = data.contacts?.length ?? 0;
                 const posts = plan?.posts ?? [];
                 const posted = posts.filter((p) => p.status === "posted").length;
@@ -1221,13 +1221,39 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 }
                 return out;
               })()}
-              onGo={(sc) => goTo(sc)}
-            />
+                    onGo={(sc) => goTo(sc)}
+                  />
+                  <QuickCards
+                    greenRoomHref={greenRoomHref}
+                    accountsCount={social?.accounts?.length ?? 0}
+                    slotLabel={mySlot ? `${formatDateInZone(mySlot.start, zone)} · ${formatTimeInZone(mySlot.start, zone)}` : null}
+                    cohost={cohost}
+                    onGo={(sc) => goTo(sc)}
+                    onCohost={() => document.getElementById("section-cohost")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  />
+                  <div className="mt-6">
+                    <TodoStrip
+                      todos={(() => {
+                const t: { key: string; label: string; screen: "editProfile" | "promotion" | "integrations" | "events"; optional?: boolean }[] = [];
+                const show = hostEvents?.find((e) => e.slotIndex != null)?.show ?? hostEvents?.[0]?.show ?? null;
+                if (!show?.showName) t.push({ key: "show", label: "Set up your show", screen: "events" });
+                if (show?.showFormat === "prerecorded" && !show.recordingUrl) t.push({ key: "file", label: "Send us your recorded episode", screen: "events" });
+                if (!profile?.photoOriginalUrl) t.push({ key: "headshot", label: "Add a print-quality headshot", screen: "editProfile" });
+                if ((social?.accounts?.length ?? 0) === 0) t.push({ key: "accounts", label: "Connect your social accounts", screen: "integrations" });
+                if ((hostAssets?.length ?? 0) === 0 && !profile?.mediaAnswered) t.push({ key: "materials", label: "Upload an intro, outro or images", screen: "events" });
+                if (!youtube?.connected) t.push({ key: "youtube", label: "Send your slot to your own YouTube", screen: "integrations", optional: true });
+                return t;
+              })()}
+                      onGo={(sc) => goTo(sc)}
+                    />
+                  </div>
+                </>
+              );
+            })()}
 
             {/* ------------------------------------------------ profile header */}
-            <section className="mt-6" data-testid="card-profile-header">
+            <section className="mt-4" data-testid="card-profile-header">
               <div className="overflow-hidden rounded-2xl border border-border bg-card">
-                <div className="h-1.5 bg-primary" />
                 <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-start sm:p-6">
                   {profile?.photoUrl ? (
                     <img

@@ -690,7 +690,7 @@ export default function Studio({ slug }: { slug?: string }) {
             chat needs a column, not the page — and Up next beside her rather
             than above the rail, so the top of the page answers "who is on,
             who is next, and who do I ask" without a scroll. */}
-        <div className="grid gap-5 xl:grid-cols-[minmax(220px,1fr)_minmax(0,34rem)_minmax(0,1.2fr)] xl:items-start">
+        <div className="grid gap-5 xl:grid-cols-[minmax(200px,15rem)_minmax(0,1fr)_minmax(20rem,26rem)] xl:items-start">
           <div>
             <Link
               href="/host/dashboard"
@@ -715,11 +715,10 @@ export default function Studio({ slug }: { slug?: string }) {
               she answered questions about a green room the person had not
               entered yet. */}
           {joined ? <AlexChat studioId={studioId} /> : <div />}
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="min-w-[260px] flex-1">
-              {joined && <UpNext slug={slug} studioId={studioId} compact />}
-            </div>
-          <div className="flex items-center gap-2">
+          <div className="flex h-56 flex-col gap-2">
+            {/* Pills first, then what is coming fills the rest of the same
+                height as Alex's card, so the header reads as one row. */}
+            <div className="flex shrink-0 items-center justify-end gap-2">
             {/* The connection reading, which lost its card. A strong one needs
                 no words; a struggling one is the single most useful thing on
                 this page, so it keeps its colour and gains an instruction. */}
@@ -764,7 +763,10 @@ export default function Studio({ slug }: { slug?: string }) {
                 is the way out, and two of them a few hundred pixels apart —
                 one of which silently drops your camera — is a way to leave by
                 accident in the minute before you are due on. */}
-          </div>
+            </div>
+            <div className="min-h-0 flex-1">
+              {joined && <UpNext slug={slug} studioId={studioId} compact fill />}
+            </div>
           </div>
         </div>
 
