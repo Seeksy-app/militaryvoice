@@ -521,6 +521,16 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     enabled: !!data,
   });
 
+  // The posting plan, for the number on the command center. Same query the
+  // planner makes, so it is cached rather than fetched twice.
+  const firstSignupId = data?.mySignups[0]?.id;
+  const { data: plan } = useQuery<{ posts: { selected: boolean; status: string | null; postedAt: string | null }[] }>({
+    queryKey: ["/api/host/campaign", firstSignupId],
+    queryFn: async () => (await apiRequest("GET", `/api/host/campaign?signupId=${firstSignupId}`)).json(),
+    enabled: !!firstSignupId,
+    retry: false,
+  });
+
   // Whether their own channel is wired up, for the checklist. StreamStatusRow
   // asks the same question lower down; both read the one cached answer.
   const { data: youtube } = useQuery<{ connected: boolean; channelTitle?: string }>({
@@ -1191,6 +1201,25 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 if ((hostAssets?.length ?? 0) === 0 && !profile?.mediaAnswered) t.push({ key: "materials", label: "Upload an intro, outro or images", screen: "events" });
                 if (!youtube?.connected) t.push({ key: "youtube", label: "Send your slot to your own YouTube", screen: "integrations", optional: true });
                 return t;
+              })()}
+              stats={(() => {
+                const contacts = data.contacts?.length ?? 0;
+                const posts = plan?.posts ?? [];
+                const posted = posts.filter((p) => p.status === "posted").length;
+                const queued = posts.filter((p) => p.selected && p.status !== "posted").length;
+                const out: { key: string; value: string; label: string; screen: "contacts" | "promotion"; muted?: boolean }[] = [
+                  { key: "contacts", value: String(contacts), label: contacts === 1 ? "person asked for a reminder" : "people asked for a reminder", screen: "contacts", muted: contacts === 0 },
+                ];
+                if (posts.length > 0) {
+                  out.push({
+                    key: "posts",
+                    value: `${posted + queued}/${posts.length}`,
+                    label: posted > 0 ? `posts on the calendar · ${posted} out` : "posts on the calendar",
+                    screen: "promotion",
+                    muted: posted + queued === 0,
+                  });
+                }
+                return out;
               })()}
               onGo={(sc) => goTo(sc)}
             />

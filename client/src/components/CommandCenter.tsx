@@ -31,6 +31,7 @@ export function CommandCenter({
   socialConfigured,
   greenRoomHref,
   todos,
+  stats,
   onGo,
 }: {
   firstName: string;
@@ -43,7 +44,10 @@ export function CommandCenter({
   greenRoomHref: string | null;
   /** What is still outstanding before the day, each pointing at where it is done. */
   todos: { key: string; label: string; screen: "editProfile" | "promotion" | "integrations" | "events"; optional?: boolean }[];
-  onGo: (screen: "editProfile" | "promotion" | "integrations" | "events") => void;
+  /** The results of promoting, where they log in: people who asked for a
+   *  reminder, and posts on the calendar. */
+  stats: { key: string; value: string; label: string; screen: "contacts" | "promotion"; muted?: boolean }[];
+  onGo: (screen: "editProfile" | "promotion" | "integrations" | "events" | "contacts") => void;
 }) {
   const now = new Date();
   const daysToGo = Math.max(0, Math.ceil((Date.parse(eventStartUtc) - now.getTime()) / 86_400_000));
@@ -88,6 +92,7 @@ export function CommandCenter({
           )}
         </div>
 
+        <div className="flex flex-col items-end gap-4">
         <div className="flex flex-wrap items-center gap-2">
           {greenRoomHref && <GreenRoomButton href={greenRoomHref} testId="link-dashboard-green-room" />}
           <Button variant="outline" className="gap-1.5 rounded-full border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => onGo("promotion")} data-testid="button-share-card">
@@ -96,6 +101,26 @@ export function CommandCenter({
           <Button variant="outline" className="gap-1.5 rounded-full border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => onGo("editProfile")} data-testid="button-edit-profile">
             <Pencil className="h-4 w-4" /> Edit profile
           </Button>
+        </div>
+        {/* Two numbers, because they are the two things promotion produces.
+            A zero is shown too — "0 asked for a reminder" beside "Share my
+            card" is the nudge, not a gap to hide. */}
+        {stats.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {stats.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => onGo(s.screen)}
+                className="flex items-baseline gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-3.5 py-2 text-left transition-colors hover:bg-white/[0.1]"
+                data-testid={`stat-${s.key}`}
+              >
+                <span className={`text-2xl font-bold tabular-nums ${s.muted ? "text-white/50" : "text-[#F0A71F]"}`} style={HEADLINE_FONT}>{s.value}</span>
+                <span className="text-xs text-white/60">{s.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
         </div>
       </div>
 
