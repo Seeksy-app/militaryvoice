@@ -573,6 +573,39 @@ export const cadenceSource = (key: string) => `cadence:${key}`;
 // Admin users — who can open /admin. Sign-in is the same one-time email code
 // podcasters use; there is no shared password to pass around.
 // ---------------------------------------------------------------------------
+/**
+ * Which sponsor bought which show.
+ *
+ * The Show Sponsor tier is $250 a slot and there are thirty-two of them, so it
+ * is inventory rather than a label on a company — and a sponsor can take one
+ * show, several, or say "any slot" and let us place them. That last case is
+ * why signupId is nullable: the row exists, the money is real, and the slot
+ * has not been chosen yet.
+ *
+ * Kept apart from `sponsors` because one company buying four shows is one
+ * company with four slots, not four copies of the same logo and name drifting
+ * out of step the first time somebody fixes a typo in one of them.
+ */
+export const showSponsors = pgTable(
+  "show_sponsors",
+  {
+    id: serial("id").primaryKey(),
+    eventId: integer("event_id").notNull(),
+    sponsorId: integer("sponsor_id").notNull(),
+    /** The show they bought. Null while they are "any slot, you choose". */
+    signupId: integer("signup_id"),
+    /** What Alex says out loud, when the sponsor wants particular words. */
+    readLine: text("read_line").notNull().default(""),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => ({
+    // One sponsor per show. Two names read over the same handover is a
+    // conversation with whoever paid first, not a feature.
+    oneSponsorPerShow: uniqueIndex("show_sponsors_signup").on(t.eventId, t.signupId),
+  }),
+);
+export type ShowSponsorRow = typeof showSponsors.$inferSelect;
+
 export const adminUsers = pgTable("admin_users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),

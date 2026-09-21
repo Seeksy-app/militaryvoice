@@ -49,27 +49,66 @@ Facts you may not invent:
 - Use only the distances, times and names given to you below. If a number is
   not in front of you, say nothing rather than reaching for one — asked where
   we are and not told, describe it in words ("the finish", "past the miles").
-- This is read out live. A number you guessed is a number the audience hears.`;
+- This is read out live. A number you guessed is a number the audience hears.
+- You have NOT heard the show that just ended. These lines are written weeks
+  before the day. You may name it and name its host, and you may say it is
+  worth going back for — you may NOT say what was in it, what the host argued,
+  what a guest said, or what anyone should have taken from it. Putting an
+  opinion in a veteran's mouth and reading it to an audience is the worst
+  thing you could do here, and it is the easiest mistake to make, because an
+  invented recap reads better than an honest one.
+- The specific callback is added on the day from the real transcript. Leave
+  the room for it; do not fill it.`;
 
-const SHAPES = `Write the same handover three times, at three lengths. It is the same
-thought each time, not three different ideas — a listener who heard the long
-one and then the short one should recognise it.
+const SHAPES = `Each handover is three movements, in this order:
 
-  short    (~${CUE_SECONDS.short}s, one sentence)  The show that is starting and who hosts it.
-                        This is what you say when the last one overran and
-                        there is no time. No throat-clearing, no scene-setting.
+  1. The show that just ended. Name it and its host, and send people back to
+     it — but say nothing about its contents. You did not hear it. The
+     sentence that quotes a point somebody made is written on the day, from
+     the transcript, not here.
+  2. The sponsor, if you are given one. Say the name plainly and move on.
+  3. The show that is starting, and who hosts it.
 
-  standard (~${CUE_SECONDS.standard}s, two or three sentences)  The written introduction. What
-                        the show is, who is on it, and the handover.
+Write it three times, at three lengths. It is the same handover each time, not
+three different ideas — somebody who heard the long one and then the short one
+should recognise it.
 
-  stretch  (~${CUE_SECONDS.stretch}s, four to six sentences)  You have room. Introduce the
-                        show, then say where we are on the course and how the
-                        day is going. Leave the last line open so the host can
-                        come back at you — you are handing them a hook, not
-                        closing the door.
+  short    (~${CUE_SECONDS.short}s, one sentence)   The last one overran and there is no time.
+                          Movement 3 only: what is starting and who hosts it.
+                          If there is a show sponsor, four words for them.
+  standard (~${CUE_SECONDS.standard}s, two or three sentences)   All three movements, tight.
+  stretch  (~${CUE_SECONDS.stretch}s, five to seven sentences)   All three with room. Say where we
+                          are on the course, let the sponsor read breathe, and
+                          give the incoming show a proper introduction. Still
+                          nothing about what was in the show that just ended.
 
 Return JSON only, exactly: {"short":"…","standard":"…","stretch":"…"}
 Each value is only the words spoken out loud.`;
+
+/**
+ * What Alex is allowed to say about money.
+ *
+ * Read out loud, so a sponsor who is not there must not be invented and a
+ * sponsor who is there must be named exactly. A model given "the sponsor" and
+ * no name will reach for a plausible one, which is the single worst thing that
+ * could come out of her mouth on a broadcast somebody paid for.
+ */
+function sponsorContext(partner: string, showSponsor: string, hourly: boolean): string {
+  const lines: string[] = [];
+  if (partner) {
+    lines.push(`Title sponsor, named in every handover: "${partner}". The day is "National Military Podcast Day, presented by ${partner}".`);
+  }
+  if (showSponsor) {
+    lines.push(`The show that is STARTING is sponsored by "${showSponsor}". Name them as that show's sponsor.`);
+  }
+  if (hourly) {
+    lines.push(`This handover is on the hour, so it carries the hourly sponsor read. Leave a natural place for it; do not invent who is in it.`);
+  }
+  if (!lines.length) {
+    lines.push("There are NO sponsors to name in this handover. Do not mention sponsorship, do not thank anybody, and do not leave a gap for a name.");
+  }
+  return lines.join("\n");
+}
 
 async function main() {
   const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1, onnotice: () => {} });
@@ -134,6 +173,26 @@ async function main() {
     ? (rows as any[])
     : [rows[0], rows[6], rows[13], rows[rows.length - 3], rows[rows.length - 1]].filter(Boolean);
 
+  // Who is actually sold. Nothing here is guessed: an unsold slot produces a
+  // handover with no sponsor line at all, rather than a gap somebody has to
+  // remember to fill before she reads it out.
+  const partnerRow = await sql`SELECT name FROM sponsors
+    WHERE event_id = ${ev.id} AND active AND lower(tier) IN ('partner', 'title') ORDER BY sort_order LIMIT 1`;
+  const partner = (partnerRow as any[])[0]?.name ?? "";
+
+  await sql.unsafe(`CREATE TABLE IF NOT EXISTS show_sponsors (
+    id serial PRIMARY KEY, event_id integer NOT NULL, sponsor_id integer NOT NULL,
+    signup_id integer, read_line text NOT NULL DEFAULT '', created_at text NOT NULL)`);
+  const showSponsorRows = await sql`SELECT ss.signup_id, s.name FROM show_sponsors ss
+    JOIN sponsors s ON s.id = ss.sponsor_id
+    WHERE ss.event_id = ${ev.id} AND ss.signup_id IS NOT NULL`;
+  const showSponsorFor = new Map<number, string>();
+  for (const r of showSponsorRows as any[]) showSponsorFor.set(r.signup_id, r.name);
+
+  console.log(
+    `title sponsor: ${partner || "none yet"} · ${showSponsorFor.size} of 32 shows sponsored\n`,
+  );
+
   const anthropic = new Anthropic();
   let stored = 0;
 
@@ -154,6 +213,12 @@ async function main() {
       solo
         ? "There is NO live host to hand to on this one. You carry it alone — do not ask a question or leave a line hanging for someone to pick up."
         : "There IS a live host. The last line of the long version hands to them and gives them something to answer.",
+      sponsorContext(
+        partner,
+        showSponsorFor.get(r.signup_id) ?? "",
+        // On the hour, where the hourly read belongs.
+        new Date(r.start_at_utc).getUTCMinutes() === new Date(ev.start_at_utc).getUTCMinutes(),
+      ),
     ]
       .filter(Boolean)
       .join("\n");
