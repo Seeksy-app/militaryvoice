@@ -20,11 +20,14 @@ const SITE = process.env.MV_SITE ?? "https://www.militaryvoice.ai";
 
 // Matched on the episode titles, which were confirmed against each podcaster's
 // own YouTube listing rather than guessed from the filenames.
-const PAIRS: { asset: number; match: RegExp }[] = [
+// `asset` is the library id; `file` finds it by file name instead, for an
+// episode uploaded a minute ago whose id nobody has looked up yet.
+const PAIRS: { asset?: number; file?: RegExp; match: RegExp }[] = [
   { asset: 4, match: /developing the leader within/i },
   { asset: 5, match: /flag carry/i },
   { asset: 6, match: /today with tally/i },
   { asset: 7, match: /stillserving/i },
+  { file: /montel williams/i, match: /brave blocks/i },
 ];
 
 async function main() {
@@ -35,8 +38,10 @@ async function main() {
 
   const plan: { sceneId: number; rowId: number; url: string; label: string; where: string }[] = [];
   for (const p of PAIRS) {
-    const [asset] = await sql`SELECT id, label FROM show_assets WHERE id = ${p.asset}`;
-    if (!asset) { console.log(`asset #${p.asset} missing — skipped`); continue; }
+    const [asset] = p.asset
+      ? await sql`SELECT id, label FROM show_assets WHERE id = ${p.asset}`
+      : await sql`SELECT id, label FROM show_assets WHERE email = 'hello@militaryvoice.ai' AND file_name ~* ${p.file!.source} ORDER BY id DESC LIMIT 1`;
+    if (!asset) { console.log(`asset ${p.asset ?? p.file} missing — skipped`); continue; }
     const [sg] = await sql`SELECT id, slot_index, podcast_name FROM signups
       WHERE event_id = ${ev.id} AND status <> 'cancelled' AND podcast_name ~* ${p.match.source}`;
     if (!sg) { console.log(`no segment matching ${p.match} — skipped`); continue; }
