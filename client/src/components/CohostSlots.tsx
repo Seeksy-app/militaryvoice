@@ -26,7 +26,7 @@ const WHAT_IT_MEANS =
   "An hour on the main stage with Alex, our producer, in the minutes between shows — " +
   "you introduce what's coming up, talk about the day, and keep it moving. " +
   "We'll send you a short script you can use or go your own way. " +
-  "You can't take the hour your own show is on.";
+  "Take as many hours as you like — one person per hour, and not the hour your own show is on.";
 
 /**
  * The broadcast day in hours, for a podcaster to take one.
@@ -77,8 +77,13 @@ export function CohostSlots({ eventId, zone }: { eventId: number; zone: string }
 
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Co-host Available Slots</p>
+      {/* The same amber as the green-room callout above it: this is the one
+          thing on the page we are asking them to do, and it should not read
+          like another settings block. */}
+      <div className="rounded-2xl border-2 border-[#F0A71F] bg-[#F0A71F]/[0.07] p-4 sm:p-5" data-testid="cohost-card">
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <Mic2 className="h-5 w-5 text-[#7a5200]" />
+        <p className="text-base font-bold tracking-tight text-foreground">Co-host Available Slots</p>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -98,10 +103,11 @@ export function CohostSlots({ eventId, zone }: { eventId: number; zone: string }
           </span>
         )}
       </div>
-      {/* Hover is not a thing on a phone, so the one sentence that matters
-          is on the page as well as in the tooltip. */}
-      <p className="mb-3 text-xs text-muted-foreground">
-        Take an hour on the main stage with Alex between shows. Tap the info icon for what that involves.
+      {/* Hover is not a thing on a phone, so the sentences that matter are
+          on the page as well as in the tooltip. */}
+      <p className="mb-3 text-sm text-foreground/80">
+        Take an hour — <strong>or several</strong> — on the main stage with Alex between shows. One person per hour,
+        first come first served. Tap the info icon for what it involves.
       </p>
 
       {isLoading || !data ? (
@@ -115,7 +121,7 @@ export function CohostSlots({ eventId, zone }: { eventId: number; zone: string }
             const busy = change.isPending && change.variables?.blockIndex === b.index;
             if (b.mine) {
               return (
-                <div key={b.index} className="flex flex-col gap-1.5 rounded-xl border border-primary bg-primary/5 px-3 py-2.5" data-testid={`cohost-block-${b.index}`}>
+                <div key={b.index} className="flex flex-col gap-1.5 rounded-xl border-2 border-primary bg-background px-3 py-2.5" data-testid={`cohost-block-${b.index}`}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="tabular-nums text-sm font-semibold">{time}</span>
                     <Check className="h-4 w-4 text-primary" />
@@ -152,7 +158,7 @@ export function CohostSlots({ eventId, zone }: { eventId: number; zone: string }
               );
             }
             return (
-              <div key={b.index} className="flex flex-col gap-1.5 rounded-xl border border-border px-3 py-2.5" data-testid={`cohost-block-${b.index}`}>
+              <div key={b.index} className="flex flex-col gap-1.5 rounded-xl border border-border bg-background px-3 py-2.5" data-testid={`cohost-block-${b.index}`}>
                 <span className="tabular-nums text-sm font-semibold">{time}</span>
                 <Button
                   size="sm"
@@ -169,6 +175,7 @@ export function CohostSlots({ eventId, zone }: { eventId: number; zone: string }
           })}
         </div>
       )}
+      </div>
     </TooltipProvider>
   );
 }
