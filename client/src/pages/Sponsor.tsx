@@ -301,89 +301,120 @@ export default function Sponsor() {
             </h2>
           </div>
 
-          <div className="mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-            {[
-              {
-                name: "Partner sponsor",
-                price: PARTNER_PRICE,
-                note: "one available",
-                blurb: "Your name on the whole day, from the first show to the last.",
-                benefits: PARTNER_BENEFITS,
-                featured: true,
-              },
-              {
-                name: "Live stream sponsor",
-                price: LIVESTREAM_PRICE,
-                note: "four available",
-                blurb: "Your name on the stream itself, every mile of the way.",
-                benefits: LIVESTREAM_BENEFITS,
-                featured: false,
-              },
-              {
-                name: "Supporting sponsor",
-                price: SUPPORTING_PRICE,
-                note: "limited",
-                blurb: "A presence across the whole marathon, without taking the title.",
-                benefits: SUPPORTING_BENEFITS,
-                featured: false,
-              },
-              {
-                name: "Show sponsor",
-                price: SLOT_PRICE,
-                note: `per show · ${slotCount || 48} slots`,
-                blurb: "Back the shows that fit, one at a time.",
-                benefits: SHOW_BENEFITS,
-                featured: false,
-              },
-            ].map((tier) => (
+          {/* The four tiers are not four of a thing.
+              As equal columns the Partner's seven benefits set the height and
+              the other three sat in a third of it, so most of the row was
+              empty and every line wrapped three times in a column too narrow
+              to hold it. The one that costs ten thousand gets the width its
+              content needs, and the three that are genuinely comparable —
+              four benefits each — sit together underneath where they can be
+              read against one another, which is what a buyer is doing. */}
+          <div className="mt-12">
+            <div
+              className="relative rounded-3xl border-2 bg-[#F0A71F]/[0.07] p-8 sm:p-10"
+              style={{ borderColor: GOLD }}
+              data-testid="card-tier-partner"
+            >
               <div
-                key={tier.name}
-                className={`relative flex flex-col rounded-3xl p-8 ${
-                  tier.featured ? "border-2 bg-[#F0A71F]/[0.07]" : "border border-border bg-card"
-                }`}
-                style={{ borderColor: tier.featured ? GOLD : undefined }}
-                data-testid={`card-tier-${tier.name.split(" ")[0].toLowerCase()}`}
+                className="absolute -top-3.5 left-8 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#1a1200]"
+                style={{ backgroundColor: GOLD }}
               >
-                {tier.featured && (
-                  <div
-                    className="absolute -top-3.5 left-8 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-[#1a1200]"
-                    style={{ backgroundColor: GOLD }}
-                  >
-                    Most visible
+                Most visible
+              </div>
+              <div className="grid gap-8 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] lg:gap-12">
+                <div>
+                  <div className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    Partner sponsor
                   </div>
-                )}
-                <div className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">{tier.name}</div>
-                <div className="mt-3 flex items-baseline gap-2">
-                  <span className="text-5xl font-bold tabular-nums tracking-tight text-foreground" style={HEADLINE_FONT}>
-                    {money(tier.price)}
-                  </span>
+                  <div className="mt-3 text-5xl font-bold tabular-nums tracking-tight text-foreground sm:text-6xl" style={HEADLINE_FONT}>
+                    {money(PARTNER_PRICE)}
+                  </div>
+                  <div className="mt-1 text-sm text-muted-foreground">one available</div>
+                  <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
+                    Your name on the whole day, from the first show to the last.
+                  </p>
+                  <div className="mt-7">
+                    <SponsorDialog {...dialogCopy}>
+                      <Button
+                        className="w-full rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#ffb92e] sm:w-auto sm:px-8"
+                        data-testid="button-tier-partner"
+                      >
+                        Start the conversation
+                      </Button>
+                    </SponsorDialog>
+                  </div>
                 </div>
-                <div className="mt-1 text-sm text-muted-foreground">{tier.note}</div>
-                <p className="mt-4 text-muted-foreground">{tier.blurb}</p>
-                <ul className="mt-7 flex-1 space-y-3.5">
-                  {tier.benefits.map((b) => (
+                {/* Two columns, so seven benefits read as a list rather than a
+                    ladder down the side of the page. */}
+                <ul className="grid gap-x-8 gap-y-3.5 sm:grid-cols-2">
+                  {PARTNER_BENEFITS.map((b) => (
                     <li key={b} className="flex gap-3 text-sm leading-relaxed text-foreground">
                       <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: GOLD }} />
                       <span>{b}</span>
                     </li>
                   ))}
                 </ul>
-                <div className="mt-8">
-                  <SponsorDialog {...dialogCopy}>
-                    <Button
-                      className={`w-full rounded-full font-semibold ${
-                        tier.featured
-                          ? "bg-[#F0A71F] text-[#1a1200] hover:bg-[#ffb92e]"
-                          : "bg-[#053877] text-white hover:bg-[#064391]"
-                      }`}
-                      data-testid={`button-tier-${tier.name.split(" ")[0].toLowerCase()}`}
-                    >
-                      Start the conversation
-                    </Button>
-                  </SponsorDialog>
-                </div>
               </div>
-            ))}
+            </div>
+
+            <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {[
+                {
+                  name: "Live stream sponsor",
+                  price: LIVESTREAM_PRICE,
+                  note: "four available",
+                  blurb: "Your name on the stream itself, every mile of the way.",
+                  benefits: LIVESTREAM_BENEFITS,
+                },
+                {
+                  name: "Supporting sponsor",
+                  price: SUPPORTING_PRICE,
+                  note: "limited",
+                  blurb: "A presence across the whole marathon, without taking the title.",
+                  benefits: SUPPORTING_BENEFITS,
+                },
+                {
+                  name: "Show sponsor",
+                  price: SLOT_PRICE,
+                  note: `per show · ${slotCount || 48} slots`,
+                  blurb: "Back the shows that fit, one at a time.",
+                  benefits: SHOW_BENEFITS,
+                },
+              ].map((tier) => (
+                <div
+                  key={tier.name}
+                  className="flex flex-col rounded-3xl border border-border bg-card p-7"
+                  data-testid={`card-tier-${tier.name.split(" ")[0].toLowerCase()}`}
+                >
+                  <div className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    {tier.name}
+                  </div>
+                  <div className="mt-3 text-4xl font-bold tabular-nums tracking-tight text-foreground" style={HEADLINE_FONT}>
+                    {money(tier.price)}
+                  </div>
+                  <div className="mt-1 text-sm text-muted-foreground">{tier.note}</div>
+                  <p className="mt-4 leading-relaxed text-muted-foreground">{tier.blurb}</p>
+                  <ul className="mt-6 flex-1 space-y-3.5">
+                    {tier.benefits.map((b) => (
+                      <li key={b} className="flex gap-3 text-sm leading-relaxed text-foreground">
+                        <Check className="mt-0.5 h-4 w-4 shrink-0" style={{ color: GOLD }} />
+                        <span>{b}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-8">
+                    <SponsorDialog {...dialogCopy}>
+                      <Button
+                        className="w-full rounded-full bg-[#053877] font-semibold text-white hover:bg-[#064391]"
+                        data-testid={`button-tier-${tier.name.split(" ")[0].toLowerCase()}`}
+                      >
+                        Start the conversation
+                      </Button>
+                    </SponsorDialog>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
