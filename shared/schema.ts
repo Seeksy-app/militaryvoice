@@ -163,8 +163,17 @@ export type PublicSignup = Pick<
   | "serviceStatus"
   | "status"
 > & {
-  /** The second person on the show, when there is one. Resolved from their profile. */
-  coHost?: { hostName: string; photoUrl: string } | null;
+  /** The second person on the show, when there is one. Enough of their
+   *  profile for the card and for a profile dialog of their own. */
+  coHost?: {
+    hostName: string;
+    photoUrl: string;
+    podcastName: string;
+    socialLinks: string;
+    rssUrl: string;
+    youtubeUrl: string;
+    socialAccounts: string;
+  } | null;
 };
 
 // ---------------------------------------------------------------------------

@@ -357,57 +357,101 @@ export default function Agenda({ slug }: Props) {
                           />
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => setSelected({ signup, start: s.start })}
-                          className="flex items-center gap-3 p-4 text-left transition-colors hover:bg-muted/40"
-                          data-testid={`button-profile-${s.index}`}
-                        >
-                          {/* Two people, two faces. The second overlaps the
-                              first so the pair reads as one show, not a
-                              crowd. */}
-                          <span className={`flex shrink-0 items-center ${signup.coHost ? "-space-x-4" : ""}`}>
-                            {signup.photoUrl ? (
-                              <img
-                                src={resolveUploadUrl(signup.photoUrl)}
-                                alt={signup.hostName}
-                                className="h-16 w-16 shrink-0 rounded-full object-cover ring-4 ring-[#F0A71F]/40"
-                                data-testid={`img-agenda-photo-${s.index}`}
-                              />
+                        {(() => {
+                          const co = signup.coHost ?? null;
+                          const firstOf = (n: string) => n.trim().split(/\s+/)[0] || n;
+                          // The co-host's dialog is built from their profile;
+                          // a show name that is just their own first name
+                          // ("Jane ") means they never set one, so the show
+                          // they are on is used instead.
+                          const asSignup = (): PublicSignup => ({
+                            ...signup,
+                            coHost: null,
+                            hostName: co!.hostName,
+                            photoUrl: co!.photoUrl,
+                            podcastName:
+                              co!.podcastName.trim() && co!.podcastName.trim().toLowerCase() !== firstOf(co!.hostName).toLowerCase()
+                                ? co!.podcastName
+                                : signup.podcastName,
+                            socialLinks: co!.socialLinks,
+                            rssUrl: co!.rssUrl,
+                            youtubeUrl: co!.youtubeUrl,
+                            socialAccounts: co!.socialAccounts,
+                          });
+                          const avatar = (url: string, alt: string, cls: string) =>
+                            url ? (
+                              <img src={resolveUploadUrl(url)} alt={alt} className={`${cls} rounded-full object-cover`} />
                             ) : (
-                              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                              <div className={`${cls} flex items-center justify-center rounded-full bg-accent text-accent-foreground`}>
                                 <Mic2 className="h-6 w-6" />
                               </div>
-                            )}
-                            {signup.coHost && (
-                              signup.coHost.photoUrl ? (
-                                <img
-                                  src={resolveUploadUrl(signup.coHost.photoUrl)}
-                                  alt={signup.coHost.hostName}
-                                  className="relative h-16 w-16 shrink-0 rounded-full object-cover ring-4 ring-card"
-                                  data-testid={`img-agenda-cohost-${s.index}`}
-                                />
-                              ) : (
-                                <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground ring-4 ring-card">
-                                  <Mic2 className="h-6 w-6" />
-                                </div>
-                              )
-                            )}
-                          </span>
-                          <span className="min-w-0">
-                            <span className="line-clamp-2 block font-semibold leading-tight text-card-foreground">
-                              {signup.podcastName}
-                            </span>
-                            {/* Two names do not fit one line on a phone; the
-                                second name is the point, so it wraps. */}
-                            <span className="line-clamp-2 block text-sm text-muted-foreground">
-                              with {signup.hostName}{signup.coHost ? ` & ${signup.coHost.hostName}` : ""}
-                            </span>
-                            <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary">
-                              View profile <ArrowRight className="h-3 w-3" />
-                            </span>
-                          </span>
-                        </button>
+                            );
+                          if (!co) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setSelected({ signup, start: s.start })}
+                                className="flex items-center gap-3 p-4 text-left transition-colors hover:bg-muted/40"
+                                data-testid={`button-profile-${s.index}`}
+                              >
+                                {avatar(signup.photoUrl, signup.hostName, "h-16 w-16 shrink-0 ring-4 ring-[#F0A71F]/40")}
+                                <span className="min-w-0">
+                                  <span className="line-clamp-2 block font-semibold leading-tight text-card-foreground">
+                                    {signup.podcastName}
+                                  </span>
+                                  <span className="block truncate text-sm text-muted-foreground">with {signup.hostName}</span>
+                                  <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                                    View profile <ArrowRight className="h-3 w-3" />
+                                  </span>
+                                </span>
+                              </button>
+                            );
+                          }
+                          // Two people: the second sits lower and to the
+                          // right of the first, so the pair takes less width
+                          // than two full circles and both names fit beside
+                          // it. Each face and each name opens its own profile.
+                          return (
+                            <div className="flex items-center gap-3 p-4" data-testid={`card-profiles-${s.index}`}>
+                              <span className="relative h-[5.5rem] w-24 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => setSelected({ signup, start: s.start })}
+                                  className="absolute left-0 top-0"
+                                  aria-label={`${signup.hostName}'s profile`}
+                                  data-testid={`button-profile-${s.index}`}
+                                >
+                                  {avatar(signup.photoUrl, signup.hostName, "h-16 w-16 ring-4 ring-[#F0A71F]/40")}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelected({ signup: asSignup(), start: s.start })}
+                                  className="absolute left-10 top-6"
+                                  aria-label={`${co.hostName}'s profile`}
+                                  data-testid={`button-cohost-profile-${s.index}`}
+                                >
+                                  {avatar(co.photoUrl, co.hostName, "h-14 w-14 ring-4 ring-card")}
+                                </button>
+                              </span>
+                              <span className="min-w-0">
+                                <span className="line-clamp-2 block font-semibold leading-tight text-card-foreground">
+                                  {signup.podcastName}
+                                </span>
+                                <span className="line-clamp-2 block text-sm text-muted-foreground">
+                                  with {signup.hostName} & {co.hostName}
+                                </span>
+                                <span className="mt-1 flex flex-wrap gap-x-3 text-xs font-medium text-primary">
+                                  <button type="button" onClick={() => setSelected({ signup, start: s.start })} className="inline-flex items-center gap-1 hover:underline">
+                                    {firstOf(signup.hostName)}'s profile <ArrowRight className="h-3 w-3" />
+                                  </button>
+                                  <button type="button" onClick={() => setSelected({ signup: asSignup(), start: s.start })} className="inline-flex items-center gap-1 hover:underline">
+                                    {firstOf(co.hostName)}'s profile <ArrowRight className="h-3 w-3" />
+                                  </button>
+                                </span>
+                              </span>
+                            </div>
+                          );
+                        })()}
 
                         <div className="mt-auto flex flex-col gap-3 px-4 pb-4">
                           {/* Connected accounts plus anything placeable from the links they

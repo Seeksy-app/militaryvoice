@@ -283,7 +283,20 @@ async function withCoHosts(rows: PublicSignup[], all: { coHostEmail: string; id:
     const email = byId.get(r.id);
     if (!email) return r;
     const prof = await storage.getProfileByEmail(email);
-    return prof ? { ...r, coHost: { hostName: prof.hostName, photoUrl: prof.photoUrl } } : r;
+    return prof
+      ? {
+          ...r,
+          coHost: {
+            hostName: prof.hostName,
+            photoUrl: prof.photoUrl,
+            podcastName: prof.podcastName,
+            socialLinks: prof.socialLinks,
+            rssUrl: prof.rssUrl,
+            youtubeUrl: prof.youtubeUrl,
+            socialAccounts: prof.socialAccounts ?? "",
+          },
+        }
+      : r;
   }));
 }
 
