@@ -624,6 +624,18 @@ export const showSponsors = pgTable(
     signupId: integer("signup_id"),
     /** What Alex says out loud, when the sponsor wants particular words. */
     readLine: text("read_line").notNull().default(""),
+    /**
+     * The podcaster who made the introduction, and is owed a share of it.
+     *
+     * Recorded when the introduction happens rather than claimed afterwards,
+     * because two people remembering who brought a sponsor in November is a
+     * conversation nobody wants to have.
+     */
+    referredBySignupId: integer("referred_by_signup_id"),
+    /** Their share, in whole dollars. Set at the time, so a later change to
+     *  the rate does not quietly rewrite what somebody was promised. */
+    referralFee: integer("referral_fee").notNull().default(0),
+    referralPaidAt: text("referral_paid_at").notNull().default(""),
     createdAt: text("created_at").notNull(),
   },
   (t) => ({
