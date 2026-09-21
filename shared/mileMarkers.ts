@@ -58,6 +58,16 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
     .filter((i) => i >= 0);
   const first = ceremonies[0];
   const last = ceremonies.length > 1 ? ceremonies[ceremonies.length - 1] : -1;
+  // When the closing ceremony is the awards, the tape is not there — you
+  // cross the line first and then get the medal. The finish is the last
+  // show before it, and the ceremony keeps the star.
+  const closingIsAwards = last >= 0 && isAwards(slots[last].signup);
+  let finishAt = last;
+  if (closingIsAwards) {
+    for (let i = last - 1; i >= 0; i--) {
+      if (slots[i].signup && !isBonus(slots[i].signup) && !isAwards(slots[i].signup) && i !== first) { finishAt = i; break; }
+    }
+  }
 
   // The .2 is the fraction *after* the twenty-six miles, so only the bonuses
   // past the last mile are part of it, and those are the ones worth numbering
@@ -65,7 +75,7 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
   // finish, and it stays a plain B so it never takes B1 off the closing run.
   let lastMile = -1;
   slots.forEach((s, i) => {
-    if (i !== first && i !== last && s.signup && !isBonus(s.signup) && !isAwards(s.signup)) lastMile = i;
+    if (i !== first && i !== last && i !== finishAt && s.signup && !isBonus(s.signup) && !isAwards(s.signup)) lastMile = i;
   });
 
   // Numbered only when there is more than one — a lone "B1" implies a B2 that
@@ -77,7 +87,8 @@ export function mileMarkers<T extends { signup?: Booking | null }>(slots: T[]): 
   let leg = 0;
   return slots.map((s, i) => {
     if (i === first) return { kind: "start", label: "START", sub: "the line" };
-    if (i === last) return { kind: "finish", label: "FINISH", sub: "the tape" };
+    if (i === finishAt) return { kind: "finish", label: "FINISH", sub: "the tape" };
+    if (i === last && closingIsAwards) return { kind: "medal", label: "★", sub: "awards" };
     // "B", not ".2". The fraction is the distance the bonuses add up to, not a
     // name for any one of them — a slot reading ".2" was labelling a session
     // with an arithmetic fact about the course.

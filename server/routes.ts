@@ -5078,7 +5078,11 @@ export function registerRoutes(app: Express): void {
       eventId = featured.id;
     }
     const rows = await storage.listSignups(eventId);
-    const live = rows.filter((r) => r.status !== "cancelled");
+    // A booking parked past the end of the day — the organisers' own, for
+    // seeing the dashboard as a podcaster — is not on the public lineup.
+    const ev = await storage.getEventById(eventId);
+    const totalSlots = ev ? Math.floor((ev.durationHours * 60) / ev.slotMinutes) : Infinity;
+    const live = rows.filter((r) => r.status !== "cancelled" && r.slotIndex < totalSlots);
     res.json(await withCoHosts(live.map(toPublicSignup), live));
   });
 
