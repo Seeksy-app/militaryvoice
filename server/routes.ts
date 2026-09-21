@@ -6427,12 +6427,43 @@ export function registerRoutes(app: Express): void {
   });
 
   // Resend webhook — receives email events in real time
+  /**
+   * Verify a Svix-signed webhook.
+   *
+   * The signature header is "v1,<base64 hmac>" — several of them while a
+   * secret is rotating — and the secret is the HMAC *key*, never something
+   * that appears in the header. The tracking webhook checked
+   * `sig.includes(secret)`, which cannot ever be true, so every delivery,
+   * open and click Resend sent us was answered 401 and retried into nothing.
+   *
+   * Written once here because it was written twice before: the inbound
+   * endpoint had it right and this one had it wrong, and nothing made them
+   * disagree out loud.
+   */
+  function svixVerified(req: Request, secret: string): boolean {
+    if (!secret) return true; // unset means "not checking", as before
+    const id = req.get("svix-id") ?? "";
+    const ts = req.get("svix-timestamp") ?? "";
+    const sigHeader = req.get("svix-signature") ?? "";
+    const raw = (req as any).rawBody as Buffer | undefined;
+    if (!id || !ts || !sigHeader || !raw) return false;
+    // Five minutes, so a captured POST cannot be replayed at us tomorrow.
+    if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;
+    const key = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+    const expected = crypto.createHmac("sha256", key).update(`${id}.${ts}.${raw.toString("utf8")}`).digest("base64");
+    return sigHeader
+      .split(" ")
+      .map((p) => p.split(",")[1])
+      .filter(Boolean)
+      .some((sig) => {
+        const a = Buffer.from(sig);
+        const b = Buffer.from(expected);
+        return a.length === b.length && crypto.timingSafeEqual(a, b);
+      });
+  }
+
   app.post("/api/webhooks/resend", async (req, res) => {
-    const secret = process.env.RESEND_WEBHOOK_SECRET;
-    if (secret) {
-      const sig = req.headers["svix-signature"] as string | undefined;
-      if (!sig || !sig.includes(secret)) return res.status(401).end();
-    }
+    if (!svixVerified(req, process.env.RESEND_WEBHOOK_SECRET ?? "")) return res.status(401).end();
     const event = req.body as {
       type?: string;
       data?: { email_id?: string; url?: string; created_at?: string; click?: { link?: string; timestamp?: string } };
