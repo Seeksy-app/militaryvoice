@@ -114,7 +114,10 @@ export function getSession(req: Request): { email: string; exp: number; remember
   const payload = verify(token);
   if (!payload || typeof payload.email !== "string" || typeof payload.exp !== "number") return null;
   if (Date.now() > payload.exp) return null;
-  return { email: payload.email, exp: payload.exp, remember: payload.remember === true, iat: typeof payload.iat === "number" ? payload.iat : null };
+  // Cookies set before the flag existed carry only the expiry; a session with
+  // more than a day left on it was a thirty-day one.
+  const remember = payload.remember === true || payload.exp - Date.now() > 24 * 60 * 60 * 1000;
+  return { email: payload.email, exp: payload.exp, remember, iat: typeof payload.iat === "number" ? payload.iat : null };
 }
 
 export function requireHostSession(req: Request, res: Response, next: NextFunction): void {
