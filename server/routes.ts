@@ -754,7 +754,7 @@ export function registerRoutes(app: Express): void {
         const payload = await buildNudgePayload(signup, event);
 
         const send = kind === "prep" ? sendPrepNudge : kind === "final" ? sendFinalNudge : sendOnAirNudge;
-        let sent = false;
+        let sent: string | null = null;
         try {
           sent = await send(payload);
           if (!sent) {
@@ -767,8 +767,8 @@ export function registerRoutes(app: Express): void {
         } catch (err) {
           console.error(`Nudge ${kind} failed for signup ${signup.id}:`, err);
         }
-        out.push({ signupId: signup.id, to: signup.email, kind, sent, suppressed });
-        if (sent) await storage.incrementCadenceBroadcast(event.id, kind, 1).catch(() => {});
+        out.push({ signupId: signup.id, to: signup.email, kind, sent: !!sent, suppressed });
+        if (sent) await storage.recordCadenceSend(event.id, kind, signup.email, sent).catch(() => {});
       }
     }
     return out;
@@ -836,7 +836,7 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: "Give me an address to send to." });
       return;
     }
-    let sent = false;
+    let sent: boolean | string | null = false;
     if (kind === "schedule") {
       sent = await sendScheduleReference(to);
     } else if (kind === "starting") {
@@ -866,7 +866,7 @@ export function registerRoutes(app: Express): void {
         agendaUrl: `${PUBLIC_ORIGIN}/agenda`,
       });
     }
-    res.json({ to, kind, sent });
+    res.json({ to, kind, sent: !!sent });
   });
 
   app.post("/api/admin/nudges/preview", requireAdmin, async (req, res) => {
@@ -893,7 +893,7 @@ export function registerRoutes(app: Express): void {
       ["onair", sendOnAirNudge],
     ] as const) {
       try {
-        sent[kind] = await send(payload);
+        sent[kind] = !!(await send(payload));
       } catch (err) {
         console.error(`Preview ${kind} failed:`, err);
         sent[kind] = false;
@@ -4944,7 +4944,7 @@ export function registerRoutes(app: Express): void {
       const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
       const tz = signup.timezone || "America/New_York";
       const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
-      const sent = await sendConfirmationEmail({
+      const id = await sendConfirmationEmail({
         to: signup.email,
         hostName: signup.hostName,
         podcastName: signup.podcastName,
@@ -4955,8 +4955,8 @@ export function registerRoutes(app: Express): void {
         agendaUrl: `${origin}/agenda`,
         calendar: calendarLinksFor(signup, event, origin),
       });
-      if (sent) await storage.incrementCadenceBroadcast(event.id, "confirmation", 1).catch(() => {});
-      return sent;
+      if (id) await storage.recordCadenceSend(event.id, "confirmation", signup.email, id).catch(() => {});
+      return !!id;
     } catch (err) {
       console.error("Failed to send signup confirmation email:", err);
       return false;
@@ -6587,29 +6587,94 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
-  // Retroactive sync: pull recent emails from Resend API and match to broadcast sends
-  app.post("/api/admin/broadcasts/:id/sync-resend", requireAdmin, async (req, res) => {
-    const broadcastId = Number(req.params.id);
-    const page = await resendApiGet("/emails?limit=100") as { data?: Array<{ id: string; to: string[]; created_at: string; last_event?: string }> } | null;
-    if (!page?.data) return res.status(502).json({ error: "Could not reach Resend API" });
-    const sends = page.data;
-    let matched = 0;
-    for (const s of sends) {
-      const email = s.to?.[0];
-      if (!email) continue;
-      // Try recording the send row — if already present it's a no-op via unique constraint
-      try {
-        await storage.recordBroadcastSend(broadcastId, email, s.id);
+  /**
+   * Fill in the sends Resend knows about and we do not.
+   *
+   * Three kinds of email left no send row: the automatic ones before today,
+   * the hand-written ones before this morning, and the co-host ask filed
+   * after the fact with no ids. Resend still holds every one of them, with the
+   * address, the subject and the last thing that happened to it. Matching on
+   * subject and address gives each its id — and the webhook events already
+   * stored against that id, which we could not attach to anything, start
+   * counting.
+   *
+   * Paid for by whoever presses the button: up to ten pages of a hundred,
+   * stopping at `days` back.
+   */
+  async function syncResend(opts: { onlyBroadcastId?: number; days?: number }) {
+    type Item = { id: string; to?: string[]; subject?: string; created_at: string; last_event?: string };
+    const since = Date.now() - (opts.days ?? 14) * 86400_000;
+    const featured = await storage.getFeaturedEvent();
+    const known = await storage.listSendResendIds();
+    const sent = await storage.listSentBroadcasts();
+
+    // The automatic emails are recognised by their subject line, since their
+    // rows carry a label rather than the subject that went out.
+    const cadenceOf = (subject: string) =>
+      subject.startsWith("You're on the schedule:") ? "confirmation"
+      : /: your slot is /.test(subject) ? "prep"
+      : subject.startsWith("Two days:") ? "final"
+      : subject.startsWith("You're on soon:") ? "onair"
+      : null;
+    const findFor = (subject: string, at: number): BroadcastRow | undefined => {
+      const kind = cadenceOf(subject);
+      if (kind) return sent.find((b) => b.source === `cadence:${kind}` && b.eventId === featured.id);
+      // Same subject, nearest send time: a subject reused a week later is a
+      // different campaign.
+      return sent
+        .filter((b) => b.subject === subject && b.sentAt && Math.abs(Date.parse(b.sentAt) - at) < 3 * 86400_000)
+        .sort((x, y) => Math.abs(Date.parse(x.sentAt!) - at) - Math.abs(Date.parse(y.sentAt!) - at))[0];
+    };
+    // What a last event implies: a clicked email was opened and delivered.
+    // Stats count distinct ids per type, so a copy the webhook already stored
+    // does not count twice.
+    const implied: Record<string, string[]> = {
+      delivered: ["delivered"], opened: ["opened", "delivered"], clicked: ["clicked", "opened", "delivered"],
+      bounced: ["bounced"], complained: ["complained", "delivered"],
+    };
+
+    let scanned = 0, matched = 0, unmatched = 0;
+    let after: string | undefined;
+    for (let page = 0; page < 10; page++) {
+      const res = (await resendApiGet(`/emails?limit=100${after ? `&after=${after}` : ""}`)) as { data?: Item[]; has_more?: boolean } | null;
+      if (!res?.data?.length) break;
+      let stop = false;
+      for (const m of res.data) {
+        scanned++;
+        const at = Date.parse(m.created_at);
+        if (at < since) { stop = true; break; }
+        if (known.has(m.id)) continue;
+        const to = m.to?.[0];
+        if (!to) continue;
+        const b = findFor(m.subject ?? "", at);
+        if (!b || (opts.onlyBroadcastId && b.id !== opts.onlyBroadcastId)) { unmatched++; continue; }
+        await storage.attachSend(b.id, to, m.id, new Date(at).toISOString());
+        for (const type of implied[m.last_event ?? ""] ?? []) {
+          await storage.recordBroadcastEvent(m.id, type, new Date(at).toISOString());
+        }
+        known.add(m.id);
         matched++;
-      } catch {
-        // duplicate — already stored
       }
-      // Record the last event if Resend returned one
-      if (s.last_event) {
-        try { await storage.recordBroadcastEvent(s.id, s.last_event, s.created_at); } catch { /* dup */ }
-      }
+      if (stop || !res.has_more) break;
+      after = res.data[res.data.length - 1].id;
     }
-    res.json({ matched });
+    return { scanned, matched, unmatched };
+  }
+
+  app.post("/api/admin/emails/sync-resend", requireAdmin, async (req, res) => {
+    try {
+      res.json(await syncResend({ days: Number(req.body?.days) || 14 }));
+    } catch (err) {
+      res.status(502).json({ message: (err as Error).message });
+    }
+  });
+
+  app.post("/api/admin/broadcasts/:id/sync-resend", requireAdmin, async (req, res) => {
+    try {
+      res.json(await syncResend({ onlyBroadcastId: Number(req.params.id) }));
+    } catch (err) {
+      res.status(502).json({ message: (err as Error).message });
+    }
   });
 
   // ---- CRM: Segments ----------------------------------------------------------

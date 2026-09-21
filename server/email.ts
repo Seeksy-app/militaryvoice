@@ -280,9 +280,14 @@ export function renderConfirmationEmail(input: ConfirmationEmailInput): { subjec
   };
 }
 
-/** Send the on-air confirmation email. Never throws. */
-export async function sendConfirmationEmail(input: ConfirmationEmailInput): Promise<boolean> {
-  return sendEmail({ to: input.to, ...renderConfirmationEmail(input) });
+/**
+ * Send the on-air confirmation email. Never throws.
+ *
+ * Resolves to Resend's id for the message, or null when it was refused, so
+ * the caller can file the send and its opens count like a campaign's.
+ */
+export async function sendConfirmationEmail(input: ConfirmationEmailInput): Promise<string | null> {
+  return sendRawEmail({ to: input.to, ...renderConfirmationEmail(input) });
 }
 
 export interface LoginCodeEmailInput {
@@ -572,19 +577,21 @@ export function renderNudge(kind: NudgeKind, v: NudgeInput): { subject: string; 
   };
 }
 
+// Each resolves to Resend's id, or null when refused, so the send can be filed.
+
 /** Two weeks out: time to send us things. */
-export async function sendPrepNudge(v: NudgeInput): Promise<boolean> {
-  return sendEmail({ to: v.to, ...renderNudge("prep", v) });
+export async function sendPrepNudge(v: NudgeInput): Promise<string | null> {
+  return sendRawEmail({ to: v.to, ...renderNudge("prep", v) });
 }
 
 /** Two days out: the practical details. */
-export async function sendFinalNudge(v: NudgeInput): Promise<boolean> {
-  return sendEmail({ to: v.to, ...renderNudge("final", v) });
+export async function sendFinalNudge(v: NudgeInput): Promise<string | null> {
+  return sendRawEmail({ to: v.to, ...renderNudge("final", v) });
 }
 
 /** An hour out: one link, nothing else. */
-export async function sendOnAirNudge(v: NudgeInput): Promise<boolean> {
-  return sendEmail({ to: v.to, ...renderNudge("onair", v) });
+export async function sendOnAirNudge(v: NudgeInput): Promise<string | null> {
+  return sendRawEmail({ to: v.to, ...renderNudge("onair", v) });
 }
 
 // ---------------------------------------------------------------------------

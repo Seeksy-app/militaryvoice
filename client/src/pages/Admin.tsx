@@ -2939,6 +2939,28 @@ function ActivityLog({
   const [mode, setMode] = useState<"sends" | "contacts">("sends");
   const [preview, setPreview] = useState<{ broadcastId?: number; cadence?: string; title: string } | null>(null);
 
+  // Ask Resend for the sends we never filed, so their opens count. An admin
+  // presses this; it is not run on a page load.
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [syncing, setSyncing] = useState(false);
+  async function syncResend() {
+    setSyncing(true);
+    try {
+      const r = (await adminSend("POST", "/api/admin/emails/sync-resend", {}).then((x) => x.json())) as { scanned: number; matched: number; unmatched: number };
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/broadcasts"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/admin/emails/recipients"] });
+      toast({
+        title: r.matched ? `${r.matched} sends matched` : "Nothing new",
+        description: `${r.scanned} emails read from Resend${r.unmatched ? ` · ${r.unmatched} belong to nothing in this log` : ""}.`,
+      });
+    } catch (err) {
+      toast({ title: "Sync failed", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   // The same queries the rows make, hoisted so the total can be added up.
   // Identical cache keys, so this costs no extra requests — and the rows are
   // handed the result rather than asking for it again.
@@ -2985,18 +3007,24 @@ function ActivityLog({
   const pct = (n: number) => (totals.delivered > 0 ? `${Math.round((n / totals.delivered) * 100)}%` : "—");
 
   const modeTabs = (
-    <div className="inline-flex rounded-lg border border-border p-0.5 text-xs" data-testid="activity-mode">
-      {([["sends", "By email"], ["contacts", "By contact"]] as const).map(([k, label]) => (
-        <button
-          key={k}
-          type="button"
-          onClick={() => setMode(k)}
-          className={`rounded-md px-3 py-1.5 font-medium transition-colors ${mode === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-          data-testid={`activity-mode-${k}`}
-        >
-          {label}
-        </button>
-      ))}
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="inline-flex rounded-lg border border-border p-0.5 text-xs" data-testid="activity-mode">
+        {([["sends", "By email"], ["contacts", "By contact"]] as const).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setMode(k)}
+            className={`rounded-md px-3 py-1.5 font-medium transition-colors ${mode === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            data-testid={`activity-mode-${k}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <Button size="sm" variant="outline" onClick={syncResend} disabled={syncing} data-testid="sync-resend">
+        <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+        {syncing ? "Reading Resend…" : "Sync with Resend"}
+      </Button>
     </div>
   );
 
@@ -3029,8 +3057,8 @@ function ActivityLog({
         ))}
       </div>
       <p className="-mt-1 text-xs text-muted-foreground">
-        Opens and clicks cover the {totals.tracked} send{totals.tracked === 1 ? "" : "s"} we can measure. The automatic
-        emails go out one at a time as people book, so they count towards emails sent and nothing else.
+        Opens and clicks cover the {totals.tracked} send{totals.tracked === 1 ? "" : "s"} with a per-send record.
+        Sync with Resend fills in the ones that went out without one.
       </p>
 
       <div className="flex flex-col gap-2">
@@ -3186,7 +3214,7 @@ function ActivityRow({
         /* A transactional send has no broadcast_sends rows to join against,
            so there is nothing to report beyond the count it keeps itself. */
         <p className="mt-2 text-xs text-muted-foreground">
-          {auto ? "Sent one at a time as people book — no per-send tracking." : "Waiting for delivery events."}
+          {auto ? "Sent one at a time as people book — nothing matched yet. Sync with Resend fills these in." : "Waiting for delivery events."}
         </p>
       )}
     </div>

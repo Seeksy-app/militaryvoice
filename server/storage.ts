@@ -2393,6 +2393,54 @@ class DatabaseStorage implements IStorage {
     await db.insert(broadcastSends).values({ broadcastId, email, resendId, sentAt: new Date().toISOString() });
   }
 
+  /**
+   * An automatic email went out: count it on its cadence row and keep the
+   * send with its Resend id, so its opens count the way a campaign's do.
+   * Before this the row only carried a running total, and "23 opened" was
+   * something the confirmation could never show.
+   */
+  async recordCadenceSend(eventId: number, kind: string, email: string, resendId: string): Promise<void> {
+    await this.incrementCadenceBroadcast(eventId, kind, 1);
+    const [row] = await db.select().from(broadcasts)
+      .where(and(eq(broadcasts.eventId, eventId), eq(broadcasts.source, `cadence:${kind}`)))
+      .limit(1);
+    if (row) await this.recordBroadcastSend(row.id, email, resendId);
+  }
+
+  async listSentBroadcasts(): Promise<BroadcastRow[]> {
+    await ready();
+    return db.select().from(broadcasts).where(eq(broadcasts.status, "sent"));
+  }
+
+  async listSendResendIds(): Promise<Set<string>> {
+    await ready();
+    const rows = await db.select({ id: broadcastSends.resendId }).from(broadcastSends);
+    return new Set(rows.map((r) => r.id).filter(Boolean));
+  }
+
+  /**
+   * A send row for an address under a broadcast, learned after the fact.
+   *
+   * A row filed with no Resend id — the co-host ask was backfilled that way —
+   * takes the id rather than gaining a twin, so the recipient count and the
+   * send count stay the same number.
+   */
+  async attachSend(broadcastId: number, email: string, resendId: string, sentAt: string): Promise<void> {
+    await ready();
+    const [blank] = await db.select().from(broadcastSends)
+      .where(and(
+        eq(broadcastSends.broadcastId, broadcastId),
+        sqlExpr`lower(${broadcastSends.email}) = lower(${email})`,
+        eq(broadcastSends.resendId, ""),
+      ))
+      .limit(1);
+    if (blank) {
+      await db.update(broadcastSends).set({ resendId, sentAt }).where(eq(broadcastSends.id, blank.id));
+      return;
+    }
+    await db.insert(broadcastSends).values({ broadcastId, email, resendId, sentAt });
+  }
+
   async recordBroadcastEvent(resendId: string, eventType: string, occurredAt: string, url?: string): Promise<void> {
     await ready();
     await db.insert(broadcastEvents).values({ resendId, eventType, occurredAt, url: url ?? "" });
