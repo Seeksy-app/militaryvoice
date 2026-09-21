@@ -855,6 +855,22 @@ export function registerRoutes(app: Express): void {
     res.json({ id, to });
   });
 
+  /**
+   * A presigned upload for the house's own files — a screenshot, a still, a
+   * reel — from an admin's browser straight to R2, the way podcasters' own
+   * uploads already go. Register it afterwards with /api/admin/media.
+   */
+  app.post("/api/admin/upload-url", requireAdmin, (req, res) => {
+    const name = String(req.body?.fileName ?? "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+    const key = `studio/house/${Date.now()}-${crypto.randomBytes(4).toString("hex")}-${name}`;
+    try {
+      res.json({ uploadUrl: signedRecordingUpload(key), storageKey: key });
+    } catch (err) {
+      console.error("Could not sign a house upload:", err);
+      res.status(502).json({ message: "Couldn't start the upload." });
+    }
+  });
+
   /** Everyone who has had email from us, for the activity log's by-contact view. */
   app.get("/api/admin/emails/recipients", requireAdmin, async (req, res) => {
     const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent())?.id;
