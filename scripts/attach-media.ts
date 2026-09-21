@@ -24,7 +24,10 @@ const SITE = process.env.MV_SITE ?? "https://www.militaryvoice.ai";
 // episode uploaded a minute ago whose id nobody has looked up yet.
 const PAIRS: { asset?: number; file?: RegExp; match: RegExp }[] = [
   { asset: 4, match: /developing the leader within/i },
-  { asset: 5, match: /flag carry/i },
+  // Asset 5 is a Devil Dawg episode and was paired with The Flag Carry — a
+  // live show — for a day. The stage would have rolled Riccoh's episode over
+  // Theresa's slot at 9:30 and had nothing for Devil Dawg at 10.
+  { asset: 5, match: /devil dawg/i },
   { asset: 6, match: /today with tally/i },
   { asset: 7, match: /stillserving/i },
   { file: /montel williams/i, match: /brave blocks/i },
@@ -64,6 +67,21 @@ async function main() {
     console.log(`    ${x.url}`);
   }
   if (!process.argv.includes("--apply")) { console.log("\nDry run — pass --apply."); await sql.end(); return; }
+
+  // A live show must not carry a file: whatever a mis-pairing left on one
+  // goes back to the camera before anything is attached.
+  const stray = await sql`
+    SELECT r.id AS row_id, sc.id AS scene_id, r.title FROM run_of_show r
+    JOIN signups s ON s.id = r.signup_id
+    JOIN event_shows es ON es.email = s.email AND es.event_id = r.event_id
+    LEFT JOIN scenes sc ON sc.run_item_id = r.id
+    WHERE r.event_id = ${ev.id} AND r.kind = 'Segment' AND es.show_format <> 'prerecorded'
+      AND (r.media_url <> '' OR sc.media_url <> '')`;
+  for (const x of stray as any[]) {
+    console.log(`  detached from live show: ${x.title}`);
+    await sql`UPDATE run_of_show SET media_url = '', media_kind = '', media_label = '' WHERE id = ${x.row_id}`;
+    if (x.scene_id) await sql`UPDATE scenes SET kind = 'camera', media_url = '', media_kind = '', media_label = '' WHERE id = ${x.scene_id}`;
+  }
 
   for (const x of plan) {
     await sql`UPDATE scenes SET kind = 'media', media_url = ${x.url}, media_kind = 'video', media_label = ${x.label} WHERE id = ${x.sceneId}`;
