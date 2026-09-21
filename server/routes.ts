@@ -2249,7 +2249,55 @@ export function registerRoutes(app: Express): void {
       configured: isYoutubeConfigured(),
       connected: Boolean(acct),
       channelTitle: acct?.channelTitle ?? "",
+      scope: acct?.scope ?? "segment",
     });
+  });
+
+  /**
+   * Their segment, or the whole show, on their channel.
+   *
+   * "Segment" needs nothing now: the producer opens a broadcast on their
+   * channel when their slot comes up. "Show" is a destination on the house
+   * broadcast, so it is opened here — a broadcast scheduled for the event's
+   * start, bound to a stream, and its ingest filed as a whole-day destination
+   * that the day's egress picks up with the others. Switching back removes
+   * that destination; the scheduled broadcast on their channel simply never
+   * starts.
+   */
+  app.patch("/api/host/youtube", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const scope = req.body?.scope === "show" ? "show" : req.body?.scope === "segment" ? "segment" : null;
+    if (!scope) return res.status(400).json({ message: "Segment or show." });
+    const acct = await storage.getYoutubeAccount(email);
+    if (!acct) return res.status(409).json({ message: "Connect YouTube first." });
+    const event = await storage.getFeaturedEvent();
+    const mine = (await storage.listDestinations(event.id)).filter(
+      (d) => d.platform === "youtube" && !d.signupId && d.ownerEmail.toLowerCase() === email,
+    );
+    if (scope === "show" && mine.length === 0) {
+      const token = await youtubeToken(email);
+      if (!token) return res.status(409).json({ message: "YouTube isn't answering for your channel — reconnect it and try again." });
+      try {
+        const b = await createBroadcast(token, {
+          title: event.name,
+          description: `${event.tagline || event.name} — live from MilitaryVoice.ai, the whole day.`,
+          startAtIso: event.startAtUtc,
+        });
+        await storage.createDestination(event.id, email, {
+          platform: "youtube",
+          label: `${acct.channelTitle || email} · whole show`,
+          rtmpUrl: b.ingestAddress,
+          streamKey: b.streamName,
+          enabled: true,
+        });
+      } catch (err: any) {
+        console.error("Couldn't open a whole-show broadcast:", err);
+        return res.status(502).json({ message: err?.message ?? "YouTube wouldn't open the broadcast. Is live streaming enabled on your channel?" });
+      }
+    }
+    if (scope === "segment") for (const d of mine) await storage.deleteDestination(d.id);
+    await storage.upsertYoutubeAccount(email, { refreshToken: acct.refreshToken, scope });
+    res.json({ ok: true, scope });
   });
 
   app.get("/api/host/youtube/start", requireHostSession, async (req, res) => {

@@ -1388,6 +1388,13 @@ export const youtubeAccounts = pgTable("youtube_accounts", {
   email: text("email").notNull(),
   channelId: text("channel_id").notNull().default(""),
   channelTitle: text("channel_title").notNull().default(""),
+  /**
+   * What goes to their channel: "segment" — their own slot, opened by the
+   * producer when it comes up — or "show", the whole day, as a destination
+   * on the house broadcast. Asked at the point of connecting, because that
+   * is the one moment they are thinking about it.
+   */
+  scope: text("scope").notNull().default("segment"),
   // The refresh token is the durable credential; the access token is a cache.
   refreshToken: text("refresh_token").notNull(),
   accessToken: text("access_token").notNull().default(""),
