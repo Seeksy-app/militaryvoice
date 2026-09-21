@@ -1012,6 +1012,10 @@ export const scenes = pgTable("scenes", {
    *  two in separate panels. */
   bannerTitle: text("banner_title").notNull().default(""),
   bannerSubtitle: text("banner_subtitle").notNull().default(""),
+  /** A picture for the card, for scenes with no face to wear — the pre-show,
+   *  the sponsor reel. Empty means the rail decides (a still, a headshot, or
+   *  the camera glyph). */
+  thumbUrl: text("thumb_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
 });
 export type SceneRow = typeof scenes.$inferSelect;

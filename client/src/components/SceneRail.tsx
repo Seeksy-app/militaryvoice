@@ -361,8 +361,8 @@ export function SceneRail({
           // hundred and forty-six scenes, recognising a face is faster than
           // reading a line of text.
           const sceneImage = k === "media" && isImage(sc) ? sc.mediaUrl : null;
-          const thumb = sceneImage ?? sg?.photoUrl ?? null;
-          const isFace = !sceneImage && !!thumb;
+          const thumb = sc.thumbUrl || sceneImage || sg?.photoUrl || null;
+          const isFace = !sc.thumbUrl && !sceneImage && !!thumb;
           const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
           const here = sg
             ? presentNames.some(
