@@ -4,7 +4,8 @@ import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { SponsorDialog } from "@/components/SponsorDialog";
-import { AudienceReach, useAudienceSnapshot } from "@/components/AudienceReach";
+import { useAudienceSnapshot } from "@/components/AudienceReach";
+import { PodcastReach } from "@/components/PodcastReach";
 import { POSTS_BEFORE_PER_SHOW, POSTS_AFTER_PER_SHOW, postsLabel } from "@shared/promo";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
@@ -156,16 +157,18 @@ export default function Sponsor() {
               { icon: Clock, n: String(event?.durationHours ?? 24), label: "hours, continuous", note: "no dead air" },
               { icon: Radio, n: String(slotCount || 48), label: "broadcast slots", note: `${event?.slotMinutes ?? 30} minutes each` },
               {
-                icon: Megaphone,
-                n: postsLabel(lineup.length || 17),
-                label: "promotional posts",
-                note: `${POSTS_BEFORE_PER_SHOW} before and ${POSTS_AFTER_PER_SHOW} after, per show`,
-              },
-              {
                 icon: Users,
                 n: audience ? audience.followers.toLocaleString("en-US") : "—",
                 label: "combined following",
                 note: audience ? `across ${audience.channels} connected channels` : "being counted",
+              },
+              // The catalogue, up here with the rest: these are not new shows,
+              // and a sponsor should read that in the first screen.
+              {
+                icon: Megaphone,
+                n: audience?.catalogue?.episodes ? audience.catalogue.episodes.toLocaleString("en-US") : "—",
+                label: "episodes already published",
+                note: audience?.catalogue?.sinceYear ? `the longest-running since ${audience.catalogue.sinceYear}` : "being counted",
               },
             ].map(({ icon: Icon, n, label, note }) => (
               <div key={label} className="px-2 lg:px-0">
@@ -284,59 +287,8 @@ export default function Sponsor() {
         </section>
       )}
 
-      {/* --------------------------------------------------- AUDIENCE REACH */}
-      <AudienceReach />
-
-      {/* ------------------------------------------------------- THE CATALOGUE */}
-      {/* Downloads belong to each host and we do not have them, so this does
-          not claim an audience — it shows the output, and lets a reader draw
-          the conclusion themselves. Nobody publishes six hundred episodes over
-          ten years into silence.
-
-          Every number here is a floor: it counts only the feeds that answer,
-          which is thirteen of a thirty-two show lineup. Saying so is what
-          makes the rest of the page credible. */}
-      {audience?.catalogue && audience.catalogue.episodes > 0 && (
-        <section className="border-b border-border bg-background py-14 lg:py-16">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <h2 className="max-w-3xl text-2xl font-bold leading-[1.3] tracking-tight text-foreground sm:text-3xl" style={HEADLINE_FONT}>
-              These aren't new shows.
-            </h2>
-            <div className="mt-8 grid gap-8 sm:grid-cols-3">
-              <div>
-                <div className="text-4xl font-bold tabular-nums tracking-tight text-foreground sm:text-5xl" style={HEADLINE_FONT}>
-                  {audience.catalogue.episodes.toLocaleString()}
-                </div>
-                <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  episodes published, across {audience.catalogue.feeds} of the shows on the lineup
-                </div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold tabular-nums tracking-tight text-foreground sm:text-5xl" style={HEADLINE_FONT}>
-                  {audience.catalogue.sinceYear}
-                </div>
-                <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  the year the longest-running show put out its first episode
-                </div>
-              </div>
-              <div>
-                <div className="text-4xl font-bold tabular-nums tracking-tight text-foreground sm:text-5xl" style={HEADLINE_FONT}>
-                  {audience.catalogue.medianEpisodes}
-                </div>
-                <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                  episodes for the middle show — half have made more
-                </div>
-              </div>
-            </div>
-            <p className="mt-8 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-              Download figures belong to each host and we don't publish them. What we can show you is
-              that these are working podcasters with audiences that have stayed with them for years —
-              and that the counts above are a floor, not a total, because they only include the feeds
-              we read directly.
-            </p>
-          </div>
-        </section>
-      )}
+      {/* --------------------------------------------- WHERE PODCASTS ARE WATCHED */}
+      <PodcastReach />
 
       {/* ------------------------------------------------------------ TIERS */}
       {/* Inverted against the navy reach band above it, so the page alternates

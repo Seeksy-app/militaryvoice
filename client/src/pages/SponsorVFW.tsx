@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { SponsorDialog } from "@/components/SponsorDialog";
-import { AudienceReach, useAudienceSnapshot } from "@/components/AudienceReach";
+import { useAudienceSnapshot } from "@/components/AudienceReach";
+import { PodcastReach } from "@/components/PodcastReach";
 import { POSTS_BEFORE_PER_SHOW, POSTS_AFTER_PER_SHOW, postsLabel } from "@shared/promo";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup } from "@shared/schema";
@@ -120,16 +121,16 @@ export default function SponsorVFW() {
               { icon: Clock, n: String(event?.durationHours ?? 24), label: "hours, continuous", note: "no dead air" },
               { icon: Radio, n: String(slotCount || 48), label: "broadcast slots", note: `${event?.slotMinutes ?? 30} minutes each` },
               {
-                icon: Megaphone,
-                n: postsLabel(lineup.length || 17),
-                label: "promotional posts",
-                note: `${POSTS_BEFORE_PER_SHOW} before and ${POSTS_AFTER_PER_SHOW} after, per show`,
-              },
-              {
                 icon: Users,
                 n: audience ? audience.followers.toLocaleString("en-US") : "—",
                 label: "combined following",
                 note: audience ? `across ${audience.channels} connected channels` : "being counted",
+              },
+              {
+                icon: Megaphone,
+                n: audience?.catalogue?.episodes ? audience.catalogue.episodes.toLocaleString("en-US") : "—",
+                label: "episodes already published",
+                note: audience?.catalogue?.sinceYear ? `the longest-running since ${audience.catalogue.sinceYear}` : "being counted",
               },
             ].map(({ icon: Icon, n, label, note }) => (
               <div key={label} className="px-2 lg:px-0">
@@ -275,7 +276,7 @@ export default function SponsorVFW() {
       )}
 
       {/* --------------------------------------------------- AUDIENCE REACH */}
-      <AudienceReach />
+      <PodcastReach />
 
       {/* ------------------------------------------------------------ OFFER */}
       {/* Inverted against the navy reach band above it, so the page alternates
