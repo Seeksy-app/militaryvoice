@@ -94,6 +94,7 @@ import {
   resendApiGet,
 } from "./email.js";
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
+import { alexAnswer, type AlexTurn } from "./alex.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
@@ -5930,6 +5931,35 @@ export function registerRoutes(app: Express): void {
   //      that record; the profile stays about them.
 
   /** Every event, with what this podcaster has done on each. */
+  // ---- Host: Alex, by text ----------------------------------------------------
+
+  /**
+   * The green room's chat with Alex. Streams plain text as it is written,
+   * so the first words are on screen before the sentence is finished.
+   */
+  app.post("/api/host/alex/chat", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const raw = Array.isArray(req.body?.messages) ? (req.body.messages as unknown[]) : [];
+    const turns: AlexTurn[] = raw
+      .map((m: any) => ({ role: m?.role === "assistant" ? "assistant" as const : "user" as const, content: String(m?.content ?? "").slice(0, 2000) }))
+      .filter((m) => m.content.trim() !== "");
+    if (!turns.length || turns[turns.length - 1].role !== "user") {
+      return res.status(400).json({ message: "Say something first." });
+    }
+    noStore(res);
+    res.setHeader("content-type", "text/plain; charset=utf-8");
+    res.setHeader("x-accel-buffering", "no");
+    res.flushHeaders?.();
+    try {
+      for await (const piece of alexAnswer(turns, email)) res.write(piece);
+    } catch (err) {
+      console.error("Alex chat failed:", err);
+      if (!res.headersSent) return res.status(502).json({ message: "Alex is not answering right now." });
+      res.write("\n\n(Sorry — I lost my train of thought. Ask me again.)");
+    }
+    res.end();
+  });
+
   // ---- Host: co-hosting -------------------------------------------------------
 
   /**

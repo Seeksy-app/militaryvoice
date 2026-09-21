@@ -1,3 +1,4 @@
+import { AlexChat } from "@/components/AlexChat";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -702,24 +703,10 @@ export default function Studio({ slug }: { slug?: string }) {
             </p>
           </div>
           {/* The co-host sits with the room's name, not in the queue of people
-              waiting to go on. She is staff. */}
-          {cohost && (
-            <div className="flex h-56 items-stretch overflow-hidden rounded-2xl border border-[#F0A71F]/30 bg-[#F0A71F]/[0.06]">
-              {/* Flush to the card's edges and its full height. Inset in a
-                  padded box she was a thumbnail of a person rather than a
-                  person — the point of her being here is that you can see her
-                  face well enough to talk to it. */}
-              <div className="w-72 shrink-0 self-stretch bg-black/40 sm:w-80">
-                <PeerTile peer={cohost} fill keyed />
-              </div>
-              <div className="flex min-w-0 flex-col justify-center px-4 py-3">
-                <div className="text-xl font-semibold leading-tight">Alex</div>
-                <div className="mt-1 text-sm leading-snug text-white/55">
-                  Your co-host · say “Alex” to ask anything
-                </div>
-              </div>
-            </div>
-          )}
+              waiting to go on. She is staff. By text here: her rendered face
+              took seven seconds to answer, and the stage is where the face
+              matters. */}
+          <AlexChat studioId={studioId} />
           </div>
           <div className="flex items-center gap-2">
             {/* The connection reading, which lost its card. A strong one needs
