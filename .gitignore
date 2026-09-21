@@ -23,3 +23,4 @@ uploads/
 # .env.production.local, which the old `.env.local` line did not cover — a
 # pulled production key was one `git add -A` from being committed.
 .env*.local
+media/magazine/

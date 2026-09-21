@@ -1,0 +1,173 @@
+  /* ---------------------------------------------------------------------
+     Print geometry. US magazine trim 8.375 x 10.875in, 0.125in bleed all
+     round, so the sheet the printer receives is 8.625 x 11.125in. Every
+     printer on earth asks for exactly these numbers.
+     --------------------------------------------------------------------- */
+  :root {
+    --bleed: 0.125in;
+    --trim-w: 8.375in;
+    --trim-h: 10.875in;
+    --safe: 0.375in;          /* nothing important closer than this to trim */
+    --navy: #000741;
+    --navy-2: #04102b;
+    --amber: #F0A71F;
+    --red: #ED1C24;
+    --blue: #053877;
+    --paper: #fbfaf7;
+    --ink: #14161c;
+  }
+  @page { size: 8.625in 11.125in; margin: 0; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; background: #555; }
+
+  .page {
+    position: relative;
+    width: 8.625in;
+    height: 11.125in;
+    overflow: hidden;
+    background: var(--paper);
+    page-break-after: always;
+    break-after: page;
+  }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+
+  /* The live area: inside the bleed, inside the safety margin. */
+  .live {
+    position: absolute;
+    inset: calc(var(--bleed) + var(--safe));
+  }
+  /* Anything that runs off the edge starts at the bleed line, not the trim. */
+  .full-bleed { position: absolute; inset: 0; }
+
+  /* Crop marks, drawn rather than imagined. A printer without them guesses. */
+  .crop { position: absolute; background: #000; }
+  .crop.tl-v { left: var(--bleed); top: 0; width: .5pt; height: .09in; }
+  .crop.tl-h { left: 0; top: var(--bleed); height: .5pt; width: .09in; }
+  .crop.tr-v { right: var(--bleed); top: 0; width: .5pt; height: .09in; }
+  .crop.tr-h { right: 0; top: var(--bleed); height: .5pt; width: .09in; }
+  .crop.bl-v { left: var(--bleed); bottom: 0; width: .5pt; height: .09in; }
+  .crop.bl-h { left: 0; bottom: var(--bleed); height: .5pt; width: .09in; }
+  .crop.br-v { right: var(--bleed); bottom: 0; width: .5pt; height: .09in; }
+  .crop.br-h { right: 0; bottom: var(--bleed); height: .5pt; width: .09in; }
+
+  body { font-family: Inter, system-ui, sans-serif; color: var(--ink); }
+  .display { font-family: Fraunces, Georgia, serif; }
+
+  /* ------------------------------------------------------------- cover */
+  .cover { background: var(--navy); color: #fff; }
+  .cover-img {
+    position: absolute; inset: 0;
+    background-size: cover; background-position: 58% 16%;
+  }
+  .cover-wash {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(180deg, rgba(0,7,65,.88) 0%, rgba(0,7,65,.42) 34%, rgba(0,7,65,.30) 52%, rgba(0,7,65,.93) 84%, rgba(0,7,65,.99) 100%),
+      linear-gradient(90deg, rgba(0,7,65,.80) 0%, rgba(0,7,65,.30) 46%, rgba(0,7,65,0) 72%);
+  }
+  .masthead {
+    font-family: Fraunces, Georgia, serif;
+    font-weight: 900;
+    font-size: 84pt;
+    line-height: .82;
+    letter-spacing: -.035em;
+    text-transform: uppercase;
+  }
+  .masthead .dot { color: var(--amber); }
+  .kicker {
+    font-size: 8.5pt; font-weight: 700; letter-spacing: .28em; text-transform: uppercase;
+  }
+  .coverline { font-size: 13pt; line-height: 1.5; font-weight: 300; }
+  .coverline b { font-weight: 700; }
+  .rule-amber { height: 3pt; background: var(--amber); width: 1.1in; }
+
+  /* ----------------------------------------------------------- profile */
+  .portrait {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 4.45in;
+    background-size: cover; background-position: 50% 26%;
+  }
+  .portrait::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, var(--paper) 0%, rgba(251,250,247,.55) 14%, rgba(251,250,247,0) 42%);
+  }
+  .folio {
+    position: absolute; left: calc(var(--bleed) + var(--safe)); right: calc(var(--bleed) + var(--safe));
+    bottom: calc(var(--bleed) + 0.22in);
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 7.5pt; letter-spacing: .18em; text-transform: uppercase; color: #8a8f9c;
+  }
+  .mile {
+    font-family: Fraunces, Georgia, serif; font-weight: 900; font-size: 11pt;
+    color: var(--amber); letter-spacing: .04em;
+  }
+  .badge {
+    display: inline-block; padding: 3.5pt 9pt; border-radius: 999px;
+    background: var(--blue); color: #fff;
+    font-size: 7.5pt; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+  }
+  .showname {
+    font-family: Fraunces, Georgia, serif; font-weight: 900;
+    font-size: 40pt; line-height: .95; letter-spacing: -.02em; color: var(--navy);
+  }
+  .hostline { font-size: 11pt; font-weight: 600; color: var(--blue); letter-spacing: .02em; }
+  .pull {
+    font-family: Fraunces, Georgia, serif; font-weight: 300; font-style: italic;
+    font-size: 17pt; line-height: 1.32; color: var(--navy);
+    border-left: 3pt solid var(--amber); padding-left: 13pt;
+  }
+  .body { font-size: 9.6pt; line-height: 1.62; color: #2a2e38; }
+  .body p { margin: 0 0 7pt; }
+  .placeholder { color: #9aa0ad; }
+  .listen {
+    border-top: .75pt solid #d8d5cd; padding-top: 8pt;
+    font-size: 7.8pt; letter-spacing: .1em; text-transform: uppercase; color: #6a7080;
+  }
+  .listen b { color: var(--navy); letter-spacing: .04em; }
+  .qr {
+    width: .92in; height: .92in; border: .75pt solid #cdc9bf; border-radius: 3pt;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 6.5pt; letter-spacing: .1em; color: #a9a49a; text-align: center; text-transform: uppercase;
+  }
+
+  /* --------------------------------------------------------------- ad */
+  .ad-frame {
+    position: absolute; inset: var(--bleed);
+    border: 1pt dashed #b9b3a7; background: #fff;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .ad-spec { font-size: 9pt; line-height: 1.85; color: #5d6470; text-align: center; }
+  .ad-spec .n { font-family: Fraunces, Georgia, serif; font-weight: 900; font-size: 15pt; color: var(--navy); }
+  .ad-pos {
+    font-family: Fraunces, Georgia, serif; font-weight: 900; font-size: 30pt;
+    color: var(--navy); letter-spacing: -.01em;
+  }
+  .safe-line {
+    position: absolute; inset: calc(var(--bleed) + var(--safe));
+    border: .5pt dashed #ddd8cc;
+  }
+
+/* ---- added for the full book ------------------------------------------- */
+
+/* A placeholder must look like one. Set in the same face and size as the copy
+   it stands in for, so the page is a real proof, but never mistakable for
+   finished text — this is the file somebody will eventually send a printer. */
+.ph { color: #b9b3a7; font-style: italic; }
+
+/* Where the picture is not good enough to print, say so on the page rather
+   than in a report nobody opens next to the proof. */
+.flag {
+  position: absolute; left: var(--bleed); right: var(--bleed); top: var(--bleed);
+  background: #ED1C24; color: #fff; padding: 3pt 8pt;
+  font-size: 7.5pt; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  z-index: 5;
+}
+.portrait-missing { background: repeating-linear-gradient(45deg, #ece8e0, #ece8e0 10pt, #e3ded4 10pt, #e3ded4 20pt); }
+
+.toc-row {
+  display: flex; align-items: baseline; gap: 5pt;
+  break-inside: avoid; padding: 2.5pt 0; border-bottom: .4pt solid #e2ded4;
+}
+.toc-n { width: 13pt; font-family: Fraunces, Georgia, serif; font-weight: 900; font-size: 9pt; color: var(--amber); }
+.toc-name { flex: 1; font-size: 8.6pt; font-weight: 600; color: var(--navy); line-height: 1.25; }
+.toc-host { font-size: 7.4pt; color: #8a8f9c; }
+.toc-p { width: 14pt; text-align: right; font-size: 8pt; color: #8a8f9c; font-variant-numeric: tabular-nums; }
