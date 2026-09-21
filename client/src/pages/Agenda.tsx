@@ -363,23 +363,44 @@ export default function Agenda({ slug }: Props) {
                           className="flex items-center gap-3 p-4 text-left transition-colors hover:bg-muted/40"
                           data-testid={`button-profile-${s.index}`}
                         >
-                          {signup.photoUrl ? (
-                            <img
-                              src={resolveUploadUrl(signup.photoUrl)}
-                              alt={signup.hostName}
-                              className="h-16 w-16 shrink-0 rounded-full object-cover ring-4 ring-[#F0A71F]/40"
-                              data-testid={`img-agenda-photo-${s.index}`}
-                            />
-                          ) : (
-                            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                              <Mic2 className="h-6 w-6" />
-                            </div>
-                          )}
+                          {/* Two people, two faces. The second overlaps the
+                              first so the pair reads as one show, not a
+                              crowd. */}
+                          <span className={`flex shrink-0 items-center ${signup.coHost ? "-space-x-4" : ""}`}>
+                            {signup.photoUrl ? (
+                              <img
+                                src={resolveUploadUrl(signup.photoUrl)}
+                                alt={signup.hostName}
+                                className="h-16 w-16 shrink-0 rounded-full object-cover ring-4 ring-[#F0A71F]/40"
+                                data-testid={`img-agenda-photo-${s.index}`}
+                              />
+                            ) : (
+                              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+                                <Mic2 className="h-6 w-6" />
+                              </div>
+                            )}
+                            {signup.coHost && (
+                              signup.coHost.photoUrl ? (
+                                <img
+                                  src={resolveUploadUrl(signup.coHost.photoUrl)}
+                                  alt={signup.coHost.hostName}
+                                  className="relative h-16 w-16 shrink-0 rounded-full object-cover ring-4 ring-card"
+                                  data-testid={`img-agenda-cohost-${s.index}`}
+                                />
+                              ) : (
+                                <div className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground ring-4 ring-card">
+                                  <Mic2 className="h-6 w-6" />
+                                </div>
+                              )
+                            )}
+                          </span>
                           <span className="min-w-0">
                             <span className="line-clamp-2 block font-semibold leading-tight text-card-foreground">
                               {signup.podcastName}
                             </span>
-                            <span className="block truncate text-sm text-muted-foreground">with {signup.hostName}</span>
+                            <span className="block truncate text-sm text-muted-foreground">
+                              with {signup.hostName}{signup.coHost ? ` & ${signup.coHost.hostName}` : ""}
+                            </span>
                             <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary">
                               View profile <ArrowRight className="h-3 w-3" />
                             </span>

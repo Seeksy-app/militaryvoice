@@ -78,6 +78,14 @@ export const signups = pgTable("signups", {
   email: text("email").notNull(),
   phone: text("phone").notNull().default(""),
   numPeople: integer("num_people").notNull().default(1),
+  /**
+   * A second person on the show, by the address of their profile.
+   *
+   * The opening is Riccoh with Jane beside him, and the card said "with
+   * Riccoh Player" over one photograph. Set by the organisers; the public
+   * card shows both faces and both names.
+   */
+  coHostEmail: text("co_host_email").notNull().default(""),
   hasVideoIntro: boolean("has_video_intro").notNull().default(false),
   hasVideoOutro: boolean("has_video_outro").notNull().default(false),
   hasSlides: boolean("has_slides").notNull().default(false),
@@ -154,7 +162,10 @@ export type PublicSignup = Pick<
   | "branch"
   | "serviceStatus"
   | "status"
->;
+> & {
+  /** The second person on the show, when there is one. Resolved from their profile. */
+  coHost?: { hostName: string; photoUrl: string } | null;
+};
 
 // ---------------------------------------------------------------------------
 // Reminders — a fan asking to be notified before a specific signup goes live

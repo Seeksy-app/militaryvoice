@@ -270,6 +270,23 @@ function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[numbe
   };
 }
 
+/**
+ * Attach the second person on a show, where there is one.
+ *
+ * A co-host is stored as an address; the card needs a name and a face, and
+ * those live on the profile. One lookup per co-hosted show, which is a
+ * handful, not one per row.
+ */
+async function withCoHosts(rows: PublicSignup[], all: { coHostEmail: string; id: number }[]): Promise<PublicSignup[]> {
+  const byId = new Map(all.map((s) => [s.id, s.coHostEmail?.trim().toLowerCase() ?? ""]));
+  return Promise.all(rows.map(async (r) => {
+    const email = byId.get(r.id);
+    if (!email) return r;
+    const prof = await storage.getProfileByEmail(email);
+    return prof ? { ...r, coHost: { hostName: prof.hostName, photoUrl: prof.photoUrl } } : r;
+  }));
+}
+
 function slotWindow(event: EventRow, slotIndex: number): { start: Date; end: Date } {
   const start = new Date(new Date(event.startAtUtc).getTime() + slotIndex * event.slotMinutes * 60000);
   return { start, end: new Date(start.getTime() + event.slotMinutes * 60000) };
@@ -4947,7 +4964,8 @@ export function registerRoutes(app: Express): void {
       eventId = featured.id;
     }
     const rows = await storage.listSignups(eventId);
-    res.json(rows.filter((r) => r.status !== "cancelled").map(toPublicSignup));
+    const live = rows.filter((r) => r.status !== "cancelled");
+    res.json(await withCoHosts(live.map(toPublicSignup), live));
   });
 
   // ---- Host (podcaster, logged in): claim a slot. Reuses their saved profile
@@ -6284,7 +6302,7 @@ export function registerRoutes(app: Express): void {
     res.json({
       email,
       event: toPublicEvent(event),
-      signups: active.map(toPublicSignup),
+      signups: await withCoHosts(active.map(toPublicSignup), active),
       mySignups: mySignups.map((s) => ({
         id: s.id,
         slotIndex: s.slotIndex,
