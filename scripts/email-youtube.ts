@@ -25,8 +25,9 @@ const API = process.env.API_BASE || BASE;
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1, onnotice: () => {} });
 interface Row { email: string; host_name: string; podcast_name: string; slot_index: number }
-const [ev] = await sql<{ start_at_utc: string; slot_minutes: number; duration_hours: number; admin_password: string }[]>`
-  SELECT start_at_utc, slot_minutes, duration_hours, admin_password FROM events WHERE id = 1`;
+const [ev] = await sql<{ name: string; start_at_utc: string; slot_minutes: number; duration_hours: number; admin_password: string }[]>`
+  SELECT name, start_at_utc, slot_minutes, duration_hours, admin_password FROM events WHERE id = 1`;
+const EVENT = ev.name.trim();
 const total = Math.floor((ev.duration_hours * 60) / ev.slot_minutes);
 const rows = (await sql<Row[]>`
   SELECT DISTINCT ON (s.email) s.email, s.host_name, s.podcast_name, s.slot_index FROM signups s
@@ -43,7 +44,7 @@ function body(r: Row): string {
   const first = (r.host_name || "").trim().split(/\s+/)[0] || "there";
   return `<p>${first},</p>
 
-<p>Your slot airs on MilitaryVoice.ai on 5 October. If you'd like it on
+<p>Your slot airs on ${EVENT} on 5 October. If you'd like it on
 <strong>your own YouTube channel as well</strong> — live, to your audience, at
 the same time — it's one button. No stream key to find.</p>
 
@@ -68,15 +69,15 @@ do it this week, not on the day. And YouTube is the only place we can send to
 directly; Facebook, LinkedIn and X don't allow it without a third-party tool —
 reply if you want one of those and we'll set it up with you.</p>
 
-<p>Optional, of course. Your slot goes out on MilitaryVoice.ai either way.</p>
+<p>Optional, of course. Your slot goes out on ${EVENT} either way.</p>
 
-<p>The MilitaryVoice.ai team</p>`;
+<p>The ${EVENT} team</p>`;
 }
 function textOf(r: Row): string {
   const first = (r.host_name || "").trim().split(/\s+/)[0] || "there";
   return `${first},
 
-Your slot airs on MilitaryVoice.ai on 5 October. If you'd like it on your own YouTube channel as well — live, to your audience, at the same time — it's one button. No stream key to find.
+Your slot airs on ${EVENT} on 5 October. If you'd like it on your own YouTube channel as well — live, to your audience, at the same time — it's one button. No stream key to find.
 
 1. Sign in to your dashboard and open Integrations.
 2. Press Connect YouTube and allow it. Use the Google account that owns your channel.
@@ -88,15 +89,15 @@ One screen will look alarming. Google shows "Google hasn't verified this app" wh
 
 Two more things. Your channel needs live streaming switched on — YouTube asks for a verified phone number and takes up to 24 hours the first time, so do it this week, not on the day. And YouTube is the only place we can send to directly; Facebook, LinkedIn and X don't allow it without a third-party tool — reply if you want one of those and we'll set it up with you.
 
-Optional, of course. Your slot goes out on MilitaryVoice.ai either way.
+Optional, of course. Your slot goes out on ${EVENT} either way.
 
-The MilitaryVoice.ai team`;
+The ${EVENT} team`;
 }
 const htmlFor = (r: Row) => emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: SUBJECT, body: body(r) });
 
 console.log(`${rows.length} podcasters\n`);
 for (const r of rows) console.log(`   ${r.email.padEnd(34)} ${r.podcast_name.slice(0, 38)}`);
-if (preview) { console.log("\n──────── as the first person will read it ────────\n"); console.log(`From: MilitaryVoice.ai\nSubject: ${SUBJECT}\n\n${textOf(rows[0])}`); }
+if (preview) { console.log("\n──────── as the first person will read it ────────\n"); console.log(`From: The ${EVENT} team\nSubject: ${SUBJECT}\n\n${textOf(rows[0])}`); }
 // --html <path>: the rendered email, to look at in a browser.
 const htmlAt = args[args.indexOf("--html") + 1];
 if (args.includes("--html") && htmlAt) { (await import("node:fs")).writeFileSync(htmlAt, htmlFor(rows[0])); console.log(`\nHTML written to ${htmlAt}`); }

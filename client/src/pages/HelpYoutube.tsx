@@ -23,7 +23,7 @@ export default function HelpYoutube() {
           Your slot on your own YouTube, too
         </h1>
         <p className="mt-4 text-lg text-muted-foreground">
-          Your slot airs on MilitaryVoice.ai either way. Connect your channel once and it goes out there as well — live, to
+          Your slot airs on The Podcast Marathon either way. Connect your channel once and it goes out there as well — live, to
           your audience, at the same time. No stream key to find. Five minutes, start to finish.
         </p>
 
