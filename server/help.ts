@@ -28,6 +28,7 @@ FOR PODCASTERS
 - One slot per show. To change it: dashboard → Event settings → "Remove this time", then pick another.
 - Cancel any time before the event from the dashboard; the slot goes back on the open schedule.
 - Pre-recorded episodes are fine: in Event settings choose "Play a recorded episode" and paste a link (unlisted YouTube/Vimeo, Google Drive, Dropbox, WeTransfer — set sharing to anyone with the link). Then choose a short live intro on camera, or straight into the recording.
+- Your own YouTube: a podcaster can send their slot (or the whole show) to their own YouTube channel from Dashboard → Integrations → Connect YouTube. Google shows an "unverified app" warning during connection — that is expected (verification in review); press Advanced, then Go to Military Voice, then Continue. Full walkthrough with pictures at /help/youtube.
 - Going live: you join from the studio page in your browser about 10 minutes before your slot (a link is emailed before the event). No special software. Podcasters who already run OBS/StreamYard can ask for a stream key instead.
 - Materials: upload an intro, outro, mid-roll, images or slides from the dashboard so the production team can plan transitions. Say in Event settings if you'd like an interviewer paired with you.
 - RSS feed: optional but recommended — it lets listeners play your episodes from your card and follow you after. Found in your hosting platform's settings (Buzzsprout, Spotify for Creators, Libsyn, Transistor, Podbean...).

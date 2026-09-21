@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { PlatformIcon } from "@/components/SocialIcons";
-import { Check, LogOut } from "lucide-react";
+import { Check, LogOut, HelpCircle } from "lucide-react";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { Link } from "wouter";
 
 // Connecting a podcaster's own channel, so their slot goes out to their
 // audience as well as ours. One button instead of them digging a stream key
@@ -96,6 +98,41 @@ export function ConnectYoutube({ locked = false, lockedReason = "" }: { locked?:
             YouTube is the only channel we can send to directly. Facebook, LinkedIn and X don't allow it without a
             third-party tool — ask us and we'll set one up with you.
           </p>
+          {/* What Google will show them, before they press the button and
+              meet it cold. The full walkthrough is a page; this is the
+              three presses, where they are about to need them. */}
+          {!data.connected && (
+            <HoverCard openDelay={120}>
+              <HoverCardTrigger asChild>
+                <button type="button" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline" data-testid="youtube-what-youll-see">
+                  <HelpCircle className="h-3.5 w-3.5" /> What you'll see when you connect
+                </button>
+              </HoverCardTrigger>
+              <HoverCardContent align="start" className="w-96 text-sm">
+                <p className="font-semibold">Google will say it hasn't verified this app.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  That's us — our verification with Google is in review. The permission only lets us open a live broadcast on
+                  your channel at your booked time.
+                </p>
+                <ol className="mt-3 space-y-2 text-xs">
+                  {[
+                    ["Press Advanced.", "/email/google-1.png"],
+                    ["Press Go to Military Voice (unsafe) — it isn't; that's Google's default wording until the review is done.", "/email/google-2.png"],
+                    ["Press Continue.", "/email/google-3.png"],
+                  ].map(([t, src], i) => (
+                    <li key={src} className="flex items-start gap-2">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#F0A71F] text-[10px] font-bold text-[#1a1200]">{i + 1}</span>
+                      <span className="min-w-0 flex-1">{t}</span>
+                      <img src={src} alt="" className="h-12 w-20 shrink-0 rounded border border-border object-cover object-left-top" />
+                    </li>
+                  ))}
+                </ol>
+                <Link href="/help/youtube" className="mt-3 inline-block text-xs font-medium text-primary hover:underline">
+                  Full walkthrough with pictures →
+                </Link>
+              </HoverCardContent>
+            </HoverCard>
+          )}
         </div>
         {data.connected ? (
           <Button

@@ -49,20 +49,11 @@ the same time — it's one button. No stream key to find.</p>
 
 <p style="margin:22px 0"><a href="${LINK}" style="background:#053877;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Connect my YouTube</a></p>
 
-<p><strong>One screen will look alarming.</strong> Google shows
-"Google hasn't verified this app" when you connect. That's us — our
-verification with Google is in review and hasn't come back yet. Three
-presses get you through it:</p>
-
-<p style="margin:0 0 4px"><strong>1.</strong> Press <strong>Advanced</strong>.</p>
-<img src="${BASE}/email/google-1.png" alt="Google's warning screen: press Advanced" width="560" style="display:block;width:100%;max-width:560px;height:auto;margin:0 0 14px;border:1px solid #e5e7eb;border-radius:10px">
-<p style="margin:0 0 4px"><strong>2.</strong> Press <strong>Go to Military Voice (unsafe)</strong>. It isn't — that word is Google's default until the review is done.</p>
-<img src="${BASE}/email/google-2.png" alt="Press Go to Military Voice" width="560" style="display:block;width:100%;max-width:560px;height:auto;margin:0 0 14px;border:1px solid #e5e7eb;border-radius:10px">
-<p style="margin:0 0 4px"><strong>3.</strong> Press <strong>Continue</strong>.</p>
-<img src="${BASE}/email/google-3.png" alt="Press Continue on the permission screen" width="560" style="display:block;width:100%;max-width:560px;height:auto;margin:0 0 18px;border:1px solid #e5e7eb;border-radius:10px">
-
-<p>The permission only lets us open a live broadcast on your channel at your
-booked time; we can't post, edit or read anything else.</p>
+<p><strong>One screen will look alarming.</strong> Google shows "Google hasn't
+verified this app" when you connect. That's us — our verification with Google
+is in review. It's three presses to get through, and the permission only lets
+us open a live broadcast on your channel at your booked time.
+<a href="${BASE}/help/youtube" style="color:#053877;font-weight:700">Here's exactly what to press, with pictures.</a></p>
 
 <p>Two more things. Your channel needs live streaming switched on — YouTube
 asks for a verified phone number and takes up to 24 hours the first time, so
@@ -86,7 +77,7 @@ Your slot airs on MilitaryVoice.ai on 5 October. If you'd like it on your own Yo
 
 ${LINK}
 
-One screen will look alarming. Google shows "Google hasn't verified this app" when you connect. That's us — our verification with Google is in review and hasn't come back yet. Three presses get you through it: Advanced, then "Go to Military Voice (unsafe)" — it isn't, that word is Google's default until the review is done — then Continue. The permission only lets us open a live broadcast on your channel at your booked time; we can't post, edit or read anything else.
+One screen will look alarming. Google shows "Google hasn't verified this app" when you connect. That's us — our verification with Google is in review. It's three presses to get through (Advanced, then "Go to Military Voice", then Continue), and the permission only lets us open a live broadcast on your channel at your booked time. Exactly what to press, with pictures: ${BASE}/help/youtube
 
 Two more things. Your channel needs live streaming switched on — YouTube asks for a verified phone number and takes up to 24 hours the first time, so do it this week, not on the day. And YouTube is the only place we can send to directly; Facebook, LinkedIn and X don't allow it without a third-party tool — reply if you want one of those and we'll set it up with you.
 
