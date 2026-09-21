@@ -37,8 +37,7 @@ import {
   Lock,
   RotateCcw,
   ChevronDown,
-  ChevronUp,
-} from "lucide-react";
+  ChevronUp,, Users } from "lucide-react";
 
 interface Props {
   /** Which event's agenda. */
@@ -58,6 +57,58 @@ const KIND_STYLE: Record<string, string> = {
 };
 
 const COLLAPSED_ROWS = 8;
+
+/**
+ * Who is beside Alex each hour.
+ *
+ * The run of show is what the producer follows, and the one thing it could
+ * not tell her was whether a person would be on the stage for the handovers
+ * in a given hour. Every hour of the day, named or open, so the gaps read as
+ * gaps.
+ */
+function CohostStrip({ adminGet, event, zone }: { adminGet: Props["adminGet"]; event: EventRow | undefined; zone: string }) {
+  type Claim = { blockIndex: number; startAtUtc: string; email: string; hostName: string; podcastName: string; claimedAt: string };
+  const { data: claims } = useQuery<Claim[]>({
+    queryKey: ["/api/admin/cohost-slots", event?.id],
+    queryFn: () => adminGet<Claim[]>(`/api/admin/cohost-slots?eventId=${event!.id}`),
+    enabled: !!event,
+    staleTime: 30_000,
+  });
+  if (!event) return null;
+  const hours = Math.max(1, Math.round(event.durationHours));
+  const start = Date.parse(event.startAtUtc);
+  const byBlock = new Map((claims ?? []).map((c) => [c.blockIndex, c]));
+  const filled = byBlock.size;
+  return (
+    <div className="mb-4 rounded-xl border border-border bg-muted/20 px-4 py-3" data-testid="cohost-strip">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.08em]">
+          <Users className="h-3.5 w-3.5" /> Co-hosts
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {filled === 0 ? "Nobody has taken an hour yet" : `${filled} of ${hours} hours have a person beside Alex`} · podcasters pick these from their dashboard
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {Array.from({ length: hours }, (_, i) => {
+          const c = byBlock.get(i);
+          const at = new Date(start + i * 3_600_000);
+          return (
+            <div
+              key={i}
+              title={c ? `${c.hostName} · ${c.podcastName}` : "Open"}
+              className={`flex min-w-[6.5rem] flex-col rounded-lg border px-2.5 py-1.5 text-xs ${c ? "border-primary/40 bg-primary/5" : "border-dashed border-border text-muted-foreground"}`}
+              data-testid={`cohost-hour-${i}`}
+            >
+              <span className="tabular-nums font-semibold">{formatTimeInZone(at, zone)}</span>
+              <span className="truncate">{c ? (c.hostName.trim().split(/\s+/)[0] || c.email) : "open"}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
   const { toast } = useToast();
@@ -262,6 +313,7 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
       </CardHeader>
 
       <CardContent>
+        <CohostStrip adminGet={adminGet} event={event} zone={zone} />
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : !items || items.length === 0 ? (
