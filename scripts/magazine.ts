@@ -64,6 +64,12 @@ interface Show {
  * silently, because a background-image that 404s draws nothing at all.
  */
 const SITE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
+
+// Art that lives with the book rather than in the database: the event's own
+// logo, and the one photograph of Riccoh worth printing. Referenced off disk
+// because the renderer runs here — which also sidesteps the upload that dies
+// on this network.
+const ASSET = (name: string) => `file://${path.resolve(OUT, "assets", name)}`;
 const abs = (u: string) => (!u ? "" : /^https?:\/\//i.test(u) ? u : `${SITE}${u.startsWith("/") ? "" : "/"}${u}`);
 
 const esc = (v: string) =>
@@ -84,32 +90,46 @@ function bestImage(s: Show): { url: string; warn: string } {
   return { url: "", warn: "no image at all" };
 }
 
-function coverPage(hero: Show | undefined): string {
-  const img = hero ? bestImage(hero).url : "";
+/**
+ * The cover.
+ *
+ * Built around the logo rather than a full-bleed photograph, because the best
+ * picture of Riccoh is 910px wide and a full-bleed cover wants 2588 — it would
+ * print at about a hundred dots to the inch, which on the one page everybody
+ * looks at is not a trade worth making. A contained panel puts him at 227dpi,
+ * which is honest, and the logo carries the rest of the page at 2000px square.
+ *
+ * With a bigger file of Riccoh this becomes a full-bleed cover in one line.
+ */
+function coverPage(_hero: Show | undefined): string {
   return `<section class="page cover">
-  ${img ? `<div class="cover-img" style="background-image:url('${esc(img)}')"></div>` : ""}
-  <div class="cover-wash"></div>
-  <div class="live" style="display:flex;flex-direction:column;justify-content:space-between">
-    <div>
-      <div class="kicker" style="color:var(--amber)">National Military Podcast Day · October 2026</div>
-      <div class="masthead" style="margin-top:14pt">Military<br>Voice<span class="dot">.</span></div>
-      <div class="rule-amber" style="margin-top:16pt"></div>
-      <div class="coverline" style="margin-top:12pt;max-width:4.1in">
-        Thirty-two shows. Twenty-six point two miles.<br>One day on the air.
-      </div>
+  <div class="cover-field"></div>
+  <div class="live" style="display:flex;flex-direction:column">
+    <div class="kicker" style="color:var(--amber)">National Military Podcast Day · October 2026</div>
+    <div class="masthead" style="margin-top:12pt">Military<br>Voice<span class="dot">.</span></div>
+    <div class="rule-amber" style="margin-top:14pt"></div>
+    <div class="coverline" style="margin-top:10pt;max-width:4.3in">
+      Thirty-two shows. Twenty-six point two miles.<br>One day on the air.
     </div>
-    <div style="max-width:4.6in">
-      <div class="coverline" style="border-top:.75pt solid rgba(255,255,255,.28);padding-top:12pt">
-        <span class="ph">[COVER LINE — the story this issue leads with]</span>
+
+    <div class="cover-art">
+      <img class="cover-logo" src="${ASSET("nmpd-logo.jpg")}" alt="">
+      <div class="cover-portrait" style="background-image:url('${ASSET("riccoh-emmy.jpg")}')"></div>
+    </div>
+
+    <div style="margin-top:auto;max-width:4.8in">
+      <div class="coverline" style="border-top:.75pt solid rgba(255,255,255,.28);padding-top:11pt">
+        <b>Riccoh Player</b> hosts sixteen hours of it<br>
+        <span class="ph" style="color:rgba(255,255,255,.45)">[SECOND COVER LINE]</span>
       </div>
-      <div class="kicker" style="margin-top:16pt;opacity:.6">Issue One · militaryvoice.ai</div>
+      <div class="kicker" style="margin-top:13pt;opacity:.6">Issue One · militaryvoice.ai</div>
     </div>
   </div>${crops()}
 </section>`;
 }
 
 function riccohPage(r: Show | undefined): string {
-  const img = r ? bestImage(r).url : "";
+  const img = ASSET("riccoh-emmy.jpg");
   return `<section class="page">
   ${img ? `<div class="portrait" style="background-image:url('${esc(img)}')"></div>` : ""}
   <div class="live" style="width:3.5in">

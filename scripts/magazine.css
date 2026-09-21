@@ -171,3 +171,25 @@
 .toc-name { flex: 1; font-size: 8.6pt; font-weight: 600; color: var(--navy); line-height: 1.25; }
 .toc-host { font-size: 7.4pt; color: #8a8f9c; }
 .toc-p { width: 14pt; text-align: right; font-size: 8pt; color: #8a8f9c; font-variant-numeric: tabular-nums; }
+
+/* ---- cover ------------------------------------------------------------- */
+.cover-field {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(70% 55% at 78% 62%, rgba(5,56,119,.55), transparent 70%),
+    radial-gradient(60% 40% at 10% 8%, rgba(240,167,31,.13), transparent 70%),
+    var(--navy);
+}
+.cover-art { position: relative; margin-top: 20pt; height: 5.4in; }
+.cover-logo {
+  position: absolute; left: 0; top: 0; width: 2.35in; height: auto;
+  border-radius: 50%; box-shadow: 0 6pt 26pt rgba(0,0,0,.45);
+}
+.cover-portrait {
+  position: absolute; right: -0.28in; top: 0.5in; width: 3.15in; height: 4.6in;
+  background-size: cover; background-position: 50% 18%;
+  border-radius: 6pt; box-shadow: 0 8pt 34pt rgba(0,0,0,.55);
+  /* A hairline of the brand amber, so the panel reads as deliberate framing
+     rather than a photograph that failed to bleed. */
+  outline: 2pt solid rgba(240,167,31,.85); outline-offset: -2pt;
+}
