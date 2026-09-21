@@ -14,7 +14,9 @@
 import "dotenv/config";
 import postgres from "postgres";
 
-const SITE = process.env.MV_API ?? "https://militaryvoice.ai";
+// The canonical host, not the apex. militaryvoice.ai 308s to www, and on show
+// day the egress browser should chase one redirect to R2, not two.
+const SITE = process.env.MV_SITE ?? "https://www.militaryvoice.ai";
 
 // Matched on the episode titles, which were confirmed against each podcaster's
 // own YouTube listing rather than guessed from the filenames.

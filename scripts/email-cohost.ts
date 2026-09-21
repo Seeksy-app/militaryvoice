@@ -1,9 +1,13 @@
-// Fourteen days out: the co-host ask, and the medal.
+// Fourteen days out: the co-host ask.
 //
-//   npx tsx scripts/email-cohost-medal.ts            # who it would go to
-//   npx tsx scripts/email-cohost-medal.ts --preview  # read it
-//   npx tsx scripts/email-cohost-medal.ts --test     # one copy to Andrew
-//   npx tsx scripts/email-cohost-medal.ts --apply    # send it
+// One ask, on its own. MilCrunch Formation was in here too and went to its
+// own email — two offers in one message means the reader picks the easier one
+// to ignore, and a co-host is the thing we actually need an answer on.
+//
+//   npx tsx scripts/email-cohost.ts            # who it would go to
+//   npx tsx scripts/email-cohost.ts --preview  # read it
+//   npx tsx scripts/email-cohost.ts --test     # one copy to Andrew
+//   npx tsx scripts/email-cohost.ts --apply    # send it
 //
 // The countdown is computed, not typed. "14 days away" written into the copy
 // is wrong the moment it sends a day late, and an email that opens with a
@@ -53,24 +57,14 @@ function body(r: Row): string {
 Twenty-six point two miles of military and veteran podcasts, back to back, and
 you're one of them.</p>
 
-<p><strong>Two things.</strong></p>
+<p><strong>Would you like to co-host?</strong></p>
 
-<p><strong>First — would you like to co-host?</strong> Not just your own
-segment, but time on the main stage between shows: introducing what's coming
-up, talking about the day, keeping the thing moving. If that sounds like you,
-reply and tell me and we'll work out where you'd fit.</p>
+<p>Not just your own segment — time on the main stage between shows.
+Introducing what's coming up, talking about the day, keeping the thing moving.
+As much or as little of the day as suits you.</p>
 
-<p><strong>Second — your medal.</strong> Every marathon has one at the finish
-line. Yours is <strong>90 days in MilCrunch Formation</strong>, the incubator I
-run for military and veteran creators.</p>
-
-<p>All six platforms from one composer, your numbers on one screen instead of
-six dashboards, and a verified page at milcrunch.com/yourname that brands
-search by branch and audience when they're looking to spend. Mostly it's the
-room you're in and the introductions that come with it —
-<a href="https://www.milcrunch.com/" style="color:#053877">milcrunch.com</a>.</p>
-
-<p>Nothing to claim and nothing to do. It's yours for being on the course.</p>
+<p>If that sounds like you, reply and tell me, and we'll work out where you'd
+fit.</p>
 
 <p>Fourteen days. See you at the start line.</p>
 
@@ -83,15 +77,11 @@ function textOf(r: Row): string {
 
 The National Military Podcast Day Marathon is ${countdown}. Twenty-six point two miles of military and veteran podcasts, back to back, and you're one of them.
 
-Two things.
+Would you like to co-host?
 
-First — would you like to co-host? Not just your own segment, but time on the main stage between shows: introducing what's coming up, talking about the day, keeping the thing moving. If that sounds like you, reply and tell me and we'll work out where you'd fit.
+Not just your own segment — time on the main stage between shows. Introducing what's coming up, talking about the day, keeping the thing moving. As much or as little of the day as suits you.
 
-Second — your medal. Every marathon has one at the finish line. Yours is 90 days in MilCrunch Formation, the incubator I run for military and veteran creators.
-
-All six platforms from one composer, your numbers on one screen instead of six dashboards, and a verified page at milcrunch.com/yourname that brands search by branch and audience when they're looking to spend. Mostly it's the room you're in and the introductions that come with it — milcrunch.com
-
-Nothing to claim and nothing to do. It's yours for being on the course.
+If that sounds like you, reply and tell me, and we'll work out where you'd fit.
 
 Fourteen days. See you at the start line.
 

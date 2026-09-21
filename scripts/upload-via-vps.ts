@@ -53,18 +53,33 @@ async function main() {
     const name = basename(t.f);
     console.log(`\n${name}`);
 
-    // --append-verify so a dropped transfer picks up where it stopped rather
-    // than starting the gigabyte again.
+    // --append resumes rather than restarting the gigabyte. macOS ships
+    // openrsync, which has no --append-verify, so the prefix is not checked
+    // during transfer — hence the checksum below. A resumed upload that
+    // silently appended onto a bad partial is a file that plays as garbage on
+    // show day, which is worse than sending it twice.
     console.log("  rsync → vps");
-    if (run("rsync", ["--partial", "--append-verify", "--progress", "-e", "ssh -o BatchMode=yes", t.f, `${HOST}:${STAGE}/`]) !== 0) {
-      console.log("  rsync FAILED"); continue;
+    const remote = `${STAGE}/${name}`;
+    let landed = false;
+    for (let attempt = 1; attempt <= 2 && !landed; attempt++) {
+      if (run("rsync", ["--partial", "--append", "--progress", "-e", "ssh -o BatchMode=yes", t.f, `${HOST}:${STAGE}/`]) !== 0) {
+        console.log(`  rsync attempt ${attempt} failed`);
+        continue;
+      }
+      const mine = (spawnSync("md5", ["-q", t.f], { encoding: "utf8" }).stdout ?? "").trim();
+      const theirs = (spawnSync("ssh", ["-o", "BatchMode=yes", HOST, `md5sum ${JSON.stringify(remote)} | cut -d" " -f1`], { encoding: "utf8" }).stdout ?? "").trim();
+      if (mine && mine === theirs) { landed = true; break; }
+      console.log(`  checksum mismatch — resending whole file`);
+      spawnSync("ssh", ["-o", "BatchMode=yes", HOST, `rm -f ${JSON.stringify(remote)}`]);
     }
+    if (!landed) { console.log("  rsync FAILED"); continue; }
+    console.log("  checksum ok");
 
     const key = `studio/${Date.now()}-${name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80)}`;
     const url = signedRecordingUpload(key, 6 * 3600);
     console.log("  vps → R2");
     const put = spawnSync("ssh", ["-o", "BatchMode=yes", HOST,
-      `curl --fail-with-body --retry 5 --retry-all-errors -s -w '%{http_code}' -X PUT -H 'content-type: video/mp4' --upload-file ${JSON.stringify(`${STAGE}/${name}`)} ${JSON.stringify(url)}`,
+      `curl --fail-with-body --retry 5 --retry-all-errors -s -w '%{http_code}' -X PUT -H 'content-type: video/mp4' --upload-file ${JSON.stringify(remote)} ${JSON.stringify(url)}`,
     ], { encoding: "utf8" });
     const code = (put.stdout ?? "").trim().slice(-3);
     if (code !== "200") { console.log(`  upload FAILED (${code || put.status}) ${(put.stderr ?? "").slice(0, 200)}`); continue; }
@@ -82,7 +97,7 @@ async function main() {
     console.log(reg.ok ? `  in the library as asset #${body.id}` : `  register FAILED ${reg.status} ${body.message ?? ""}`);
 
     // The VPS is a staging post, not a second copy to keep track of.
-    if (reg.ok) spawnSync("ssh", ["-o", "BatchMode=yes", HOST, `rm -f ${JSON.stringify(`${STAGE}/${name}`)}`]);
+    if (reg.ok) spawnSync("ssh", ["-o", "BatchMode=yes", HOST, `rm -f ${JSON.stringify(remote)}`]);
   }
 }
 

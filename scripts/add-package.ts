@@ -20,7 +20,7 @@ const PKG = {
   description: "Your name on the stream itself, every mile of the way.",
   sort_order: 0,
   active: true,
-  checkout_url: "", // Seeksy link — only you can create it
+  checkout_url: "https://checkout.seeksy.io/b/8x2eVc95m1et4H7fbldfG0d",
 };
 
 async function main() {
