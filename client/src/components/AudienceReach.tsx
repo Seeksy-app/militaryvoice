@@ -24,6 +24,7 @@ export interface AudienceSnapshot {
   followers: number;
   reach: number;
   impressions: number;
+  catalogue?: { episodes: number; feeds: number; sinceYear: number; medianEpisodes: number };
   engagements: number;
   byPlatform: { platform: string; channels: number; followers: number }[];
   dropped: number;

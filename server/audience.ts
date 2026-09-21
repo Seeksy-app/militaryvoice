@@ -46,6 +46,27 @@ export interface PlatformTotal {
   followers: number;
 }
 
+/**
+ * What the lineup has already made.
+ *
+ * A sponsor cannot be shown download figures — those belong to each host and
+ * we do not have them. What a feed proves instead is longevity and output, and
+ * a show with six hundred episodes over ten years has an audience whether or
+ * not anybody hands us a number for it. It is the inference a reader makes
+ * themselves, which is worth more than us asserting "engaged audience".
+ */
+export interface Catalogue {
+  /** Episodes across every feed that answered. */
+  episodes: number;
+  /** How many feeds that was — never the whole lineup, so the figure is a floor. */
+  feeds: number;
+  /** The year of the oldest episode we can find. */
+  sinceYear: number;
+  /** Half the shows have more than this. Median, because one long-runner
+   *  would otherwise speak for everybody. */
+  medianEpisodes: number;
+}
+
 export interface AudienceSnapshot {
   generatedAt: string;
   windowDays: number;
@@ -68,6 +89,7 @@ export interface AudienceSnapshot {
   measuredFollowers?: number;
   measuredChannels?: number;
   measuredShows?: number;
+  catalogue?: Catalogue;
   byPlatform: PlatformTotal[];
   /** Accounts whose numbers failed a sanity check and were left out. */
   dropped: number;
@@ -249,6 +271,44 @@ export function projectReach(snapshot: AudienceSnapshot): ReachProjection | null
  * Recompute from the live API. Costs one Upload-Post call per podcaster with
  * connected accounts, so nothing calls this on a page load — an admin asks.
  */
+/**
+ * Read every feed we hold and count what is in it.
+ *
+ * A URL on file is not a feed that answers — six of nineteen return a page
+ * with no items in it, most likely a show's homepage pasted into the feed
+ * box. Those are skipped rather than counted as zero-episode shows, because
+ * the number is a floor and a broken link should not drag it down.
+ */
+async function readCatalogue(urls: string[]): Promise<Catalogue | undefined> {
+  const counts: number[] = [];
+  let oldest = Infinity;
+  await Promise.all(
+    urls.map(async (url) => {
+      try {
+        const xml = await (await fetch(url, { signal: AbortSignal.timeout(15_000) })).text();
+        const items = (xml.match(/<item>/g) || []).length;
+        if (!items) return;
+        counts.push(items);
+        const dates = xml.match(/<pubDate>[^<]+<\/pubDate>/g) ?? [];
+        for (const d of dates) {
+          const t = Date.parse(d.replace(/<\/?pubDate>/g, ""));
+          if (Number.isFinite(t) && t < oldest) oldest = t;
+        }
+      } catch {
+        /* a feed that will not answer is not a show with no episodes */
+      }
+    }),
+  );
+  if (!counts.length) return undefined;
+  const sorted = [...counts].sort((a, b) => a - b);
+  return {
+    episodes: counts.reduce((t, n) => t + n, 0),
+    feeds: counts.length,
+    sinceYear: Number.isFinite(oldest) ? new Date(oldest).getUTCFullYear() : 0,
+    medianEpisodes: sorted[Math.floor(sorted.length / 2)],
+  };
+}
+
 export async function buildAudienceSnapshot(eventId?: number): Promise<AudienceSnapshot> {
   const now = new Date().toISOString();
   // What the reach and impression figures actually describe.
@@ -277,7 +337,9 @@ export async function buildAudienceSnapshot(eventId?: number): Promise<AudienceS
   // "N of M shows" only means something against a real lineup.
   if (eventId) {
     const signups = await storage.listSignups(eventId);
-    empty.showsTotal = signups.filter((s) => s.status !== "cancelled").length;
+    const active = signups.filter((s) => s.status !== "cancelled");
+    empty.showsTotal = active.length;
+    empty.catalogue = await readCatalogue(active.map((s) => s.rssUrl).filter(Boolean));
   }
 
   const byPlatform = new Map<string, PlatformTotal>();
@@ -406,6 +468,7 @@ export async function buildAudienceSnapshot(eventId?: number): Promise<AudienceS
     measuredFollowers,
     measuredChannels,
     measuredShows: measuredShowKeys.size,
+    catalogue: empty.catalogue,
     dropped,
     unavailable,
     byPlatform: Array.from(byPlatform.values()).sort((a, b) => b.followers - a.followers),

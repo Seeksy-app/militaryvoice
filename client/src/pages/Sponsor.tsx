@@ -287,6 +287,57 @@ export default function Sponsor() {
       {/* --------------------------------------------------- AUDIENCE REACH */}
       <AudienceReach />
 
+      {/* ------------------------------------------------------- THE CATALOGUE */}
+      {/* Downloads belong to each host and we do not have them, so this does
+          not claim an audience — it shows the output, and lets a reader draw
+          the conclusion themselves. Nobody publishes six hundred episodes over
+          ten years into silence.
+
+          Every number here is a floor: it counts only the feeds that answer,
+          which is thirteen of a thirty-two show lineup. Saying so is what
+          makes the rest of the page credible. */}
+      {audience?.catalogue && audience.catalogue.episodes > 0 && (
+        <section className="border-b border-border bg-background py-14 lg:py-16">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
+            <h2 className="max-w-3xl text-2xl font-bold leading-[1.3] tracking-tight text-foreground sm:text-3xl" style={HEADLINE_FONT}>
+              These aren't new shows.
+            </h2>
+            <div className="mt-8 grid gap-8 sm:grid-cols-3">
+              <div>
+                <div className="text-4xl font-bold tabular-nums tracking-tight text-foreground sm:text-5xl" style={HEADLINE_FONT}>
+                  {audience.catalogue.episodes.toLocaleString()}
+                </div>
+                <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  episodes published, across {audience.catalogue.feeds} of the shows on the lineup
+                </div>
+              </div>
+              <div>
+                <div className="text-4xl font-bold tabular-nums tracking-tight text-foreground sm:text-5xl" style={HEADLINE_FONT}>
+                  {audience.catalogue.sinceYear}
+                </div>
+                <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  the year the longest-running show put out its first episode
+                </div>
+              </div>
+              <div>
+                <div className="text-4xl font-bold tabular-nums tracking-tight text-foreground sm:text-5xl" style={HEADLINE_FONT}>
+                  {audience.catalogue.medianEpisodes}
+                </div>
+                <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  episodes for the middle show — half have made more
+                </div>
+              </div>
+            </div>
+            <p className="mt-8 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+              Download figures belong to each host and we don't publish them. What we can show you is
+              that these are working podcasters with audiences that have stayed with them for years —
+              and that the counts above are a floor, not a total, because they only include the feeds
+              we read directly.
+            </p>
+          </div>
+        </section>
+      )}
+
       {/* ------------------------------------------------------------ TIERS */}
       {/* Inverted against the navy reach band above it, so the page alternates
           rather than running two dark sections together. */}
