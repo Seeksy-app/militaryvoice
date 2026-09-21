@@ -70,7 +70,7 @@ sell or negotiate anything. I need
 them by <strong>${DEADLINE}</strong> so their artwork makes the graphics and the
 run of show.</p>
 
-<p>Paid out in one go the week after the event.</p>
+<p>You will get paid one week after the event.</p>
 
 <p>Riccoh</p>
 
@@ -100,7 +100,7 @@ Who to think of: anyone who already advertises with you, the veteran-owned busin
 
 Reply with a name and I'll do the rest — you don't have to sell or negotiate anything. I need them by ${DEADLINE} so their artwork makes the graphics and the run of show.
 
-Paid out in one go the week after the event.
+You will get paid one week after the event.
 
 Riccoh
 
