@@ -840,11 +840,7 @@ export default function Studio({ slug }: { slug?: string }) {
              and a green room you have to scroll is one where somebody misses
              the producer bringing them up. */
           <>
-          <div className="mb-4 mt-4">
-            <UpNext slug={slug} studioId={studioId} />
-          </div>
-
-          <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
+          <div className="mt-4 grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px]">
             {/* ------------------------------------------------ left: the room */}
             <div className="order-2 flex flex-col gap-4 xl:order-1">
               <div>
@@ -1168,7 +1164,7 @@ export default function Studio({ slug }: { slug?: string }) {
                   <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-white/50">
                     <Users className="h-3.5 w-3.5 text-[#F0A71F]" /> In here with you ({greenRoomPeers.length})
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto pr-1">
                     {greenRoomPeers.map((p) => (
                       <PeerTile key={p.identity} peer={p} />
                     ))}
@@ -1245,6 +1241,12 @@ export default function Studio({ slug }: { slug?: string }) {
 
             {/* --------------------------------------------- right: the running order */}
             <div className="order-3 flex flex-col gap-4">
+              {/* What is coming, above the rail that lists everything. Across
+                  the top these two cards took the full width of the page to
+                  say two lines, and that width is worth more as room for
+                  Alex, for alerts, and for a green room that has to hold
+                  five faces without being scrolled. */}
+              <UpNext slug={slug} studioId={studioId} compact />
               {/* Producers get the filter in here too — they answer "is my video
                   loaded?" from wherever they happen to be standing. A podcaster
                   is looking for one scene, their own, and scrolling to it is

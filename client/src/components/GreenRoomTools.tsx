@@ -214,6 +214,7 @@ function Card({
   thumb,
   zone,
   now,
+  compact = false,
 }: {
   label: string;
   scene: SceneRow | undefined;
@@ -221,6 +222,8 @@ function Card({
   thumb: string | null;
   zone: string;
   now: number;
+  /** In a side column: half the width, so half the furniture. */
+  compact?: boolean;
 }) {
   const starts = scene?.startAtUtc ? Date.parse(scene.startAtUtc) : NaN;
   const hasTime = Number.isFinite(starts);
@@ -230,13 +233,13 @@ function Card({
 
   return (
     <div
-      className={`flex min-w-0 items-center gap-4 rounded-2xl border px-4 py-3.5 ${
-        imminent ? "border-[#F0A71F]/60 bg-[#F0A71F]/[0.08]" : "border-white/12 bg-white/[0.04]"
-      }`}
+      className={`flex min-w-0 items-center rounded-2xl border ${
+        compact ? "gap-2.5 px-2.5 py-2" : "gap-4 px-4 py-3.5"
+      } ${imminent ? "border-[#F0A71F]/60 bg-[#F0A71F]/[0.08]" : "border-white/12 bg-white/[0.04]"}`}
       data-testid={`upnext-${label.toLowerCase().replace(/\s+/g, "-")}`}
     >
       {/* 16:9, because it is a picture of what goes on the screen. */}
-      <span className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-xl bg-[#04102b] ring-1 ring-white/10 sm:w-36">
+      <span className={`relative aspect-video shrink-0 overflow-hidden rounded-lg bg-[#04102b] ring-1 ring-white/10 ${compact ? "w-16" : "w-32 sm:w-36"}`}>
         {thumb ? (
           <img src={resolveUploadUrl(thumb)} alt="" className="h-full w-full object-cover object-[50%_28%]" />
         ) : (
@@ -251,7 +254,7 @@ function Card({
           <Radio className={`h-3.5 w-3.5 ${imminent ? "text-[#F0A71F]" : "text-[#F0A71F]/70"}`} />
           {label}
         </span>
-        <span className="mt-1 block truncate text-base font-bold leading-tight text-white sm:text-lg">
+        <span className={`mt-0.5 block truncate font-bold leading-tight text-white ${compact ? "text-[13px]" : "mt-1 text-base sm:text-lg"}`}>
           {scene?.name?.trim() || "Nothing scheduled"}
         </span>
         <span className="mt-1 block truncate text-[12px] text-white/50">
@@ -263,13 +266,13 @@ function Card({
       {hasTime && (
         <span className="shrink-0 text-right">
           <span
-            className={`block text-2xl font-bold leading-none tabular-nums ${
+            className={`block font-bold leading-none tabular-nums ${compact ? "text-sm" : "text-2xl"} ${
               imminent ? "text-[#F0A71F]" : "text-white/90"
             }`}
           >
             {countdown ?? formatDateInZone(new Date(starts), zone)}
           </span>
-          <span className="mt-1 block text-[11px] uppercase tracking-[0.1em] text-white/35">
+          <span className={`mt-0.5 block uppercase tracking-[0.1em] text-white/35 ${compact ? "text-[10px]" : "mt-1 text-[11px]"}`}>
             {formatTimeInZone(new Date(starts), zone)}
           </span>
         </span>
@@ -286,7 +289,7 @@ function Card({
  * told something different from what the control room is following is worse
  * than being told nothing.
  */
-export function UpNext({ slug, studioId }: { slug?: string; studioId?: number }) {
+export function UpNext({ slug, studioId, compact = false }: { slug?: string; studioId?: number; compact?: boolean }) {
   const zone = useMemo(detectLocalTimeZone, []);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -351,9 +354,9 @@ export function UpNext({ slug, studioId }: { slug?: string; studioId?: number })
           </span>
         </div>
       )}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={compact ? "flex flex-col gap-2" : "grid gap-3 sm:grid-cols-2"}>
         {cards.map((c) => (
-          <Card key={c.key} label={c.label} scene={c.scene} who={c.who} thumb={c.thumb} zone={zone} now={now} />
+          <Card key={c.key} label={c.label} scene={c.scene} who={c.who} thumb={c.thumb} zone={zone} now={now} compact={compact} />
         ))}
       </div>
     </div>
