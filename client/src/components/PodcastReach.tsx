@@ -60,7 +60,7 @@ export function PodcastReach({ image = "/email/podcasters.jpg" }: { image?: stri
           to the <span style={{ color: GOLD }}>main stage</span>.
         </h2>
         <p className="mt-3 max-w-2xl text-base leading-relaxed text-white/80">
-          More Americans listen and watch than ever, and this is sixteen hours of it, live.
+          More Americans listen and watch than ever. This is 26.2 miles of it: sixteen hours of military and veteran storytellers, live.
         </p>
         <div className="mt-8 grid gap-x-6 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
           {STATS.map(({ icon: Icon, n, label, source, href }) => (
