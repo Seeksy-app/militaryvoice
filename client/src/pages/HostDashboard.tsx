@@ -505,7 +505,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     queryFn: async () => (await apiRequest("GET", "/api/signups")).json(),
   });
   // Just enough to know what's still outstanding for the checklist.
-  const { data: hostEvents } = useQuery<{ show: { showName?: string } | null; slotIndex: number | null }[]>({
+  const { data: hostEvents } = useQuery<{ show: { showName?: string; showFormat?: string; recordingUrl?: string } | null; slotIndex: number | null }[]>({
     queryKey: ["/api/host/events"],
     queryFn: async () => (await apiRequest("GET", "/api/host/events")).json(),
     enabled: !!data,
@@ -1181,6 +1181,17 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   ? data.event.isFeatured === false && data.event.slug ? `/event/${data.event.slug}/studio` : "/studio"
                   : null
               }
+              todos={(() => {
+                const t: { key: string; label: string; screen: "editProfile" | "promotion" | "integrations" | "events"; optional?: boolean }[] = [];
+                const show = hostEvents?.find((e) => e.slotIndex != null)?.show ?? hostEvents?.[0]?.show ?? null;
+                if (!show?.showName) t.push({ key: "show", label: "Set up your show", screen: "events" });
+                if (show?.showFormat === "prerecorded" && !show.recordingUrl) t.push({ key: "file", label: "Send us your recorded episode", screen: "events" });
+                if (!profile?.photoOriginalUrl) t.push({ key: "headshot", label: "Add a print-quality headshot", screen: "editProfile" });
+                if ((social?.accounts?.length ?? 0) === 0) t.push({ key: "accounts", label: "Connect your social accounts", screen: "integrations" });
+                if ((hostAssets?.length ?? 0) === 0 && !profile?.mediaAnswered) t.push({ key: "materials", label: "Upload an intro, outro or images", screen: "events" });
+                if (!youtube?.connected) t.push({ key: "youtube", label: "Send your slot to your own YouTube", screen: "integrations", optional: true });
+                return t;
+              })()}
               onGo={(sc) => goTo(sc)}
             />
 

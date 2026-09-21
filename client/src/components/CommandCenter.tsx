@@ -1,5 +1,5 @@
 import type { SocialAccount } from "@shared/schema";
-import { ArrowRight, CalendarClock, Link2, Pencil, Share2 } from "lucide-react";
+import { ArrowRight, CalendarClock, Check, Link2, Pencil, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GreenRoomButton } from "@/components/GreenRoomButton";
 import { PlatformIcon, platformBackground, formatFollowers } from "@/components/SocialIcons";
@@ -30,6 +30,7 @@ export function CommandCenter({
   accounts,
   socialConfigured,
   greenRoomHref,
+  todos,
   onGo,
 }: {
   firstName: string;
@@ -40,6 +41,8 @@ export function CommandCenter({
   accounts: SocialAccount[];
   socialConfigured: boolean;
   greenRoomHref: string | null;
+  /** What is still outstanding before the day, each pointing at where it is done. */
+  todos: { key: string; label: string; screen: "editProfile" | "promotion" | "integrations" | "events"; optional?: boolean }[];
   onGo: (screen: "editProfile" | "promotion" | "integrations" | "events") => void;
 }) {
   const now = new Date();
@@ -101,6 +104,41 @@ export function CommandCenter({
           The green room is open any time — check your camera, mic and lighting. Nothing in there goes on air.
         </p>
       )}
+
+      {/* The prep nudge, live on the page: the same things the email asks
+          for, each a link to where it is done. Only what is left — a list of
+          ticks is a pat on the back, and a list of gaps is a plan. */}
+      <div className="relative mt-6 border-t border-white/10 pt-5" data-testid="todo-strip">
+        {todos.filter((t) => !t.optional).length === 0 ? (
+          <p className="inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3.5 py-1.5 text-sm font-medium text-emerald-300">
+            <Check className="h-4 w-4" /> You're all set — nothing left to do before the day.
+            {todos.length > 0 && <span className="font-normal text-emerald-300/70">(one optional thing below)</span>}
+          </p>
+        ) : (
+          <p className="text-sm font-semibold">
+            Before the day <span className="ml-1.5 font-normal text-white/50">· {todos.filter((t) => !t.optional).length} to do</span>
+          </p>
+        )}
+        {todos.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {todos.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => onGo(t.screen)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
+                  t.optional
+                    ? "border-white/15 text-white/60 hover:border-white/40 hover:text-white"
+                    : "border-[#F0A71F]/60 bg-[#F0A71F]/10 text-white hover:bg-[#F0A71F]/20"
+                }`}
+                data-testid={`todo-${t.key}`}
+              >
+                {t.label} <ArrowRight className="h-3.5 w-3.5 opacity-70" />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="relative mt-6 border-t border-white/10 pt-5">
         <div className="flex items-center justify-between gap-3">
