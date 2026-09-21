@@ -684,16 +684,20 @@ export default function Studio({ slug }: { slug?: string }) {
   return (
     <div className="min-h-screen bg-[#04102b] text-white">
       <div className="mx-auto w-full max-w-[1800px] px-4 py-5 sm:px-6">
-        <Link
-          href="/host/dashboard"
-          className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
-          data-testid="link-back-to-dashboard"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to your dashboard
-        </Link>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-4">
+        {/* Three columns, all starting on the back link's line: the room's
+            name, Alex, and what is coming. Alex at half her old width — the
+            chat needs a column, not the page — and Up next beside her rather
+            than above the rail, so the top of the page answers "who is on,
+            who is next, and who do I ask" without a scroll. */}
+        <div className="grid gap-5 xl:grid-cols-[minmax(220px,1fr)_minmax(0,34rem)_minmax(0,1.2fr)] xl:items-start">
           <div>
+            <Link
+              href="/host/dashboard"
+              className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
+              data-testid="link-back-to-dashboard"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to your dashboard
+            </Link>
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
               Green Room
             </h1>
@@ -707,7 +711,10 @@ export default function Studio({ slug }: { slug?: string }) {
               took seven seconds to answer, and the stage is where the face
               matters. */}
           <AlexChat studioId={studioId} />
-          </div>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-[260px] flex-1">
+              <UpNext slug={slug} studioId={studioId} compact />
+            </div>
           <div className="flex items-center gap-2">
             {/* The connection reading, which lost its card. A strong one needs
                 no words; a struggling one is the single most useful thing on
@@ -753,6 +760,7 @@ export default function Studio({ slug }: { slug?: string }) {
                 is the way out, and two of them a few hundred pixels apart —
                 one of which silently drops your camera — is a way to leave by
                 accident in the minute before you are due on. */}
+          </div>
           </div>
         </div>
 
@@ -1230,12 +1238,6 @@ export default function Studio({ slug }: { slug?: string }) {
 
             {/* --------------------------------------------- right: the running order */}
             <div className="order-3 flex flex-col gap-4">
-              {/* What is coming, above the rail that lists everything. Across
-                  the top these two cards took the full width of the page to
-                  say two lines, and that width is worth more as room for
-                  Alex, for alerts, and for a green room that has to hold
-                  five faces without being scrolled. */}
-              <UpNext slug={slug} studioId={studioId} compact />
               {/* Producers get the filter in here too — they answer "is my video
                   loaded?" from wherever they happen to be standing. A podcaster
                   is looking for one scene, their own, and scrolling to it is
