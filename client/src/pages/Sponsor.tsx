@@ -221,10 +221,10 @@ export default function Sponsor() {
           </div>
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>
-              Hosted by
+              Hosted by Emmy Winner
             </div>
             <h2 className="mt-3 text-4xl font-bold leading-[1.1] tracking-tight sm:text-5xl" style={HEADLINE_FONT}>
-              Riccoh Player
+              Riccoh Player <span className="text-[0.5em] font-medium text-white/70">(USMC, Retired)</span>
             </h2>
             <p className="mt-5 text-xl leading-relaxed text-white/90 sm:text-2xl">
               Thirty-three years in the Marine Corps. Five combat tours. An Emmy, and a seat beside a global media

@@ -141,7 +141,7 @@ for (const r of to) {
   const res = await fetch(`${API}/api/admin/emails/send-one`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
-    body: JSON.stringify({ to: r.email, subject: SUBJECT, html: htmlFor(r), text: textOf(r) }),
+    body: JSON.stringify({ to: r.email, subject: SUBJECT, html: htmlFor(r), text: textOf(r), sender: "member:1", banner: "podcasters" }),
   });
   res.ok ? sent++ : failed++;
   console.log(`  ${res.ok ? "sent  " : `FAILED ${res.status}`} ${r.email}`);

@@ -625,9 +625,9 @@ export default function Landing({ slug }: Props) {
           </Reveal>
 
           <Reveal delay={0.1}>
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Hosted by</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Hosted by Emmy Winner</div>
             <h2 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT} data-testid="text-host-name">
-              Riccoh Player
+              Riccoh Player <span className="text-[0.5em] font-medium text-muted-foreground">(USMC, Retired)</span>
             </h2>
             <p className="mt-5 text-2xl leading-relaxed text-foreground">
               Thirty-three years in the Marine Corps. Five combat tours. An Emmy, and a seat beside a global media executive.

@@ -1976,7 +1976,65 @@ const SEGMENT_LABELS: Record<string, string> = {
   all: "Both (signed up + imported)",
   "not-signed-up": "On the list, no slot yet",
   "no-audience-link": "Booked, but no social link on file",
+  "one-off": "Hand-picked",
 };
+
+/** The automatic emails, by the key they are filed under in `nudges`. */
+const NUDGE_LABELS: Record<string, string> = {
+  confirmation: "Booking confirmation",
+  prep: "Prep nudge (2 weeks out)",
+  final: "Final nudge (2 days out)",
+  onair: "On-air nudge (1 hour out)",
+};
+
+/**
+ * One email, exactly as it arrived.
+ *
+ * A campaign renders from its stored body; an automatic email has none, so
+ * the server renders it for the most recent booking instead. Either way the
+ * admin sees the thing that went out rather than the text it was built from.
+ */
+function EmailPreviewDialog({ target, onClose }: {
+  target: { broadcastId?: number; cadence?: string; title: string } | null;
+  onClose: () => void;
+}) {
+  const [html, setHtml] = useState("");
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!target) return;
+    let cancelled = false;
+    setHtml("");
+    setFailed(false);
+    const q = target.broadcastId ? `broadcastId=${target.broadcastId}` : `cadence=${encodeURIComponent(target.cadence ?? "")}`;
+    adminSend("GET", `/api/admin/email-preview?${q}`)
+      .then((r) => r.text())
+      .then((t) => { if (!cancelled) setHtml(t); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, [target?.broadcastId, target?.cadence]);
+
+  return (
+    <Dialog open={!!target} onOpenChange={(o) => { if (!o) onClose(); }}>
+      {/* stopPropagation: the contact drawer closes on any click that reaches
+          it, and a portal's clicks still bubble through the React tree. */}
+      <DialogContent className="max-w-2xl p-0" onClick={(e) => e.stopPropagation()} data-testid="dialog-email-preview">
+        <DialogHeader className="px-5 pt-5">
+          <DialogTitle className="truncate pr-6 text-base">{target?.title}</DialogTitle>
+          <DialogDescription className="text-xs">As it arrives, with a real booking's details filled in.</DialogDescription>
+        </DialogHeader>
+        <div className="border-t border-border bg-muted/30 p-3">
+          {failed ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">Couldn't render this one.</p>
+          ) : !html ? (
+            <Skeleton className="h-[60vh] w-full rounded-lg" />
+          ) : (
+            <iframe title="Email preview" srcDoc={html} sandbox="" className="h-[60vh] w-full rounded-lg border border-border bg-white" />
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function BroadcastsSection({
   eventId,
@@ -2497,10 +2555,12 @@ function ContactDrawer({ contact, onClose, broadcastList, eventId }: {
   const queryClient = useQueryClient();
   const email = contact.email;
 
-  const { data: history } = useQuery<{ sends: SendRow[]; events: BroadcastEventRow[] }>({
+  type History = { sends: SendRow[]; events: BroadcastEventRow[]; nudges?: { kind: string; sentAt: string; eventId: number }[] };
+  const { data: history } = useQuery<History>({
     queryKey: ["/api/admin/contacts", email, "history"],
-    queryFn: () => adminGet<{ sends: SendRow[]; events: BroadcastEventRow[] }>(`/api/admin/contacts/${encodeURIComponent(email)}/history`),
+    queryFn: () => adminGet<History>(`/api/admin/contacts/${encodeURIComponent(email)}/history`),
   });
+  const [preview, setPreview] = useState<{ broadcastId?: number; cadence?: string; title: string } | null>(null);
 
   const { data: signup } = useQuery<SignupSummary>({
     queryKey: ["/api/admin/signup-by-email", eventId, email],
@@ -2600,36 +2660,72 @@ function ContactDrawer({ contact, onClose, broadcastList, eventId }: {
             </div>
           )}
 
-          {/* Email history */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Broadcast history</p>
-            {!history?.sends?.length ? (
-              <p className="text-sm text-muted-foreground">No broadcasts sent yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {Array.from(new Map(history.sends.map((s) => [s.broadcastId, s])).values()).map((send) => {
-                  const broadcast = broadcastById.get(send.broadcastId);
-                  const evts = eventsByResendId.get(send.resendId) ?? [];
-                  const types = new Set(evts.map((e) => e.eventType));
-                  return (
-                    <div key={send.id} className="rounded-lg border p-3 text-sm space-y-1">
-                      <p className="font-medium truncate">{broadcast?.subject ?? `Broadcast #${send.broadcastId}`}</p>
-                      <p className="text-xs text-muted-foreground">{new Date(send.sentAt).toLocaleDateString()}</p>
-                      <div className="flex gap-2 flex-wrap mt-1">
-                        {types.has("delivered") && <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">📬 Delivered</span>}
-                        {types.has("opened") && <span className="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">👁 Opened</span>}
-                        {types.has("clicked") && <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">🔗 Clicked</span>}
-                        {types.has("bounced") && <span className="text-xs bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">⚠ Bounced</span>}
-                        {evts.length === 0 && <span className="text-xs text-muted-foreground">Sent — no events recorded</span>}
+          {/* Email history: campaigns and the automatic emails in one list,
+              newest first, since "what did they last get from us" is the
+              question this drawer is opened to answer. */}
+          {(() => {
+            type Item = { key: string; title: string; at: string; broadcastId?: number; cadence?: string; types: Set<string>; tracked: boolean };
+            const items: Item[] = [];
+            for (const send of Array.from(new Map((history?.sends ?? []).map((s) => [s.broadcastId, s])).values())) {
+              const broadcast = broadcastById.get(send.broadcastId);
+              const evts = eventsByResendId.get(send.resendId) ?? [];
+              items.push({
+                key: `s-${send.id}`,
+                title: broadcast?.subject ?? `Broadcast #${send.broadcastId}`,
+                at: send.sentAt,
+                broadcastId: send.broadcastId,
+                types: new Set(evts.map((e) => e.eventType)),
+                tracked: true,
+              });
+            }
+            for (const n of history?.nudges ?? []) {
+              items.push({ key: `n-${n.kind}-${n.sentAt}`, title: NUDGE_LABELS[n.kind] ?? n.kind, at: n.sentAt, cadence: n.kind, types: new Set(), tracked: false });
+            }
+            items.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+            return (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                  Email history{items.length > 0 && <span className="ml-1.5 font-medium normal-case tracking-normal">· {items.length}</span>}
+                </p>
+                {items.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nothing sent to this address yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {items.map((it) => (
+                      <div key={it.key} className="rounded-lg border p-3 text-sm" data-testid={`history-${it.key}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{it.title}</p>
+                            <p className="text-xs text-muted-foreground">{new Date(it.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setPreview({ broadcastId: it.broadcastId, cadence: it.cadence, title: it.title })}
+                            title="Preview this email"
+                            className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                            data-testid={`preview-${it.key}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div className="flex gap-2 flex-wrap mt-1.5">
+                          {it.types.has("delivered") && <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">📬 Delivered</span>}
+                          {it.types.has("opened") && <span className="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded-full">👁 Opened</span>}
+                          {it.types.has("clicked") && <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">🔗 Clicked</span>}
+                          {it.types.has("bounced") && <span className="text-xs bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">⚠ Bounced</span>}
+                          {it.tracked && it.types.size === 0 && <span className="text-xs text-muted-foreground">Sent — no events yet</span>}
+                          {!it.tracked && <span className="text-xs text-muted-foreground">Automatic — sent one at a time, not tracked</span>}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
         </div>
       </div>
+      <EmailPreviewDialog target={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }
@@ -2820,20 +2916,28 @@ type CrmView = "lists" | "list-signups" | "list-contacts" | "list-engagement" | 
  */
 function ActivityLog({
   broadcasts,
+  eventId,
   onViewEngagement,
+  onSelectContact,
 }: {
   broadcasts: BroadcastRow[];
+  eventId: number;
   onViewEngagement: (broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) => void;
+  onSelectContact: (c: EngagementRecipient) => void;
 }) {
-  // Oldest at the top. This is a log: reading it top to bottom should be
-  // reading the campaign forwards, the way it happened.
+  // Newest at the top. The question this tab answers is "what just went
+  // out", and on a sixteen-hour send day that row should never be below the
+  // fold.
   const sent = useMemo(
     () =>
       broadcasts
         .filter((b) => b.status === "sent" && (b.recipientCount ?? 0) > 0)
-        .sort((a, b) => Date.parse(a.sentAt ?? a.createdAt) - Date.parse(b.sentAt ?? b.createdAt)),
+        .sort((a, b) => Date.parse(b.sentAt ?? b.createdAt) - Date.parse(a.sentAt ?? a.createdAt)),
     [broadcasts],
   );
+  // Two ways to read the same log: by email, or by the person it reached.
+  const [mode, setMode] = useState<"sends" | "contacts">("sends");
+  const [preview, setPreview] = useState<{ broadcastId?: number; cadence?: string; title: string } | null>(null);
 
   // The same queries the rows make, hoisted so the total can be added up.
   // Identical cache keys, so this costs no extra requests — and the rows are
@@ -2880,8 +2984,34 @@ function ActivityLog({
 
   const pct = (n: number) => (totals.delivered > 0 ? `${Math.round((n / totals.delivered) * 100)}%` : "—");
 
+  const modeTabs = (
+    <div className="inline-flex rounded-lg border border-border p-0.5 text-xs" data-testid="activity-mode">
+      {([["sends", "By email"], ["contacts", "By contact"]] as const).map(([k, label]) => (
+        <button
+          key={k}
+          type="button"
+          onClick={() => setMode(k)}
+          className={`rounded-md px-3 py-1.5 font-medium transition-colors ${mode === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          data-testid={`activity-mode-${k}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (mode === "contacts") {
+    return (
+      <>
+        {modeTabs}
+        <RecipientList eventId={eventId} onSelect={onSelectContact} />
+      </>
+    );
+  }
+
   return (
     <>
+      {modeTabs}
       {/* The four numbers you actually came for, before the list of rows you
           would otherwise have to add up in your head. */}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
@@ -2915,10 +3045,75 @@ function ActivityLog({
               when={when}
               stats={statsQueries[i]?.data}
               onViewEngagement={onViewEngagement}
+              onPreview={() => setPreview({ broadcastId: b.id, title: b.subject })}
             />
           );
         })}
       </div>
+      <EmailPreviewDialog target={preview} onClose={() => setPreview(null)} />
+    </>
+  );
+}
+
+/**
+ * Everyone who has had email from us, most recently reached first.
+ *
+ * The log by email answers "did the sponsor offer go out"; this answers "what
+ * has Enrique had from us", which is the question when somebody replies.
+ */
+function RecipientList({ eventId, onSelect }: { eventId: number; onSelect: (c: EngagementRecipient) => void }) {
+  type Recipient = { email: string; name: string; sends: number; lastAt: string };
+  const [q, setQ] = useState("");
+  const { data: recipients = [], isLoading } = useQuery<Recipient[]>({
+    queryKey: ["/api/admin/emails/recipients", eventId],
+    queryFn: () => adminGet<Recipient[]>(`/api/admin/emails/recipients?eventId=${eventId}`),
+    staleTime: 60_000,
+  });
+  const needle = q.trim().toLowerCase();
+  const shown = needle
+    ? recipients.filter((r) => r.email.includes(needle) || r.name.toLowerCase().includes(needle))
+    : recipients;
+
+  return (
+    <>
+      <Input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search by name or email"
+        className="max-w-sm"
+        data-testid="recipient-search"
+      />
+      {isLoading ? (
+        <Skeleton className="h-40 w-full rounded-xl" />
+      ) : shown.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{needle ? "Nobody matches that." : "Nobody has been emailed yet."}</p>
+      ) : (
+        <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
+          {shown.map((r) => {
+            const [firstName, ...rest] = r.name.split(" ");
+            return (
+              <button
+                key={r.email}
+                type="button"
+                onClick={() => onSelect({ email: r.email, firstName: firstName ?? "", lastName: rest.join(" ") })}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-accent"
+                data-testid={`recipient-${r.email}`}
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{r.name || r.email}</p>
+                  {r.name && <p className="truncate text-xs text-muted-foreground">{r.email}</p>}
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-semibold tabular-nums">{r.sends}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {r.sends === 1 ? "email" : "emails"} · last {new Date(r.lastAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 }
@@ -2930,12 +3125,14 @@ function ActivityRow({
   when,
   stats,
   onViewEngagement,
+  onPreview,
 }: {
   b: BroadcastRow;
   auto: boolean;
   when: Date | null;
   stats?: BroadcastStats;
   onViewEngagement: (broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) => void;
+  onPreview: () => void;
 }) {
   return (
     <div className="rounded-xl border border-border px-4 py-3" data-testid={`activity-${b.id}`}>
@@ -2950,11 +3147,22 @@ function ActivityRow({
             {b.recipientCount} {auto ? "so far" : b.recipientCount === 1 ? "recipient" : "recipients"}
           </p>
         </div>
-        {auto ? (
-          <Badge variant="secondary" className="shrink-0 text-[11px]">Automatic</Badge>
-        ) : (
-          <Badge className="shrink-0 text-[11px]">Sent</Badge>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onPreview}
+            title="Preview this email"
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            data-testid={`preview-${b.id}`}
+          >
+            <Eye className="h-4 w-4" />
+          </button>
+          {auto ? (
+            <Badge variant="secondary" className="text-[11px]">Automatic</Badge>
+          ) : (
+            <Badge className="text-[11px]">Sent</Badge>
+          )}
+        </div>
       </div>
 
       {stats && (stats.delivered > 0 || stats.bounced > 0) ? (
@@ -3843,7 +4051,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
       {view === "activity" && (
         <div className="flex flex-col gap-4">
           <BroadcastSubNav view={view} setView={setView} />
-          <ActivityLog broadcasts={broadcastList} onViewEngagement={openEngagementView} />
+          <ActivityLog broadcasts={broadcastList} eventId={eventId} onViewEngagement={openEngagementView} onSelectContact={setSelectedContact} />
         </div>
       )}
 

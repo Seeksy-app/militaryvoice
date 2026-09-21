@@ -17,7 +17,7 @@ const KNOWLEDGE = `
 ABOUT THE SITE
 - MilitaryVoice.ai runs the Podcast Marathon for National Military Podcast Day: 26.2 — twenty-six shows plus bonus sessions — of live and "Best of MilVet" podcasting — back-to-back shows, special guests, stories from the military and veteran community, streaming around the clock. Shows hand off every 30 minutes so someone is always on.
 - It is free for podcasters to claim a slot and free for listeners.
-- Host: Riccoh Player — 33 years in the Marine Corps, five combat tours, an Emmy. He anchors the day and hands off to each show.
+- Host: Emmy winner Riccoh Player (USMC, Retired) — 33 years in the Marine Corps, five combat tours. He anchors the day and hands off to each show.
 - Every time on the site is shown in the visitor's own time zone; they can switch zones on the agenda.
 
 FOR PODCASTERS

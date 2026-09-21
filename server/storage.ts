@@ -2234,6 +2234,12 @@ class DatabaseStorage implements IStorage {
   // CRM — broadcasts
   // -------------------------------------------------------------------------
 
+  async getBroadcast(id: number): Promise<BroadcastRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(broadcasts).where(eq(broadcasts.id, id)).limit(1);
+    return row;
+  }
+
   async listBroadcasts(eventId?: number | null): Promise<BroadcastRow[]> {
     await ready();
     if (eventId != null) {
@@ -2481,12 +2487,104 @@ class DatabaseStorage implements IStorage {
     }
   }
 
-  async getContactHistory(email: string): Promise<{ sends: typeof broadcastSends.$inferSelect[]; events: typeof broadcastEvents.$inferSelect[] }> {
+  /**
+   * Everything one address has had from us, not only the campaigns.
+   *
+   * The confirmation and the nudges go out one at a time and leave a row in
+   * `nudges` rather than `broadcast_sends`, so a history read from the sends
+   * alone was missing the four emails a podcaster is most likely to ask about.
+   */
+  async getContactHistory(email: string): Promise<{
+    sends: typeof broadcastSends.$inferSelect[];
+    events: typeof broadcastEvents.$inferSelect[];
+    nudges: { kind: string; sentAt: string; eventId: number }[];
+  }> {
     await ready();
-    const sends = await db.select().from(broadcastSends).where(eq(broadcastSends.email, email)).orderBy(broadcastSends.sentAt);
+    const sends = await db.select().from(broadcastSends)
+      .where(sqlExpr`lower(${broadcastSends.email}) = lower(${email})`)
+      .orderBy(broadcastSends.sentAt);
     const ids = sends.map((s) => s.resendId).filter(Boolean);
     const evts = ids.length > 0 ? await db.select().from(broadcastEvents).where(inArray(broadcastEvents.resendId, ids)) : [];
-    return { sends, events: evts };
+    const nudgeRows = await db
+      .select({ kind: nudges.kind, sentAt: nudges.sentAt, eventId: signups.eventId })
+      .from(nudges)
+      .innerJoin(signups, eq(signups.id, nudges.signupId))
+      .where(and(sqlExpr`lower(${signups.email}) = lower(${email})`, eq(nudges.emailed, true)));
+    return { sends, events: evts, nudges: nudgeRows };
+  }
+
+  /**
+   * Who has had email from us, one row per address, most recent first.
+   *
+   * Campaign sends and the automatic nudges are stored in different tables,
+   * so this is the one place the two are added up per person.
+   */
+  async listEmailRecipients(eventId: number): Promise<{ email: string; name: string; sends: number; lastAt: string }[]> {
+    await ready();
+    const rows = await db.execute(sqlExpr`
+      WITH all_sends AS (
+        SELECT lower(bs.email) AS email, bs.sent_at
+        FROM broadcast_sends bs JOIN broadcasts b ON b.id = bs.broadcast_id
+        WHERE b.event_id = ${eventId} OR b.event_id IS NULL
+        UNION ALL
+        SELECT lower(s.email), n.sent_at
+        FROM nudges n JOIN signups s ON s.id = n.signup_id
+        WHERE s.event_id = ${eventId} AND n.emailed = true
+      )
+      SELECT a.email,
+             count(*)::int AS sends,
+             max(a.sent_at) AS last_at,
+             coalesce(
+               (SELECT s.host_name FROM signups s WHERE lower(s.email) = a.email AND s.event_id = ${eventId} LIMIT 1),
+               (SELECT nullif(trim(c.first_name || ' ' || c.last_name), '') FROM contacts c WHERE lower(c.email) = a.email LIMIT 1),
+               '') AS name
+      FROM all_sends a
+      GROUP BY a.email
+      ORDER BY last_at DESC`);
+    return (rows as unknown as { email: string; name: string; sends: number; last_at: string }[])
+      .map((r) => ({ email: r.email, name: r.name, sends: r.sends, lastAt: r.last_at }));
+  }
+
+  /**
+   * File a hand-written send under a campaign row, so the log shows it.
+   *
+   * The one-off sender was the only way out of the building that left no
+   * record: the sponsor offer and the co-host ask went to thirty-one people
+   * each and the activity log showed neither. Same subject on the same day is
+   * the same campaign. Each recipient is a send row keyed by Resend's id, so
+   * delivery and open events land against it like any other.
+   */
+  async recordOneOffSend(o: {
+    eventId: number | null; subject: string; bodyText: string; sender: string; banner: string;
+    email: string; resendId: string;
+  }): Promise<number> {
+    await ready();
+    const now = new Date().toISOString();
+    const today = now.slice(0, 10);
+    const existing = await db.select().from(broadcasts)
+      .where(and(
+        eq(broadcasts.source, "one-off"),
+        eq(broadcasts.subject, o.subject),
+        o.eventId == null ? isNull(broadcasts.eventId) : eq(broadcasts.eventId, o.eventId),
+        sqlExpr`${broadcasts.sentAt} >= ${today}`,
+      ))
+      .limit(1);
+    let id: number;
+    if (existing.length > 0) {
+      id = existing[0].id;
+      await db.update(broadcasts)
+        .set({ recipientCount: (existing[0].recipientCount ?? 0) + 1, sentAt: now })
+        .where(eq(broadcasts.id, id));
+    } else {
+      const [row] = await db.insert(broadcasts).values({
+        eventId: o.eventId, subject: o.subject, bodyText: o.bodyText, segment: "one-off",
+        sender: o.sender, banner: o.banner, status: "sent", source: "one-off",
+        recipientCount: 1, sentAt: now, createdAt: now,
+      }).returning();
+      id = row.id;
+    }
+    await db.insert(broadcastSends).values({ broadcastId: id, email: o.email, resendId: o.resendId, sentAt: now });
+    return id;
   }
 
   async listContactsEnriched(limit = 200): Promise<ContactRow[]> {

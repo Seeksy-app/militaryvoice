@@ -271,14 +271,18 @@ export async function resendApiGet(path: string): Promise<unknown> {
   return res.json().catch(() => null);
 }
 
-/** Send the on-air confirmation email. Never throws. */
-export async function sendConfirmationEmail(input: ConfirmationEmailInput): Promise<boolean> {
-  return sendEmail({
-    to: input.to,
+/** The confirmation as it would arrive, without sending it. */
+export function renderConfirmationEmail(input: ConfirmationEmailInput): { subject: string; html: string; text: string } {
+  return {
     subject: `You're on the schedule: ${input.podcastName} at ${input.onAirStartLabel}`,
     html: buildHtml(input),
     text: buildText(input),
-  });
+  };
+}
+
+/** Send the on-air confirmation email. Never throws. */
+export async function sendConfirmationEmail(input: ConfirmationEmailInput): Promise<boolean> {
+  return sendEmail({ to: input.to, ...renderConfirmationEmail(input) });
 }
 
 export interface LoginCodeEmailInput {
@@ -496,75 +500,91 @@ function outstandingHtml(items: string[]): string {
     <ul style="margin:0 0 20px;padding-left:20px;color:#374151;font-size:15px;line-height:1.6;">${lis}</ul>`;
 }
 
-/** Two weeks out: time to send us things. */
-export async function sendPrepNudge(v: NudgeInput): Promise<boolean> {
-  const html = nudgeShell({
-    eyebrow: v.eventName,
-    heading: `Your slot is coming up, ${v.hostName}`,
-    body: `<p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
-        <strong>${escapeHtml(v.podcastName)}</strong> is on air <strong>${escapeHtml(v.onAirLabel)}</strong>.
-        Now's a good time to get your side ready.
-      </p>
-      ${outstandingHtml(v.outstanding)}
-      <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">
-        Your share link — it shows your artwork and your time wherever you post it:<br />
-        <a href="${v.shareUrl}" style="color:#053877;">${escapeHtml(v.shareUrl)}</a>
-      </p>`,
-    cta: { href: v.dashboardUrl, label: "Open your dashboard" },
-  });
-  return sendEmail({
-    to: v.to,
-    subject: `${v.podcastName}: your slot is ${v.onAirLabel}`,
-    html,
-    text: `${v.podcastName} is on air ${v.onAirLabel}.\n\n${
+export type NudgeKind = "prep" | "final" | "onair";
+
+/**
+ * A nudge as it would arrive, without sending it.
+ *
+ * The three senders below used to build their HTML inline, which meant the
+ * only way to see one was to send it to yourself. The admin's activity log
+ * previews them through this instead.
+ */
+export function renderNudge(kind: NudgeKind, v: NudgeInput): { subject: string; html: string; text: string } {
+  if (kind === "prep") {
+    // Two weeks out: time to send us things.
+    return {
+      subject: `${v.podcastName}: your slot is ${v.onAirLabel}`,
+      html: nudgeShell({
+        eyebrow: v.eventName,
+        heading: `Your slot is coming up, ${v.hostName}`,
+        body: `<p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+            <strong>${escapeHtml(v.podcastName)}</strong> is on air <strong>${escapeHtml(v.onAirLabel)}</strong>.
+            Now's a good time to get your side ready.
+          </p>
+          ${outstandingHtml(v.outstanding)}
+          <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">
+            Your share link — it shows your artwork and your time wherever you post it:<br />
+            <a href="${v.shareUrl}" style="color:#053877;">${escapeHtml(v.shareUrl)}</a>
+          </p>`,
+        cta: { href: v.dashboardUrl, label: "Open your dashboard" },
+      }),
+      text: `${v.podcastName} is on air ${v.onAirLabel}.\n\n${
       v.outstanding.length ? `Still outstanding:\n- ${v.outstanding.join("\n- ")}\n\n` : "Everything we need is in.\n\n"
     }Share link: ${v.shareUrl}\nYour dashboard: ${v.dashboardUrl}`,
-  });
+    };
+  }
+  if (kind === "final") {
+    // Two days out: the practical details.
+    return {
+      subject: `Two days: ${v.podcastName} at ${v.onAirLabel}`,
+      html: nudgeShell({
+        eyebrow: v.eventName,
+        heading: `You're on in two days`,
+        body: `<div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 16px;">
+            <p style="margin:0 0 4px;color:#053877;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">You're on air</p>
+            <p style="margin:0;color:#1f2937;font-size:18px;font-weight:700;">${escapeHtml(v.onAirLabel)}</p>
+          </div>
+          <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+            Join the green room <strong>ten minutes before</strong> and we'll check your camera and sound. The producer
+            brings you on when it's your turn.
+          </p>
+          ${outstandingHtml(v.outstanding)}`,
+        cta: { href: v.studioUrl, label: "Your studio link" },
+      }),
+      text: `You're on air ${v.onAirLabel}.\n\nJoin the green room ten minutes before: ${v.studioUrl}\n\n${
+      v.outstanding.length ? `Still outstanding:\n- ${v.outstanding.join("\n- ")}\n` : ""
+    }`,
+    };
+  }
+  // An hour out: one link, nothing else.
+  return {
+    subject: `You're on soon: ${v.podcastName} at ${v.onAirLabel}`,
+    html: nudgeShell({
+      eyebrow: v.eventName,
+      heading: `You're on in about an hour`,
+      body: `<p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+          <strong>${escapeHtml(v.podcastName)}</strong> is on air at <strong>${escapeHtml(v.onAirLabel)}</strong>.
+          Join the green room now — we'll check your camera and sound before you go on.
+        </p>`,
+      cta: { href: v.studioUrl, label: "Join the green room" },
+    }),
+    text: `${v.podcastName} is on air at ${v.onAirLabel}.\n\nJoin the green room: ${v.studioUrl}`,
+  };
+}
+
+/** Two weeks out: time to send us things. */
+export async function sendPrepNudge(v: NudgeInput): Promise<boolean> {
+  return sendEmail({ to: v.to, ...renderNudge("prep", v) });
 }
 
 /** Two days out: the practical details. */
 export async function sendFinalNudge(v: NudgeInput): Promise<boolean> {
-  const html = nudgeShell({
-    eyebrow: v.eventName,
-    heading: `You're on in two days`,
-    body: `<div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 16px;">
-        <p style="margin:0 0 4px;color:#053877;font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">You're on air</p>
-        <p style="margin:0;color:#1f2937;font-size:18px;font-weight:700;">${escapeHtml(v.onAirLabel)}</p>
-      </div>
-      <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
-        Join the green room <strong>ten minutes before</strong> and we'll check your camera and sound. The producer
-        brings you on when it's your turn.
-      </p>
-      ${outstandingHtml(v.outstanding)}`,
-    cta: { href: v.studioUrl, label: "Your studio link" },
-  });
-  return sendEmail({
-    to: v.to,
-    subject: `Two days: ${v.podcastName} at ${v.onAirLabel}`,
-    html,
-    text: `You're on air ${v.onAirLabel}.\n\nJoin the green room ten minutes before: ${v.studioUrl}\n\n${
-      v.outstanding.length ? `Still outstanding:\n- ${v.outstanding.join("\n- ")}\n` : ""
-    }`,
-  });
+  return sendEmail({ to: v.to, ...renderNudge("final", v) });
 }
 
 /** An hour out: one link, nothing else. */
 export async function sendOnAirNudge(v: NudgeInput): Promise<boolean> {
-  const html = nudgeShell({
-    eyebrow: v.eventName,
-    heading: `You're on in about an hour`,
-    body: `<p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
-        <strong>${escapeHtml(v.podcastName)}</strong> is on air at <strong>${escapeHtml(v.onAirLabel)}</strong>.
-        Join the green room now — we'll check your camera and sound before you go on.
-      </p>`,
-    cta: { href: v.studioUrl, label: "Join the green room" },
-  });
-  return sendEmail({
-    to: v.to,
-    subject: `You're on soon: ${v.podcastName} at ${v.onAirLabel}`,
-    html,
-    text: `${v.podcastName} is on air at ${v.onAirLabel}.\n\nJoin the green room: ${v.studioUrl}`,
-  });
+  return sendEmail({ to: v.to, ...renderNudge("onair", v) });
 }
 
 // ---------------------------------------------------------------------------

@@ -92,7 +92,7 @@ import {
   sendBroadcastEmail,
   resendApiGet,
 } from "./email.js";
-import { renderBroadcastEmail } from "./email.js";
+import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
@@ -803,7 +803,30 @@ export function registerRoutes(app: Express): void {
     const id = await sendOneOffEmail({ to, subject, html, text, replyTo: String(req.body?.replyTo ?? "") || undefined });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     console.log(`One-off email sent to ${to}: ${subject}`);
+    // Filed under a campaign row so the activity log and each contact's
+    // history show it. Never fails the send — that has already happened.
+    try {
+      const featured = await storage.getFeaturedEvent();
+      await storage.recordOneOffSend({
+        eventId: featured?.id ?? null,
+        subject,
+        bodyText: text || html.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+        sender: String(req.body?.sender ?? "team"),
+        banner: String(req.body?.banner ?? "podcasters"),
+        email: to,
+        resendId: id,
+      });
+    } catch (err) {
+      console.error("One-off email sent but not logged:", err);
+    }
     res.json({ id, to });
+  });
+
+  /** Everyone who has had email from us, for the activity log's by-contact view. */
+  app.get("/api/admin/emails/recipients", requireAdmin, async (req, res) => {
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent())?.id;
+    noStore(res);
+    res.json(eventId ? await storage.listEmailRecipients(eventId) : []);
   });
 
   app.post("/api/admin/emails/preview", requireAdmin, async (req, res) => {
@@ -877,6 +900,64 @@ export function registerRoutes(app: Express): void {
       }
     }
     res.json({ to, basedOn: signup.podcastName, sent });
+  });
+
+  /**
+   * One email as it arrives, for the eye icon on the activity log.
+   *
+   * Campaigns render from their stored body. The automatic ones have no body
+   * to store — their wording lives in code and carries per-person detail — so
+   * they are rendered for the most recent booking, the same stand-in the
+   * "send me a preview" buttons use.
+   */
+  app.get("/api/admin/email-preview", requireAdmin, async (req, res) => {
+    const broadcastId = Number(req.query.broadcastId) || 0;
+    let cadence = String(req.query.cadence || "");
+    let b: BroadcastRow | undefined;
+    if (broadcastId) {
+      b = await storage.getBroadcast(broadcastId);
+      if (!b) return res.status(404).json({ message: "No such email." });
+      if (b.source.startsWith("cadence:") && !b.bodyText.trim()) cadence = b.source.slice("cadence:".length);
+    }
+    noStore(res);
+    if (cadence) {
+      const featured = await storage.getFeaturedEvent();
+      const active = (await storage.listSignups(featured.id)).filter((x) => x.status !== "cancelled");
+      const signup = active[active.length - 1];
+      if (!signup) return res.status(404).json({ message: "No booking to build a preview from." });
+      if (cadence === "confirmation") {
+        const r = renderConfirmationEmail({
+          to: signup.email,
+          hostName: signup.hostName,
+          podcastName: signup.podcastName,
+          eventName: featured.name,
+          onAirStartLabel: "Mon, Oct 5 · 9:30 AM",
+          onAirEndLabel: "9:55 AM",
+          timezoneLabel: "US Eastern (EDT)",
+          agendaUrl: `${PUBLIC_ORIGIN}/agenda`,
+        });
+        return res.type("html").send(r.html);
+      }
+      if (cadence === "prep" || cadence === "final" || cadence === "onair") {
+        const r = renderNudge(cadence, { ...(await buildNudgePayload(signup, featured)), to: signup.email });
+        return res.type("html").send(r.html);
+      }
+      return res.status(404).json({ message: "Nothing stored to preview for that email." });
+    }
+    if (!b) return res.status(400).json({ message: "Say which email." });
+    const senderMember = await resolveTeamSender(b.sender ?? "team");
+    const rendered = renderBroadcastEmail({
+      to: "preview@militaryvoice.ai",
+      firstName: "Sam",
+      subject: b.subject,
+      bodyText: b.bodyText,
+      unsubscribeUrl: "#",
+      sender: b.sender,
+      banner: b.banner,
+      senderMember,
+      bannerTitle: await broadcastBannerTitle(),
+    });
+    res.type("html").send(rendered.html);
   });
 
   //      Vercel's scheduler issues GET, so both verbs are accepted — a
