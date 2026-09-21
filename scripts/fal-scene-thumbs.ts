@@ -19,7 +19,7 @@ const SHOTS: { file: string; prompt: string }[] = [
   },
   {
     file: "sponsor-reel.jpg",
-    prompt: `A bald eagle in a tiny navy suit and gold tie sits at a news-desk holding a coffee mug, wings spread wide as if introducing something big, gold confetti in the air, a glowing blank video wall behind, ${STYLE}`,
+    prompt: `A happy corgi in a tiny navy blazer and gold bow tie stands on a news desk, one paw pointing proudly at a big glowing blank screen beside it, gold balloons and confetti, bright, cheerful, well-lit, photoreal, warm golden light, soft bokeh, no text, no words, no letters, no logos`,
   },
 ];
 
