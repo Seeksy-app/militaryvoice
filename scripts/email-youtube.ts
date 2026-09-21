@@ -48,7 +48,14 @@ the same time — it's one button. No stream key to find.</p>
 
 <p style="margin:22px 0"><a href="${LINK}" style="background:#053877;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Connect my YouTube</a></p>
 
-<p>Two things to know. Your channel needs live streaming switched on — YouTube
+<p><strong>One screen will look alarming.</strong> Google shows
+"Google hasn't verified this app" when you connect. That's us — our
+verification with Google is in review and hasn't come back yet. Press
+<strong>Advanced</strong>, then <strong>Go to militaryvoice.ai</strong>, then
+<strong>Allow</strong>. The permission only lets us open a live broadcast on
+your channel at your booked time; we can't post, edit or read anything else.</p>
+
+<p>Two more things. Your channel needs live streaming switched on — YouTube
 asks for a verified phone number and takes up to 24 hours the first time, so
 do it this week, not on the day. And YouTube is the only place we can send to
 directly; Facebook, LinkedIn and X don't allow it without a third-party tool —
@@ -70,7 +77,9 @@ Your slot airs on MilitaryVoice.ai on 5 October. If you'd like it on your own Yo
 
 ${LINK}
 
-Two things to know. Your channel needs live streaming switched on — YouTube asks for a verified phone number and takes up to 24 hours the first time, so do it this week, not on the day. And YouTube is the only place we can send to directly; Facebook, LinkedIn and X don't allow it without a third-party tool — reply if you want one of those and we'll set it up with you.
+One screen will look alarming. Google shows "Google hasn't verified this app" when you connect. That's us — our verification with Google is in review and hasn't come back yet. Press Advanced, then "Go to militaryvoice.ai", then Allow. The permission only lets us open a live broadcast on your channel at your booked time; we can't post, edit or read anything else.
+
+Two more things. Your channel needs live streaming switched on — YouTube asks for a verified phone number and takes up to 24 hours the first time, so do it this week, not on the day. And YouTube is the only place we can send to directly; Facebook, LinkedIn and X don't allow it without a third-party tool — reply if you want one of those and we'll set it up with you.
 
 Optional, of course. Your slot goes out on MilitaryVoice.ai either way.
 
