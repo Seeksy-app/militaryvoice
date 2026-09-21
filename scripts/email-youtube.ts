@@ -14,6 +14,12 @@ const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const test = args.includes("--test");
 const preview = args.includes("--preview");
+// --only a@b.com sends to one person; --except a@b.com leaves one out — for
+// a first copy to somebody who needs it today, and the rest tomorrow without
+// sending it to them twice.
+const pick = (flag: string) => (args.includes(flag) ? (args[args.indexOf(flag) + 1] ?? "").toLowerCase() : "");
+const only = pick("--only");
+const except = pick("--except");
 const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
 const API = process.env.API_BASE || BASE;
 
@@ -22,10 +28,11 @@ interface Row { email: string; host_name: string; podcast_name: string; slot_ind
 const [ev] = await sql<{ start_at_utc: string; slot_minutes: number; duration_hours: number; admin_password: string }[]>`
   SELECT start_at_utc, slot_minutes, duration_hours, admin_password FROM events WHERE id = 1`;
 const total = Math.floor((ev.duration_hours * 60) / ev.slot_minutes);
-const rows = await sql<Row[]>`
+const rows = (await sql<Row[]>`
   SELECT DISTINCT ON (s.email) s.email, s.host_name, s.podcast_name, s.slot_index FROM signups s
   WHERE s.event_id = 1 AND s.status <> 'cancelled' AND s.email <> '' AND s.slot_index < ${total}
-  ORDER BY s.email, s.slot_index`;
+  ORDER BY s.email, s.slot_index`)
+  .filter((r) => (!only || r.email.toLowerCase() === only) && (!except || r.email.toLowerCase() !== except));
 const at = (i: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
   .format(new Date(Date.parse(ev.start_at_utc) + i * ev.slot_minutes * 60_000));
 
