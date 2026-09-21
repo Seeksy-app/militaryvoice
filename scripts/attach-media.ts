@@ -33,6 +33,7 @@ const PAIRS: { asset?: number; file?: RegExp; match: RegExp }[] = [
   { asset: 6, match: /today with tally/i },
   { asset: 7, match: /stillserving/i },
   { file: /montel williams/i, match: /brave blocks/i },
+  { file: /zach & riccoh/i, match: /warrior legacy/i },
 ];
 
 async function main() {

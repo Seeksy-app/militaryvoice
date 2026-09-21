@@ -32,6 +32,8 @@ const FILES = [
   // Developing The Leader Within, 9:00 AM — the episode Enrique submitted,
   // from his Drive link. Replaces Episode 311 on the segment.
   "DTLW Podcast Ericka Full Video1.mp4",
+  // WARRIOR Legacy Network, 8:00 AM — Zachary"s episode with Riccoh.
+  "Zach & Riccoh Episode 3 - WARRIOR Legacy Network Podcast.mp4",
 ];
 
 const HOST = process.env.MV_VPS ?? "root@187.77.217.123";
