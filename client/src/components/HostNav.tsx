@@ -29,12 +29,15 @@ export function HostNav({
   contactsCount,
   pathFor,
   onGo,
+  feature,
 }: {
   screen: HostScreen;
   eventsCount: number;
   contactsCount: number;
   pathFor: (s: HostScreen) => string;
   onGo: (s: HostScreen, feature?: string) => void;
+  /** Which Pro door is open, when the Pro page is the screen. */
+  feature?: string;
 }) {
   const groups: { title: string; items: Item[] }[] = [
     {
@@ -68,7 +71,7 @@ export function HostNav({
   ];
 
   const link = (it: Item, compact: boolean) => {
-    const active = screen === it.key && !it.locked;
+    const active = it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key;
     const Icon = it.icon;
     return (
       <a

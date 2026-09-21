@@ -467,7 +467,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const [profileDirty, setProfileDirty] = useState(false);
   const [remindEventSetup, setRemindEventSetup] = useState(false);
   // Which locked door was opened, so the Pro page scrolls to it.
-  const [proFeature, setProFeature] = useState<string | undefined>(undefined);
+  const [proFeature, setProFeature] = useState<string | undefined>(() => {
+    const h = typeof window === "undefined" ? "" : window.location.hash.replace(/^#/, "");
+    return ["campaigns", "crm", "studio"].includes(h) ? h : undefined;
+  });
 
   // The nav is buttons, not links, so ProfileForm's own leave-guard (which
   // watches anchors and page unload) never sees these clicks.
@@ -883,6 +886,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             contactsCount={data?.contacts?.length ?? 0}
             pathFor={(sc) => hostScreenPath(sc)}
             onGo={(sc, feature) => { setProFeature(feature); goTo(sc); }}
+            feature={proFeature}
           />
         )}
         <div className="min-w-0">

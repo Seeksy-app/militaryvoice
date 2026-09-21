@@ -45,11 +45,13 @@ export function ProScreen({ feature }: { feature?: string }) {
   const { toast } = useToast();
   const [asked, setAsked] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const f = FEATURES.find((x) => x.key === feature) ?? FEATURES[0];
+  const Icon = f.icon;
+  const done = asked.includes(f.key);
 
   useEffect(() => {
-    if (!feature) return;
-    document.getElementById(`pro-${feature}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [feature]);
+    window.scrollTo({ top: 0 });
+  }, [f.key]);
 
   async function interested(key: string) {
     setBusy(key);
@@ -65,55 +67,41 @@ export function ProScreen({ feature }: { feature?: string }) {
   }
 
   return (
-    <section className="mt-2">
+    <section className="mt-2" id={`pro-${f.key}`} data-testid={`pro-${f.key}`}>
       <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#F0A71F]">
         <Lock className="h-3.5 w-3.5" /> Pro · coming after the Marathon
       </p>
-      <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground sm:text-3xl" style={HEADLINE_FONT}>
-        The tools that run the marathon, for your show
-      </h2>
-      <p className="mt-2 max-w-2xl text-muted-foreground">
-        Everything the event uses to reach people, write to them and go on air is being made available to podcasters
-        on the lineup first. Have a look. If you want one, say so — that's what decides the order we build them in.
-      </p>
-
-      <div className="mt-8 flex flex-col gap-10">
-        {FEATURES.map((f) => {
-          const Icon = f.icon;
-          const done = asked.includes(f.key);
-          return (
-            <article key={f.key} id={`pro-${f.key}`} className="scroll-mt-24 overflow-hidden rounded-2xl border border-border bg-card" data-testid={`pro-${f.key}`}>
-              <div className="grid gap-0 lg:grid-cols-[1.35fr_1fr]">
-                <div className="relative bg-muted/40">
-                  <img src={f.image} alt={`${f.title} — a look at the real thing`} className="block w-full" loading="lazy" />
-                  <span className="absolute left-3 top-3 rounded-full bg-[#04102b]/85 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">Preview</span>
-                </div>
-                <div className="flex flex-col p-6">
-                  <h3 className="flex items-center gap-2 text-xl font-bold text-card-foreground" style={HEADLINE_FONT}>
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877]"><Icon className="h-5 w-5" /></span>
-                    {f.title}
-                  </h3>
-                  <p className="mt-3 text-base text-foreground/90">{f.lead}</p>
-                  <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-                    {f.points.map((p) => (
-                      <li key={p} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" /> {p}</li>
-                    ))}
-                  </ul>
-                  <div className="mt-auto pt-6">
-                    {done ? (
-                      <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400"><Check className="h-4 w-4" /> You're on the list for this one.</p>
-                    ) : (
-                      <Button className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" disabled={busy === f.key} onClick={() => interested(f.key)} data-testid={`pro-interested-${f.key}`}>
-                        I'd use this
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </article>
-          );
-        })}
+      <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="flex items-center gap-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl" style={HEADLINE_FONT}>
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877]"><Icon className="h-5 w-5" /></span>
+            {f.title}
+          </h2>
+          <p className="mt-2 max-w-2xl text-lg text-foreground/90">{f.lead}</p>
+        </div>
+        {done ? (
+          <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400"><Check className="h-4 w-4" /> You're on the list for this one.</p>
+        ) : (
+          <Button className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" disabled={busy === f.key} onClick={() => interested(f.key)} data-testid={`pro-interested-${f.key}`}>
+            I'd use this
+          </Button>
+        )}
       </div>
+
+      <div className="relative mt-6 overflow-hidden rounded-2xl border border-border bg-muted/40 shadow-sm">
+        <img src={f.image} alt={`${f.title} — the real thing`} className="block w-full" />
+        <span className="absolute left-3 top-3 rounded-full bg-[#04102b]/85 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">Preview</span>
+      </div>
+
+      <ul className="mt-6 grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
+        {f.points.map((p) => (
+          <li key={p} className="flex items-start gap-2 rounded-xl border border-border bg-card p-4"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" /> {p}</li>
+        ))}
+      </ul>
+      <p className="mt-6 max-w-2xl text-sm text-muted-foreground">
+        Everything the event uses to reach people, write to them and go on air is being made available to podcasters on
+        the lineup first. If you want one, say so — that's what decides the order we build them in.
+      </p>
     </section>
   );
 }
