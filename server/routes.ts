@@ -4447,6 +4447,34 @@ export function registerRoutes(app: Express): void {
   //      This forwards them to a person. Reply-to is set to whoever wrote in,
   //      so hitting reply in the forwarded copy goes back to them and not to
   //      ourselves, which is the whole point of a forward.
+  /**
+   * Which domains this app is allowed to forward mail for.
+   *
+   * A list rather than a single name because the event carries whatever the
+   * sender typed — several recipients, display names, capitals — and because
+   * one Resend account serves more than one of these projects.
+   */
+  const OUR_DOMAINS = (process.env.INBOUND_DOMAINS || "militaryvoice.ai,militaryvoice.io")
+    .split(",")
+    .map((d) => d.trim().toLowerCase())
+    .filter(Boolean);
+
+  function addressedToUs(to: string): boolean {
+    const addresses = String(to ?? "")
+      .split(/[,;]/)
+      .map((part) => {
+        // "Name <a@b.com>" and a bare "a@b.com" both have to work.
+        const m = part.match(/<([^>]+)>/);
+        return (m ? m[1] : part).trim().toLowerCase();
+      })
+      .filter((a) => a.includes("@"));
+    // A subdomain counts: mail to anything.militaryvoice.ai is still ours.
+    return addresses.some((a) => {
+      const domain = a.slice(a.lastIndexOf("@") + 1);
+      return OUR_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
+    });
+  }
+
   app.post("/api/webhooks/resend-inbound", async (req, res) => {
     // Its own secret. Svix issues one per endpoint, so the variable the
     // tracking webhook uses will not verify this one.
@@ -4511,6 +4539,18 @@ export function registerRoutes(app: Express): void {
         } catch (err) {
           body = `(Couldn't fetch the body. Open it in Resend — id ${emailId}.)`;
         }
+      }
+
+      // Only mail that was actually addressed to us.
+      //
+      // Resend raises email.received for the whole account, not per domain, so
+      // this endpoint was handed every inbound message the account took —
+      // including another project's load board at loads@inbound.smartloads.io
+      // — and forwarded all of it. The webhook is not wrong to receive them;
+      // it was wrong to assume anything that arrived was ours.
+      if (!addressedToUs(to)) {
+        console.log(`Inbound mail for ${to} is not ours — not forwarding.`);
+        return;
       }
 
       const header = `From: ${from}\nTo: ${to}\nSubject: ${subject}\n\n`;
