@@ -5913,7 +5913,14 @@ export function registerRoutes(app: Express): void {
     if (!event) return null;
     const claims = await storage.listCohostSlots(eventId);
     const active = (await storage.listSignups(eventId)).filter((s) => s.status !== "cancelled");
-    const byEmail = new Map(active.map((s) => [s.email.trim().toLowerCase(), s]));
+    const byEmail = new Map(active.map((s) => [s.email.trim().toLowerCase(), { hostName: s.hostName, podcastName: s.podcastName }]));
+    // A co-host placed by the organisers may be registered without a slot —
+    // the lineup was full — so their name comes from the profile instead.
+    for (const c of claims) {
+      if (byEmail.has(c.email)) continue;
+      const prof = await storage.getProfileByEmail(c.email);
+      if (prof) byEmail.set(c.email, { hostName: prof.hostName, podcastName: prof.podcastName.trim() });
+    }
     const me = viewerEmail.trim().toLowerCase();
     const start = Date.parse(event.startAtUtc);
     const blockMs = COHOST_BLOCK_MINUTES * 60_000;
@@ -5994,6 +6001,30 @@ export function registerRoutes(app: Express): void {
     res.json(await storage.upsertEventShow(email, eventId, patch));
   });
 
+  /**
+   * Place a co-host in an hour, or take one out.
+   *
+   * Some co-hosts are arranged by the organisers rather than self-served —
+   * a registered podcaster with no slot, paired with Riccoh for the opening.
+   * Same table, same one-per-hour rule; only the hand on the button differs.
+   */
+  app.post("/api/admin/cohost-slots", requireAdmin, async (req, res) => {
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent())?.id;
+    const blockIndex = Number(req.body?.blockIndex);
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    if (!eventId || !Number.isInteger(blockIndex) || blockIndex < 0 || !email.includes("@")) {
+      return res.status(400).json({ message: "Need an event, an hour and an address." });
+    }
+    const row = await storage.claimCohostSlot(eventId, blockIndex, email);
+    if (!row) return res.status(409).json({ message: "Somebody already has that hour." });
+    res.json(row);
+  });
+  app.delete("/api/admin/cohost-slots/:eventId/:blockIndex", requireAdmin, async (req, res) => {
+    const email = String(req.query.email ?? "").trim().toLowerCase();
+    const ok = await storage.releaseCohostSlot(Number(req.params.eventId), Number(req.params.blockIndex), email);
+    res.json({ ok });
+  });
+
   /** Who has signed up to co-host, hour by hour, for the run of show. */
   app.get("/api/admin/cohost-slots", requireAdmin, async (req, res) => {
     const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent())?.id;
@@ -6001,7 +6032,12 @@ export function registerRoutes(app: Express): void {
     const event = await storage.getEventById(eventId);
     const claims = await storage.listCohostSlots(eventId);
     const active = (await storage.listSignups(eventId)).filter((s) => s.status !== "cancelled");
-    const byEmail = new Map(active.map((s) => [s.email.trim().toLowerCase(), s]));
+    const byEmail = new Map(active.map((s) => [s.email.trim().toLowerCase(), { hostName: s.hostName, podcastName: s.podcastName }]));
+    for (const c of claims) {
+      if (byEmail.has(c.email)) continue;
+      const prof = await storage.getProfileByEmail(c.email);
+      if (prof) byEmail.set(c.email, { hostName: prof.hostName, podcastName: prof.podcastName.trim() });
+    }
     noStore(res);
     res.json(claims.map((c) => {
       const s = byEmail.get(c.email);
