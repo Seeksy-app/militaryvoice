@@ -2979,8 +2979,11 @@ function ActivityLog({
     let clicked = 0;
     let tracked = 0;
     sent.forEach((b, i) => {
-      emails += b.recipientCount ?? 0;
       const st = statsQueries[i]?.data;
+      // The automatic rows only started counting when the counter was added;
+      // Resend remembers the sends before that. Whichever is larger is the
+      // truer number.
+      emails += Math.max(b.recipientCount ?? 0, st?.sent ?? 0);
       // The automatic emails fire one at a time and leave no broadcast_sends
       // rows, so they contribute to the email count and to nothing else. The
       // rates below have to be honest about which sends they describe.
@@ -3172,7 +3175,10 @@ function ActivityRow({
             {" · "}
             {SEGMENT_LABELS[b.segment] ?? b.segment}
             {" · "}
-            {b.recipientCount} {auto ? "so far" : b.recipientCount === 1 ? "recipient" : "recipients"}
+            {(() => {
+              const n = Math.max(b.recipientCount ?? 0, stats?.sent ?? 0);
+              return `${n} ${auto ? "so far" : n === 1 ? "recipient" : "recipients"}`;
+            })()}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
