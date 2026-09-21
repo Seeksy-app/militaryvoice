@@ -1,4 +1,4 @@
-import { Tv, Youtube, Headphones, Users, TrendingUp, ExternalLink } from "lucide-react";
+import { Youtube, Headphones, Users, TrendingUp, ExternalLink } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const GOLD = "#F0A71F";
@@ -27,14 +27,6 @@ const STATS = [
     note: "a milestone YouTube reported in January 2025",
     source: "YouTube",
     href: "https://blog.youtube/news-and-events/1-billion-monthly-podcast-users/",
-  },
-  {
-    icon: Tv,
-    n: "1B+",
-    label: "hours of YouTube watched on televisions every day",
-    note: "TV overtook mobile for U.S. YouTube watch time",
-    source: "YouTube, Feb 2025",
-    href: "https://blog.youtube/inside-youtube/our-big-bets-for-2025/",
   },
   {
     icon: Headphones,
@@ -75,8 +67,8 @@ export function PodcastReach({ image = "/email/podcasters.jpg" }: { image?: stri
               <div key={label} className="border-l-2 pl-4" style={{ borderColor: "rgba(240,167,31,0.6)" }}>
                 <Icon className="h-5 w-5" style={{ color: GOLD }} />
                 <div className="mt-2 text-4xl font-bold tabular-nums tracking-tight sm:text-5xl" style={HEADLINE_FONT}>{n}</div>
-                <div className="mt-1.5 text-sm leading-snug text-white/85">{label}</div>
-                <div className="mt-1 text-xs text-white/50">{note}</div>
+                <div className="mt-1.5 text-sm leading-snug text-white">{label}</div>
+                <div className="mt-1 text-xs text-white/80">{note}</div>
                 <a href={href} target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: GOLD }}>
                   {source} <ExternalLink className="h-3 w-3" />
                 </a>

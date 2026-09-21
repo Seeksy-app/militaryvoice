@@ -176,8 +176,8 @@ export default function Sponsor() {
                 <div className="mt-2.5 text-4xl font-bold tabular-nums tracking-tight text-white sm:text-5xl" style={HEADLINE_FONT}>
                   {n}
                 </div>
-                <div className="mt-1 text-sm text-white/60">{label}</div>
-                <div className="text-xs text-white/40">{note}</div>
+                <div className="mt-1 text-sm text-white">{label}</div>
+                <div className="text-xs text-white/75">{note}</div>
               </div>
             ))}
           </div>
