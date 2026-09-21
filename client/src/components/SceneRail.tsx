@@ -158,9 +158,19 @@ export function SceneRail({
     let raf = 0;
     const timers: number[] = [];
     const anchor = () => {
-      const el = liveRef.current;
       const box = railRef.current;
-      if (!el || !box) return;
+      if (!box) return;
+      // Nothing on air yet — before the day starts, or between programmes —
+      // and the rail reads from the top: scene one is what is coming first.
+      // Anchoring to a live card that does not exist left it wherever the
+      // last render put it.
+      if (liveIndex < 0) {
+        if (box.scrollTop > 0) box.scrollTo({ top: 0, behavior: anchored.current ? "smooth" : "auto" });
+        anchored.current = true;
+        return;
+      }
+      const el = liveRef.current;
+      if (!el) return;
       const delta = el.getBoundingClientRect().top - box.getBoundingClientRect().top;
       if (Math.abs(delta - 8) < 2) return;
       box.scrollTo({
@@ -182,7 +192,7 @@ export function SceneRail({
       cancelAnimationFrame(raf);
       for (const t of timers) window.clearTimeout(t);
     };
-  }, [currentSceneId, scenes.length]);
+  }, [currentSceneId, liveIndex, scenes.length]);
 
   // 1–9 take a scene. Guarded against anything typed into a field, so renaming
   // a scene called "Segment 3" doesn't cut the programme to scene 3.

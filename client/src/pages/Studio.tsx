@@ -301,10 +301,12 @@ function PeerTile({ peer, muted = false, fill = false, keyed = false }: { peer: 
         // Scaled up and anchored to her head. The source frames her small with
         // a lot of headroom, so at natural size she floated in the middle of
         // the card with space above and below; cropping in makes her fill it.
+        // 1.75 took the top of her head off once the card was short; with a
+        // taller card the crop can be gentler and keep it.
         <canvas
           ref={canvasRef}
           className="h-full w-full object-cover"
-          style={{ transform: "scale(1.75)", transformOrigin: "center 34%" }}
+          style={{ transform: "scale(1.45)", transformOrigin: "center 30%" }}
         />
       )}
       <audio ref={audioRef} autoPlay muted={muted} />
@@ -702,12 +704,12 @@ export default function Studio({ slug }: { slug?: string }) {
           {/* The co-host sits with the room's name, not in the queue of people
               waiting to go on. She is staff. */}
           {cohost && (
-            <div className="flex h-40 items-stretch overflow-hidden rounded-2xl border border-[#F0A71F]/30 bg-[#F0A71F]/[0.06]">
+            <div className="flex h-56 items-stretch overflow-hidden rounded-2xl border border-[#F0A71F]/30 bg-[#F0A71F]/[0.06]">
               {/* Flush to the card's edges and its full height. Inset in a
                   padded box she was a thumbnail of a person rather than a
                   person — the point of her being here is that you can see her
                   face well enough to talk to it. */}
-              <div className="w-64 shrink-0 self-stretch bg-black/40 sm:w-72">
+              <div className="w-72 shrink-0 self-stretch bg-black/40 sm:w-80">
                 <PeerTile peer={cohost} fill keyed />
               </div>
               <div className="flex min-w-0 flex-col justify-center px-4 py-3">
