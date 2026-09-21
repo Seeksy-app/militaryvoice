@@ -1929,7 +1929,7 @@ function EventOverview({ eventId, event, go }: { eventId: number; event: PublicE
         {/* A booking parked past the end of the day (the organisers' own,
             for seeing the dashboard as a podcaster) is not one of the slots. */}
         {tile("Slots booked", `${active.filter((s) => s.slotIndex < total).length} / ${total}`, `${Math.max(0, total - active.filter((s) => s.slotIndex < total).length)} still open`, "signups")}
-        {tile("Sent materials", `${withMaterials} / ${active.length}`, `${prerecorded} pre-recorded · ${needInterviewer} want an interviewer`, "signups")}
+        {tile("Sent materials", `${withMaterials} / ${active.filter((s) => s.slotIndex < total).length}`, `${prerecorded} pre-recorded · ${needInterviewer} want an interviewer`, "signups")}
         {tile("Sponsors", (sponsors ?? []).length, "Logos in the strip and read on air", "sponsors")}
       </div>
       <div className="flex flex-wrap gap-2">
