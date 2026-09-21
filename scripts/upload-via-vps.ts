@@ -27,6 +27,8 @@ const FILES = [
   "Devil Dawg Double Dare Podcast Ep 4 Major Life Changes with Phil Randazzo.mp4",
   "Episode 314 | Ibogaine Treatment - Veterans with PTSD -  - 2026-09-20 06-45-10_0.mp4",
   "VFW Podcast 73- Sets and Reps.mp4",
+  // Brave Blocks, 8:30 PM — the YouTube episode Greg sent, pulled down.
+  "Montel Williams- Sacrifice, Service, and Stardom.mp4",
 ];
 
 const HOST = process.env.MV_VPS ?? "root@187.77.217.123";
