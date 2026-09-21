@@ -391,7 +391,7 @@ export default function Agenda({ slug }: Props) {
                               <button
                                 type="button"
                                 onClick={() => setSelected({ signup, start: s.start })}
-                                className="flex items-center gap-3 p-4 text-left transition-colors hover:bg-muted/40"
+                                className="flex items-start gap-3 p-4 text-left transition-colors hover:bg-muted/40"
                                 data-testid={`button-profile-${s.index}`}
                               >
                                 {avatar(signup.photoUrl, signup.hostName, "h-16 w-16 shrink-0 ring-4 ring-[#F0A71F]/40")}
@@ -412,7 +412,7 @@ export default function Agenda({ slug }: Props) {
                           // than two full circles and both names fit beside
                           // it. Each face and each name opens its own profile.
                           return (
-                            <div className="flex items-center gap-3 p-4" data-testid={`card-profiles-${s.index}`}>
+                            <div className="flex items-start gap-3 p-4" data-testid={`card-profiles-${s.index}`}>
                               <span className="relative h-[5.5rem] w-24 shrink-0">
                                 <button
                                   type="button"
