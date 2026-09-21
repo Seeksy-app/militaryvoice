@@ -1964,7 +1964,7 @@ const LIFECYCLE_COLORS: Record<string, string> = {
   no_show: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
   alumni: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
 };
-type BroadcastRow = { id: number; eventId: number | null; subject: string; bodyText: string; segment: string; sender: string | null; banner: string | null; status: string; recipientCount: number | null; sentAt: string | null; scheduledFor: string | null; source: string; createdAt: string };
+type BroadcastRow = { id: number; eventId: number | null; subject: string; bodyText: string; segment: string; sender: string | null; banner: string | null; status: string; recipientCount: number | null; sentAt: string | null; scheduledFor: string | null; source: string; isTemplate?: boolean; createdAt: string };
 
 // ---------------------------------------------------------------------------
 // Shared broadcast compose + list (used by both CrmPanel and CrmEventPanel)
@@ -2799,7 +2799,11 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
 
 // ---------------------------------------------------------------------------
 
-type CrmView = "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "broadcasts" | "cadence" | "activity" | "compose";
+// Brevo's vocabulary, because it is the one an event planner arrives with:
+// a campaign is one email that goes out once, an automation is a series that
+// fires off a trigger, and a template is copy you pick from when building
+// either. "Cadence" was doing two of those jobs at once.
+type CrmView = "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "campaigns" | "templates" | "automation" | "activity" | "compose";
 
 /**
  * Everything that has actually gone out, in the order it went.
@@ -2985,8 +2989,9 @@ function ActivityRow({
  *  has actually gone out. */
 function BroadcastSubNav({ view, setView }: { view: CrmView; setView: (v: CrmView) => void }) {
   const tabs: { key: CrmView; label: string }[] = [
-    { key: "broadcasts", label: "Templates" },
-    { key: "cadence", label: "Cadence" },
+    { key: "campaigns", label: "Campaigns" },
+    { key: "automation", label: "Automation" },
+    { key: "templates", label: "Templates" },
     { key: "activity", label: "Activity log" },
   ];
   return (
@@ -3060,6 +3065,24 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
    * then the drafts. Sorting the whole list by creation date instead buried
    * the one email that has actually been sent under seven that never have.
    */
+  /**
+   * Three lists, from one table.
+   *
+   * A template is copy with no send date and no recipients — it is picked
+   * when building something else. A campaign goes out once. An automation
+   * step is wired to a moment in the sequence and carries its source.
+   * Sixteen rows in one list, some with a status that meant something and
+   * some where it never could, is what made this screen unreadable.
+   */
+  const templateBroadcasts = useMemo(
+    () => broadcastList.filter((b) => b.isTemplate),
+    [broadcastList],
+  );
+  const campaignBroadcasts = useMemo(
+    () => broadcastList.filter((b) => !b.isTemplate && b.source === "manual"),
+    [broadcastList],
+  );
+
   const orderedBroadcasts = useMemo(() => {
     const rank = (b: BroadcastRow) => (b.status === "sent" ? 0 : b.status === "scheduled" ? 1 : 2);
     const when = (b: BroadcastRow) => Date.parse(b.sentAt ?? b.scheduledFor ?? b.createdAt) || 0;
@@ -3190,7 +3213,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
       }
       queryClient.invalidateQueries({ queryKey: ["/api/admin/broadcasts", eventId] });
       toast({ title: scheduledFor ? "Scheduled ✓" : "Draft saved", description: scheduledFor ? `Will send at ${new Date(scheduledFor).toLocaleString()}` : undefined });
-      setView("broadcasts");
+      setView("campaigns");
     } catch (err) {
       toast({ title: "Save failed", description: (err as Error).message, variant: "destructive" });
     } finally { setBBusy(false); }
@@ -3374,10 +3397,10 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
 
   const navItems: { id: CrmView; label: string }[] = [
     { id: "lists", label: "Contacts" },
-    { id: "broadcasts", label: "Broadcasts" },
+    { id: "campaigns", label: "Broadcasts" },
   ];
   const activeNav = view === "list-signups" || view === "list-contacts" || view === "list-engagement" ? "lists"
-    : view === "compose" ? "broadcasts"
+    : view === "compose" ? "campaigns"
     : view;
 
   return (
@@ -3665,7 +3688,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
       {view === "list-engagement" && engagementCtx && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <button onClick={() => setView("broadcasts")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+            <button onClick={() => setView("campaigns")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
               <ArrowLeft className="h-3.5 w-3.5" /> Broadcasts
             </button>
             <div className="flex items-center gap-2 min-w-0">
@@ -3718,7 +3741,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
       )}
 
       {/* ── BROADCASTS: list ── */}
-      {view === "cadence" && (
+      {view === "automation" && (
         <div className="flex flex-col gap-4">
           <BroadcastSubNav view={view} setView={setView} />
           <p className="text-sm text-muted-foreground">
@@ -3824,18 +3847,25 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
         </div>
       )}
 
-      {view === "broadcasts" && (
+      {(view === "campaigns" || view === "templates") && (
         <div className="flex flex-col gap-4">
           <BroadcastSubNav view={view} setView={setView} />
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              {orderedBroadcasts.length} template{orderedBroadcasts.length !== 1 ? "s" : ""}
-              {oneOffBroadcasts.length !== orderedBroadcasts.length && (
-                <span> · {orderedBroadcasts.length - oneOffBroadcasts.length} wired into the cadence</span>
+              {view === "templates" ? (
+                <>
+                  {templateBroadcasts.length} template{templateBroadcasts.length !== 1 ? "s" : ""} · copy to
+                  start a campaign or an automation step from
+                </>
+              ) : (
+                <>
+                  {campaignBroadcasts.length} campaign{campaignBroadcasts.length !== 1 ? "s" : ""} · one email,
+                  one send
+                </>
               )}
             </p>
             <Button size="sm" className="gap-1.5" onClick={() => openCompose()}>
-              <Plus className="h-4 w-4" /> New broadcast
+              <Plus className="h-4 w-4" /> {view === "templates" ? "New template" : "New campaign"}
             </Button>
           </div>
 
@@ -3877,7 +3907,12 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                 onClose={() => setPreviewSegment(null)}
               />
 
-              {orderedBroadcasts.map((b) => (
+              {/* The tab decides the list. Sorting stays as it was — sent
+                  and scheduled read forwards in time, drafts newest first,
+                  because an unsent draft is a to-do and not a record. */}
+              {orderedBroadcasts
+                .filter((b) => (view === "templates" ? b.isTemplate : !b.isTemplate && b.source === "manual"))
+                .map((b) => (
                 <BroadcastCard
                   key={b.id}
                   b={b}
@@ -3895,7 +3930,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                   onDelete={deleteBroadcast}
                   onViewEngagement={openEngagementView}
                 />
-              ))}
+                ))}
             </div>
           )}
         </div>
@@ -3905,7 +3940,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
       {view === "compose" && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-3">
-            <button onClick={() => setView("broadcasts")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+            <button onClick={() => setView("campaigns")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
               <ArrowLeft className="h-3.5 w-3.5" /> Broadcasts
             </button>
             <span className="text-sm font-semibold">{editingBroadcast ? "Edit draft" : "New broadcast"}</span>
@@ -4136,7 +4171,7 @@ function CrmEventPanel({ eventId }: { eventId: number }) {
                   <Button type="button" variant="outline" disabled={bBusy || !editingBroadcast} onClick={sendTest} className="gap-1.5">
                     <Send className="h-3.5 w-3.5" /> Send test to me
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => setView("broadcasts")}>Cancel</Button>
+                  <Button type="button" variant="outline" onClick={() => setView("campaigns")}>Cancel</Button>
                 </div>
               </form>
             </CardContent>

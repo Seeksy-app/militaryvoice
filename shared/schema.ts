@@ -1486,6 +1486,17 @@ export const broadcasts = pgTable("broadcasts", {
   sentAt: text("sent_at"),
   scheduledFor: text("scheduled_for"),
   source: text("source").notNull().default("manual"),
+  /**
+   * Reusable copy rather than something that goes out.
+   *
+   * A draft was doing two jobs — an unsent campaign and a piece of copy kept
+   * to start the next one from — and nothing told them apart, so the list
+   * showed sixteen rows where some had a date and a status that meant
+   * something and some never would. A template has no send date, no
+   * recipients and no status; it is picked when building a campaign or a step
+   * of an automation, exactly as Brevo and Mailchimp do it.
+   */
+  isTemplate: boolean("is_template").notNull().default(false),
   createdAt: text("created_at").notNull(),
 });
 export type BroadcastRow = typeof broadcasts.$inferSelect;
