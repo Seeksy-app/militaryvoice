@@ -46,7 +46,7 @@ export function emailShell(o: {
   return `<!doctype html><html><body style="margin:0;padding:0;background:#eef2f8;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f8;">
     <tr><td align="center" style="padding:24px 12px;">
-      <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+      <table role="presentation" width="700" cellpadding="0" cellspacing="0" style="max-width:700px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
         <!-- The artwork, whole.
              It used to be a background-image with a dark gradient and the
              header type drawn on top. Three things went wrong with that: the
@@ -57,8 +57,8 @@ export function emailShell(o: {
              the wave in half. A plain <img> has none of those problems: it
              always shows the whole thing, at every width, in every client. -->
         <tr><td style="padding:0;background:#053877;font-size:0;line-height:0;" bgcolor="#053877">
-          <img src="${o.banner}" width="640" alt="${escapeHtml(o.bannerAlt ?? "MilitaryVoice.ai")}"
-               style="display:block;width:100%;max-width:640px;height:auto;border:0;">
+          <img src="${o.banner}" width="700" alt="${escapeHtml(o.bannerAlt ?? "MilitaryVoice.ai")}"
+               style="display:block;width:100%;max-width:700px;height:auto;border:0;">
         </td></tr>
         <!-- The brand bar: what this email is on the left, the mark on the
              right. Below the picture rather than on it, so neither can ever
