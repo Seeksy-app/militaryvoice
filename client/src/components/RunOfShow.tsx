@@ -126,6 +126,9 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
   // the row's title and notes and the podcaster behind it, and shows every
   // hit regardless of the fold.
   const [q, setQ] = useState("");
+  // Which shows roll a file rather than join live is the producer's first
+  // question on the day, and it was answerable only by scrolling for badges.
+  const [preOnly, setPreOnly] = useState(false);
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState<Partial<RunItemRow>>({});
 
@@ -155,18 +158,24 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
   }, [assets]);
 
   const visible = useMemo(() => {
-    let rows = bookedOnly ? (items ?? []).filter((it) => it.signupId != null) : items ?? [];
+    let rows = bookedOnly || preOnly ? (items ?? []).filter((it) => it.signupId != null) : items ?? [];
+    if (preOnly) rows = rows.filter((it) => it.kind === "Segment" && signupById.get(it.signupId!)?.showFormat === "prerecorded");
     const needle = q.trim().toLowerCase();
     if (needle) {
       rows = rows.filter((it) => {
         const sg = it.signupId != null ? signupById.get(it.signupId) : undefined;
-        return [it.title, it.notes, it.kind, sg?.hostName, sg?.podcastName, sg?.email]
+        return [it.title, it.notes, it.kind, sg?.hostName, sg?.podcastName, sg?.email, sg?.showFormat === "prerecorded" ? "pre-recorded prerecorded" : "live"]
           .some((v) => (v ?? "").toLowerCase().includes(needle));
       });
     }
     return rows;
-  }, [items, bookedOnly, q, signupById]);
+  }, [items, bookedOnly, preOnly, q, signupById]);
   const bookedSegments = useMemo(() => (items ?? []).filter((it) => it.kind === "Segment" && it.signupId != null), [items]);
+  const preRecorded = useMemo(
+    () => bookedSegments.filter((it) => signupById.get(it.signupId!)?.showFormat === "prerecorded"),
+    [bookedSegments, signupById],
+  );
+  const preWithFile = preRecorded.filter((it) => it.mediaUrl.trim() !== "").length;
   const withMaterials = useMemo(
     () =>
       bookedSegments.filter((it) => {
@@ -296,6 +305,22 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
                 </span>
               </Button>
             )}
+            {preRecorded.length > 0 && (
+              <Button
+                variant={preOnly ? "default" : "outline"}
+                size="sm"
+                className="gap-1.5 rounded-full"
+                aria-pressed={preOnly}
+                onClick={() => setPreOnly((v) => !v)}
+                title={`${preWithFile} of ${preRecorded.length} pre-recorded shows have their file attached`}
+                data-testid="button-run-prerecorded"
+              >
+                <PlayCircle className="h-3.5 w-3.5" /> Pre-recorded · {preRecorded.length}
+                <span className={`text-[11px] font-normal ${preOnly ? "text-white/80" : preWithFile < preRecorded.length ? "text-amber-600" : "text-muted-foreground"}`}>
+                  ({preWithFile} with a file)
+                </span>
+              </Button>
+            )}
             {items && items.length > 0 && (
               <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={exportCsv} data-testid="button-run-export">
                 <Download className="h-3.5 w-3.5" /> CSV
@@ -304,7 +329,7 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
             <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => addItem.mutate()} data-testid="button-run-add">
               <Plus className="h-3.5 w-3.5" /> Add row
             </Button>
-            {items && !bookedOnly && !q && items.length > COLLAPSED_ROWS && (
+            {items && !bookedOnly && !preOnly && !q && items.length > COLLAPSED_ROWS && (
               <Button
                 variant="outline"
                 size="sm"
@@ -359,7 +384,7 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
                 Nothing matches "{q.trim()}".
               </p>
             )}
-            {(expanded || bookedOnly || q ? visible : visible.slice(0, COLLAPSED_ROWS)).map((it) => {
+            {(expanded || bookedOnly || preOnly || q ? visible : visible.slice(0, COLLAPSED_ROWS)).map((it) => {
               const s = it.signupId ? signupById.get(it.signupId) : undefined;
               const mats = s ? assetsByEmail.get(s.email.toLowerCase()) ?? [] : [];
               const isEditing = editing === it.id;
@@ -503,6 +528,11 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
 
                   <div className="flex shrink-0 flex-col items-start gap-1">
                     <Badge className={`font-normal hover:opacity-100 ${KIND_STYLE[it.kind] ?? KIND_STYLE.Custom}`}>{it.kind}</Badge>
+                    {s?.showFormat === "prerecorded" && (
+                      <Badge className="gap-1 bg-[#F0A71F] text-[11px] font-semibold text-[#1a1200] hover:bg-[#F0A71F]" data-testid={`badge-prerecorded-${it.id}`}>
+                        <PlayCircle className="h-2.5 w-2.5" /> Pre-recorded
+                      </Badge>
+                    )}
                     {it.edited && (
                       <Badge variant="outline" className="gap-1 border-primary/40 text-[11px] font-normal text-primary" title="Rebuild won't overwrite this row's wording">
                         <Lock className="h-2.5 w-2.5" /> Edited
@@ -526,9 +556,15 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
                     {it.notes && <div className="mt-0.5 whitespace-pre-line text-xs text-muted-foreground">{it.notes}</div>}
 
                     {s?.showFormat === "prerecorded" && (
-                      <Badge variant="outline" className="mt-1.5 gap-1 border-[#F0A71F] text-xs font-normal">
-                        <PlayCircle className="h-3 w-3" /> Roll their file
-                      </Badge>
+                      it.mediaUrl.trim() ? (
+                        <Badge variant="outline" className="mt-1.5 gap-1 border-green-600/50 text-xs font-normal text-green-700 dark:text-green-400" title={it.mediaUrl}>
+                          <Check className="h-3 w-3" /> Roll their file{it.mediaLabel ? ` · ${it.mediaLabel}` : ""}
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="mt-1.5 gap-1 border-amber-500 text-xs font-normal text-amber-700 dark:text-amber-400" title="Pre-recorded, but no file is attached to this row yet">
+                          <PlayCircle className="h-3 w-3" /> No file attached yet
+                        </Badge>
+                      )
                     )}
                     {s && it.kind === "Segment" && mats.length === 0 && (
                       <Badge variant="outline" className="mt-1.5 gap-1 border-dashed text-xs font-normal text-muted-foreground" title="No intro, outro, mid-roll or images uploaded">
@@ -619,7 +655,7 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
             })}
           </div>
         )}
-        {!expanded && !bookedOnly && !q && items && items.length > COLLAPSED_ROWS && (
+        {!expanded && !bookedOnly && !preOnly && !q && items && items.length > COLLAPSED_ROWS && (
           <button
             type="button"
             className="mt-3 w-full rounded-xl border border-dashed border-border py-3 text-sm text-muted-foreground hover:bg-muted/40"
