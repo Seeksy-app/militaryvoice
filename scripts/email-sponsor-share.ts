@@ -37,7 +37,7 @@ const rows = await sql<Row[]>`
   WHERE s.event_id = 1 AND s.status <> 'cancelled' AND s.email <> ''
   ORDER BY s.email, s.slot_index`;
 
-const SUBJECT = "Your segment can have a sponsor — and half of it is yours";
+const SUBJECT = "Your segment can have a sponsor — and you earn from it";
 
 function body(r: Row): string {
   const first = (r.host_name || "").trim().split(/\s+/)[0] || "there";
@@ -49,12 +49,11 @@ function body(r: Row): string {
 on the agenda, and on the "coming up next" card that runs before your show.
 It's <strong>$250</strong> a segment.</p>
 
-<p><strong>If you bring the sponsor, you keep half.</strong> $125, for making an
-introduction. You don't have to sell anything or negotiate anything — send me
-a name and I'll take it from there.</p>
+<p><strong>If you bring the sponsor, you earn a share of it.</strong> You don't
+have to sell anything or negotiate anything — send me a name and I'll take it
+from there.</p>
 
-<p>And if the person you introduce wants something bigger than one segment,
-you get ten percent of whatever they take:</p>
+<p>Here's what each one pays you:</p>
 
 <table style="margin:0 0 20px;border-collapse:collapse;font-size:15px;color:#374151">
   <tr><td style="padding:6px 18px 6px 0"><strong>Your segment</strong> · $250</td><td style="padding:6px 0"><strong>you keep $125</strong></td></tr>
@@ -63,9 +62,8 @@ you get ten percent of whatever they take:</p>
   <tr><td style="padding:6px 18px 6px 0">Partner sponsor · $10,000</td><td style="padding:6px 0"><strong>you keep $1,000</strong></td></tr>
 </table>
 
-<p>You'll notice the bigger ones pay you more than your own segment does. That's
-deliberate — if you know somebody who should be doing more than $250, I don't
-want you talking them down to fit the cheap slot.</p>
+<p>The bigger ones pay you more than your own segment does — on purpose. Don't
+talk anyone down to fit the $250 slot.</p>
 
 <p>Who to think of: anyone who already advertises with you, the veteran-owned
 business you actually rate, a company that's been trying to reach this audience
@@ -88,16 +86,16 @@ Riccoh here. Quick one, and there's money in it for you.
 
 We're putting a sponsor on each segment of the marathon — named on air, on the agenda, and on the "coming up next" card before your show. It's $250 a segment.
 
-If you bring the sponsor, you keep half. $125, for making an introduction. You don't have to sell or negotiate anything — send me a name and I'll take it from there.
+If you bring the sponsor, you earn a share of it. You don't have to sell or negotiate anything — send me a name and I'll take it from there.
 
-If the person you introduce wants something bigger, you get ten percent:
+Here's what each one pays you:
 
   Your segment          $250     you keep $125
   Supporting sponsor    $2,500   you keep $250
   Live stream sponsor   $5,000   you keep $500
   Partner sponsor       $10,000  you keep $1,000
 
-The bigger ones pay you more than your own segment does. That's deliberate — if you know somebody who should be doing more than $250, I don't want you talking them down to fit the cheap slot.
+The bigger ones pay you more than your own segment does — on purpose. Don't talk anyone down to fit the $250 slot.
 
 Who to think of: anyone who already advertises with you, the veteran-owned business you actually rate, a company that's been trying to reach this audience and hasn't worked out how. It doesn't have to be big.
 
@@ -112,7 +110,7 @@ function htmlFor(r: Row): string {
   return emailShell({
     banner: EMAIL_BANNERS.podcasters,
     eyebrow: "The Podcast Marathon · 5 October",
-    heading: "Bring a sponsor, keep half",
+    heading: "Bring a sponsor, earn from it",
     body: body(r),
   });
 }
