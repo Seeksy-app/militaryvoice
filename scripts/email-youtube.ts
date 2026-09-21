@@ -42,7 +42,8 @@ the same time — it's one button. No stream key to find.</p>
 
 <ol style="padding-left:20px;margin:0 0 18px">
   <li style="margin:0 0 8px">Sign in to your dashboard and open <strong>Integrations</strong>.</li>
-  <li style="margin:0 0 8px">Press <strong>Connect YouTube</strong> and allow it. Use the Google account that owns your channel.</li>
+  <li style="margin:0 0 8px">Press <strong>Connect YouTube</strong> and allow it. Use the Google account that owns your channel.
+    <br><img src="${BASE}/email/connect-youtube.png" alt="The Going out live card on the Integrations page, with the Connect YouTube button" width="560" style="display:block;width:100%;max-width:560px;height:auto;margin:10px 0 4px;border:1px solid #e5e7eb;border-radius:10px"></li>
   <li style="margin:0 0 8px">Answer one question: <strong>just my segment</strong> (${at(r.slot_index)} ET), or <strong>the entire show</strong> — all sixteen hours on your channel too.</li>
 </ol>
 
