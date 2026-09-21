@@ -566,6 +566,34 @@ export const CADENCE_AUTOMATIC = [
   { key: "final", label: "Final nudge", blurb: "Two days before their slot" },
   { key: "onair", label: "On-air nudge", blurb: "One hour before their slot" },
 ] as const;
+/**
+ * Everything a podcaster receives, in the order it reaches them.
+ *
+ * One list, not two. The split between "sent for you automatically" and
+ * "yours to write" described how each email is *built*, which is our problem
+ * and nobody else's — and it hid the fact that two of them were aimed at the
+ * same moment: a hand-written "Two weeks out" and an automatic prep nudge,
+ * neither aware of the other.
+ *
+ * `days` is the offset from the event, so a row can show the date it will
+ * actually go. Null means it is triggered by something a person does rather
+ * than by the calendar, and there is no date to show.
+ */
+export const CADENCE = [
+  { key: "welcome", label: "Welcome", days: null, auto: false, blurb: "When they take a slot — what to do first" },
+  { key: "confirmation", label: "Booking confirmation", days: null, auto: true, blurb: "The instant a slot is claimed, with their time and calendar links" },
+  { key: "materials", label: "Two weeks out", days: -14, auto: false, blurb: "Artwork, clips and guest names" },
+  { key: "prep", label: "Prep nudge", days: -14, auto: true, blurb: "Their slot time, and what is still outstanding" },
+  { key: "email-1", label: "Ten days out", days: -10, auto: false, blurb: "Pre-show checklist" },
+  { key: "email-2", label: "Five days out", days: -5, auto: false, blurb: "Test your camera, mic and lighting" },
+  { key: "final", label: "Final nudge", days: -2, auto: true, blurb: "The practical details, and the green room" },
+  { key: "email-3", label: "The day before", days: -1, auto: false, blurb: "You're on tomorrow — everything in one place" },
+  { key: "onair", label: "On-air nudge", days: 0, auto: true, blurb: "One hour before their slot" },
+  { key: "email-4", label: "One hour before", days: 0, auto: false, blurb: "Final call, and how to join" },
+  { key: "email-5", label: "After the show", days: 1, auto: false, blurb: "Thank you, and the replay" },
+  { key: "email-6", label: "Clips ready", days: 2, auto: false, blurb: "Their segment, cut and ready to post" },
+] as const;
+
 export type CadenceKey = (typeof CADENCE_STEPS)[number]["key"];
 export const cadenceSource = (key: string) => `cadence:${key}`;
 

@@ -5676,6 +5676,28 @@ export function registerRoutes(app: Express): void {
    * with no scopes, and hands back a bearer token. Nothing here creates a job
    * or spends a transaction from the free tier's 500.
    */
+  /**
+   * Which automatic nudges are held, and how many people are waiting.
+   *
+   * A nudge row with emailed = false is claimed and will never send. Without
+   * this the cadence screen shows "Scheduled" against something that cannot
+   * fire — which is exactly the state the prep nudge is in right now, and the
+   * screen had no way to say so.
+   */
+  app.get("/api/admin/nudges/held", requireAdmin, async (_req, res) => {
+    noStore(res);
+    const featured = await storage.getFeaturedEvent();
+    const active = (await storage.listSignups(featured.id)).filter((x) => x.status !== "cancelled");
+    const all = await storage.listNudgesForSignups(active.map((x) => x.id));
+    const held: Record<string, number> = {};
+    const sent: Record<string, number> = {};
+    for (const n of all) {
+      const bucket = n.emailed ? sent : held;
+      bucket[n.kind] = (bucket[n.kind] ?? 0) + 1;
+    }
+    res.json({ held, sent, total: active.length });
+  });
+
   app.get("/api/admin/adobe/check", requireAdmin, async (_req, res) => {
     noStore(res);
     const id = process.env.ADOBE_CLIENT_ID ?? "";
