@@ -78,7 +78,7 @@ export function parseCookies(header: string | undefined): Record<string, string>
 export function setSessionCookie(res: Response, email: string, remember = false): void {
   const hours = remember ? SESSION_DAYS * 24 : SESSION_HOURS;
   const exp = Date.now() + hours * 60 * 60 * 1000;
-  const token = sign({ email, exp });
+  const token = sign({ email, exp, remember, iat: Date.now() });
   const isProd = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
   const attrs = [
     `${COOKIE_NAME}=${encodeURIComponent(token)}`,
@@ -103,6 +103,18 @@ export function getSessionEmail(req: Request): string | null {
   if (!payload || typeof payload.email !== "string" || typeof payload.exp !== "number") return null;
   if (Date.now() > payload.exp) return null;
   return payload.email;
+}
+
+/** The session as the cookie carries it, for the dashboard to say how long
+ *  it lasts — and for finding out why someone was asked to sign in again. */
+export function getSession(req: Request): { email: string; exp: number; remember: boolean; iat: number | null } | null {
+  const cookies = parseCookies(req.headers.cookie);
+  const token = cookies[COOKIE_NAME];
+  if (!token) return null;
+  const payload = verify(token);
+  if (!payload || typeof payload.email !== "string" || typeof payload.exp !== "number") return null;
+  if (Date.now() > payload.exp) return null;
+  return { email: payload.email, exp: payload.exp, remember: payload.remember === true, iat: typeof payload.iat === "number" ? payload.iat : null };
 }
 
 export function requireHostSession(req: Request, res: Response, next: NextFunction): void {

@@ -99,7 +99,7 @@ import { emailShell, EMAIL_BANNERS } from "./email.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
-import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
+import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   publishPhoto,
   isUploadPostConfigured,
@@ -5791,6 +5791,17 @@ export function registerRoutes(app: Express): void {
   app.post("/api/host/logout", (_req, res) => {
     clearSessionCookie(res);
     res.json({ ok: true });
+  });
+
+  // ---- Host: how long this sign-in lasts ------------------------------------
+  app.get("/api/host/session", (req, res) => {
+    noStore(res);
+    const sess = getSession(req);
+    if (!sess) {
+      res.status(401).json({ message: "Please sign in again." });
+      return;
+    }
+    res.json({ email: sess.email, expiresAt: new Date(sess.exp).toISOString(), remember: sess.remember, signedInAt: sess.iat ? new Date(sess.iat).toISOString() : null });
   });
 
   // ---- Host: fetch their podcaster profile (null if not set up yet) --------

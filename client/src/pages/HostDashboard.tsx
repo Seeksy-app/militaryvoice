@@ -671,6 +671,20 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, !!data]);
 
+  // How long this sign-in lasts, said under the address. Thirty days was
+  // ticked and people were still being asked for a code the same afternoon;
+  // the first step to finding out why is seeing what the browser holds.
+  const session = useQuery<{ expiresAt: string; remember: boolean }>({
+    queryKey: ["/api/host/session"],
+    enabled: !!data,
+    retry: false,
+  });
+  const sessionLine = session.data
+    ? session.data.remember
+      ? `Signed in until ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(session.data.expiresAt))}`
+      : "Signed in for this visit"
+    : null;
+
   const logout = useMutation({
     mutationFn: async () => apiRequest("POST", "/api/host/logout"),
     onSuccess: () => {
@@ -831,7 +845,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 <span className="block truncate text-sm font-semibold text-foreground">
                   {profile?.podcastName || data?.email}
                 </span>
-                <span className="block truncate text-xs text-muted-foreground">{data?.email}</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {data?.email}
+                  {sessionLine && <span data-testid="text-session-until"> · {sessionLine}</span>}
+                </span>
               </span>
               <Button
                 variant="outline"
