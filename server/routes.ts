@@ -4607,6 +4607,11 @@ export function registerRoutes(app: Express): void {
       // still forward what the event carried, because a forward with only a
       // subject line beats silence.
       let body = "";
+      // The sender's own HTML, when that is all they sent. Wrapping it in
+      // <pre> and escaping it — what happened before — forwarded a wall of
+      // markup; a reply from a podcaster's mail client usually has no text
+      // part at all.
+      let bodyHtml = "";
       if (emailId && process.env.RESEND_API_KEY) {
         try {
           const r = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
@@ -4614,7 +4619,15 @@ export function registerRoutes(app: Express): void {
           });
           if (r.ok) {
             const full = (await r.json()) as any;
-            body = String(full.text ?? full.html ?? "");
+            bodyHtml = String(full.html ?? "");
+            body = String(full.text ?? "") || bodyHtml
+              .replace(/<style[\s\S]*?<\/style>/gi, "")
+              .replace(/<br\s*\/?>/gi, "\n")
+              .replace(/<\/(p|div|tr|li|h[1-6])>/gi, "\n")
+              .replace(/<[^>]+>/g, "")
+              .replace(/&nbsp;/g, " ")
+              .replace(/\n{3,}/g, "\n\n")
+              .trim();
           } else {
             body = `(Couldn't fetch the body: HTTP ${r.status}. Open it in Resend — id ${emailId}.)`;
           }
@@ -4640,7 +4653,12 @@ export function registerRoutes(app: Express): void {
         to: process.env.FORWARD_INBOX || "andrew@podlogix.co",
         subject: `Fwd: ${subject}`,
         text: header + body,
-        html: `<p style="color:#555;font-size:13px">From: ${esc(from)}<br>To: ${esc(to)}<br>Subject: ${esc(subject)}</p><hr><pre style="white-space:pre-wrap;font-family:inherit">${esc(body)}</pre>`,
+        html:
+          `<p style="color:#555;font-size:13px">From: ${esc(from)}<br>To: ${esc(to)}<br>Subject: ${esc(subject)}</p><hr>` +
+          // Scripts stripped; everything else is theirs to render as sent.
+          (bodyHtml
+            ? bodyHtml.replace(/<script[\s\S]*?<\/script>/gi, "")
+            : `<pre style="white-space:pre-wrap;font-family:inherit">${esc(body)}</pre>`),
         replyTo: Array.isArray(d.from) ? d.from[0] : String(d.from ?? ""),
       });
       console.log(`Forwarded inbound mail from ${from}: ${subject}`);
@@ -5949,6 +5967,31 @@ export function registerRoutes(app: Express): void {
     const email = (req as any).hostEmail as string;
     await storage.releaseCohostSlot(eventId, Number(req.params.blockIndex), email);
     res.json(await cohostBoard(eventId, email));
+  });
+
+  /**
+   * Set a podcaster's recording or format on their behalf.
+   *
+   * Replies come to the inbox as links — "the link to the show is …" — and
+   * until now the only way to file one was for the podcaster to log in and
+   * paste it themselves, or for somebody to write SQL. Only the two fields a
+   * reply ever carries.
+   */
+  app.patch("/api/admin/shows/:eventId/:email", requireAdmin, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const email = decodeURIComponent(String(req.params.email)).trim().toLowerCase();
+    const body = req.body as { recordingUrl?: string; showFormat?: string };
+    const patch: { recordingUrl?: string; showFormat?: string } = {};
+    if (typeof body.recordingUrl === "string") {
+      const url = body.recordingUrl.trim();
+      if (url && !/^https?:\/\//i.test(url)) return res.status(400).json({ message: "The recording needs to be a link." });
+      patch.recordingUrl = url;
+    }
+    if (body.showFormat === "live" || body.showFormat === "prerecorded") patch.showFormat = body.showFormat;
+    if (!Object.keys(patch).length) return res.status(400).json({ message: "Nothing to change." });
+    const active = (await storage.listSignups(eventId)).some((s) => s.status !== "cancelled" && s.email.trim().toLowerCase() === email);
+    if (!active) return res.status(404).json({ message: "No booking for that address on this event." });
+    res.json(await storage.upsertEventShow(email, eventId, patch));
   });
 
   /** Who has signed up to co-host, hour by hour, for the run of show. */

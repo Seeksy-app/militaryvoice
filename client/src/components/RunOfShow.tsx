@@ -39,6 +39,7 @@ import {
   ChevronDown,
   ChevronUp,
   Users,
+  Search,
 } from "lucide-react";
 
 interface Props {
@@ -121,6 +122,10 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
   const [expanded, setExpanded] = useState(false);
   // Hide open slots, pre-show and handoffs: just the shows that are actually booked.
   const [bookedOnly, setBookedOnly] = useState(false);
+  // Ninety-eight rows is too many to scroll for one name. A search matches
+  // the row's title and notes and the podcaster behind it, and shows every
+  // hit regardless of the fold.
+  const [q, setQ] = useState("");
   const [editing, setEditing] = useState<number | null>(null);
   const [draft, setDraft] = useState<Partial<RunItemRow>>({});
 
@@ -149,7 +154,18 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
     return m;
   }, [assets]);
 
-  const visible = useMemo(() => (bookedOnly ? (items ?? []).filter((it) => it.signupId != null) : items ?? []), [items, bookedOnly]);
+  const visible = useMemo(() => {
+    let rows = bookedOnly ? (items ?? []).filter((it) => it.signupId != null) : items ?? [];
+    const needle = q.trim().toLowerCase();
+    if (needle) {
+      rows = rows.filter((it) => {
+        const sg = it.signupId != null ? signupById.get(it.signupId) : undefined;
+        return [it.title, it.notes, it.kind, sg?.hostName, sg?.podcastName, sg?.email]
+          .some((v) => (v ?? "").toLowerCase().includes(needle));
+      });
+    }
+    return rows;
+  }, [items, bookedOnly, q, signupById]);
   const bookedSegments = useMemo(() => (items ?? []).filter((it) => it.kind === "Segment" && it.signupId != null), [items]);
   const withMaterials = useMemo(
     () =>
@@ -254,6 +270,16 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
             </CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search rows or podcasters"
+                className="h-9 w-56 rounded-full pl-9 text-sm"
+                data-testid="run-search"
+              />
+            </div>
             {bookedSegments.length > 0 && (
               <Button
                 variant={bookedOnly ? "default" : "outline"}
@@ -278,7 +304,7 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
             <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => addItem.mutate()} data-testid="button-run-add">
               <Plus className="h-3.5 w-3.5" /> Add row
             </Button>
-            {items && !bookedOnly && items.length > COLLAPSED_ROWS && (
+            {items && !bookedOnly && !q && items.length > COLLAPSED_ROWS && (
               <Button
                 variant="outline"
                 size="sm"
@@ -328,7 +354,12 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {(expanded || bookedOnly ? visible : visible.slice(0, COLLAPSED_ROWS)).map((it) => {
+            {q && visible.length === 0 && (
+              <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground" data-testid="run-search-empty">
+                Nothing matches "{q.trim()}".
+              </p>
+            )}
+            {(expanded || bookedOnly || q ? visible : visible.slice(0, COLLAPSED_ROWS)).map((it) => {
               const s = it.signupId ? signupById.get(it.signupId) : undefined;
               const mats = s ? assetsByEmail.get(s.email.toLowerCase()) ?? [] : [];
               const isEditing = editing === it.id;
@@ -588,7 +619,7 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
             })}
           </div>
         )}
-        {!expanded && !bookedOnly && items && items.length > COLLAPSED_ROWS && (
+        {!expanded && !bookedOnly && !q && items && items.length > COLLAPSED_ROWS && (
           <button
             type="button"
             className="mt-3 w-full rounded-xl border border-dashed border-border py-3 text-sm text-muted-foreground hover:bg-muted/40"
