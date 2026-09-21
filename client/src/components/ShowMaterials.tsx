@@ -146,8 +146,25 @@ export function ShowMaterials({
       if (file) {
         setProgress(1);
         const signed = await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name });
-        const { uploadUrl, storageKey } = (await signed.json()) as { uploadUrl: string; storageKey: string };
-        await putWithProgress(uploadUrl, file, setProgress);
+        let { uploadUrl, storageKey } = (await signed.json()) as { uploadUrl: string; storageKey: string };
+        try {
+          await putWithProgress(uploadUrl, file, setProgress);
+        } catch (err) {
+          // The bucket's own door is shut to browsers. A file a function
+          // body can carry goes through us instead; an episode cannot, and
+          // says so rather than spinning.
+          if (file.size > 80 * 1024 * 1024) throw err;
+          setProgress(5);
+          const via = await fetch(`/api/host/assets/upload?fileName=${encodeURIComponent(file.name)}`, {
+            method: "POST",
+            headers: { "content-type": file.type || "application/octet-stream" },
+            credentials: "include",
+            body: file,
+          });
+          if (!via.ok) throw new Error("The upload didn't go through. Try again in a moment.");
+          storageKey = ((await via.json()) as { storageKey: string }).storageKey;
+          setProgress(100);
+        }
         fd.append("storageKey", storageKey);
         fd.append("fileName", file.name);
         fd.append("sizeBytes", String(file.size));

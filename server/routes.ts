@@ -72,7 +72,7 @@ import {
   listIngressForRoom,
   webhooks,
 } from "./livekit.js";
-import { ensureRecordingsBucket, signedRecordingUrl, signedRecordingUpload, deleteRecordingObject } from "./recordingStorage.js";
+import { ensureRecordingsBucket, signedRecordingUrl, signedRecordingUpload, deleteRecordingObject, putRecordingObject } from "./recordingStorage.js";
 import {
   isYoutubeConfigured,
   consentUrl,
@@ -856,18 +856,26 @@ export function registerRoutes(app: Express): void {
   });
 
   /**
-   * A presigned upload for the house's own files — a screenshot, a still, a
-   * reel — from an admin's browser straight to R2, the way podcasters' own
-   * uploads already go. Register it afterwards with /api/admin/media.
+   * A house file, through the server.
+   *
+   * A browser cannot PUT to the bucket — it has no CORS policy — so a small
+   * file (a screenshot, a still) comes here as a data URL and is put from
+   * the server. Register it afterwards with /api/admin/media.
    */
-  app.post("/api/admin/upload-url", requireAdmin, (req, res) => {
+  app.post("/api/admin/house-upload", requireAdmin, async (req, res) => {
     const name = String(req.body?.fileName ?? "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+    const dataUrl = String(req.body?.dataUrl ?? "");
+    const m = /^data:([a-z]+\/[a-z0-9.+-]+);base64,(.+)$/i.exec(dataUrl);
+    if (!m) return res.status(400).json({ message: "Send a data URL." });
+    const body = Buffer.from(m[2], "base64");
+    if (body.length > 8 * 1024 * 1024) return res.status(413).json({ message: "Too big for this door — use the upload URL." });
     const key = `studio/house/${Date.now()}-${crypto.randomBytes(4).toString("hex")}-${name}`;
     try {
-      res.json({ uploadUrl: signedRecordingUpload(key), storageKey: key });
+      await putRecordingObject(key, body, m[1]);
+      res.json({ storageKey: key, sizeBytes: body.length });
     } catch (err) {
-      console.error("Could not sign a house upload:", err);
-      res.status(502).json({ message: "Couldn't start the upload." });
+      console.error("House upload failed:", err);
+      res.status(502).json({ message: (err as Error).message });
     }
   });
 
@@ -1955,6 +1963,33 @@ export function registerRoutes(app: Express): void {
    * function; it only hands out the signed URL and, afterwards, records where
    * the file landed.
    */
+  /**
+   * The fallback door for a podcaster's file.
+   *
+   * The direct PUT to storage has never worked from a browser — the bucket
+   * has no CORS policy — so until it is opened, intros, outros and images
+   * come through here. Capped well under what a function body will carry; a
+   * pre-recorded episode is too big for this and still needs the bucket.
+   */
+  app.post(
+    "/api/host/assets/upload",
+    requireHostSession,
+    express.raw({ type: "*/*", limit: "80mb" }),
+    async (req, res) => {
+      const name = String(req.query.fileName ?? "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+      const body = req.body as Buffer;
+      if (!Buffer.isBuffer(body) || body.length === 0) return res.status(400).json({ message: "No file arrived." });
+      const key = `show-assets/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${name}`;
+      try {
+        await putRecordingObject(key, body, String(req.get("content-type") || "application/octet-stream").split(";")[0]);
+        res.json({ storageKey: key, sizeBytes: body.length });
+      } catch (err) {
+        console.error("Proxied asset upload failed:", err);
+        res.status(502).json({ message: "Storage refused the file. Try again in a moment." });
+      }
+    },
+  );
+
   app.post("/api/host/assets/upload-url", requireHostSession, async (req, res) => {
     const name = String(req.body?.fileName ?? "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
     const key = `show-assets/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${name}`;

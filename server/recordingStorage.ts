@@ -110,6 +110,19 @@ function presignS3(method: "GET" | "PUT" | "DELETE", path: string, expiresInSeco
  * R2 only; Supabase storage has a project-wide per-file cap that an episode
  * goes straight past.
  */
+/**
+ * Put an object from here rather than from a browser.
+ *
+ * The bucket has no CORS policy, so a browser's PUT to a presigned URL dies
+ * before it starts — which is why no podcaster upload has ever reached R2.
+ * The server is not subject to CORS. Bounded by what a function body will
+ * carry; the episodes still need the bucket's own door opened.
+ */
+export async function putRecordingObject(path: string, body: Buffer, contentType: string): Promise<void> {
+  const r = await fetch(presignS3("PUT", path, 900), { method: "PUT", headers: { "content-type": contentType }, body: new Uint8Array(body) });
+  if (!r.ok) throw new Error(`Storage refused the file (${r.status}).`);
+}
+
 export function signedRecordingUpload(path: string, expiresInSeconds = 7_200): string {
   if (!usingR2()) throw new Error("Recording uploads need R2 — Supabase caps file size project-wide.");
   return presignS3("PUT", path, expiresInSeconds);
