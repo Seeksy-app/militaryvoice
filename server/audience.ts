@@ -58,6 +58,16 @@ export interface AudienceSnapshot {
   reach: number;
   impressions: number;
   engagements: number;
+  /**
+   * What reach and impressions actually describe.
+   *
+   * Only a channel with connected analytics reports them, while `followers`
+   * counts every channel we know of — so the two cover different populations.
+   * Shown so nobody divides one by the other and calls it an engagement rate.
+   */
+  measuredFollowers?: number;
+  measuredChannels?: number;
+  measuredShows?: number;
   byPlatform: PlatformTotal[];
   /** Accounts whose numbers failed a sanity check and were left out. */
   dropped: number;
@@ -159,12 +169,92 @@ export function sanitizeAccount(block: unknown): { figures: AccountFigures | nul
 // Building the snapshot
 // ---------------------------------------------------------------------------
 
+
+/** One week either side of the event — the window a sponsor is buying. */
+export const CAMPAIGN_WINDOW_DAYS = 14;
+
+export interface ReachProjection {
+  windowDays: number;
+  /** Expected unique accounts reached across the lineup in that window. */
+  reach: number;
+  /** Expected impressions — reach times how often each account sees something. */
+  impressions: number;
+  /** Followers behind the shows we can actually measure. */
+  measuredFollowers: number;
+  measuredShows: number;
+  /** Reach as a share of followers, observed rather than assumed. */
+  reachRate: number;
+  /** What the measured shows actually got, before the ceiling. */
+  observedReachRate: number;
+  /** True when the observed rate was above what we are willing to claim. */
+  capped: boolean;
+  /** Impressions per account reached, observed. */
+  frequency: number;
+}
+
+/**
+ * What a sponsor can expect, from what these shows already do.
+ *
+ * Not an industry benchmark. A published "20–35% of followers" is a number
+ * about somebody else's audience, and a media buyer is entitled to ask where
+ * it came from. This takes the reach these shows actually got over thirty days
+ * — measured through their own connected analytics — expresses it as a share
+ * of the followers behind those same channels, and applies that rate to the
+ * whole lineup.
+ *
+ * Two things it assumes, and both are stated on the page rather than buried:
+ * that the shows we cannot read behave like the ones we can, and that each
+ * posts about the event at the rate they already post. It is a projection, and
+ * the word estimate belongs next to it.
+ *
+ * Returns null when there is nothing measured to reason from. A guess with no
+ * basis is worse to a sponsor than no number at all.
+ */
+export function projectReach(snapshot: AudienceSnapshot): ReachProjection | null {
+  const measuredFollowers = snapshot.measuredFollowers ?? 0;
+  if (measuredFollowers <= 0 || snapshot.reach <= 0 || snapshot.followers <= 0) return null;
+
+  // A rate measured on nine small shows, applied to two hundred thousand
+  // followers, is the flattering direction of a real bias: the accounts whose
+  // analytics we can read are the ones that connected them, and they skew
+  // small and engaged. A small account routinely reaches most of its
+  // followers; a large one never does.
+  //
+  // Organic reach past forty percent does not survive contact with a media
+  // buyer, so that is the ceiling. Capping understates a sponsor's return,
+  // which is the only direction worth being wrong in.
+  const observed = snapshot.reach / measuredFollowers;
+  const reachRate = Math.min(observed, 0.4);
+  const capped = observed > 0.4;
+  // How many times a reached account saw something. Never below one: you
+  // cannot reach an account fewer times than once.
+  const frequency = snapshot.reach > 0 ? Math.max(1, snapshot.impressions / snapshot.reach) : 1;
+  const windowScale = CAMPAIGN_WINDOW_DAYS / (snapshot.windowDays || AUDIENCE_WINDOW_DAYS);
+
+  const reach = Math.round(snapshot.followers * reachRate * windowScale);
+  return {
+    windowDays: CAMPAIGN_WINDOW_DAYS,
+    reach,
+    impressions: Math.round(reach * frequency),
+    measuredFollowers,
+    measuredShows: snapshot.measuredShows ?? 0,
+    reachRate,
+    observedReachRate: observed,
+    capped,
+    frequency,
+  };
+}
+
 /**
  * Recompute from the live API. Costs one Upload-Post call per podcaster with
  * connected accounts, so nothing calls this on a page load — an admin asks.
  */
 export async function buildAudienceSnapshot(eventId?: number): Promise<AudienceSnapshot> {
   const now = new Date().toISOString();
+  // What the reach and impression figures actually describe.
+  let measuredFollowers = 0;
+  let measuredChannels = 0;
+  const measuredShowKeys = new Set<string>();
   const empty: AudienceSnapshot = {
     generatedAt: now,
     windowDays: AUDIENCE_WINDOW_DAYS,
@@ -258,6 +348,14 @@ export async function buildAudienceSnapshot(eventId?: number): Promise<AudienceS
       reach += figures.reach;
       impressions += figures.impressions;
       engagements += figures.engagements;
+      // Kept apart from the total on purpose. Reach and impressions can only
+      // come from a channel whose analytics we can actually read, and the
+      // follower total includes shows we cannot. Summing them and showing the
+      // two side by side invites a sponsor to divide one by the other and get
+      // an engagement rate for a population that was never measured.
+      measuredFollowers += figures.followers;
+      measuredChannels += 1;
+      measuredShowKeys.add(key);
       const row = byPlatform.get(platform) ?? { platform, channels: 0, followers: 0 };
       row.channels += 1;
       row.followers += figures.followers;
@@ -305,6 +403,9 @@ export async function buildAudienceSnapshot(eventId?: number): Promise<AudienceS
     reach,
     impressions,
     engagements,
+    measuredFollowers,
+    measuredChannels,
+    measuredShows: measuredShowKeys.size,
     dropped,
     unavailable,
     byPlatform: Array.from(byPlatform.values()).sort((a, b) => b.followers - a.followers),
