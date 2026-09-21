@@ -57,7 +57,7 @@ import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { ContactsScreen } from "@/components/ContactsScreen";
-import { StudioIcon } from "@/components/GreenRoomButton";
+import { CommandCenter } from "@/components/CommandCenter";
 import { AudienceConsent } from "@/components/AudienceConsent";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1161,8 +1161,31 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           </section>
         ) : (
           <>
+            <CommandCenter
+              firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || "there"}
+              eventName={data.event.name.trim()}
+              eventStartUtc={data.event.startAtUtc}
+              slot={
+                data.mySignups.length > 0
+                  ? {
+                      start: slotStart(data.event.startAtUtc, data.event.slotMinutes, data.mySignups[0].slotIndex),
+                      end: slotEnd(data.event.startAtUtc, data.event.slotMinutes, data.mySignups[0].slotIndex),
+                    }
+                  : null
+              }
+              zone={zone}
+              accounts={social?.accounts ?? []}
+              socialConfigured={!!social?.configured}
+              greenRoomHref={
+                data.mySignups.length > 0
+                  ? data.event.isFeatured === false && data.event.slug ? `/event/${data.event.slug}/studio` : "/studio"
+                  : null
+              }
+              onGo={(sc) => goTo(sc)}
+            />
+
             {/* ------------------------------------------------ profile header */}
-            <section className="mt-8" data-testid="card-profile-header">
+            <section className="mt-6" data-testid="card-profile-header">
               <div className="overflow-hidden rounded-2xl border border-border bg-card">
                 <div className="h-1.5 bg-primary" />
                 <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-start sm:p-6">
@@ -1212,33 +1235,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     {/* The website / YouTube / RSS pills lived here, but
                         "where people can listen" is a Profile settings thing
                         now and they made the card read as a link dump. */}
-
-                    {/* The green room sat in the top nav, where it competed
-                        with the public pages for attention and meant nothing to
-                        anyone without a slot. It belongs here, beside the slot
-                        it's for. */}
-                    {data.mySignups.length > 0 && (
-                      <a
-                        href={data.event.isFeatured === false && data.event.slug ? `/event/${data.event.slug}/studio` : "/studio"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-[#F0A71F] bg-[#F0A71F]/10 px-4 py-3 transition-colors hover:bg-[#F0A71F]/20"
-                        data-testid="link-dashboard-green-room"
-                      >
-                        <span className="flex min-w-0 items-center gap-3">
-                          <StudioIcon />
-                          <span className="min-w-0">
-                            <span className="block text-sm font-semibold text-card-foreground">Enter the green room</span>
-                            <span className="block text-sm text-muted-foreground">
-                              Check your camera, mic and lighting. Open any time — worth two minutes this week.
-                            </span>
-                          </span>
-                        </span>
-                        <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-[#7a5200]">
-                          Open <ArrowRight className="h-3.5 w-3.5" />
-                        </span>
-                      </a>
-                    )}
 
                     <div className="mt-4 border-t border-border pt-4" data-testid="section-your-slot">
                       <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your slot</p>
@@ -1325,18 +1321,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       </div>
                     )}
 
-                    {/* Only once something is actually connected. The seven
-                        grey "Not connected" tiles that used to sit here were a
-                        third of the card saying nothing; three real accounts
-                        with faces and follower counts earn the space. */}
-                    {social?.configured && social.accounts.length > 0 && (
-                      <div className="mt-4 border-t border-border pt-4" data-testid="section-social-accounts">
-                        <ConnectedAccountsStrip
-                          accounts={social.accounts}
-                          onManage={() => goTo("integrations")}
-                        />
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
