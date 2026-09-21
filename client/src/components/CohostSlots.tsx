@@ -23,7 +23,7 @@ interface Board { blockMinutes: number; blocks: Block[] }
  * the hour involves, that a script comes with it, and the one rule.
  */
 const WHAT_IT_MEANS =
-  "An hour on the main stage with Alex, our producer, in the minutes between shows — " +
+  "An hour on the main stage with Alex, our producer, or with Riccoh, in the minutes between shows — " +
   "you introduce what's coming up, talk about the day, and keep it moving. " +
   "We'll send you a short script you can use or go your own way. " +
   "Take as many hours as you like — one person per hour, and not the hour your own show is on.";
@@ -106,7 +106,7 @@ export function CohostSlots({ eventId, zone }: { eventId: number; zone: string }
       {/* Hover is not a thing on a phone, so the sentences that matter are
           on the page as well as in the tooltip. */}
       <p className="mb-3 text-sm text-foreground/80">
-        Take an hour — <strong>or several</strong> — on the main stage with Alex between shows. One person per hour,
+        Take an hour — <strong>or several</strong> — on the main stage with Alex or Riccoh between shows. One person per hour,
         first come first served. Tap the info icon for what it involves.
       </p>
 
