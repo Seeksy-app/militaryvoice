@@ -37,7 +37,9 @@ import {
   Lock,
   RotateCcw,
   ChevronDown,
-  ChevronUp,, Users } from "lucide-react";
+  ChevronUp,
+  Users,
+} from "lucide-react";
 
 interface Props {
   /** Which event's agenda. */
