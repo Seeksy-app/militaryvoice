@@ -193,3 +193,39 @@
      rather than a photograph that failed to bleed. */
   outline: 2pt solid rgba(240,167,31,.85); outline-offset: -2pt;
 }
+
+/* ---- a show's page ----------------------------------------------------- */
+/* Room at the foot for the folio, which is positioned against the page rather
+   than against this box — without it the listen block and the page number
+   printed on top of each other. */
+.profile .live { display: flex; flex-direction: column; padding-bottom: 30pt; }
+
+.p-head { display: flex; align-items: flex-start; gap: 20pt; min-height: 2.2in; }
+.p-head-text { flex: 1; min-width: 0; }
+.profile .showname { font-size: 33pt; }
+
+/* Contained. Artwork keeps the square it was drawn in; a photograph of a
+   person gets the portrait it was taken in. */
+.p-art {
+  flex: none; background-size: cover; background-position: 50% 42%;
+  border-radius: 4pt; box-shadow: 0 3pt 14pt rgba(4,16,43,.16);
+}
+.p-art.is-square { width: 2.2in; height: 2.2in; }
+.p-art.is-portrait { width: 2.2in; height: 2.75in; background-position: 50% 26%; }
+
+.p-body { margin-top: 24pt; column-count: 2; column-gap: 20pt; font-size: 9.6pt;
+  line-height: 1.62; color: #2a2e38; }
+.p-body p { margin: 0; }
+
+.p-foot { margin-top: auto; display: flex; gap: 14pt; align-items: flex-end;
+  padding-top: 20pt; }
+
+/* A corner tag, not a banner. This is a note to us on a proof, and a red bar
+   across the top of every second page makes the book look broken rather than
+   unfinished. */
+.flag-tag {
+  position: absolute; right: var(--bleed); top: var(--bleed);
+  background: #ED1C24; color: #fff; padding: 2.5pt 7pt;
+  font-size: 6.5pt; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  border-bottom-left-radius: 3pt; z-index: 5;
+}

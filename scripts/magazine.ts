@@ -169,27 +169,53 @@ function contentsPage(shows: Show[]): string {
 </section>`;
 }
 
+/**
+ * A show's page.
+ *
+ * The picture is contained, not bled. Two thirds of these are cover artwork
+ * rather than a photograph, and a logo enlarged to four and a half inches and
+ * run off three edges is a badge magnified past its purpose — it stops being a
+ * mark and becomes wallpaper. Artwork gets a square, which is the shape it was
+ * drawn in; a photograph of a person gets a portrait. The page is then mostly
+ * type and paper, which is what a magazine is.
+ */
 function profilePage(s: Show, pageNo: number): string {
   const { url, warn } = bestImage(s);
   const who = [s.branch, s.serviceStatus].filter(Boolean).join(" · ");
-  return `<section class="page">
-  ${url ? `<div class="portrait" style="background-image:url('${esc(url)}')"></div>` : `<div class="portrait portrait-missing"></div>`}
-  ${warn ? `<div class="flag">${esc(warn)}</div>` : ""}
-  <div class="live" style="width:3.5in">
-    ${who ? `<span class="badge">${esc(who)}</span>` : ""}
-    <div class="showname" style="margin-top:14pt">${esc(s.podcastName)}</div>
-    <div class="hostline" style="margin-top:9pt">${esc(s.hostName)}</div>
-    <div class="pull" style="margin-top:20pt"><span class="ph">[PULL QUOTE — lifted from a transcript]</span></div>
-    <div class="body" style="margin-top:20pt">
-      <p class="ph">[PROFILE — drafted from this host's own feed and recent
-      episodes, with sources, then approved by them before it prints. Roughly
-      190 words sits comfortably in this measure.]</p>
+  const square = !s.printPhoto; // artwork and web crops are square; a print photo is not
+  return `<section class="page profile">
+  ${warn ? `<div class="flag-tag">${esc(warn)}</div>` : ""}
+  <div class="live">
+    <div class="p-head">
+      <div class="p-head-text">
+        ${who ? `<span class="badge">${esc(who)}</span>` : ""}
+        <div class="showname" style="margin-top:12pt">${esc(s.podcastName)}</div>
+        <div class="hostline" style="margin-top:8pt">${esc(s.hostName)}</div>
+      </div>
+      ${
+        url
+          ? `<div class="p-art ${square ? "is-square" : "is-portrait"}" style="background-image:url('${esc(url)}')"></div>`
+          : `<div class="p-art is-square portrait-missing"></div>`
+      }
     </div>
-    <div style="display:flex;gap:14pt;align-items:flex-end;margin-top:22pt">
+
+    <div class="pull" style="margin-top:14pt;max-width:4.9in">
+      <span class="ph">[PULL QUOTE — lifted from a transcript]</span>
+    </div>
+
+    <div class="p-body">
+      <p class="ph">[PROFILE — drafted from this host's own feed and recent
+      episodes, with sources, then approved by them before it prints. Two
+      columns of roughly a hundred and ninety words each sits comfortably at
+      this measure, which is where a page stops looking like a slide and starts
+      reading like a magazine.]</p>
+    </div>
+
+    <div class="p-foot">
       <div class="qr">QR</div>
       <div class="listen" style="flex:1">Listen<br>
-        <b style="font-size:9pt;text-transform:none">${esc(s.rss ? s.rss.replace(/^https?:\/\//, "").slice(0, 36) : "[feed]")}</b><br>
-        <b style="font-size:9pt;text-transform:none">${esc(s.youtube ? s.youtube.replace(/^https?:\/\//, "").slice(0, 36) : "[youtube]")}</b>
+        <b style="font-size:9pt;text-transform:none">${esc(s.rss ? s.rss.replace(/^https?:\/\//, "").slice(0, 40) : "[feed]")}</b><br>
+        <b style="font-size:9pt;text-transform:none">${esc(s.youtube ? s.youtube.replace(/^https?:\/\//, "").slice(0, 40) : "[youtube]")}</b>
       </div>
     </div>
   </div>
