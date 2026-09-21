@@ -61,9 +61,16 @@ up, talking about the day, keeping the thing moving. If that sounds like you,
 reply and tell me and we'll work out where you'd fit.</p>
 
 <p><strong>Second — your medal.</strong> Every marathon has one at the finish
-line. Yours is a <strong>90-day subscription to MilCrunch Formation</strong>,
-for taking part. Nothing to claim and nothing to do — it's yours for being on
-the course.</p>
+line. Yours is <strong>90 days in MilCrunch Formation</strong>, the incubator I
+run for military and veteran creators.</p>
+
+<p>All six platforms from one composer, your numbers on one screen instead of
+six dashboards, and a verified page at milcrunch.com/yourname that brands
+search by branch and audience when they're looking to spend. Mostly it's the
+room you're in and the introductions that come with it —
+<a href="https://www.milcrunch.com/" style="color:#053877">milcrunch.com</a>.</p>
+
+<p>Nothing to claim and nothing to do. It's yours for being on the course.</p>
 
 <p>Fourteen days. See you at the start line.</p>
 
@@ -80,7 +87,11 @@ Two things.
 
 First — would you like to co-host? Not just your own segment, but time on the main stage between shows: introducing what's coming up, talking about the day, keeping the thing moving. If that sounds like you, reply and tell me and we'll work out where you'd fit.
 
-Second — your medal. Every marathon has one at the finish line. Yours is a 90-day subscription to MilCrunch Formation, for taking part. Nothing to claim and nothing to do — it's yours for being on the course.
+Second — your medal. Every marathon has one at the finish line. Yours is 90 days in MilCrunch Formation, the incubator I run for military and veteran creators.
+
+All six platforms from one composer, your numbers on one screen instead of six dashboards, and a verified page at milcrunch.com/yourname that brands search by branch and audience when they're looking to spend. Mostly it's the room you're in and the introductions that come with it — milcrunch.com
+
+Nothing to claim and nothing to do. It's yours for being on the course.
 
 Fourteen days. See you at the start line.
 
