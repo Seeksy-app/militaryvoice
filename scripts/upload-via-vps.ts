@@ -29,6 +29,9 @@ const FILES = [
   "VFW Podcast 73- Sets and Reps.mp4",
   // Brave Blocks, 8:30 PM — the YouTube episode Greg sent, pulled down.
   "Montel Williams- Sacrifice, Service, and Stardom.mp4",
+  // Developing The Leader Within, 9:00 AM — the episode Enrique submitted,
+  // from his Drive link. Replaces Episode 311 on the segment.
+  "DTLW Podcast Ericka Full Video1.mp4",
 ];
 
 const HOST = process.env.MV_VPS ?? "root@187.77.217.123";

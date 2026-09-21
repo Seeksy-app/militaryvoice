@@ -23,7 +23,9 @@ const SITE = process.env.MV_SITE ?? "https://www.militaryvoice.ai";
 // `asset` is the library id; `file` finds it by file name instead, for an
 // episode uploaded a minute ago whose id nobody has looked up yet.
 const PAIRS: { asset?: number; file?: RegExp; match: RegExp }[] = [
-  { asset: 4, match: /developing the leader within/i },
+  // The episode Enrique submitted, not Episode 311 (asset 4), which was
+  // uploaded before his link was read.
+  { file: /DTLW Podcast Ericka/i, match: /developing the leader within/i },
   // Asset 5 is a Devil Dawg episode and was paired with The Flag Carry — a
   // live show — for a day. The stage would have rolled Riccoh's episode over
   // Theresa's slot at 9:30 and had nothing for Devil Dawg at 10.
