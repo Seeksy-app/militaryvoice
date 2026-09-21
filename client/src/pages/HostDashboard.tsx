@@ -1187,6 +1187,13 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     onGo={(sc) => goTo(sc)}
                     onCohost={() => document.getElementById("section-cohost")?.scrollIntoView({ behavior: "smooth", block: "start" })}
                   />
+                  {/* The accounts, with faces, right under the door that
+                      manages them — where the eye lands after the cards. */}
+                  {social?.configured && (social.accounts?.length ?? 0) > 0 && (
+                    <div className="mt-4 px-3 sm:px-5">
+                      <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} />
+                    </div>
+                  )}
                   <div className="mt-6">
                     <TodoStrip
                       todos={(() => {
