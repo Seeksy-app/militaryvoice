@@ -91,6 +91,9 @@ const htmlFor = (r: Row) => emailShell({ banner: EMAIL_BANNERS.podcasters, eyebr
 console.log(`${rows.length} podcasters\n`);
 for (const r of rows) console.log(`   ${r.email.padEnd(34)} ${r.podcast_name.slice(0, 38)}`);
 if (preview) { console.log("\n──────── as the first person will read it ────────\n"); console.log(`From: MilitaryVoice.ai\nSubject: ${SUBJECT}\n\n${textOf(rows[0])}`); }
+// --html <path>: the rendered email, to look at in a browser.
+const htmlAt = args[args.indexOf("--html") + 1];
+if (args.includes("--html") && htmlAt) { (await import("node:fs")).writeFileSync(htmlAt, htmlFor(rows[0])); console.log(`\nHTML written to ${htmlAt}`); }
 if (!test && !apply) { console.log(`\nNothing sent. --preview to read it, --test for one copy, --apply to send all ${rows.length}.`); await sql.end(); process.exit(0); }
 const to = test ? [{ ...rows[0], email: "andrew@podlogix.co" }] : rows;
 let sent = 0, failed = 0;
