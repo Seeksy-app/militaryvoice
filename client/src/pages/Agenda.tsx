@@ -398,7 +398,9 @@ export default function Agenda({ slug }: Props) {
                             <span className="line-clamp-2 block font-semibold leading-tight text-card-foreground">
                               {signup.podcastName}
                             </span>
-                            <span className="block truncate text-sm text-muted-foreground">
+                            {/* Two names do not fit one line on a phone; the
+                                second name is the point, so it wraps. */}
+                            <span className="line-clamp-2 block text-sm text-muted-foreground">
                               with {signup.hostName}{signup.coHost ? ` & ${signup.coHost.hostName}` : ""}
                             </span>
                             <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary">
