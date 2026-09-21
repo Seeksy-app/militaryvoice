@@ -339,7 +339,16 @@ export async function buildAudienceSnapshot(eventId?: number): Promise<AudienceS
     const signups = await storage.listSignups(eventId);
     const active = signups.filter((s) => s.status !== "cancelled");
     empty.showsTotal = active.length;
-    empty.catalogue = await readCatalogue(active.map((s) => s.rssUrl).filter(Boolean));
+    // A feed can be on the signup (the host typed it when they booked) or on
+    // the profile (we found it later), and the two do not agree — a feed added
+    // to the profile went uncounted here for as long as the signup's own
+    // column was blank. One per show, profile first because it is the newer of
+    // the two, and deduplicated so a show with both is still one feed.
+    const byEmail = new Map(profiles.map((p) => [p.email, p.rssUrl?.trim() ?? ""]));
+    const feeds = new Set(
+      active.map((s) => byEmail.get(s.email) || s.rssUrl.trim()).filter(Boolean),
+    );
+    empty.catalogue = await readCatalogue(Array.from(feeds));
   }
 
   const byPlatform = new Map<string, PlatformTotal>();

@@ -41,7 +41,9 @@ const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1, onnoti
 interface Row { host_name: string; podcast_name: string; email: string; rss: string }
 const rows = await sql<Row[]>`
   SELECT DISTINCT ON (s.email) s.host_name, s.podcast_name, s.email,
-         coalesce(p.rss_url, '') AS rss
+         -- Two columns hold a feed: the one the host typed when they booked,
+         -- and the one on their profile. Profile first, it is the newer.
+         coalesce(nullif(p.rss_url, ''), s.rss_url, '') AS rss
   FROM signups s LEFT JOIN podcaster_profiles p ON p.email = s.email
   WHERE s.event_id = 1 AND s.status <> 'cancelled'
   ORDER BY s.email, s.slot_index`;
@@ -129,9 +131,12 @@ if (!found.length) {
   let saved = 0;
   const noRow: string[] = [];
   for (const f of found) {
+    // Both columns, or the next reader picks the blank one.
     const r = await sql`UPDATE podcaster_profiles
       SET rss_url = ${f.feed}, updated_at = now()
       WHERE email = ${f.email} RETURNING id`;
+    await sql`UPDATE signups SET rss_url = ${f.feed}
+      WHERE email = ${f.email} AND event_id = 1 AND coalesce(rss_url, '') = ''`;
     r.length ? saved++ : noRow.push(f.email);
   }
   if (noRow.length) console.log(`\nno profile row, skipped: ${noRow.join(", ")}`);
