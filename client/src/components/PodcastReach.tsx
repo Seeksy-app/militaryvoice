@@ -4,44 +4,39 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 const GOLD = "#F0A71F";
 
 /**
- * Where podcasts are watched now — the market, not our lineup.
+ * How strong podcasting is now — the market, not our lineup.
  *
  * The lineup's own numbers sit in the hero, where a sponsor reads them
- * first. This is the context those numbers live in: podcasts have moved to
- * the television, on YouTube, in numbers a media buyer will recognise. Every
- * figure links to where it was published; none of them is ours.
+ * first. This is a short band of context on the way to the pricing: four
+ * figures, each linked to where it was published; none of them is ours.
  */
 const STATS = [
   {
-    icon: TrendingUp,
-    n: "+75%",
-    label: "growth in podcast hours watched on TVs, in one year",
-    note: "700M+ hours on living-room devices in Oct 2025, up from 400M",
-    source: "YouTube, Dec 2025",
-    href: "https://blog.youtube/news-and-events/podcasts-living-room-in-2025/",
+    icon: Headphones,
+    n: "167M",
+    label: "Americans listen or watch every month",
+    source: "Edison Research, 2026",
+    href: "https://ssrs.com/insights/the-infinite-dial-2026/",
   },
   {
     icon: Youtube,
     n: "1B+",
-    label: "monthly podcast viewers on YouTube, worldwide",
-    note: "a milestone YouTube reported in January 2025",
+    label: "monthly podcast viewers on YouTube",
     source: "YouTube",
     href: "https://blog.youtube/news-and-events/1-billion-monthly-podcast-users/",
   },
   {
-    icon: Headphones,
-    n: "167M",
-    label: "Americans 12+ who consume podcasts monthly — 58%",
-    note: "130M weekly (45%), both records, listening and watching",
-    source: "Edison Research / SSRS, 2026",
-    href: "https://ssrs.com/insights/the-infinite-dial-2026/",
+    icon: TrendingUp,
+    n: "+75%",
+    label: "more podcast hours watched on TVs, in one year",
+    source: "YouTube, Dec 2025",
+    href: "https://blog.youtube/news-and-events/podcasts-living-room-in-2025/",
   },
   {
     icon: Users,
     n: "68%",
-    label: "of Americans 35–54 consumed a podcast in the past month",
-    note: "the audience is not only the young",
-    source: "Edison Research / SSRS, 2026",
+    label: "of Americans 35–54 tuned in last month",
+    source: "Edison Research, 2026",
     href: "https://ssrs.com/insights/the-infinite-dial-2026/",
   },
 ] as const;
@@ -49,40 +44,38 @@ const STATS = [
 export function PodcastReach({ image = "/email/podcasters.jpg" }: { image?: string }) {
   return (
     <section className="relative overflow-hidden text-white" style={{ backgroundColor: "#000741" }} data-testid="section-podcast-reach">
-      <div className="pointer-events-none absolute -left-32 top-1/2 h-[36rem] w-[36rem] -translate-y-1/2 rounded-full" style={{ background: "radial-gradient(closest-side, rgba(240,167,31,0.18), transparent)" }} aria-hidden="true" />
-      <div className="relative mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:py-24">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>
-            Where podcasts are watched now
+      <div className="pointer-events-none absolute -left-32 top-1/2 h-[28rem] w-[28rem] -translate-y-1/2 rounded-full" style={{ background: "radial-gradient(closest-side, rgba(240,167,31,0.18), transparent)" }} aria-hidden="true" />
+      <div className="relative mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:py-12">
+        <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>
+              Podcasting today
+            </div>
+            <h2 className="mt-2 max-w-2xl text-2xl font-bold leading-[1.15] tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
+              Podcasting has moved to the <span style={{ color: GOLD }}>main stage</span>.
+            </h2>
+            <p className="mt-3 max-w-2xl text-base leading-relaxed text-white/80">
+              More Americans listen and watch than ever, and this is sixteen hours of it, live.
+            </p>
           </div>
-          <h2 className="mt-3 max-w-2xl text-3xl font-bold leading-[1.15] tracking-tight sm:text-5xl" style={HEADLINE_FONT}>
-            Podcasts moved to the <span style={{ color: GOLD }}>living-room television</span>. This one is built for it.
-          </h2>
-          <p className="mt-5 max-w-2xl text-lg leading-relaxed text-white/80">
-            Sixteen hours of video podcasts, streamed live on YouTube and on our own site, with each show's host sending
-            it to their own channel too. That is the medium the numbers below describe.
-          </p>
-          <div className="mt-10 grid gap-x-8 gap-y-8 sm:grid-cols-2">
-            {STATS.map(({ icon: Icon, n, label, note, source, href }) => (
-              <div key={label} className="border-l-2 pl-4" style={{ borderColor: "rgba(240,167,31,0.6)" }}>
-                <Icon className="h-5 w-5" style={{ color: GOLD }} />
-                <div className="mt-2 text-4xl font-bold tabular-nums tracking-tight sm:text-5xl" style={HEADLINE_FONT}>{n}</div>
-                <div className="mt-1.5 text-sm leading-snug text-white">{label}</div>
-                <div className="mt-1 text-xs text-white/80">{note}</div>
-                <a href={href} target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: GOLD }}>
-                  {source} <ExternalLink className="h-3 w-3" />
-                </a>
-              </div>
-            ))}
+          <div className="relative mx-auto w-40 shrink-0 sm:w-44 lg:mx-0">
+            <div className="absolute -inset-2 rotate-2 rounded-[1.25rem]" style={{ background: "rgba(240,167,31,0.75)" }} aria-hidden="true" />
+            <img src={image} alt="A podcast being recorded on camera" loading="lazy" className="relative aspect-square w-full rounded-[1rem] object-cover shadow-2xl" />
           </div>
         </div>
-        <div className="relative mx-auto w-full max-w-md lg:max-w-none">
-          <div className="absolute -inset-3 rotate-2 rounded-[2rem]" style={{ background: "rgba(240,167,31,0.75)" }} aria-hidden="true" />
-          <img src={image} alt="A podcast being recorded on camera" loading="lazy" className="relative aspect-[4/5] w-full rounded-[1.75rem] object-cover shadow-2xl lg:aspect-[3/4]" />
-          <div className="absolute -bottom-5 left-5 right-5 rounded-2xl border border-white/10 bg-[#04102b]/95 p-4 text-sm shadow-xl backdrop-blur sm:left-8 sm:right-auto sm:max-w-xs">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: GOLD }}>The strongest single number</p>
-            <p className="mt-1 text-white/90">Podcast viewing on TVs grew about 75% in a year. That is the trend this broadcast rides.</p>
-          </div>
+        <div className="mt-8 grid gap-x-6 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
+          {STATS.map(({ icon: Icon, n, label, source, href }) => (
+            <div key={label} className="border-l-2 pl-4" style={{ borderColor: "rgba(240,167,31,0.6)" }}>
+              <div className="flex items-center gap-2">
+                <Icon className="h-4 w-4" style={{ color: GOLD }} />
+                <div className="text-3xl font-bold tabular-nums tracking-tight sm:text-4xl" style={HEADLINE_FONT}>{n}</div>
+              </div>
+              <div className="mt-1 text-sm leading-snug text-white">{label}</div>
+              <a href={href} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs font-medium hover:underline" style={{ color: GOLD }}>
+                {source} <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          ))}
         </div>
       </div>
     </section>
