@@ -6029,7 +6029,11 @@ export function registerRoutes(app: Express): void {
     if (!Object.keys(patch).length) return res.status(400).json({ message: "Nothing to change." });
     const active = (await storage.listSignups(eventId)).some((s) => s.status !== "cancelled" && s.email.trim().toLowerCase() === email);
     if (!active) return res.status(404).json({ message: "No booking for that address on this event." });
-    res.json(await storage.upsertEventShow(email, eventId, patch));
+    const show = await storage.upsertEventShow(email, eventId, patch);
+    // The booking's own copy too, or the agenda badge and the run of show
+    // keep the old answer.
+    await storage.updateSignupFormatByEmail(eventId, email, patch);
+    res.json(show);
   });
 
   /**

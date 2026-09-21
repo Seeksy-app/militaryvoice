@@ -2150,6 +2150,23 @@ class DatabaseStorage implements IStorage {
     });
   }
 
+  /**
+   * The booking keeps its own copy of the format and recording — the public
+   * agenda and the run of show read from it — so a change filed on the show
+   * has to land here too, or the badge on the card keeps saying LIVE.
+   */
+  async updateSignupFormatByEmail(eventId: number, email: string, patch: { showFormat?: string; recordingUrl?: string }): Promise<number> {
+    await ready();
+    const set: Partial<SignupRow> = {};
+    if (patch.showFormat !== undefined) set.showFormat = patch.showFormat;
+    if (patch.recordingUrl !== undefined) set.recordingUrl = patch.recordingUrl;
+    if (!Object.keys(set).length) return 0;
+    const rows = await db.update(signups).set(set)
+      .where(and(eq(signups.eventId, eventId), sqlExpr`lower(${signups.email}) = lower(${email})`, ne(signups.status, "cancelled")))
+      .returning({ id: signups.id });
+    return rows.length;
+  }
+
   async updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void> {
     await ready();
     await db
