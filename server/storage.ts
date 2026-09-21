@@ -2425,20 +2425,21 @@ class DatabaseStorage implements IStorage {
    * takes the id rather than gaining a twin, so the recipient count and the
    * send count stay the same number.
    */
-  async attachSend(broadcastId: number, email: string, resendId: string, sentAt: string): Promise<void> {
+  async attachSend(broadcastId: number, email: string, resendId: string, sentAt: string): Promise<boolean> {
     await ready();
-    const [blank] = await db.select().from(broadcastSends)
-      .where(and(
-        eq(broadcastSends.broadcastId, broadcastId),
-        sqlExpr`lower(${broadcastSends.email}) = lower(${email})`,
-        eq(broadcastSends.resendId, ""),
-      ))
+    // One row per address per broadcast — the table enforces it. A second
+    // copy to the same person (a test send, a resend) is not a second
+    // recipient, so it is left alone rather than failing the whole sync.
+    const [existing] = await db.select().from(broadcastSends)
+      .where(and(eq(broadcastSends.broadcastId, broadcastId), sqlExpr`lower(${broadcastSends.email}) = lower(${email})`))
       .limit(1);
-    if (blank) {
-      await db.update(broadcastSends).set({ resendId, sentAt }).where(eq(broadcastSends.id, blank.id));
-      return;
+    if (existing) {
+      if (existing.resendId) return false;
+      await db.update(broadcastSends).set({ resendId, sentAt }).where(eq(broadcastSends.id, existing.id));
+      return true;
     }
     await db.insert(broadcastSends).values({ broadcastId, email, resendId, sentAt });
+    return true;
   }
 
   async recordBroadcastEvent(resendId: string, eventType: string, occurredAt: string, url?: string): Promise<void> {

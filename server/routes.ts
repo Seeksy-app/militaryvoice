@@ -6543,18 +6543,26 @@ export function registerRoutes(app: Express): void {
    * endpoint had it right and this one had it wrong, and nothing made them
    * disagree out loud.
    */
-  function svixVerified(req: Request, secret: string): boolean {
-    if (!secret) return true; // unset means "not checking", as before
+  /**
+   * Why a signed delivery was refused, or null when it checks out.
+   *
+   * The reason goes back in the 401 body, which Resend shows beside each
+   * failed attempt — so "every open since yesterday was 401" can be read off
+   * their dashboard as "no raw body" rather than guessed at from here.
+   */
+  function svixFailure(req: Request, secret: string): string | null {
+    if (!secret) return null; // unset means "not checking", as before
     const id = req.get("svix-id") ?? "";
     const ts = req.get("svix-timestamp") ?? "";
     const sigHeader = req.get("svix-signature") ?? "";
     const raw = (req as any).rawBody as Buffer | undefined;
-    if (!id || !ts || !sigHeader || !raw) return false;
+    if (!id || !ts || !sigHeader) return "missing svix headers";
+    if (!raw || raw.length === 0) return "no raw body to verify";
     // Five minutes, so a captured POST cannot be replayed at us tomorrow.
-    if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false;
+    if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return "timestamp outside five minutes";
     const key = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
     const expected = crypto.createHmac("sha256", key).update(`${id}.${ts}.${raw.toString("utf8")}`).digest("base64");
-    return sigHeader
+    const ok = sigHeader
       .split(" ")
       .map((p) => p.split(",")[1])
       .filter(Boolean)
@@ -6563,10 +6571,15 @@ export function registerRoutes(app: Express): void {
         const b = Buffer.from(expected);
         return a.length === b.length && crypto.timingSafeEqual(a, b);
       });
+    return ok ? null : "signature does not match";
+  }
+  function svixVerified(req: Request, secret: string): boolean {
+    return svixFailure(req, secret) === null;
   }
 
   app.post("/api/webhooks/resend", async (req, res) => {
-    if (!svixVerified(req, process.env.RESEND_WEBHOOK_SECRET ?? "")) return res.status(401).end();
+    const refused = svixFailure(req, process.env.RESEND_WEBHOOK_SECRET ?? "");
+    if (refused) return res.status(401).json({ reason: refused });
     const event = req.body as {
       type?: string;
       data?: { email_id?: string; url?: string; created_at?: string; click?: { link?: string; timestamp?: string } };
@@ -6633,7 +6646,7 @@ export function registerRoutes(app: Express): void {
       bounced: ["bounced"], complained: ["complained", "delivered"],
     };
 
-    let scanned = 0, matched = 0, unmatched = 0;
+    let scanned = 0, matched = 0, unmatched = 0, skipped = 0, failed = 0;
     let after: string | undefined;
     for (let page = 0; page < 10; page++) {
       const res = (await resendApiGet(`/emails?limit=100${after ? `&after=${after}` : ""}`)) as { data?: Item[]; has_more?: boolean } | null;
@@ -6648,17 +6661,23 @@ export function registerRoutes(app: Express): void {
         if (!to) continue;
         const b = findFor(m.subject ?? "", at);
         if (!b || (opts.onlyBroadcastId && b.id !== opts.onlyBroadcastId)) { unmatched++; continue; }
-        await storage.attachSend(b.id, to, m.id, new Date(at).toISOString());
-        for (const type of implied[m.last_event ?? ""] ?? []) {
-          await storage.recordBroadcastEvent(m.id, type, new Date(at).toISOString());
+        // One bad row must not stop the other nine hundred.
+        try {
+          if (!(await storage.attachSend(b.id, to, m.id, new Date(at).toISOString()))) { skipped++; continue; }
+          for (const type of implied[m.last_event ?? ""] ?? []) {
+            await storage.recordBroadcastEvent(m.id, type, new Date(at).toISOString());
+          }
+          known.add(m.id);
+          matched++;
+        } catch (err) {
+          failed++;
+          console.error(`sync-resend: could not file ${m.id} (${to}, "${m.subject}"):`, (err as Error).message);
         }
-        known.add(m.id);
-        matched++;
       }
       if (stop || !res.has_more) break;
       after = res.data[res.data.length - 1].id;
     }
-    return { scanned, matched, unmatched };
+    return { scanned, matched, unmatched, skipped, failed };
   }
 
   app.post("/api/admin/emails/sync-resend", requireAdmin, async (req, res) => {
