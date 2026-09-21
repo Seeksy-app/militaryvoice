@@ -58,6 +58,8 @@ import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, QuickCards, TodoStrip } from "@/components/CommandCenter";
+import { HostNav } from "@/components/HostNav";
+import { ProScreen } from "@/components/ProScreen";
 import { AudienceConsent } from "@/components/AudienceConsent";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -431,7 +433,7 @@ function AnchoredHeading({ id, icon: Icon, label }: { id: string; icon: typeof R
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "contacts", "claim"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "contacts", "pro", "claim"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -443,6 +445,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   recordings: "recordings",
   integrations: "integrations",
   contacts: "contacts",
+  pro: "pro",
   claim: "claim",
 };
 const SLUG_SCREEN = new Map<string, Screen>(
@@ -463,6 +466,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const screen: Screen = (tab && SLUG_SCREEN.get(tab.toLowerCase())) || "dashboard";
   const [profileDirty, setProfileDirty] = useState(false);
   const [remindEventSetup, setRemindEventSetup] = useState(false);
+  // Which locked door was opened, so the Pro page scrolls to it.
+  const [proFeature, setProFeature] = useState<string | undefined>(undefined);
 
   // The nav is buttons, not links, so ProfileForm's own leave-guard (which
   // watches anchors and page unload) never sees these clicks.
@@ -865,75 +870,20 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           </div>
         )}
 
-        {/* Two places to be, said plainly: one about them, one about an
-            event. Everything else hangs off those. Hidden during first-time
-            setup, where there is only one thing to do. */}
+        {/* The nav down the left, like the admin's, with the page beside it.
+            Hidden during first-time setup, where there is only one thing to
+            do. */}
+        <div className={data && hasProfile && !inSetup ? "lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-8" : ""}>
         {data && hasProfile && !inSetup && (
-          <nav className="grid grid-cols-2 gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm sm:grid-cols-3 lg:grid-cols-6">
-            {(
-              [
-                /* In the order the work actually happens: say who you are,
-                   set your show up, connect the accounts the promotion posts
-                   from, promote it, then collect what came out. Integrations
-                   sat after Recordings, which put "connect your accounts"
-                   after "here's your finished audio". */
-                ["dashboard", "Dashboard", "Your card and slot"],
-                ["editProfile", "Profile settings", "About you"],
-                ["events", "Event settings", "Your shows and times"],
-                ["integrations", "Integrations", "Your connected accounts"],
-                ["promotion", "Promotion", "Get people watching"],
-                ["recordings", "Recordings & clips", "Yours after the show"],
-                // Only once there is somebody in it. An empty Contacts tab is
-                // a promise; a tab that appears with the first name is news.
-                ...((data?.contacts?.length ?? 0) > 0 ? ([["contacts", "Contacts", `${data!.contacts.length} asked for a reminder`]] as const) : []),
-              ] as const
-            ).map(([value, label, hint]) => {
-              const active = screen === value;
-              return (
-                /* A real anchor, so the address bar is honest and these can be
-                   opened in a new tab, copied, or middle-clicked. The click is
-                   still intercepted for the unsaved-changes guard — wouter
-                   would otherwise navigate away from a half-edited profile
-                   without asking. */
-                <a
-                  key={value}
-                  href={hostScreenPath(value)}
-                  onClick={(e) => {
-                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-                    e.preventDefault();
-                    goTo(value);
-                  }}
-                  aria-current={active ? "page" : undefined}
-                  className={`flex flex-col gap-0.5 rounded-xl px-2 py-2.5 transition-colors ${
-                    active
-                      ? "bg-[#053877] text-white shadow-sm"
-                      : "bg-[#053877]/[0.05] text-foreground hover:bg-[#053877]/10"
-                  }`}
-                  data-testid={`nav-host-${value}`}
-                >
-                  <span className="flex items-center gap-1.5 text-sm font-semibold">
-                    {label}
-                    {/* The count is here because the green room button lives
-                        one click inside this tab, and nothing on the outside
-                        suggested there was anything in there to open. A number
-                        is the cheapest way to say "this concerns you". */}
-                    {value === "events" && (hostEvents?.length ?? 0) > 0 && (
-                      <span
-                        className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-bold leading-none ${
-                          active ? "bg-white text-[#053877]" : "bg-[#F0A71F] text-[#1a1200]"
-                        }`}
-                        data-testid="badge-host-events-count"
-                      >
-                        {hostEvents!.length}
-                      </span>
-                    )}
-                  </span>
-                  <span className="hidden text-[12px] font-normal opacity-70 sm:block">{hint}</span>
-                </a>
-              );
-            })}
-          </nav>
+          <HostNav
+            screen={screen === "claim" ? "dashboard" : screen}
+            eventsCount={hostEvents?.length ?? 0}
+            contactsCount={data?.contacts?.length ?? 0}
+            pathFor={(sc) => hostScreenPath(sc)}
+            onGo={(sc, feature) => { setProFeature(feature); goTo(sc); }}
+          />
         )}
+        <div className="min-w-0">
 
         {loadingProfile ? (
           <div className="mt-8 space-y-4">
@@ -1070,6 +1020,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     )}
 
           </section>
+        ) : screen === "pro" ? (
+          <ProScreen feature={proFeature} />
         ) : screen === "contacts" ? (
           <ContactsScreen contacts={data?.contacts ?? []} />
         ) : screen === "promotion" ? (
@@ -1200,6 +1152,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 <>
                   <CommandCenter
                     firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || "there"}
+                    photoUrl={profile?.photoUrl ?? ""}
+                    podcastName={profile?.podcastName ?? ""}
+                    email={data.email}
+                    serviceLine={[profile?.serviceStatus, profile?.branch].filter((v) => v && v !== "Not applicable").join(" · ")}
                     eventName={data.event.name.trim()}
                     eventStartUtc={data.event.startAtUtc}
                     stats={(() => {
@@ -1254,49 +1210,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             {/* ------------------------------------------------ profile header */}
             <section className="mt-4" data-testid="card-profile-header">
               <div className="overflow-hidden rounded-2xl border border-border bg-card">
-                <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-start sm:p-6">
-                  {profile?.photoUrl ? (
-                    <img
-                      src={resolveUploadUrl(profile.photoUrl)}
-                      alt={profile.hostName}
-                      className="h-24 w-24 shrink-0 rounded-full object-cover ring-4 ring-primary/10"
-                    />
-                  ) : (
-                    <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                      <Mic2 className="h-8 w-8" />
-                    </div>
-                  )}
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2 className="truncate text-xl font-bold tracking-tight text-card-foreground sm:text-2xl">{profile?.podcastName}</h2>
-                        <p className="mt-0.5 text-sm text-muted-foreground">
-                          Hosted by <span className="font-medium text-card-foreground">{profile?.hostName}</span>
-                        </p>
-                      </div>
-                    </div>
-
-                    <dl className="mt-4 flex flex-col gap-1.5 text-sm">
-                      <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
-                        <Mail className="h-3.5 w-3.5 shrink-0 text-primary" />
-                        <dd className="truncate">{data.email}</dd>
-                      </div>
-                      {(profile?.serviceStatus || profile?.branch) && (
-                        <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
-                          <Shield className="h-3.5 w-3.5 shrink-0 text-primary" />
-                          <dd className="truncate">
-                            {[profile.serviceStatus, profile.branch].filter((v) => v && v !== "Not applicable").join(" · ")}
-                          </dd>
-                        </div>
-                      )}
-                      {profile?.phone && (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Phone className="h-3.5 w-3.5 shrink-0 text-primary" />
-                          <dd>{profile.phone}</dd>
-                        </div>
-                      )}
-                    </dl>
+                <div className="p-5 sm:p-6">
+                  <div className="min-w-0">
 
                     {/* The website / YouTube / RSS pills lived here, but
                         "where people can listen" is a Profile settings thing
@@ -1396,6 +1311,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
 
           </>
         )}
+        </div>
+        </div>
       </div>
 
       {/* The same checklist as the section above, following them across every

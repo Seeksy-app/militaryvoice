@@ -6030,6 +6030,38 @@ export function registerRoutes(app: Express): void {
   //      that record; the profile stays about them.
 
   /** Every event, with what this podcaster has done on each. */
+  // ---- Host: Pro interest -----------------------------------------------------
+
+  /**
+   * "I'd use this" on the Pro page. The same interest list the public
+   * platform form feeds, so one place holds who wants what; a second press
+   * for the same feature is a no-op rather than a second email to us.
+   */
+  app.post("/api/host/pro-interest", requireHostSession, async (req, res) => {
+    const email = ((req as any).hostEmail as string).toLowerCase().trim();
+    const feature = String(req.body?.feature ?? "").trim();
+    if (!["campaigns", "crm", "studio"].includes(feature)) return res.status(400).json({ message: "Which feature?" });
+    const profile = await storage.getProfileByEmail(email);
+    const notes = `Pro interest: ${feature}`;
+    const already = (await storage.listPlatformInterest()).some((r) => r.email.toLowerCase() === email && r.notes === notes);
+    if (already) return res.json({ ok: true, already: true });
+    const v = {
+      intent: "beta",
+      name: profile?.hostName || email,
+      email,
+      organization: profile?.podcastName || "",
+      eventTiming: "",
+      notes,
+    };
+    await storage.createPlatformInterest(v);
+    try {
+      await sendPlatformInterestEmail(v as any);
+    } catch (err) {
+      console.error("Pro interest notification failed:", err);
+    }
+    res.json({ ok: true });
+  });
+
   // ---- Host: Alex, by text ----------------------------------------------------
 
   /**

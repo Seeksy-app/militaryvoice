@@ -1,4 +1,5 @@
-import { ArrowRight, CalendarDays, Check, Link2, Mic2 } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, Link2, Mic2, Mail, Shield } from "lucide-react";
+import { resolveUploadUrl } from "@/lib/queryClient";
 import { StudioIcon } from "@/components/GreenRoomButton";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -22,12 +23,20 @@ function greeting(now: Date): string {
  */
 export function CommandCenter({
   firstName,
+  photoUrl,
+  podcastName,
+  email,
+  serviceLine,
   eventName,
   eventStartUtc,
   stats,
   onGo,
 }: {
   firstName: string;
+  photoUrl: string;
+  podcastName: string;
+  email: string;
+  serviceLine: string;
   eventName: string;
   eventStartUtc: string;
   stats: { key: string; value: string; label: string; screen: Screen; muted?: boolean }[];
@@ -40,18 +49,33 @@ export function CommandCenter({
       <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
       <div className="pointer-events-none absolute -right-8 -top-8 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
       <div className="relative flex flex-wrap items-end justify-between gap-5">
-        <div className="min-w-0">
-          <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#F0A71F]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[#F0A71F]" /> Your command center
-          </p>
-          <h2 className="mt-1.5 text-3xl font-bold tracking-tight text-white sm:text-4xl" style={HEADLINE_FONT}>
-            {greeting(now)}, {firstName} 👋
-          </h2>
-          <p className="mt-1 text-sm text-white/85">
-            {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
-            {" · "}
-            {daysToGo === 0 ? `${eventName} is today` : `${daysToGo} day${daysToGo === 1 ? "" : "s"} to ${eventName}`}
-          </p>
+        {/* Who this is, once: the avatar and the show up here beside the
+            greeting, so the page below can get on with the slot. */}
+        <div className="flex min-w-0 items-center gap-4">
+          {photoUrl ? (
+            <img src={resolveUploadUrl(photoUrl)} alt={podcastName} className="h-20 w-20 shrink-0 rounded-full object-cover ring-4 ring-white/15 sm:h-24 sm:w-24" />
+          ) : (
+            <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-white/10 text-2xl font-bold sm:h-24 sm:w-24">{(podcastName || firstName).slice(0, 1)}</span>
+          )}
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#F0A71F]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#F0A71F]" /> Your command center
+            </p>
+            <h2 className="mt-1 text-3xl font-bold tracking-tight text-white sm:text-4xl" style={HEADLINE_FONT}>
+              {greeting(now)}, {firstName} 👋
+            </h2>
+            <p className="mt-1 text-sm text-white/85">
+              <span className="font-semibold text-white">{podcastName}</span>
+              {" · "}
+              {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+              {" · "}
+              {daysToGo === 0 ? `${eventName} is today` : `${daysToGo} day${daysToGo === 1 ? "" : "s"} to ${eventName}`}
+            </p>
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/75">
+              <span className="inline-flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-[#F0A71F]" /> {email}</span>
+              {serviceLine && <span className="inline-flex items-center gap-1.5"><Shield className="h-3.5 w-3.5 text-[#F0A71F]" /> {serviceLine}</span>}
+            </p>
+          </div>
         </div>
         {/* Bright on purpose: the first cut used quarter-strength white and the
             numbers vanished into the navy. */}
