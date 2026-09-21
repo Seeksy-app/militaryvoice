@@ -595,6 +595,39 @@ export const CADENCE = [
 ] as const;
 
 export type CadenceKey = (typeof CADENCE_STEPS)[number]["key"];
+
+// ---------------------------------------------------------------------------
+// Co-hosts — who is on the main stage with Alex, and when.
+// ---------------------------------------------------------------------------
+/**
+ * The day is thirty-two shows with five minutes between each, and Alex runs
+ * those five minutes alone unless a person joins her. A co-host takes an
+ * hour of them — two handovers — from the main stage: introducing what is
+ * coming up, talking about the day, keeping it moving.
+ *
+ * One person per hour. Banter between three is a panel, not a handover, and
+ * a podcaster cannot take the hour their own show is on. The hour is the
+ * unit because it is the smallest stretch worth turning a camera on for.
+ */
+export const COHOST_BLOCK_MINUTES = 60;
+
+export const cohostSlots = pgTable(
+  "cohost_slots",
+  {
+    id: serial("id").primaryKey(),
+    eventId: integer("event_id").notNull(),
+    /** Hour of the broadcast day, 0 = the first. */
+    blockIndex: integer("block_index").notNull(),
+    email: text("email").notNull(),
+    claimedAt: text("claimed_at").notNull(),
+  },
+  (t) => ({
+    // The constraint is what makes "one per hour" true under two people
+    // pressing the button in the same second.
+    onePerHour: uniqueIndex("cohost_slots_event_block_unique").on(t.eventId, t.blockIndex),
+  }),
+);
+export type CohostSlotRow = typeof cohostSlots.$inferSelect;
 export const cadenceSource = (key: string) => `cadence:${key}`;
 
 // ---------------------------------------------------------------------------

@@ -44,6 +44,7 @@ import {
   scenePatchSchema,
   NUDGE_KINDS,
   type NudgeKind,
+  COHOST_BLOCK_MINUTES,
 } from "../shared/schema.js";
 import { isLiveOnlySlot, LIVE_ONLY_LABEL } from "../shared/slots.js";
 import { showClock } from "../shared/showClock.js";
@@ -5880,6 +5881,98 @@ export function registerRoutes(app: Express): void {
   //      that record; the profile stays about them.
 
   /** Every event, with what this podcaster has done on each. */
+  // ---- Host: co-hosting -------------------------------------------------------
+
+  /**
+   * The broadcast day in hours, and who has each one.
+   *
+   * Names are shown to other podcasters — first name and show — because
+   * "taken" on its own invites the question "by whom", and the answer is
+   * public the moment they are on air together.
+   */
+  async function cohostBoard(eventId: number, viewerEmail: string) {
+    const event = await storage.getEventById(eventId);
+    if (!event) return null;
+    const claims = await storage.listCohostSlots(eventId);
+    const active = (await storage.listSignups(eventId)).filter((s) => s.status !== "cancelled");
+    const byEmail = new Map(active.map((s) => [s.email.trim().toLowerCase(), s]));
+    const me = viewerEmail.trim().toLowerCase();
+    const start = Date.parse(event.startAtUtc);
+    const blockMs = COHOST_BLOCK_MINUTES * 60_000;
+    const blocks = Math.max(1, Math.round((event.durationHours * 60) / COHOST_BLOCK_MINUTES));
+    // Which hours the viewer's own show falls in — they cannot co-host those.
+    const mySlots = active.filter((s) => s.email.trim().toLowerCase() === me).map((s) => s.slotIndex);
+    const yourShowBlocks = new Set(mySlots.map((i) => Math.floor((i * event.slotMinutes) / COHOST_BLOCK_MINUTES)));
+    return {
+      blockMinutes: COHOST_BLOCK_MINUTES,
+      blocks: Array.from({ length: blocks }, (_, i) => {
+        const claim = claims.find((c) => c.blockIndex === i);
+        const who = claim ? byEmail.get(claim.email) : undefined;
+        return {
+          index: i,
+          startAtUtc: new Date(start + i * blockMs).toISOString(),
+          endAtUtc: new Date(start + (i + 1) * blockMs).toISOString(),
+          mine: !!claim && claim.email === me,
+          yourShow: yourShowBlocks.has(i),
+          takenBy: claim && !(claim.email === me)
+            ? { firstName: (who?.hostName ?? "").trim().split(/\s+/)[0] || "Someone", podcastName: who?.podcastName ?? "" }
+            : null,
+        };
+      }),
+    };
+  }
+
+  app.get("/api/host/cohost-slots/:eventId", requireHostSession, async (req, res) => {
+    const board = await cohostBoard(Number(req.params.eventId), (req as any).hostEmail as string);
+    if (!board) return res.status(404).json({ message: "No such event." });
+    noStore(res);
+    res.json(board);
+  });
+
+  app.post("/api/host/cohost-slots/:eventId", requireHostSession, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const email = (req as any).hostEmail as string;
+    const blockIndex = Number(req.body?.blockIndex);
+    const board = await cohostBoard(eventId, email);
+    if (!board) return res.status(404).json({ message: "No such event." });
+    const block = board.blocks[blockIndex];
+    if (!block) return res.status(400).json({ message: "That hour is not on the schedule." });
+    if (block.yourShow) return res.status(400).json({ message: "Your own show is on in that hour." });
+    if (block.takenBy) return res.status(409).json({ message: `${block.takenBy.firstName} already has that hour.` });
+    const row = await storage.claimCohostSlot(eventId, blockIndex, email);
+    if (!row) return res.status(409).json({ message: "Somebody took that hour a moment ago." });
+    res.json(await cohostBoard(eventId, email));
+  });
+
+  app.delete("/api/host/cohost-slots/:eventId/:blockIndex", requireHostSession, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const email = (req as any).hostEmail as string;
+    await storage.releaseCohostSlot(eventId, Number(req.params.blockIndex), email);
+    res.json(await cohostBoard(eventId, email));
+  });
+
+  /** Who has signed up to co-host, hour by hour, for the run of show. */
+  app.get("/api/admin/cohost-slots", requireAdmin, async (req, res) => {
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent())?.id;
+    if (!eventId) return res.json([]);
+    const event = await storage.getEventById(eventId);
+    const claims = await storage.listCohostSlots(eventId);
+    const active = (await storage.listSignups(eventId)).filter((s) => s.status !== "cancelled");
+    const byEmail = new Map(active.map((s) => [s.email.trim().toLowerCase(), s]));
+    noStore(res);
+    res.json(claims.map((c) => {
+      const s = byEmail.get(c.email);
+      return {
+        blockIndex: c.blockIndex,
+        startAtUtc: event ? new Date(Date.parse(event.startAtUtc) + c.blockIndex * COHOST_BLOCK_MINUTES * 60_000).toISOString() : "",
+        email: c.email,
+        hostName: s?.hostName ?? "",
+        podcastName: s?.podcastName ?? "",
+        claimedAt: c.claimedAt,
+      };
+    }));
+  });
+
   app.get("/api/host/events", requireHostSession, async (req, res) => {
     const email = (req as any).hostEmail as string;
     // Switching an event off hides it from podcasters too, not just the

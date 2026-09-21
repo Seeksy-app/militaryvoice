@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -978,6 +978,34 @@ class DatabaseStorage implements IStorage {
   }
 
   /** Every profile, for aggregates that span the whole lineup. */
+  // ---- Co-hosts ---------------------------------------------------------------
+
+  async listCohostSlots(eventId: number): Promise<typeof cohostSlots.$inferSelect[]> {
+    await ready();
+    return db.select().from(cohostSlots).where(eq(cohostSlots.eventId, eventId)).orderBy(cohostSlots.blockIndex);
+  }
+
+  /** Take an hour. Null when somebody else already has it. */
+  async claimCohostSlot(eventId: number, blockIndex: number, email: string): Promise<typeof cohostSlots.$inferSelect | null> {
+    await ready();
+    const [row] = await db
+      .insert(cohostSlots)
+      .values({ eventId, blockIndex, email: email.trim().toLowerCase(), claimedAt: new Date().toISOString() })
+      .onConflictDoNothing()
+      .returning();
+    return row ?? null;
+  }
+
+  /** Give an hour back. Only your own. */
+  async releaseCohostSlot(eventId: number, blockIndex: number, email: string): Promise<boolean> {
+    await ready();
+    const rows = await db
+      .delete(cohostSlots)
+      .where(and(eq(cohostSlots.eventId, eventId), eq(cohostSlots.blockIndex, blockIndex), sqlExpr`lower(${cohostSlots.email}) = lower(${email})`))
+      .returning();
+    return rows.length > 0;
+  }
+
   async listAllProfiles(): Promise<ProfileRow[]> {
     await ready();
     return db.select().from(podcasterProfiles).orderBy(podcasterProfiles.createdAt);

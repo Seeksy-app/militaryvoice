@@ -51,6 +51,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
 import { ShowMaterials } from "@/components/ShowMaterials";
+import { CohostSlots } from "@/components/CohostSlots";
 import { EventSettings } from "@/components/EventSettings";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
@@ -1309,6 +1310,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                         </div>
                       )}
                     </div>
+
+                    {/* Only somebody on the lineup can co-host: the hour is
+                        between shows, and you need a show to be between. */}
+                    {data.mySignups.length > 0 && (
+                      <div className="mt-4 border-t border-border pt-4" data-testid="section-cohost">
+                        <CohostSlots eventId={data.event.id} zone={zone} />
+                      </div>
+                    )}
 
                     {/* Only once something is actually connected. The seven
                         grey "Not connected" tiles that used to sit here were a
