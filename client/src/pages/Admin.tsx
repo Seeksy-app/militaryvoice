@@ -725,10 +725,15 @@ function SignupsCard({ eventId }: { eventId: number }) {
     queryKey: ["/api/admin/assets"],
     queryFn: () => adminGet<ShowAssetRow[]>("/api/admin/assets"),
   });
+  // The house address holds the event's own library — episodes uploaded on a
+  // podcaster's behalf, pictures for the site — and the two ceremony slots
+  // are booked under that same address, so it read as Riccoh's materials.
+  // A show's pre-recorded file is attached on the run of show, not here.
   const assetsByEmail = useMemo(() => {
     const m = new Map<string, ShowAssetRow[]>();
     for (const a of assets ?? []) {
       const k = a.email.toLowerCase();
+      if (k === "hello@militaryvoice.ai") continue;
       m.set(k, [...(m.get(k) ?? []), a]);
     }
     return m;

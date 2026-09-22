@@ -1286,8 +1286,11 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const origin = `${req.protocol}://${req.get("host")}`;
+    // Only the day itself: a booking parked past the end (the organisers'
+    // own eyes-on account) is not on the lineup card.
+    const lineupSlots = Math.floor((ev.durationHours * 60) / ev.slotMinutes);
     const signups = (await storage.listSignups(ev.id))
-      .filter((sg) => sg.status !== "cancelled")
+      .filter((sg) => sg.status !== "cancelled" && sg.slotIndex < lineupSlots)
       .sort((a, b) => a.slotIndex - b.slotIndex);
     const requested = String(req.query.size ?? "square");
     const size: CardSize = requested in CARD_SIZES ? (requested as CardSize) : "square";
@@ -1750,7 +1753,20 @@ export function registerRoutes(app: Express): void {
   //      No contact info leaves the server.
   app.get("/api/podcasters", async (_req, res) => {
     publicCache(res);
-    const rows = await storage.listCompleteProfiles();
+    // A profile whose only booking is parked past the end of the day — the
+    // organisers' own eyes-on account — is not a podcaster on the lineup.
+    const featured = await storage.getFeaturedEvent();
+    const dayLength = Math.floor((featured.durationHours * 60) / featured.slotMinutes);
+    const parked = new Set<string>();
+    const onDay = new Set<string>();
+    for (const sg of await storage.listSignups(featured.id)) {
+      if (sg.status === "cancelled") continue;
+      (sg.slotIndex < dayLength ? onDay : parked).add(sg.email.trim().toLowerCase());
+    }
+    const rows = (await storage.listCompleteProfiles()).filter((p) => {
+      const e = p.email.trim().toLowerCase();
+      return !(parked.has(e) && !onDay.has(e));
+    });
     const out: PublicPodcaster[] = rows.map((p) => ({
       id: p.id,
       podcastName: p.podcastName,

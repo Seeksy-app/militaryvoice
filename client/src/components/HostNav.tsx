@@ -30,6 +30,7 @@ export function HostNav({
   pathFor,
   onGo,
   feature,
+  proOpen = false,
 }: {
   screen: HostScreen;
   eventsCount: number;
@@ -38,6 +39,9 @@ export function HostNav({
   onGo: (s: HostScreen, feature?: string) => void;
   /** Which Pro door is open, when the Pro page is the screen. */
   feature?: string;
+  /** Whether the Pro doors open at all. They are shown to everyone and open
+   *  only for the organisers' own account until the previews are worth it. */
+  proOpen?: boolean;
 }) {
   const groups: { title: string; items: Item[] }[] = [
     {
@@ -72,12 +76,16 @@ export function HostNav({
 
   const link = (it: Item, compact: boolean) => {
     const active = it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key;
+    const inert = !!it.locked && !proOpen;
     const Icon = it.icon;
     return (
       <a
         key={`${it.key}-${it.feature ?? ""}`}
-        href={it.locked ? `${pathFor("pro")}#${it.feature}` : pathFor(it.key)}
+        href={inert ? undefined : it.locked ? `${pathFor("pro")}#${it.feature}` : pathFor(it.key)}
+        aria-disabled={inert || undefined}
+        title={inert ? "Coming after the Marathon" : undefined}
         onClick={(e) => {
+          if (inert) { e.preventDefault(); return; }
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
           e.preventDefault();
           onGo(it.key, it.feature);
@@ -92,7 +100,7 @@ export function HostNav({
                 active
                   ? "bg-[#053877] text-white shadow-sm"
                   : it.locked
-                    ? "text-muted-foreground hover:bg-muted"
+                    ? `text-muted-foreground ${proOpen ? "hover:bg-muted" : "cursor-default"}`
                     : "text-foreground hover:bg-[#053877]/[0.06]"
               }`
         }

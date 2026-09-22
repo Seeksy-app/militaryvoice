@@ -47,9 +47,11 @@ const outDir = await fs.mkdtemp(path.join(os.tmpdir(), "standby-"));
 // ---------------------------------------------------------------------------
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1 });
 const [event] = await sql`SELECT * FROM events WHERE is_featured = true LIMIT 1`;
+// Only the day itself — a booking parked past the end is not on the lineup.
+const lineupSlots = Math.floor((event.duration_hours * 60) / event.slot_minutes);
 const shows = await sql`
   SELECT podcast_name, host_name, photo_url, slot_index
-  FROM signups WHERE event_id = ${event.id} AND status <> 'cancelled'
+  FROM signups WHERE event_id = ${event.id} AND status <> 'cancelled' AND slot_index < ${lineupSlots}
   ORDER BY slot_index`;
 await sql.end();
 
