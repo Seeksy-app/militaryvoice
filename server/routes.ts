@@ -2408,6 +2408,14 @@ export function registerRoutes(app: Express): void {
         return;
       }
       const channel = await myChannel(t.access_token);
+      // A Google login with no channel behind it is not a connection. Frank
+      // signed in with the account that has no YouTube channel, we saved it
+      // as connected, and nothing could ever stream to him. Send them back to
+      // choose the account — usually a brand account — that owns the channel.
+      if (!channel.id) {
+        res.redirect("/host/dashboard?youtube=noChannel");
+        return;
+      }
       await storage.upsertYoutubeAccount(email, {
         refreshToken: t.refresh_token,
         accessToken: t.access_token,

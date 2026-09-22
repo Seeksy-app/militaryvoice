@@ -36,6 +36,14 @@ export function ConnectYoutube({ locked = false, lockedReason = "" }: { locked?:
     if (result === "failed") {
       toast({ title: "That didn't connect", description: "Try again, and make sure you allow the permissions.", variant: "destructive" });
     }
+    if (result === "noChannel") {
+      toast({
+        title: "That Google account has no YouTube channel",
+        description: "Connect again and, when Google asks which account, pick the one that owns your channel — often a second choice under your name, called a brand account.",
+        variant: "destructive",
+        duration: 15000,
+      });
+    }
     if (result === "noRefresh") {
       toast({
         title: "Nearly — try once more",
