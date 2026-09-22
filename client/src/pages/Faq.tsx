@@ -1,11 +1,13 @@
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
+import { HelpSearch, askAlex } from "@/components/HelpSearch";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import type { PublicEvent } from "@shared/schema";
 import { detectLocalTimeZone, formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
-import { Mic2, Headphones, HelpCircle, ArrowRight, Mail } from "lucide-react";
+import { Mic2, Headphones, HelpCircle, ArrowRight, Mail, ArrowLeft } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -13,6 +15,11 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 interface QA {
   q: string;
   a: React.ReactNode;
+}
+
+/** The anchor for a question: the words, lower-case, dashed. Search links land on it. */
+export function faqSlug(q: string): string {
+  return q.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 export default function Faq() {
@@ -225,6 +232,19 @@ export default function Faq() {
     },
   ];
 
+  // A link to one question (#its-slug) opens it and scrolls to it.
+  const [open, setOpen] = useState<string>(() => (typeof window !== "undefined" ? window.location.hash.slice(1) : ""));
+  useEffect(() => {
+    const onHash = () => setOpen(window.location.hash.slice(1));
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => document.getElementById(open)?.scrollIntoView({ block: "center" }), 60);
+    return () => clearTimeout(t);
+  }, [open]);
+
   const Group = ({ id, icon: Icon, title, items }: { id: string; icon: typeof Mic2; title: string; items: QA[] }) => (
     <section id={id} className="scroll-mt-20">
       <div className="mb-4 flex items-center gap-2">
@@ -235,9 +255,9 @@ export default function Faq() {
           {title}
         </h2>
       </div>
-      <Accordion type="single" collapsible className="overflow-hidden rounded-2xl border border-border bg-card">
+      <Accordion type="single" collapsible value={items.some((it) => faqSlug(it.q) === open) ? open : undefined} onValueChange={(v) => setOpen(v ?? "")} className="overflow-hidden rounded-2xl border border-border bg-card">
         {items.map((item, i) => (
-          <AccordionItem key={item.q} value={`${id}-${i}`} className="border-border px-5 last:border-b-0">
+          <AccordionItem key={item.q} id={faqSlug(item.q)} value={faqSlug(item.q)} className="scroll-mt-24 border-border px-5 last:border-b-0">
             <AccordionTrigger className="py-4 text-left text-base font-semibold hover:no-underline" data-testid={`faq-${id}-${i}`}>
               {item.q}
             </AccordionTrigger>
@@ -252,29 +272,26 @@ export default function Faq() {
     <div className="min-h-screen">
       <NavBar />
 
-      <section className="relative overflow-hidden bg-[#053877] text-white">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-[#F0A71F] opacity-[0.14] blur-3xl" />
-        <div className="relative mx-auto max-w-4xl px-4 py-14 sm:px-6 lg:py-20">
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest">
-            <HelpCircle className="h-3.5 w-3.5 text-[#F0A71F]" /> FAQ
-          </div>
-          <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT} data-testid="text-faq-title">
+      <section className="bg-[#04102b] text-white">
+        <div className="mx-auto w-full max-w-4xl px-4 py-12 sm:px-6 sm:py-16">
+          <Link href="/help" className="inline-flex items-center gap-1.5 text-sm font-medium text-white/70 hover:text-white" data-testid="link-help-back">
+            <ArrowLeft className="h-4 w-4" /> All help
+          </Link>
+          <p className="mt-6 text-xs font-semibold uppercase tracking-[0.2em] text-[#F0A71F]">Help · FAQ</p>
+          <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT} data-testid="text-faq-title">
             Questions, answered.
           </h1>
           <p className="mt-3 max-w-2xl text-base text-white/75 sm:text-lg">
-            Everything podcasters and listeners ask about the Podcast Marathon. Jump to your section.
+            Everything podcasters and listeners ask about The Podcast Marathon. Search, or jump to your section.
           </p>
-          <div className="mt-6 flex flex-wrap gap-2">
+          <div className="mt-6 text-left"><HelpSearch compact /></div>
+          <div className="mt-5 flex flex-wrap gap-2">
             {[
               ["#general", "General"],
               ["#podcasters", "For podcasters"],
               ["#listeners", "For listeners"],
             ].map(([href, label]) => (
-              <a
-                key={href}
-                href={href}
-                className="rounded-full border border-white/30 px-4 py-1.5 text-sm font-medium text-white hover:bg-white/10"
-              >
+              <a key={href} href={href} className="rounded-full border border-white/30 px-4 py-1.5 text-sm font-medium text-white hover:bg-white/10">
                 {label}
               </a>
             ))}
@@ -294,7 +311,7 @@ export default function Faq() {
                 Still have a question?
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Email{" "}
+                Ask Alex, or email{" "}
                 <a href="mailto:hello@militaryvoice.ai" className="text-primary underline-offset-2 hover:underline">
                   hello@militaryvoice.ai
                 </a>{" "}
@@ -302,6 +319,9 @@ export default function Faq() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button type="button" onClick={() => askAlex()} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="faq-ask-alex">
+                <img src="/alex.jpg" alt="" className="-ml-1.5 h-6 w-6 rounded-full object-cover ring-2 ring-white/30" /> Ask Alex
+              </Button>
               <a href="mailto:hello@militaryvoice.ai">
                 <Button variant="outline" className="gap-1.5 rounded-full">
                   <Mail className="h-4 w-4" /> Email us

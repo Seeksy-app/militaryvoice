@@ -58,7 +58,7 @@ export function HelpSearch({ compact = false, autoFocus = false }: { compact?: b
               );
               const cls = "flex items-center justify-between gap-3 px-4 py-3 hover:bg-accent";
               // Help articles open here; the dashboard and the rest open in a new tab.
-              return r.href.startsWith("/help/") ? (
+              return r.href.startsWith("/help/") || r.href.startsWith("/faq") ? (
                 <Link key={r.href + r.title} href={r.href} className={cls} data-testid={`help-result-${r.href}`}>{inner}</Link>
               ) : (
                 <a key={r.href + r.title} href={r.href} target="_blank" rel="noreferrer" className={cls} data-testid={`help-result-${r.href}`}>{inner}</a>

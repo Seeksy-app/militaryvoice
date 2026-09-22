@@ -29,7 +29,7 @@ const MOST_ASKED = [
 
 /** A help article opens here. The dashboard and the rest open in a new tab, so the help stays put. */
 function HelpLink({ e, className, children }: { e: HelpEntry; className: string; children: React.ReactNode }) {
-  return e.href.startsWith("/help/") ? (
+  return e.href.startsWith("/help/") || e.href.startsWith("/faq") ? (
     <Link href={e.href} className={className} data-testid={`help-link-${e.href}`}>{children}</Link>
   ) : (
     <a href={e.href} target="_blank" rel="noreferrer" className={className} data-testid={`help-link-${e.href}`}>{children}</a>
@@ -70,7 +70,7 @@ export default function HelpIndex() {
               <li key={e.title}>
                 <HelpLink e={e} className="group inline-flex items-center gap-2 text-base font-semibold text-foreground hover:text-[#053877]">
                   {e.title}
-                  {e.href.startsWith("/help/") ? <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" /> : <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />}
+                  {e.href.startsWith("/help/") || e.href.startsWith("/faq") ? <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" /> : <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />}
                 </HelpLink>
               </li>
             ))}
@@ -82,7 +82,8 @@ export default function HelpIndex() {
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {HELP_CATEGORIES.map((c) => {
               const Icon = CATEGORY_ICON[c.key];
-              const items = HELP_INDEX.filter((e) => e.category === c.key);
+              const items = HELP_INDEX.filter((e) => e.category === c.key && !e.faq);
+              const faqCount = HELP_INDEX.filter((e) => e.category === c.key && e.faq).length;
               return (
                 <div key={c.key} className="flex flex-col rounded-3xl border border-border bg-card p-6" data-testid={`help-category-${c.key}`}>
                   <div className="flex items-center gap-3">
@@ -98,10 +99,18 @@ export default function HelpIndex() {
                       <li key={e.title}>
                         <HelpLink e={e} className="group flex items-center justify-between gap-3 py-2.5 text-sm font-medium text-foreground hover:text-[#053877]">
                           <span>{e.title}</span>
-                          {e.href.startsWith("/help/") ? <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" /> : <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                          {e.href.startsWith("/help/") || e.href.startsWith("/faq") ? <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" /> : <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                         </HelpLink>
                       </li>
                     ))}
+                    {faqCount > 0 && (
+                      <li>
+                        <Link href={`/faq#${c.key === "watching" ? "listeners" : c.key === "lineup" || c.key === "showday" ? "podcasters" : "general"}`} className="group flex items-center justify-between gap-3 py-2.5 text-sm font-medium text-[#053877] hover:underline">
+                          <span>{faqCount} more in the FAQ</span>
+                          <ArrowRight className="h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5" />
+                        </Link>
+                      </li>
+                    )}
                   </ul>
                 </div>
               );
