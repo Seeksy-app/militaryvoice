@@ -1,4 +1,3 @@
-import { Tag } from "lucide-react";
 import type { PublicSignup } from "@shared/schema";
 
 export type CardSponsor = NonNullable<PublicSignup["sponsor"]>;
@@ -9,9 +8,10 @@ export function sponsorHref(sponsor: CardSponsor, source: string): string | unde
 }
 
 /**
- * The ribbon across a sponsored card: "This segment is sponsored by" and the
- * sponsor's logo, on the amber band the site uses for what matters. The same
- * band on the homepage and the agenda, so a sponsor sees one thing everywhere.
+ * The sponsor's band across the top of a card. Navy, with a hairline of gold
+ * along the top and the logo as the only bright thing on it, so the sponsor
+ * reads as part of the card's design rather than a sticker on it. Wide cards
+ * put the line and the logo side by side; narrow cards stack them, centred.
  * Clicking it goes to the sponsor through the counted link.
  */
 export function SponsorRibbon({ sponsor, source, size = "md", testId }: { sponsor: CardSponsor; source: string; size?: "sm" | "md"; testId?: string }) {
@@ -21,20 +21,26 @@ export function SponsorRibbon({ sponsor, source, size = "md", testId }: { sponso
   return (
     <Tagish
       {...(href ? { href, target: "_blank", rel: "noreferrer" } : {})}
-      className={`relative flex flex-wrap items-center gap-x-2 gap-y-1 overflow-hidden bg-gradient-to-r from-[#F0A71F] via-[#f5b53a] to-[#F0A71F] text-[#1a1200] ${sm ? "px-3 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]"} ${href ? "transition-[filter] hover:brightness-105" : ""}`}
+      className={`group/sp relative block overflow-hidden bg-[#04102b] text-white ${href ? "transition-colors hover:bg-[#071a3f]" : ""}`}
       data-testid={testId}
-      title={`Sponsored by ${sponsor.name}`}
+      title={`This segment is sponsored by ${sponsor.name}`}
     >
-      <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 w-1.5 bg-[#1a1200]/15" />
-      <Tag className={`${sm ? "h-3 w-3" : "h-3.5 w-3.5"} shrink-0`} />
-      <span className="shrink-0 font-bold uppercase tracking-[0.14em]">This segment is sponsored by</span>
-      {sponsor.logoUrl ? (
-        <span className={`ml-auto flex shrink-0 items-center rounded-md bg-[#04102b] ${sm ? "px-1.5 py-0.5" : "px-2 py-0.5"}`}>
-          <img src={sponsor.logoUrl} alt={sponsor.name} className={`${sm ? "h-4 max-w-[5.5rem]" : "h-5 max-w-[7rem]"} object-contain`} />
+      <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[#F0A71F]/0 via-[#F0A71F] to-[#F0A71F]/0" />
+      <span aria-hidden="true" className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#F0A71F]/10 blur-2xl" />
+      <span className={`relative flex ${sm ? "flex-col items-center gap-1.5 px-3 pb-3 pt-3.5 text-center" : "items-center justify-between gap-4 px-4 py-2.5"}`}>
+        <span className={`whitespace-nowrap font-semibold uppercase tracking-[0.22em] text-[#F0A71F] ${sm ? "text-[9px]" : "text-[10px]"}`}>
+          This segment is sponsored by
         </span>
-      ) : (
-        <span className="ml-auto shrink-0 font-extrabold">{sponsor.name}</span>
-      )}
+        {sponsor.logoUrl ? (
+          <img
+            src={sponsor.logoUrl}
+            alt={sponsor.name}
+            className={`shrink-0 object-contain drop-shadow-[0_1px_8px_rgba(240,167,31,0.25)] transition-transform group-hover/sp:scale-[1.03] ${sm ? "h-7 max-w-[9rem]" : "h-7 max-w-[10rem]"}`}
+          />
+        ) : (
+          <span className="text-base font-bold tracking-tight">{sponsor.name}</span>
+        )}
+      </span>
     </Tagish>
   );
 }
