@@ -860,6 +860,11 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     retry: false,
   });
 
+  const { data: cohost } = useQuery<CohostInfo>({
+    queryKey: ["/api/host/cohost"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/cohost")).json(),
+    enabled: !!data,
+  });
   if (isError) {
     return (
       <div className="min-h-screen">
@@ -879,11 +884,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     : [];
   const openSlots = slots.filter((s) => !s.signup);
   const selectedSlot = slots.find((s) => s.index === claimIndex);
-  const { data: cohost } = useQuery<CohostInfo>({
-    queryKey: ["/api/host/cohost"],
-    queryFn: async () => (await apiRequest("GET", "/api/host/cohost")).json(),
-    enabled: !!data,
-  });
   const cohostHours = cohost?.isCohost ? (cohost.hours?.length ?? 0) + ((cohost.shared?.length ?? 0) > 0 ? 1 : 0) : 0;
   // A co-host with no show of their own gets the co-host dashboard as their
   // dashboard. One who is also on the lineup gets it as a door in the nav.
