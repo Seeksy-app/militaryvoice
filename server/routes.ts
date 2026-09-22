@@ -7495,6 +7495,35 @@ The ${eventName} team`;
     return id;
   }
 
+  // ---- Sponsor leads: the people Riccoh is going to write to ----------------
+  const LEAD_FIELDS = ["name", "company", "title", "linkedin", "email", "phone", "notes", "owner"] as const;
+  const LEAD_STATUSES = new Set(["new", "contacted", "in_talks", "sponsor", "passed"]);
+  app.get("/api/admin/sponsor-leads", requireAdmin, async (req, res) => {
+    noStore(res);
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    res.json(await storage.listSponsorLeads(eventId));
+  });
+  app.post("/api/admin/sponsor-leads", requireAdmin, async (req, res) => {
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const row: Record<string, string> = {};
+    for (const f of LEAD_FIELDS) row[f] = String(req.body?.[f] ?? "").trim().slice(0, f === "notes" ? 2000 : 300);
+    if (!row.name && !row.email && !row.linkedin) return res.status(400).json({ message: "A lead needs a name, an email or a LinkedIn link." });
+    const status = LEAD_STATUSES.has(String(req.body?.status)) ? String(req.body.status) : "new";
+    res.json(await storage.createSponsorLead({ eventId, name: row.name, company: row.company, title: row.title, linkedin: row.linkedin, email: row.email, phone: row.phone, notes: row.notes, owner: row.owner || "Riccoh", status }));
+  });
+  app.patch("/api/admin/sponsor-leads/:id", requireAdmin, async (req, res) => {
+    const patch: Record<string, string> = {};
+    for (const f of LEAD_FIELDS) if (req.body?.[f] != null) patch[f] = String(req.body[f]).trim().slice(0, f === "notes" ? 2000 : 300);
+    if (req.body?.status != null && LEAD_STATUSES.has(String(req.body.status))) patch.status = String(req.body.status);
+    const updated = await storage.updateSponsorLead(Number(req.params.id), patch);
+    if (!updated) return res.status(404).json({ message: "No such lead." });
+    res.json(updated);
+  });
+  app.delete("/api/admin/sponsor-leads/:id", requireAdmin, async (req, res) => {
+    await storage.deleteSponsorLead(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
   // ---- View as: an admin steps into one of their own other seats -------------
   //      The owner is also a producer and a podcaster on this event, under
   //      other addresses. Rather than three browsers, the admin picks a seat

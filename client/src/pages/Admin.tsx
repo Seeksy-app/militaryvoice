@@ -34,6 +34,7 @@ import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
 import { AdminClips } from "@/components/AdminClips";
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
+import { SponsorLeads } from "@/components/SponsorLeads";
 import { AudienceFigures } from "@/components/AudienceFigures";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
@@ -5268,7 +5269,14 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                 </TabsContent>
                 <TabsContent value="sponsors" className="mt-2 flex flex-col gap-8 lg:mt-0">
                   <SponsorPackagesCard eventId={selectedEventId} />
-                  <SponsorsCard eventId={selectedEventId} />
+                  {/* The sponsors we have on the left; the ones Riccoh is
+                      going after on the right, pasted in as he finds them. */}
+                  <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
+                    <SponsorsCard eventId={selectedEventId} />
+                    <div className="rounded-2xl border border-border bg-card p-5 xl:sticky xl:top-6">
+                      <SponsorLeads eventId={selectedEventId} />
+                    </div>
+                  </div>
                 </TabsContent>
                   </div>
                 </div>

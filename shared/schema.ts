@@ -1683,3 +1683,27 @@ export const inboundEmails = pgTable("inbound_emails", {
   createdAt: text("created_at").notNull(),
 }, (t) => [index("inbound_from_idx").on(t.fromEmail)]);
 export type InboundEmailRow = typeof inboundEmails.$inferSelect;
+
+/**
+ * Sponsor leads: people Riccoh is going to write to. Pasted in from
+ * LinkedIn or a signature, moved along a short status, nothing more — the
+ * sponsor inquiry form is for people who came to us; this is for the ones
+ * we go to.
+ */
+export const sponsorLeads = pgTable("sponsor_leads", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  name: text("name").notNull().default(""),
+  company: text("company").notNull().default(""),
+  title: text("title").notNull().default(""),
+  linkedin: text("linkedin").notNull().default(""),
+  email: text("email").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  /** new → contacted → in_talks → sponsor | passed */
+  status: text("status").notNull().default("new"),
+  owner: text("owner").notNull().default("Riccoh"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [index("sponsor_leads_event_idx").on(t.eventId)]);
+export type SponsorLeadRow = typeof sponsorLeads.$inferSelect;

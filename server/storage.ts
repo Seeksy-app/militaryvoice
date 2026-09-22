@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -662,6 +662,10 @@ export interface IStorage {
   listSponsorInquiries(): Promise<SponsorInquiryRow[]>;
   setSponsorInquiryHandled(id: number, handled: boolean): Promise<void>;
   listAssetsByEmail(email: string): Promise<ShowAssetRow[]>;
+  listSponsorLeads(eventId: number): Promise<SponsorLeadRow[]>;
+  createSponsorLead(row: Omit<SponsorLeadRow, "id" | "createdAt" | "updatedAt">): Promise<SponsorLeadRow>;
+  updateSponsorLead(id: number, patch: Partial<SponsorLeadRow>): Promise<SponsorLeadRow | null>;
+  deleteSponsorLead(id: number): Promise<void>;
   createInbound(row: Omit<InboundEmailRow, "id" | "createdAt">): Promise<InboundEmailRow>;
   listInbound(limit?: number): Promise<InboundEmailRow[]>;
   listInboundByEmail(email: string): Promise<InboundEmailRow[]>;
@@ -1027,6 +1031,26 @@ class DatabaseStorage implements IStorage {
         and(ne(podcasterProfiles.podcastName, ""), ne(podcasterProfiles.hostName, ""), ne(podcasterProfiles.photoUrl, "")),
       )
       .orderBy(podcasterProfiles.createdAt);
+  }
+
+  async listSponsorLeads(eventId: number): Promise<SponsorLeadRow[]> {
+    await ready();
+    return db.select().from(sponsorLeads).where(eq(sponsorLeads.eventId, eventId)).orderBy(desc(sponsorLeads.createdAt));
+  }
+  async createSponsorLead(row: Omit<SponsorLeadRow, "id" | "createdAt" | "updatedAt">): Promise<SponsorLeadRow> {
+    await ready();
+    const now = new Date().toISOString();
+    const [r] = await db.insert(sponsorLeads).values({ ...row, createdAt: now, updatedAt: now }).returning();
+    return r;
+  }
+  async updateSponsorLead(id: number, patch: Partial<SponsorLeadRow>): Promise<SponsorLeadRow | null> {
+    await ready();
+    const [r] = await db.update(sponsorLeads).set({ ...patch, updatedAt: new Date().toISOString() }).where(eq(sponsorLeads.id, id)).returning();
+    return r ?? null;
+  }
+  async deleteSponsorLead(id: number): Promise<void> {
+    await ready();
+    await db.delete(sponsorLeads).where(eq(sponsorLeads.id, id));
   }
 
   async createInbound(row: Omit<InboundEmailRow, "id" | "createdAt">): Promise<InboundEmailRow> {
