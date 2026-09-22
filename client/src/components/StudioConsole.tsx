@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { showClock } from "@shared/showClock";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -805,27 +806,16 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
 
   // The lower third the scene on air carries, shown in the rail so a producer
   // can see where the name bar came from before they overwrite it.
-  // Time left in what is on. The live scene points at a run item; its
-  // clock starts when the scene was taken and runs for the item's minutes.
-  // An untimed item (an intro) counts down to the next timed item's start.
+  // Time left before the next scene is due, on the same clock the green
+  // room and Alex read, so everybody at the desk sees one number.
   const [tick, setTick] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setTick(Date.now()), 1000); return () => clearInterval(id); }, []);
   const timeLeft = useMemo(() => {
-    const sc = (scenes ?? []).find((x) => x.id === studio?.currentSceneId);
-    if (!sc) return null;
-    const item = (runItems ?? []).find((r) => r.id === sc.runItemId);
-    const takenAt = studio?.currentSceneTakenAtUtc ? Date.parse(studio.currentSceneTakenAtUtc) : NaN;
-    let endMs = NaN; let label = sc.name; let mode: "left" | "next" = "left";
-    if (item && item.durationMinutes > 0 && !Number.isNaN(takenAt)) {
-      endMs = takenAt + item.durationMinutes * 60_000; label = item.title || sc.name;
-    } else if (item?.startAtUtc) {
-      const timed = (runItems ?? []).filter((r) => r.startAtUtc && r.durationMinutes > 0 && r.startAtUtc > item.startAtUtc).sort((a, b) => a.startAtUtc.localeCompare(b.startAtUtc));
-      if (timed[0]) { endMs = Date.parse(timed[0].startAtUtc); label = timed[0].title; mode = "next"; }
-    }
-    if (Number.isNaN(endMs)) return null;
-    const remaining = Math.round((endMs - tick) / 1000);
-    return { remaining, label, mode };
-  }, [scenes, runItems, studio?.currentSceneId, studio?.currentSceneTakenAtUtc, tick]);
+    if (!studio?.currentSceneId) return null;
+    const clock = showClock((scenes ?? []).map((sc) => ({ id: sc.id, name: sc.name, startAtUtc: sc.startAtUtc })), studio.currentSceneId, studio.currentSceneTakenAtUtc ?? "", tick);
+    if (!clock || !Number.isFinite(clock.windowSeconds)) return null;
+    return { remaining: clock.windowSeconds, label: clock.nextSceneName, mode: "next" as const };
+  }, [scenes, studio?.currentSceneId, studio?.currentSceneTakenAtUtc, tick]);
   const fmtLeft = (secs: number) => { const a = Math.abs(secs); const m = Math.floor(a / 60); const sN = a % 60; return `${m}:${String(sN).padStart(2, "0")}`; };
 
   const currentSceneBanner = useMemo(() => {
@@ -1347,7 +1337,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               >
                 <Clock className={`h-3.5 w-3.5 ${timeLeft.remaining <= 30 && timeLeft.remaining >= 0 ? "animate-pulse" : ""}`} />
                 <span className="text-base font-bold leading-none">{timeLeft.remaining < 0 ? `+${fmtLeft(timeLeft.remaining)}` : fmtLeft(timeLeft.remaining)}</span>
-                <span className="hidden max-w-[12rem] truncate font-medium opacity-80 sm:inline">{timeLeft.remaining < 0 ? "over" : timeLeft.mode === "next" ? `until ${timeLeft.label}` : "left"}</span>
+                <span className="hidden max-w-[12rem] truncate font-medium opacity-80 sm:inline">{timeLeft.remaining < 0 ? `over · ${timeLeft.label}` : `until ${timeLeft.label}`}</span>
               </div>
             )}
             {isLive && (

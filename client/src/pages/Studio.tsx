@@ -349,6 +349,37 @@ function PeerTile({ peer, muted = false, fill = false, keyed = false }: { peer: 
   );
 }
 
+/**
+ * Time left before the next scene is due, top right of the green room, for
+ * whoever is at the desk. Amber inside two minutes, red inside thirty
+ * seconds, and counting up in red once it is over. Off air it says nothing.
+ */
+function TimeLeftPill({ slug, studioId }: { slug?: string; studioId?: number }) {
+  const { data } = useQuery<{ currentSceneId: number; clock: { windowSeconds: number; nextSceneName: string; nextStartAtUtc: string } | null }>({
+    queryKey: ["/api/studio/scenes", slug ?? "featured", studioId ?? 0, "clock"],
+    queryFn: async () => {
+      const q = new URLSearchParams();
+      if (slug) q.set("slug", slug);
+      if (studioId) q.set("studioId", String(studioId));
+      return (await apiRequest("GET", `/api/studio/scenes?${q}`)).json();
+    },
+    refetchInterval: 15_000,
+  });
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setTick(Date.now()), 1000); return () => clearInterval(id); }, []);
+  const clock = data?.clock;
+  if (!clock || !clock.nextStartAtUtc) return null;
+  const remaining = Math.round((Date.parse(clock.nextStartAtUtc) - tick) / 1000);
+  const a = Math.abs(remaining); const mm = Math.floor(a / 60); const ss = String(a % 60).padStart(2, "0");
+  const tone = remaining < 0 ? "bg-[#ED1C24] text-white" : remaining <= 30 ? "bg-[#ED1C24]/20 text-[#ff6b6b] ring-1 ring-[#ED1C24]/60" : remaining <= 120 ? "bg-[#F0A71F]/20 text-[#F0A71F] ring-1 ring-[#F0A71F]/60" : "bg-white/10 text-white/90 ring-1 ring-white/15";
+  return (
+    <div className={`mb-2 flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs font-semibold tabular-nums ${tone}`} title={`Until ${clock.nextSceneName}`} data-testid="room-time-left">
+      <span className="flex items-center gap-2"><Clock className={`h-4 w-4 ${remaining >= 0 && remaining <= 30 ? "animate-pulse" : ""}`} /><span className="text-xl font-bold leading-none">{remaining < 0 ? "+" : ""}{mm}:{ss}</span></span>
+      <span className="min-w-0 truncate font-medium opacity-85">{remaining < 0 ? "over" : "left"} · {clock.nextSceneName}</span>
+    </div>
+  );
+}
+
 export default function Studio({ slug }: { slug?: string }) {
   const { toast } = useToast();
   // A link can name which room to walk into; without one you land in the
@@ -820,6 +851,7 @@ export default function Studio({ slug }: { slug?: string }) {
               entered yet. */}
           {joined ? <AlexChat studioId={studioId} /> : <div />}
           <div className="flex h-56 flex-col">
+            {joined && <TimeLeftPill slug={slug} studioId={studioId} />}
             <div className="min-h-0 flex-1">
               {joined && <UpNext slug={slug} studioId={studioId} compact fill />}
             </div>
