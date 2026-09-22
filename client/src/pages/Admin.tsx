@@ -2992,9 +2992,9 @@ type CrmView = "contacts" | "lists" | "list-signups" | "list-contacts" | "list-e
 function InboxPanel() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { data: rows = [], isLoading } = useQuery<InboundEmailRow[]>({
+  const { data: rows = [], isLoading } = useQuery<(InboundEmailRow & { saidText?: string })[]>({
     queryKey: ["/api/admin/inbound"],
-    queryFn: () => adminGet<InboundEmailRow[]>("/api/admin/inbound"),
+    queryFn: () => adminGet<(InboundEmailRow & { saidText?: string })[]>("/api/admin/inbound"),
     refetchInterval: 60_000,
   });
   const [open, setOpen] = useState<number | null>(null);
@@ -3055,7 +3055,7 @@ function InboxPanel() {
                       <span className="mr-1.5">📥</span>{who}
                       <span className="ml-2 font-normal text-muted-foreground">{r.subject}</span>
                     </p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{r.summary || r.bodyText.slice(0, 140)}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{r.summary || (r.saidText || r.bodyText).slice(0, 140)}</p>
                   </div>
                   <div className="shrink-0 text-right text-[11px] text-muted-foreground">
                     <div>{new Date(r.receivedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</div>
@@ -3072,10 +3072,16 @@ function InboxPanel() {
                   <div className="mt-3 grid gap-3 lg:grid-cols-2">
                     <div className="rounded-lg bg-muted/40 p-3 text-sm">
                       <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">They wrote</p>
-                      <pre className="whitespace-pre-wrap font-sans text-sm">{r.bodyText.slice(0, 4000)}</pre>
+                      <pre className="whitespace-pre-wrap font-sans text-sm">{(r.saidText || r.bodyText).slice(0, 4000)}</pre>
+                      {r.saidText && r.saidText.length < r.bodyText.length - 40 && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Show the quoted email</summary>
+                          <pre className="mt-2 whitespace-pre-wrap border-l-2 border-border pl-3 font-sans text-xs text-muted-foreground">{r.bodyText.slice(r.saidText.length, r.saidText.length + 4000)}</pre>
+                        </details>
+                      )}
                       {r.ackAt && (
                         <>
-                          <p className="mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Alex acknowledged, automatically · {new Date(r.ackAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+                          <p className="mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">⚡ Alex acknowledged, automatically · {new Date(r.ackAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
                           <pre className="whitespace-pre-wrap font-sans text-xs text-muted-foreground">{r.ackText}</pre>
                         </>
                       )}

@@ -96,7 +96,7 @@ import {
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
 import { alexAnswer, type AlexTurn } from "./alex.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
-import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck } from "./inbox.js";
+import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted } from "./inbox.js";
 import { waitUntil } from "@vercel/functions";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
@@ -4950,7 +4950,7 @@ export function registerRoutes(app: Express): void {
           (r) => r.id !== row.id && r.ackAt && Date.now() - Date.parse(r.ackAt) < 24 * 3600_000 && thread(r.subject) === thread(row.subject),
         );
         if (recent) return;
-        const { subject, text, html: body } = composeAck(row, draft?.ack ?? "");
+        const { subject, text, html: body } = composeAck(row, draft?.ack ?? "", await firstNameFor(row));
         const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: "We got your email", body });
         const headers: Record<string, string> = {};
         if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
@@ -4995,7 +4995,7 @@ export function registerRoutes(app: Express): void {
   // ---- Inbox: replies that came in, with a draft answer each ----------------
   app.get("/api/admin/inbound", requireAdmin, async (_req, res) => {
     noStore(res);
-    res.json(await storage.listInbound());
+    res.json((await storage.listInbound()).map((r) => ({ ...r, saidText: stripQuoted(r.bodyText) })));
   });
 
   /** File a reply by hand — one that arrived before the inbox existed. */

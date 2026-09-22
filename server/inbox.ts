@@ -24,6 +24,22 @@ export interface InboundDraft {
 
 const ET = "America/New_York";
 
+/**
+ * The part they typed. A reply from a mail client carries the whole email it
+ * answers underneath, quoted; the drafter choked on it and the panel showed
+ * a wall of our own words. Everything from the first "On … wrote:" line, or
+ * the first quoted line, is the quote.
+ */
+export function stripQuoted(text: string): string {
+  const lines = text.replace(/\r/g, "").split("\n");
+  let cut = lines.length;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (/^>/.test(l) || /^On .{6,120} wrote:$/.test(l) || /^-{2,}\s*Original Message\s*-{2,}$/i.test(l) || /^From: .+$/.test(l) && i + 1 < lines.length && /^(Sent|Date): /.test(lines[i + 1].trim())) { cut = i; break; }
+  }
+  return lines.slice(0, cut).join("\n").trim();
+}
+
 function at(startAtUtc: string, slotMinutes: number, slot: number): string {
   return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: ET })
     .format(new Date(Date.parse(startAtUtc) + slot * slotMinutes * 60_000));
@@ -79,7 +95,8 @@ Rules:
 Also write "ack": one to three plain sentences, team voice, no greeting and no sign-off, that answer what they asked using only the context — the part of an automatic acknowledgement that goes out the moment their mail arrives. If the context does not answer it, or they asked to cancel or change a slot, make "ack" an empty string so the acknowledgement only promises a person.
 
 Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other","summary":"one line on what they want","from":"riccoh|team","subject":"Re: ...","reply":"the email body, plain text","ack":"..."}`;
-  const user = `Context:\n${context}\n\nInbound email\nFrom: ${m.fromName ? `${m.fromName} <${m.fromEmail}>` : m.fromEmail}\nSubject: ${m.subject}\n\n${m.bodyText.slice(0, 6000)}`;
+  const said = stripQuoted(m.bodyText) || m.bodyText;
+  const user = `Context:\n${context}\n\nInbound email\nFrom: ${m.fromName ? `${m.fromName} <${m.fromEmail}>` : m.fromEmail}\nSubject: ${m.subject}\n\n${said.slice(0, 4000)}`;
   const res = await client.messages.create({
     model: "claude-sonnet-5",
     max_tokens: 900,
@@ -127,8 +144,19 @@ export function looksAutomatic(m: { subject: string; fromEmail: string; bodyText
  * we have one, and a person if that did not cover it — so a podcaster always
  * knows what happens next.
  */
-export function composeAck(m: InboundEmailRow, ack: string): { subject: string; text: string; html: string } {
-  const first = (m.fromName || "").trim().split(/\s+/)[0] || "";
+export async function firstNameFor(m: { fromName: string; fromEmail: string }): Promise<string> {
+  const given = (m.fromName || "").trim().split(/\s+/)[0];
+  if (given && /^[A-Za-z]/.test(given)) return given;
+  // Mail forwarded through Google arrives without a display name; the
+  // lineup knows who they are.
+  const e = m.fromEmail.trim().toLowerCase();
+  const ev = await storage.getFeaturedEvent();
+  const sg = (await storage.listSignups(ev.id)).find((x) => x.email.trim().toLowerCase() === e);
+  const name = sg?.hostName || (await storage.getProfileByEmail(e))?.hostName || "";
+  return name.trim().split(/\s+/)[0] || "";
+}
+
+export function composeAck(m: InboundEmailRow, ack: string, first = (m.fromName || "").trim().split(/\s+/)[0] || ""): { subject: string; text: string; html: string } {
   const subject = m.subject.trim() ? (/^re:/i.test(m.subject) ? m.subject.trim() : `Re: ${m.subject.trim()}`) : "Re: your email to The Podcast Marathon";
   const answer = ack.trim();
   const greeting = first ? `Hi ${first},` : "Hi,";
