@@ -690,7 +690,7 @@ export default function Studio({ slug }: { slug?: string }) {
             chat needs a column, not the page — and Up next beside her rather
             than above the rail, so the top of the page answers "who is on,
             who is next, and who do I ask" without a scroll. */}
-        <div className="grid gap-5 xl:grid-cols-[minmax(260px,26rem)_minmax(0,1fr)_minmax(17rem,20rem)] xl:items-start">
+        <div className="grid gap-5 xl:grid-cols-[auto_minmax(0,1fr)_minmax(17rem,20rem)] xl:items-start">
           <div>
             <Link
               href="/host/dashboard"
