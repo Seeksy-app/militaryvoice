@@ -45,7 +45,7 @@ export function PhotoCropDialog({ open, imageSrc, onCancel, onConfirm }: Props) 
         <DialogHeader>
           <DialogTitle>Adjust your photo</DialogTitle>
           <DialogDescription>
-            Drag to reposition, and use the slider to zoom — works for portrait or landscape photos. We'll frame it square for the agenda.
+            Drag the photo to frame your face, and use the slider to zoom in. We'll frame it square for the agenda.
           </DialogDescription>
         </DialogHeader>
 
@@ -58,6 +58,12 @@ export function PhotoCropDialog({ open, imageSrc, onCancel, onConfirm }: Props) 
               aspect={1}
               cropShape="round"
               showGrid={false}
+              // The photo covers the frame rather than fitting inside it. With
+              // "contain" a portrait photo sat exactly in the circle at zoom 1
+              // and could not be moved at all — the drag cursor showed and
+              // nothing happened until you zoomed. Covering leaves the long
+              // side free to pan from the start.
+              objectFit="cover"
               onCropChange={setCrop}
               onZoomChange={setZoom}
               onCropComplete={handleCropComplete}
