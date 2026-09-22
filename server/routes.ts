@@ -7476,6 +7476,56 @@ The ${eventName} team`;
     return id;
   }
 
+  // ---- Crew: the dashboard for someone on the team rather than the lineup ----
+  app.get("/api/host/crew", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = ((req as any).hostEmail as string).trim().toLowerCase();
+    const ev = await storage.getFeaturedEvent();
+    if (!(await isCrew(req, ev.id))) return res.json({ isCrew: false, member: null, event: null, studioId: null });
+    const member = (await storage.listEventTeam(ev.id)).find((m) => m.email.trim().toLowerCase() === email) ?? null;
+    const studio = (await storage.listStudios(ev.id))[0];
+    res.json({
+      isCrew: true,
+      member: member ? { id: member.id, name: member.name, title: member.title, photoUrl: member.photoUrl, email: member.email } : null,
+      event: { name: ev.name, startAtUtc: ev.startAtUtc },
+      studioId: studio?.id ?? null,
+    });
+  });
+
+  /** A crew member's own row on the team, made on first save if the list let them in without one. */
+  async function crewMemberFor(req: Request, eventId: number, email: string) {
+    if (!(await isCrew(req, eventId))) return null;
+    const found = (await storage.listEventTeam(eventId)).find((m) => m.email.trim().toLowerCase() === email);
+    return found ?? (await storage.addTeamMember(eventId, { name: email.split("@")[0], title: "Crew", email, photoUrl: "" }));
+  }
+
+  app.put("/api/host/crew", requireHostSession, async (req, res) => {
+    const email = ((req as any).hostEmail as string).trim().toLowerCase();
+    const ev = await storage.getFeaturedEvent();
+    const member = await crewMemberFor(req, ev.id, email);
+    if (!member) return res.status(403).json({ message: "Only the crew can do that." });
+    const name = String(req.body?.name ?? "").trim().slice(0, 80);
+    const title = String(req.body?.title ?? "").trim().slice(0, 80);
+    if (!name) return res.status(400).json({ message: "Give us a name." });
+    const updated = await storage.updateTeamMember(member.id, { name, title: title || member.title });
+    res.json(updated);
+  });
+
+  app.post("/api/host/crew/photo", requireHostSession, (req, res, next) => {
+    upload.single("photo")(req, res, (err) => {
+      if (err) { res.status(400).json({ message: err.message }); return; }
+      next();
+    });
+  }, async (req, res) => {
+    const email = ((req as any).hostEmail as string).trim().toLowerCase();
+    const ev = await storage.getFeaturedEvent();
+    const member = await crewMemberFor(req, ev.id, email);
+    if (!member) return res.status(403).json({ message: "Only the crew can do that." });
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const photoUrl = await uploadPhoto(`team/${Date.now()}-${member.id}.jpg`, req.file.buffer);
+    res.json(await storage.updateTeamMember(member.id, { photoUrl }));
+  });
+
   app.post("/api/admin/events/:id/team/:memberId/invite", requireAdmin, async (req, res) => {
     const member = (await storage.listEventTeam(Number(req.params.id))).find((m) => m.id === Number(req.params.memberId));
     if (!member) return res.status(404).json({ message: "Team member not found" });

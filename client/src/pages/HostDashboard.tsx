@@ -60,6 +60,7 @@ import { PromotionScreen } from "@/components/PromotionScreen";
 import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, QuickDoors, TodoStrip } from "@/components/CommandCenter";
 import { StudioIcon } from "@/components/GreenRoomButton";
+import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
 import { HostNav } from "@/components/HostNav";
 import { ProScreen } from "@/components/ProScreen";
 import { AudienceConsent } from "@/components/AudienceConsent";
@@ -806,7 +807,15 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     : [];
   const openSlots = slots.filter((s) => !s.signup);
   const selectedSlot = slots.find((s) => s.index === claimIndex);
-  const inSetup = !!data && !loadingProfile && !hasProfile;
+  // Crew without a show: a producer, say. Their dashboard is not the
+  // podcaster's, and it must not ask them for a podcast they do not have.
+  const { data: crew } = useQuery<CrewInfo>({
+    queryKey: ["/api/host/crew"],
+    enabled: !!data,
+    retry: false,
+  });
+  const crewMode = !!data && !loadingProfile && !hasProfile && !!crew?.isCrew;
+  const inSetup = !!data && !loadingProfile && !hasProfile && !crewMode;
 
   // Signed in, past setup: this is a workspace, not a page of the website.
   // The public nav is for people deciding whether to take part; somebody who
@@ -869,7 +878,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                {inSetup ? "Set up your show" : "Podcaster Dashboard"}
+                {crewMode ? "Crew" : inSetup ? "Set up your show" : "Podcaster Dashboard"}
               </h1>
               {data && (
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -916,7 +925,11 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             <Skeleton className="h-24 w-full rounded-xl" />
             <Skeleton className="h-48 w-full rounded-xl" />
           </div>
-        ) : !data ? null : inSetup || screen === "editProfile" ? (
+        ) : !data ? null : crewMode && crew ? (
+          <section className="mt-6">
+            <CrewDashboard crew={crew} email={data.email} />
+          </section>
+        ) : inSetup || screen === "editProfile" ? (
           <section className="mt-6">
             {inSetup && (
               <p className="mb-6 max-w-2xl text-sm text-muted-foreground">
