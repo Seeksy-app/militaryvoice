@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PublicSignup } from "@shared/schema";
 import { slotStart, slotEnd } from "@/lib/schedule";
-import { CalendarDays, ListOrdered, PlayCircle, UserRound, LayoutDashboard, ImagePlus, Check } from "lucide-react";
+import { CalendarDays, ListOrdered, PlayCircle, UserRound, LayoutDashboard, ImagePlus, Check, Mic2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { PhotoCropDialog } from "@/components/PhotoCropDialog";
 import { StudioIcon } from "@/components/GreenRoomButton";
+import { CohostDashboard, type CohostInfo } from "@/components/CohostDashboard";
 import { formatTimeInZone, formatDateInZone } from "@/lib/schedule";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -34,8 +35,9 @@ export interface CrewInfo {
  * to the green room. Everything else on the podcaster side is a show's
  * business and stays out of the way.
  */
-export function CrewDashboard({ crew, email, onPickEvent }: { crew: CrewInfo; email: string; onPickEvent: (id: number) => void }) {
-  const [screen, setScreen] = useState<"dashboard" | "about">("dashboard");
+export function CrewDashboard({ crew, email, onPickEvent, cohost }: { crew: CrewInfo; email: string; onPickEvent: (id: number) => void; cohost?: CohostInfo }) {
+  const [screen, setScreen] = useState<"dashboard" | "about" | "cohost">("dashboard");
+  const cohostHours = cohost?.isCohost ? (cohost.hours?.length ?? 0) + ((cohost.shared?.length ?? 0) > 0 ? 1 : 0) : 0;
   const ev = crew.event;
   const start = ev ? new Date(ev.startAtUtc) : null;
   const now = new Date();
@@ -45,8 +47,9 @@ export function CrewDashboard({ crew, email, onPickEvent }: { crew: CrewInfo; em
   const greenRoom = crew.studioId ? `/studio?studioId=${crew.studioId}` : "/studio";
   const callTime = start ? formatTimeInZone(new Date(start.getTime() - 30 * 60000), ET) : null;
 
-  const nav: { key: "dashboard" | "about"; label: string; hint: string; icon: typeof LayoutDashboard }[] = [
+  const nav: { key: "dashboard" | "about" | "cohost"; label: string; hint: string; icon: typeof LayoutDashboard }[] = [
     { key: "dashboard", label: "Dashboard", hint: "The day at a glance", icon: LayoutDashboard },
+    ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `Your ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} at the desk`, icon: Mic2 }] : []),
     { key: "about", label: "About you", hint: "Name, role and photo", icon: UserRound },
   ];
   const links: { label: string; hint: string; icon: typeof ListOrdered; href: string; external?: boolean; green?: boolean }[] = [
@@ -106,7 +109,9 @@ export function CrewDashboard({ crew, email, onPickEvent }: { crew: CrewInfo; em
       </nav>
 
       <div className="min-w-0">
-        {screen === "dashboard" ? (
+        {screen === "cohost" && cohost?.isCohost ? (
+          <CohostDashboard info={cohost} onBack={() => setScreen("dashboard")} />
+        ) : screen === "dashboard" ? (
           <>
             <section className="relative overflow-hidden rounded-2xl bg-[#04102b] p-6 text-white sm:p-8" data-testid="crew-command-center">
               <div className="flex items-start gap-5">

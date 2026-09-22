@@ -1006,6 +1006,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <section className="mt-6">
             <CrewDashboard
               crew={crew}
+              cohost={cohost}
               email={data.email}
               onPickEvent={(id) => {
                 setCrewEventId(id);
