@@ -1494,7 +1494,7 @@ function SponsorsCard({ eventId }: { eventId: number }) {
     }
   }
 
-  async function patch(id: number, body: Partial<Pick<SponsorRow, "name" | "url" | "active" | "sortOrder" | "tier" | "packageId">>) {
+  async function patch(id: number, body: Partial<Pick<SponsorRow, "name" | "url" | "active" | "sortOrder" | "tier" | "packageId" | "videoUrl">>) {
     await adminSend("PATCH", `/api/admin/sponsors/${id}`, body);
     refresh();
   }
@@ -1612,6 +1612,17 @@ function SponsorsCard({ eventId }: { eventId: number }) {
                   ) : (
                     <div className="text-xs text-muted-foreground">No link</div>
                   )}
+                  {/* A video makes a scene in the handoff after each show they sponsor. */}
+                  <input
+                    type="url"
+                    defaultValue={sp.videoUrl ?? ""}
+                    placeholder="Sponsor video link (optional)"
+                    title="A link to their video. It plays in the handoff after each show they sponsor."
+                    className="mt-1 h-7 w-full max-w-xs rounded-md border border-border bg-background px-2 text-xs"
+                    onBlur={(e) => { const v = e.target.value.trim(); if (v !== (sp.videoUrl ?? "")) patch(sp.id, { videoUrl: v }); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                    data-testid={`input-sponsor-video-${sp.id}`}
+                  />
                 </div>
                 <div className="flex items-center gap-2">
                   <Select value={sp.tier || "friend"} onValueChange={(v) => patch(sp.id, { tier: v })}>

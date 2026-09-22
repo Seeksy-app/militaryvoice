@@ -520,6 +520,8 @@ export const sponsors = pgTable("sponsors", {
   name: text("name").notNull(),
   url: text("url").notNull().default(""),
   logoUrl: text("logo_url").notNull(),
+  /** A sponsor's own video. When set, a media scene runs it in the handoff after each show they sponsor. */
+  videoUrl: text("video_url").notNull().default(""),
   /** Where the logo shows. Existing rows predate tiers and stay "friend". */
   tier: text("tier").notNull().default("friend"),
   /** 0 = no package (a courtesy logo, or one tracked outside the site). */
@@ -540,6 +542,7 @@ export const updateSponsorSchema = z.object({
   packageId: z.number().int().min(0).optional(),
   sortOrder: z.number().int().optional(),
   active: z.boolean().optional(),
+  videoUrl: z.string().trim().refine((v) => v === "" || /^https?:\/\//i.test(v), "The video needs to be a link").optional(),
 });
 export type UpdateSponsor = z.infer<typeof updateSponsorSchema>;
 export type SponsorRow = typeof sponsors.$inferSelect;
@@ -866,6 +869,8 @@ export const cohostLines = pgTable(
     standard: text("standard").notNull().default(""),
     /** Roughly 75 seconds: introduction, sponsor read, room for banter. */
     stretch: text("stretch").notNull().default(""),
+    /** The same handover written for a person at the desk, not for Alex. */
+    host: text("host").notNull().default(""),
     /** Whether she carries this one alone, or hands to a live host. */
     soloIntro: boolean("solo_intro").notNull().default(false),
     /** Set once a human changes the wording; regeneration then leaves it be. */

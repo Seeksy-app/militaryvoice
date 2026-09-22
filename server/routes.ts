@@ -2751,7 +2751,7 @@ export function registerRoutes(app: Express): void {
         items.push({
           sourceKey: `handoff-${i}`,
           kind: "Handoff",
-          title: `Sponsor read & handoff`,
+          title: `Desk · thanks, sponsor read & handoff`,
           notes: `${sponsorMinutes}-minute sponsor read, then reset for the next show.`,
           startAtUtc: onAir.end.toISOString(),
           durationMinutes: event.bufferMinutes,
@@ -5372,8 +5372,53 @@ export function registerRoutes(app: Express): void {
       res.status(404).json({ message: "Sponsor not found" });
       return;
     }
+    if (parsed.data.videoUrl !== undefined) await syncSponsorVideoScenes(updated.eventId || (await storage.getFeaturedEvent()).id);
     res.json(updated);
   });
+
+  /**
+   * A sponsor with a video gets a media scene in the handoff after every
+   * show they sponsor: "Sponsor video · Name", right after that show's
+   * segment, timed to the handoff. Taking the video away takes the scenes
+   * away. Nothing is made for a sponsor without one.
+   */
+  async function syncSponsorVideoScenes(eventId: number): Promise<void> {
+    const studio = (await storage.listStudios(eventId))[0];
+    if (!studio) return;
+    const companies = await storage.listSponsors(false, [eventId, 0]);
+    const wanted = new Map<number, { name: string; sponsorId: number; videoUrl: string; signupId: number }>();
+    for (const ss of await storage.listShowSponsors(eventId)) {
+      const c = companies.find((x) => x.id === ss.sponsorId);
+      if (c?.videoUrl && ss.signupId) wanted.set(ss.signupId, { name: c.name, sponsorId: c.id, videoUrl: c.videoUrl, signupId: ss.signupId });
+    }
+    const items = await storage.listRunOfShow(eventId);
+    let scenes = await storage.listScenes(studio.id);
+    const isVideoScene = (sc: SceneRow) => sc.name.startsWith("Sponsor video · ");
+    // Take away the ones no longer wanted.
+    for (const sc of scenes.filter(isVideoScene)) {
+      const seg = items.find((r) => r.id === sc.runItemId);
+      const w = seg?.signupId ? wanted.get(seg.signupId) : undefined;
+      if (!w || w.videoUrl !== sc.mediaUrl) await storage.deleteScene(sc.id);
+    }
+    scenes = await storage.listScenes(studio.id);
+    for (const w of Array.from(wanted.values())) {
+      const seg = items.find((r) => r.signupId === w.signupId && r.kind === "Segment");
+      if (!seg) continue;
+      if (scenes.some((sc) => isVideoScene(sc) && sc.runItemId === seg.id && sc.mediaUrl === w.videoUrl)) continue;
+      const segScene = scenes.find((sc) => sc.runItemId === seg.id);
+      const handoff = items.find((r) => r.kind === "Handoff" && r.startAtUtc >= (seg.startAtUtc || "") && r.sortIndex > seg.sortIndex);
+      const created = await storage.createScene({
+        studioId: studio.id, name: `Sponsor video · ${w.name}`, sortIndex: scenes.length, kind: "media",
+        mediaUrl: w.videoUrl, mediaKind: "video", mediaLabel: `${w.name} · sponsor video`,
+        startAtUtc: handoff?.startAtUtc || seg.startAtUtc || "", runItemId: seg.id,
+      });
+      // Slot it right after the segment's own scene.
+      const ids = scenes.map((sc) => sc.id);
+      const at = segScene ? ids.indexOf(segScene.id) + 1 : ids.length;
+      ids.splice(at, 0, created.id);
+      scenes = await storage.reorderScenes(studio.id, ids);
+    }
+  }
 
   app.delete("/api/admin/sponsors/:id", requireAdmin, async (req, res) => {
     await storage.deleteSponsor(Number(req.params.id));
@@ -6613,7 +6658,7 @@ export function registerRoutes(app: Express): void {
       return {
         signupId: sg.id, slotIndex: sg.slotIndex, podcastName: sg.podcastName, hostName: sg.hostName, photoUrl: sg.photoUrl,
         showFormat: sg.showFormat, onAirStartUtc: onAir.start.toISOString(), onAirEndUtc: onAir.end.toISOString(),
-        line: line?.short || line?.standard || "",
+        line: line?.host || line?.short || line?.standard || "",
         sponsor: sp ? { name: sp.name, readLine: sp.readLine } : null,
       };
     };
