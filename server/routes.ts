@@ -3819,6 +3819,22 @@ export function registerRoutes(app: Express): void {
   }
 
   /** One click during the show: put the stage back the way this scene had it. */
+  /** Who holds the desk at a moment: the co-host with that hour, by name and face. */
+  async function deskHostFor(eventId: number, atUtc: string): Promise<{ name: string; photoUrl: string; email: string } | null> {
+    const ev = await storage.getEventById(eventId);
+    if (!ev || !atUtc) return null;
+    const block = Math.floor((Date.parse(atUtc) - Date.parse(ev.startAtUtc)) / (COHOST_BLOCK_MINUTES * 60_000));
+    const claim = (await storage.listCohostSlots(eventId)).find((c) => c.blockIndex === block);
+    if (!claim) return null;
+    const email = claim.email.trim().toLowerCase();
+    const sg = (await storage.listSignups(eventId)).find((x) => x.status !== "cancelled" && x.email.trim().toLowerCase() === email);
+    if (sg) return { name: sg.hostName, photoUrl: sg.photoUrl, email };
+    const prof = await storage.getProfileByEmail(email);
+    if (prof) return { name: prof.hostName, photoUrl: prof.photoUrl, email };
+    const member = (await storage.listEventTeam(eventId)).find((m) => m.email.trim().toLowerCase() === email);
+    return member ? { name: member.name, photoUrl: member.photoUrl, email } : null;
+  }
+
   async function applyScene(sceneId: number): Promise<{ status: number; body: unknown }> {
     const scene = await storage.getScene(sceneId);
     if (!scene) return { status: 404, body: { message: "Not found" } };
@@ -3839,11 +3855,14 @@ export function registerRoutes(app: Express): void {
         const who = row.signupId ? await storage.getSignupById(row.signupId) : undefined;
         const sponsor = row.signupId ? (await sponsorsBySignup(studio.eventId)).get(row.signupId) : undefined;
         const banner = bannerFor(scene);
+        // The desk scene: the card is whoever holds that hour as co-host,
+        // so the stage says who is talking rather than nobody.
+        const desk = row.kind === "Handoff" && !who ? await deskHostFor(studio.eventId, row.startAtUtc) : null;
         const withScene = await storage.updateStudio(studio.id, {
           currentSceneId: scene.id,
-          stageCardName: who?.hostName ?? "",
-          stageCardShow: who?.podcastName?.trim() ?? "",
-          stageCardPhoto: who?.photoUrl ?? "",
+          stageCardName: who?.hostName ?? desk?.name ?? "",
+          stageCardShow: who?.podcastName?.trim() ?? (desk ? "Co-host · at the desk" : ""),
+          stageCardPhoto: who?.photoUrl ?? desk?.photoUrl ?? "",
           stageCardSponsor: sponsor?.name ?? "",
           stageCardSponsorLogo: sponsor?.logoUrl ?? "",
             currentSceneTakenAtUtc: new Date().toISOString(),
@@ -3860,6 +3879,8 @@ export function registerRoutes(app: Express): void {
           ...banner,
           // The sponsor rides on the lower third too, when there is one.
           ...(sponsor && banner.bannerTitle ? { bannerSubtitle: [banner.bannerSubtitle, `Presented by ${sponsor.name}`].filter(Boolean).join(" · ") } : {}),
+          // At the desk the lower third is the co-host's name.
+          ...(desk && !banner.bannerTitle ? { bannerTitle: desk.name, bannerSubtitle: "Co-host · The Podcast Marathon", bannerVisible: true } : {}),
         });
         if (withScene) {
           const ev = await storage.getEventById(studio.eventId);
