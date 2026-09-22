@@ -591,7 +591,7 @@ export function StageGrid({
              cut to them and they are on their way. Their face and the show,
              so the room and the audience know who is next. */
           <>
-            <p className="relative text-xs font-bold uppercase tracking-[0.3em] text-[#F0A71F]" data-testid="stage-coming-up">Coming up next</p>
+            <p className="relative text-xs font-bold uppercase tracking-[0.3em] text-[#F0A71F]" data-testid="stage-coming-up">{meta.stageCardShow?.startsWith("Co-host") ? "At the desk" : "Coming up next"}</p>
             {meta.stageCardPhoto ? (
               <img src={meta.stageCardPhoto} alt="" className="relative h-36 w-36 rounded-full object-cover object-[50%_28%] ring-4 ring-[#F0A71F]/60 sm:h-44 sm:w-44" />
             ) : (

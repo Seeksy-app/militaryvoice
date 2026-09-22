@@ -113,6 +113,12 @@ function CohostStrip({ adminGet, event, zone }: { adminGet: Props["adminGet"]; e
   );
 }
 
+/** "34:28" from seconds; "1:17:18" past an hour. */
+export function fmtRun(secs: number): string {
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), r = secs % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}` : `${m}:${String(r).padStart(2, "0")}`;
+}
+
 export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -569,9 +575,20 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
 
                     {s?.showFormat === "prerecorded" && (
                       it.mediaUrl.trim() ? (
-                        <Badge variant="outline" className="mt-1.5 gap-1 border-green-600/50 text-xs font-normal text-green-700 dark:text-green-400" title={it.mediaUrl}>
-                          <Check className="h-3 w-3" /> Roll their file{it.mediaLabel ? ` · ${it.mediaLabel}` : ""}
-                        </Badge>
+                        <span className="mt-1.5 inline-flex flex-wrap items-center gap-1.5">
+                          <Badge variant="outline" className="gap-1 border-green-600/50 text-xs font-normal text-green-700 dark:text-green-400" title={it.mediaUrl}>
+                            <Check className="h-3 w-3" /> Roll their file{it.mediaLabel ? ` · ${it.mediaLabel}` : ""}
+                          </Badge>
+                          {(it as { mediaSeconds?: number }).mediaSeconds ? (
+                            (it as { mediaSeconds?: number }).mediaSeconds! > it.durationMinutes * 60 ? (
+                              <Badge className="gap-1 bg-[#ED1C24] text-xs font-semibold text-white hover:bg-[#ED1C24]" title="The file is longer than the on-air window. It will be cut off, or the desk has to take it out early." data-testid={`badge-runs-long-${it.id}`}>
+                                Runs {fmtRun((it as { mediaSeconds?: number }).mediaSeconds!)} · slot is {it.durationMinutes}:00
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="gap-1 text-xs font-normal" data-testid={`badge-runs-${it.id}`}>Runs {fmtRun((it as { mediaSeconds?: number }).mediaSeconds!)}</Badge>
+                            )
+                          ) : null}
+                        </span>
                       ) : (
                         <Badge variant="outline" className="mt-1.5 gap-1 border-amber-500 text-xs font-normal text-amber-700 dark:text-amber-400" title="Pre-recorded, but no file is attached to this row yet">
                           <PlayCircle className="h-3 w-3" /> No file attached yet

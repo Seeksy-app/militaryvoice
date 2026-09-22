@@ -785,6 +785,8 @@ export const showAssets = pgTable("show_assets", {
    *  Supabase caps objects at 48MB project-wide, which is smaller than the
    *  episodes podcasters are being asked to send. */
   storageKey: text("storage_key").notNull().default(""),
+  /** How long a video runs, measured when it was put in the library. 0 when unknown. */
+  durationSeconds: integer("duration_seconds").notNull().default(0),
   linkUrl: text("link_url").notNull().default(""),
   fileName: text("file_name").notNull().default(""),
   sizeBytes: integer("size_bytes").notNull().default(0),

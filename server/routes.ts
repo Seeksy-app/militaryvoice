@@ -288,6 +288,19 @@ function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[numbe
  * handful, not one per row.
  */
 /** Which company backs which show, by signup id. */
+/** "34:28" from seconds; "1:17:18" past an hour. */
+function fmtRun(secs: number): string {
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+}
+/** The measured length of a library file behind a media link, in seconds; 0 when unknown. */
+async function mediaSecondsFor(mediaUrl: string): Promise<number> {
+  const m = /\/api\/studio\/media\/(\d+)/.exec(mediaUrl || "");
+  if (!m) return 0;
+  const asset = await storage.getAsset(Number(m[1]));
+  return asset?.durationSeconds ?? 0;
+}
+
 async function sponsorsBySignup(eventId: number): Promise<Map<number, { id: number; name: string; logoUrl: string; url: string; readLine: string }>> {
   const out = new Map<number, { id: number; name: string; logoUrl: string; url: string; readLine: string }>();
   const rows = await storage.listShowSponsors(eventId);
@@ -2189,7 +2202,7 @@ export function registerRoutes(app: Express): void {
       }
 
       const created = await storage.createAsset({
-        email, kind, label, fileUrl, storageKey: fromR2 ? storageKey : "", linkUrl, fileName, sizeBytes,
+        email, kind, label, fileUrl, storageKey: fromR2 ? storageKey : "", linkUrl, fileName, sizeBytes, durationSeconds: 0,
       });
       // The link needs the row's own id, so it is set the moment there is one.
       if (fromR2) {
@@ -2678,7 +2691,10 @@ export function registerRoutes(app: Express): void {
   // ---- Run of show ------------------------------------------------------------
   app.get("/api/admin/run-of-show", requireAdmin, async (req, res) => {
     const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
-    res.json(await storage.listRunOfShow(eventId));
+    // A row that rolls a file says how long the file runs, so a 77-minute
+    // episode in a 25-minute slot is seen here and not at 9:31 on the day.
+    const rows = await storage.listRunOfShow(eventId);
+    res.json(await Promise.all(rows.map(async (r) => ({ ...r, mediaSeconds: r.mediaUrl ? await mediaSecondsFor(r.mediaUrl) : 0 }))));
   });
 
   /** Build the plan from the schedule: pre-show, then each slot with a sponsor
@@ -3020,7 +3036,7 @@ export function registerRoutes(app: Express): void {
             found.studio.currentSceneTakenAtUtc,
           )
         : null,
-      scenes: allScenes,
+      scenes: await Promise.all(allScenes.map(async (sc) => ({ ...sc, mediaSeconds: sc.mediaUrl ? await mediaSecondsFor(sc.mediaUrl) : 0 }))),
       runItems: await storage.listRunOfShow(found.studio.eventId),
       signups: (await storage.listSignups(found.studio.eventId)).filter((x) => x.status !== "cancelled"),
     });
@@ -3567,7 +3583,7 @@ export function registerRoutes(app: Express): void {
     const fileName = String(req.body?.fileName ?? "").slice(0, 200);
     const label = String(req.body?.label ?? "").trim().slice(0, 120) || fileName.replace(/\.[^.]+$/, "");
     const kind = (ASSET_KINDS as readonly string[]).includes(String(req.body?.kind)) ? String(req.body.kind) : "Other";
-    const created = await storage.createAsset({
+    const created = await storage.createAsset({ durationSeconds: Math.max(0, Math.round(Number(req.body?.durationSeconds) || 0)),
       email: HOUSE_EMAIL,
       kind,
       label,
@@ -3656,7 +3672,8 @@ export function registerRoutes(app: Express): void {
   app.get("/api/admin/scenes", requireAdmin, async (req, res) => {
     noStore(res);
     const { studio } = await adminStudio(req);
-    res.json(await storage.listScenes(studio.id));
+    const rows = await storage.listScenes(studio.id);
+    res.json(await Promise.all(rows.map(async (sc) => ({ ...sc, mediaSeconds: sc.mediaUrl ? await mediaSecondsFor(sc.mediaUrl) : 0 }))));
   });
 
   /**
@@ -6668,26 +6685,29 @@ export function registerRoutes(app: Express): void {
     const start = Date.parse(ev.startAtUtc);
     const blockMs = COHOST_BLOCK_MINUTES * 60_000;
     const slotMs = ev.slotMinutes * 60_000;
-    const showOf = (sg: SignupRow) => {
+    const showOf = async (sg: SignupRow) => {
       const blockStart = new Date(start + sg.slotIndex * slotMs);
       const onAir = ev.bufferPosition === "before"
         ? { start: new Date(blockStart.getTime() + ev.bufferMinutes * 60_000), end: new Date(blockStart.getTime() + (ev.bufferMinutes + ev.onAirMinutes) * 60_000) }
         : { start: blockStart, end: new Date(blockStart.getTime() + ev.onAirMinutes * 60_000) };
       const intro = runItems.find((r) => r.signupId === sg.id && r.kind === "Intro");
+      const segment = runItems.find((r) => r.signupId === sg.id && r.kind === "Segment");
       const line = intro ? lines.find((l) => l.runItemId === intro.id) : undefined;
       const sp = sponsors.get(sg.id);
+      const recordingSeconds = segment?.mediaUrl ? await mediaSecondsFor(segment.mediaUrl) : 0;
       return {
         signupId: sg.id, slotIndex: sg.slotIndex, podcastName: sg.podcastName, hostName: sg.hostName, photoUrl: sg.photoUrl,
         showFormat: sg.showFormat, onAirStartUtc: onAir.start.toISOString(), onAirEndUtc: onAir.end.toISOString(),
+        recordingSeconds, recordingLabel: segment?.mediaLabel ?? "", onAirMinutes: ev.onAirMinutes,
         line: line?.host || line?.short || line?.standard || "",
         sponsor: sp ? { name: sp.name, readLine: sp.readLine } : null,
       };
     };
-    const hours = claims.map((c) => {
+    const hours = await Promise.all(claims.map(async (c) => {
       const s0 = start + c.blockIndex * blockMs; const e0 = s0 + blockMs;
-      const shows = active.filter((sg) => { const t = start + sg.slotIndex * slotMs; return t >= s0 && t < e0; }).sort((a, b) => a.slotIndex - b.slotIndex).map(showOf);
+      const shows = await Promise.all(active.filter((sg) => { const t = start + sg.slotIndex * slotMs; return t >= s0 && t < e0; }).sort((a, b) => a.slotIndex - b.slotIndex).map(showOf));
       return { blockIndex: c.blockIndex, startAtUtc: new Date(s0).toISOString(), endAtUtc: new Date(e0).toISOString(), shows };
-    });
+    }));
     const studio = (await storage.listStudios(ev.id))[0];
     const profile = await storage.getProfileByEmail(email);
     res.json({
@@ -6695,7 +6715,7 @@ export function registerRoutes(app: Express): void {
       name: profile?.hostName ?? "",
       event: { id: ev.id, name: ev.name, startAtUtc: ev.startAtUtc, slotMinutes: ev.slotMinutes, durationHours: ev.durationHours, slug: ev.slug },
       hours,
-      shared: shared.map(showOf),
+      shared: await Promise.all(shared.map(showOf)),
       studioId: studio?.id ?? null,
     });
   });

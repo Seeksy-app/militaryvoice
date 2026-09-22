@@ -17,7 +17,11 @@ export interface CohostShow {
   onAirEndUtc: string;
   line: string;
   sponsor: { name: string; readLine: string } | null;
+  recordingSeconds?: number;
+  recordingLabel?: string;
+  onAirMinutes?: number;
 }
+const fmtRun = (secs: number) => { const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), r = secs % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}` : `${m}:${String(r).padStart(2, "0")}`; };
 export interface CohostInfo {
   isCohost: boolean;
   name?: string;
@@ -59,6 +63,15 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
         )}
         {s.sponsor && (
           <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground"><Handshake className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#053877]" /><span><span className="font-semibold text-foreground">Sponsor: {s.sponsor.name}.</span> {s.sponsor.readLine || "Thank them at the handoff."}</span></p>
+        )}
+        {s.showFormat === "prerecorded" && (
+          s.recordingSeconds ? (
+            <p className={`mt-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold ${s.recordingSeconds > (s.onAirMinutes ?? 25) * 60 ? "bg-[#ED1C24]/10 text-[#ED1C24]" : "bg-muted text-foreground"}`} data-testid={`cohost-runs-${s.signupId}`}>
+              <PlayCircle className="h-3.5 w-3.5" /> The file runs {fmtRun(s.recordingSeconds)}{s.recordingSeconds > (s.onAirMinutes ?? 25) * 60 ? ` · the slot is ${s.onAirMinutes ?? 25}:00, so it will be taken out early` : ""}
+            </p>
+          ) : (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-[#F0A71F]/15 px-2 py-1 text-xs font-semibold text-[#8a5a00]"><PlayCircle className="h-3.5 w-3.5" /> No file on this slot yet</p>
+          )
         )}
         <p className="mt-1.5 text-xs text-muted-foreground">{s.showFormat === "prerecorded" ? "The producer rolls the episode. You bring it on, and take it out at the end." : "They're live from the green room. Bring them on, and the handoff at the end is yours."}</p>
       </div>

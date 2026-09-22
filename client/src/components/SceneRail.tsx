@@ -88,7 +88,11 @@ function isImage(sc: SceneRow): boolean {
 export function sceneKindLabel(sc: SceneRow): string {
   const k = kindOf(sc);
   if (k === "countdown") return `${Math.round(sc.countdownSeconds / 60)} min clock`;
-  if (k === "media") return sc.mediaLabel || (isImage(sc) ? "Image" : "Clip");
+  if (k === "media") {
+    const secs = (sc as { mediaSeconds?: number }).mediaSeconds ?? 0;
+    const base = sc.mediaLabel || (isImage(sc) ? "Image" : "Clip");
+    return secs ? `${base} · ${Math.floor(secs / 3600) ? `${Math.floor(secs / 3600)}:${String(Math.floor((secs % 3600) / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}` : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`}` : base;
+  }
   return "Cameras";
 }
 

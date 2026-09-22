@@ -97,6 +97,12 @@ async function main() {
       console.log("  faststart FAILED — sending as is");
     }
 
+    // How long it runs, read on the VPS where ffprobe is, so the run of show
+    // can say it before the day.
+    const probed = spawnSync("ssh", ["-o", "BatchMode=yes", HOST, `ffprobe -v error -show_entries format=duration -of csv=p=0 ${JSON.stringify(remote)}`], { encoding: "utf8" });
+    const durationSeconds = Math.round(Number((probed.stdout ?? "").trim()) || 0);
+    if (durationSeconds) console.log(`  runs ${Math.floor(durationSeconds / 60)}:${String(durationSeconds % 60).padStart(2, "0")}`);
+
     const key = `studio/${Date.now()}-${name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80)}`;
     const url = signedRecordingUpload(key, 6 * 3600);
     console.log("  vps → R2");
@@ -111,7 +117,7 @@ async function main() {
       method: "POST",
       headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
       body: JSON.stringify({
-        storageKey: key, fileName: name, sizeBytes: t.size, kind: "Other",
+        storageKey: key, fileName: name, sizeBytes: t.size, kind: "Other", durationSeconds,
         label: oneLabel || name.replace(/\.[^.]+$/, "").replace(/\s*-\s*\d{4}-\d{2}-\d{2}.*$/, "").trim(),
       }),
     });
