@@ -96,7 +96,8 @@ import {
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
 import { alexAnswer, type AlexTurn } from "./alex.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
-import { draftReply, matchBroadcast } from "./inbox.js";
+import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck } from "./inbox.js";
+import { waitUntil } from "@vercel/functions";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
@@ -4739,9 +4740,11 @@ export function registerRoutes(app: Express): void {
     }
 
     // Acknowledge before doing any work: Resend retries, and a retry storm on
-    // a bug of ours is worse than one missed forward.
+    // a bug of ours is worse than one missed forward. The work is handed to
+    // waitUntil so Vercel does not freeze the function the moment it answers.
     res.json({ ok: true });
 
+    const work = (async () => {
     try {
       const evt = JSON.parse(raw.toString("utf8")) as any;
       if (evt?.type !== "email.received") return;
@@ -4841,20 +4844,66 @@ export function registerRoutes(app: Express): void {
           replyResendId: "",
           replyFrom: "",
           replyText: "",
+          ackAt: null,
+          ackResendId: "",
+          ackText: "",
         });
-        try {
-          const draft = await draftReply(row);
-          await storage.updateInbound(row.id, { category: draft.category, summary: draft.summary, draftFrom: draft.from, draftSubject: draft.subject, draftText: draft.reply, status: "drafted" });
-        } catch (err) {
-          console.error("Inbound draft failed:", err);
-        }
+        await draftLater(row.id, { ack: true });
       } catch (err) {
         console.error("Inbound filing failed:", err);
       }
     } catch (err) {
       console.error("Inbound forward failed:", err);
     }
+    })();
+    try { waitUntil(work); } catch { /* not on Vercel */ }
   });
+
+  /**
+   * Draft after the response has gone. On Vercel a function is frozen once it
+   * answers, so anything left running is lost — the first filed reply sat at
+   * "new" with no draft for that reason. waitUntil keeps the function alive
+   * for the promise; off Vercel it just runs.
+   */
+  function draftLater(rowId: number, opts: { ack?: boolean } = {}) {
+    const job = (async () => {
+      const row = await storage.getInbound(rowId);
+      if (!row) return;
+      let draft;
+      try {
+        draft = await draftReply(row);
+        await storage.updateInbound(row.id, { category: draft.category, summary: draft.summary, draftFrom: draft.from, draftSubject: draft.subject, draftText: draft.reply, status: "drafted" });
+      } catch (err) {
+        console.error("Inbound draft failed:", err);
+      }
+      if (!opts.ack) return;
+      // The automatic acknowledgement: every podcaster or sponsor who writes
+      // in hears back at once — thanks, the answer when we have one, and a
+      // person if that did not cover it. Never to a machine, never twice in a
+      // day to the same address, and never to a mail filed by hand.
+      try {
+        if (looksAutomatic(row) || !(await isKnownSender(row.fromEmail))) return;
+        const recent = (await storage.listInboundByEmail(row.fromEmail)).some((r) => r.id !== row.id && r.ackAt && Date.now() - Date.parse(r.ackAt) < 24 * 3600_000);
+        if (recent) return;
+        const { subject, text } = composeAck(row, draft?.ack ?? "");
+        const paragraphs = text.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("\n");
+        const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: "We got your email", body: paragraphs });
+        const headers: Record<string, string> = {};
+        if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
+        const id = await sendOneOffEmail({ to: row.fromEmail, subject, html, text, headers });
+        if (!id) return;
+        const now = new Date().toISOString();
+        await storage.updateInbound(row.id, { ackAt: now, ackResendId: id, ackText: text });
+        const featured = await storage.getFeaturedEvent();
+        await storage.recordOneOffSend({ eventId: featured?.id ?? null, subject, bodyText: text, sender: "team", banner: "podcasters", email: row.fromEmail, resendId: id });
+        console.log(`Auto-acknowledged ${row.fromEmail}: ${subject}`);
+      } catch (err) {
+        console.error("Inbound ack failed:", err);
+      }
+    })();
+    try { waitUntil(job); } catch { /* not on Vercel */ }
+    return job;
+  }
 
   // ---- Inbox: replies that came in, with a draft answer each ----------------
   app.get("/api/admin/inbound", requireAdmin, async (_req, res) => {
@@ -4872,14 +4921,10 @@ export function registerRoutes(app: Express): void {
       resendId: "", messageId: "", fromEmail, fromName: String(req.body?.fromName ?? "").trim(), toAddr: "hello@militaryvoice.ai",
       subject, bodyText, receivedAt: String(req.body?.receivedAt ?? new Date().toISOString()), broadcastId: await matchBroadcast(subject),
       category: "", summary: "", draftFrom: "team", draftSubject: "", draftText: "", status: "new", repliedAt: null, replyResendId: "", replyFrom: "", replyText: "",
+      ackAt: null, ackResendId: "", ackText: "",
     });
     res.json(row);
-    try {
-      const draft = await draftReply(row);
-      await storage.updateInbound(row.id, { category: draft.category, summary: draft.summary, draftFrom: draft.from, draftSubject: draft.subject, draftText: draft.reply, status: "drafted" });
-    } catch (err) {
-      console.error("Inbound draft failed:", err);
-    }
+    draftLater(row.id);
   });
 
   app.post("/api/admin/inbound/:id/redraft", requireAdmin, async (req, res) => {

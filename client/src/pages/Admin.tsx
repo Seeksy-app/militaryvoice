@@ -787,9 +787,26 @@ function SignupsCard({ eventId }: { eventId: number }) {
           <p className="text-sm text-muted-foreground">No signups yet — share the schedule link to get started.</p>
         ) : (
           <div className="flex max-h-[70vh] flex-col gap-2.5 overflow-y-auto pr-1">
-            {active
-              .sort((a, b) => a.slotIndex - b.slotIndex)
-              .map((s) => {
+            {(() => {
+              // A half-hour nobody holds is a row here too, so the list reads
+              // like the day and a gap is not a jump from 4:00 to 5:00.
+              const dayLength = Math.floor((event.durationHours * 60) / event.slotMinutes);
+              const taken = new Set(active.map((x) => x.slotIndex));
+              const holes = Array.from({ length: dayLength }, (_, i) => i).filter((i) => !taken.has(i));
+              const openRow = (i: number) => (
+                <div key={`open-${i}`} className="flex items-center justify-between rounded-xl border-2 border-dashed border-border bg-muted/20 px-4 py-3" data-testid={`admin-open-${i}`}>
+                  <div className="text-sm">
+                    <span className="font-semibold tabular-nums">{formatDateInZone(slotStart(event.startAtUtc, event.slotMinutes, i), zone)} {formatTimeInZone(slotStart(event.startAtUtc, event.slotMinutes, i), zone)}</span>
+                    <span className="ml-2 text-muted-foreground">Open — nobody booked</span>
+                  </div>
+                  <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Open</span>
+                </div>
+              );
+              const sortedActive = [...active].sort((a, b) => a.slotIndex - b.slotIndex);
+              const lastIdx = sortedActive.length ? sortedActive[sortedActive.length - 1].slotIndex : -1;
+              const trailing = holes.filter((i) => i > lastIdx).map(openRow);
+              return [...sortedActive.map((s) => {
+                const before = holes.filter((i) => i < s.slotIndex && !sortedActive.some((x) => x.slotIndex > i && x.slotIndex < s.slotIndex)).map(openRow);
                 const start = slotStart(event.startAtUtc, event.slotMinutes, s.slotIndex);
                 const onAir = onAirWindow(start, {
                   onAirMinutes: event.onAirMinutes,
@@ -797,8 +814,9 @@ function SignupsCard({ eventId }: { eventId: number }) {
                   bufferPosition: event.bufferPosition,
                 });
                 return (
+                  <React.Fragment key={s.id}>
+                  {before}
                   <div
-                    key={s.id}
                     className="relative rounded-lg border border-border p-3 lg:grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_minmax(0,1fr)] lg:gap-x-6"
                     data-testid={`row-signup-${s.id}`}
                   >
@@ -973,8 +991,10 @@ function SignupsCard({ eventId }: { eventId: number }) {
                       );
                     })()}
                   </div>
+                  </React.Fragment>
                 );
-              })}
+              }), ...trailing];
+            })()}
           </div>
         )}
       </CardContent>
@@ -3009,6 +3029,7 @@ function InboxPanel() {
                   <div className="shrink-0 text-right text-[11px] text-muted-foreground">
                     <div>{new Date(r.receivedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</div>
                     <div className="mt-0.5">
+                      {r.ackAt && <span className="mr-2 text-emerald-700 dark:text-emerald-400">⚡ Auto-replied</span>}
                       {r.status === "sent" ? <span className="text-emerald-700 dark:text-emerald-400">✓ Replied as {r.replyFrom === "riccoh" ? "Riccoh" : "the team"}</span>
                         : r.status === "ignored" ? "Ignored"
                         : r.status === "drafted" ? `${CATEGORY[r.category] ?? "Reply"} · draft ready`
@@ -3021,6 +3042,12 @@ function InboxPanel() {
                     <div className="rounded-lg bg-muted/40 p-3 text-sm">
                       <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">They wrote</p>
                       <pre className="whitespace-pre-wrap font-sans text-sm">{r.bodyText.slice(0, 4000)}</pre>
+                      {r.ackAt && (
+                        <>
+                          <p className="mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Auto-reply sent {new Date(r.ackAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+                          <pre className="whitespace-pre-wrap font-sans text-xs text-muted-foreground">{r.ackText}</pre>
+                        </>
+                      )}
                     </div>
                     <div>
                       <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

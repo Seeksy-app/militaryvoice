@@ -17,6 +17,9 @@ export interface InboundDraft {
   from: "riccoh" | "team";
   subject: string;
   reply: string;
+  /** One to three sentences answering what they asked, for the automatic
+   *  acknowledgement — or empty when nothing in the context answers it. */
+  ack: string;
 }
 
 const ET = "America/New_York";
@@ -73,7 +76,9 @@ Rules:
 - Give times in Eastern and, when the sender's signature shows another zone, in theirs too.
 - Address them by first name if known. End with the signature line only.
 
-Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other","summary":"one line on what they want","from":"riccoh|team","subject":"Re: ...","reply":"the email body, plain text"}`;
+Also write "ack": one to three plain sentences, team voice, no greeting and no sign-off, that answer what they asked using only the context — the part of an automatic acknowledgement that goes out the moment their mail arrives. If the context does not answer it, or they asked to cancel or change a slot, make "ack" an empty string so the acknowledgement only promises a person.
+
+Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other","summary":"one line on what they want","from":"riccoh|team","subject":"Re: ...","reply":"the email body, plain text","ack":"..."}`;
   const user = `Context:\n${context}\n\nInbound email\nFrom: ${m.fromName ? `${m.fromName} <${m.fromEmail}>` : m.fromEmail}\nSubject: ${m.subject}\n\n${m.bodyText.slice(0, 6000)}`;
   const res = await client.messages.create({
     model: "claude-sonnet-5",
@@ -91,7 +96,49 @@ Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other
     from: parsed.from === "riccoh" ? "riccoh" : "team",
     subject: String(parsed.subject ?? (m.subject.startsWith("Re:") ? m.subject : `Re: ${m.subject}`)).slice(0, 200),
     reply: String(parsed.reply ?? "").trim(),
+    ack: String(parsed.ack ?? "").trim().slice(0, 600),
   };
+}
+
+/** Podcasters and sponsors: anyone we already hold a record for. */
+export async function isKnownSender(email: string): Promise<boolean> {
+  const e = email.trim().toLowerCase();
+  if (!e.includes("@")) return false;
+  const ev = await storage.getFeaturedEvent();
+  if ((await storage.listSignups(ev.id)).some((s) => s.email.trim().toLowerCase() === e)) return true;
+  if (await storage.getProfileByEmail(e)) return true;
+  if ((await storage.listSponsorInquiries()).some((s) => s.email.trim().toLowerCase() === e)) return true;
+  if ((await storage.listContacts()).some((c) => c.email.trim().toLowerCase() === e)) return true;
+  return false;
+}
+
+/** Mail that should never get an automatic answer: another machine's. */
+export function looksAutomatic(m: { subject: string; fromEmail: string; bodyText: string }): boolean {
+  const subj = m.subject.toLowerCase();
+  const from = m.fromEmail.toLowerCase();
+  if (/^(auto(matic)?[\s-]*reply|out of office|automatic reply|delivery status|undeliverable|mail delivery)/i.test(subj)) return true;
+  if (/(no-?reply|mailer-daemon|postmaster|bounce|notification)@/.test(from)) return true;
+  if (/@(militaryvoice\.(ai|io)|resend\.dev)$/.test(from)) return true;
+  return false;
+}
+
+/**
+ * The acknowledgement itself. The frame is fixed — thanks, the answer when
+ * we have one, and a person if that did not cover it — so a podcaster always
+ * knows what happens next.
+ */
+export function composeAck(m: InboundEmailRow, ack: string): { subject: string; text: string } {
+  const first = (m.fromName || "").trim().split(/\s+/)[0] || "";
+  const subject = m.subject.trim() ? (/^re:/i.test(m.subject) ? m.subject.trim() : `Re: ${m.subject.trim()}`) : "Re: your email to The Podcast Marathon";
+  const answer = ack.trim() ? `\n\n${ack.trim()}` : "";
+  const text = `${first ? `Hi ${first},` : "Hi,"}
+
+Thank you for sending this email.${answer}
+
+If this doesn't answer your question, please reply to this email. We'll get a human on it, and someone will reach out to you shortly.
+
+The Podcast Marathon team`;
+  return { subject, text };
 }
 
 /** The campaign a reply answers, read off its subject line. */

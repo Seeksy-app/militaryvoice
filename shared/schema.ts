@@ -1670,6 +1670,10 @@ export const inboundEmails = pgTable("inbound_emails", {
   replyResendId: text("reply_resend_id").notNull().default(""),
   replyFrom: text("reply_from").notNull().default(""),
   replyText: text("reply_text").notNull().default(""),
+  /** The automatic acknowledgement that went straight back, if one did. */
+  ackAt: text("ack_at"),
+  ackResendId: text("ack_resend_id").notNull().default(""),
+  ackText: text("ack_text").notNull().default(""),
   createdAt: text("created_at").notNull(),
 }, (t) => [index("inbound_from_idx").on(t.fromEmail)]);
 export type InboundEmailRow = typeof inboundEmails.$inferSelect;
