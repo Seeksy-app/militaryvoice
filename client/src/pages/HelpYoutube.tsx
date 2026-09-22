@@ -37,7 +37,7 @@ export default function HelpYoutube() {
             Your browser can't play this video. The steps below cover the same ground.
           </video>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">30 seconds: the whole connection, start to finish.</p>
+        <p className="mt-2 text-xs text-muted-foreground">45 seconds: the whole connection, start to finish.</p>
 
         <Section n={1} title="Connect your channel">
           <p>

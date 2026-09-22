@@ -15,7 +15,7 @@ export interface HelpEntry {
 export const HELP_INDEX: HelpEntry[] = [
   {
     title: "Send your slot to your own YouTube",
-    summary: "Connect your channel once and your segment streams there too, live. A 30-second video and the steps.",
+    summary: "Connect your channel once and your segment streams there too, live. A 45-second video and the steps.",
     href: "/help/youtube",
     keywords: "youtube connect channel stream live integrations google verified advanced continue scope broadcast",
     audience: "podcasters",
