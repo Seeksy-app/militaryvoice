@@ -5048,7 +5048,6 @@ export default function Admin({ tab }: { tab?: string } = {}) {
     queryFn: () => adminGet<PublicEvent[]>("/api/admin/events"),
     enabled: isAuthenticated,
   });
-  const featuredEventId = adminEvents?.find((e) => e.isFeatured)?.id ?? adminEvents?.[0]?.id ?? 0;
   const selectedEvent = adminEvents?.find((e) => e.id === selectedEventId) ?? null;
   // The URL is the source of truth for which section is open, so /admin/finances
   // can be bookmarked, linked in a note, and reached with the back button —
@@ -5277,6 +5276,9 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                 <TabsContent value="crm" className="mt-2 lg:mt-0">
                   <CrmEventPanel eventId={selectedEventId} event={selectedEvent} />
                 </TabsContent>
+                <TabsContent value="social" className="mt-2 lg:mt-0">
+                  <SocialCalendar eventId={selectedEventId} />
+                </TabsContent>
                 {/* These four used to be desktop-only, reachable on a phone
                     only by hunting for a tile on Overview. The rail lists
                     everything at every width, so they are simply here. */}
@@ -5314,7 +5316,6 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                 <div className="min-w-0 flex-1">
                   <TabsContent value="events" className="mt-2 flex flex-col gap-8 lg:mt-0">
                     <EventPicker onOpen={(id) => { setEventTab("overview"); pickEvent(id); }} />
-                    {featuredEventId > 0 && <SocialCalendar eventId={featuredEventId} />}
                     <NewEventCard />
                   </TabsContent>
                   <TabsContent value="rooms" className="mt-2 lg:mt-0">

@@ -57,6 +57,7 @@ export const EVENT_GROUPS: { title: string; items: AdminSection[] }[] = [
     title: "Getting an audience",
     items: [
       { key: "promotion", label: "Promotion", icon: Megaphone },
+      { key: "social", label: "Social calendar", icon: CalendarDays },
       { key: "crm", label: "CRM", icon: Mail },
     ],
   },
