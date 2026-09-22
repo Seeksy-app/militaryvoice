@@ -33,7 +33,7 @@ export default function HelpYoutube() {
         {/* Thirty seconds of the real thing, before the words. Served through
             the media door so the file lives with the rest of the library. */}
         <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-black shadow-sm" data-testid="help-youtube-video">
-          <video controls playsInline preload="metadata" poster="/help-youtube-poster.jpg" src="/api/studio/media/17" className="aspect-video w-full">
+          <video controls playsInline preload="metadata" poster="/help-youtube-poster.jpg?v=2" src="/api/studio/media/18" className="aspect-video w-full">
             Your browser can't play this video. The steps below cover the same ground.
           </video>
         </div>

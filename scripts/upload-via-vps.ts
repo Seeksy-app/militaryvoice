@@ -51,7 +51,13 @@ async function main() {
   await sql.end();
   const already = new Set((have as any[]).map((r) => r.file_name));
 
-  const todo = FILES.filter((f) => !already.has(basename(f))).map((f) => ({ f, size: statSync(f).size }));
+  // --file <path> [--label <text>] sends one file instead of the episode list.
+  const fileArg = process.argv.indexOf("--file");
+  const labelArg = process.argv.indexOf("--label");
+  const oneFile = fileArg > -1 ? process.argv[fileArg + 1] : "";
+  const oneLabel = labelArg > -1 ? process.argv[labelArg + 1] : "";
+  const list = oneFile ? [oneFile] : FILES;
+  const todo = list.filter((f) => oneFile || !already.has(basename(f))).map((f) => ({ f, size: statSync(f).size }));
   for (const t of todo) console.log(`  send  ${MB(t.size).padStart(9)}  ${basename(t.f)}`);
   console.log(`\n${todo.length} file(s), ${MB(todo.reduce((n, t) => n + t.size, 0))} via ${HOST}`);
   if (!process.argv.includes("--apply")) { console.log("\nDry run — pass --apply."); return; }
@@ -106,7 +112,7 @@ async function main() {
       headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
       body: JSON.stringify({
         storageKey: key, fileName: name, sizeBytes: t.size, kind: "Other",
-        label: name.replace(/\.[^.]+$/, "").replace(/\s*-\s*\d{4}-\d{2}-\d{2}.*$/, "").trim(),
+        label: oneLabel || name.replace(/\.[^.]+$/, "").replace(/\s*-\s*\d{4}-\d{2}-\d{2}.*$/, "").trim(),
       }),
     });
     const body = (await reg.json().catch(() => ({}))) as { id?: number; message?: string };

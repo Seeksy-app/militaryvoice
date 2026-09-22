@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { PlatformIcon } from "@/components/SocialIcons";
-import { Check, LogOut, HelpCircle } from "lucide-react";
+import { Check, LogOut, HelpCircle, PlayCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Link } from "wouter";
 
@@ -21,6 +22,7 @@ interface Status {
 
 export function ConnectYoutube({ locked = false, lockedReason = "" }: { locked?: boolean; lockedReason?: string } = {}) {
   const { toast } = useToast();
+  const [howTo, setHowTo] = useState(false);
   const queryClient = useQueryClient();
 
   const { data } = useQuery<Status>({
@@ -142,32 +144,57 @@ export function ConnectYoutube({ locked = false, lockedReason = "" }: { locked?:
             </HoverCard>
           )}
         </div>
-        {data.connected ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="gap-1.5 text-muted-foreground"
-            disabled={disconnect.isPending}
-            onClick={() => disconnect.mutate()}
-            data-testid="button-youtube-disconnect"
-          >
-            <LogOut className="h-3.5 w-3.5" /> Disconnect
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            disabled={locked}
-            title={locked ? lockedReason : undefined}
-            className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]"
-            onClick={() => {
-              window.location.href = "/api/host/youtube/start";
-            }}
-            data-testid="button-youtube-connect"
-          >
-            <Check className="h-3.5 w-3.5" /> Connect YouTube
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {!data.connected && (
+            <button
+              type="button"
+              onClick={() => setHowTo(true)}
+              title="Watch how to connect, 45 seconds"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:text-primary"
+              data-testid="button-youtube-howto"
+            >
+              <PlayCircle className="h-4 w-4" /> How to
+            </button>
+          )}
+          {data.connected ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="gap-1.5 text-muted-foreground"
+              disabled={disconnect.isPending}
+              onClick={() => disconnect.mutate()}
+              data-testid="button-youtube-disconnect"
+            >
+              <LogOut className="h-3.5 w-3.5" /> Disconnect
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={locked}
+              title={locked ? lockedReason : undefined}
+              className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]"
+              onClick={() => {
+                window.location.href = "/api/host/youtube/start";
+              }}
+              data-testid="button-youtube-connect"
+            >
+              <Check className="h-3.5 w-3.5" /> Connect YouTube
+            </Button>
+          )}
+        </div>
       </div>
+      {/* The how-to, right here: forty-five seconds of the connection being
+          made, so nobody has to leave the card to see what happens next. */}
+      <Dialog open={howTo} onOpenChange={setHowTo}>
+        <DialogContent className="max-w-3xl overflow-hidden p-0">
+          <DialogTitle className="px-5 pt-4 text-base">How to connect your YouTube</DialogTitle>
+          <video controls autoPlay playsInline preload="metadata" poster="/help-youtube-poster.jpg?v=2" src="/api/studio/media/18" className="aspect-video w-full bg-black" data-testid="video-youtube-howto" />
+          <p className="px-5 pb-4 text-xs text-muted-foreground">
+            Then press Connect YouTube. If Google says the app isn't verified, press Advanced, then Go to Military Voice, then Continue.{" "}
+            <Link href="/help/youtube" className="font-medium text-primary hover:underline">The full article →</Link>
+          </p>
+        </DialogContent>
+      </Dialog>
       {/* YouTube's API terms ask for these two links wherever the connection
           is made, not only in the policy. */}
       <p className="mt-2 text-[11px] text-muted-foreground">

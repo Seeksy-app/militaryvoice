@@ -146,12 +146,12 @@ function Reveal({ children, delay = 0, className = "" }: { children: React.React
 const CO_HOSTS = [
   {
     name: "Amy Forsythe",
-    line: "U.S. Navy, Retired · Today with Tally",
+    line: "U.S. Navy, Retired",
     photo: "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789581359972-53a24ac49334.jpg",
   },
   {
     name: "Jane Babcock",
-    line: "U.S. Army, Retired · Talk Veteran",
+    line: "U.S. Army, Retired",
     photo: "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1790012616137-e235fd8fe9d1.jpg",
   },
 ];
