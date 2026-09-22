@@ -142,6 +142,20 @@ function Reveal({ children, delay = 0, className = "" }: { children: React.React
   );
 }
 
+/** Riccoh's co-hosts for the day. Photos are the ones on their lineup cards. */
+const CO_HOSTS = [
+  {
+    name: "Amy Forsythe",
+    line: "U.S. Navy, Retired · Today with Tally",
+    photo: "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789581359972-53a24ac49334.jpg",
+  },
+  {
+    name: "Jane Babcock",
+    line: "U.S. Army, Retired · Talk Veteran",
+    photo: "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1790012616137-e235fd8fe9d1.jpg",
+  },
+];
+
 export default function Landing({ slug }: Props) {
   const { data: liveEvent } = useQuery<PublicEvent>({
     queryKey: ["/api/event", slug ?? "featured"],
@@ -641,7 +655,7 @@ export default function Landing({ slug }: Props) {
           </Reveal>
 
           <Reveal delay={0.1}>
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Hosted by Emmy Winner</div>
+            <div className="text-base font-bold uppercase tracking-[0.18em] text-primary sm:text-lg" data-testid="text-hosted-by">Hosted by Emmy Winner</div>
             <h2 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT} data-testid="text-host-name">
               Riccoh Player <span className="text-[0.5em] font-medium text-muted-foreground">(USMC, Retired)</span>
             </h2>
@@ -662,6 +676,22 @@ export default function Landing({ slug }: Props) {
                   <span className="text-sm text-muted-foreground">{label}</span>
                 </div>
               ))}
+            </div>
+
+            {/* The co-hosts, beside him: the two who share the desk through the day. */}
+            <div className="mt-8 border-t border-border pt-6" data-testid="row-cohosts">
+              <div className="text-sm font-bold uppercase tracking-[0.18em] text-primary">With co-hosts</div>
+              <div className="mt-4 flex flex-wrap gap-x-8 gap-y-4">
+                {CO_HOSTS.map((c) => (
+                  <div key={c.name} className="flex items-center gap-3" data-testid={`cohost-${c.name.split(" ")[0].toLowerCase()}`}>
+                    <img src={c.photo} alt={c.name} className="h-16 w-16 rounded-full object-cover ring-4 ring-[#F0A71F]/40 sm:h-20 sm:w-20" loading="lazy" />
+                    <div>
+                      <div className="text-lg font-bold leading-tight" style={HEADLINE_FONT}>{c.name}</div>
+                      <div className="text-sm text-muted-foreground">{c.line}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </Reveal>
         </div>
