@@ -814,6 +814,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     if (!studio?.currentSceneId) return null;
     const clock = showClock((scenes ?? []).map((sc) => ({ id: sc.id, name: sc.name, startAtUtc: sc.startAtUtc })), studio.currentSceneId, studio.currentSceneTakenAtUtc ?? "", tick);
     if (!clock || !Number.isFinite(clock.windowSeconds)) return null;
+    // In rehearsal the next scene is days away; a clock reading 18018:35 is
+    // noise. It shows on air, or once the scene is inside three hours.
+    if (!broadcasting && clock.windowSeconds > 3 * 3600) return null;
     return { remaining: clock.windowSeconds, label: clock.nextSceneName, mode: "next" as const };
   }, [scenes, studio?.currentSceneId, studio?.currentSceneTakenAtUtc, tick]);
   const fmtLeft = (secs: number) => { const a = Math.abs(secs); const m = Math.floor(a / 60); const sN = a % 60; return `${m}:${String(sN).padStart(2, "0")}`; };
