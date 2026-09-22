@@ -176,8 +176,10 @@ async function enhanceAndSavePhoto(buffer: Buffer): Promise<{ url: string; origi
   const stem = `${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
   const upright = await sharp(buffer).rotate().toBuffer();
 
+  // 1600 a side, not 720: the same square goes on the stage behind a host
+  // and on a TV, where 720 was soft. A small upload is not stretched.
   const web = await sharp(upright)
-    .resize(720, 720, { fit: "cover", position: "attention" })
+    .resize(1600, 1600, { fit: "cover", position: "attention", withoutEnlargement: true })
     .normalize() // auto-level contrast
     .sharpen()
     .jpeg({ quality: 88 })
