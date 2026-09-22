@@ -127,18 +127,34 @@ export function looksAutomatic(m: { subject: string; fromEmail: string; bodyText
  * we have one, and a person if that did not cover it — so a podcaster always
  * knows what happens next.
  */
-export function composeAck(m: InboundEmailRow, ack: string): { subject: string; text: string } {
+export function composeAck(m: InboundEmailRow, ack: string): { subject: string; text: string; html: string } {
   const first = (m.fromName || "").trim().split(/\s+/)[0] || "";
   const subject = m.subject.trim() ? (/^re:/i.test(m.subject) ? m.subject.trim() : `Re: ${m.subject.trim()}`) : "Re: your email to The Podcast Marathon";
-  const answer = ack.trim() ? `\n\n${ack.trim()}` : "";
-  const text = `${first ? `Hi ${first},` : "Hi,"}
+  const answer = ack.trim();
+  const greeting = first ? `Hi ${first},` : "Hi,";
+  const paragraphs = [
+    "Thank you for contacting us. Your message is very important to us.",
+    ...(answer ? [answer] : []),
+    "If this doesn't answer your question, please reply to this email. We'll get a human on it, and someone will reach out to you shortly.",
+    "For quick answers any time, I'm the Help button on militaryvoice.ai.",
+  ];
+  const text = `${greeting}\n\n${paragraphs.join("\n\n")}\n\nAlex\nAI help desk · The Podcast Marathon`;
+  const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const html =
+    `<p>${esc(greeting)}</p>` +
+    paragraphs.map((t) => `<p>${esc(t).replace("militaryvoice.ai", '<a href="https://www.militaryvoice.ai/#help" style="color:#053877;font-weight:600">militaryvoice.ai</a>')}</p>`).join("") +
+    alexSignatureHtml();
+  return { subject, text, html };
+}
 
-Thank you for sending this email.${answer}
-
-If this doesn't answer your question, please reply to this email. We'll get a human on it, and someone will reach out to you shortly.
-
-The Podcast Marathon team`;
-  return { subject, text };
+/** Alex's sign-off: her picture, her name, and what she is. */
+export function alexSignatureHtml(): string {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:22px;border-collapse:collapse"><tr>
+  <td style="padding-right:14px;vertical-align:middle"><img src="https://www.militaryvoice.ai/alex.jpg" width="56" height="56" alt="Alex" style="display:block;width:56px;height:56px;border-radius:50%;object-fit:cover"></td>
+  <td style="vertical-align:middle;font-family:Helvetica,Arial,sans-serif">
+    <div style="font-size:15px;font-weight:700;color:#0b1a3a">Alex</div>
+    <div style="font-size:12px;color:#5b6478">AI help desk · The Podcast Marathon</div>
+  </td></tr></table>`;
 }
 
 /** The campaign a reply answers, read off its subject line. */

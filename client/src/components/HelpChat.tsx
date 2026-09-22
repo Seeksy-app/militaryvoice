@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
-import { MessageCircle, X, Send, User, Check, Loader2 } from "lucide-react";
+import { X, Send, User, Check, Loader2 } from "lucide-react";
 
 // The help bubble. Ask a question, get an answer from what we know about the
 // site; at any point "Talk to a human" hands the whole thing to a person by
@@ -54,11 +54,12 @@ function linkify(text: string) {
   return out;
 }
 
-const HIDDEN_ON = ["/studio", "/watch", "/admin"];
+// Not on the studio or the watch page, where it would sit on the picture.
+const HIDDEN_ON = ["/studio", "/watch"];
 
 const OPENER: Msg = {
   role: "assistant",
-  content: "Hi — ask me anything about the Podcast Marathon: claiming a slot, how show day works, reminders. If I can't help, I'll get you to a person.",
+  content: "Hi, I'm Alex. Ask me anything about the Podcast Marathon: claiming a slot, how show day works, reminders, YouTube. If I can't help, I'll get you to a person.",
 };
 
 export function HelpChat() {
@@ -76,6 +77,11 @@ export function HelpChat() {
   const scroller = useRef<HTMLDivElement>(null);
 
   const { data: cfg } = useQuery<{ agent: boolean }>({ queryKey: ["/api/help/config"], staleTime: Infinity, retry: false });
+
+  // A link can open her: the acknowledgement email points at /#help.
+  useEffect(() => {
+    if (window.location.hash === "#help") setOpen(true);
+  }, []);
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
@@ -139,7 +145,8 @@ export function HelpChat() {
           aria-label="Open help"
           data-testid="button-help-open"
         >
-          <MessageCircle className="h-5 w-5" /> Help
+          <img src="/alex.jpg" alt="" className="-ml-1.5 h-8 w-8 rounded-full object-cover ring-2 ring-white/30" />
+          Ask Alex
         </button>
       )}
 
@@ -151,9 +158,12 @@ export function HelpChat() {
           data-testid="panel-help"
         >
           <div className="flex items-center justify-between bg-[#053877] px-4 py-3 text-white">
-            <div>
-              <p className="text-sm font-semibold">MilitaryVoice.ai help</p>
-              <p className="text-[11px] text-white/80">{cfg?.agent === false ? "A person will reply by email" : "Answers now · a person if you need one"}</p>
+            <div className="flex items-center gap-3">
+              <img src="/alex.jpg" alt="Alex" className="h-10 w-10 rounded-full object-cover ring-2 ring-white/30" />
+              <div>
+                <p className="text-sm font-semibold">Alex · AI help desk</p>
+                <p className="text-[11px] text-white/80">{cfg?.agent === false ? "A person will reply by email" : "Answers now · a person if you need one"}</p>
+              </div>
             </div>
             <button type="button" onClick={() => setOpen(false)} className="rounded-full p-1 hover:bg-white/10" aria-label="Close help" data-testid="button-help-close">
               <X className="h-4 w-4" />
@@ -164,7 +174,8 @@ export function HelpChat() {
             <>
               <div ref={scroller} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
                 {msgs.map((m, i) => (
-                  <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div key={i} className={`flex items-end gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                    {m.role === "assistant" && <img src="/alex.jpg" alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />}
                     <div
                       className={`max-w-[85%] whitespace-pre-line rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
                         m.role === "user" ? "bg-[#053877] text-white" : "bg-muted text-foreground"

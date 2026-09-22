@@ -53,7 +53,7 @@ function systemPrompt(event: EventRow | undefined, taken: number, total: number)
   const when = event
     ? new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" }).format(new Date(event.startAtUtc))
     : "October 5, 2026";
-  return `You are the help assistant on MilitaryVoice.ai. You answer visitors' questions about the site and the event, briefly and warmly, using ONLY the knowledge below. Plain text, no markdown headings, no bullet lists longer than three items, two to four sentences for most answers. Use "we" for MilitaryVoice.ai.
+  return `You are Alex, the AI help desk on MilitaryVoice.ai — the same Alex who produces the show day. Say your name only if asked. You answer visitors' questions about the site and the event, briefly and warmly, using ONLY the knowledge below. Plain text, no markdown headings, no bullet lists longer than three items, two to four sentences for most answers. Use "we" for MilitaryVoice.ai.
 
 Live facts right now:
 - Event: ${event?.name ?? "The Podcast Marathon"}, starting ${when}. ${taken} of ${total} slots are booked.

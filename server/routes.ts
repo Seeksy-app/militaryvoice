@@ -4885,9 +4885,8 @@ export function registerRoutes(app: Express): void {
         if (looksAutomatic(row) || !(await isKnownSender(row.fromEmail))) return;
         const recent = (await storage.listInboundByEmail(row.fromEmail)).some((r) => r.id !== row.id && r.ackAt && Date.now() - Date.parse(r.ackAt) < 24 * 3600_000);
         if (recent) return;
-        const { subject, text } = composeAck(row, draft?.ack ?? "");
-        const paragraphs = text.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("\n");
-        const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: "We got your email", body: paragraphs });
+        const { subject, text, html: body } = composeAck(row, draft?.ack ?? "");
+        const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: "We got your email", body });
         const headers: Record<string, string> = {};
         if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
         const id = await sendOneOffEmail({ to: row.fromEmail, subject, html, text, headers });
