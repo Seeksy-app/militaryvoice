@@ -1,6 +1,8 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { PublicSignup } from "@shared/schema";
+import { slotStart, slotEnd } from "@/lib/schedule";
 import { CalendarDays, ListOrdered, PlayCircle, UserRound, LayoutDashboard, ImagePlus, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +19,9 @@ const ET = "America/New_York";
 export interface CrewInfo {
   isCrew: boolean;
   member: { id: number; name: string; title: string; photoUrl: string; email: string } | null;
-  event: { name: string; startAtUtc: string } | null;
+  event: { id: number; name: string; startAtUtc: string; slotMinutes: number; durationHours: number; slug: string } | null;
+  /** Every event they are crew on; more than one means they choose. */
+  events: { id: number; name: string; startAtUtc: string }[];
   studioId: number | null;
 }
 
@@ -30,7 +34,7 @@ export interface CrewInfo {
  * to the green room. Everything else on the podcaster side is a show's
  * business and stays out of the way.
  */
-export function CrewDashboard({ crew, email }: { crew: CrewInfo; email: string }) {
+export function CrewDashboard({ crew, email, onPickEvent }: { crew: CrewInfo; email: string; onPickEvent: (id: number) => void }) {
   const [screen, setScreen] = useState<"dashboard" | "about">("dashboard");
   const ev = crew.event;
   const start = ev ? new Date(ev.startAtUtc) : null;
@@ -47,8 +51,8 @@ export function CrewDashboard({ crew, email }: { crew: CrewInfo; email: string }
   ];
   const links: { label: string; hint: string; icon: typeof ListOrdered; href: string; external?: boolean; green?: boolean }[] = [
     { label: "Green room", hint: "Where the crew gathers", icon: ListOrdered, href: greenRoom, external: true, green: true },
-    { label: "Full agenda", hint: "Every show, every time", icon: CalendarDays, href: "/agenda" },
-    { label: "Watch page", hint: "What the audience sees", icon: PlayCircle, href: "/watch" },
+    { label: "Full agenda", hint: "Every show, every time", icon: CalendarDays, href: "#crew-agenda" },
+    { label: "Watch page", hint: "What the audience sees", icon: PlayCircle, href: "/watch", external: true },
   ];
 
   return (
@@ -90,6 +94,8 @@ export function CrewDashboard({ crew, email }: { crew: CrewInfo; email: string }
                 const cls = "flex items-center gap-2.5 rounded-xl px-3 py-2 text-left text-foreground transition-colors hover:bg-[#053877]/[0.06]";
                 return it.external ? (
                   <a key={it.label} href={it.href} target="_blank" rel="noreferrer" className={cls} data-testid={`nav-crew-${it.label.toLowerCase().replace(/\s+/g, "-")}`}>{inner}</a>
+                ) : it.href.startsWith("#") ? (
+                  <button key={it.label} type="button" onClick={() => { setScreen("dashboard"); requestAnimationFrame(() => document.getElementById(it.href.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" })); }} className={cls} data-testid={`nav-crew-${it.label.toLowerCase().replace(/\s+/g, "-")}`}>{inner}</button>
                 ) : (
                   <Link key={it.label} href={it.href} className={cls} data-testid={`nav-crew-${it.label.toLowerCase().replace(/\s+/g, "-")}`}>{inner}</Link>
                 );
@@ -114,10 +120,20 @@ export function CrewDashboard({ crew, email }: { crew: CrewInfo; email: string }
                     <span className="h-1.5 w-1.5 rounded-full bg-[#F0A71F]" /> Crew · {crew.member?.title || "Crew"}
                   </p>
                   <h2 className="mt-1 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>{greeting}, {first} 👋</h2>
-                  <p className="mt-1 text-sm text-white/85">
-                    <span className="font-semibold text-white">{ev?.name?.trim() || "The Podcast Marathon"}</span>
-                    {" · "}
-                    {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+                  <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-white/85">
+                    {crew.events.length > 1 ? (
+                      <select
+                        value={ev?.id ?? ""}
+                        onChange={(e) => onPickEvent(Number(e.target.value))}
+                        className="rounded-md border border-white/25 bg-white/10 px-2 py-1 text-sm font-semibold text-white"
+                        data-testid="select-crew-event"
+                      >
+                        {crew.events.map((e) => <option key={e.id} value={e.id} className="text-foreground">{e.name.trim()}</option>)}
+                      </select>
+                    ) : (
+                      <span className="font-semibold text-white">{ev?.name?.trim() || "The Podcast Marathon"}</span>
+                    )}
+                    <span>· {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</span>
                   </p>
                   <p className="mt-1 text-sm text-white/70">{email}</p>
                 </div>
@@ -126,12 +142,12 @@ export function CrewDashboard({ crew, email }: { crew: CrewInfo; email: string }
                 <a href={greenRoom} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-emerald-500 bg-white px-3.5 py-2 text-sm font-medium text-foreground hover:bg-emerald-50" data-testid="door-crew-green-room">
                   <StudioIcon className="h-6 w-6 rounded-md" tone="green" /> Green room
                 </a>
-                <Link href="/agenda" className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-2 text-sm font-medium text-white hover:bg-white/15">
+                <button type="button" onClick={() => document.getElementById("crew-agenda")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-2 text-sm font-medium text-white hover:bg-white/15">
                   <ListOrdered className="h-4 w-4" /> Full agenda
-                </Link>
-                <Link href="/watch" className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-2 text-sm font-medium text-white hover:bg-white/15">
+                </button>
+                <a href="/watch" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-2 text-sm font-medium text-white hover:bg-white/15">
                   <PlayCircle className="h-4 w-4" /> Watch page
-                </Link>
+                </a>
               </div>
             </section>
 
@@ -162,6 +178,7 @@ export function CrewDashboard({ crew, email }: { crew: CrewInfo; email: string }
                 </ul>
               </div>
             </div>
+            {ev && <CrewAgenda event={ev} />}
           </>
         ) : (
           <AboutYou crew={crew} email={email} />
@@ -180,7 +197,7 @@ function AboutYou({ crew, email }: { crew: CrewInfo; email: string }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const save = useMutation({
-    mutationFn: async () => (await apiRequest("PUT", "/api/host/crew", { name: name.trim(), title: title.trim() })).json(),
+    mutationFn: async () => (await apiRequest("PUT", "/api/host/crew", { name: name.trim(), title: title.trim(), eventId: crew.event?.id })).json(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/host/crew"] });
       toast({ title: "Saved" });
@@ -192,7 +209,7 @@ function AboutYou({ crew, email }: { crew: CrewInfo; email: string }) {
     setCropSrc(null);
     const fd = new FormData();
     fd.append("photo", blob, "photo.jpg");
-    const res = await fetch("/api/host/crew/photo", { method: "POST", body: fd, credentials: "include" });
+    const res = await fetch(`/api/host/crew/photo${crew.event ? `?eventId=${crew.event.id}` : ""}`, { method: "POST", body: fd, credentials: "include" });
     if (!res.ok) {
       toast({ title: "Couldn't save that photo", description: (await res.json().catch(() => ({ message: res.statusText }))).message, variant: "destructive" });
       return;
@@ -231,6 +248,64 @@ function AboutYou({ crew, email }: { crew: CrewInfo; email: string }) {
         </form>
       </div>
       <PhotoCropDialog open={!!cropSrc} imageSrc={cropSrc} onCancel={() => setCropSrc(null)} onConfirm={uploadPhoto} />
+    </section>
+  );
+}
+
+/**
+ * The day, in order, on the crew's own page. The public agenda, compact:
+ * every slot with its time, the show and who is on, so a producer reads
+ * the day here rather than in another tab.
+ */
+function CrewAgenda({ event }: { event: NonNullable<CrewInfo["event"]> }) {
+  const { data: signups = [] } = useQuery<PublicSignup[]>({
+    queryKey: ["/api/signups", event.id],
+    queryFn: async () => (await apiRequest("GET", `/api/signups?eventId=${event.id}`)).json(),
+    staleTime: 60_000,
+  });
+  const rows = useMemo(() => {
+    const n = Math.floor((event.durationHours * 60) / event.slotMinutes);
+    return Array.from({ length: n }, (_, i) => ({
+      i,
+      start: slotStart(event.startAtUtc, event.slotMinutes, i),
+      end: slotEnd(event.startAtUtc, event.slotMinutes, i),
+      signup: signups.find((s) => s.slotIndex === i) ?? null,
+    }));
+  }, [event, signups]);
+  const nowMs = Date.now();
+  return (
+    <section id="crew-agenda" className="mt-6 scroll-mt-6 rounded-2xl border border-border bg-card" data-testid="crew-agenda">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Full agenda · {event.name.trim()}</p>
+        <a href={`/agenda`} target="_blank" rel="noreferrer" className="text-xs font-medium text-[#053877] underline underline-offset-2">Open the public agenda</a>
+      </div>
+      <div className="divide-y divide-border">
+        {rows.map((r) => {
+          const live = nowMs >= r.start.getTime() && nowMs < r.end.getTime();
+          const past = nowMs >= r.end.getTime();
+          return (
+            <div key={r.i} className={`flex items-center gap-3 px-5 py-2.5 ${past ? "opacity-50" : ""} ${live ? "bg-[#053877]/[0.05]" : ""}`} data-testid={`crew-agenda-${r.i}`}>
+              <div className="w-24 shrink-0 text-sm font-semibold tabular-nums text-foreground">{formatTimeInZone(r.start, ET)}</div>
+              {r.signup ? (
+                <>
+                  {r.signup.photoUrl ? (
+                    <img src={r.signup.photoUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover object-[50%_28%]" />
+                  ) : (
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">{r.signup.hostName.slice(0, 1)}</span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{r.signup.podcastName.trim()}</p>
+                    <p className="truncate text-xs text-foreground/70">{r.signup.hostName}{r.signup.coHost ? ` · with ${r.signup.coHost.hostName}` : ""}</p>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-foreground/60">Open</p>
+              )}
+              {live && <span className="rounded-full bg-[#ED1C24] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Live</span>}
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }

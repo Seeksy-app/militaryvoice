@@ -809,8 +809,12 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const selectedSlot = slots.find((s) => s.index === claimIndex);
   // Crew without a show: a producer, say. Their dashboard is not the
   // podcaster's, and it must not ask them for a podcast they do not have.
+  const [crewEventId, setCrewEventId] = useState<number | null>(() => {
+    try { const v = Number(localStorage.getItem("mv_crew_event") ?? ""); return v || null; } catch { return null; }
+  });
   const { data: crew } = useQuery<CrewInfo>({
-    queryKey: ["/api/host/crew"],
+    queryKey: ["/api/host/crew", crewEventId],
+    queryFn: async () => (await apiRequest("GET", `/api/host/crew${crewEventId ? `?eventId=${crewEventId}` : ""}`)).json(),
     enabled: !!data,
     retry: false,
   });
@@ -927,7 +931,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           </div>
         ) : !data ? null : crewMode && crew ? (
           <section className="mt-6">
-            <CrewDashboard crew={crew} email={data.email} />
+            <CrewDashboard
+              crew={crew}
+              email={data.email}
+              onPickEvent={(id) => {
+                setCrewEventId(id);
+                try { localStorage.setItem("mv_crew_event", String(id)); } catch { /* fine */ }
+              }}
+            />
           </section>
         ) : inSetup || screen === "editProfile" ? (
           <section className="mt-6">

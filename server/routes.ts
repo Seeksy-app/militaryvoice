@@ -7489,14 +7489,22 @@ The ${eventName} team`;
   app.get("/api/host/crew", requireHostSession, async (req, res) => {
     noStore(res);
     const email = ((req as any).hostEmail as string).trim().toLowerCase();
-    const ev = await storage.getFeaturedEvent();
-    if (!(await isCrew(req, ev.id))) return res.json({ isCrew: false, member: null, event: null, studioId: null });
+    // Every event they are crew on — a producer can be on more than one —
+    // and the one they are looking at, asked for or the featured one.
+    const all = (await storage.listEvents()).filter((e) => e.visible !== false);
+    const mine: typeof all = [];
+    for (const e of all) if (await isCrew(req, e.id)) mine.push(e);
+    if (mine.length === 0) return res.json({ isCrew: false, member: null, event: null, events: [], studioId: null });
+    const featured = await storage.getFeaturedEvent();
+    const asked = Number(req.query.eventId) || 0;
+    const ev = mine.find((e) => e.id === asked) ?? mine.find((e) => e.id === featured.id) ?? mine[0];
     const member = (await storage.listEventTeam(ev.id)).find((m) => m.email.trim().toLowerCase() === email) ?? null;
     const studio = (await storage.listStudios(ev.id))[0];
     res.json({
       isCrew: true,
       member: member ? { id: member.id, name: member.name, title: member.title, photoUrl: member.photoUrl, email: member.email } : null,
-      event: { name: ev.name, startAtUtc: ev.startAtUtc },
+      event: { id: ev.id, name: ev.name, startAtUtc: ev.startAtUtc, slotMinutes: ev.slotMinutes, durationHours: ev.durationHours, slug: ev.slug },
+      events: mine.map((e) => ({ id: e.id, name: e.name, startAtUtc: e.startAtUtc })),
       studioId: studio?.id ?? null,
     });
   });
@@ -7510,7 +7518,7 @@ The ${eventName} team`;
 
   app.put("/api/host/crew", requireHostSession, async (req, res) => {
     const email = ((req as any).hostEmail as string).trim().toLowerCase();
-    const ev = await storage.getFeaturedEvent();
+    const ev = (Number(req.body?.eventId) ? await storage.getEventById(Number(req.body.eventId)) : null) ?? (await storage.getFeaturedEvent());
     const member = await crewMemberFor(req, ev.id, email);
     if (!member) return res.status(403).json({ message: "Only the crew can do that." });
     const name = String(req.body?.name ?? "").trim().slice(0, 80);
@@ -7527,7 +7535,7 @@ The ${eventName} team`;
     });
   }, async (req, res) => {
     const email = ((req as any).hostEmail as string).trim().toLowerCase();
-    const ev = await storage.getFeaturedEvent();
+    const ev = (Number(req.query.eventId) ? await storage.getEventById(Number(req.query.eventId)) : null) ?? (await storage.getFeaturedEvent());
     const member = await crewMemberFor(req, ev.id, email);
     if (!member) return res.status(403).json({ message: "Only the crew can do that." });
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
