@@ -160,6 +160,16 @@ export function ConnectYoutube({ locked = false, lockedReason = "" }: { locked?:
           </Button>
         )}
       </div>
+      {/* YouTube's API terms ask for these two links wherever the connection
+          is made, not only in the policy. */}
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Connecting uses YouTube API Services. By connecting you agree to the{" "}
+        <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">YouTube Terms of Service</a>
+        {" "}and acknowledge the{" "}
+        <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Google Privacy Policy</a>.
+        You can revoke our access any time from your{" "}
+        <a href="https://security.google.com/settings/security/permissions" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Google security settings</a>.
+      </p>
 
       {/* The one question, asked the moment they connect and answerable any
           time after: their slot, or the day. */}

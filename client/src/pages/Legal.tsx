@@ -107,6 +107,16 @@ export function PrivacyPolicy() {
           </a>
           , including the Limited Use requirements.
         </p>
+        <p>
+          Connecting uses YouTube API Services. By connecting, you agree to the{" "}
+          <a className="text-primary hover:underline" href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer">YouTube Terms of Service</a>
+          , and Google's handling of your data is described in the{" "}
+          <a className="text-primary hover:underline" href="https://policies.google.com/privacy" target="_blank" rel="noreferrer">Google Privacy Policy</a>
+          . You can revoke our access at any time from your{" "}
+          <a className="text-primary hover:underline" href="https://security.google.com/settings/security/permissions" target="_blank" rel="noreferrer">Google security settings</a>
+          . We keep the refresh token only while your channel is connected; we do not store any other YouTube data, and
+          we never share it with anyone.
+        </p>
       </Section>
 
       <Section heading="If you link your social accounts">
