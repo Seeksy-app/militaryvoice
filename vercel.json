@@ -23,11 +23,15 @@
       "destination": "/api"
     },
     {
+      "source": "/go/(.*)",
+      "destination": "/api"
+    },
+    {
       "source": "/og/(.*)",
       "destination": "/api"
     },
     {
-      "source": "/((?!api/|assets/|s/|og/).*)",
+      "source": "/((?!api/|assets/|s/|og/|go/).*)",
       "destination": "/index.html"
     }
   ],
