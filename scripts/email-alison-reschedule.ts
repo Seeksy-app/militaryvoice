@@ -31,26 +31,20 @@ const when = (slot: number, zone: string) =>
     .format(new Date(Date.parse(ev.start_at_utc) + slot * ev.slot_minutes * 60_000));
 const both = (slot: number) => `${when(slot, "America/New_York")} Eastern (${when(slot, "Pacific/Honolulu")} Hawaii)`;
 const current = both(alison.slot_index);
-const early = both(Math.min(zach.slot_index, riccoh.slot_index));
-const late = both(Math.max(zach.slot_index, riccoh.slot_index));
+const early = both(zach.slot_index);
 
-const SUBJECT = "Sorry about the time change — two other spots for you";
+const SUBJECT = "Sorry about the time change — one other spot for you";
 
 const html = `<p>Alison,</p>
 
 <p>You're right, and I'm sorry. The schedule moved and your time changed to ${current}
 without a proper heads-up first. That's on us.</p>
 
-<p>I don't want to lose <em>Get Booked</em> from the day, so here are two spots I can
-give you on Monday, October 5:</p>
+<p>I don't want to lose <em>Get Booked</em> from the day. The one spot I can give you on
+Monday, October 5 is <strong>${early}</strong>. That's all we have.</p>
 
-<ul>
-  <li><strong>${early}</strong></li>
-  <li><strong>${late}</strong></li>
-</ul>
-
-<p>Reply with the one that works and I'll move you there myself — nothing for you to
-set up. If neither works, say so and I'll take you off the lineup, no hard feelings.</p>
+<p>Reply with a yes and I'll move you there myself — nothing for you to set up. If it
+doesn't work, say so and I'll take you off the lineup, no hard feelings.</p>
 
 <p>Riccoh</p>`;
 
@@ -58,12 +52,9 @@ const text = `Alison,
 
 You're right, and I'm sorry. The schedule moved and your time changed to ${current} without a proper heads-up first. That's on us.
 
-I don't want to lose Get Booked from the day, so here are two spots I can give you on Monday, October 5:
+I don't want to lose Get Booked from the day. The one spot I can give you on Monday, October 5 is ${early}. That's all we have.
 
-  - ${early}
-  - ${late}
-
-Reply with the one that works and I'll move you there myself — nothing for you to set up. If neither works, say so and I'll take you off the lineup, no hard feelings.
+Reply with a yes and I'll move you there myself — nothing for you to set up. If it doesn't work, say so and I'll take you off the lineup, no hard feelings.
 
 Riccoh`;
 
