@@ -64,9 +64,9 @@ export const HELP_INDEX: HelpEntry[] = [
   },
   {
     title: "Your photo and your card",
-    summary: "A print-quality headshot and your show's details make your card on the public lineup.",
+    summary: "A hi-res headshot, at least 1000 × 1000 pixels, and your show's details make your card on the lineup and the big screen.",
     href: "/host/dashboard",
-    keywords: "photo headshot picture profile card lineup crop image",
+    keywords: "photo headshot picture profile card lineup crop image hi-res high resolution size pixels blurry",
     audience: "podcasters",
   },
   {

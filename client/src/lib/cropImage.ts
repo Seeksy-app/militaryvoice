@@ -23,9 +23,12 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 export async function getCroppedImageBlob(
   imageSrc: string,
   crop: CropArea,
-  outputSize = 1000
+  outputSize?: number
 ): Promise<Blob> {
   const image = await loadImage(imageSrc);
+  // Keep the source's own resolution, up to 2000px a side: the photo goes on
+  // the stage and in print, and a 1000px cap made a hi-res upload soft.
+  outputSize = outputSize ?? Math.max(1000, Math.min(2000, Math.round(crop.width)));
   const canvas = document.createElement("canvas");
   canvas.width = outputSize;
   canvas.height = outputSize;

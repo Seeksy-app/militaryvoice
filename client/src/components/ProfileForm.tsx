@@ -156,6 +156,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  /** A word about a photo we accepted but would rather have bigger. */
+  const [photoNote, setPhotoNote] = useState<string | null>(null);
   const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
@@ -173,6 +175,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
     if (!file) {
       setPhotoFile(null);
       setPhotoPreview(null);
+      setPhotoNote(null);
       return;
     }
     if (!file.type.startsWith("image/")) {
@@ -180,10 +183,32 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
       return;
     }
     setPhotoError(null);
+    setPhotoNote(null);
     const reader = new FileReader();
     reader.onload = () => {
-      setRawImageSrc(reader.result as string);
-      setCropOpen(true);
+      const src = reader.result as string;
+      // Size it before the crop. The photo goes on the stage and in print,
+      // so a thumbnail or a screenshot is turned away and a small one gets a
+      // word, while the upload still goes through.
+      const probe = new Image();
+      probe.onload = () => {
+        const short = Math.min(probe.naturalWidth, probe.naturalHeight);
+        if (short < 400) {
+          setPhotoError(`That one is only ${probe.naturalWidth} × ${probe.naturalHeight}. We need a hi-res photo, at least 1000 pixels on the short side. Try the original from your phone or camera, not a screenshot.`);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+          return;
+        }
+        if (short < 1000) {
+          setPhotoNote(`This one is ${probe.naturalWidth} × ${probe.naturalHeight}. It will do, but it will look soft on the big screen. If you have a bigger original, use that.`);
+        }
+        setRawImageSrc(src);
+        setCropOpen(true);
+      };
+      probe.onerror = () => {
+        setRawImageSrc(src);
+        setCropOpen(true);
+      };
+      probe.src = src;
     };
     reader.readAsDataURL(file);
   }
@@ -468,9 +493,9 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                   )}
                 </button>
                 <div className="flex flex-col gap-1.5">
-                  <div className="text-sm font-medium">Photo {shownPhoto ? "" : <span className="text-destructive">*</span>}</div>
+                  <div className="text-sm font-medium">Hi-res photo {shownPhoto ? "" : <span className="text-destructive">*</span>}</div>
                   <p className="text-xs text-muted-foreground">
-                    Square works best. We'll enhance it and crop it to a circle for the agenda.
+                    Upload the biggest, sharpest photo you have: at least 1000 × 1000 pixels, the original from your phone or camera. It goes on the lineup, on the big screen during your show, and in print. You'll crop it to a circle next.
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
@@ -506,6 +531,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                     )}
                   </div>
                   {photoError && <p className="text-sm font-medium text-destructive">{photoError}</p>}
+                  {!photoError && photoNote && <p className="text-xs font-medium text-[#8a5a00]">{photoNote}</p>}
                 </div>
                 <input
                   ref={fileInputRef}
