@@ -78,9 +78,18 @@ export function HelpChat() {
 
   const { data: cfg } = useQuery<{ agent: boolean }>({ queryKey: ["/api/help/config"], staleTime: Infinity, retry: false });
 
-  // A link can open her: the acknowledgement email points at /#help.
+  // A link can open her: the acknowledgement email points at /#help. So can
+  // any button on the site, with a question already typed.
   useEffect(() => {
     if (window.location.hash === "#help") setOpen(true);
+    const onAsk = (e: Event) => {
+      const q = String((e as CustomEvent<{ question?: string }>).detail?.question ?? "");
+      setOpen(true);
+      setMode("chat");
+      if (q) setDraft(q);
+    };
+    window.addEventListener("mv:ask-alex", onAsk);
+    return () => window.removeEventListener("mv:ask-alex", onAsk);
   }, []);
 
   useEffect(() => {

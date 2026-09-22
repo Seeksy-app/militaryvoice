@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
+import { HelpSearch } from "@/components/HelpSearch";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Youtube } from "lucide-react";
@@ -27,6 +28,8 @@ export default function HelpYoutube() {
           your audience, at the same time. No stream key to find. Five minutes, start to finish.
         </p>
 
+        <div className="mt-6"><HelpSearch compact /></div>
+
         {/* Thirty seconds of the real thing, before the words. Served through
             the media door so the file lives with the rest of the library. */}
         <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-black shadow-sm" data-testid="help-youtube-video">
@@ -49,7 +52,7 @@ export default function HelpYoutube() {
           </div>
         </Section>
 
-        <Section n={2} title="Get past Google's warning">
+        <Section n={2} id="verified" title="Get past Google's warning">
           <p>
             Google shows <strong>"Google hasn't verified this app"</strong>. That's us — our verification with Google is in
             review and hasn't come back yet. The permission only lets us open a live broadcast on your channel at your booked
@@ -115,9 +118,9 @@ export default function HelpYoutube() {
   );
 }
 
-function Section({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+function Section({ n, title, children, id }: { n: number; title: string; children: React.ReactNode; id?: string }) {
   return (
-    <section className="mt-12">
+    <section className="mt-12 scroll-mt-6" id={id}>
       <h2 className="flex items-center gap-3 text-xl font-bold" style={HEADLINE_FONT}>
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">{n}</span>
         {title}

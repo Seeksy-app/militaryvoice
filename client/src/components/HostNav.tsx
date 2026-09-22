@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
-import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock } from "lucide-react";
+import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock, LifeBuoy } from "lucide-react";
+import { Link } from "wouter";
 
 export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "recordings" | "contacts" | "pro";
 
@@ -12,6 +13,8 @@ interface Item {
   /** A door that is not open yet: shown, greyed, and it opens the Pro page. */
   locked?: boolean;
   feature?: string;
+  /** A page rather than a screen: the help hub. */
+  href?: string;
 }
 
 /**
@@ -72,12 +75,34 @@ export function HostNav({
         { key: "pro", label: "Your own studio", hint: "Stream and record, any day", icon: MonitorPlay, locked: true, feature: "studio" },
       ],
     },
+    {
+      title: "Help",
+      items: [{ key: "dashboard", label: "Help", hint: "Search the help, or ask Alex", icon: LifeBuoy, href: "/help" }],
+    },
   ];
 
   const link = (it: Item, compact: boolean) => {
+    const Icon = it.icon;
+    if (it.href) {
+      return (
+        <Link
+          key={`href-${it.href}`}
+          href={it.href}
+          className={compact
+            ? "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[#053877]/[0.06] px-3 py-1.5 text-sm font-medium text-foreground"
+            : "flex items-center gap-2.5 rounded-xl px-3 py-2 text-left text-foreground transition-colors hover:bg-[#053877]/[0.06]"}
+          data-testid={`nav-host-help`}
+        >
+          <Icon className="h-4 w-4 shrink-0 text-[#053877]" />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-1.5 text-[15px] font-semibold tracking-[-0.01em]">{it.label}</span>
+            {!compact && <span className="block text-xs font-normal text-foreground/80">{it.hint}</span>}
+          </span>
+        </Link>
+      );
+    }
     const active = it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key;
     const inert = !!it.locked && !proOpen;
-    const Icon = it.icon;
     return (
       <a
         key={`${it.key}-${it.feature ?? ""}`}
@@ -133,7 +158,7 @@ export function HostNav({
       <nav className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-10rem)]" aria-label="Dashboard sections">
         <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-5 rounded-2xl border border-border bg-card p-3 shadow-sm">
           {groups.map((g) => (
-            <div key={g.title}>
+            <div key={g.title} className={g.title === "Help" ? "mt-auto" : undefined}>
               <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{g.title}</p>
               <div className="flex flex-col gap-0.5">{g.items.map((it) => link(it, false))}</div>
             </div>
