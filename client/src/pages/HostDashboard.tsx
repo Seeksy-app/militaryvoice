@@ -193,9 +193,13 @@ function SeatSwitcher({ current }: { current: string }) {
   });
   if (!me) return null;
   const others = seats.filter((s) => s.email !== current.trim().toLowerCase());
+  const viewingAs = me.email.trim().toLowerCase() !== current.trim().toLowerCase();
   return (
     <div className="flex flex-wrap items-center gap-1.5" data-testid="seat-switcher">
-      <a href="/admin" className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-foreground hover:border-[#053877]/40">Admin</a>
+      {/* Viewing as somebody else: the way back is the loudest thing in the row. */}
+      <a href="/admin" className={viewingAs ? "rounded-full bg-[#F0A71F] px-3 py-1 text-[11px] font-bold text-[#1a1200] hover:brightness-105" : "rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-foreground hover:border-[#053877]/40"} data-testid="seat-admin">
+        {viewingAs ? "← Back to admin" : "Admin"}
+      </a>
       {others.map((s) => (
         <button
           key={s.email}
