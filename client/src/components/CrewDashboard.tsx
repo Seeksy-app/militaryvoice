@@ -135,7 +135,7 @@ export function CrewDashboard({ crew, email, onPickEvent }: { crew: CrewInfo; em
                     )}
                     <span>· {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</span>
                   </p>
-                  <p className="mt-1 text-sm text-white/70">{email}</p>
+                  <p className="mt-1 text-sm text-white/70">{crew.member?.email || email}</p>
                 </div>
               </div>
               <div className="mt-6 flex flex-wrap gap-2">
@@ -221,7 +221,13 @@ function AboutYou({ crew, email }: { crew: CrewInfo; email: string }) {
   return (
     <section className="rounded-2xl border border-border bg-card p-6" data-testid="crew-about">
       <h2 className="text-xl font-bold tracking-tight" style={HEADLINE_FONT}>About you</h2>
-      <p className="mt-1 text-sm text-foreground/80">Your name and role, as the crew and the studio see them. Signed in as {email}.</p>
+      <p className="mt-1 text-sm text-foreground/80">Your name and role, as the crew and the studio see them.</p>
+      {crew.member?.email && (
+        <p className="mt-2 text-sm" data-testid="text-crew-email">
+          <span className="font-semibold">Email:</span> {crew.member.email}
+          {crew.member.email.toLowerCase() !== email.toLowerCase() && <span className="text-foreground/60"> · signed in as {email}</span>}
+        </p>
+      )}
       <div className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-start">
         <div className="flex flex-col items-center gap-2">
           <button type="button" onClick={() => fileRef.current?.click()} className="group relative h-28 w-28 overflow-hidden rounded-full border-2 border-dashed border-border bg-muted hover:border-[#053877]" data-testid="button-crew-photo">
