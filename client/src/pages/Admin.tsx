@@ -3007,7 +3007,7 @@ function InboxPanel() {
     <div className="rounded-xl border border-border" data-testid="inbox-panel">
       <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
         <p className="text-sm font-semibold">
-          Replies{waiting.length > 0 && <span className="ml-2 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-bold text-[#1a1200]">{waiting.length} waiting</span>}
+          Replies{waiting.length > 0 && <span className="ml-2 rounded-full bg-[#053877] px-2 py-0.5 text-[11px] font-bold text-white">{waiting.length} need{waiting.length === 1 ? "s" : ""} a person</span>}
         </p>
         {done.length > 0 && (
           <button type="button" onClick={() => setShowDone((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground" data-testid="inbox-toggle-done">
@@ -3036,10 +3036,10 @@ function InboxPanel() {
                   <div className="shrink-0 text-right text-[11px] text-muted-foreground">
                     <div>{new Date(r.receivedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</div>
                     <div className="mt-0.5">
-                      {r.ackAt && <span className="mr-2 text-emerald-700 dark:text-emerald-400">⚡ Auto-replied</span>}
-                      {r.status === "sent" ? <span className="text-emerald-700 dark:text-emerald-400">✓ Replied as {r.replyFrom === "riccoh" ? "Riccoh" : "the team"}</span>
-                        : r.status === "ignored" ? "Ignored"
-                        : r.status === "drafted" ? `${CATEGORY[r.category] ?? "Reply"} · draft ready`
+                      {r.ackAt && <span className="mr-2 text-emerald-700 dark:text-emerald-400">⚡ Alex acknowledged</span>}
+                      {r.status === "sent" ? <span className="text-emerald-700 dark:text-emerald-400">✓ Answered by {r.replyFrom === "riccoh" ? "Riccoh" : "the team"}</span>
+                        : r.status === "ignored" ? "No follow-up needed"
+                        : r.status === "drafted" ? `${CATEGORY[r.category] ?? "Reply"} · a person still owes a reply`
                         : "Drafting…"}
                     </div>
                   </div>
@@ -3051,14 +3051,14 @@ function InboxPanel() {
                       <pre className="whitespace-pre-wrap font-sans text-sm">{r.bodyText.slice(0, 4000)}</pre>
                       {r.ackAt && (
                         <>
-                          <p className="mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Auto-reply sent {new Date(r.ackAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
+                          <p className="mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Alex acknowledged, automatically · {new Date(r.ackAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>
                           <pre className="whitespace-pre-wrap font-sans text-xs text-muted-foreground">{r.ackText}</pre>
                         </>
                       )}
                     </div>
                     <div>
                       <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {r.status === "sent" ? `Sent as ${r.replyFrom === "riccoh" ? "Riccoh" : "the team"}` : `Draft · suggested from ${r.draftFrom === "riccoh" ? "Riccoh" : "the team"}`}
+                        {r.status === "sent" ? `Sent as ${r.replyFrom === "riccoh" ? "Riccoh" : "the team"}` : `Human follow-up · draft, suggested from ${r.draftFrom === "riccoh" ? "Riccoh" : "the team"}`}
                       </p>
                       {r.status === "sent" ? (
                         <pre className="whitespace-pre-wrap rounded-lg border border-border p-3 font-sans text-sm">{r.replyText}</pre>
@@ -3080,7 +3080,7 @@ function InboxPanel() {
                               Send as {r.draftFrom === "riccoh" ? "the team" : "Riccoh"}
                             </Button>
                             <Button size="sm" variant="ghost" disabled={busy === r.id} onClick={() => act(r.id, "redraft")}>Rewrite</Button>
-                            <Button size="sm" variant="ghost" disabled={busy === r.id} onClick={() => act(r.id, "ignore")}>{r.status === "ignored" ? "Un-ignore" : "Ignore"}</Button>
+                            <Button size="sm" variant="ghost" disabled={busy === r.id} onClick={() => act(r.id, "ignore")}>{r.status === "ignored" ? "Reopen" : "No follow-up needed"}</Button>
                           </div>
                         </>
                       )}
