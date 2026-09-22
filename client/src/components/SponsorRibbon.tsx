@@ -21,7 +21,7 @@ export function SponsorRibbon({ sponsor, source, size = "md", testId }: { sponso
   return (
     <Tagish
       {...(href ? { href, target: "_blank", rel: "noreferrer" } : {})}
-      className={`relative flex items-center gap-2 overflow-hidden bg-gradient-to-r from-[#F0A71F] via-[#f5b53a] to-[#F0A71F] text-[#1a1200] ${sm ? "px-3 py-1 text-[10px]" : "px-3 py-1.5 text-[11px]"} ${href ? "transition-[filter] hover:brightness-105" : ""}`}
+      className={`relative flex flex-wrap items-center gap-x-2 gap-y-1 overflow-hidden bg-gradient-to-r from-[#F0A71F] via-[#f5b53a] to-[#F0A71F] text-[#1a1200] ${sm ? "px-3 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]"} ${href ? "transition-[filter] hover:brightness-105" : ""}`}
       data-testid={testId}
       title={`Sponsored by ${sponsor.name}`}
     >

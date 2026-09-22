@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, PlatformIcon, platformLabel, parseSocialAccounts } from "@/components/SocialIcons";
 import { spotlightFromSignup, type SpotlightItem } from "@/components/SpotlightCard";
-import { sponsorHref } from "@/components/SponsorRibbon";
+import { sponsorHref, SponsorRibbon } from "@/components/SponsorRibbon";
 import { SponsorDialog } from "@/components/SponsorDialog";
 import { PodcasterDialog } from "@/components/PodcasterDialog";
 import { useCountdown } from "@/hooks/use-countdown";
@@ -764,9 +764,14 @@ export default function Landing({ slug }: Props) {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-40px" }}
                   transition={{ duration: 0.45, delay: Math.min(i, 6) * 0.06 }}
-                  className="group flex flex-col items-center rounded-2xl border border-border bg-card p-5 text-center transition-shadow hover:border-primary/40 hover:shadow-md"
+                  className="group flex flex-col items-center overflow-hidden rounded-2xl border border-border bg-card p-5 text-center transition-shadow hover:border-primary/40 hover:shadow-md"
                   data-testid={`card-lineup-${signup.id}`}
                 >
+                  {signup.sponsor && (
+                    <div className="-mx-5 -mt-5 mb-4 w-[calc(100%+2.5rem)]">
+                      <SponsorRibbon sponsor={signup.sponsor} source="home" size="sm" testId={`lineup-sponsor-${signup.id}`} />
+                    </div>
+                  )}
                   {markers[i] && markers[i].kind !== "open" && (
                     <div className="mb-2 self-start">
                       <MileMarker marker={markers[i]} size={40} />
