@@ -103,7 +103,7 @@ export function ShowSponsorsCard({ eventId }: { eventId: number }) {
           <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
             {rows.map((r) => (
               <div key={r.id} className="flex items-center gap-3 px-4 py-3" data-testid={`show-sponsor-${r.id}`}>
-                {r.logoUrl ? <img src={r.logoUrl} alt="" className="h-8 w-14 shrink-0 object-contain" /> : <span className="flex h-8 w-14 shrink-0 items-center justify-center rounded bg-muted text-xs font-bold">{r.sponsorName.slice(0, 2)}</span>}
+                {r.logoUrl ? <span className="flex h-8 w-14 shrink-0 items-center justify-center rounded bg-[#04102b] px-1"><img src={r.logoUrl} alt="" className="max-h-6 max-w-full object-contain" /></span> : <span className="flex h-8 w-14 shrink-0 items-center justify-center rounded bg-muted text-xs font-bold">{r.sponsorName.slice(0, 2)}</span>}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold">{r.sponsorName} <span className="font-normal text-muted-foreground">presents</span> {r.signupId ? r.podcastName.trim() || r.hostName : "a slot to be chosen"}</p>
                   <p className="truncate text-xs text-muted-foreground">{r.slotLabel}{r.readLine ? ` · "${r.readLine}"` : ""}</p>

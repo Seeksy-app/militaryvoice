@@ -29,7 +29,7 @@ export function SponsorRibbon({ sponsor, source, size = "md", testId }: { sponso
       <Tag className={`${sm ? "h-3 w-3" : "h-3.5 w-3.5"} shrink-0`} />
       <span className="shrink-0 font-bold uppercase tracking-[0.14em]">This segment is sponsored by</span>
       {sponsor.logoUrl ? (
-        <span className={`ml-auto flex shrink-0 items-center rounded-md bg-white ${sm ? "px-1.5 py-0.5" : "px-2 py-0.5"}`}>
+        <span className={`ml-auto flex shrink-0 items-center rounded-md bg-[#04102b] ${sm ? "px-1.5 py-0.5" : "px-2 py-0.5"}`}>
           <img src={sponsor.logoUrl} alt={sponsor.name} className={`${sm ? "h-4 max-w-[5.5rem]" : "h-5 max-w-[7rem]"} object-contain`} />
         </span>
       ) : (
