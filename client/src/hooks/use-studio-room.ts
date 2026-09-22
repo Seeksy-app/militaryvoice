@@ -23,6 +23,8 @@ export interface RoomPeer {
   state: string;
   videoTrack: RemoteTrack | null;
   audioTrack: RemoteTrack | null;
+  /** You. Your picture goes on the stage with the others; your sound never plays back to you. */
+  self?: boolean;
 }
 
 interface Args {
@@ -83,6 +85,16 @@ export function useStudioRoom({ enabled, clientKey, slug, studioId, stream }: Ar
           audioTrack: audio,
         });
       });
+      // You are a participant too. The stage in the middle is what the
+      // audience sees, and when you are on it the audience sees you.
+      const me = r.localParticipant;
+      if (me && me.trackPublications.size > 0) {
+        let video: RemoteTrack | null = null;
+        me.trackPublications.forEach((pub) => {
+          if (pub.track && pub.kind === Track.Kind.Video) video = pub.track as unknown as RemoteTrack;
+        });
+        next.push({ identity: me.identity, name: me.name || me.identity, state: me.attributes?.state ?? "Green room", videoTrack: video, audioTrack: null, self: true });
+      }
       setPeers(next);
     };
 
@@ -111,6 +123,8 @@ export function useStudioRoom({ enabled, clientKey, slug, studioId, stream }: Ar
         .on(RoomEvent.TrackSubscribed, refresh)
         .on(RoomEvent.TrackUnsubscribed, refresh)
         .on(RoomEvent.ParticipantAttributesChanged, refresh)
+        .on(RoomEvent.LocalTrackPublished, refresh)
+        .on(RoomEvent.LocalTrackUnpublished, refresh)
         .on(RoomEvent.Disconnected, () => {
           if (cancelled) return;
           setStatus("idle");

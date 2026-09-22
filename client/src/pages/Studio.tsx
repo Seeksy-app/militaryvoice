@@ -609,7 +609,7 @@ export default function Studio({ slug }: { slug?: string }) {
   // beside her, which reads as a broken second guest.
   const isCohostEar = (p: { identity: string }) => p.identity === "alex-ears";
   const greenRoomPeers = peers.filter(
-    (p) => p.state !== "On stage" && !isViewer(p) && !isCohost(p) && !isCohostEar(p),
+    (p) => p.state !== "On stage" && !isViewer(p) && !isCohost(p) && !isCohostEar(p) && !p.self,
   );
   const cohost = peers.find((p) => isCohost(p) && !isViewer(p));
   const watchingCount = peers.filter(isViewer).length;
