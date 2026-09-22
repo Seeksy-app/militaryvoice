@@ -2692,7 +2692,11 @@ class DatabaseStorage implements IStorage {
     await ready();
     const now = new Date().toISOString();
     const today = now.slice(0, 10);
-    const existing = await db.select().from(broadcasts)
+    // A reply answers one person; filing two replies with the same subject
+    // as one send with two recipients hid who wrote to whom. Only sends that
+    // are genuinely the same email to several people share a row.
+    const isReply = /^\s*re:/i.test(o.subject);
+    const existing = isReply ? [] : await db.select().from(broadcasts)
       .where(and(
         eq(broadcasts.source, "one-off"),
         eq(broadcasts.subject, o.subject),

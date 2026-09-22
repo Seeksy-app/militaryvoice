@@ -3205,6 +3205,25 @@ function ActivityLog({
     }
   }
 
+  // What came in, beside what went out: a reply is part of the story of a
+  // send, and a log that showed only our side read as if nobody answered.
+  const { data: inboundRows = [] } = useQuery<(InboundEmailRow & { saidText?: string })[]>({
+    queryKey: ["/api/admin/inbound"],
+    queryFn: () => adminGet<(InboundEmailRow & { saidText?: string })[]>("/api/admin/inbound"),
+    refetchInterval: 60_000,
+  });
+  const { data: team = [] } = useQuery<{ id: number; name: string; title: string }[]>({
+    queryKey: ["/api/admin/events", eventId, "team"],
+    queryFn: () => adminGet<{ id: number; name: string; title: string }[]>(`/api/admin/events/${eventId}/team`),
+    staleTime: 300_000,
+  });
+  const senderName = (sender: string | null) => {
+    if (!sender || sender === "team") return "the team";
+    if (sender === "rico" || sender === "riccoh") return "Riccoh";
+    const m = sender.startsWith("member:") ? team.find((t) => t.id === Number(sender.split(":")[1])) : undefined;
+    return m?.name ?? "the team";
+  };
+
   // The same queries the rows make, hoisted so the total can be added up.
   // Identical cache keys, so this costs no extra requests — and the rows are
   // handed the result rather than asking for it again.
@@ -3311,21 +3330,47 @@ function ActivityLog({
       </p>
 
       <div className="flex flex-col gap-2">
-        {sent.map((b, i) => {
-          const auto = b.source?.startsWith("cadence:");
-          const when = b.sentAt ? new Date(b.sentAt) : null;
-          return (
-            <ActivityRow
-              key={b.id}
-              b={b}
-              auto={!!auto}
-              when={when}
-              stats={statsQueries[i]?.data}
-              onViewEngagement={onViewEngagement}
-              onPreview={() => setPreview({ broadcastId: b.id, title: b.subject })}
-            />
-          );
-        })}
+        {(() => {
+          type Row = { at: number; el: React.ReactNode };
+          const rows: Row[] = [];
+          sent.forEach((b, i) => {
+            const auto = b.source?.startsWith("cadence:");
+            const when = b.sentAt ? new Date(b.sentAt) : null;
+            rows.push({ at: when?.getTime() ?? 0, el: (
+              <ActivityRow
+                key={`b-${b.id}`}
+                b={b}
+                auto={!!auto}
+                when={when}
+                stats={statsQueries[i]?.data}
+                senderLabel={b.source === "one-off" ? senderName(b.sender) : undefined}
+                onViewEngagement={onViewEngagement}
+                onPreview={() => setPreview({ broadcastId: auto ? undefined : b.id, cadence: auto ? cadenceSource(b.source) : undefined, title: b.subject })}
+              />
+            ) });
+          });
+          inboundRows.forEach((m) => {
+            rows.push({ at: Date.parse(m.receivedAt), el: (
+              <div key={`i-${m.id}`} className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-3" data-testid={`activity-inbound-${m.id}`}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">📥 {m.fromName || m.fromEmail} <span className="font-normal text-muted-foreground">· {m.subject || "(no subject)"}</span></p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{new Date(m.receivedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })} · {m.summary || (m.saidText || m.bodyText).slice(0, 120)}</p>
+                  </div>
+                  <Badge variant="secondary" className="text-[11px]">Received</Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                  {m.ackAt && <span className="text-emerald-700 dark:text-emerald-400">⚡ Alex acknowledged</span>}
+                  {m.status === "sent" ? <span className="text-emerald-700 dark:text-emerald-400">✓ Answered by {m.replyFrom === "riccoh" ? "Riccoh" : m.replyFrom === "michael" ? "Michael" : "the team"}</span>
+                    : m.status === "ignored" ? <span className="text-muted-foreground">No follow-up needed</span>
+                    : <span className="text-muted-foreground">A person still owes a reply · see Replies</span>}
+                </div>
+              </div>
+            ) });
+          });
+          rows.sort((a, b) => b.at - a.at);
+          return rows.map((r) => r.el);
+        })()}
       </div>
       <EmailPreviewDialog target={preview} onClose={() => setPreview(null)} />
     </>
@@ -3401,6 +3446,7 @@ function ActivityRow({
   auto,
   when,
   stats,
+  senderLabel,
   onViewEngagement,
   onPreview,
 }: {
@@ -3408,6 +3454,8 @@ function ActivityRow({
   auto: boolean;
   when: Date | null;
   stats?: BroadcastStats;
+  /** Who a one-off went out as — a reply from Michael is not a campaign. */
+  senderLabel?: string;
   onViewEngagement: (broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) => void;
   onPreview: () => void;
 }) {
@@ -3419,7 +3467,7 @@ function ActivityRow({
           <p className="mt-0.5 text-xs text-muted-foreground">
             {when ? when.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—"}
             {" · "}
-            {SEGMENT_LABELS[b.segment] ?? b.segment}
+            {senderLabel ? `from ${senderLabel}` : (SEGMENT_LABELS[b.segment] ?? b.segment)}
             {" · "}
             {(() => {
               const n = Math.max(b.recipientCount ?? 0, stats?.sent ?? 0);
@@ -3874,6 +3922,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
   const { data: broadcastList = [], isLoading: loadingBroadcasts } = useQuery<BroadcastRow[]>({
     queryKey: ["/api/admin/broadcasts", eventId],
     queryFn: () => adminGet<BroadcastRow[]>(`/api/admin/broadcasts?eventId=${eventId}`),
+      refetchInterval: 60_000,
   });
 
   // Cadence emails are filed by source; campaigns are everything else, so the

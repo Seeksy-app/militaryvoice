@@ -39,7 +39,7 @@ console.log(`To: ${TO}\nIn-Reply-To: ${inb?.message_id || "(none)"}\n\n${text}\n
 if (!apply) { await sql.end(); console.log("Nothing sent. --apply to send."); process.exit(0); }
 const res = await fetch(`${API}/api/admin/emails/send-one`, {
   method: "POST", headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
-  body: JSON.stringify({ to: TO, subject: SUBJECT, text, sender: "team", banner: "podcasters", from: "Michael <michael@militaryvoice.ai>", replyTo: "michael@militaryvoice.ai", inReplyTo: inb?.message_id || undefined,
+  body: JSON.stringify({ to: TO, subject: SUBJECT, text, sender: "member:3", banner: "podcasters", from: "Michael <michael@militaryvoice.ai>", replyTo: "michael@militaryvoice.ai", inReplyTo: inb?.message_id || undefined,
     html: emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: "Fixed — try the dashboard again", body: html }) }),
 });
 const body = await res.json().catch(() => ({}));
