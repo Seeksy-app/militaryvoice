@@ -1733,7 +1733,15 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 // the hand-copied version of this object silently fell behind
                 // and the rail's graphics reached air without ever reaching
                 // the screen the producer was watching.
-                meta={{ ...(studio ? stageMetaFromStudio(studio) : {}), eventName: currentStudio?.name }}
+                meta={{
+                  ...(studio ? stageMetaFromStudio(studio) : {}),
+                  eventName: currentStudio?.name,
+                  // Off air, the monitor rehearses: a taken scene shows here
+                  // exactly as it would on air — the file rolls, the cameras
+                  // grid — while the audience still sees standby. On air the
+                  // monitor is the programme and standby outranks everything.
+                  ...(!broadcasting && studio?.currentSceneId ? { fallbackPlaying: false } : {}),
+                }}
                 // Never muted. This carries other people's microphones and
                 // nothing else — StageView builds its tiles from
                 // room.remoteParticipants, so your own voice cannot be in it.
@@ -1751,6 +1759,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   <Disc className="h-3 w-3 text-[#ED1C24]" /> Recording
                 </span>
               )}
+              {!broadcasting && studio?.currentSceneId ? (
+                <span className="pointer-events-none absolute left-4 top-4 flex items-center gap-2 rounded-full bg-[#F0A71F] px-3 py-1.5 text-[12px] font-semibold text-[#1a1200]" data-testid="badge-rehearsal">
+                  Rehearsal · only you see this
+                </span>
+              ) : null}
             </div>
 
             {/* The graphics rail. It takes its width out of the stage rather

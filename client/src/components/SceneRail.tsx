@@ -75,6 +75,12 @@ function kindOf(sc: SceneRow): "camera" | "media" | "countdown" {
   return sc.mediaUrl ? "media" : "camera";
 }
 
+/** A YouTube link plays in a frame, not a <video>, so it gets no still. */
+function youtubeId(url: string): string | null {
+  const m = url.match(/(?:youtu\.be\/|v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
 function isImage(sc: SceneRow): boolean {
   return sc.mediaKind === "image" || /\.(jpe?g|png|webp|gif|svg)(\?|$)/i.test(sc.mediaUrl);
 }
@@ -361,7 +367,11 @@ export function SceneRail({
           // hundred and forty-six scenes, recognising a face is faster than
           // reading a line of text.
           const sceneImage = k === "media" && isImage(sc) ? sc.mediaUrl : null;
-          const thumb = sc.thumbUrl || sceneImage || sg?.photoUrl || null;
+          // A scene that rolls a file shows the file: a frame from the
+          // episode, not the host's headshot, so the producer can tell a
+          // pre-recorded segment from a live one at a glance.
+          const sceneVideo = k === "media" && !isImage(sc) && !youtubeId(sc.mediaUrl) ? sc.mediaUrl : null;
+          const thumb = sc.thumbUrl || sceneImage || (sceneVideo ? null : sg?.photoUrl) || null;
           const isFace = !sc.thumbUrl && !sceneImage && !!thumb;
           const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
           const here = sg
@@ -384,7 +394,12 @@ export function SceneRail({
                 data-testid={`button-scene-${sc.id}`}
               >
                 <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
-                  {thumb ? (
+                  {sceneVideo ? (
+                    <>
+                      <video src={`${sceneVideo}#t=1`} muted playsInline preload="metadata" className="absolute inset-0 h-full w-full object-cover" />
+                      <span className="absolute left-2 top-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Video</span>
+                    </>
+                  ) : thumb ? (
                     <>
                       <img
                         src={thumb}
