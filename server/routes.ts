@@ -7485,6 +7485,43 @@ The ${eventName} team`;
     return id;
   }
 
+  // ---- View as: an admin steps into one of their own other seats -------------
+  //      The owner is also a producer and a podcaster on this event, under
+  //      other addresses. Rather than three browsers, the admin picks a seat
+  //      and gets that seat's host session; the admin cookie is separate and
+  //      stays, so the way back is a link. Admin only, and only to seats we
+  //      hold a record for: the crew list and the team.
+  async function viewAsSeats(): Promise<{ email: string; label: string; kind: "crew" | "team" }[]> {
+    const ev = await storage.getFeaturedEvent();
+    const out = new Map<string, { email: string; label: string; kind: "crew" | "team" }>();
+    for (const m of await storage.listEventTeam(ev.id)) {
+      const e = m.email.trim().toLowerCase();
+      if (e.includes("@")) out.set(e, { email: e, label: `${m.name} · ${m.title}`, kind: "team" });
+    }
+    const listed = ((await storage.getSetting("studio_crew_emails")) ?? "").split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@"));
+    const signups = await storage.listSignups(ev.id);
+    for (const e of listed) {
+      if (out.has(e)) continue;
+      const sg = signups.find((x) => x.email.trim().toLowerCase() === e && x.status !== "cancelled");
+      out.set(e, { email: e, label: sg ? `${sg.podcastName.trim()} · Podcaster` : `${e} · Crew`, kind: "crew" });
+    }
+    return Array.from(out.values());
+  }
+
+  app.get("/api/admin/view-as", requireAdmin, async (_req, res) => {
+    noStore(res);
+    res.json(await viewAsSeats());
+  });
+
+  app.post("/api/admin/view-as", requireAdmin, async (req, res) => {
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const seat = (await viewAsSeats()).find((x) => x.email === email);
+    if (!seat) return res.status(400).json({ message: "That isn't one of your seats." });
+    setSessionCookie(res, email, false);
+    console.log(`Admin ${getAdminEmail(req)} viewing as ${email}`);
+    res.json({ ok: true, to: "/host/dashboard" });
+  });
+
   // ---- Crew: the dashboard for someone on the team rather than the lineup ----
   app.get("/api/host/crew", requireHostSession, async (req, res) => {
     noStore(res);

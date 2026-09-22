@@ -3120,6 +3120,38 @@ function InboxPanel() {
   );
 }
 
+/** The admin's other seats — producer, podcaster — one pick away. */
+function ViewAs() {
+  const { data: seats = [] } = useQuery<{ email: string; label: string; kind: string }[]>({
+    queryKey: ["/api/admin/view-as"],
+    queryFn: () => adminGet<{ email: string; label: string; kind: string }[]>("/api/admin/view-as"),
+    staleTime: 300_000,
+  });
+  const { toast } = useToast();
+  if (seats.length === 0) return null;
+  return (
+    <select
+      value=""
+      onChange={async (e) => {
+        const email = e.target.value;
+        if (!email) return;
+        try {
+          const r = (await adminSend("POST", "/api/admin/view-as", { email }).then((x) => x.json())) as { to: string };
+          window.location.href = r.to;
+        } catch (err) {
+          toast({ title: "Couldn't switch", description: (err as Error).message, variant: "destructive" });
+        }
+      }}
+      className="ml-1 h-8 rounded-full border border-border bg-background px-3 text-xs font-medium"
+      title="Open one of your other seats"
+      data-testid="select-view-as"
+    >
+      <option value="">View as…</option>
+      {seats.map((s) => <option key={s.email} value={s.email}>{s.label}</option>)}
+    </select>
+  );
+}
+
 function ActivityLog({
   broadcasts,
   eventId,
@@ -5050,6 +5082,7 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   {admin?.isOwner ? "Owner" : "Admin"}
                 </span>
               </span>
+              <ViewAs />
               <Button
                 variant="outline"
                 size="sm"

@@ -160,6 +160,42 @@ function linkLabel(v: string): string {
 // ---------------------------------------------------------------------------
 // Sign-in card (email → 6-digit code). Shows the held slot when there is one.
 // ---------------------------------------------------------------------------
+/**
+ * For an admin who is also on the lineup or the crew under other addresses:
+ * the other seats, and the way back to the admin. Shown only when the admin
+ * cookie is present beside the host one; everyone else sees nothing here.
+ */
+function SeatSwitcher({ current }: { current: string }) {
+  const { data: me } = useQuery<{ email: string }>({ queryKey: ["/api/admin/me"], retry: false, staleTime: 300_000 });
+  const { data: seats = [] } = useQuery<{ email: string; label: string; kind: string }[]>({
+    queryKey: ["/api/admin/view-as"],
+    enabled: !!me,
+    retry: false,
+    staleTime: 300_000,
+  });
+  if (!me) return null;
+  const others = seats.filter((s) => s.email !== current.trim().toLowerCase());
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" data-testid="seat-switcher">
+      <a href="/admin" className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-foreground hover:border-[#053877]/40">Admin</a>
+      {others.map((s) => (
+        <button
+          key={s.email}
+          type="button"
+          onClick={async () => {
+            await apiRequest("POST", "/api/admin/view-as", { email: s.email });
+            window.location.href = "/host/dashboard";
+          }}
+          className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-foreground hover:border-[#053877]/40"
+          data-testid={`seat-${s.email}`}
+        >
+          {s.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -865,6 +901,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   {sessionLine && <span data-testid="text-session-until"> · {sessionLine}</span>}
                 </span>
               </span>
+              <SeatSwitcher current={data?.email ?? ""} />
               <Button
                 variant="outline"
                 size="sm"
@@ -890,6 +927,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   Signed in as {data.email}
                 </p>
               )}
+              {data && <div className="mt-2"><SeatSwitcher current={data.email} /></div>}
             </div>
             {data && (
               <Button
