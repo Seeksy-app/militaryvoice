@@ -194,7 +194,22 @@ function AboutYou({ crew, email }: { crew: CrewInfo; email: string }) {
   const [name, setName] = useState(crew.member?.name ?? "");
   const [title, setTitle] = useState(crew.member?.title ?? "Producer");
   const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [photoLink, setPhotoLink] = useState("");
   const fileRef = useRef<HTMLInputElement | null>(null);
+
+  // A Google profile picture is a link, not a file on disk. Saved as the
+  // card's photo as given; Google's image URLs are public and stable.
+  const saveLink = useMutation({
+    mutationFn: async () => (await apiRequest("PUT", "/api/host/crew", { photoUrl: photoLink.trim(), eventId: crew.event?.id })).json(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/host/crew"] });
+      setLinkOpen(false);
+      setPhotoLink("");
+      toast({ title: "Photo saved" });
+    },
+    onError: (err: Error) => toast({ title: "Couldn't use that link", description: err.message, variant: "destructive" }),
+  });
 
   const save = useMutation({
     mutationFn: async () => (await apiRequest("PUT", "/api/host/crew", { name: name.trim(), title: title.trim(), eventId: crew.event?.id })).json(),
@@ -235,9 +250,22 @@ function AboutYou({ crew, email }: { crew: CrewInfo; email: string }) {
             <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100"><ImagePlus className="h-5 w-5 text-white" /></span>
           </button>
           <span className="text-xs text-foreground/70">{crew.member?.photoUrl ? "Change photo" : "Add a photo"}</span>
+          <button type="button" onClick={() => setLinkOpen((v) => !v)} className="text-xs text-[#053877] underline underline-offset-2" data-testid="button-crew-photo-link">or paste an image link</button>
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) { const r = new FileReader(); r.onload = () => setCropSrc(String(r.result)); r.readAsDataURL(f); } e.target.value = ""; }} />
         </div>
         <form className="flex flex-1 flex-col gap-3" onSubmit={(e) => { e.preventDefault(); save.mutate(); }}>
+          {linkOpen && (
+            <div className="rounded-xl border border-dashed border-border bg-muted/30 p-3">
+              <Label htmlFor="crew-photo-link">Image link</Label>
+              <p className="mb-2 text-xs text-foreground/70">On your Google account page, right-click your picture and copy the image address, then paste it here.</p>
+              <div className="flex gap-2">
+                <Input id="crew-photo-link" value={photoLink} onChange={(e) => setPhotoLink(e.target.value)} placeholder="https://…" data-testid="input-crew-photo-link" />
+                <Button type="button" size="sm" className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" disabled={saveLink.isPending || !/^https?:\/\//.test(photoLink.trim())} onClick={() => saveLink.mutate()} data-testid="button-crew-photo-link-save">
+                  {saveLink.isPending ? "Saving…" : "Use it"}
+                </Button>
+              </div>
+            </div>
+          )}
           <div>
             <Label htmlFor="crew-name">Name</Label>
             <Input id="crew-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" data-testid="input-crew-name" />

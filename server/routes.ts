@@ -7563,6 +7563,21 @@ The ${eventName} team`;
     const ev = (Number(req.body?.eventId) ? await storage.getEventById(Number(req.body.eventId)) : null) ?? (await storage.getFeaturedEvent());
     const member = await crewMemberFor(req, ev.id, email);
     if (!member) return res.status(403).json({ message: "Only the crew can do that." });
+    const photoUrl = String(req.body?.photoUrl ?? "").trim().slice(0, 600);
+    if (photoUrl) {
+      // A picture by link — a Google profile image, say. https only, and
+      // it has to be an image when fetched, so a pasted page URL is refused.
+      if (!/^https:\/\//.test(photoUrl)) return res.status(400).json({ message: "The link has to start with https://" });
+      try {
+        const head = await fetch(photoUrl, { method: "GET", headers: { Range: "bytes=0-0" } });
+        const type = head.headers.get("content-type") ?? "";
+        if (!head.ok || !type.startsWith("image/")) return res.status(400).json({ message: "That link isn't an image." });
+      } catch {
+        return res.status(400).json({ message: "Couldn't reach that link." });
+      }
+      res.json(await storage.updateTeamMember(member.id, { photoUrl }));
+      return;
+    }
     const name = String(req.body?.name ?? "").trim().slice(0, 80);
     const title = String(req.body?.title ?? "").trim().slice(0, 80);
     if (!name) return res.status(400).json({ message: "Give us a name." });
