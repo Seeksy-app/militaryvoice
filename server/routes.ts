@@ -2798,9 +2798,10 @@ export function registerRoutes(app: Express): void {
     // Same rule the join endpoint enforces, answered early so the page can
     // explain rather than let someone fill in a form that will be refused.
     let mayJoin = false;
+    let crew = false;
     if (req) {
-      const adminEmail = getAdminEmail(req);
-      if (adminEmail && (await storage.isAdminEmail(adminEmail))) mayJoin = true;
+      crew = await isCrew(req, event.id);
+      if (crew) mayJoin = true;
       else {
         const host = getSessionEmail(req);
         mayJoin =
@@ -2878,7 +2879,7 @@ export function registerRoutes(app: Express): void {
       /** Which sign-in the slot was looked up under, so a mismatch is visible. */
       myEmail: email,
       /** True when they got in as crew rather than as someone on the lineup. */
-      isCrew: Boolean(adminEmail && (await storage.isAdminEmail(adminEmail))),
+      isCrew: crew,
       onStageCount: onStage.length,
       greenRoomCount: all.filter((p) => p.state === "Green room" && withPresence(p)).length,
     };
@@ -3731,18 +3732,33 @@ export function registerRoutes(app: Express): void {
     };
   }
 
+  /**
+   * Crew: an admin, someone on the event's team, or an address on the
+   * studio_crew_emails setting. Crew get into the green room without a slot
+   * and can take scenes from it — the organisers' own eyes-on account, for
+   * one — without being handed the whole console.
+   */
+  async function isCrew(req: Request, eventId: number): Promise<boolean> {
+    const adminEmail = getAdminEmail(req);
+    if (adminEmail && (await storage.isAdminEmail(adminEmail))) return true;
+    const host = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    if (!host) return false;
+    const listed = ((await storage.getSetting("studio_crew_emails")) ?? "").split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter(Boolean);
+    if (listed.includes(host)) return true;
+    return (await storage.listEventTeam(eventId)).some((m) => m.email.trim().toLowerCase() === host);
+  }
+
   /** One click during the show: put the stage back the way this scene had it. */
-  app.post("/api/admin/scenes/:id/apply", requireAdmin, async (req, res) => {
-    const scene = await storage.getScene(Number(req.params.id));
-    if (!scene) {
-      res.status(404).json({ message: "Not found" });
-      return;
-    }
+  async function applyScene(sceneId: number): Promise<{ status: number; body: unknown }> {
+    const scene = await storage.getScene(sceneId);
+    if (!scene) return { status: 404, body: { message: "Not found" } };
     const studio = await storage.getStudioById(scene.studioId);
-    if (!studio) {
-      res.status(404).json({ message: "Not found" });
-      return;
-    }
+    if (!studio) return { status: 404, body: { message: "Not found" } };
+    // A scene with a picture of its own and nothing to roll shows the
+    // picture: the producer put it there to be seen, and a card that showed
+    // a dog on the rail and nothing on the stage was a promise not kept.
+    const mediaUrl = scene.mediaUrl || scene.thumbUrl || "";
+    const mediaKind = scene.mediaUrl ? scene.mediaKind : "image";
     // A scene built from an agenda row still does everything taking that row
     // did — the right podcaster on stage, everyone else off. That is what lets
     // the rail replace the rundown instead of sitting beside it.
@@ -3763,18 +3779,17 @@ export function registerRoutes(app: Express): void {
           // returns before the patch below, so a pre-recorded segment used to
           // move everybody into place and then sit on the cameras with the
           // episode still in the library.
-          stageMediaUrl: scene.mediaUrl,
-          stageMediaKind: scene.mediaKind,
-          stageMediaLabel: scene.mediaLabel,
-          stageMediaPlaying: Boolean(scene.mediaUrl),
+          stageMediaUrl: mediaUrl,
+          stageMediaKind: mediaKind,
+          stageMediaLabel: scene.mediaUrl ? scene.mediaLabel : "",
+          stageMediaPlaying: Boolean(mediaUrl),
           ...bannerFor(scene),
         });
         if (withScene) {
           const ev = await storage.getEventById(studio.eventId);
           await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", withScene, ev));
         }
-        res.json({ ...withScene, moved: taken.moved, missing: taken.missing });
-        return;
+        return { status: 200, body: { ...withScene, moved: taken.moved, missing: taken.missing } };
       }
     }
 
@@ -3795,11 +3810,11 @@ export function registerRoutes(app: Express): void {
           }
         : {
             ...bannerFor(scene),
-            stageMediaUrl: scene.mediaUrl,
-            stageMediaKind: scene.mediaKind,
-            stageMediaLabel: scene.mediaLabel,
-            // A scene with no media is "back to the cameras".
-            stageMediaPlaying: Boolean(scene.mediaUrl),
+            stageMediaUrl: mediaUrl,
+            stageMediaKind: mediaKind,
+            stageMediaLabel: scene.mediaUrl ? scene.mediaLabel : "",
+            // A scene with no media and no picture is "back to the cameras".
+            stageMediaPlaying: Boolean(mediaUrl),
             stageCardName: "",
             stageCardShow: "",
             stageCardPhoto: "",
@@ -3813,7 +3828,22 @@ export function registerRoutes(app: Express): void {
       const ev = await storage.getEventById(studio.eventId);
       await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
     }
-    res.json(updated);
+    return { status: 200, body: updated };
+  }
+
+  app.post("/api/admin/scenes/:id/apply", requireAdmin, async (req, res) => {
+    const r = await applyScene(Number(req.params.id));
+    res.status(r.status).json(r.body);
+  });
+
+  /** Crew in the green room take scenes with the same call, checked against the crew list. */
+  app.post("/api/host/scenes/:id/apply", requireHostSession, async (req, res) => {
+    const scene = await storage.getScene(Number(req.params.id));
+    const studio = scene ? await storage.getStudioById(scene.studioId) : null;
+    if (!scene || !studio) return res.status(404).json({ message: "Not found" });
+    if (!(await isCrew(req, studio.eventId))) return res.status(403).json({ message: "Only the crew can take scenes." });
+    const r = await applyScene(scene.id);
+    res.status(r.status).json(r.body);
   });
 
   /** Stop a running countdown early — the clock comes off, the stage stays. */

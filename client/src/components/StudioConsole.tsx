@@ -1673,6 +1673,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   <SceneRail
                     scenes={scenes ?? []}
                     currentSceneId={studio?.currentSceneId ?? 0}
+                    anchorToLive={broadcasting}
                     zone={zone}
                     runItems={runItems ?? []}
                     signups={signups ?? []}

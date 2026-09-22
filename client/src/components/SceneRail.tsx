@@ -102,6 +102,8 @@ export function SceneRail({
   media,
   busy,
   readOnly = false,
+  takeOnly = false,
+  anchorToLive = true,
   searchable = false,
   onApply,
   onAdd,
@@ -121,6 +123,10 @@ export function SceneRail({
   busy?: boolean;
   /** Podcasters see the rail; only a producer changes it. */
   readOnly?: boolean;
+  /** Crew in the green room: they can take, not edit. */
+  takeOnly?: boolean;
+  /** Off air the rail reads from the top; on air it pins the live card. */
+  anchorToLive?: boolean;
   /** Producers get a filter. 146 scenes is not a list you scroll on a question. */
   searchable?: boolean;
   onApply: (id: number) => void;
@@ -141,6 +147,7 @@ export function SceneRail({
   const railRef = useRef<HTMLDivElement | null>(null);
 
   const liveIndex = scenes.findIndex((s) => s.id === currentSceneId);
+  const editable = !readOnly && !takeOnly;
 
   // Put the scene on air at the top of the rail, with what is coming
   // underneath it.
@@ -170,7 +177,7 @@ export function SceneRail({
       // and the rail reads from the top: scene one is what is coming first.
       // Anchoring to a live card that does not exist left it wherever the
       // last render put it.
-      if (liveIndex < 0) {
+      if (liveIndex < 0 || !anchorToLive) {
         if (box.scrollTop > 0) box.scrollTo({ top: 0, behavior: anchored.current ? "smooth" : "auto" });
         anchored.current = true;
         return;
@@ -261,7 +268,7 @@ export function SceneRail({
           <Clapperboard className="h-3.5 w-3.5" /> Scenes
           <span className="rounded-full bg-white/10 px-2 py-0.5 text-white/80">{scenes.length}</span>
         </span>
-        {readOnly ? null : (
+        {!editable ? null : (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -521,7 +528,7 @@ export function SceneRail({
 
               {/* Editing controls stay out of the way until wanted — this is a
                   surface you press during a show, not one you fiddle with. */}
-              <div className={`pointer-events-none absolute right-1.5 top-8 flex-col gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 ${readOnly ? "hidden" : "flex"}`}>
+              <div className={`pointer-events-none absolute right-1.5 top-8 flex-col gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 ${editable ? "flex" : "hidden"}`}>
                 <IconBtn label="Move up" onClick={() => move(i, -1)} disabled={i === 0}>
                   <ChevronUp className="h-3 w-3" />
                 </IconBtn>
@@ -551,7 +558,7 @@ export function SceneRail({
                 </IconBtn>
               </div>
 
-              {!readOnly && renaming === sc.id && (
+              {editable && renaming === sc.id && (
                 <form
                   className="absolute inset-x-1.5 bottom-1.5 flex items-center gap-1"
                   onSubmit={(e) => {
@@ -578,7 +585,7 @@ export function SceneRail({
                   than in a panel of its own because that is the whole point:
                   taking the scene puts it up, so it has to be edited where the
                   scene is. */}
-              {!readOnly && bannering === sc.id && (
+              {editable && bannering === sc.id && (
                 <form
                   className="absolute inset-x-1.5 bottom-1.5 flex flex-col gap-1 rounded-lg bg-[#04102b]/95 p-1.5 ring-1 ring-white/20"
                   onSubmit={(e) => {
@@ -626,7 +633,7 @@ export function SceneRail({
         })}
       </div>
 
-      <div className={`border-t border-white/10 p-2.5 ${readOnly ? "hidden" : ""}`}>
+      <div className={`border-t border-white/10 p-2.5 ${editable ? "" : "hidden"}`}>
         <Button
           size="sm"
           className="h-9 w-full gap-1.5 rounded-full bg-[#F0A71F] text-[13px] font-bold text-[#1a1200] hover:bg-[#f7b73a]"

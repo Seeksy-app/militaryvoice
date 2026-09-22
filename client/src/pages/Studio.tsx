@@ -182,8 +182,21 @@ function clientKey(): string {
  * and is gated twice: readOnly here, and /api/studio/scenes having no write
  * side to call.
  */
-function RunningOrder({ slug, studioId, searchable = false }: { slug?: string; studioId?: number; searchable?: boolean }) {
+function RunningOrder({ slug, studioId, searchable = false, canTake = false }: { slug?: string; studioId?: number; searchable?: boolean; canTake?: boolean }) {
   const zone = useMemo(detectLocalTimeZone, []);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  // Crew take scenes from here — the same call the console makes, checked
+  // server-side against the crew list. Everyone else only watches.
+  async function take(id: number) {
+    try {
+      await apiRequest("POST", `/api/host/scenes/${id}/apply`);
+      queryClient.invalidateQueries({ queryKey: ["/api/studio/scenes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/studio/state"] });
+    } catch (err) {
+      toast({ title: "Couldn't take that scene", description: (err as Error).message, variant: "destructive" });
+    }
+  }
   const { data } = useQuery<{ scenes: SceneRow[]; currentSceneId: number; runItems?: any[]; signups?: any[] }>({
     queryKey: ["/api/studio/scenes", slug ?? "featured", studioId ?? 0],
     queryFn: async () => {
@@ -206,9 +219,10 @@ function RunningOrder({ slug, studioId, searchable = false }: { slug?: string; s
         signups={data.signups ?? []}
         presentNames={[]}
         media={[]}
-        readOnly
+        readOnly={!canTake}
+        takeOnly={canTake}
         searchable={searchable}
-        onApply={() => {}}
+        onApply={canTake ? take : () => {}}
         onAdd={() => {}}
         onPatch={() => {}}
         onDelete={() => {}}
@@ -690,7 +704,9 @@ export default function Studio({ slug }: { slug?: string }) {
             chat needs a column, not the page — and Up next beside her rather
             than above the rail, so the top of the page answers "who is on,
             who is next, and who do I ask" without a scroll. */}
-        <div className="grid gap-5 xl:grid-cols-[minmax(200px,15rem)_minmax(0,1fr)_minmax(17rem,20rem)] xl:items-start">
+        {/* The same three columns as the room below, so Alex's card sits
+            exactly over the programme and the two cards over the rail. */}
+        <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px] xl:items-start">
           <div>
             <Link
               href="/host/dashboard"
@@ -702,9 +718,7 @@ export default function Studio({ slug }: { slug?: string }) {
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
               Green Room
             </h1>
-            <p className="text-sm text-white/60">
-              {state?.eventName?.trim() ?? "…"}{state?.studio.name ? ` · ${state.studio.name}` : ""}
-            </p>
+            <p className="text-sm text-white/60">{state?.eventName?.trim() ?? "…"}</p>
             {state?.meta?.eventStartAtUtc && (
               <p className="mt-1 text-sm text-white/70" data-testid="text-start-time">
                 Start time: <span className="font-semibold text-white">{formatTimeInZone(new Date(state.meta.eventStartAtUtc), "America/New_York")} Eastern</span>
@@ -1234,7 +1248,7 @@ export default function Studio({ slug }: { slug?: string }) {
                   loaded?" from wherever they happen to be standing. A podcaster
                   is looking for one scene, their own, and scrolling to it is
                   not the problem worth solving. */}
-              <RunningOrder slug={slug} studioId={studioId} searchable={!!state?.isCrew} />
+              <RunningOrder slug={slug} studioId={studioId} searchable={!!state?.isCrew} canTake={!!state?.isCrew} />
 
               {recordings.length > 0 && (
                 <div className="rounded-2xl border border-white/15 bg-white/[0.06] p-4">
