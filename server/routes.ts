@@ -4749,9 +4749,12 @@ export function registerRoutes(app: Express): void {
       })
       .filter((a) => a.includes("@"));
     // A subdomain counts: mail to anything.militaryvoice.ai is still ours.
+    // So does the account's own Resend receiving address (<id>.resend.app):
+    // once the domain's mail moved to Google, hello@ reaches us by being
+    // forwarded there, and a forward can carry that address as the To.
     return addresses.some((a) => {
       const domain = a.slice(a.lastIndexOf("@") + 1);
-      return OUR_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
+      return domain.endsWith(".resend.app") || OUR_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
     });
   }
 
