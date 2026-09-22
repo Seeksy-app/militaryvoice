@@ -690,7 +690,7 @@ export default function Studio({ slug }: { slug?: string }) {
             chat needs a column, not the page — and Up next beside her rather
             than above the rail, so the top of the page answers "who is on,
             who is next, and who do I ask" without a scroll. */}
-        <div className="grid gap-5 xl:grid-cols-[auto_minmax(0,1fr)_minmax(17rem,20rem)] xl:items-start">
+        <div className="grid gap-5 xl:grid-cols-[minmax(200px,15rem)_minmax(0,1fr)_minmax(17rem,20rem)] xl:items-start">
           <div>
             <Link
               href="/host/dashboard"
@@ -699,10 +699,12 @@ export default function Studio({ slug }: { slug?: string }) {
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back to your dashboard
             </Link>
-            <h1 className="whitespace-nowrap text-xl font-bold tracking-tight sm:text-2xl" style={HEADLINE_FONT}>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
               Green Room
-              <span className="text-base font-normal text-white/60 sm:text-lg"> · {state?.eventName?.trim() ?? "…"}{state?.studio.name ? ` · ${state.studio.name}` : ""}</span>
             </h1>
+            <p className="text-sm text-white/60">
+              {state?.eventName?.trim() ?? "…"}{state?.studio.name ? ` · ${state.studio.name}` : ""}
+            </p>
             {state?.meta?.eventStartAtUtc && (
               <p className="mt-1 text-sm text-white/70" data-testid="text-start-time">
                 Start time: <span className="font-semibold text-white">{formatTimeInZone(new Date(state.meta.eventStartAtUtc), "America/New_York")} Eastern</span>
