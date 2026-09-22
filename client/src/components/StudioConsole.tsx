@@ -1089,7 +1089,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   // the same subscription that powers the green-room thumbnails.
   const monitorTiles: StageTile[] = Array.from(feeds.values())
     .filter((f) => f.state === "On stage")
-    .map((f) => ({ identity: f.identity, name: f.name, displayTitle: f.displayTitle, video: f.video, audio: f.audio, speaking: f.speaking }))
+    // Never your own microphone back at you: that is a network round trip
+    // late, and it reads as an echo. Your picture stays; your sound does not.
+    .map((f) => ({ identity: f.identity, name: f.name, displayTitle: f.displayTitle, video: f.video, audio: me && f.identity === `p-${me.id}` ? null : f.audio, speaking: f.speaking }))
     .sort((a, b) => a.identity.localeCompare(b.identity));
 
   useEffect(() => {
