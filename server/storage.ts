@@ -667,7 +667,7 @@ export interface IStorage {
   setYoutubeAccountEnabled(id: number, enabled: boolean): Promise<void>;
   listSocialPosts(eventId: number): Promise<SocialPostRow[]>;
   getSocialPost(id: number): Promise<SocialPostRow | undefined>;
-  createSocialPosts(rows: Array<{ eventId: number; signupId: number; scheduledAt: string; platforms: string; caption: string }>): Promise<SocialPostRow[]>;
+  createSocialPosts(rows: Array<{ eventId: number; signupId: number; scheduledAt: string; platforms: string; caption: string; imageUrl?: string }>): Promise<SocialPostRow[]>;
   updateSocialPost(id: number, patch: Partial<Omit<SocialPostRow, "id">>): Promise<SocialPostRow | undefined>;
   listShowSponsors(eventId: number): Promise<ShowSponsorRow[]>;
   createShowSponsor(row: Omit<ShowSponsorRow, "id" | "createdAt">): Promise<ShowSponsorRow>;
@@ -1073,7 +1073,7 @@ class DatabaseStorage implements IStorage {
     const [row] = await db.select().from(socialPosts).where(eq(socialPosts.id, id));
     return row;
   }
-  async createSocialPosts(rows: Array<{ eventId: number; signupId: number; scheduledAt: string; platforms: string; caption: string }>): Promise<SocialPostRow[]> {
+  async createSocialPosts(rows: Array<{ eventId: number; signupId: number; scheduledAt: string; platforms: string; caption: string; imageUrl?: string }>): Promise<SocialPostRow[]> {
     await ready();
     if (!rows.length) return [];
     const now = new Date().toISOString();

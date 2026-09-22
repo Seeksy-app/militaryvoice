@@ -7708,10 +7708,10 @@ Watch at militaryvoice.ai/agenda
       const sg = signups.find((x) => x.id === r.signupId);
       return {
         ...r,
-        podcastName: sg?.podcastName ?? "?",
-        hostName: sg?.hostName ?? "?",
+        podcastName: sg?.podcastName ?? (r.imageUrl ? "The Podcast Marathon" : "?"),
+        hostName: sg?.hostName ?? "Riccoh Player",
         slotIndex: sg?.slotIndex ?? -1,
-        imageUrl: `${PUBLIC_ORIGIN}/og/slot/${r.signupId}.jpg?size=square`,
+        imageUrl: r.imageUrl || `${PUBLIC_ORIGIN}/og/slot/${r.signupId}.jpg?size=square`,
         whenLabel: `${socialFmt(r.scheduledAt, { weekday: "short", month: "short", day: "numeric" })} · ${socialFmt(r.scheduledAt, { hour: "numeric", minute: "2-digit" })} ET`,
         dayKey: socialFmt(r.scheduledAt, { year: "numeric", month: "2-digit", day: "2-digit" }),
       };
@@ -7765,6 +7765,18 @@ Watch at militaryvoice.ai/agenda
     const created = await storage.createSocialPosts(rows);
     res.json({ planned: created.length, posts: await socialPostsView(eventId) });
   });
+  /** One post of our own on the calendar: a picture, a caption, a time, the networks. */
+  app.post("/api/admin/social-posts", requireAdmin, async (req, res) => {
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const signupId = Number(req.body?.signupId) || 0;
+    const scheduledAt = typeof req.body?.scheduledAt === "string" && !Number.isNaN(Date.parse(req.body.scheduledAt)) ? new Date(req.body.scheduledAt).toISOString() : "";
+    const caption = typeof req.body?.caption === "string" ? req.body.caption.slice(0, 2000) : "";
+    const imageUrl = typeof req.body?.imageUrl === "string" && /^https?:\/\//.test(req.body.imageUrl) ? req.body.imageUrl : "";
+    const platforms = typeof req.body?.platforms === "string" && req.body.platforms ? req.body.platforms : SOCIAL_PLATFORMS;
+    if (!scheduledAt || !caption) return res.status(400).json({ message: "Need a time and a caption." });
+    const [row] = await storage.createSocialPosts([{ eventId, signupId, scheduledAt, platforms, caption, imageUrl }]);
+    res.json(row);
+  });
   app.patch("/api/admin/social-posts/:id", requireAdmin, async (req, res) => {
     const row = await storage.getSocialPost(Number(req.params.id));
     if (!row) return res.status(404).json({ message: "No such post." });
@@ -7786,7 +7798,7 @@ Watch at militaryvoice.ai/agenda
       const result = await publishPhoto({
         username: poster.uploadPostUsername,
         platforms: row.platforms.split(",").filter(Boolean),
-        photoUrl: `${PUBLIC_ORIGIN}/og/slot/${row.signupId}.jpg?size=square`,
+        photoUrl: row.imageUrl || `${PUBLIC_ORIGIN}/og/slot/${row.signupId}.jpg?size=square`,
         title: row.caption.split("\n")[0].slice(0, 200),
         description: row.caption,
         ...(inFuture ? { scheduledDate: row.scheduledAt.replace(/\.\d{3}Z$/, "Z"), timezone: "UTC" } : {}),

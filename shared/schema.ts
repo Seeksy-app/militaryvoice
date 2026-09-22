@@ -1749,6 +1749,8 @@ export const socialPosts = pgTable("social_posts", {
   scheduledAt: text("scheduled_at").notNull(), // ISO, UTC
   platforms: text("platforms").notNull().default("facebook,instagram,linkedin"),
   caption: text("caption").notNull().default(""),
+  /** A picture of our own instead of the slot card. Empty means the card. */
+  imageUrl: text("image_url").notNull().default(""),
   status: text("status").notNull().default("proposed"),
   jobId: text("job_id").notNull().default(""),
   error: text("error").notNull().default(""),
@@ -1756,5 +1758,5 @@ export const socialPosts = pgTable("social_posts", {
   approvedAt: text("approved_at").notNull().default(""),
   postedAt: text("posted_at").notNull().default(""),
   createdAt: text("created_at").notNull(),
-}, (t) => [index("social_posts_event_idx").on(t.eventId), uniqueIndex("social_posts_signup_idx").on(t.signupId)]);
+}, (t) => [index("social_posts_event_idx").on(t.eventId), index("social_posts_signup_idx").on(t.signupId)]);
 export type SocialPostRow = typeof socialPosts.$inferSelect;
