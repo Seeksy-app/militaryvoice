@@ -82,6 +82,15 @@ async function main() {
     if (!landed) { console.log("  rsync FAILED"); continue; }
     console.log("  checksum ok");
 
+    // Index to the front before it goes anywhere near a browser. A file
+    // with its moov after the mdat makes the stage wait for the whole file
+    // before the first frame; +faststart copies the streams and fixes that.
+    console.log("  faststart");
+    const fixed = `${remote}.fast.mp4`;
+    if (spawnSync("ssh", ["-o", "BatchMode=yes", HOST, `ffmpeg -v error -y -i ${JSON.stringify(remote)} -c copy -movflags +faststart ${JSON.stringify(fixed)} && mv -f ${JSON.stringify(fixed)} ${JSON.stringify(remote)}`], { stdio: "inherit" }).status !== 0) {
+      console.log("  faststart FAILED — sending as is");
+    }
+
     const key = `studio/${Date.now()}-${name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80)}`;
     const url = signedRecordingUpload(key, 6 * 3600);
     console.log("  vps → R2");
