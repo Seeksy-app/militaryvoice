@@ -10,7 +10,18 @@ export interface HelpEntry {
   keywords: string;
   /** Where it applies: everyone, or people on the lineup. */
   audience: "everyone" | "podcasters";
+  /** The shelf it sits on, on the help hub. */
+  category: HelpCategory;
 }
+
+export type HelpCategory = "lineup" | "showday" | "youtube" | "watching" | "sponsors";
+export const HELP_CATEGORIES: { key: HelpCategory; title: string; blurb: string }[] = [
+  { key: "lineup", title: "Getting on the lineup", blurb: "Your sign-in, your slot, your photo and your card." },
+  { key: "showday", title: "Show day", blurb: "The green room, going live, a recorded episode, co-hosting." },
+  { key: "youtube", title: "Your own YouTube", blurb: "Your segment on your channel as well as ours." },
+  { key: "watching", title: "Watching the marathon", blurb: "What it is, when it is, and how to catch a show." },
+  { key: "sponsors", title: "Sponsors", blurb: "Backing a show, and what a sponsor gets." },
+];
 
 export const HELP_INDEX: HelpEntry[] = [
   {
@@ -19,6 +30,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/help/youtube",
     keywords: "youtube connect channel stream live integrations google verified advanced continue scope broadcast",
     audience: "podcasters",
+    category: "youtube",
   },
   {
     title: "Google says the app isn't verified",
@@ -26,6 +38,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/help/youtube#verified",
     keywords: "google not verified unverified warning advanced continue access blocked review",
     audience: "podcasters",
+    category: "youtube",
   },
   {
     title: "Sign in to your dashboard",
@@ -33,6 +46,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/host/dashboard",
     keywords: "sign in login code password email dashboard keep me signed in 30 days",
     audience: "podcasters",
+    category: "lineup",
   },
   {
     title: "Pick or change your slot",
@@ -40,6 +54,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/schedule",
     keywords: "slot time claim schedule change move release remove agenda when am I on",
     audience: "podcasters",
+    category: "lineup",
   },
   {
     title: "Live, or a recorded episode",
@@ -47,6 +62,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/prepare",
     keywords: "pre-recorded prerecorded recorded episode upload file live format mp4 send us",
     audience: "podcasters",
+    category: "showday",
   },
   {
     title: "The green room on show day",
@@ -54,6 +70,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/prepare",
     keywords: "green room studio camera mic show day on air stage producer alex call time",
     audience: "podcasters",
+    category: "showday",
   },
   {
     title: "Co-host an hour with Riccoh or Alex",
@@ -61,6 +78,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/host/dashboard",
     keywords: "co-host cohost hour main stage riccoh alex between shows",
     audience: "podcasters",
+    category: "showday",
   },
   {
     title: "Your photo and your card",
@@ -68,6 +86,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/host/dashboard",
     keywords: "photo headshot picture profile card lineup crop image hi-res high resolution size pixels blurry",
     audience: "podcasters",
+    category: "lineup",
   },
   {
     title: "Connect your social accounts",
@@ -75,6 +94,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/host/dashboard",
     keywords: "social instagram tiktok facebook linkedin x threads connect accounts follow promo post upload-post",
     audience: "podcasters",
+    category: "lineup",
   },
   {
     title: "Bring a sponsor to your segment",
@@ -82,6 +102,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/sponsors",
     keywords: "sponsor sponsorship money earn share package rev revenue bring",
     audience: "podcasters",
+    category: "sponsors",
   },
   {
     title: "Recordings and clips after the show",
@@ -89,6 +110,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/host/dashboard",
     keywords: "recording clips download after the show video shorts captions",
     audience: "podcasters",
+    category: "showday",
   },
   {
     title: "What is The Podcast Marathon?",
@@ -96,6 +118,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/faq",
     keywords: "what is marathon podcastathon national military podcast day event about",
     audience: "everyone",
+    category: "watching",
   },
   {
     title: "When is it, and how do I watch?",
@@ -103,6 +126,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/agenda",
     keywords: "when date time watch agenda schedule lineup october 5 listen",
     audience: "everyone",
+    category: "watching",
   },
   {
     title: "Get a reminder for a show",
@@ -110,6 +134,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/agenda",
     keywords: "reminder remind me email notify before show starts",
     audience: "everyone",
+    category: "watching",
   },
   {
     title: "Does it cost anything?",
@@ -117,6 +142,7 @@ export const HELP_INDEX: HelpEntry[] = [
     href: "/faq",
     keywords: "cost free price pay charge fee",
     audience: "everyone",
+    category: "watching",
   },
 ];
 
