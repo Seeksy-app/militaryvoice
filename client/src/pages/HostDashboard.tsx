@@ -61,6 +61,7 @@ import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, QuickDoors, TodoStrip } from "@/components/CommandCenter";
 import { StudioIcon } from "@/components/GreenRoomButton";
 import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
+import { CohostDashboard, type CohostInfo } from "@/components/CohostDashboard";
 import { HostNav } from "@/components/HostNav";
 import { ProScreen } from "@/components/ProScreen";
 import { AudienceConsent } from "@/components/AudienceConsent";
@@ -489,11 +490,12 @@ function AnchoredHeading({ id, icon: Icon, label }: { id: string; icon: typeof R
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "contacts", "pro", "claim"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "contacts", "pro", "claim", "cohost"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
 const SCREEN_SLUG: Record<Screen, string> = {
+  cohost: "cohost",
   dashboard: "",
   editProfile: "profile",
   events: "events",
@@ -873,6 +875,15 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     : [];
   const openSlots = slots.filter((s) => !s.signup);
   const selectedSlot = slots.find((s) => s.index === claimIndex);
+  const { data: cohost } = useQuery<CohostInfo>({
+    queryKey: ["/api/host/cohost"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/cohost")).json(),
+    enabled: !!data,
+  });
+  const cohostHours = cohost?.isCohost ? (cohost.hours?.length ?? 0) + ((cohost.shared?.length ?? 0) > 0 ? 1 : 0) : 0;
+  // A co-host with no show of their own gets the co-host dashboard as their
+  // dashboard. One who is also on the lineup gets it as a door in the nav.
+  const cohostOnly = !!data && !loadingProfile && !!cohost?.isCohost && data.mySignups.length === 0 && !crew?.isCrew;
   const crewMode = !!data && !loadingProfile && !hasProfile && !!crew?.isCrew;
   const inSetup = !!data && !loadingProfile && !hasProfile && !crewMode;
 
@@ -938,7 +949,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                {crewMode ? "Crew" : inSetup ? "Set up your show" : "Podcaster Dashboard"}
+                {crewMode ? "Crew" : cohostOnly || screen === "cohost" ? "Co-host" : inSetup ? "Set up your show" : "Podcaster Dashboard"}
               </h1>
               {data && (
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -977,6 +988,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             onGo={(sc, feature) => { setProFeature(feature); goTo(sc); }}
             feature={proFeature}
             proOpen
+            cohostHours={cohostHours}
           />
         )}
         <div className="min-w-0">
@@ -986,7 +998,11 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             <Skeleton className="h-24 w-full rounded-xl" />
             <Skeleton className="h-48 w-full rounded-xl" />
           </div>
-        ) : !data ? null : crewMode && crew ? (
+        ) : !data ? null : (cohostOnly || screen === "cohost") && cohost?.isCohost ? (
+          <section className="mt-6">
+            <CohostDashboard info={cohost} onBack={cohostOnly ? undefined : () => goTo("dashboard")} />
+          </section>
+        ) : crewMode && crew ? (
           <section className="mt-6">
             <CrewDashboard
               crew={crew}

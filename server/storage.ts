@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, socialPosts, type SocialPostRow, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -665,6 +665,7 @@ export interface IStorage {
   recordSponsorClick(sponsorId: number, source: string, referer: string, userAgent: string): Promise<void>;
   countSponsorClicks(): Promise<Map<number, { total: number; bySource: Record<string, number> }>>;
   setYoutubeAccountEnabled(id: number, enabled: boolean): Promise<void>;
+  listCohostLines(eventId: number): Promise<typeof cohostLines.$inferSelect[]>;
   listSocialPosts(eventId: number): Promise<SocialPostRow[]>;
   getSocialPost(id: number): Promise<SocialPostRow | undefined>;
   createSocialPosts(rows: Array<{ eventId: number; signupId: number; scheduledAt: string; platforms: string; caption: string; imageUrl?: string }>): Promise<SocialPostRow[]>;
@@ -1060,6 +1061,10 @@ class DatabaseStorage implements IStorage {
     return out;
   }
 
+  async listCohostLines(eventId: number): Promise<typeof cohostLines.$inferSelect[]> {
+    await ready();
+    return db.select().from(cohostLines).where(eq(cohostLines.eventId, eventId));
+  }
   async setYoutubeAccountEnabled(id: number, enabled: boolean): Promise<void> {
     await ready();
     await db.update(youtubeAccounts).set({ enabled }).where(eq(youtubeAccounts.id, id));

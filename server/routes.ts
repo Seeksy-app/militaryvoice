@@ -6581,6 +6581,59 @@ export function registerRoutes(app: Express): void {
     };
   }
 
+  /**
+   * The co-host's own view of the day: the hours they hold at the desk and
+   * every show inside them, with the line to say and the sponsor to thank,
+   * plus any segment they share with Riccoh. A podcaster who also co-hosts
+   * gets this beside their show; a co-host with no show gets it instead.
+   */
+  app.get("/api/host/cohost", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = ((req as any).hostEmail as string).trim().toLowerCase();
+    const featured = await storage.getFeaturedEvent();
+    const ev = (Number(req.query.eventId) ? await storage.getEventById(Number(req.query.eventId)) : null) ?? featured;
+    const claims = (await storage.listCohostSlots(ev.id)).filter((c) => c.email.trim().toLowerCase() === email).sort((a, b) => a.blockIndex - b.blockIndex);
+    const active = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled");
+    const shared = active.filter((s) => (s.coHostEmail ?? "").trim().toLowerCase() === email);
+    if (claims.length === 0 && shared.length === 0) return res.json({ isCohost: false });
+    const runItems = await storage.listRunOfShow(ev.id);
+    const lines = await storage.listCohostLines(ev.id);
+    const sponsors = await sponsorsBySignup(ev.id);
+    const start = Date.parse(ev.startAtUtc);
+    const blockMs = COHOST_BLOCK_MINUTES * 60_000;
+    const slotMs = ev.slotMinutes * 60_000;
+    const showOf = (sg: SignupRow) => {
+      const blockStart = new Date(start + sg.slotIndex * slotMs);
+      const onAir = ev.bufferPosition === "before"
+        ? { start: new Date(blockStart.getTime() + ev.bufferMinutes * 60_000), end: new Date(blockStart.getTime() + (ev.bufferMinutes + ev.onAirMinutes) * 60_000) }
+        : { start: blockStart, end: new Date(blockStart.getTime() + ev.onAirMinutes * 60_000) };
+      const intro = runItems.find((r) => r.signupId === sg.id && r.kind === "Intro");
+      const line = intro ? lines.find((l) => l.runItemId === intro.id) : undefined;
+      const sp = sponsors.get(sg.id);
+      return {
+        signupId: sg.id, slotIndex: sg.slotIndex, podcastName: sg.podcastName, hostName: sg.hostName, photoUrl: sg.photoUrl,
+        showFormat: sg.showFormat, onAirStartUtc: onAir.start.toISOString(), onAirEndUtc: onAir.end.toISOString(),
+        line: line?.short || line?.standard || "",
+        sponsor: sp ? { name: sp.name, readLine: sp.readLine } : null,
+      };
+    };
+    const hours = claims.map((c) => {
+      const s0 = start + c.blockIndex * blockMs; const e0 = s0 + blockMs;
+      const shows = active.filter((sg) => { const t = start + sg.slotIndex * slotMs; return t >= s0 && t < e0; }).sort((a, b) => a.slotIndex - b.slotIndex).map(showOf);
+      return { blockIndex: c.blockIndex, startAtUtc: new Date(s0).toISOString(), endAtUtc: new Date(e0).toISOString(), shows };
+    });
+    const studio = (await storage.listStudios(ev.id))[0];
+    const profile = await storage.getProfileByEmail(email);
+    res.json({
+      isCohost: true,
+      name: profile?.hostName ?? "",
+      event: { id: ev.id, name: ev.name, startAtUtc: ev.startAtUtc, slotMinutes: ev.slotMinutes, durationHours: ev.durationHours, slug: ev.slug },
+      hours,
+      shared: shared.map(showOf),
+      studioId: studio?.id ?? null,
+    });
+  });
+
   app.get("/api/host/cohost-slots/:eventId", requireHostSession, async (req, res) => {
     const board = await cohostBoard(Number(req.params.eventId), (req as any).hostEmail as string);
     if (!board) return res.status(404).json({ message: "No such event." });

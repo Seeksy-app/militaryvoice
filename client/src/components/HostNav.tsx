@@ -1,8 +1,8 @@
 import type { ComponentType } from "react";
-import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock, LifeBuoy } from "lucide-react";
+import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2 } from "lucide-react";
 import { Link } from "wouter";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "recordings" | "contacts" | "pro";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "recordings" | "contacts" | "pro" | "cohost";
 
 interface Item {
   key: HostScreen;
@@ -34,8 +34,11 @@ export function HostNav({
   onGo,
   feature,
   proOpen = false,
+  cohostHours = 0,
 }: {
   screen: HostScreen;
+  /** Hours they hold at the desk as co-host; the door shows when there are any. */
+  cohostHours?: number;
   eventsCount: number;
   contactsCount: number;
   pathFor: (s: HostScreen) => string;
@@ -53,6 +56,7 @@ export function HostNav({
         { key: "dashboard", label: "Dashboard", hint: "Your card and slot", icon: LayoutDashboard },
         { key: "editProfile", label: "Profile", hint: "About you", icon: UserRound },
         { key: "events", label: "Event settings", hint: "Your show and time", icon: CalendarDays, badge: eventsCount || undefined },
+        ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `Your ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} at the desk`, icon: Mic2 }] : []),
       ],
     },
     {
