@@ -2389,14 +2389,34 @@ export function registerRoutes(app: Express): void {
     res.redirect(consentUrl(youtubeRedirect(req), Buffer.from(email).toString("base64url")));
   });
 
+  /**
+   * The same connection, run by an admin for a podcaster who is stuck — with
+   * the podcaster's Google account signed in on this browser, by agreement.
+   * The address rides in state with an admin marker; the callback checks the
+   * admin cookie instead of the podcaster's session, and files the channel
+   * under the podcaster's email as if they had done it.
+   */
+  app.get("/api/admin/youtube/start", requireAdmin, async (req, res) => {
+    if (!isYoutubeConfigured()) return res.status(503).json({ message: "YouTube connecting isn't switched on yet." });
+    const email = String(req.query.email ?? "").toLowerCase().trim();
+    if (!email.includes("@")) return res.status(400).json({ message: "Which podcaster?" });
+    res.redirect(consentUrl(youtubeRedirect(req), Buffer.from(`admin:${email}`).toString("base64url")));
+  });
+
   app.get("/api/youtube/callback", async (req, res) => {
     const code = typeof req.query.code === "string" ? req.query.code : "";
     const state = typeof req.query.state === "string" ? req.query.state : "";
-    const email = state ? Buffer.from(state, "base64url").toString("utf8").toLowerCase().trim() : "";
+    const decoded = state ? Buffer.from(state, "base64url").toString("utf8").toLowerCase().trim() : "";
+    const onBehalf = decoded.startsWith("admin:");
+    const email = onBehalf ? decoded.slice("admin:".length) : decoded;
     const sessionEmail = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const adminEmail = getAdminEmail(req);
+    const adminOk = onBehalf && !!adminEmail && (await storage.isAdminEmail(adminEmail));
+    // Where to land: the podcaster's dashboard, or the admin's podcasters list.
+    const back = (result: string) => (onBehalf ? `/admin/podcasters?youtube=${result}&for=${encodeURIComponent(email)}` : `/host/dashboard?youtube=${result}`);
 
-    if (!code || !email || email !== sessionEmail) {
-      res.redirect("/host/dashboard?youtube=failed");
+    if (!code || !email || (onBehalf ? !adminOk : email !== sessionEmail)) {
+      res.redirect(back("failed"));
       return;
     }
     try {
@@ -2404,7 +2424,7 @@ export function registerRoutes(app: Express): void {
       if (!t.refresh_token) {
         // Google only returns one on first consent; we forced prompt=consent,
         // so this means something is wrong rather than "already connected".
-        res.redirect("/host/dashboard?youtube=noRefresh");
+        res.redirect(back("noRefresh"));
         return;
       }
       const channel = await myChannel(t.access_token);
@@ -2413,7 +2433,7 @@ export function registerRoutes(app: Express): void {
       // as connected, and nothing could ever stream to him. Send them back to
       // choose the account — usually a brand account — that owns the channel.
       if (!channel.id) {
-        res.redirect("/host/dashboard?youtube=noChannel");
+        res.redirect(back("noChannel"));
         return;
       }
       await storage.upsertYoutubeAccount(email, {
@@ -2423,10 +2443,10 @@ export function registerRoutes(app: Express): void {
         channelId: channel.id,
         channelTitle: channel.title,
       });
-      res.redirect("/host/dashboard?youtube=connected");
+      res.redirect(back("connected"));
     } catch (err) {
       console.error("YouTube connect failed:", err);
-      res.redirect("/host/dashboard?youtube=failed");
+      res.redirect(back("failed"));
     }
   });
 
