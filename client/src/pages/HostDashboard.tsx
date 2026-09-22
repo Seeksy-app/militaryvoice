@@ -824,6 +824,18 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!data, loadingProfile, hasProfile, pending?.slotIndex]);
 
+  // Crew without a show: a producer, say. Their dashboard is not the
+  // podcaster's, and it must not ask them for a podcast they do not have.
+  const [crewEventId, setCrewEventId] = useState<number | null>(() => {
+    try { const v = Number(localStorage.getItem("mv_crew_event") ?? ""); return v || null; } catch { return null; }
+  });
+  const { data: crew } = useQuery<CrewInfo>({
+    queryKey: ["/api/host/crew", crewEventId],
+    queryFn: async () => (await apiRequest("GET", `/api/host/crew${crewEventId ? `?eventId=${crewEventId}` : ""}`)).json(),
+    enabled: !!data,
+    retry: false,
+  });
+
   if (isError) {
     return (
       <div className="min-h-screen">
@@ -843,17 +855,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     : [];
   const openSlots = slots.filter((s) => !s.signup);
   const selectedSlot = slots.find((s) => s.index === claimIndex);
-  // Crew without a show: a producer, say. Their dashboard is not the
-  // podcaster's, and it must not ask them for a podcast they do not have.
-  const [crewEventId, setCrewEventId] = useState<number | null>(() => {
-    try { const v = Number(localStorage.getItem("mv_crew_event") ?? ""); return v || null; } catch { return null; }
-  });
-  const { data: crew } = useQuery<CrewInfo>({
-    queryKey: ["/api/host/crew", crewEventId],
-    queryFn: async () => (await apiRequest("GET", `/api/host/crew${crewEventId ? `?eventId=${crewEventId}` : ""}`)).json(),
-    enabled: !!data,
-    retry: false,
-  });
   const crewMode = !!data && !loadingProfile && !hasProfile && !!crew?.isCrew;
   const inSetup = !!data && !loadingProfile && !hasProfile && !crewMode;
 
