@@ -96,7 +96,8 @@ import {
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
 import { alexAnswer, type AlexTurn } from "./alex.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
-import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted } from "./inbox.js";
+import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml } from "./inbox.js";
+import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
@@ -7494,6 +7495,47 @@ The ${eventName} team`;
     }
     return id;
   }
+
+  // ---- Chat with Alex: say it, she drafts it, you send it ---------------------
+  app.post("/api/admin/chat", requireAdmin, async (req, res) => {
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const turns = (Array.isArray(req.body?.messages) ? req.body.messages : []) as ChatTurn[];
+    const clean = turns.filter((t) => (t.role === "user" || t.role === "assistant") && typeof t.content === "string").map((t) => ({ role: t.role, content: t.content.slice(0, 4000) }));
+    if (clean.length === 0 || clean[clean.length - 1].role !== "user") return res.status(400).json({ message: "Say something first." });
+    try {
+      res.json(await adminChat(eventId, clean));
+    } catch (err) {
+      res.status(502).json({ message: (err as Error).message });
+    }
+  });
+
+  /** The draft from the chat, sent. Alex signs as herself; the others as themselves. */
+  app.post("/api/admin/chat/send", requireAdmin, async (req, res) => {
+    const to = String(req.body?.to ?? "").trim().toLowerCase();
+    const subject = String(req.body?.subject ?? "").trim().slice(0, 200);
+    const text = String(req.body?.text ?? "").trim();
+    const from = ["alex", "riccoh", "michael", "team"].includes(String(req.body?.from)) ? String(req.body.from) : "alex";
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to) || !subject || !text) return res.status(400).json({ message: "Need a recipient, a subject and the words." });
+    const paragraphs = text.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
+    const body = from === "alex" ? paragraphs.replace(/<p>Alex<\/p>\s*$/, "") + alexSignatureHtml() : paragraphs;
+    const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: subject.replace(/^re:\s*/i, ""), body });
+    const named = from === "michael" ? { from: "Michael <michael@militaryvoice.ai>", replyTo: "michael@militaryvoice.ai" } : {};
+    // Threads under their latest message to us, when there is one.
+    const latest = (await storage.listInboundByEmail(to))[0];
+    const headers: Record<string, string> = {};
+    if (latest?.messageId) { headers["In-Reply-To"] = latest.messageId; headers["References"] = latest.messageId; }
+    const id = await sendOneOffEmail({ to, subject, html, text, headers, ...named });
+    if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
+    const featured = await storage.getFeaturedEvent();
+    const team = await storage.listEventTeam(featured.id);
+    const sender = from === "riccoh" ? "member:1" : from === "michael" ? `member:${team.find((m) => /michael/i.test(m.name))?.id ?? 3}` : from === "alex" ? "alex" : "team";
+    try { await storage.recordOneOffSend({ eventId: featured.id, subject, bodyText: text, sender, banner: "podcasters", email: to, resendId: id }); } catch (err) { console.error("Chat send not logged:", err); }
+    // If they were waiting on a person, they are not any more.
+    if (latest && (latest.status === "new" || latest.status === "drafted")) {
+      await storage.updateInbound(latest.id, { status: "sent", repliedAt: new Date().toISOString(), replyResendId: id, replyFrom: from, replyText: text });
+    }
+    res.json({ ok: true, id });
+  });
 
   // ---- Sponsor leads: the people Riccoh is going to write to ----------------
   const LEAD_FIELDS = ["name", "company", "title", "linkedin", "email", "phone", "notes", "owner"] as const;

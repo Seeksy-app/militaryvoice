@@ -35,6 +35,7 @@ import { FinancesCard } from "@/components/FinancesCard";
 import { AdminClips } from "@/components/AdminClips";
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
 import { SponsorLeads } from "@/components/SponsorLeads";
+import { AdminChat } from "@/components/AdminChat";
 import { AudienceFigures } from "@/components/AudienceFigures";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
@@ -2967,7 +2968,7 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
 // a campaign is one email that goes out once, an automation is a series that
 // fires off a trigger, and a template is copy you pick from when building
 // either. "Cadence" was doing two of those jobs at once.
-type CrmView = "contacts" | "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "campaigns" | "templates" | "automation" | "replies" | "activity" | "compose";
+type CrmView = "contacts" | "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "campaigns" | "templates" | "automation" | "replies" | "activity" | "chat" | "compose";
 
 /**
  * Everything that has actually gone out, in the order it went.
@@ -3062,7 +3063,7 @@ function InboxPanel() {
                     <div>{new Date(r.receivedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</div>
                     <div className="mt-0.5">
                       {r.ackAt && <span className="mr-2 text-emerald-700 dark:text-emerald-400">⚡ Alex acknowledged</span>}
-                      {r.status === "sent" ? <span className="text-emerald-700 dark:text-emerald-400">✓ Answered by {r.replyFrom === "riccoh" ? "Riccoh" : "the team"}</span>
+                      {r.status === "sent" ? <span className="text-emerald-700 dark:text-emerald-400">✓ Answered by {r.replyFrom === "riccoh" ? "Riccoh" : r.replyFrom === "michael" ? "Michael" : r.replyFrom === "alex" ? "Alex" : "the team"}</span>
                         : r.status === "ignored" ? "No follow-up needed"
                         : r.status === "drafted" ? `${CATEGORY[r.category] ?? "Reply"} · a person still owes a reply`
                         : "Drafting…"}
@@ -3221,6 +3222,7 @@ function ActivityLog({
   const senderName = (sender: string | null) => {
     if (!sender || sender === "team") return "the team";
     if (sender === "rico" || sender === "riccoh") return "Riccoh";
+    if (sender === "alex") return "Alex";
     const m = sender.startsWith("member:") ? team.find((t) => t.id === Number(sender.split(":")[1])) : undefined;
     return m?.name ?? "the team";
   };
@@ -4281,12 +4283,13 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
   // templates; everything else is one level deep.
   const navItems: { id: CrmView; label: string; badge?: number }[] = [
     { id: "contacts", label: "Contacts" },
-    { id: "lists", label: "Lists" },
     { id: "campaigns", label: "Campaigns" },
     { id: "replies", label: "Replies", badge: repliesWaiting || undefined },
     { id: "activity", label: "Activity" },
+    { id: "chat", label: "Chat with Alex" },
   ];
-  const activeNav = view === "list-signups" || view === "list-contacts" || view === "list-engagement" || view === "list-segment" ? "lists"
+  // Lists are a way of looking at contacts, so they sit under that door.
+  const activeNav = view === "lists" || view === "list-signups" || view === "list-contacts" || view === "list-engagement" || view === "list-segment" ? "contacts"
     : view === "compose" || view === "automation" || view === "templates" ? "campaigns"
     : view;
 
@@ -4316,8 +4319,17 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
 
       {/* ── CONTACTS: everyone ── */}
       {view === "contacts" && (
-        <AllContacts eventId={eventId} contacts={contactList} onSelect={setSelectedContact} />
+        <div className="flex flex-col gap-4">
+          <div className="inline-flex self-start rounded-lg bg-muted p-1">
+            <button type="button" className="rounded-md bg-background px-3 py-1.5 text-sm font-medium shadow-sm">Everyone</button>
+            <button type="button" onClick={() => setView("lists")} className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="crm-to-lists">Lists</button>
+          </div>
+          <AllContacts eventId={eventId} contacts={contactList} onSelect={setSelectedContact} />
+        </div>
       )}
+
+      {/* ── CHAT: say it to Alex, send it from the draft ── */}
+      {view === "chat" && <AdminChat eventId={eventId} />}
 
       {/* ── REPLIES: what came back, with an answer drafted ── */}
       {view === "replies" && (
@@ -4332,6 +4344,10 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
       {/* ── LISTS: directory ── */}
       {view === "lists" && (
         <div className="flex flex-col gap-4">
+          <div className="inline-flex self-start rounded-lg bg-muted p-1">
+            <button type="button" onClick={() => setView("contacts")} className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground">Everyone</button>
+            <button type="button" className="rounded-md bg-background px-3 py-1.5 text-sm font-medium shadow-sm">Lists</button>
+          </div>
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">Select a list to view or email its contacts</p>
             <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setNewListOpen(true)}>
