@@ -1410,6 +1410,8 @@ export const youtubeAccounts = pgTable("youtube_accounts", {
    * is the one moment they are thinking about it.
    */
   scope: text("scope").notNull().default("segment"),
+  /** Off: the producer's segment button won't open a broadcast on this channel. */
+  enabled: boolean("enabled").notNull().default(true),
   // The refresh token is the durable credential; the access token is a cache.
   refreshToken: text("refresh_token").notNull(),
   accessToken: text("access_token").notNull().default(""),
@@ -1438,6 +1440,12 @@ export type DestinationInput = z.infer<typeof destinationInputSchema>;
 export interface PublicDestination {
   id: number;
   signupId: number | null;
+  /** "house": a destination row. "channel": a podcaster's connected YouTube, streamed for their segment. */
+  kind?: "house" | "channel";
+  /** For a channel row: whose it is, and when their segment is. */
+  hostName?: string;
+  podcastName?: string;
+  slotLabel?: string;
   platform: string;
   label: string;
   rtmpUrl: string;
@@ -1727,3 +1735,26 @@ export const sponsorClicks = pgTable("sponsor_clicks", {
   createdAt: text("created_at").notNull(),
 }, (t) => [index("sponsor_clicks_sponsor_idx").on(t.sponsorId)]);
 export type SponsorClickRow = typeof sponsorClicks.$inferSelect;
+
+/**
+ * The social calendar: one post per podcaster from the house account, two a
+ * day, proposed by us and approved by Riccoh before it is handed to the
+ * scheduler. status: proposed → scheduled (a job waits at Upload-Post) →
+ * posted; or skipped; or failed with the reason.
+ */
+export const socialPosts = pgTable("social_posts", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  signupId: integer("signup_id").notNull(),
+  scheduledAt: text("scheduled_at").notNull(), // ISO, UTC
+  platforms: text("platforms").notNull().default("facebook,instagram,linkedin"),
+  caption: text("caption").notNull().default(""),
+  status: text("status").notNull().default("proposed"),
+  jobId: text("job_id").notNull().default(""),
+  error: text("error").notNull().default(""),
+  approvedBy: text("approved_by").notNull().default(""),
+  approvedAt: text("approved_at").notNull().default(""),
+  postedAt: text("posted_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("social_posts_event_idx").on(t.eventId), uniqueIndex("social_posts_signup_idx").on(t.signupId)]);
+export type SocialPostRow = typeof socialPosts.$inferSelect;

@@ -849,6 +849,10 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/destinations"] }),
     onError: (e: Error) => toast({ title: "Couldn't change that destination", description: e.message, variant: "destructive" }),
   });
+  const toggleChannel = useMutation({
+    mutationFn: async (v: { id: number; enabled: boolean }) => adminSend("PATCH", `/api/admin/youtube-accounts/${v.id}`, { enabled: v.enabled }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/destinations"] }),
+  });
 
   const record = useMutation({
     mutationFn: async (body: { action: "start" | "stop"; signupId?: number }) =>
@@ -1116,7 +1120,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     return () => clearInterval(id);
   }, [onCamera, selfKey, camOn, micOn, studioId]);
 
-  const houseDestRows = (dests ?? []).filter((d) => !d.signupId);
+  const houseDestRows = (dests ?? []).filter((d) => d.kind !== "channel" && !d.signupId);
+  const channelRows = (dests ?? []).filter((d) => d.kind === "channel");
+  const anyDestRows = houseDestRows.length > 0 || channelRows.length > 0;
   const houseDests = houseDestRows.filter((d) => d.enabled).length;
   const steps = [
     { n: 1, label: "Get people in", done: present.length > 0, hint: "Send them the join link." },
@@ -1353,7 +1359,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     external destinations this said "To our watch page" and
                     opened an empty list — a control whose only state is its
                     default. */}
-                {!isRoom && houseDestRows.length > 0 && (
+                {!isRoom && anyDestRows && (
                   <Popover>
                     <PopoverTrigger asChild>
                       <button
@@ -1374,6 +1380,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                               ))}
                           </span>
                         )}
+                        {channelRows.filter((d) => d.enabled).length > 0 && (
+                          <span className="rounded-full bg-white/15 px-1.5 text-[10px] font-semibold" title="Podcaster channels on for their segment">+{channelRows.filter((d) => d.enabled).length}</span>
+                        )}
                         <ChevronDown className="h-3 w-3 text-white/60" />
                       </button>
                     </PopoverTrigger>
@@ -1381,8 +1390,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                       <p className="text-sm font-semibold">Streaming to</p>
                       <p className="text-xs text-muted-foreground">Our watch page is always on. Switch the others on or off here.</p>
                       <div className="mt-3 flex flex-col gap-2">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Whole show</p>
                         {houseDestRows.length === 0 && (
-                          <p className="text-xs text-muted-foreground">No external destinations yet — add YouTube, X or a custom RTMP under Studio set.</p>
+                          <p className="text-xs text-muted-foreground">No whole-show destinations yet — add YouTube, X or a custom RTMP under Studio set.</p>
                         )}
                         {houseDestRows.map((d) => (
                           <label key={d.id} className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-sm">
@@ -1392,6 +1402,22 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                             <Switch checked={d.enabled} onCheckedChange={(v) => toggleDest.mutate({ id: d.id, enabled: v })} />
                           </label>
                         ))}
+                        {channelRows.length > 0 && (
+                          <>
+                            <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Their segment only</p>
+                            <p className="-mt-1 text-[11px] text-muted-foreground">Each goes out to the podcaster's own channel while their slot is on. Off means our watch page only.</p>
+                            {channelRows.map((d) => (
+                              <label key={d.id} className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-sm" data-testid={`dest-channel-${-d.id}`}>
+                                <DestIcon platform={d.platform} />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate">{d.label.replace(" · their segment", "")}</span>
+                                  <span className="block truncate text-[11px] text-muted-foreground">{d.podcastName?.trim() || d.hostName} · {d.slotLabel}</span>
+                                </span>
+                                <Switch checked={d.enabled} onCheckedChange={(v) => toggleChannel.mutate({ id: -d.id, enabled: v })} />
+                              </label>
+                            ))}
+                          </>
+                        )}
                       </div>
                     </PopoverContent>
                   </Popover>

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, socialPosts, type SocialPostRow, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -664,6 +664,11 @@ export interface IStorage {
   listAssetsByEmail(email: string): Promise<ShowAssetRow[]>;
   recordSponsorClick(sponsorId: number, source: string, referer: string, userAgent: string): Promise<void>;
   countSponsorClicks(): Promise<Map<number, { total: number; bySource: Record<string, number> }>>;
+  setYoutubeAccountEnabled(id: number, enabled: boolean): Promise<void>;
+  listSocialPosts(eventId: number): Promise<SocialPostRow[]>;
+  getSocialPost(id: number): Promise<SocialPostRow | undefined>;
+  createSocialPosts(rows: Array<{ eventId: number; signupId: number; scheduledAt: string; platforms: string; caption: string }>): Promise<SocialPostRow[]>;
+  updateSocialPost(id: number, patch: Partial<Omit<SocialPostRow, "id">>): Promise<SocialPostRow | undefined>;
   listShowSponsors(eventId: number): Promise<ShowSponsorRow[]>;
   createShowSponsor(row: Omit<ShowSponsorRow, "id" | "createdAt">): Promise<ShowSponsorRow>;
   deleteShowSponsor(id: number): Promise<void>;
@@ -1053,6 +1058,31 @@ class DatabaseStorage implements IStorage {
       out.set(r.sponsorId, e);
     }
     return out;
+  }
+
+  async setYoutubeAccountEnabled(id: number, enabled: boolean): Promise<void> {
+    await ready();
+    await db.update(youtubeAccounts).set({ enabled }).where(eq(youtubeAccounts.id, id));
+  }
+  async listSocialPosts(eventId: number): Promise<SocialPostRow[]> {
+    await ready();
+    return db.select().from(socialPosts).where(eq(socialPosts.eventId, eventId)).orderBy(asc(socialPosts.scheduledAt), asc(socialPosts.id));
+  }
+  async getSocialPost(id: number): Promise<SocialPostRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(socialPosts).where(eq(socialPosts.id, id));
+    return row;
+  }
+  async createSocialPosts(rows: Array<{ eventId: number; signupId: number; scheduledAt: string; platforms: string; caption: string }>): Promise<SocialPostRow[]> {
+    await ready();
+    if (!rows.length) return [];
+    const now = new Date().toISOString();
+    return db.insert(socialPosts).values(rows.map((r) => ({ ...r, createdAt: now }))).onConflictDoNothing().returning();
+  }
+  async updateSocialPost(id: number, patch: Partial<Omit<SocialPostRow, "id">>): Promise<SocialPostRow | undefined> {
+    await ready();
+    const [row] = await db.update(socialPosts).set(patch).where(eq(socialPosts.id, id)).returning();
+    return row;
   }
 
   async listShowSponsors(eventId: number): Promise<ShowSponsorRow[]> {

@@ -32,6 +32,8 @@ import {
   type PublicSettings,
   type EventRow,
   type SignupRow,
+  type SocialPostRow,
+  type PublicDestination,
   updateSponsorSchema,
   upsertSponsorPackageSchema,
   SPONSOR_TIERS,
@@ -105,6 +107,7 @@ import { stageMetaFromStudio } from "../shared/stageMeta.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   publishPhoto,
+  cancelScheduledPost,
   isUploadPostConfigured,
   ensureUploadPostProfile,
   createConnectUrl,
@@ -2487,6 +2490,11 @@ export function registerRoutes(app: Express): void {
       res.status(404).json({ message: "No such booking" });
       return;
     }
+    const acctRow = await storage.getYoutubeAccount(signup.email.toLowerCase().trim());
+    if (acctRow && acctRow.enabled === false) {
+      res.status(409).json({ message: `${signup.hostName}'s channel is switched off under Streaming to.` });
+      return;
+    }
     const token = await youtubeToken(signup.email.toLowerCase().trim());
     if (!token) {
       res.status(409).json({ message: `${signup.hostName} hasn't connected their YouTube.` });
@@ -4165,10 +4173,40 @@ export function registerRoutes(app: Express): void {
     };
   }
 
+  /**
+   * Everywhere the stream can go: the house destinations, and every
+   * podcaster's connected YouTube channel that streams their own segment.
+   * The channels are not destination rows (their broadcast is opened when
+   * their slot comes up), so they are listed here with a switch of their own.
+   */
   app.get("/api/admin/destinations", requireAdmin, async (req, res) => {
     noStore(res);
     const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
-    res.json((await storage.listDestinations(eventId)).map(publicDestination));
+    const ev = await storage.getEventById(eventId);
+    const house = (await storage.listDestinations(eventId)).map((d) => ({ ...publicDestination(d), kind: "house" as const }));
+    const signups = (await storage.listSignups(eventId)).filter((s) => s.status !== "cancelled");
+    const at = (slot: number) => ev ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(Date.parse(ev.startAtUtc) + slot * ev.slotMinutes * 60_000)) + " ET" : "";
+    const channels: PublicDestination[] = [];
+    for (const a of await storage.listYoutubeAccounts()) {
+      if (a.scope !== "segment" || !a.channelId) continue;
+      const sg = signups.find((s) => s.email.trim().toLowerCase() === a.email.trim().toLowerCase());
+      if (!sg) continue;
+      channels.push({
+        id: -a.id, signupId: sg.id, kind: "channel", platform: "youtube",
+        label: `${a.channelTitle || a.email} · their segment`, rtmpUrl: "", keyHint: "",
+        enabled: a.enabled !== false, live: false, ownerEmail: a.email,
+        hostName: sg.hostName, podcastName: sg.podcastName, slotLabel: at(sg.slotIndex),
+      });
+    }
+    channels.sort((x, y) => (signups.find((s) => s.id === x.signupId)?.slotIndex ?? 0) - (signups.find((s) => s.id === y.signupId)?.slotIndex ?? 0));
+    res.json([...house, ...channels]);
+  });
+  /** A podcaster's channel switched off: their segment stays on our watch page only. */
+  app.patch("/api/admin/youtube-accounts/:id", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: "Which channel?" });
+    await storage.setYoutubeAccountEnabled(id, req.body?.enabled !== false);
+    res.json({ ok: true });
   });
 
   app.post("/api/admin/destinations", requireAdmin, async (req, res) => {
@@ -7638,6 +7676,158 @@ The ${eventName} team`;
     if (!sponsor || !/^https?:\/\//.test(sponsor.url)) return res.redirect("/sponsors");
     storage.recordSponsorClick(id, String(req.query.src ?? "link"), String(req.get("referer") ?? ""), String(req.get("user-agent") ?? "")).catch(() => {});
     res.redirect(302, sponsor.url);
+  });
+
+  // ---- Social calendar: one post per podcaster from Riccoh's accounts --------
+  /** Whose accounts the calendar posts from. */
+  const SOCIAL_POSTER_EMAIL = "riccoh.player@drphil.tv";
+  const SOCIAL_PLATFORMS = "facebook,instagram,linkedin";
+  const socialFmt = (iso: string, opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", ...opts }).format(new Date(iso));
+  /** An Eastern wall-clock time on a given Eastern date, as UTC. */
+  function easternAt(dayIso: string, hour: number, minute = 0): Date {
+    const [y, m, d] = dayIso.split("-").map(Number);
+    const guess = new Date(Date.UTC(y, m - 1, d, hour, minute));
+    const offsetMin = (guess.getTime() - new Date(guess.toLocaleString("en-US", { timeZone: "America/New_York" })).getTime()) / 60_000;
+    return new Date(guess.getTime() + offsetMin * 60_000);
+  }
+  function socialCaption(signup: SignupRow, ev: EventRow, profile?: { branch?: string; serviceStatus?: string }): string {
+    const start = new Date(Date.parse(ev.startAtUtc) + signup.slotIndex * ev.slotMinutes * 60_000).toISOString();
+    const when = `${socialFmt(start, { weekday: "long", month: "long", day: "numeric" })} at ${socialFmt(start, { hour: "numeric", minute: "2-digit" })} ET`;
+    const who = [signup.hostName.trim(), [profile?.branch, profile?.serviceStatus].filter(Boolean).join(", ")].filter(Boolean).join(", ");
+    const show = signup.podcastName.trim() || signup.hostName.trim();
+    return `On the lineup: ${show} with ${who}. ${when} on The Podcast Marathon, 26.2 miles of military and veteran stories, live and back to back for National Military Podcast Day.
+
+Watch at militaryvoice.ai/agenda
+
+#NationalMilitaryPodcastDay #ThePodcastMarathon`;
+  }
+  async function socialPostsView(eventId: number) {
+    const rows = await storage.listSocialPosts(eventId);
+    const signups = await storage.listSignups(eventId);
+    return rows.map((r) => {
+      const sg = signups.find((x) => x.id === r.signupId);
+      return {
+        ...r,
+        podcastName: sg?.podcastName ?? "?",
+        hostName: sg?.hostName ?? "?",
+        slotIndex: sg?.slotIndex ?? -1,
+        imageUrl: `${PUBLIC_ORIGIN}/og/slot/${r.signupId}.jpg?size=square`,
+        whenLabel: `${socialFmt(r.scheduledAt, { weekday: "short", month: "short", day: "numeric" })} · ${socialFmt(r.scheduledAt, { hour: "numeric", minute: "2-digit" })} ET`,
+        dayKey: socialFmt(r.scheduledAt, { year: "numeric", month: "2-digit", day: "2-digit" }),
+      };
+    });
+  }
+  app.get("/api/admin/social-posts", requireAdmin, async (req, res) => {
+    noStore(res);
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    res.json(await socialPostsView(eventId));
+  });
+  /**
+   * Plan the calendar: every podcaster without a post gets one, in lineup
+   * order, two a day at 9:00 AM and 3:00 PM Eastern, from the next open
+   * time. Ceremonies and the house slot are left out. Nothing is posted here;
+   * the rows sit as proposals until they are approved.
+   */
+  app.post("/api/admin/social-posts/plan", requireAdmin, async (req, res) => {
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const ev = await storage.getEventById(eventId);
+    if (!ev) return res.status(404).json({ message: "No such event." });
+    const existing = new Set((await storage.listSocialPosts(eventId)).map((r) => r.signupId));
+    const skipEmails = new Set(["hello@militaryvoice.ai", "andrew@smartloads.io"]);
+    const lineup = (await storage.listSignups(eventId))
+      .filter((s) => s.status !== "cancelled" && !skipEmails.has(s.email.trim().toLowerCase()) && !existing.has(s.id))
+      .sort((a, b) => a.slotIndex - b.slotIndex);
+    // The next open time: today's 3 PM if it is still ahead, else today at
+    // 5 PM if asked for this afternoon and it's before 5, else tomorrow 9 AM.
+    const now = Date.now();
+    const todayEt = socialFmt(new Date(now).toISOString(), { year: "numeric", month: "2-digit", day: "2-digit" });
+    const [mm, dd, yyyy] = todayEt.split("/"); const today = `${yyyy}-${mm}-${dd}`;
+    const dayAfter = (iso: string, n: number) => { const d = new Date(`${iso}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+    const slots: Date[] = [];
+    let day = today; let i = 0;
+    while (slots.length < lineup.length && i < 60) {
+      for (const [h, m] of [[9, 0], [15, 0], [17, 0]] as const) {
+        const t = easternAt(day, h, m);
+        if (t.getTime() < now + 10 * 60_000) continue;
+        // 5 PM is only a stand-in for a first day whose 3 PM has passed.
+        if (h === 17 && !(day === today && easternAt(day, 15).getTime() < now)) continue;
+        slots.push(t);
+        if (slots.length >= lineup.length) break;
+      }
+      day = dayAfter(day, 1); i++;
+    }
+    const rows: Array<{ eventId: number; signupId: number; scheduledAt: string; platforms: string; caption: string }> = [];
+    for (let k = 0; k < lineup.length && k < slots.length; k++) {
+      const s = lineup[k];
+      const profile = await storage.getProfileByEmail(s.email.trim().toLowerCase());
+      rows.push({ eventId, signupId: s.id, scheduledAt: slots[k].toISOString(), platforms: SOCIAL_PLATFORMS, caption: socialCaption(s, ev, profile ?? undefined) });
+    }
+    const created = await storage.createSocialPosts(rows);
+    res.json({ planned: created.length, posts: await socialPostsView(eventId) });
+  });
+  app.patch("/api/admin/social-posts/:id", requireAdmin, async (req, res) => {
+    const row = await storage.getSocialPost(Number(req.params.id));
+    if (!row) return res.status(404).json({ message: "No such post." });
+    if (row.status !== "proposed") return res.status(409).json({ message: "Take it off the schedule before changing it." });
+    const patch: Partial<SocialPostRow> = {};
+    if (typeof req.body?.caption === "string") patch.caption = req.body.caption.slice(0, 2000);
+    if (typeof req.body?.scheduledAt === "string" && !Number.isNaN(Date.parse(req.body.scheduledAt))) patch.scheduledAt = new Date(req.body.scheduledAt).toISOString();
+    if (typeof req.body?.platforms === "string") patch.platforms = req.body.platforms.split(",").map((p: string) => p.trim()).filter((p: string) => ["facebook", "instagram", "linkedin", "x", "threads", "tiktok", "youtube"].includes(p)).join(",");
+    res.json(await storage.updateSocialPost(row.id, patch));
+  });
+  /** Approve: hand the post to the scheduler. A time already past goes now. */
+  async function approveSocialPost(id: number, by: string): Promise<{ ok: boolean; error?: string }> {
+    const row = await storage.getSocialPost(id);
+    if (!row || row.status !== "proposed") return { ok: false, error: "Not waiting for approval." };
+    const poster = await storage.getProfileByEmail(SOCIAL_POSTER_EMAIL);
+    if (!poster?.uploadPostUsername) return { ok: false, error: "Riccoh's social accounts aren't connected." };
+    const inFuture = Date.parse(row.scheduledAt) > Date.now() + 2 * 60_000;
+    try {
+      const result = await publishPhoto({
+        username: poster.uploadPostUsername,
+        platforms: row.platforms.split(",").filter(Boolean),
+        photoUrl: `${PUBLIC_ORIGIN}/og/slot/${row.signupId}.jpg?size=square`,
+        title: row.caption.split("\n")[0].slice(0, 200),
+        description: row.caption,
+        ...(inFuture ? { scheduledDate: row.scheduledAt.replace(/\.\d{3}Z$/, "Z"), timezone: "UTC" } : {}),
+      });
+      const jobId = String((result as any)?.job_id ?? "");
+      await storage.updateSocialPost(id, { status: inFuture ? "scheduled" : "posted", jobId, approvedBy: by, approvedAt: new Date().toISOString(), postedAt: inFuture ? "" : new Date().toISOString(), error: "" });
+      return { ok: true };
+    } catch (err) {
+      const msg = (err as Error).message;
+      await storage.updateSocialPost(id, { status: "failed", error: msg });
+      return { ok: false, error: msg };
+    }
+  }
+  app.post("/api/admin/social-posts/:id/approve", requireAdmin, async (req, res) => {
+    const r = await approveSocialPost(Number(req.params.id), getAdminEmail(req) ?? "admin");
+    if (!r.ok) return res.status(409).json({ message: r.error });
+    res.json(await storage.getSocialPost(Number(req.params.id)));
+  });
+  app.post("/api/admin/social-posts/approve-all", requireAdmin, async (req, res) => {
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const by = getAdminEmail(req) ?? "admin";
+    const out: Array<{ id: number; ok: boolean; error?: string }> = [];
+    for (const row of await storage.listSocialPosts(eventId)) {
+      if (row.status !== "proposed") continue;
+      out.push({ id: row.id, ...(await approveSocialPost(row.id, by)) });
+    }
+    res.json({ results: out, posts: await socialPostsView(eventId) });
+  });
+  app.post("/api/admin/social-posts/:id/skip", requireAdmin, async (req, res) => {
+    const row = await storage.getSocialPost(Number(req.params.id));
+    if (!row) return res.status(404).json({ message: "No such post." });
+    if (row.status === "scheduled" && row.jobId) { try { await cancelScheduledPost(row.jobId); } catch (err) { return res.status(502).json({ message: `Couldn't take it back: ${(err as Error).message}` }); } }
+    res.json(await storage.updateSocialPost(row.id, { status: "skipped", jobId: "" }));
+  });
+  /** Back to a proposal: a scheduled job is cancelled, a skipped one revived. */
+  app.post("/api/admin/social-posts/:id/reopen", requireAdmin, async (req, res) => {
+    const row = await storage.getSocialPost(Number(req.params.id));
+    if (!row) return res.status(404).json({ message: "No such post." });
+    if (row.status === "scheduled" && row.jobId) { try { await cancelScheduledPost(row.jobId); } catch (err) { return res.status(502).json({ message: `Couldn't take it back: ${(err as Error).message}` }); } }
+    if (row.status === "posted") return res.status(409).json({ message: "It has already gone out." });
+    res.json(await storage.updateSocialPost(row.id, { status: "proposed", jobId: "", error: "", approvedBy: "", approvedAt: "" }));
   });
 
   // ---- Show sponsors: a company on a slot ------------------------------------
