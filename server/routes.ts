@@ -7494,9 +7494,11 @@ The ${eventName} team`;
   async function viewAsSeats(): Promise<{ email: string; label: string; kind: "crew" | "team" }[]> {
     const ev = await storage.getFeaturedEvent();
     const out = new Map<string, { email: string; label: string; kind: "crew" | "team" }>();
+    // Crew seats only. A host on the team is a real person's account, not
+    // one of the admin's own seats.
     for (const m of await storage.listEventTeam(ev.id)) {
       const e = m.email.trim().toLowerCase();
-      if (e.includes("@")) out.set(e, { email: e, label: `${m.name} · ${m.title}`, kind: "team" });
+      if (e.includes("@") && /produc|director|crew|stage/i.test(m.title)) out.set(e, { email: e, label: `${m.name} · ${m.title}`, kind: "team" });
     }
     const listed = ((await storage.getSetting("studio_crew_emails")) ?? "").split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@"));
     const signups = await storage.listSignups(ev.id);
