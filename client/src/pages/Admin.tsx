@@ -2415,10 +2415,29 @@ function EventTeamPanel({ eventId }: { eventId: number }) {
   }
 
   async function uploadPhoto(id: number, file: File) {
+    // Say why when it fails. It failed silently before, which read as the
+    // picker not working at all.
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: "That photo is too big", description: "Keep it under 10 MB — a phone photo exported at medium size is fine.", variant: "destructive" });
+      return;
+    }
     const fd = new FormData();
     fd.append("photo", file);
-    await adminUpload(`/api/admin/events/${eventId}/team/${id}/photo`, fd);
-    queryClient.invalidateQueries({ queryKey: ["/api/admin/events", eventId, "team"] });
+    try {
+      await adminUpload(`/api/admin/events/${eventId}/team/${id}/photo`, fd);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/events", eventId, "team"] });
+      toast({ title: "Photo saved" });
+    } catch (err) {
+      toast({ title: "Couldn't save that photo", description: (err as Error).message, variant: "destructive" });
+    }
+  }
+  async function sendInvite(id: number, name: string) {
+    try {
+      await adminSend("POST", `/api/admin/events/${eventId}/team/${id}/invite`, {});
+      toast({ title: "Invite sent", description: `${name} has an email with how to get in.` });
+    } catch (err) {
+      toast({ title: "Couldn't send the invite", description: (err as Error).message, variant: "destructive" });
+    }
   }
 
   async function removeMember(id: number) {
@@ -2559,6 +2578,11 @@ function EventTeamPanel({ eventId }: { eventId: number }) {
                       <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => startEdit(m)}>
                         <Pencil className="h-3 w-3" /> Edit
                       </Button>
+                      {m.email && (
+                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => sendInvite(m.id, m.name)} data-testid={`team-invite-${m.id}`}>
+                          <Send className="mr-1 h-3 w-3" /> Send invite
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => removeMember(m.id)}>
                         Remove
                       </Button>

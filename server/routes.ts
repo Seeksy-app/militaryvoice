@@ -7427,10 +7427,70 @@ export function registerRoutes(app: Express): void {
     res.json(await storage.listEventTeam(Number(req.params.id)));
   });
 
+  /**
+   * The crew invite. Someone added to the team with an email gets told what
+   * they are on the crew for and how to get in: the podcaster sign-in works
+   * for any address, and the crew list lets them into the green room and
+   * lets them take scenes there. Sent when they are added, and again from
+   * the card whenever a person asks for it.
+   */
+  async function sendCrewInvite(eventId: number, member: { id: number; name: string; title: string; email: string }): Promise<string | null> {
+    const to = member.email.trim().toLowerCase();
+    if (!to.includes("@")) return null;
+    const ev = await storage.getEventById(eventId);
+    const eventName = ev?.name?.trim() || "The Podcast Marathon";
+    const studio = (await storage.listStudios(eventId))[0];
+    const first = member.name.trim().split(/\s+/)[0] || "there";
+    const day = ev ? new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/New_York" }).format(new Date(ev.startAtUtc)) : "";
+    const start = ev ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(ev.startAtUtc)) : "";
+    const green = `${PUBLIC_ORIGIN}/studio${studio ? `?studioId=${studio.id}` : ""}`;
+    const subject = `You're on the crew: ${eventName}`;
+    const text = `${first},
+
+You're on the crew for ${eventName} as ${member.title}${day ? ` — ${day}, first show ${start} Eastern` : ""}.
+
+How to get in:
+
+1. Go to ${PUBLIC_ORIGIN}/host/dashboard and sign in with this address (${to}). We email you a 6-digit code; no password.
+2. Open the green room: ${green}. As crew you're let in without a slot, and you can take scenes from the rail on the right.
+3. The day's running order is at ${PUBLIC_ORIGIN}/agenda.
+
+Reply to this email with any question and a person will answer.
+
+The ${eventName} team`;
+    const html = `<p>${esc(first)},</p>
+<p>You're on the crew for <strong>${esc(eventName)}</strong> as <strong>${esc(member.title)}</strong>${day ? ` — ${esc(day)}, first show ${esc(start)} Eastern` : ""}.</p>
+<p><strong>How to get in</strong></p>
+<ol>
+  <li>Go to <a href="${PUBLIC_ORIGIN}/host/dashboard">${PUBLIC_ORIGIN.replace(/^https?:\/\//, "")}/host/dashboard</a> and sign in with this address (${esc(to)}). We email you a 6-digit code; no password.</li>
+  <li>Open the <a href="${green}">green room</a>. As crew you're let in without a slot, and you can take scenes from the rail on the right.</li>
+  <li>The day's running order is on the <a href="${PUBLIC_ORIGIN}/agenda">agenda</a>.</li>
+</ol>
+<p style="margin:22px 0"><a href="${green}" style="background:#053877;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Open the green room</a></p>
+<p>Reply to this email with any question and a person will answer.</p>
+<p>The ${esc(eventName)} team</p>`;
+    const id = await sendOneOffEmail({ to, subject, text, html: emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: `${eventName} · crew`, heading: subject, body: html }) });
+    if (id) {
+      try { await storage.recordOneOffSend({ eventId, subject, bodyText: text, sender: "team", banner: "podcasters", email: to, resendId: id }); } catch (err) { console.error("Crew invite sent but not logged:", err); }
+    }
+    return id;
+  }
+
+  app.post("/api/admin/events/:id/team/:memberId/invite", requireAdmin, async (req, res) => {
+    const member = (await storage.listEventTeam(Number(req.params.id))).find((m) => m.id === Number(req.params.memberId));
+    if (!member) return res.status(404).json({ message: "Team member not found" });
+    if (!member.email.trim()) return res.status(400).json({ message: "Add an email to the card first." });
+    const id = await sendCrewInvite(Number(req.params.id), member);
+    if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
+    res.json({ ok: true, id });
+  });
+
   app.post("/api/admin/events/:id/team", requireAdmin, async (req, res) => {
     const { name, title, email, photoUrl } = req.body as { name: string; title: string; email?: string; photoUrl?: string };
     if (!name?.trim() || !title?.trim()) return res.status(400).json({ error: "name and title required" });
     const member = await storage.addTeamMember(Number(req.params.id), { name: name.trim(), title: title.trim(), email: email?.trim() ?? "", photoUrl: photoUrl?.trim() ?? "" });
+    // Added with an address: they hear how to get in, straight away.
+    if (member.email.trim()) sendCrewInvite(Number(req.params.id), member).catch((err) => console.error("Crew invite failed:", err));
     res.json(member);
   });
 
