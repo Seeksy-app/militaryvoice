@@ -105,10 +105,14 @@ export default function Home({ slug }: Props) {
     });
   }, [event, signups, viewZone]);
 
+  // An invite in the link (?invite=) is what gets one person through a
+  // closed lineup. It rides along to the dashboard, where the claim happens.
+  const invite = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("invite") ?? "" : "";
+  const lineupClosed = event?.closed === true && !invite;
   function openClaim(index: number) {
     // Pick the time first, then sign in / set up the profile on the dashboard
     // with this slot held (?slot=&event=). Claiming completes there.
-    navigate(`/host/dashboard?slot=${index}${event ? `&event=${event.id}` : ""}`);
+    navigate(`/host/dashboard?slot=${index}${event ? `&event=${event.id}` : ""}${invite ? `&invite=${encodeURIComponent(invite)}` : ""}`);
   }
 
   const openCount = slots.filter((s) => !s.signup).length;
@@ -220,6 +224,7 @@ export default function Home({ slug }: Props) {
                 signup={s.signup}
                 showDate={s.showDate}
                 onClaim={openClaim}
+                closed={lineupClosed}
                 onAirSettings={onAirSettings}
               />
             ))}

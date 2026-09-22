@@ -120,9 +120,26 @@ interface PendingSlot {
 }
 
 const PENDING_KEY = "mv_pending_slot";
+const INVITE_KEY = "mv_slot_invite";
+
+/** The invite that came with the slot, kept for the claim across sign-in. */
+function readInvite(): string {
+  try {
+    return sessionStorage.getItem(INVITE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
 
 function readPending(search: string): PendingSlot | null {
   const params = new URLSearchParams(search);
+  if (params.get("invite")) {
+    try {
+      sessionStorage.setItem(INVITE_KEY, params.get("invite") ?? "");
+    } catch {
+      /* ignore */
+    }
+  }
   const slot = Number(params.get("slot"));
   const eventId = Number(params.get("event"));
   if (params.has("slot") && Number.isInteger(slot) && slot >= 0) {
@@ -764,6 +781,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         eventId: targetEventId,
         slotIndex: input.slotIndex,
         timezone: zone,
+        invite: readInvite() || undefined,
       });
       return res.json();
     },

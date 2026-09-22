@@ -5567,7 +5567,13 @@ export function registerRoutes(app: Express): void {
     // been printed, mailed and rehearsed against, and a freed slot is a hole
     // in the schedule rather than an opening. Checked on the server because
     // the picker can be a stale tab.
-    if (event.closed) {
+    // One person can be let through a closed lineup: the admin makes an
+    // invite link, and a claim that carries its code is taken as if the
+    // lineup were open. Everyone else still sees a closed door.
+    const invite = typeof body.invite === "string" ? body.invite.trim() : "";
+    const inviteCode = event.closed ? (await storage.getSetting(`lineup_invite:${event.id}`)) ?? "" : "";
+    const invited = !!invite && !!inviteCode && invite === inviteCode;
+    if (event.closed && !invited) {
       res.status(409).json({
         message: "The lineup for this event is closed — no more slots are being taken.",
       });
@@ -5800,6 +5806,29 @@ export function registerRoutes(app: Express): void {
           : "The event didn't save. Try once more; if it fails again, tell us.",
       });
     }
+  });
+
+  /**
+   * The invite link: one link that gets one person through a closed lineup.
+   * Make it, send it, and clear it once they are on. The code lives in a
+   * site setting per event, so closing and reopening the lineup keeps it.
+   */
+  const inviteUrl = (eventId: number, code: string) => (code ? `${PUBLIC_ORIGIN}/schedule?invite=${code}#schedule` : "");
+  app.get("/api/admin/events/:id/invite", requireAdmin, async (req, res) => {
+    noStore(res);
+    const id = Number(req.params.id);
+    res.json({ url: inviteUrl(id, (await storage.getSetting(`lineup_invite:${id}`)) ?? "") });
+  });
+  app.post("/api/admin/events/:id/invite", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const code = crypto.randomBytes(6).toString("hex");
+    await storage.setSetting(`lineup_invite:${id}`, code);
+    res.json({ url: inviteUrl(id, code) });
+  });
+  app.delete("/api/admin/events/:id/invite", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    await storage.setSetting(`lineup_invite:${id}`, "");
+    res.json({ url: "" });
   });
 
   app.put("/api/admin/events/:id", requireAdmin, async (req, res) => {

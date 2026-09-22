@@ -14,10 +14,12 @@ interface Props {
   signup?: PublicSignup;
   showDate: boolean;
   onClaim: (index: number) => void;
+  /** The lineup is closed: a free slot is shown, not offered. */
+  closed?: boolean;
   onAirSettings?: OnAirSettings;
 }
 
-export function SlotCard({ index, start, end, viewZone, signup, showDate, onClaim, onAirSettings }: Props) {
+export function SlotCard({ index, start, end, viewZone, signup, showDate, onClaim, onAirSettings, closed }: Props) {
   const isOpen = !signup;
 
   return (
@@ -61,6 +63,10 @@ export function SlotCard({ index, start, end, viewZone, signup, showDate, onClai
             <div className="truncate text-xs text-muted-foreground">{signup.hostName}</div>
           </div>
         </div>
+      ) : closed ? (
+        <p className="mt-auto rounded-md bg-muted px-3 py-2 text-center text-xs font-semibold text-muted-foreground" data-testid={`text-slot-closed-${index}`}>
+          Lineup closed
+        </p>
       ) : (
         <Button
           onClick={() => onClaim(index)}

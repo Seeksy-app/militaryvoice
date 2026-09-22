@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
 import { LogoLockup } from "@/components/Logo";
 import { Link } from "wouter";
@@ -5242,6 +5242,7 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                       {selectedEvent.closed === true ? "Lineup closed" : "Taking signups"}
                     </span>
                   </label>
+                  {selectedEvent.closed === true && <InviteLink eventId={selectedEvent.id} />}
                   {!selectedEvent.isFeatured && (
                     <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => makeLive(selectedEvent.id)} data-testid="button-make-live">
                       <Star className="h-3.5 w-3.5" /> Make this the live-site event
@@ -5327,6 +5328,43 @@ export default function Admin({ tab }: { tab?: string } = {}) {
             </Tabs>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One person through a closed lineup. Make the link, send it to them, and
+ * their claim goes through while everyone else still sees a closed door.
+ * Clear it once they are on.
+ */
+function InviteLink({ eventId }: { eventId: number }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data } = useQuery<{ url: string }>({
+    queryKey: ["/api/admin/events", eventId, "invite"],
+    queryFn: () => adminGet<{ url: string }>(`/api/admin/events/${eventId}/invite`),
+  });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/events", eventId, "invite"] });
+  const make = useMutation({
+    mutationFn: async () => adminSend("POST", `/api/admin/events/${eventId}/invite`).then((r) => r.json()),
+    onSuccess: () => { refresh(); toast({ title: "Invite link made", description: "Send it to one person. Their claim goes through; the lineup stays closed for everyone else." }); },
+  });
+  const clear = useMutation({
+    mutationFn: async () => adminSend("DELETE", `/api/admin/events/${eventId}/invite`),
+    onSuccess: () => { refresh(); toast({ title: "Invite link cleared" }); },
+  });
+  const url = data?.url ?? "";
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="invite-link">
+      {url ? (
+        <>
+          <code className="max-w-[22rem] truncate rounded-md bg-muted px-2 py-1 text-xs" title={url}>{url}</code>
+          <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => { navigator.clipboard?.writeText(url); toast({ title: "Copied" }); }} data-testid="button-invite-copy"><Copy className="h-3.5 w-3.5" /> Copy invite link</Button>
+          <button type="button" className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground" onClick={() => clear.mutate()}>clear</button>
+        </>
+      ) : (
+        <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => make.mutate()} disabled={make.isPending} data-testid="button-invite-make"><KeyRound className="h-3.5 w-3.5" /> Invite one person</Button>
       )}
     </div>
   );
