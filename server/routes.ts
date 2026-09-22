@@ -1915,11 +1915,12 @@ export function registerRoutes(app: Express): void {
     const featured = await storage.getFeaturedEvent();
     const eventId = Number(req.query.eventId) || featured.id;
     const rows = await storage.listSponsorPackages(eventId);
-    publicCache(res, 300);
+    publicCache(res, 60);
+    // Sold and slots are public: the sponsor page says how many are left.
     res.json(
       rows
         .filter((p) => p.active)
-        .map((p) => ({ id: p.id, name: p.name, price: p.price, tier: p.tier, description: p.description })),
+        .map((p) => ({ id: p.id, name: p.name, price: p.price, tier: p.tier, description: p.description, slots: p.totalSlots, sold: p.sold })),
     );
   });
 

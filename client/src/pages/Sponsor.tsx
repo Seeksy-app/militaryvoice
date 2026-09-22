@@ -79,6 +79,15 @@ export default function Sponsor() {
 
   const { data: audience } = useAudienceSnapshot();
 
+  // How many show sponsorships are gone. Each show takes one sponsor, so the
+  // number left is a real number, and the card says it.
+  const { data: packages } = useQuery<{ name: string; slots: number; sold: number }[]>({
+    queryKey: ["/api/sponsor-packages", event?.id ?? "none"],
+    queryFn: async () => (await apiRequest("GET", `/api/sponsor-packages?eventId=${event!.id}`)).json(),
+    enabled: !!event,
+  });
+  const showSold = packages?.find((p) => /^show sponsor$/i.test(p.name))?.sold ?? 0;
+
   const zone = "America/New_York";
 
   // Confirmed shows only — a sponsor pitch should never show empty slots.
@@ -368,6 +377,8 @@ export default function Sponsor() {
                   note: "four available",
                   blurb: "Your name on the stream itself, every mile of the way.",
                   benefits: LIVESTREAM_BENEFITS,
+                  left: null as number | null,
+                  taken: 0,
                 },
                 {
                   name: "Supporting sponsor",
@@ -375,21 +386,39 @@ export default function Sponsor() {
                   note: "limited",
                   blurb: "A presence across the whole marathon, without taking the title.",
                   benefits: SUPPORTING_BENEFITS,
+                  left: null as number | null,
+                  taken: 0,
                 },
                 {
                   name: "Show sponsor",
                   price: SLOT_PRICE,
-                  note: `per show · ${slotCount || 48} slots`,
+                  note: showSold > 0 ? `per show · ${Math.max((slotCount || 32) - showSold, 0)} of ${slotCount || 32} left` : `per show · ${slotCount || 32} shows`,
                   blurb: "Back the shows that fit, one at a time.",
                   benefits: SHOW_BENEFITS,
+                  left: showSold > 0 ? Math.max((slotCount || 32) - showSold, 0) : null,
+                  taken: showSold,
                 },
               ].map((tier) => (
                 <div
                   key={tier.name}
-                  className="flex flex-col rounded-3xl border border-border bg-card p-7"
+                  className={`relative flex flex-col overflow-hidden rounded-3xl border bg-card p-7 ${tier.left != null ? "border-[#F0A71F]/60 ring-1 ring-[#F0A71F]/30" : "border-border"}`}
                   data-testid={`card-tier-${tier.name.split(" ")[0].toLowerCase()}`}
                 >
-                  <div className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  {tier.left != null && (
+                    <div className="absolute inset-x-0 top-0" data-testid="show-sponsor-going">
+                      <div className="flex items-center justify-between bg-[#F0A71F] px-5 py-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#1a1200]">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#1a1200]/60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-[#1a1200]" /></span>
+                          Going now
+                        </span>
+                        <span className="tabular-nums">{tier.taken} taken · {tier.left} left</span>
+                      </div>
+                      <div className="h-1 bg-[#F0A71F]/20">
+                        <div className="h-full bg-[#F0A71F]" style={{ width: `${Math.min(100, Math.round((tier.taken / (slotCount || 32)) * 100))}%` }} />
+                      </div>
+                    </div>
+                  )}
+                  <div className={`text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground ${tier.left != null ? "mt-6" : ""}`}>
                     {tier.name}
                   </div>
                   <div className="mt-3 text-4xl font-bold tabular-nums tracking-tight text-foreground" style={HEADLINE_FONT}>
@@ -397,6 +426,11 @@ export default function Sponsor() {
                   </div>
                   <div className="mt-1 text-sm text-muted-foreground">{tier.note}</div>
                   <p className="mt-4 leading-relaxed text-muted-foreground">{tier.blurb}</p>
+                  {tier.left != null && (
+                    <p className="mt-3 rounded-xl bg-[#F0A71F]/10 px-3 py-2 text-sm leading-relaxed text-[#6b4600]">
+                      The first {tier.taken === 1 ? "one is" : `${tier.taken} are`} gone, the start and the finish went first. One sponsor per show, and once a show is taken, it's taken.
+                    </p>
+                  )}
                   <ul className="mt-6 flex-1 space-y-3.5">
                     {tier.benefits.map((b) => (
                       <li key={b} className="flex gap-3 text-sm leading-relaxed text-foreground">
