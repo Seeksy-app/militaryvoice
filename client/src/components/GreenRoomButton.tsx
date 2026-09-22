@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button";
  * icon (headphones on amber) and one pill, so a podcaster who has seen it
  * once knows it anywhere.
  */
-export function StudioIcon({ className = "h-9 w-9" }: { className?: string }) {
+export function StudioIcon({ className = "h-9 w-9", tone = "gold" }: { className?: string; tone?: "gold" | "green" }) {
   return (
-    <span className={`flex shrink-0 items-center justify-center rounded-xl bg-[#F0A71F] text-[#1a1200] ${className}`} aria-hidden="true">
+    <span className={`flex shrink-0 items-center justify-center rounded-xl ${tone === "green" ? "bg-emerald-600 text-white" : "bg-[#F0A71F] text-[#1a1200]"} ${className}`} aria-hidden="true">
       <Headphones className="h-[55%] w-[55%]" />
     </span>
   );

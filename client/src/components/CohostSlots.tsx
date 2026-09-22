@@ -80,7 +80,7 @@ export function CohostSlots({ eventId, zone }: { eventId: number; zone: string }
       {/* The same amber as the green-room callout above it: this is the one
           thing on the page we are asking them to do, and it should not read
           like another settings block. */}
-      <div className="rounded-2xl border-2 border-[#F0A71F] bg-[#F0A71F]/[0.07] p-4 sm:p-5" data-testid="cohost-card">
+      <div className="rounded-2xl border-2 border-[#053877]/40 bg-[#053877]/[0.04] p-4 sm:p-5" data-testid="cohost-card">
       <div className="mb-1 flex flex-wrap items-center gap-2">
         <Mic2 className="h-5 w-5 text-[#7a5200]" />
         <p className="text-base font-bold tracking-tight text-foreground">Co-host Available Slots</p>
@@ -89,7 +89,7 @@ export function CohostSlots({ eventId, zone }: { eventId: number; zone: string }
             <button
               type="button"
               aria-label="What does co-hosting mean?"
-              className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
+              className="rounded-full p-0.5 text-foreground/80 hover:text-foreground"
               data-testid="cohost-info"
             >
               <Info className="h-4 w-4" />
@@ -98,7 +98,7 @@ export function CohostSlots({ eventId, zone }: { eventId: number; zone: string }
           <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">{WHAT_IT_MEANS}</TooltipContent>
         </Tooltip>
         {data && (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-foreground/80">
             {mine > 0 ? `You have ${mine} hour${mine === 1 ? "" : "s"} · ` : ""}{open} of {data.blocks.length} still open
           </span>
         )}
@@ -131,7 +131,7 @@ export function CohostSlots({ eventId, zone }: { eventId: number; zone: string }
                     type="button"
                     disabled={busy}
                     onClick={() => change.mutate({ blockIndex: b.index, release: true })}
-                    className="inline-flex items-center gap-1 self-start text-[11px] text-muted-foreground hover:text-destructive"
+                    className="inline-flex items-center gap-1 self-start text-[11px] text-foreground/80 hover:text-destructive"
                     data-testid={`cohost-release-${b.index}`}
                   >
                     <X className="h-3 w-3" /> Give it back
@@ -141,7 +141,7 @@ export function CohostSlots({ eventId, zone }: { eventId: number; zone: string }
             }
             if (b.yourShow) {
               return (
-                <div key={b.index} className="flex flex-col gap-1 rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5 text-muted-foreground" data-testid={`cohost-block-${b.index}`}>
+                <div key={b.index} className="flex flex-col gap-1 rounded-xl border border-dashed border-border bg-muted/30 px-3 py-2.5 text-foreground/80" data-testid={`cohost-block-${b.index}`}>
                   <span className="tabular-nums text-sm font-semibold">{time}</span>
                   <span className="inline-flex items-center gap-1 text-xs"><Mic2 className="h-3 w-3" /> Your show is on</span>
                 </div>
@@ -150,8 +150,8 @@ export function CohostSlots({ eventId, zone }: { eventId: number; zone: string }
             if (b.takenBy) {
               return (
                 <div key={b.index} className="flex flex-col gap-1 rounded-xl border border-border bg-muted/30 px-3 py-2.5" data-testid={`cohost-block-${b.index}`}>
-                  <span className="tabular-nums text-sm font-semibold text-muted-foreground">{time}</span>
-                  <span className="truncate text-xs text-muted-foreground">
+                  <span className="tabular-nums text-sm font-semibold text-foreground/80">{time}</span>
+                  <span className="truncate text-xs text-foreground/80">
                     {b.takenBy.firstName}{b.takenBy.podcastName ? ` · ${b.takenBy.podcastName}` : ""}
                   </span>
                 </div>

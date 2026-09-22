@@ -1,5 +1,6 @@
 import { Link } from "wouter";
-import { ArrowRight, CalendarDays, Check, Link2, ListOrdered, Mail, Shield } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, ListOrdered, Mail, Shield, Share2 } from "lucide-react";
+import { useState } from "react";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { StudioIcon } from "@/components/GreenRoomButton";
 
@@ -66,8 +67,8 @@ export function CommandCenter({
               {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
             </p>
             <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/75">
-              <span className="inline-flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-[#F0A71F]" /> {email}</span>
-              {serviceLine && <span className="inline-flex items-center gap-1.5"><Shield className="h-3.5 w-3.5 text-[#F0A71F]" /> {serviceLine}</span>}
+              <span className="inline-flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-white/80" /> {email}</span>
+              {serviceLine && <span className="inline-flex items-center gap-1.5"><Shield className="h-3.5 w-3.5 text-white/80" /> {serviceLine}</span>}
             </p>
           </div>
         </div>
@@ -85,20 +86,28 @@ export function CommandCenter({
 export function QuickDoors({
   greenRoomHref,
   slotLabel,
-  accountsCount,
+  shareUrl,
   agendaHref,
   onGo,
 }: {
   greenRoomHref: string | null;
   slotLabel: string | null;
-  accountsCount: number;
+  /** The podcaster's own share page, copied with one tap. */
+  shareUrl: string | null;
   agendaHref: string;
   onGo: (screen: Screen) => void;
 }) {
+  const [copied, setCopied] = useState(false);
   const doors: { key: string; label: string; icon: React.ReactNode; onClick?: () => void; href?: string; to?: string; accent?: boolean }[] = [
     { key: "slot", label: slotLabel ?? "Pick your slot", icon: <CalendarDays className="h-4 w-4" />, onClick: () => onGo("events") },
-    ...(greenRoomHref ? [{ key: "green-room", label: "Green room", icon: <StudioIcon className="h-6 w-6 rounded-md" />, href: greenRoomHref, accent: true }] : []),
-    { key: "accounts", label: accountsCount > 0 ? "Manage accounts" : "Connect accounts", icon: <Link2 className="h-4 w-4" />, onClick: () => onGo("integrations") },
+    ...(greenRoomHref ? [{ key: "green-room", label: "Green room", icon: <StudioIcon className="h-6 w-6 rounded-md" tone="green" />, href: greenRoomHref, accent: true }] : []),
+    // Manage lives in the corner of the accounts strip already; the door
+    // that earns its place is the one that gets the show in front of people.
+    ...(shareUrl
+      ? [{ key: "share", label: copied ? "Link copied" : "Share link", icon: copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Share2 className="h-4 w-4" />, onClick: () => {
+          navigator.clipboard?.writeText(shareUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => onGo("promotion"));
+        } }]
+      : [{ key: "promotion", label: "Promotion", icon: <Share2 className="h-4 w-4" />, onClick: () => onGo("promotion") }]),
     // The whole day, as the public sees it. Co-hosting has its own card
     // below, so it does not need a door up here.
     { key: "agenda", label: "Full agenda", icon: <ListOrdered className="h-4 w-4" />, to: agendaHref },
@@ -107,7 +116,7 @@ export function QuickDoors({
     <div className="mt-3 flex flex-wrap gap-2" data-testid="quick-doors">
       {doors.map((d) => {
         const cls = `inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-sm font-medium transition-colors ${
-          d.accent ? "border-[#F0A71F] bg-[#F0A71F]/10 text-foreground hover:bg-[#F0A71F]/20" : "border-border bg-card text-foreground hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]"
+          d.accent ? "border-emerald-600 bg-white text-foreground hover:bg-emerald-50 dark:bg-card" : "border-border bg-card text-foreground hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]"
         }`;
         const inner = (<>{d.icon}<span>{d.label}</span></>);
         return d.to ? (
@@ -154,7 +163,7 @@ export function TodoStrip({
         </p>
       ) : (
         <p className="text-sm font-semibold text-foreground">
-          Before the day <span className="ml-1.5 font-normal text-muted-foreground">· {required.length} to do</span>
+          Before the day <span className="ml-1.5 font-normal text-foreground/80">· {required.length} to do</span>
         </p>
       )}
       {todos.length > 0 && (
@@ -166,8 +175,8 @@ export function TodoStrip({
               onClick={() => onGo(t.screen)}
               className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
                 t.optional
-                  ? "border-border text-muted-foreground hover:border-foreground/40 hover:text-foreground"
-                  : "border-[#F0A71F] bg-[#F0A71F]/10 text-foreground hover:bg-[#F0A71F]/20"
+                  ? "border-border text-foreground/80 hover:border-foreground/40 hover:text-foreground"
+                  : "border-[#053877] bg-[#053877]/[0.06] text-foreground hover:bg-[#053877]/[0.12]"
               }`}
               data-testid={`todo-${t.key}`}
             >

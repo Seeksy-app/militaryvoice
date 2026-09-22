@@ -1201,7 +1201,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       <QuickDoors
                         greenRoomHref={greenRoomHref}
                         slotLabel={mySlot ? `${formatDateInZone(mySlot.start, zone)} · ${formatTimeInZone(mySlot.start, zone)}` : null}
-                        accountsCount={social?.accounts?.length ?? 0}
+                        shareUrl={data.mySignups[0] ? `${window.location.origin}/s/${data.mySignups[0].id}` : null}
                         agendaHref="/agenda"
                         onGo={(sc) => goTo(sc)}
                       />
@@ -1244,7 +1244,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                                   <div className="tabular-nums text-base font-semibold text-card-foreground">
                                     {formatDateInZone(st, zone)} · {formatTimeInZone(st, zone)}–{formatTimeInZone(en, zone)}
                                   </div>
-                                  <div className="text-xs text-muted-foreground">
+                                  <div className="text-xs text-foreground/80">
                                     {zoneLabel(zone)} · {data.event.name.trim()}
                                   </div>
                                 </div>
@@ -1306,13 +1306,13 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">On the day</p>
                       {mySlot ? (
                         <>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-sm text-foreground/85">
                             Come to the green room by <span className="font-semibold text-foreground tabular-nums">{formatTimeInZone(new Date(mySlot.start.getTime() - 15 * 60000), zone)}</span>, fifteen minutes before you're on. Alex brings you to the stage when it's your turn.
                           </p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             {greenRoomHref && (
-                              <a href={greenRoomHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F] bg-[#F0A71F]/10 px-3.5 py-2 text-sm font-medium text-foreground hover:bg-[#F0A71F]/20" data-testid="link-on-the-day-green-room">
-                                <StudioIcon className="h-6 w-6 rounded-md" /> Green room
+                              <a href={greenRoomHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-white px-3.5 py-2 text-sm font-medium text-foreground hover:bg-emerald-50 dark:bg-card" data-testid="link-on-the-day-green-room">
+                                <StudioIcon className="h-6 w-6 rounded-md" tone="green" /> Green room
                               </a>
                             )}
                             <Link href="/watch" className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground hover:border-[#053877]/40" data-testid="link-on-the-day-watch">
@@ -1321,7 +1321,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                           </div>
                         </>
                       ) : (
-                        <p className="text-sm text-muted-foreground">Pick your slot and your green room link and call time appear here.</p>
+                        <p className="text-sm text-foreground/85">Pick your slot and your green room link and call time appear here.</p>
                       )}
                     </div>
                   </div>

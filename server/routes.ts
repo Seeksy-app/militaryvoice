@@ -4910,6 +4910,29 @@ export function registerRoutes(app: Express): void {
     return job;
   }
 
+  /** Who on the lineup has connected what — for the overview tiles. */
+  app.get("/api/admin/connections", requireAdmin, async (req, res) => {
+    noStore(res);
+    const featured = await storage.getFeaturedEvent();
+    const eventId = Number(req.query.eventId) || featured.id;
+    const ev = (await storage.getEventById(eventId)) ?? featured;
+    const dayLength = Math.floor((ev.durationHours * 60) / ev.slotMinutes);
+    const lineup = new Set(
+      (await storage.listSignups(eventId)).filter((x) => x.status !== "cancelled" && x.slotIndex < dayLength).map((x) => x.email.trim().toLowerCase()),
+    );
+    const youtube = new Set((await storage.listYoutubeAccounts()).map((a) => a.email.trim().toLowerCase()));
+    const social = new Set(
+      (await storage.listAllProfiles())
+        .filter((p) => p.socialAccounts && p.socialAccounts.trim() !== "" && p.socialAccounts.trim() !== "[]")
+        .map((p) => p.email.trim().toLowerCase()),
+    );
+    res.json({
+      lineup: lineup.size,
+      youtube: Array.from(lineup).filter((e) => youtube.has(e)).length,
+      social: Array.from(lineup).filter((e) => social.has(e)).length,
+    });
+  });
+
   // ---- Inbox: replies that came in, with a draft answer each ----------------
   app.get("/api/admin/inbound", requireAdmin, async (_req, res) => {
     noStore(res);

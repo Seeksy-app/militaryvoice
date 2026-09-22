@@ -1914,6 +1914,11 @@ function RoomView({ roomId, onBack }: { roomId: number; onBack: () => void }) {
 
 /** Where you land when you open an event: the numbers, then the tabs. */
 function EventOverview({ eventId, event, go }: { eventId: number; event: PublicEvent; go: (tab: string) => void }) {
+  const { data: connections } = useQuery<{ lineup: number; youtube: number; social: number }>({
+    queryKey: ["/api/admin/connections", eventId],
+    queryFn: () => adminGet<{ lineup: number; youtube: number; social: number }>(`/api/admin/connections?eventId=${eventId}`),
+    staleTime: 60_000,
+  });
   const { data: signups } = useQuery<SignupRow[]>({
     queryKey: ["/api/admin/signups", eventId],
     queryFn: () => adminGet<SignupRow[]>(`/api/admin/signups?eventId=${eventId}`),
@@ -1950,13 +1955,15 @@ function EventOverview({ eventId, event, go }: { eventId: number; event: PublicE
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {tile("Days to go", daysToGo, `${formatDateInZone(start, zone)} · ${formatTimeInZone(start, zone)}`)}
         {/* A booking parked past the end of the day (the organisers' own,
             for seeing the dashboard as a podcaster) is not one of the slots. */}
         {tile("Slots booked", `${active.filter((s) => s.slotIndex < total).length} / ${total}`, `${Math.max(0, total - active.filter((s) => s.slotIndex < total).length)} still open`, "signups")}
         {tile("Sent materials", `${withMaterials} / ${active.filter((s) => s.slotIndex < total).length}`, `${prerecorded} pre-recorded · ${needInterviewer} want an interviewer`, "signups")}
-        {tile("Sponsors", (sponsors ?? []).length, "Logos in the strip and read on air", "sponsors")}
+        {tile("Sponsors", (sponsors ?? []).filter((x) => (x.packageId ?? 0) > 0).length, `${(sponsors ?? []).filter((x) => !((x.packageId ?? 0) > 0)).length} friends of the marathon in the strip`, "sponsors")}
+        {tile("YouTube connected", `${connections?.youtube ?? "–"} / ${connections?.lineup ?? total}`, "Podcasters who linked a channel", "signups")}
+        {tile("Social connected", `${connections?.social ?? "–"} / ${connections?.lineup ?? total}`, "Podcasters with at least one account linked", "signups")}
       </div>
       <div className="flex flex-wrap gap-2">
         <GreenRoomButton label="Open the studio" onClick={() => go("studio")} testId="overview-open-studio" />
