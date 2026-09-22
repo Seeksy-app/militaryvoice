@@ -10,9 +10,9 @@ export function sponsorHref(sponsor: CardSponsor, source: string): string | unde
 /**
  * The sponsor's band across the top of a card. Navy, with a hairline of gold
  * along the top and the logo as the only bright thing on it, so the sponsor
- * reads as part of the card's design rather than a sticker on it. Wide cards
- * put the line and the logo side by side; narrow cards stack them, centred.
- * Clicking it goes to the sponsor through the counted link.
+ * reads as part of the card's design rather than a sticker on it.
+ * Clicking it goes to the sponsor through the counted link. Every card this
+ * sits on is narrow, so the line and the logo are always stacked, centred.
  */
 export function SponsorRibbon({ sponsor, source, size = "md", testId }: { sponsor: CardSponsor; source: string; size?: "sm" | "md"; testId?: string }) {
   const href = sponsorHref(sponsor, source);
@@ -27,7 +27,7 @@ export function SponsorRibbon({ sponsor, source, size = "md", testId }: { sponso
     >
       <span aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[#F0A71F]/0 via-[#F0A71F] to-[#F0A71F]/0" />
       <span aria-hidden="true" className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#F0A71F]/10 blur-2xl" />
-      <span className={`relative flex ${sm ? "flex-col items-center gap-1.5 px-3 pb-3 pt-3.5 text-center" : "items-center justify-between gap-4 px-4 py-2.5"}`}>
+      <span className={`relative flex flex-col items-center text-center ${sm ? "gap-1.5 px-3 pb-3 pt-3.5" : "gap-2 px-4 pb-3.5 pt-4"}`}>
         <span className={`whitespace-nowrap font-semibold uppercase tracking-[0.22em] text-[#F0A71F] ${sm ? "text-[9px]" : "text-[10px]"}`}>
           This segment is sponsored by
         </span>
@@ -35,7 +35,7 @@ export function SponsorRibbon({ sponsor, source, size = "md", testId }: { sponso
           <img
             src={sponsor.logoUrl}
             alt={sponsor.name}
-            className={`shrink-0 object-contain drop-shadow-[0_1px_8px_rgba(240,167,31,0.25)] transition-transform group-hover/sp:scale-[1.03] ${sm ? "h-7 max-w-[9rem]" : "h-7 max-w-[10rem]"}`}
+            className={`shrink-0 object-contain drop-shadow-[0_1px_8px_rgba(240,167,31,0.25)] transition-transform group-hover/sp:scale-[1.03] ${sm ? "h-7 max-w-[9rem]" : "h-8 max-w-[10rem]"}`}
           />
         ) : (
           <span className="text-base font-bold tracking-tight">{sponsor.name}</span>
