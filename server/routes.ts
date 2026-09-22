@@ -835,7 +835,14 @@ export function registerRoutes(app: Express): void {
     if (html.length > 200_000 || text.length > 100_000) {
       return res.status(413).json({ message: "That email is too long to send." });
     }
-    const id = await sendOneOffEmail({ to, subject, html, text, replyTo: String(req.body?.replyTo ?? "") || undefined });
+    // A named sender on our own domain — a producer writing as himself.
+    // Only our domain: Resend refuses anything else, and so should we.
+    const fromRaw = String(req.body?.from ?? "").trim();
+    const fromAddr = (fromRaw.match(/<([^>]+)>/)?.[1] ?? fromRaw).trim().toLowerCase();
+    if (fromRaw && !/@militaryvoice\.(ai|io)$/.test(fromAddr)) return res.status(400).json({ message: "The sender has to be on our domain." });
+    const headers: Record<string, string> = {};
+    if (req.body?.inReplyTo) { headers["In-Reply-To"] = String(req.body.inReplyTo); headers["References"] = String(req.body.inReplyTo); }
+    const id = await sendOneOffEmail({ to, subject, html, text, replyTo: String(req.body?.replyTo ?? "") || undefined, from: fromRaw || undefined, headers });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     console.log(`One-off email sent to ${to}: ${subject}`);
     // Filed under a campaign row so the activity log and each contact's

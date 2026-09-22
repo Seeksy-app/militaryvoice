@@ -261,6 +261,8 @@ export async function sendOneOffEmail(o: {
   replyTo?: string;
   /** e.g. In-Reply-To, so a reply threads under the mail it answers. */
   headers?: Record<string, string>;
+  /** A named sender on our domain, when it isn't hello@. */
+  from?: string;
 }): Promise<string | null> {
   return sendRawEmail(o);
 }
