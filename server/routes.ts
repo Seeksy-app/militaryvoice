@@ -96,6 +96,7 @@ import {
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
 import { alexAnswer, type AlexTurn } from "./alex.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
+import { draftReply, matchBroadcast } from "./inbox.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
@@ -4759,6 +4760,7 @@ export function registerRoutes(app: Express): void {
       // markup; a reply from a podcaster's mail client usually has no text
       // part at all.
       let bodyHtml = "";
+      let messageId = "";
       if (emailId && process.env.RESEND_API_KEY) {
         try {
           const r = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
@@ -4766,6 +4768,7 @@ export function registerRoutes(app: Express): void {
           });
           if (r.ok) {
             const full = (await r.json()) as any;
+            messageId = String(full.message_id ?? full.headers?.["message-id"] ?? full.headers?.["Message-ID"] ?? "");
             bodyHtml = String(full.html ?? "");
             body = String(full.text ?? "") || bodyHtml
               .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -4809,9 +4812,122 @@ export function registerRoutes(app: Express): void {
         replyTo: Array.isArray(d.from) ? d.from[0] : String(d.from ?? ""),
       });
       console.log(`Forwarded inbound mail from ${from}: ${subject}`);
+
+      // Filed, then drafted. The forward above is the safety net; this is
+      // what puts the reply in the activity log with an answer ready.
+      try {
+        if (await storage.findInboundByResendId(String(emailId))) return;
+        const fromRaw = Array.isArray(d.from) ? String(d.from[0] ?? "") : String(d.from ?? "");
+        const fm = fromRaw.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
+        const fromEmail = (fm ? fm[2] : fromRaw).trim().toLowerCase();
+        const fromName = (fm ? fm[1] : "").trim();
+        const row = await storage.createInbound({
+          resendId: String(emailId),
+          messageId,
+          fromEmail,
+          fromName,
+          toAddr: to,
+          subject,
+          bodyText: body,
+          receivedAt: String(d.created_at ?? new Date().toISOString()),
+          broadcastId: await matchBroadcast(subject),
+          category: "",
+          summary: "",
+          draftFrom: "team",
+          draftSubject: "",
+          draftText: "",
+          status: "new",
+          repliedAt: null,
+          replyResendId: "",
+          replyFrom: "",
+          replyText: "",
+        });
+        try {
+          const draft = await draftReply(row);
+          await storage.updateInbound(row.id, { category: draft.category, summary: draft.summary, draftFrom: draft.from, draftSubject: draft.subject, draftText: draft.reply, status: "drafted" });
+        } catch (err) {
+          console.error("Inbound draft failed:", err);
+        }
+      } catch (err) {
+        console.error("Inbound filing failed:", err);
+      }
     } catch (err) {
       console.error("Inbound forward failed:", err);
     }
+  });
+
+  // ---- Inbox: replies that came in, with a draft answer each ----------------
+  app.get("/api/admin/inbound", requireAdmin, async (_req, res) => {
+    noStore(res);
+    res.json(await storage.listInbound());
+  });
+
+  /** File a reply by hand — one that arrived before the inbox existed. */
+  app.post("/api/admin/inbound", requireAdmin, async (req, res) => {
+    const fromEmail = String(req.body?.fromEmail ?? "").trim().toLowerCase();
+    const subject = String(req.body?.subject ?? "").trim();
+    const bodyText = String(req.body?.bodyText ?? "").trim();
+    if (!fromEmail.includes("@") || !bodyText) return res.status(400).json({ message: "Need a sender and the text." });
+    const row = await storage.createInbound({
+      resendId: "", messageId: "", fromEmail, fromName: String(req.body?.fromName ?? "").trim(), toAddr: "hello@militaryvoice.ai",
+      subject, bodyText, receivedAt: String(req.body?.receivedAt ?? new Date().toISOString()), broadcastId: await matchBroadcast(subject),
+      category: "", summary: "", draftFrom: "team", draftSubject: "", draftText: "", status: "new", repliedAt: null, replyResendId: "", replyFrom: "", replyText: "",
+    });
+    res.json(row);
+    try {
+      const draft = await draftReply(row);
+      await storage.updateInbound(row.id, { category: draft.category, summary: draft.summary, draftFrom: draft.from, draftSubject: draft.subject, draftText: draft.reply, status: "drafted" });
+    } catch (err) {
+      console.error("Inbound draft failed:", err);
+    }
+  });
+
+  app.post("/api/admin/inbound/:id/redraft", requireAdmin, async (req, res) => {
+    const row = await storage.getInbound(Number(req.params.id));
+    if (!row) return res.status(404).json({ message: "No such reply." });
+    try {
+      const draft = await draftReply(row);
+      await storage.updateInbound(row.id, { category: draft.category, summary: draft.summary, draftFrom: draft.from, draftSubject: draft.subject, draftText: draft.reply, status: row.status === "new" ? "drafted" : row.status });
+      res.json(await storage.getInbound(row.id));
+    } catch (err) {
+      res.status(502).json({ message: (err as Error).message });
+    }
+  });
+
+  app.post("/api/admin/inbound/:id/ignore", requireAdmin, async (req, res) => {
+    const row = await storage.getInbound(Number(req.params.id));
+    if (!row) return res.status(404).json({ message: "No such reply." });
+    await storage.updateInbound(row.id, { status: row.status === "ignored" ? "drafted" : "ignored" });
+    res.json(await storage.getInbound(row.id));
+  });
+
+  /**
+   * Send the answer. From Riccoh or from the team, as the person chose;
+   * threaded under their message; filed as a one-off send so it shows in the
+   * activity log and in the contact's history like everything else we send.
+   */
+  app.post("/api/admin/inbound/:id/reply", requireAdmin, async (req, res) => {
+    const row = await storage.getInbound(Number(req.params.id));
+    if (!row) return res.status(404).json({ message: "No such reply." });
+    const text = String(req.body?.text ?? "").trim();
+    const from = req.body?.from === "riccoh" ? "riccoh" : "team";
+    const subject = String(req.body?.subject ?? row.draftSubject ?? "").trim() || (row.subject.startsWith("Re:") ? row.subject : `Re: ${row.subject}`);
+    if (!text) return res.status(400).json({ message: "Nothing to send." });
+    const paragraphs = text.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("\n");
+    const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: subject.replace(/^re:\s*/i, ""), body: paragraphs });
+    const headers: Record<string, string> = {};
+    if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
+    const id = await sendOneOffEmail({ to: row.fromEmail, subject, html, text, headers });
+    if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
+    const now = new Date().toISOString();
+    await storage.updateInbound(row.id, { status: "sent", repliedAt: now, replyResendId: id, replyFrom: from, replyText: text });
+    try {
+      const featured = await storage.getFeaturedEvent();
+      await storage.recordOneOffSend({ eventId: featured?.id ?? null, subject, bodyText: text, sender: from === "riccoh" ? "member:1" : "team", banner: "podcasters", email: row.fromEmail, resendId: id });
+    } catch (err) {
+      console.error("Reply sent but not logged:", err);
+    }
+    res.json(await storage.getInbound(row.id));
   });
 
   // ---- LiveKit webhook ----------------------------------------------------------

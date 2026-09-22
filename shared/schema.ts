@@ -1636,3 +1636,40 @@ export const presentationSlides = pgTable("presentation_slides", {
   createdAt: text("created_at").notNull(),
 });
 export type PresentationSlideRow = typeof presentationSlides.$inferSelect;
+
+/**
+ * Mail that came in to hello@ — a podcaster's reply, mostly.
+ *
+ * The inbound webhook used to forward each one to a person and keep nothing,
+ * so a reply lived only in someone's Gmail. Kept here it sits in the activity
+ * log next to the email it answers, with a draft reply written for it and a
+ * record of what went back and when.
+ */
+export const inboundEmails = pgTable("inbound_emails", {
+  id: serial("id").primaryKey(),
+  resendId: text("resend_id").notNull().default(""),
+  /** The sender's Message-ID, so a reply threads under theirs. */
+  messageId: text("message_id").notNull().default(""),
+  fromEmail: text("from_email").notNull(),
+  fromName: text("from_name").notNull().default(""),
+  toAddr: text("to_addr").notNull().default(""),
+  subject: text("subject").notNull().default(""),
+  bodyText: text("body_text").notNull().default(""),
+  receivedAt: text("received_at").notNull(),
+  /** The campaign this answers, when the subject says so. */
+  broadcastId: integer("broadcast_id"),
+  /** What the reply is about: scheduling, materials, question, cancel, thanks, other. */
+  category: text("category").notNull().default(""),
+  summary: text("summary").notNull().default(""),
+  draftFrom: text("draft_from").notNull().default("team"),
+  draftSubject: text("draft_subject").notNull().default(""),
+  draftText: text("draft_text").notNull().default(""),
+  /** new → drafted → sent | ignored */
+  status: text("status").notNull().default("new"),
+  repliedAt: text("replied_at"),
+  replyResendId: text("reply_resend_id").notNull().default(""),
+  replyFrom: text("reply_from").notNull().default(""),
+  replyText: text("reply_text").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("inbound_from_idx").on(t.fromEmail)]);
+export type InboundEmailRow = typeof inboundEmails.$inferSelect;

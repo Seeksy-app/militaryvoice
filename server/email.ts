@@ -202,7 +202,7 @@ function buildText(input: ConfirmationEmailInput): string {
 
 /** Low-level Resend sender shared by every email type. Never throws — logs and
  *  returns false on failure so a flaky email provider never blocks a user flow. */
-async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string }): Promise<string | null> {
+async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string> }): Promise<string | null> {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (RESEND_API_KEY) {
@@ -220,6 +220,7 @@ async function sendRawEmail(opts: { to: string; subject: string; html: string; t
         html: opts.html,
         text: opts.text,
         ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
+        ...(opts.headers && Object.keys(opts.headers).length ? { headers: opts.headers } : {}),
       }),
     });
     if (!res.ok) {
@@ -258,6 +259,8 @@ export async function sendOneOffEmail(o: {
   html: string;
   text: string;
   replyTo?: string;
+  /** e.g. In-Reply-To, so a reply threads under the mail it answers. */
+  headers?: Record<string, string>;
 }): Promise<string | null> {
   return sendRawEmail(o);
 }

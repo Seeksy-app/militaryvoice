@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -662,6 +662,12 @@ export interface IStorage {
   listSponsorInquiries(): Promise<SponsorInquiryRow[]>;
   setSponsorInquiryHandled(id: number, handled: boolean): Promise<void>;
   listAssetsByEmail(email: string): Promise<ShowAssetRow[]>;
+  createInbound(row: Omit<InboundEmailRow, "id" | "createdAt">): Promise<InboundEmailRow>;
+  listInbound(limit?: number): Promise<InboundEmailRow[]>;
+  listInboundByEmail(email: string): Promise<InboundEmailRow[]>;
+  getInbound(id: number): Promise<InboundEmailRow | null>;
+  updateInbound(id: number, patch: Partial<InboundEmailRow>): Promise<void>;
+  findInboundByResendId(resendId: string): Promise<InboundEmailRow | null>;
   listAllAssets(): Promise<ShowAssetRow[]>;
   createAsset(a: Omit<ShowAssetRow, "id" | "createdAt">): Promise<ShowAssetRow>;
   getAsset(id: number): Promise<ShowAssetRow | undefined>;
@@ -1021,6 +1027,35 @@ class DatabaseStorage implements IStorage {
         and(ne(podcasterProfiles.podcastName, ""), ne(podcasterProfiles.hostName, ""), ne(podcasterProfiles.photoUrl, "")),
       )
       .orderBy(podcasterProfiles.createdAt);
+  }
+
+  async createInbound(row: Omit<InboundEmailRow, "id" | "createdAt">): Promise<InboundEmailRow> {
+    await ready();
+    const [r] = await db.insert(inboundEmails).values({ ...row, createdAt: new Date().toISOString() }).returning();
+    return r;
+  }
+  async listInbound(limit = 200): Promise<InboundEmailRow[]> {
+    await ready();
+    return db.select().from(inboundEmails).orderBy(desc(inboundEmails.receivedAt)).limit(limit);
+  }
+  async listInboundByEmail(email: string): Promise<InboundEmailRow[]> {
+    await ready();
+    return db.select().from(inboundEmails).where(sqlExpr`lower(${inboundEmails.fromEmail}) = lower(${email})`).orderBy(desc(inboundEmails.receivedAt));
+  }
+  async getInbound(id: number): Promise<InboundEmailRow | null> {
+    await ready();
+    const [r] = await db.select().from(inboundEmails).where(eq(inboundEmails.id, id)).limit(1);
+    return r ?? null;
+  }
+  async updateInbound(id: number, patch: Partial<InboundEmailRow>): Promise<void> {
+    await ready();
+    await db.update(inboundEmails).set(patch).where(eq(inboundEmails.id, id));
+  }
+  async findInboundByResendId(resendId: string): Promise<InboundEmailRow | null> {
+    await ready();
+    if (!resendId) return null;
+    const [r] = await db.select().from(inboundEmails).where(eq(inboundEmails.resendId, resendId)).limit(1);
+    return r ?? null;
   }
 
   async listAssetsByEmail(email: string): Promise<ShowAssetRow[]> {
@@ -2592,6 +2627,7 @@ class DatabaseStorage implements IStorage {
     sends: typeof broadcastSends.$inferSelect[];
     events: typeof broadcastEvents.$inferSelect[];
     nudges: { kind: string; sentAt: string; eventId: number }[];
+    inbound: InboundEmailRow[];
   }> {
     await ready();
     const sends = await db.select().from(broadcastSends)
@@ -2604,7 +2640,8 @@ class DatabaseStorage implements IStorage {
       .from(nudges)
       .innerJoin(signups, eq(signups.id, nudges.signupId))
       .where(and(sqlExpr`lower(${signups.email}) = lower(${email})`, eq(nudges.emailed, true)));
-    return { sends, events: evts, nudges: nudgeRows };
+    const inbound = await this.listInboundByEmail(email);
+    return { sends, events: evts, nudges: nudgeRows, inbound };
   }
 
   /**

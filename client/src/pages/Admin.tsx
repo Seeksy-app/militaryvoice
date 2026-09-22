@@ -39,7 +39,7 @@ import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
 import { CADENCE, CADENCE_STEPS, cadenceSource } from "@shared/schema";
 import { GreenRoomButton } from "@/components/GreenRoomButton";
-import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, SponsorPackageWithSold, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow } from "@shared/schema";
+import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, SponsorPackageWithSold, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow, InboundEmailRow } from "@shared/schema";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { detectLocalTimeZone, dateTimeLocalToUtc, utcToDateTimeLocalValue, slotStart, formatDateInZone, formatTimeInZone, zoneLabel, onAirWindow } from "@/lib/schedule";
 
@@ -2563,7 +2563,7 @@ function ContactDrawer({ contact, onClose, broadcastList, eventId }: {
   const queryClient = useQueryClient();
   const email = contact.email;
 
-  type History = { sends: SendRow[]; events: BroadcastEventRow[]; nudges?: { kind: string; sentAt: string; eventId: number }[] };
+  type History = { sends: SendRow[]; events: BroadcastEventRow[]; nudges?: { kind: string; sentAt: string; eventId: number }[]; inbound?: InboundEmailRow[] };
   const { data: history } = useQuery<History>({
     queryKey: ["/api/admin/contacts", email, "history"],
     queryFn: () => adminGet<History>(`/api/admin/contacts/${encodeURIComponent(email)}/history`),
@@ -2672,8 +2672,11 @@ function ContactDrawer({ contact, onClose, broadcastList, eventId }: {
               newest first, since "what did they last get from us" is the
               question this drawer is opened to answer. */}
           {(() => {
-            type Item = { key: string; title: string; at: string; broadcastId?: number; cadence?: string; types: Set<string>; tracked: boolean };
+            type Item = { key: string; title: string; at: string; broadcastId?: number; cadence?: string; types: Set<string>; tracked: boolean; inbound?: InboundEmailRow };
             const items: Item[] = [];
+            for (const m of history?.inbound ?? []) {
+              items.push({ key: `i-${m.id}`, title: `📥 ${m.subject || "(no subject)"}`, at: m.receivedAt, types: new Set(), tracked: false, inbound: m });
+            }
             for (const send of Array.from(new Map((history?.sends ?? []).map((s) => [s.broadcastId, s])).values())) {
               const broadcast = broadcastById.get(send.broadcastId);
               const evts = eventsByResendId.get(send.resendId) ?? [];
@@ -2706,7 +2709,7 @@ function ContactDrawer({ contact, onClose, broadcastList, eventId }: {
                             <p className="font-medium truncate">{it.title}</p>
                             <p className="text-xs text-muted-foreground">{new Date(it.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</p>
                           </div>
-                          <button
+                          {!it.inbound && <button
                             type="button"
                             onClick={() => setPreview({ broadcastId: it.broadcastId, cadence: it.cadence, title: it.title })}
                             title="Preview this email"
@@ -2714,7 +2717,7 @@ function ContactDrawer({ contact, onClose, broadcastList, eventId }: {
                             data-testid={`preview-${it.key}`}
                           >
                             <Eye className="h-4 w-4" />
-                          </button>
+                          </button>}
                         </div>
                         <div className="flex gap-2 flex-wrap mt-1.5">
                           {it.types.has("delivered") && <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">📬 Delivered</span>}
@@ -2722,7 +2725,12 @@ function ContactDrawer({ contact, onClose, broadcastList, eventId }: {
                           {it.types.has("clicked") && <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">🔗 Clicked</span>}
                           {it.types.has("bounced") && <span className="text-xs bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 px-2 py-0.5 rounded-full">⚠ Bounced</span>}
                           {it.tracked && it.types.size === 0 && <span className="text-xs text-muted-foreground">Sent — no events yet</span>}
-                          {!it.tracked && <span className="text-xs text-muted-foreground">Automatic — sent one at a time, not tracked</span>}
+                          {!it.tracked && !it.inbound && <span className="text-xs text-muted-foreground">Automatic — sent one at a time, not tracked</span>}
+                          {it.inbound && (
+                            <span className="text-xs text-muted-foreground">
+                              They wrote in · {it.inbound.status === "sent" ? `answered as ${it.inbound.replyFrom === "riccoh" ? "Riccoh" : "the team"}` : it.inbound.status === "ignored" ? "no reply needed" : "answer waiting in Activity log"}
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -2922,6 +2930,138 @@ type CrmView = "lists" | "list-signups" | "list-contacts" | "list-engagement" | 
  * campaign, so their row carries a running total rather than a one-off count,
  * and leaving them out would understate what the list has received from us.
  */
+
+/**
+ * Replies that came in to hello@, each with a draft answer.
+ *
+ * The person reads the reply, fixes the draft if it needs it, and sends it
+ * as Riccoh or as the team. Nothing goes out on its own. What went out is
+ * filed as a send, so it shows below with everything else.
+ */
+function InboxPanel() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data: rows = [], isLoading } = useQuery<InboundEmailRow[]>({
+    queryKey: ["/api/admin/inbound"],
+    queryFn: () => adminGet<InboundEmailRow[]>("/api/admin/inbound"),
+    refetchInterval: 60_000,
+  });
+  const [open, setOpen] = useState<number | null>(null);
+  const [drafts, setDrafts] = useState<Record<number, string>>({});
+  const [busy, setBusy] = useState<number | null>(null);
+  const [showDone, setShowDone] = useState(false);
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/inbound"] });
+
+  async function act(id: number, what: "reply" | "ignore" | "redraft", body?: Record<string, unknown>) {
+    setBusy(id);
+    try {
+      await adminSend("POST", `/api/admin/inbound/${id}/${what}`, body ?? {});
+      await refresh();
+      if (what === "reply") {
+        toast({ title: "Sent", description: "Filed in the log and in their history." });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/broadcasts"] });
+        setOpen(null);
+      }
+    } catch (err) {
+      toast({ title: "That didn't go through", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const waiting = rows.filter((r) => r.status === "new" || r.status === "drafted");
+  const done = rows.filter((r) => r.status === "sent" || r.status === "ignored");
+  const shown = showDone ? rows : waiting;
+  if (isLoading || rows.length === 0) return null;
+
+  const CATEGORY: Record<string, string> = { scheduling: "Scheduling", materials: "Materials", question: "Question", cancel: "Cancel", thanks: "Thanks", other: "Other" };
+
+  return (
+    <div className="rounded-xl border border-border" data-testid="inbox-panel">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+        <p className="text-sm font-semibold">
+          Replies{waiting.length > 0 && <span className="ml-2 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-bold text-[#1a1200]">{waiting.length} waiting</span>}
+        </p>
+        {done.length > 0 && (
+          <button type="button" onClick={() => setShowDone((v) => !v)} className="text-xs text-muted-foreground hover:text-foreground" data-testid="inbox-toggle-done">
+            {showDone ? "Hide answered" : `Show answered (${done.length})`}
+          </button>
+        )}
+      </div>
+      {shown.length === 0 ? (
+        <p className="px-4 py-3 text-sm text-muted-foreground">Every reply has an answer.</p>
+      ) : (
+        <div className="divide-y divide-border">
+          {shown.map((r) => {
+            const isOpen = open === r.id;
+            const draft = drafts[r.id] ?? r.draftText;
+            const who = r.fromName || r.fromEmail;
+            return (
+              <div key={r.id} className="px-4 py-3" data-testid={`inbox-${r.id}`}>
+                <button type="button" onClick={() => setOpen(isOpen ? null : r.id)} className="flex w-full items-start justify-between gap-3 text-left">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      <span className="mr-1.5">📥</span>{who}
+                      <span className="ml-2 font-normal text-muted-foreground">{r.subject}</span>
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{r.summary || r.bodyText.slice(0, 140)}</p>
+                  </div>
+                  <div className="shrink-0 text-right text-[11px] text-muted-foreground">
+                    <div>{new Date(r.receivedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</div>
+                    <div className="mt-0.5">
+                      {r.status === "sent" ? <span className="text-emerald-700 dark:text-emerald-400">✓ Replied as {r.replyFrom === "riccoh" ? "Riccoh" : "the team"}</span>
+                        : r.status === "ignored" ? "Ignored"
+                        : r.status === "drafted" ? `${CATEGORY[r.category] ?? "Reply"} · draft ready`
+                        : "Drafting…"}
+                    </div>
+                  </div>
+                </button>
+                {isOpen && (
+                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                    <div className="rounded-lg bg-muted/40 p-3 text-sm">
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">They wrote</p>
+                      <pre className="whitespace-pre-wrap font-sans text-sm">{r.bodyText.slice(0, 4000)}</pre>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {r.status === "sent" ? `Sent as ${r.replyFrom === "riccoh" ? "Riccoh" : "the team"}` : `Draft · suggested from ${r.draftFrom === "riccoh" ? "Riccoh" : "the team"}`}
+                      </p>
+                      {r.status === "sent" ? (
+                        <pre className="whitespace-pre-wrap rounded-lg border border-border p-3 font-sans text-sm">{r.replyText}</pre>
+                      ) : (
+                        <>
+                          <textarea
+                            value={draft}
+                            onChange={(e) => setDrafts((d) => ({ ...d, [r.id]: e.target.value }))}
+                            rows={10}
+                            className="w-full rounded-lg border border-border bg-background p-3 text-sm"
+                            placeholder={r.status === "new" ? "The draft is being written…" : ""}
+                            data-testid={`inbox-draft-${r.id}`}
+                          />
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <Button size="sm" className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" disabled={busy === r.id || !draft.trim()} onClick={() => act(r.id, "reply", { text: draft, from: r.draftFrom === "riccoh" ? "riccoh" : "team", subject: r.draftSubject })} data-testid={`inbox-send-${r.id}`}>
+                              Send as {r.draftFrom === "riccoh" ? "Riccoh" : "the team"}
+                            </Button>
+                            <Button size="sm" variant="outline" className="rounded-full" disabled={busy === r.id || !draft.trim()} onClick={() => act(r.id, "reply", { text: draft, from: r.draftFrom === "riccoh" ? "team" : "riccoh", subject: r.draftSubject })}>
+                              Send as {r.draftFrom === "riccoh" ? "the team" : "Riccoh"}
+                            </Button>
+                            <Button size="sm" variant="ghost" disabled={busy === r.id} onClick={() => act(r.id, "redraft")}>Rewrite</Button>
+                            <Button size="sm" variant="ghost" disabled={busy === r.id} onClick={() => act(r.id, "ignore")}>{r.status === "ignored" ? "Un-ignore" : "Ignore"}</Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ActivityLog({
   broadcasts,
   eventId,
@@ -3007,11 +3147,14 @@ function ActivityLog({
 
   if (sent.length === 0) {
     return (
+      <>
+      <InboxPanel />
       <div className="rounded-xl border border-dashed p-10 text-center">
         <Mail className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
         <p className="text-sm font-medium">Nothing has gone out yet</p>
         <p className="mt-1 text-xs text-muted-foreground">Sent emails land here with their delivery and open counts.</p>
       </div>
+      </>
     );
   }
 
@@ -3051,6 +3194,7 @@ function ActivityLog({
   return (
     <>
       {modeTabs}
+      <InboxPanel />
       {/* The four numbers you actually came for, before the list of rows you
           would otherwise have to add up in your head. */}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
