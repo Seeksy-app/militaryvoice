@@ -108,7 +108,7 @@ export function HostNav({
       >
         <Icon className={`h-4 w-4 shrink-0 ${active ? "text-white" : it.locked ? "text-muted-foreground/70" : "text-[#053877]"}`} />
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5 text-sm font-semibold">
+          <span className="flex items-center gap-1.5 text-[15px] font-semibold tracking-[-0.01em]">
             {it.label}
             {it.badge != null && (
               <span className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-bold leading-none ${active ? "bg-white text-[#053877]" : "bg-[#F0A71F] text-[#1a1200]"}`} data-testid="badge-host-events-count">
@@ -117,7 +117,7 @@ export function HostNav({
             )}
             {it.locked && <Lock className="h-3 w-3 opacity-60" />}
           </span>
-          {!compact && <span className={`block text-[12px] ${active ? "text-white/75" : "text-muted-foreground"}`}>{it.hint}</span>}
+          {!compact && <span className={`block text-xs font-normal ${active ? "text-white/75" : "text-muted-foreground"}`}>{it.hint}</span>}
         </span>
       </a>
     );

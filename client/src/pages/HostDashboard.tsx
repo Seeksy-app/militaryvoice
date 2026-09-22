@@ -26,6 +26,7 @@ import {
   ChevronDown,
   ChevronRight,
   ArrowRight,
+  PlayCircle,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -58,6 +59,7 @@ import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, QuickDoors, TodoStrip } from "@/components/CommandCenter";
+import { StudioIcon } from "@/components/GreenRoomButton";
 import { HostNav } from "@/components/HostNav";
 import { ProScreen } from "@/components/ProScreen";
 import { AudienceConsent } from "@/components/AudienceConsent";
@@ -1200,43 +1202,15 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                         greenRoomHref={greenRoomHref}
                         slotLabel={mySlot ? `${formatDateInZone(mySlot.start, zone)} · ${formatTimeInZone(mySlot.start, zone)}` : null}
                         accountsCount={social?.accounts?.length ?? 0}
-                        cohost={cohost}
+                        agendaHref="/agenda"
                         onGo={(sc) => goTo(sc)}
-                        onCohost={() => document.getElementById("section-cohost")?.scrollIntoView({ behavior: "smooth", block: "start" })}
                       />
                     </div>
                   </div>
-                  <div className="mt-6">
-                    <TodoStrip
-                      todos={(() => {
-                const t: { key: string; label: string; screen: "editProfile" | "promotion" | "integrations" | "events"; optional?: boolean }[] = [];
-                const show = hostEvents?.find((e) => e.slotIndex != null)?.show ?? hostEvents?.[0]?.show ?? null;
-                if (!show?.showName) t.push({ key: "show", label: "Set up your show", screen: "events" });
-                if (show?.showFormat === "prerecorded" && !show.recordingUrl) t.push({ key: "file", label: "Send us your recorded episode", screen: "events" });
-                if (!profile?.photoOriginalUrl) t.push({ key: "headshot", label: "Add a print-quality headshot", screen: "editProfile" });
-                if ((social?.accounts?.length ?? 0) === 0) t.push({ key: "accounts", label: "Connect your social accounts", screen: "integrations" });
-                if ((hostAssets?.length ?? 0) === 0 && !profile?.mediaAnswered) t.push({ key: "materials", label: "Upload an intro, outro or images", screen: "events" });
-                if (!youtube?.connected) t.push({ key: "youtube", label: "Send your slot to your own YouTube", screen: "integrations", optional: true });
-                return t;
-              })()}
-                      onGo={(sc) => goTo(sc)}
-                    />
-                  </div>
-                </>
-              );
-            })()}
-
-            {/* ------------------------------------------------ profile header */}
-            <section className="mt-4" data-testid="card-profile-header">
-              <div className="overflow-hidden rounded-2xl border border-border bg-card">
-                <div className="p-5 sm:p-6">
-                  <div className="min-w-0">
-
-                    {/* The website / YouTube / RSS pills lived here, but
-                        "where people can listen" is a Profile settings thing
-                        now and they made the card read as a link dump. */}
-
-                    <div className="mt-4 border-t border-border pt-4" data-testid="section-your-slot">
+                  {/* Three cards across, not one long strip: the slot, what is
+                      left to do, and what happens on the day. */}
+                  <div className="mt-6 grid gap-4 lg:grid-cols-3">
+                    <div className="h-full rounded-2xl border border-border bg-card p-5" data-testid="section-your-slot">
                       <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your slot</p>
                       {data.mySignups.length === 0 ? (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] px-4 py-3">
@@ -1312,11 +1286,64 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                         </div>
                       )}
                     </div>
+                    <TodoStrip
+                      todos={(() => {
+                const t: { key: string; label: string; screen: "editProfile" | "promotion" | "integrations" | "events"; optional?: boolean }[] = [];
+                const show = hostEvents?.find((e) => e.slotIndex != null)?.show ?? hostEvents?.[0]?.show ?? null;
+                if (!show?.showName) t.push({ key: "show", label: "Set up your show", screen: "events" });
+                if (show?.showFormat === "prerecorded" && !show.recordingUrl) t.push({ key: "file", label: "Send us your recorded episode", screen: "events" });
+                if (!profile?.photoOriginalUrl) t.push({ key: "headshot", label: "Add a print-quality headshot", screen: "editProfile" });
+                if ((social?.accounts?.length ?? 0) === 0) t.push({ key: "accounts", label: "Connect your social accounts", screen: "integrations" });
+                if ((hostAssets?.length ?? 0) === 0 && !profile?.mediaAnswered) t.push({ key: "materials", label: "Upload an intro, outro or images", screen: "events" });
+                if (!youtube?.connected) t.push({ key: "youtube", label: "Send your slot to your own YouTube", screen: "integrations", optional: true });
+                return t;
+              })()}
+                      onGo={(sc) => goTo(sc)}
+                      eventStartUtc={data.event.startAtUtc}
+                      eventName={data.event.name.trim()}
+                    />
+                    <div className="h-full rounded-2xl border border-border bg-card p-5" data-testid="section-on-the-day">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">On the day</p>
+                      {mySlot ? (
+                        <>
+                          <p className="text-sm text-muted-foreground">
+                            Come to the green room by <span className="font-semibold text-foreground tabular-nums">{formatTimeInZone(new Date(mySlot.start.getTime() - 15 * 60000), zone)}</span>, fifteen minutes before you're on. Alex brings you to the stage when it's your turn.
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {greenRoomHref && (
+                              <a href={greenRoomHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F] bg-[#F0A71F]/10 px-3.5 py-2 text-sm font-medium text-foreground hover:bg-[#F0A71F]/20" data-testid="link-on-the-day-green-room">
+                                <StudioIcon className="h-6 w-6 rounded-md" /> Green room
+                              </a>
+                            )}
+                            <Link href="/watch" className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground hover:border-[#053877]/40" data-testid="link-on-the-day-watch">
+                              <PlayCircle className="h-4 w-4" /> Watch page
+                            </Link>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Pick your slot and your green room link and call time appear here.</p>
+                      )}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* ------------------------------------------------ profile header */}
+            <section className="mt-4" data-testid="card-profile-header">
+              <div className="overflow-hidden rounded-2xl border border-border bg-card">
+                <div className="p-5 sm:p-6">
+                  <div className="min-w-0">
+
+                    {/* The website / YouTube / RSS pills lived here, but
+                        "where people can listen" is a Profile settings thing
+                        now and they made the card read as a link dump. */}
+
 
                     {/* Only somebody on the lineup can co-host: the hour is
                         between shows, and you need a show to be between. */}
                     {data.mySignups.length > 0 && (
-                      <div className="mt-4 border-t border-border pt-4" data-testid="section-cohost">
+                      <div data-testid="section-cohost">
                         <CohostSlots eventId={data.event.id} zone={zone} />
                       </div>
                     )}

@@ -1,4 +1,5 @@
-import { ArrowRight, CalendarDays, Check, Link2, Mic2, Mail, Shield } from "lucide-react";
+import { Link } from "wouter";
+import { ArrowRight, CalendarDays, Check, Link2, ListOrdered, Mail, Shield } from "lucide-react";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { StudioIcon } from "@/components/GreenRoomButton";
 
@@ -39,7 +40,6 @@ export function CommandCenter({
   eventStartUtc: string;
 }) {
   const now = new Date();
-  const daysToGo = Math.max(0, Math.ceil((Date.parse(eventStartUtc) - now.getTime()) / 86_400_000));
   return (
     <section className="relative overflow-hidden rounded-2xl bg-[#04102b] px-5 pb-12 pt-5 text-white sm:px-7 sm:pt-6" data-testid="command-center">
       <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
@@ -64,8 +64,6 @@ export function CommandCenter({
               <span className="font-semibold text-white">{podcastName}</span>
               {" · "}
               {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
-              {" · "}
-              {daysToGo === 0 ? `${eventName} is today` : `${daysToGo} day${daysToGo === 1 ? "" : "s"} to ${eventName}`}
             </p>
             <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/75">
               <span className="inline-flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-[#F0A71F]" /> {email}</span>
@@ -88,22 +86,22 @@ export function QuickDoors({
   greenRoomHref,
   slotLabel,
   accountsCount,
-  cohost,
+  agendaHref,
   onGo,
-  onCohost,
 }: {
   greenRoomHref: string | null;
   slotLabel: string | null;
   accountsCount: number;
-  cohost: { open: number; mine: number; total: number } | null;
+  agendaHref: string;
   onGo: (screen: Screen) => void;
-  onCohost: () => void;
 }) {
-  const doors: { key: string; label: string; icon: React.ReactNode; onClick?: () => void; href?: string; accent?: boolean }[] = [
+  const doors: { key: string; label: string; icon: React.ReactNode; onClick?: () => void; href?: string; to?: string; accent?: boolean }[] = [
     { key: "slot", label: slotLabel ?? "Pick your slot", icon: <CalendarDays className="h-4 w-4" />, onClick: () => onGo("events") },
     ...(greenRoomHref ? [{ key: "green-room", label: "Green room", icon: <StudioIcon className="h-6 w-6 rounded-md" />, href: greenRoomHref, accent: true }] : []),
     { key: "accounts", label: accountsCount > 0 ? "Manage accounts" : "Connect accounts", icon: <Link2 className="h-4 w-4" />, onClick: () => onGo("integrations") },
-    { key: "cohost", label: cohost && cohost.mine > 0 ? `Co-hosting ${cohost.mine}h` : "Co-host an hour", icon: <Mic2 className="h-4 w-4" />, onClick: onCohost },
+    // The whole day, as the public sees it. Co-hosting has its own card
+    // below, so it does not need a door up here.
+    { key: "agenda", label: "Full agenda", icon: <ListOrdered className="h-4 w-4" />, to: agendaHref },
   ];
   return (
     <div className="mt-3 flex flex-wrap gap-2" data-testid="quick-doors">
@@ -112,7 +110,9 @@ export function QuickDoors({
           d.accent ? "border-[#F0A71F] bg-[#F0A71F]/10 text-foreground hover:bg-[#F0A71F]/20" : "border-border bg-card text-foreground hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]"
         }`;
         const inner = (<>{d.icon}<span>{d.label}</span></>);
-        return d.href ? (
+        return d.to ? (
+          <Link key={d.key} href={d.to} className={cls} data-testid={`door-${d.key}`}>{inner}</Link>
+        ) : d.href ? (
           <a key={d.key} href={d.href} target="_blank" rel="noreferrer" className={cls} data-testid={`door-${d.key}`}>{inner}</a>
         ) : (
           <button key={d.key} type="button" onClick={d.onClick} className={cls} data-testid={`door-${d.key}`}>{inner}</button>
@@ -130,13 +130,24 @@ export function QuickDoors({
 export function TodoStrip({
   todos,
   onGo,
+  eventStartUtc,
+  eventName,
 }: {
   todos: { key: string; label: string; screen: Screen; optional?: boolean }[];
   onGo: (screen: Screen) => void;
+  eventStartUtc?: string;
+  eventName?: string;
 }) {
   const required = todos.filter((t) => !t.optional);
+  // The countdown lives with the list of what is left, where it means
+  // something, rather than after the date in the header.
+  const daysToGo = eventStartUtc ? Math.max(0, Math.ceil((Date.parse(eventStartUtc) - Date.now()) / 86_400_000)) : null;
+  const countdown = daysToGo == null ? null : daysToGo === 0 ? `${eventName ?? "The day"} is today` : `${daysToGo} day${daysToGo === 1 ? "" : "s"} to go`;
   return (
-    <div className="rounded-2xl border border-border bg-card p-5" data-testid="todo-strip">
+    <div className="h-full rounded-2xl border border-border bg-card p-5" data-testid="todo-strip">
+      {countdown && (
+        <p className="mb-2 text-2xl font-bold tabular-nums tracking-tight text-[#053877]" data-testid="text-days-to-go">{countdown}</p>
+      )}
       {required.length === 0 ? (
         <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
           <Check className="h-4 w-4" /> You're all set — nothing left to do before the day.
