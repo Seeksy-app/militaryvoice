@@ -2942,7 +2942,7 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
 // a campaign is one email that goes out once, an automation is a series that
 // fires off a trigger, and a template is copy you pick from when building
 // either. "Cadence" was doing two of those jobs at once.
-type CrmView = "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "campaigns" | "templates" | "automation" | "activity" | "compose";
+type CrmView = "contacts" | "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "campaigns" | "templates" | "automation" | "replies" | "activity" | "compose";
 
 /**
  * Everything that has actually gone out, in the order it went.
@@ -3182,7 +3182,6 @@ function ActivityLog({
   if (sent.length === 0) {
     return (
       <>
-      <InboxPanel />
       <div className="rounded-xl border border-dashed p-10 text-center">
         <Mail className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
         <p className="text-sm font-medium">Nothing has gone out yet</p>
@@ -3228,7 +3227,6 @@ function ActivityLog({
   return (
     <>
       {modeTabs}
-      <InboxPanel />
       {/* The four numbers you actually came for, before the list of rows you
           would otherwise have to add up in your head. */}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
@@ -3604,7 +3602,6 @@ function BroadcastSubNav({ view, setView }: { view: CrmView; setView: (v: CrmVie
     { key: "campaigns", label: "Campaigns" },
     { key: "automation", label: "Automation" },
     { key: "templates", label: "Templates" },
-    { key: "activity", label: "Activity log" },
   ];
   return (
     <div className="inline-flex rounded-lg bg-muted p-1">
@@ -3625,11 +3622,164 @@ function BroadcastSubNav({ view, setView }: { view: CrmView; setView: (v: CrmVie
   );
 }
 
+/**
+ * Everyone, in one table: the lineup and the imported list together, each
+ * row saying where it came from and when we last wrote to them. The CSV
+ * import lives here because this is where its rows appear.
+ */
+function AllContacts({ eventId, contacts, onSelect }: { eventId: number; contacts: ContactRow[]; onSelect: (c: EngagementRecipient) => void }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [q, setQ] = useState("");
+  const [source, setSource] = useState<"all" | "lineup" | "imported">("all");
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+
+  const { data: signupRows = [] } = useQuery<SignupRow[]>({
+    queryKey: ["/api/admin/signups", eventId],
+    queryFn: () => adminGet<SignupRow[]>(`/api/admin/signups?eventId=${eventId}`),
+    staleTime: 60_000,
+  });
+  // A cancelled booking is a contact, not a lineup row.
+  const signups = signupRows.filter((sg) => sg.status !== "cancelled");
+  const { data: recipients = [] } = useQuery<{ email: string; name: string; sends: number; lastAt: string }[]>({
+    queryKey: ["/api/admin/emails/recipients", eventId],
+    queryFn: () => adminGet<{ email: string; name: string; sends: number; lastAt: string }[]>(`/api/admin/emails/recipients?eventId=${eventId}`),
+    staleTime: 60_000,
+  });
+
+  type Row = { email: string; name: string; sub: string; source: "lineup" | "imported"; sends: number; lastAt: string | null; contactId?: number; stage?: string };
+  const rows = useMemo(() => {
+    const byEmail = new Map<string, Row>();
+    const last = new Map(recipients.map((r) => [r.email.toLowerCase(), r]));
+    for (const sg of signups) {
+      const e = sg.email.trim().toLowerCase();
+      if (!e || byEmail.has(e)) continue;
+      const r = last.get(e);
+      byEmail.set(e, { email: e, name: sg.hostName || sg.podcastName || e, sub: sg.podcastName, source: "lineup", sends: r?.sends ?? 0, lastAt: r?.lastAt ?? null });
+    }
+    for (const c of contacts) {
+      const e = c.email.trim().toLowerCase();
+      if (!e) continue;
+      const r = last.get(e);
+      const name = [c.firstName, c.lastName].filter(Boolean).join(" ");
+      const existing = byEmail.get(e);
+      if (existing) { existing.contactId = c.id; existing.stage = c.lifecycleStage; continue; }
+      byEmail.set(e, { email: e, name: name || e, sub: c.source ? `Imported · ${c.source}` : "Imported", source: "imported", sends: r?.sends ?? 0, lastAt: r?.lastAt ?? null, contactId: c.id, stage: c.lifecycleStage });
+    }
+    return Array.from(byEmail.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [signups, contacts, recipients]);
+
+  const needle = q.trim().toLowerCase();
+  const shown = rows.filter((r) => (source === "all" || r.source === source) && (!needle || r.email.includes(needle) || r.name.toLowerCase().includes(needle) || r.sub.toLowerCase().includes(needle)));
+  const counts = { all: rows.length, lineup: rows.filter((r) => r.source === "lineup").length, imported: rows.filter((r) => r.source === "imported").length };
+
+  async function importCsv(e: React.FormEvent) {
+    e.preventDefault();
+    if (!csvFile) return;
+    setImporting(true);
+    try {
+      const csvText = await csvFile.text();
+      const result: { inserted: number; updated: number; total: number } = await adminSend("POST", "/api/admin/contacts/import", { csv: csvText }).then((r) => r.json());
+      toast({ title: "Imported", description: `${result.inserted} new, ${result.updated} updated of ${result.total} rows.` });
+      setCsvFile(null);
+      setImportOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
+    } catch (err) {
+      toast({ title: "Import failed", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function remove(row: Row) {
+    if (!row.contactId || !window.confirm(`Remove ${row.email} from the imported list?`)) return;
+    await adminSend("DELETE", `/api/admin/contacts/${row.contactId}`);
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
+  }
+
+  return (
+    <div className="flex flex-col gap-4" data-testid="crm-contacts">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, show or email" className="w-64" data-testid="contacts-search" />
+          <div className="inline-flex rounded-lg border border-border p-0.5 text-xs">
+            {([["all", "Everyone"], ["lineup", "On the lineup"], ["imported", "Imported"]] as const).map(([k, label]) => (
+              <button key={k} type="button" onClick={() => setSource(k)} className={`rounded-md px-3 py-1.5 font-medium transition-colors ${source === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} data-testid={`contacts-source-${k}`}>
+                {label} <span className="opacity-70">{counts[k]}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setImportOpen((v) => !v)} data-testid="contacts-import-toggle">
+          <Upload className="h-3.5 w-3.5" /> Import CSV
+        </Button>
+      </div>
+
+      {importOpen && (
+        <Card className="border-primary/50">
+          <CardContent className="pt-4 pb-4">
+            <form onSubmit={importCsv} className="flex flex-wrap items-center gap-3">
+              <input type="file" accept=".csv,text/csv" onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)} className="text-sm" data-testid="contacts-csv" />
+              <Button type="submit" size="sm" disabled={!csvFile || importing}>{importing ? "Importing…" : "Import"}</Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => { setImportOpen(false); setCsvFile(null); }}>Cancel</Button>
+            </form>
+            <p className="mt-2 text-xs text-muted-foreground">A CSV with at least an <code>email</code> column. Optional: <code>first_name</code>, <code>last_name</code>. Existing addresses are updated, not duplicated.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {shown.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{needle ? "Nobody matches that." : "No contacts yet."}</p>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2 font-semibold">Who</th>
+                <th className="px-4 py-2 font-semibold">From</th>
+                <th className="px-4 py-2 font-semibold">Emails</th>
+                <th className="px-4 py-2 font-semibold">Last email</th>
+                <th className="px-2 py-2" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {shown.map((r) => (
+                <tr key={r.email} className="hover:bg-accent/60">
+                  <td className="px-4 py-2.5">
+                    <button type="button" onClick={() => { const [first, ...rest] = r.name.split(" "); onSelect({ email: r.email, firstName: first ?? "", lastName: rest.join(" ") }); }} className="text-left" data-testid={`contact-${r.email}`}>
+                      <div className="font-medium">{r.name}</div>
+                      <div className="text-xs text-muted-foreground">{r.email}{r.sub && r.sub !== r.name ? ` · ${r.sub}` : ""}</div>
+                    </button>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${r.source === "lineup" ? "bg-[#053877]/10 text-[#053877]" : "bg-muted text-muted-foreground"}`}>{r.source === "lineup" ? "On the lineup" : "Imported"}</span>
+                  </td>
+                  <td className="px-4 py-2.5 tabular-nums">{r.sends}</td>
+                  <td className="px-4 py-2.5 text-muted-foreground">{r.lastAt ? new Date(r.lastAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—"}</td>
+                  <td className="px-2 py-2.5 text-right">
+                    {r.contactId && r.source === "imported" && (
+                      <button type="button" onClick={() => remove(r)} className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" title="Remove" data-testid={`contact-remove-${r.email}`}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEvent | null }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [view, setView] = useState<CrmView>("lists");
+  const [view, setView] = useState<CrmView>("contacts");
   const [search, setSearch] = useState("");
   const [selectedContact, setSelectedContact] = useState<ContactRow | EngagementRecipient | null>(null);
   const [engagementCtx, setEngagementCtx] = useState<{ broadcastId: number; type: string; label: string } | null>(null);
@@ -3645,6 +3795,13 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
     queryKey: ["/api/admin/signups-contacts", eventId],
     queryFn: () => adminGet<{ email: string; firstName: string }[]>(`/api/admin/events/${eventId}/signup-contacts`),
   });
+
+  const { data: inboundRows = [] } = useQuery<InboundEmailRow[]>({
+    queryKey: ["/api/admin/inbound"],
+    queryFn: () => adminGet<InboundEmailRow[]>("/api/admin/inbound"),
+    refetchInterval: 60_000,
+  });
+  const repliesWaiting = inboundRows.filter((r) => r.status === "new" || r.status === "drafted").length;
 
   const { data: contactList = [], isLoading: loadingContacts } = useQuery<ContactRow[]>({
     queryKey: ["/api/admin/contacts"],
@@ -4007,12 +4164,18 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
 
   // ── sub-nav ─────────────────────────────────────────────────────────────
 
-  const navItems: { id: CrmView; label: string }[] = [
-    { id: "lists", label: "Contacts" },
-    { id: "campaigns", label: "Broadcasts" },
+  // One CRM, five doors: who, grouped how, what we send, what came back,
+  // what happened. Campaigns keeps its own second row for automation and
+  // templates; everything else is one level deep.
+  const navItems: { id: CrmView; label: string; badge?: number }[] = [
+    { id: "contacts", label: "Contacts" },
+    { id: "lists", label: "Lists" },
+    { id: "campaigns", label: "Campaigns" },
+    { id: "replies", label: "Replies", badge: repliesWaiting || undefined },
+    { id: "activity", label: "Activity" },
   ];
-  const activeNav = view === "list-signups" || view === "list-contacts" || view === "list-engagement" ? "lists"
-    : view === "compose" ? "campaigns"
+  const activeNav = view === "list-signups" || view === "list-contacts" || view === "list-engagement" || view === "list-segment" ? "lists"
+    : view === "compose" || view === "automation" || view === "templates" ? "campaigns"
     : view;
 
   return (
@@ -4026,18 +4189,35 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
           <button
             key={n.id}
             onClick={() => setView(n.id)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
               activeNav === n.id
                 ? "border-primary text-primary"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
+            data-testid={`crm-nav-${n.id}`}
           >
             {n.label}
+            {n.badge != null && <span className="rounded-full bg-[#053877] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{n.badge}</span>}
           </button>
         ))}
       </div>
 
-      {/* ── CONTACTS: list directory ── */}
+      {/* ── CONTACTS: everyone ── */}
+      {view === "contacts" && (
+        <AllContacts eventId={eventId} contacts={contactList} onSelect={setSelectedContact} />
+      )}
+
+      {/* ── REPLIES: what came back, with an answer drafted ── */}
+      {view === "replies" && (
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            Everything that came in to hello@. Alex acknowledges each one on arrival; a person sends the answer.
+          </p>
+          <InboxPanel />
+        </div>
+      )}
+
+      {/* ── LISTS: directory ── */}
       {view === "lists" && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
@@ -4379,7 +4559,6 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
       {/* ── ACTIVITY LOG ── */}
       {view === "activity" && (
         <div className="flex flex-col gap-4">
-          <BroadcastSubNav view={view} setView={setView} />
           <ActivityLog broadcasts={broadcastList} eventId={eventId} onViewEngagement={openEngagementView} onSelectContact={setSelectedContact} />
         </div>
       )}

@@ -75,7 +75,7 @@ export const TOP_GROUPS: { title: string; items: AdminSection[] }[] = [
     items: [
       { key: "events", label: "Events", icon: CalendarDays },
       { key: "rooms", label: "Rooms", icon: DoorOpen },
-      { key: "crm", label: "CRM", icon: Mail },
+      // Contacts live in the event's CRM now — one CRM, not one per level.
       { key: "team", label: "Team", icon: Contact },
     ],
   },
