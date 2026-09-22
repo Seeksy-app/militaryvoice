@@ -540,11 +540,12 @@ export default function Landing({ slug }: Props) {
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#1a1200]"
+                                title={`This segment is sponsored by ${it.sponsor.name}`}
+                                className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#F0A71F]/60 bg-[#04102b] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#F0A71F]"
                                 data-testid={`mini-sponsor-${it.key}`}
                               >
                                 <Tag className="h-2.5 w-2.5 shrink-0" />
-                                <span className="truncate">Sponsored by {it.sponsor.name}</span>
+                                {it.sponsor.logoUrl ? <img src={it.sponsor.logoUrl} alt={it.sponsor.name} className="h-3 max-w-[4.5rem] object-contain" /> : <span className="truncate">{it.sponsor.name}</span>}
                               </a>
                             )}
                           </div>
