@@ -1276,8 +1276,13 @@ export default function Studio({ slug }: { slug?: string }) {
                     audio: p.audioTrack ?? null,
                     speaking: false,
                   }))}
-                  meta={(state?.meta ?? {}) as RoomMeta}
-                  muted={!onStage && !listenToShow}
+                  // Off air, the studio row still says the standby card is up,
+                  // so the green room showed the card, music and all, to a
+                  // person who had just been put on stage with the producer.
+                  // With people on stage, show the people. The standby's music
+                  // is for the audience; in here it stays silent.
+                  meta={{ ...((state?.meta ?? {}) as RoomMeta), ...(onAirPeers.length > 0 ? { fallbackPlaying: false } : {}) }}
+                  muted={(!onStage && !listenToShow) || (onAirPeers.length === 0 && Boolean(state?.meta?.fallbackPlaying))}
                   idleTitle={state?.studio.name}
                 />
               </div>
