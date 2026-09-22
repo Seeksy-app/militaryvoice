@@ -325,6 +325,9 @@ export async function publishPhoto(input: {
   photoUrl: string;
   title: string;
   description?: string;
+  /** Post later: an ISO date, read in `timezone` (default UTC). Returns 202 and a job. */
+  scheduledDate?: string;
+  timezone?: string;
 }): Promise<PublishResult> {
   if (!API_KEY) throw new Error("Upload-Post is not configured (UPLOAD_POST_API_KEY missing).");
   if (input.platforms.length === 0) throw new Error("Pick at least one account to post to.");
@@ -336,6 +339,10 @@ export async function publishPhoto(input: {
   // Several networks use the title as the caption, so it carries the post.
   form.set("title", input.title.slice(0, 300));
   if (input.description) form.set("description", input.description.slice(0, 4000));
+  if (input.scheduledDate) {
+    form.set("scheduled_date", input.scheduledDate);
+    if (input.timezone) form.set("timezone", input.timezone);
+  }
 
   const res = await fetch(`${BASE}/upload_photos`, {
     method: "POST",
@@ -354,4 +361,21 @@ export async function publishPhoto(input: {
     throw new Error(String(msg));
   }
   return (json ?? { success: true }) as PublishResult;
+}
+
+/** The posts waiting to go out, optionally for one profile. */
+export async function listScheduledPosts(username?: string): Promise<Array<{ job_id: string; scheduled_date: string; post_type: string; profile_username: string; title: string }>> {
+  if (!API_KEY) throw new Error("Upload-Post is not configured (UPLOAD_POST_API_KEY missing).");
+  const q = username ? `?profile_username=${encodeURIComponent(username)}` : "";
+  const res = await fetch(`${BASE}/uploadposts/schedule${q}`, { headers: { Authorization: `Apikey ${API_KEY}` } });
+  if (!res.ok) throw new Error(await res.text());
+  const json = (await res.json()) as { scheduled_posts?: Array<{ job_id: string; scheduled_date: string; post_type: string; profile_username: string; title: string }> };
+  return json.scheduled_posts ?? [];
+}
+
+/** Take a scheduled post back before it goes out. */
+export async function cancelScheduledPost(jobId: string): Promise<void> {
+  if (!API_KEY) throw new Error("Upload-Post is not configured (UPLOAD_POST_API_KEY missing).");
+  const res = await fetch(`${BASE}/uploadposts/schedule/${encodeURIComponent(jobId)}`, { method: "DELETE", headers: { Authorization: `Apikey ${API_KEY}` } });
+  if (!res.ok) throw new Error(await res.text());
 }
