@@ -3,7 +3,7 @@ import { NavBar } from "@/components/NavBar";
 import { HelpSearch } from "@/components/HelpSearch";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Youtube } from "lucide-react";
+import { ArrowRight, Youtube, ArrowLeft } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -19,6 +19,9 @@ export default function HelpYoutube() {
     <div className="min-h-screen bg-background">
       <NavBar />
       <main className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6">
+        <Link href="/help" className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary" data-testid="link-help-back">
+          <ArrowLeft className="h-4 w-4" /> All help
+        </Link>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Help · Going out live</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
           Your slot on your own YouTube, too

@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ArrowRight, Youtube, KeyRound, CalendarDays, Headphones, Mic2, Users, HelpCircle } from "lucide-react";
+import { ArrowRight, ExternalLink, Youtube, KeyRound, CalendarDays, Headphones, Mic2, Users, HelpCircle } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { HelpSearch, askAlex } from "@/components/HelpSearch";
@@ -26,15 +26,28 @@ export default function HelpIndex() {
   const everyone = HELP_INDEX.filter((e) => e.audience === "everyone");
   const Card = ({ e }: { e: (typeof HELP_INDEX)[number] }) => {
     const Icon = ICONS[e.href.split("#")[0]] ?? HelpCircle;
-    return (
-      <Link href={e.href} className="group flex items-start gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-[#053877]/40" data-testid={`help-card-${e.href}`}>
+    // A help article opens here and carries a way back. Anything else, the
+    // dashboard or the schedule, opens in a new tab so the help stays put.
+    const article = e.href.startsWith("/help/");
+    const cls = "group flex items-start gap-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-[#053877]/40";
+    const inner = (
+      <>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877]"><Icon className="h-4.5 w-4.5" /></span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold">{e.title}</span>
           <span className="mt-0.5 block text-sm text-muted-foreground">{e.summary}</span>
         </span>
-        <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-      </Link>
+        {article ? (
+          <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        ) : (
+          <ExternalLink className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+      </>
+    );
+    return article ? (
+      <Link href={e.href} className={cls} data-testid={`help-card-${e.href}`}>{inner}</Link>
+    ) : (
+      <a href={e.href} target="_blank" rel="noreferrer" className={cls} data-testid={`help-card-${e.href}`}>{inner}</a>
     );
   };
   return (

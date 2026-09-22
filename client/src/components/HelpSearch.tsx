@@ -46,15 +46,24 @@ export function HelpSearch({ compact = false, autoFocus = false }: { compact?: b
               <button type="button" onClick={() => askAlex(q.trim())} className="font-medium text-[#053877] hover:underline">Ask Alex instead →</button>
             </div>
           ) : (
-            results.map((r) => (
-              <Link key={r.href + r.title} href={r.href} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-accent" data-testid={`help-result-${r.href}`}>
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold">{r.title}</span>
-                  <span className="block text-xs text-muted-foreground">{r.summary}</span>
-                </span>
-                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </Link>
-            ))
+            results.map((r) => {
+              const inner = (
+                <>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">{r.title}</span>
+                    <span className="block text-xs text-muted-foreground">{r.summary}</span>
+                  </span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </>
+              );
+              const cls = "flex items-center justify-between gap-3 px-4 py-3 hover:bg-accent";
+              // Help articles open here; the dashboard and the rest open in a new tab.
+              return r.href.startsWith("/help/") ? (
+                <Link key={r.href + r.title} href={r.href} className={cls} data-testid={`help-result-${r.href}`}>{inner}</Link>
+              ) : (
+                <a key={r.href + r.title} href={r.href} target="_blank" rel="noreferrer" className={cls} data-testid={`help-result-${r.href}`}>{inner}</a>
+              );
+            })
           )}
         </div>
       )}
