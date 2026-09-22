@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, PlatformIcon, platformLabel, parseSocialAccounts } from "@/components/SocialIcons";
 import { spotlightFromSignup, type SpotlightItem } from "@/components/SpotlightCard";
+import { sponsorHref } from "@/components/SponsorRibbon";
 import { SponsorDialog } from "@/components/SponsorDialog";
 import { PodcasterDialog } from "@/components/PodcasterDialog";
 import { useCountdown } from "@/hooks/use-countdown";
@@ -36,6 +37,7 @@ import {
   UserCircle2,
   MousePointerClick,
   Headphones,
+  Tag,
 } from "lucide-react";
 
 interface Props {
@@ -532,6 +534,19 @@ export default function Landing({ slug }: Props) {
                             <div className="mt-0.5 truncate tabular-nums text-[12px] text-[#F0A71F]">
                               {it.start ? `${formatDateInZone(it.start, zone)} · ${formatTimeInZone(it.start, zone)}` : "Time coming soon"}
                             </div>
+                            {it.sponsor && (
+                              <a
+                                href={sponsorHref(it.sponsor, "home")}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#1a1200]"
+                                data-testid={`mini-sponsor-${it.key}`}
+                              >
+                                <Tag className="h-2.5 w-2.5 shrink-0" />
+                                <span className="truncate">Sponsored by {it.sponsor.name}</span>
+                              </a>
+                            )}
                           </div>
                         </motion.div>
                       ))}

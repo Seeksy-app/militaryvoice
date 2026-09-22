@@ -174,6 +174,8 @@ export type PublicSignup = Pick<
     youtubeUrl: string;
     socialAccounts: string;
   } | null;
+  /** The company backing this show, when one has. Named on the card. */
+  sponsor?: { id: number; name: string; logoUrl: string; url: string } | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -944,6 +946,9 @@ export const studios = pgTable("studios", {
   stageCardName: text("stage_card_name").notNull().default(""),
   stageCardShow: text("stage_card_show").notNull().default(""),
   stageCardPhoto: text("stage_card_photo").notNull().default(""),
+  /** The show's sponsor, for the same card: "Presented by …" with a logo. */
+  stageCardSponsor: text("stage_card_sponsor").notNull().default(""),
+  stageCardSponsorLogo: text("stage_card_sponsor_logo").notNull().default(""),
   // Graphics: a logo burned into the corner of the stage for the whole show,
   // independent of whatever scene is up.
   logoUrl: text("logo_url").notNull().default(""),
@@ -1707,3 +1712,18 @@ export const sponsorLeads = pgTable("sponsor_leads", {
   updatedAt: text("updated_at").notNull(),
 }, (t) => [index("sponsor_leads_event_idx").on(t.eventId)]);
 export type SponsorLeadRow = typeof sponsorLeads.$inferSelect;
+
+/**
+ * A click on a sponsor's link, wherever it was: the agenda card, the strip,
+ * an email. The sponsor asked how many people clicked; this is the answer,
+ * with where they clicked from so the answer has shape.
+ */
+export const sponsorClicks = pgTable("sponsor_clicks", {
+  id: serial("id").primaryKey(),
+  sponsorId: integer("sponsor_id").notNull(),
+  source: text("source").notNull().default(""),
+  referer: text("referer").notNull().default(""),
+  userAgent: text("user_agent").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("sponsor_clicks_sponsor_idx").on(t.sponsorId)]);
+export type SponsorClickRow = typeof sponsorClicks.$inferSelect;

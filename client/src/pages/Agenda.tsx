@@ -1,3 +1,4 @@
+import { SponsorRibbon } from "@/components/SponsorRibbon";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearch } from "wouter";
@@ -356,6 +357,8 @@ export default function Agenda({ slug }: Props) {
                             now={now}
                           />
                         </div>
+
+                        {signup.sponsor && <SponsorRibbon sponsor={signup.sponsor} source="agenda" testId={`card-sponsor-${s.index}`} />}
 
                         {(() => {
                           const co = signup.coHost ?? null;

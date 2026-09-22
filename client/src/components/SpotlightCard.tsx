@@ -8,6 +8,7 @@ import { resolveUploadUrl } from "@/lib/queryClient";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
 import { deriveSocialAccounts } from "@shared/socialLinks";
 import { formatDateInZone, formatTimeInZone } from "@/lib/schedule";
+import { SponsorRibbon } from "@/components/SponsorRibbon";
 
 /** A card-worthy podcaster: either a claimed slot (with on-air start) or a
  *  finished profile that hasn't picked a slot yet. */
@@ -21,6 +22,7 @@ export interface SpotlightItem {
   rssUrl: string;
   youtubeUrl: string;
   start?: Date; // on-air start when a slot is claimed
+  sponsor?: PublicSignup["sponsor"];
 }
 
 export function spotlightFromSignup(signup: PublicSignup, start: Date): SpotlightItem {
@@ -34,6 +36,7 @@ export function spotlightFromSignup(signup: PublicSignup, start: Date): Spotligh
     rssUrl: signup.rssUrl,
     youtubeUrl: signup.youtubeUrl,
     start,
+    sponsor: signup.sponsor ?? null,
   };
 }
 
@@ -107,8 +110,14 @@ export function SpotlightCard({ items, zone, agendaHref, intervalMs = 6000 }: Pr
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -14 }}
             transition={{ duration: 0.45, ease: "easeOut" }}
-            className="px-6 pb-6 pt-4 sm:px-8 sm:pb-8"
+            className="pb-6 pt-4 sm:pb-8"
           >
+            {signup.sponsor && (
+              <div className="mb-4">
+                <SponsorRibbon sponsor={signup.sponsor} source="home" testId="spotlight-sponsor" />
+              </div>
+            )}
+            <div className="px-6 sm:px-8">
             <div className="flex items-start gap-5">
               {signup.photoUrl ? (
                 <img
@@ -185,6 +194,7 @@ export function SpotlightCard({ items, zone, agendaHref, intervalMs = 6000 }: Pr
                   ))}
                 </div>
               )}
+            </div>
             </div>
           </motion.div>
         </AnimatePresence>

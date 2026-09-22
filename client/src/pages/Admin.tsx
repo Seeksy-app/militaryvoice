@@ -35,6 +35,7 @@ import { FinancesCard } from "@/components/FinancesCard";
 import { AdminClips } from "@/components/AdminClips";
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
 import { SponsorLeads } from "@/components/SponsorLeads";
+import { ShowSponsorsCard } from "@/components/ShowSponsors";
 import { AdminChat } from "@/components/AdminChat";
 import { AudienceFigures } from "@/components/AudienceFigures";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
@@ -5288,7 +5289,10 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   {/* The sponsors we have on the left; the ones Riccoh is
                       going after on the right, pasted in as he finds them. */}
                   <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
-                    <SponsorsCard eventId={selectedEventId} />
+                    <div className="flex flex-col gap-6">
+                      <ShowSponsorsCard eventId={selectedEventId} />
+                      <SponsorsCard eventId={selectedEventId} />
+                    </div>
                     <div className="rounded-2xl border border-border bg-card p-5 xl:sticky xl:top-6">
                       <SponsorLeads eventId={selectedEventId} />
                     </div>

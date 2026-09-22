@@ -28,6 +28,8 @@ export function stageMetaFromStudio(st: StudioRow) {
     stageCardName: st.stageCardName,
     stageCardShow: st.stageCardShow,
     stageCardPhoto: st.stageCardPhoto,
+    stageCardSponsor: st.stageCardSponsor,
+    stageCardSponsorLogo: st.stageCardSponsorLogo,
     countdownEndsAtUtc: st.countdownEndsAtUtc,
     countdownLabel: st.countdownLabel,
     currentSceneId: st.currentSceneId,

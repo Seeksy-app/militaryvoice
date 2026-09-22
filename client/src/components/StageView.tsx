@@ -47,6 +47,8 @@ export interface RoomMeta {
   stageCardName?: string;
   stageCardShow?: string;
   stageCardPhoto?: string;
+  stageCardSponsor?: string;
+  stageCardSponsorLogo?: string;
 }
 
 /**
@@ -598,6 +600,12 @@ export function StageGrid({
             <div className="relative">
               <p className="text-2xl font-semibold text-white sm:text-4xl" style={HEADLINE_FONT}>{meta.stageCardName}</p>
               {meta.stageCardShow && <p className="mt-1 text-base text-white/70 sm:text-lg">{meta.stageCardShow}</p>}
+              {meta.stageCardSponsor && (
+                <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-sm text-white/85" data-testid="stage-presented-by">
+                  <span className="text-xs uppercase tracking-[0.2em] text-[#F0A71F]">Presented by</span>
+                  {meta.stageCardSponsorLogo ? <img src={meta.stageCardSponsorLogo} alt={meta.stageCardSponsor} className="h-6 max-w-[8rem] object-contain" /> : <span className="font-semibold">{meta.stageCardSponsor}</span>}
+                </div>
+              )}
             </div>
           </>
         ) : (

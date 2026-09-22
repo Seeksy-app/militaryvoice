@@ -282,6 +282,20 @@ function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[numbe
  * those live on the profile. One lookup per co-hosted show, which is a
  * handful, not one per row.
  */
+/** Which company backs which show, by signup id. */
+async function sponsorsBySignup(eventId: number): Promise<Map<number, { id: number; name: string; logoUrl: string; url: string; readLine: string }>> {
+  const out = new Map<number, { id: number; name: string; logoUrl: string; url: string; readLine: string }>();
+  const rows = await storage.listShowSponsors(eventId);
+  if (rows.length === 0) return out;
+  const companies = await storage.listSponsors(false, [eventId, 0]);
+  for (const r of rows) {
+    if (r.signupId == null) continue;
+    const c = companies.find((x) => x.id === r.sponsorId);
+    if (c) out.set(r.signupId, { id: c.id, name: c.name, logoUrl: c.logoUrl, url: c.url, readLine: r.readLine });
+  }
+  return out;
+}
+
 async function withCoHosts(rows: PublicSignup[], all: { coHostEmail: string; id: number }[]): Promise<PublicSignup[]> {
   const byId = new Map(all.map((s) => [s.id, s.coHostEmail?.trim().toLowerCase() ?? ""]));
   return Promise.all(rows.map(async (r) => {
@@ -3812,11 +3826,15 @@ export function registerRoutes(app: Express): void {
       if (row) {
         const taken = await takeRunRow(studio, row);
         const who = row.signupId ? await storage.getSignupById(row.signupId) : undefined;
+        const sponsor = row.signupId ? (await sponsorsBySignup(studio.eventId)).get(row.signupId) : undefined;
+        const banner = bannerFor(scene);
         const withScene = await storage.updateStudio(studio.id, {
           currentSceneId: scene.id,
           stageCardName: who?.hostName ?? "",
           stageCardShow: who?.podcastName?.trim() ?? "",
           stageCardPhoto: who?.photoUrl ?? "",
+          stageCardSponsor: sponsor?.name ?? "",
+          stageCardSponsorLogo: sponsor?.logoUrl ?? "",
             currentSceneTakenAtUtc: new Date().toISOString(),
           countdownEndsAtUtc: "",
           countdownLabel: "",
@@ -3828,7 +3846,9 @@ export function registerRoutes(app: Express): void {
           stageMediaKind: mediaKind,
           stageMediaLabel: scene.mediaUrl ? scene.mediaLabel : "",
           stageMediaPlaying: Boolean(mediaUrl),
-          ...bannerFor(scene),
+          ...banner,
+          // The sponsor rides on the lower third too, when there is one.
+          ...(sponsor && banner.bannerTitle ? { bannerSubtitle: [banner.bannerSubtitle, `Presented by ${sponsor.name}`].filter(Boolean).join(" · ") } : {}),
         });
         if (withScene) {
           const ev = await storage.getEventById(studio.eventId);
@@ -3846,6 +3866,8 @@ export function registerRoutes(app: Express): void {
             stageCardName: "",
             stageCardShow: "",
             stageCardPhoto: "",
+            stageCardSponsor: "",
+            stageCardSponsorLogo: "",
             currentSceneId: scene.id,
             currentSceneTakenAtUtc: new Date().toISOString(),
             // Stored as the moment it hits zero, so every viewer counts down
@@ -3863,6 +3885,8 @@ export function registerRoutes(app: Express): void {
             stageCardName: "",
             stageCardShow: "",
             stageCardPhoto: "",
+            stageCardSponsor: "",
+            stageCardSponsorLogo: "",
             currentSceneId: scene.id,
             currentSceneTakenAtUtc: new Date().toISOString(),
             countdownEndsAtUtc: "",
@@ -5376,7 +5400,12 @@ export function registerRoutes(app: Express): void {
     const ev = await storage.getEventById(eventId);
     const totalSlots = ev ? Math.floor((ev.durationHours * 60) / ev.slotMinutes) : Infinity;
     const live = rows.filter((r) => r.status !== "cancelled" && r.slotIndex < totalSlots);
-    res.json(await withCoHosts(live.map(toPublicSignup), live));
+    const sponsors = await sponsorsBySignup(eventId);
+    const out = (await withCoHosts(live.map(toPublicSignup), live)).map((r) => {
+      const sp = sponsors.get(r.id);
+      return sp ? { ...r, sponsor: { id: sp.id, name: sp.name, logoUrl: sp.logoUrl, url: sp.url } } : r;
+    });
+    res.json(out);
   });
 
   // ---- Host (podcaster, logged in): claim a slot. Reuses their saved profile
@@ -7563,6 +7592,69 @@ The ${eventName} team`;
       await storage.updateInbound(latest.id, { status: "sent", repliedAt: new Date().toISOString(), replyResendId: id, replyFrom: from, replyText: text });
     }
     res.json({ ok: true, id });
+  });
+
+  /**
+   * A sponsor's link, counted. /go/sponsor/8?src=agenda notes the click and
+   * sends the visitor on to the sponsor's site. Every place we link a sponsor
+   * points here, so "how many people clicked" has one answer.
+   */
+  app.get("/go/sponsor/:id", async (req, res) => {
+    noStore(res);
+    const id = Number(req.params.id);
+    const sponsor = (await storage.listSponsors(false)).find((x) => x.id === id);
+    if (!sponsor || !/^https?:\/\//.test(sponsor.url)) return res.redirect("/sponsors");
+    storage.recordSponsorClick(id, String(req.query.src ?? "link"), String(req.get("referer") ?? ""), String(req.get("user-agent") ?? "")).catch(() => {});
+    res.redirect(302, sponsor.url);
+  });
+
+  // ---- Show sponsors: a company on a slot ------------------------------------
+  app.get("/api/admin/show-sponsors", requireAdmin, async (req, res) => {
+    noStore(res);
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    const ev = await storage.getEventById(eventId);
+    const rows = await storage.listShowSponsors(eventId);
+    const companies = await storage.listSponsors(false, [eventId, 0]);
+    const signups = await storage.listSignups(eventId);
+    const at = (slot: number) => ev ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(Date.parse(ev.startAtUtc) + slot * ev.slotMinutes * 60_000)) + " ET" : "";
+    const clicks = await storage.countSponsorClicks();
+    res.json(rows.map((r) => {
+      const c = companies.find((x) => x.id === r.sponsorId);
+      const sg = r.signupId != null ? signups.find((x) => x.id === r.signupId) : undefined;
+      return {
+        id: r.id, sponsorId: r.sponsorId, sponsorName: c?.name ?? "?", logoUrl: c?.logoUrl ?? "", url: c?.url ?? "",
+        clicks: clicks.get(r.sponsorId)?.total ?? 0, clicksBySource: clicks.get(r.sponsorId)?.bySource ?? {},
+        trackedUrl: `${PUBLIC_ORIGIN}/go/sponsor/${r.sponsorId}`,
+        signupId: r.signupId, slotIndex: sg?.slotIndex ?? null, slotLabel: sg ? at(sg.slotIndex) : "slot to be chosen",
+        podcastName: sg?.podcastName ?? "", hostName: sg?.hostName ?? "", readLine: r.readLine, createdAt: r.createdAt,
+      };
+    }));
+  });
+  app.get("/api/admin/show-sponsors/slots", requireAdmin, async (req, res) => {
+    noStore(res);
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    const ev = await storage.getEventById(eventId);
+    if (!ev) return res.json([]);
+    const total = Math.floor((ev.durationHours * 60) / ev.slotMinutes);
+    const at = (slot: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(Date.parse(ev.startAtUtc) + slot * ev.slotMinutes * 60_000)) + " ET";
+    res.json((await storage.listSignups(eventId)).filter((s) => s.status !== "cancelled" && s.slotIndex < total).sort((a, b) => a.slotIndex - b.slotIndex)
+      .map((s) => ({ id: s.id, slotIndex: s.slotIndex, label: at(s.slotIndex), podcastName: s.podcastName, hostName: s.hostName })));
+  });
+  app.post("/api/admin/show-sponsors", requireAdmin, async (req, res) => {
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const sponsorId = Number(req.body?.sponsorId);
+    const signupId = req.body?.signupId == null || req.body.signupId === "" ? null : Number(req.body.signupId);
+    if (!sponsorId) return res.status(400).json({ message: "Which sponsor?" });
+    if (signupId != null && (await storage.listShowSponsors(eventId)).some((r) => r.signupId === signupId)) return res.status(409).json({ message: "That show already has a sponsor." });
+    try {
+      res.json(await storage.createShowSponsor({ eventId, sponsorId, signupId, readLine: String(req.body?.readLine ?? "").trim().slice(0, 300), referredBySignupId: req.body?.referredBySignupId ? Number(req.body.referredBySignupId) : null, referralFee: Number(req.body?.referralFee) || 0, referralPaidAt: "" }));
+    } catch (err) {
+      res.status(400).json({ message: (err as Error).message });
+    }
+  });
+  app.delete("/api/admin/show-sponsors/:id", requireAdmin, async (req, res) => {
+    await storage.deleteShowSponsor(Number(req.params.id));
+    res.json({ ok: true });
   });
 
   // ---- Sponsor leads: the people Riccoh is going to write to ----------------

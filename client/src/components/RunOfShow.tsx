@@ -170,6 +170,13 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
     }
     return rows;
   }, [items, bookedOnly, preOnly, q, signupById]);
+  // Which shows have a sponsor, for the chip and the handoff note.
+  const { data: showSponsorRows = [] } = useQuery<{ signupId: number | null; sponsorName: string; readLine: string }[]>({
+    queryKey: ["/api/admin/show-sponsors", eventId],
+    queryFn: () => adminGet<{ signupId: number | null; sponsorName: string; readLine: string }[]>(`/api/admin/show-sponsors?eventId=${eventId}`),
+    staleTime: 60_000,
+  });
+  const sponsorBySignup = useMemo(() => new Map(showSponsorRows.filter((r) => r.signupId != null).map((r) => [r.signupId as number, r])), [showSponsorRows]);
   const bookedSegments = useMemo(() => (items ?? []).filter((it) => it.kind === "Segment" && it.signupId != null), [items]);
   const preRecorded = useMemo(
     () => bookedSegments.filter((it) => signupById.get(it.signupId!)?.showFormat === "prerecorded"),
@@ -531,6 +538,11 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
                     {s?.showFormat === "prerecorded" && (
                       <Badge className="gap-1 bg-[#F0A71F] text-[11px] font-semibold text-[#1a1200] hover:bg-[#F0A71F]" data-testid={`badge-prerecorded-${it.id}`}>
                         <PlayCircle className="h-2.5 w-2.5" /> Pre-recorded
+                      </Badge>
+                    )}
+                    {it.signupId != null && sponsorBySignup.get(it.signupId) && (
+                      <Badge variant="outline" className="gap-1 border-[#8a5a00]/40 text-[11px] font-normal text-[#8a5a00]" title={sponsorBySignup.get(it.signupId)!.readLine || "Sponsor of this show"} data-testid={`badge-sponsor-${it.id}`}>
+                        Presented by {sponsorBySignup.get(it.signupId)!.sponsorName}
                       </Badge>
                     )}
                     {it.edited && (
