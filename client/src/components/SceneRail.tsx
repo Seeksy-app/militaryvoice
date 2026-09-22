@@ -396,8 +396,19 @@ export function SceneRail({
                 <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
                   {sceneVideo ? (
                     <>
-                      <video src={`${sceneVideo}#t=1`} muted playsInline preload="metadata" className="absolute inset-0 h-full w-full object-cover" />
-                      <span className="absolute left-2 top-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Video</span>
+                      {/* On air, the card plays: what the producer sees on the
+                          monitor is what the rail shows, so a glance at the
+                          rail says the episode is rolling. Off air, a frame. */}
+                      <video
+                        key={on ? "playing" : "still"}
+                        src={on ? sceneVideo : `${sceneVideo}#t=1`}
+                        muted
+                        playsInline
+                        autoPlay={on}
+                        preload="metadata"
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                      <span className="absolute left-2 top-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">{on ? "▶ Video" : "Video"}</span>
                     </>
                   ) : thumb ? (
                     <>
@@ -412,6 +423,11 @@ export function SceneRail({
                       />
                       {isFace && (
                         <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/25" />
+                      )}
+                      {isFace && k === "camera" && (
+                        <span className={`absolute left-2 top-2 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${here ? "bg-emerald-500 text-white" : "bg-black/70 text-white"}`}>
+                          {here ? "Live · here" : "Live"}
+                        </span>
                       )}
                     </>
                   ) : (

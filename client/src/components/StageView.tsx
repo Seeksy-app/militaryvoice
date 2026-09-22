@@ -43,6 +43,10 @@ export interface RoomMeta {
   stageMediaUrl?: string;
   stageMediaKind?: string;
   stageMediaLabel?: string;
+  /** The show the taken scene belongs to, for the card an empty stage holds. */
+  stageCardName?: string;
+  stageCardShow?: string;
+  stageCardPhoto?: string;
 }
 
 /**
@@ -580,11 +584,31 @@ export function StageGrid({
             one up — sees no change at all. */}
         <BackgroundLayer url={meta.backgroundUrl ?? ""} />
         <div className="absolute inset-0 bg-[#04102b]/70" aria-hidden="true" />
-        <img src="/logo-wave.png?v=2" alt="" className="relative h-20 w-auto opacity-90" />
-        <p className="relative text-2xl font-semibold text-white/85 sm:text-3xl" style={HEADLINE_FONT}>
-          {idleTitle ?? meta.eventName ?? "Back shortly"}
-        </p>
-        <p className="relative text-base text-white/50">We'll be right back.</p>
+        {meta.stageCardName ? (
+          /* A scene for a show, with nobody on stage yet: the producer has
+             cut to them and they are on their way. Their face and the show,
+             so the room and the audience know who is next. */
+          <>
+            <p className="relative text-xs font-bold uppercase tracking-[0.3em] text-[#F0A71F]" data-testid="stage-coming-up">Coming up next</p>
+            {meta.stageCardPhoto ? (
+              <img src={meta.stageCardPhoto} alt="" className="relative h-36 w-36 rounded-full object-cover object-[50%_28%] ring-4 ring-[#F0A71F]/60 sm:h-44 sm:w-44" />
+            ) : (
+              <img src="/logo-wave.png?v=2" alt="" className="relative h-20 w-auto opacity-90" />
+            )}
+            <div className="relative">
+              <p className="text-2xl font-semibold text-white sm:text-4xl" style={HEADLINE_FONT}>{meta.stageCardName}</p>
+              {meta.stageCardShow && <p className="mt-1 text-base text-white/70 sm:text-lg">{meta.stageCardShow}</p>}
+            </div>
+          </>
+        ) : (
+          <>
+            <img src="/logo-wave.png?v=2" alt="" className="relative h-20 w-auto opacity-90" />
+            <p className="relative text-2xl font-semibold text-white/85 sm:text-3xl" style={HEADLINE_FONT}>
+              {idleTitle ?? meta.eventName ?? "Back shortly"}
+            </p>
+            <p className="relative text-base text-white/50">We'll be right back.</p>
+          </>
+        )}
       </div>
     ) : (
       <>

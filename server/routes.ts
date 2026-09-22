@@ -3750,8 +3750,12 @@ export function registerRoutes(app: Express): void {
       const row = await storage.getRunItem(scene.runItemId);
       if (row) {
         const taken = await takeRunRow(studio, row);
+        const who = row.signupId ? await storage.getSignupById(row.signupId) : undefined;
         const withScene = await storage.updateStudio(studio.id, {
           currentSceneId: scene.id,
+          stageCardName: who?.hostName ?? "",
+          stageCardShow: who?.podcastName?.trim() ?? "",
+          stageCardPhoto: who?.photoUrl ?? "",
             currentSceneTakenAtUtc: new Date().toISOString(),
           countdownEndsAtUtc: "",
           countdownLabel: "",
@@ -3779,6 +3783,9 @@ export function registerRoutes(app: Express): void {
         ? {
             ...bannerFor(scene),
             stageMediaPlaying: false,
+            stageCardName: "",
+            stageCardShow: "",
+            stageCardPhoto: "",
             currentSceneId: scene.id,
             currentSceneTakenAtUtc: new Date().toISOString(),
             // Stored as the moment it hits zero, so every viewer counts down
@@ -3793,6 +3800,9 @@ export function registerRoutes(app: Express): void {
             stageMediaLabel: scene.mediaLabel,
             // A scene with no media is "back to the cameras".
             stageMediaPlaying: Boolean(scene.mediaUrl),
+            stageCardName: "",
+            stageCardShow: "",
+            stageCardPhoto: "",
             currentSceneId: scene.id,
             currentSceneTakenAtUtc: new Date().toISOString(),
             countdownEndsAtUtc: "",

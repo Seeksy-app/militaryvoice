@@ -690,7 +690,7 @@ export default function Studio({ slug }: { slug?: string }) {
             chat needs a column, not the page — and Up next beside her rather
             than above the rail, so the top of the page answers "who is on,
             who is next, and who do I ask" without a scroll. */}
-        <div className="grid gap-5 xl:grid-cols-[minmax(200px,15rem)_minmax(0,1fr)_minmax(20rem,26rem)] xl:items-start">
+        <div className="grid gap-5 xl:grid-cols-[minmax(220px,18rem)_minmax(0,28rem)_minmax(24rem,1fr)] xl:items-start">
           <div>
             <Link
               href="/host/dashboard"
@@ -701,27 +701,16 @@ export default function Studio({ slug }: { slug?: string }) {
             </Link>
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
               Green Room
+              <span className="font-normal text-white/60"> · {state?.eventName?.trim() ?? "…"}{state?.studio.name ? ` · ${state.studio.name}` : ""}</span>
             </h1>
-            <p className="mt-1 text-sm text-white/60">
-              {state?.eventName?.trim() ?? "Loading…"}
-              {state?.studio.name ? ` · ${state.studio.name}` : ""}
-            </p>
-          </div>
-          {/* The co-host sits with the room's name, not in the queue of people
-              waiting to go on. She is staff. By text here: her rendered face
-              took seven seconds to answer, and the stage is where the face
-              matters. */}
-          {/* Only once they are in the room. On the "add your name" screen
-              she answered questions about a green room the person had not
-              entered yet. */}
-          {joined ? <AlexChat studioId={studioId} /> : <div />}
-          <div className="flex h-56 flex-col gap-2">
-            {/* Pills first, then what is coming fills the rest of the same
-                height as Alex's card, so the header reads as one row. */}
-            <div className="flex shrink-0 items-center justify-end gap-2">
-            {/* The connection reading, which lost its card. A strong one needs
-                no words; a struggling one is the single most useful thing on
-                this page, so it keeps its colour and gains an instruction. */}
+            {state?.meta?.eventStartAtUtc && (
+              <p className="mt-1 text-sm text-white/70" data-testid="text-start-time">
+                Start time: <span className="font-semibold text-white">{formatTimeInZone(new Date(state.meta.eventStartAtUtc), "America/New_York")} Eastern</span>
+              </p>
+            )}
+            {/* The pills live with the title, so the two cards on the right
+                can stand the full height of Alex's. */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
             {quality && (
               <span
                 className={`hidden items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold sm:inline-flex ${
@@ -738,10 +727,6 @@ export default function Studio({ slug }: { slug?: string }) {
                 {quality.tone === "poor" && <span className="font-normal opacity-80">· a cable beats wi-fi</span>}
               </span>
             )}
-            {/* What's true from where they're standing. The studio's own status
-                said "Live" while standby was rolling and nobody was on stage,
-                which reads as "you are being broadcast" — the one thing it must
-                never say wrongly. */}
             <Badge
               className={`gap-1.5 px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
                 onStage
@@ -759,11 +744,17 @@ export default function Studio({ slug }: { slug?: string }) {
               />
               {onStage ? "You're on air" : showIsLive ? "Show is live" : "Off air"}
             </Badge>
-            {/* No Leave button here. "Back to your dashboard" at the top left
-                is the way out, and two of them a few hundred pixels apart —
-                one of which silently drops your camera — is a way to leave by
-                accident in the minute before you are due on. */}
             </div>
+          </div>
+          {/* The co-host sits with the room's name, not in the queue of people
+              waiting to go on. She is staff. By text here: her rendered face
+              took seven seconds to answer, and the stage is where the face
+              matters. */}
+          {/* Only once they are in the room. On the "add your name" screen
+              she answered questions about a green room the person had not
+              entered yet. */}
+          {joined ? <AlexChat studioId={studioId} /> : <div />}
+          <div className="flex h-56 flex-col">
             <div className="min-h-0 flex-1">
               {joined && <UpNext slug={slug} studioId={studioId} compact fill />}
             </div>

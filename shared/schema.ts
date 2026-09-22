@@ -938,6 +938,12 @@ export const studios = pgTable("studios", {
   stageMediaKind: text("stage_media_kind").notNull().default("video"),
   stageMediaLabel: text("stage_media_label").notNull().default(""),
   stageMediaPlaying: boolean("stage_media_playing").notNull().default(false),
+  /** Who the taken scene is for, so an empty stage says "coming up next"
+   *  with their face rather than a generic card. Blank when the scene has
+   *  no show — the pre-show, a sponsor read, a clock. */
+  stageCardName: text("stage_card_name").notNull().default(""),
+  stageCardShow: text("stage_card_show").notNull().default(""),
+  stageCardPhoto: text("stage_card_photo").notNull().default(""),
   // Graphics: a logo burned into the corner of the stage for the whole show,
   // independent of whatever scene is up.
   logoUrl: text("logo_url").notNull().default(""),
