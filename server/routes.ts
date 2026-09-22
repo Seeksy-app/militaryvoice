@@ -4880,10 +4880,16 @@ export function registerRoutes(app: Express): void {
       // The automatic acknowledgement: every podcaster or sponsor who writes
       // in hears back at once — thanks, the answer when we have one, and a
       // person if that did not cover it. Never to a machine, never twice in a
-      // day to the same address, and never to a mail filed by hand.
+      // day to the same thread, and never to a mail filed by hand.
       try {
         if (looksAutomatic(row) || !(await isKnownSender(row.fromEmail))) return;
-        const recent = (await storage.listInboundByEmail(row.fromEmail)).some((r) => r.id !== row.id && r.ackAt && Date.now() - Date.parse(r.ackAt) < 24 * 3600_000);
+        // Once per conversation, not once per day: three questions in an
+        // afternoon are three answers, but a second mail in the same thread
+        // an hour later is someone adding a line, not asking again.
+        const thread = (v: string) => v.replace(/^\s*((re|fwd?|aw)\s*:\s*)+/i, "").trim().toLowerCase();
+        const recent = (await storage.listInboundByEmail(row.fromEmail)).some(
+          (r) => r.id !== row.id && r.ackAt && Date.now() - Date.parse(r.ackAt) < 24 * 3600_000 && thread(r.subject) === thread(row.subject),
+        );
         if (recent) return;
         const { subject, text, html: body } = composeAck(row, draft?.ack ?? "");
         const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: "We got your email", body });
