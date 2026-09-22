@@ -27,6 +27,15 @@ export default function HelpYoutube() {
           your audience, at the same time. No stream key to find. Five minutes, start to finish.
         </p>
 
+        {/* Thirty seconds of the real thing, before the words. Served through
+            the media door so the file lives with the rest of the library. */}
+        <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-black shadow-sm" data-testid="help-youtube-video">
+          <video controls playsInline preload="metadata" poster="/help-youtube-poster.jpg" src="/api/studio/media/17" className="aspect-video w-full">
+            Your browser can't play this video. The steps below cover the same ground.
+          </video>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">30 seconds: the whole connection, start to finish.</p>
+
         <Section n={1} title="Connect your channel">
           <p>
             Sign in to your dashboard, open <strong>Integrations</strong>, and press <strong>Connect YouTube</strong>. Use
