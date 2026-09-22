@@ -53,8 +53,8 @@ export function CrewDashboard({ crew, email }: { crew: CrewInfo; email: string }
 
   return (
     <div className="lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-8" data-testid="crew-dashboard">
-      <nav className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-3rem)]" aria-label="Crew sections">
-        <div className="flex min-h-[calc(100vh-3rem)] flex-col gap-5 rounded-2xl border border-border bg-card p-3 shadow-sm">
+      <nav className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-10rem)]" aria-label="Crew sections">
+        <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-5 rounded-2xl border border-border bg-card p-3 shadow-sm">
           <div>
             <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">You</p>
             <div className="flex flex-col gap-0.5">

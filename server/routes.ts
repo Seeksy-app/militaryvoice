@@ -2853,13 +2853,22 @@ export function registerRoutes(app: Express): void {
     // to fall back to — but they are usually on the event team, which does
     // carry a photo. Without this a producer's camera being off is a black
     // rectangle with no clue whose it is.
-    if (!myPhotoUrl && adminEmail) {
-      const team = await storage.listEventTeam(event.id);
-      myPhotoUrl =
-        team.find((m) => m.email.trim().toLowerCase() === adminEmail.trim().toLowerCase())?.photoUrl || "";
-    }
+    const team = await storage.listEventTeam(event.id);
+    const teamMe = team.find((m) => {
+      const e = m.email.trim().toLowerCase();
+      return e && (e === email || e === adminEmail.trim().toLowerCase());
+    });
+    if (!myPhotoUrl && teamMe) myPhotoUrl = teamMe.photoUrl || "";
+    // Who is producing the day, for the small card under the pills. The
+    // team carries hosts too; the card is for whoever is running it.
+    const producers = team
+      .filter((m) => /produc|director|crew|stage/i.test(m.title))
+      .map((m) => ({ name: m.name, title: m.title, photoUrl: m.photoUrl }));
 
     return {
+      /** The crew member's own name from the team card, so the green room does not ask a producer to type it. */
+      myName: teamMe?.name ?? "",
+      producers,
       eventName: event.name,
       studio: {
         name: studio.name,

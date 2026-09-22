@@ -143,6 +143,10 @@ const HEARTBEAT_MS = 6_000;
 
 interface StudioState {
   eventName: string;
+  /** A crew member's name from their team card. */
+  myName?: string;
+  /** Who is producing the day. */
+  producers?: { name: string; title: string; photoUrl: string }[];
   /** Whether this visitor is on the lineup, or crew. */
   mayJoin?: boolean;
   studio: { name: string; status: string; fallbackPlaying: boolean; maxOnStage: number };
@@ -424,6 +428,31 @@ export default function Studio({ slug }: { slug?: string }) {
     if (state?.me?.displayName && !name) setName(state.me.displayName);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state?.me?.id]);
+
+  // The browser's key belongs to whoever was signed in when it was made. A
+  // producer signing in on a laptop that a podcaster had used walked in
+  // wearing the podcaster's name; when the sign-in changes, the key does.
+  useEffect(() => {
+    const mine = (state?.myEmail ?? "").trim().toLowerCase();
+    if (!mine) return;
+    try {
+      const owner = localStorage.getItem(`${KEY_STORAGE}_owner`) ?? "";
+      if (owner === mine) return;
+      localStorage.setItem(`${KEY_STORAGE}_owner`, mine);
+      if (owner) {
+        localStorage.removeItem(KEY_STORAGE);
+        window.location.reload();
+      }
+    } catch {
+      /* private mode: nothing to reset */
+    }
+  }, [state?.myEmail]);
+
+  // Crew arrive with a name already: their team card's.
+  useEffect(() => {
+    if (state?.myName && !name && !state?.me) setName(state.myName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.myName]);
 
   /** Camera and mic run entirely in the browser — no server, no SDK. */
   const startMedia = useCallback(async () => {
@@ -761,6 +790,26 @@ export default function Studio({ slug }: { slug?: string }) {
               {onStage ? "You're on air" : showIsLive ? "Show is live" : "Off air"}
             </Badge>
             </div>
+            {(state?.producers?.length ?? 0) > 0 && (
+              <div className="mt-3 rounded-xl border border-white/15 bg-white/[0.05] px-3 py-2" data-testid="card-your-producer">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">Your producer{state!.producers!.length > 1 ? "s" : ""}</p>
+                <div className="mt-1.5 flex flex-col gap-1.5">
+                  {state!.producers!.map((p) => (
+                    <div key={`${p.name}-${p.title}`} className="flex items-center gap-2">
+                      {p.photoUrl ? (
+                        <img src={p.photoUrl} alt="" className="h-7 w-7 rounded-full object-cover ring-1 ring-white/20" />
+                      ) : (
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-xs font-bold">{p.name.slice(0, 1)}</span>
+                      )}
+                      <div className="min-w-0 leading-tight">
+                        <p className="truncate text-sm font-semibold">{p.name}</p>
+                        <p className="truncate text-[11px] text-white/60">{p.title}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           {/* The co-host sits with the room's name, not in the queue of people
               waiting to go on. She is staff. By text here: her rendered face

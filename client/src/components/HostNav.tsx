@@ -130,8 +130,8 @@ export function HostNav({
         {groups.flatMap((g) => g.items).map((it) => link(it, true))}
       </nav>
       {/* Desktop: the column. */}
-      <nav className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-3rem)]" aria-label="Dashboard sections">
-        <div className="flex min-h-[calc(100vh-3rem)] flex-col gap-5 rounded-2xl border border-border bg-card p-3 shadow-sm">
+      <nav className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-10rem)]" aria-label="Dashboard sections">
+        <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-5 rounded-2xl border border-border bg-card p-3 shadow-sm">
           {groups.map((g) => (
             <div key={g.title}>
               <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{g.title}</p>
