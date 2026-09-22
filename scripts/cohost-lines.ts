@@ -4,6 +4,7 @@
 //   npx tsx scripts/cohost-lines.ts --all           # every handover, nothing stored
 //   npx tsx scripts/cohost-lines.ts --all --apply   # write them to the database
 //   npx tsx scripts/cohost-lines.ts --solo 14,15    # those slots have no live host
+//   npx tsx scripts/cohost-lines.ts --only 499 --apply   # just that handover
 //
 // The show clock decides which length she reads at the moment she reads it:
 // twelve seconds when the last podcaster overran, seventy-five when they
@@ -169,9 +170,14 @@ async function main() {
     new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
       .format(new Date(x));
 
-  const pick = all
-    ? (rows as any[])
-    : [rows[0], rows[6], rows[13], rows[rows.length - 3], rows[rows.length - 1]].filter(Boolean);
+  // --only <run item id[,id]> rewrites just those handovers: a slot that changed hands.
+  const onlyArg = args[args.indexOf("--only") + 1];
+  const only = new Set(args.includes("--only") && onlyArg ? onlyArg.split(",").map((n) => Number(n.trim())) : []);
+  const pick = only.size
+    ? (rows as any[]).filter((r) => only.has(r.id))
+    : all
+      ? (rows as any[])
+      : [rows[0], rows[6], rows[13], rows[rows.length - 3], rows[rows.length - 1]].filter(Boolean);
 
   // Who is actually sold. Nothing here is guessed: an unsold slot produces a
   // handover with no sponsor line at all, rather than a gap somebody has to
