@@ -906,7 +906,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             pathFor={(sc) => hostScreenPath(sc)}
             onGo={(sc, feature) => { setProFeature(feature); goTo(sc); }}
             feature={proFeature}
-            proOpen={(data?.email ?? "").toLowerCase() === "andrew@smartloads.io"}
+            proOpen
           />
         )}
         <div className="min-w-0">

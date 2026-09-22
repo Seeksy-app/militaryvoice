@@ -3,6 +3,7 @@ import { Check, Mail, Contact, MonitorPlay, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { ProCrmDemo } from "@/components/ProCrmDemo";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -88,10 +89,18 @@ export function ProScreen({ feature }: { feature?: string }) {
         )}
       </div>
 
-      <div className="relative mt-6 overflow-hidden rounded-2xl border border-border bg-muted/40 shadow-sm">
-        <img src={f.image} alt={`${f.title} — the real thing`} className="block w-full" />
-        <span className="absolute left-3 top-3 rounded-full bg-[#04102b]/85 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">Preview</span>
-      </div>
+      {/* The CRM and campaigns are the real thing with sample data, tabbed
+          through like the admin's. The studio still shows a picture. */}
+      {f.key === "crm" || f.key === "campaigns" ? (
+        <div className="mt-6">
+          <ProCrmDemo initialTab={f.key === "campaigns" ? "campaigns" : "contacts"} />
+        </div>
+      ) : (
+        <div className="relative mt-6 overflow-hidden rounded-2xl border border-border bg-muted/40 shadow-sm">
+          <img src={f.image} alt={`${f.title} — the real thing`} className="block w-full" />
+          <span className="absolute left-3 top-3 rounded-full bg-[#04102b]/85 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">Preview</span>
+        </div>
+      )}
 
       <ul className="mt-6 grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
         {f.points.map((p) => (
