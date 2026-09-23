@@ -370,7 +370,7 @@ export default function Discover() {
                             key={b}
                             type="button"
                             aria-pressed={on}
-                            onClick={() => setBranch((on ? branchList.filter((x) => x !== b) : [...branchList, b]).join(","))}
+                            onClick={() => setBranch((prev) => { const cur = prev ? prev.split(",") : []; return (cur.includes(b) ? cur.filter((x) => x !== b) : [...cur, b]).join(","); })}
                             className={`rounded-full border px-3 py-1 text-sm transition-colors ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card text-foreground hover:border-[#053877]/40"}`}
                             data-testid={`branch-${b}`}
                           >
@@ -426,7 +426,7 @@ export default function Discover() {
           <Lists lists={lists.data ?? []} onOpen={(c) => openIn((lists.data ?? []).flatMap((l) => l.items.map((i) => i.snapshot)))(c)} />
           </>
         ) : !submitted || !isMember || submitted.mode === "username" ? (
-          <Welcome verified={verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} onJoin={() => setGate(true)} loading={meLoading} />
+          <Welcome verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} onJoin={() => setGate(true)} loading={meLoading} />
         ) : (
           <>
             {/* what ran */}
