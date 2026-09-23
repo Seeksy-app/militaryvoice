@@ -162,6 +162,8 @@ export default function Discover() {
   const [mode, setMode] = useState<Mode>("ai");
   const [filters, setFilters] = useState<Filters>({});
   const [showFilters, setShowFilters] = useState(false);
+  // While the search-mode menu is open the hero sits above the sticky filter bar, so the menu isn't painted over.
+  const [menuOpen, setMenuOpen] = useState(false);
   const [submitted, setSubmitted] = useState<null | { q: string; platform: string; branch: string; size: number; sort: string; mode: Mode; filters: Filters }>(null);
   const [heroVariant] = useState(() => {
     try {
@@ -296,6 +298,7 @@ export default function Discover() {
             onSubmit={() => run()}
             busy={userLoading}
             filterCount={activeFilters(filters).length}
+            onMenu={setMenuOpen}
             onFilters={() => { setShowFilters((v) => !v); setTimeout(() => document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }), 60); }}
           />
         );
@@ -311,9 +314,9 @@ export default function Discover() {
         );
         const toEnrich = () => { setTab("enrich"); setTimeout(() => document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }), 50); };
         return heroVariant === "a" ? (
-          <HeroA door={door} setDoor={setDoor} bar={bar} tries={tries} onEnrich={toEnrich} allowance={isMember ? me?.reveals ?? null : null} />
+          <HeroA raised={menuOpen} door={door} setDoor={setDoor} bar={bar} tries={tries} onEnrich={toEnrich} allowance={isMember ? me?.reveals ?? null : null} />
         ) : (
-          <HeroB door={door} setDoor={setDoor} bar={bar} tries={tries} onEnrich={toEnrich} verified={verified} onOpen={setOpen} />
+          <HeroB raised={menuOpen} door={door} setDoor={setDoor} bar={bar} tries={tries} onEnrich={toEnrich} verified={verified} onOpen={setOpen} />
         );
       })()}
 
@@ -471,8 +474,9 @@ export default function Discover() {
 // The search bar: platform, how to search, what, and the filters
 // ===========================================================================
 
-function ModeMenu({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
+function ModeMenu({ mode, setMode, onOpenChange }: { mode: Mode; setMode: (m: Mode) => void; onOpenChange?: (open: boolean) => void }) {
   const [open, setOpen] = useState(false);
+  useEffect(() => onOpenChange?.(open), [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -507,7 +511,8 @@ function ModeMenu({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void })
   );
 }
 
-function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder, onSubmit, busy, filterCount, onFilters }: {
+function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder, onSubmit, busy, filterCount, onFilters, onMenu }: {
+  onMenu?: (open: boolean) => void;
   platform: string; setPlatform: (p: string) => void; mode: Mode; setMode: (m: Mode) => void; q: string; setQ: (q: string) => void;
   placeholder: string; onSubmit: () => void; busy: boolean; filterCount: number; onFilters: () => void;
 }) {
@@ -519,7 +524,7 @@ function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder,
           <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="h-12 rounded-xl border-0 bg-muted/60 px-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#053877] sm:w-[8.5rem]" aria-label="Platform" data-testid="discover-platform">
             {PLATFORMS.map((p) => <option key={p.v} value={p.v}>{p.label}</option>)}
           </select>
-          <ModeMenu mode={mode} setMode={setMode} />
+          <ModeMenu mode={mode} setMode={setMode} onOpenChange={onMenu} />
         </div>
         <div className="relative flex-1">
           <Lead className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
@@ -545,11 +550,11 @@ function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder,
 // Two heroes: B is the default; A is the one before it, at ?hero=a
 // ===========================================================================
 
-type HeroProps = { door: (typeof DOORS)[number]["key"]; setDoor: (d: (typeof DOORS)[number]["key"]) => void; bar: React.ReactNode; tries: React.ReactNode; onEnrich: () => void };
+type HeroProps = { raised: boolean; door: (typeof DOORS)[number]["key"]; setDoor: (d: (typeof DOORS)[number]["key"]) => void; bar: React.ReactNode; tries: React.ReactNode; onEnrich: () => void };
 
-function HeroA({ door, setDoor, bar, tries, onEnrich, allowance }: HeroProps & { allowance: { used: number; allowance: number } | null }) {
+function HeroA({ raised, door, setDoor, bar, tries, onEnrich, allowance }: HeroProps & { allowance: { used: number; allowance: number } | null }) {
   return (
-    <section className="relative isolate" style={{ background: NAVY }}>
+    <section className={`relative isolate ${raised ? "z-30" : ""}`} style={{ background: NAVY }}>
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute -right-40 -top-40 h-[32rem] w-[32rem] rounded-full opacity-[0.16] blur-3xl" style={{ background: GOLD }} />
         <div className="absolute -bottom-48 -left-32 h-[28rem] w-[28rem] rounded-full bg-[#1d5cc4] opacity-20 blur-3xl" />
@@ -589,10 +594,10 @@ function HeroA({ door, setDoor, bar, tries, onEnrich, allowance }: HeroProps & {
  * the numbers a brand would see. No invented figures: every tile on the preview
  * is that creator's own.
  */
-function HeroB({ door, setDoor, bar, tries, onEnrich, verified, onOpen }: HeroProps & { verified: Card[]; onOpen: (c: Card) => void }) {
+function HeroB({ raised, door, setDoor, bar, tries, onEnrich, verified, onOpen }: HeroProps & { verified: Card[]; onOpen: (c: Card) => void }) {
   const d = DOORS.find((x) => x.key === door)!;
   return (
-    <section className="relative isolate" style={{ background: "#030b1f" }}>
+    <section className={`relative isolate ${raised ? "z-30" : ""}`} style={{ background: "#030b1f" }}>
       {/* depth: a fine grid that fades out, and two soft lights, clipped on their own layer so the section never scrolls or clips its menus */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
       
