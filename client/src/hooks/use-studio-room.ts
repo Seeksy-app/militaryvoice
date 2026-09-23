@@ -54,7 +54,11 @@ export function useStudioRoom({ enabled, clientKey, slug, studioId, stream }: Ar
   const reconnect = useCallback(() => setAttempt((a) => a + 1), []);
 
   useEffect(() => {
-    if (!enabled || !stream) return;
+    // Joined is enough to be in the room: a guest with the camera still off
+    // sees who's there (the studio host above all) and can hear them. The
+    // camera and mic go out once they're on — the stream changing reconnects
+    // with them published.
+    if (!enabled) return;
     let cancelled = false;
     let room: Room | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
@@ -144,7 +148,7 @@ export function useStudioRoom({ enabled, clientKey, slug, studioId, stream }: Ar
         await room.connect(cfg.url, cfg.token);
         // Publish the tracks the page already has, so the local preview and the
         // meter keep working off the same stream.
-        for (const track of stream.getTracks()) {
+        for (const track of stream?.getTracks() ?? []) {
           if (track.readyState === "ended") continue;
           await room.localParticipant.publishTrack(track);
         }
