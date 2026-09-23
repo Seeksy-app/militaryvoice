@@ -64,7 +64,10 @@ async function ic(path: string, body: unknown): Promise<any> {
     const msg = json?.detail || json?.message || json?.error || text.slice(0, 200);
     // Out of credits, or a brief it couldn't read: both are the user's to know.
     if (res.status === 402) throw new HttpError(402, "Discovery is out of search credits for the moment.");
-    if (res.status === 400) throw new HttpError(400, typeof msg === "string" ? msg : "That search couldn't be run. Try describing it differently.");
+    if (res.status === 400) {
+      console.warn("discovery 400:", path, text.slice(0, 500));
+      throw new HttpError(400, typeof msg === "string" ? msg : `That search couldn't be run. ${JSON.stringify(json).slice(0, 240)}`);
+    }
     throw new HttpError(502, `Couldn't reach the creator index (${res.status}).`);
   }
   return json;
