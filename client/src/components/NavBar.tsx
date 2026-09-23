@@ -69,7 +69,7 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
 
   return (
     <header className={bare ? "relative z-40 border-t border-white/10 text-white" : dark ? "sticky top-0 z-40 bg-[#030b1f]/95 text-white backdrop-blur" : "sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur"}>
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-2.5 sm:px-6">
+      <div className={`mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-2.5 sm:px-6 ${bare ? "lg:px-10" : ""}`}>
         {!bare && (
           <Link href="/" className="shrink-0" data-testid="link-home-logo">
             {dark ? <LogoLockupOnDark className="h-14 lg:h-[72px]" /> : <LogoLockup />}
