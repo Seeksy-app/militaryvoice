@@ -64,6 +64,7 @@ import { PromotionScreen } from "@/components/PromotionScreen";
 import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
+import { MyAnalytics } from "@/components/MyAnalytics";
 import { isPodcaster } from "@shared/schema";
 import { StudioIcon } from "@/components/GreenRoomButton";
 import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
@@ -493,12 +494,13 @@ function AnchoredHeading({ id, icon: Icon, label }: { id: string; icon: typeof R
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "contacts", "pro", "claim", "cohost"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
 const SCREEN_SLUG: Record<Screen, string> = {
   cohost: "cohost",
+  analytics: "analytics",
   dashboard: "",
   editProfile: "profile",
   events: "events",
@@ -1182,6 +1184,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     )}
 
           </section>
+        ) : screen === "analytics" ? (
+          <MyAnalytics onConnect={() => goTo("integrations")} />
         ) : screen === "pro" ? (
           <ProScreen feature={proFeature} />
         ) : screen === "contacts" ? (
@@ -1340,7 +1344,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                           event: the event lives in its own card below. */}
                       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="general-doors">
                         {[
-                          { key: "analytics", label: "Social analytics", icon: BarChart3, go: () => goTo("integrations") },
+                          { key: "analytics", label: "Your analytics", icon: BarChart3, go: () => goTo("analytics") },
                           { key: "discovery", label: "Discovery", icon: Compass, href: "/discover" },
                           { key: "recordings", label: "Recordings & clips", icon: Film, go: () => goTo("recordings") },
                           { key: "promotion", label: "Promote your show", icon: Megaphone, go: () => goTo("promotion") },
@@ -1399,7 +1403,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     <div className="h-full rounded-2xl border border-border bg-card p-5" data-testid="section-your-audience">
                       <div className="mb-3 flex items-center justify-between gap-2">
                         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your audience</p>
-                        <button type="button" onClick={() => goTo("integrations")} className="text-xs font-medium text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="link-analytics">Analytics</button>
+                        <button type="button" onClick={() => goTo("analytics")} className="text-xs font-medium text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="link-analytics">Your analytics</button>
                       </div>
                       {(() => {
                         const accts = social?.accounts ?? [];

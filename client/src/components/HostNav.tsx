@@ -1,8 +1,8 @@
 import type { ComponentType } from "react";
-import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass } from "lucide-react";
+import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3 } from "lucide-react";
 import { Link } from "wouter";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "recordings" | "contacts" | "pro" | "cohost";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "recordings" | "contacts" | "pro" | "cohost" | "analytics";
 
 interface Item {
   key: HostScreen;
@@ -62,6 +62,7 @@ export function HostNav({
     {
       title: "Getting an audience",
       items: [
+        { key: "analytics", label: "Your analytics", hint: "What a sponsor sees about you", icon: BarChart3 },
         { key: "integrations", label: "Integrations", hint: "Connected accounts", icon: Link2 },
         { key: "promotion", label: "Promotion", hint: "Get people watching", icon: Megaphone },
         ...(contactsCount > 0 ? [{ key: "contacts" as const, label: "Contacts", hint: `${contactsCount} asked for a reminder`, icon: Users }] : []),
