@@ -1931,7 +1931,7 @@ export function registerRoutes(app: Express): void {
     const t = team.find((m) => (m.email ?? "").toLowerCase().trim() === e);
     const admin = (await storage.listAdmins()).find((a) => a.email === e);
     const fallback = e.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    return { name: t?.name || admin?.name || fallback, title: t?.title || "Studio host", photoUrl: t?.photoUrl || "" };
+    return { name: t?.name || admin?.name || fallback, title: t?.title || "Studio host", photoUrl: t?.photoUrl || admin?.photoUrl || "" };
   }
 
   /**

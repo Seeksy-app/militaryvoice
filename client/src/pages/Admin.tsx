@@ -5159,9 +5159,13 @@ export default function Admin({ tab }: { tab?: string } = {}) {
               <LogoLockup className="h-8 w-auto" />
             </Link>
             <div className="flex min-w-0 items-center gap-2">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-xs font-bold text-[#053877] dark:bg-white/10 dark:text-white">
-                {(admin?.name || admin?.email || "?").trim().charAt(0).toUpperCase()}
-              </span>
+              {admin?.photoUrl ? (
+                <img src={admin.photoUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-border" />
+              ) : (
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-xs font-bold text-[#053877] dark:bg-white/10 dark:text-white">
+                  {(admin?.name || admin?.email || "?").trim().charAt(0).toUpperCase()}
+                </span>
+              )}
               <span className="hidden min-w-0 sm:block">
                 <span className="block truncate text-sm font-semibold">{admin?.name || admin?.email}</span>
                 <span className="block truncate text-xs text-muted-foreground">

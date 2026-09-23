@@ -8,6 +8,8 @@ export interface AdminIdentity {
   email: string;
   name: string;
   isOwner: boolean;
+  /** Their picture, from the event team or their own admin record. */
+  photoUrl?: string;
 }
 
 interface AdminAuthValue {
