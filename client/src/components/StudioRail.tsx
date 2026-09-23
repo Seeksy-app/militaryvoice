@@ -116,6 +116,25 @@ export function StudioRail({
     if (!v) setOpen(null);
     try { localStorage.setItem("mv-graphics-rail", v ? "1" : "0"); } catch { /* private window */ }
   };
+  // The open panel's width, dragged from its left edge and remembered.
+  const [panelW, setPanelW] = useState(() => {
+    try { return Math.min(720, Math.max(300, Number(localStorage.getItem("mv-rail-width")) || 330)); } catch { return 330; }
+  });
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const x0 = e.clientX, w0 = panelW;
+    let w = w0;
+    const move = (ev: PointerEvent) => { w = Math.min(720, Math.max(300, w0 + (x0 - ev.clientX))); setPanelW(w); };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.cursor = "";
+      try { localStorage.setItem("mv-rail-width", String(Math.round(w))); } catch { /* private window */ }
+    };
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
   const anyLive = Boolean(
     (studio?.bannerVisible && studio?.bannerTitle) || (studio?.tickerVisible && studio?.tickerText) ||
     (studio?.backgroundVisible && studio?.backgroundUrl) || (studio?.logoVisible && studio?.logoUrl) || studio?.stageMediaPlaying,
@@ -144,9 +163,24 @@ export function StudioRail({
     <>
       {open && (
         <aside
-          className="flex w-[330px] shrink-0 flex-col border-l border-white/20 bg-[#04102b]"
+          className="relative flex shrink-0 flex-col border-l border-white/20 bg-[#04102b]"
+          style={{ width: panelW }}
           data-testid={`rail-panel-${open}`}
         >
+          {/* The pull: drag the left edge to make the panel wider or narrower.
+              Double-click puts it back. */}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Drag to resize the panel"
+            title="Drag to resize"
+            onPointerDown={startResize}
+            onDoubleClick={() => { setPanelW(330); try { localStorage.setItem("mv-rail-width", "330"); } catch { /* private window */ } }}
+            className="group absolute inset-y-0 -left-1.5 z-10 flex w-3 cursor-col-resize items-center justify-center"
+            data-testid="rail-resize"
+          >
+            <span className="h-12 w-1 rounded-full bg-white/25 transition-colors group-hover:bg-[#F0A71F]" />
+          </div>
           <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/20 pl-3 pr-1.5">
             <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/60">
               {TABS.find((t) => t.key === open)?.label}
@@ -270,29 +304,58 @@ async function uploadToLibrary(
   onProgress: (pct: number) => void,
 ): Promise<string> {
   onProgress(1);
-  const signed = await (await adminSend("POST", "/api/admin/media/upload-url", { fileName: file.name })).json();
-  await new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", signed.uploadUrl);
-    xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
-    // fetch cannot report upload progress, which on a big file is the
-    // difference between a bar and a page that looks hung.
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.max(1, Math.round((e.loaded / e.total) * 100)));
-    };
-    xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status}).`));
-    xhr.onerror = () => reject(new Error("The upload was interrupted."));
-    xhr.send(file);
-  });
-  await adminSend("POST", "/api/admin/media", {
-    uploadedUrl: signed.publicUrl,
+  const signed = (await (await adminSend("POST", "/api/admin/media/upload-url", {
+    fileName: file.name,
+    contentType: file.type,
+    size: file.size,
+  })).json()) as { uploadUrl: string; publicUrl?: string; storageKey?: string };
+  const put = (url: string) =>
+    new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", url);
+      xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
+      // fetch cannot report upload progress, which on a big file is the
+      // difference between a bar and a page that looks hung.
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(Math.max(1, Math.round((e.loaded / e.total) * 100)));
+      };
+      xhr.onload = () =>
+        xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status}).`));
+      xhr.onerror = () => reject(new Error("The upload was interrupted."));
+      xhr.send(file);
+    });
+
+  // Video goes to R2 (Supabase stops at ~48MB). The bucket refuses a browser
+  // PUT until its CORS is opened, so on refusal the file comes through our
+  // own endpoint instead — fine up to ~95MB, which covers reels and slides.
+  let storageKey = signed.storageKey;
+  if (storageKey) {
+    try {
+      await put(signed.uploadUrl);
+    } catch (err) {
+      if (file.size > 95 * 1024 * 1024) throw new Error("That file is over 95MB. Trim it, or ask for the storage door to be opened for big files.");
+      onProgress(5);
+      const via = await fetch(`/api/admin/media/upload?fileName=${encodeURIComponent(file.name)}`, {
+        method: "POST",
+        headers: { "content-type": file.type || "application/octet-stream" },
+        credentials: "include",
+        body: file,
+      });
+      if (!via.ok) throw new Error("The upload didn't go through. Try again in a moment.");
+      storageKey = ((await via.json()) as { storageKey: string }).storageKey;
+      onProgress(100);
+    }
+  } else {
+    await put(signed.uploadUrl);
+  }
+  const created = (await (await adminSend("POST", "/api/admin/media", {
+    ...(storageKey ? { storageKey } : { uploadedUrl: signed.publicUrl }),
     fileName: file.name,
     label: file.name.replace(/\.[^.]+$/, ""),
     kind,
     sizeBytes: file.size,
-  });
-  return signed.publicUrl as string;
+  })).json()) as { id: number };
+  return storageKey ? `/api/studio/media/${created.id}` : (signed.publicUrl ?? "");
 }
 
 /** A file picker that looks like the rest of the rail. */

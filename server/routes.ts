@@ -3650,14 +3650,19 @@ export function registerRoutes(app: Express): void {
     const assets = await storage.listAllAssets();
     res.json(
       assets
-        .filter((a) => (a.fileUrl || a.linkUrl) && a.kind !== "Clip") // clips are posts on the podcaster's dashboard, not scene material
+        // Clips are posts on the podcaster's dashboard, not scene material —
+        // including the older ones filed as "Other" ("… - clip 2 - square.mp4").
+        .filter((a) => a.kind !== "Clip" && !/ - clip \d+ - (wide|square|vertical)\./i.test(a.fileName))
+        // Playable by everyone who needs to (the watch page, the recorder):
+        // a public file, a link, or house media in R2 behind /api/studio/media.
+        .filter((a) => a.fileUrl || a.linkUrl || (a.email === HOUSE_EMAIL && a.storageKey.startsWith("studio/")))
         .map((a) => {
-          const url = a.fileUrl || a.linkUrl;
+          const url = a.fileUrl || a.linkUrl || `/api/studio/media/${a.id}`;
           const sg = byEmail.get(a.email.toLowerCase().trim());
           return {
             id: a.id,
             label: a.label || a.fileName || a.kind,
-            kind: /\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(url) ? "image" : "video",
+            kind: /\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(a.fileName || url) ? "image" : "video",
             url,
             owner: sg?.podcastName ?? a.email,
             assetKind: a.kind,
@@ -3675,11 +3680,43 @@ export function registerRoutes(app: Express): void {
    * browser PUTs straight to storage and only tells us where it landed, so a
    * 400MB reel is not trying to squeeze through a request body.
    */
+  /**
+   * The studio's fallback door, same as the podcasters': the R2 bucket has no
+   * CORS policy, so a browser PUT to it is refused and the file comes through
+   * here instead. A function body carries up to ~100MB; past that the bucket
+   * needs its CORS opened.
+   */
+  app.post(
+    "/api/admin/media/upload",
+    requireAdmin,
+    express.raw({ type: "*/*", limit: "95mb" }),
+    async (req, res) => {
+      const name = String(req.query.fileName ?? "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+      const body = req.body as Buffer;
+      if (!Buffer.isBuffer(body) || body.length === 0) return res.status(400).json({ message: "No file arrived." });
+      const key = `studio/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${name}`;
+      try {
+        await putRecordingObject(key, body, String(req.get("content-type") || "application/octet-stream").split(";")[0]);
+        res.json({ storageKey: key, sizeBytes: body.length });
+      } catch (err) {
+        console.error("Proxied studio upload failed:", err);
+        res.status(502).json({ message: "Storage refused the file. Try again in a moment." });
+      }
+    },
+  );
+
   app.post("/api/admin/media/upload-url", requireAdmin, async (req, res) => {
     const name = String(req.body?.fileName ?? "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
     const key = `studio/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${name}`;
+    // Video, or anything big, goes to R2: Supabase caps a file at ~48MB and a
+    // sponsor reel or an episode is past that. Images stay on Supabase, whose
+    // public URLs every player can read without a signature.
+    const type = String(req.body?.contentType ?? "");
+    const size = Number(req.body?.size) || 0;
+    const big = type.startsWith("video/") || type.startsWith("audio/") || size > 40 * 1024 * 1024 || /\.(mp4|mov|m4v|webm|mp3|m4a|wav)$/i.test(name);
     try {
-      res.json(await signedAssetUpload(key));
+      if (big) res.json({ uploadUrl: signedRecordingUpload(key), storageKey: key });
+      else res.json(await signedAssetUpload(key));
     } catch (err) {
       console.error("Could not sign a studio upload:", err);
       res.status(502).json({ message: "Couldn't start the upload. Try again in a moment." });
