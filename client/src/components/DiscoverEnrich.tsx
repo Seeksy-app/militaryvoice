@@ -90,7 +90,7 @@ export function readLookups(text: string): string[] {
 function Face({ src, name }: { src: string; name: string }) {
   const [broken, setBroken] = useState(false);
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
-  if (!src || broken) return <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-xs font-bold text-[#053877]">{initials}</span>;
+  if (!src || broken) return <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-xs font-semibold text-[#053877]">{initials}</span>;
   return <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} className="h-9 w-9 shrink-0 rounded-full object-cover" />;
 }
 
@@ -203,7 +203,7 @@ export function DiscoverEnrich({ isMember, onJoin, onOpen, onSaveAll, lookups, o
         <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="p-5 sm:p-6">
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#b36b00]"><Sparkles className="h-3.5 w-3.5" /> Enrich</div>
-            <h2 className="mt-1 text-2xl font-bold tracking-tight">Bring your own list</h2>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight">Bring your own list</h2>
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
               Handles, profile links or emails, one per line, or a spreadsheet. Each comes back with followers, engagement and how recently they post, and anyone on our lineup is marked.
             </p>

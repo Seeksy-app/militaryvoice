@@ -41,7 +41,6 @@ export type Profile = {
 
 const NAVY = "#053877";
 const GOLD = "#F0A71F";
-const HEADLINE = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
 const compact = (n: number | null | undefined) =>
   n == null ? "–" : Math.abs(n) >= 1_000_000 ? `${(n / 1_000_000).toFixed(Math.abs(n) >= 10_000_000 ? 0 : 1)}M` : Math.abs(n) >= 1_000 ? `${(n / 1_000).toFixed(Math.abs(n) >= 10_000 ? 0 : 1)}K` : String(Math.round(n));

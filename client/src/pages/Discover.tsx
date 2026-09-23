@@ -20,7 +20,6 @@ import { CreatorProfileSections, type Profile, type ProfilePerson } from "@/comp
 import { DiscoverEnrich, type EnrichCard } from "@/components/DiscoverEnrich";
 import { FiltersPanel, FilterChips, activeFilters, filtersForServer, type Filters } from "@/components/DiscoverFilters";
 
-const HEADLINE = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const NAVY = "#04102b";
 const GOLD = "#F0A71F";
 
@@ -117,7 +116,7 @@ function Avatar({ src, name, size = 56, ring = false }: { src: string; name: str
   const cls = `shrink-0 rounded-full object-cover ${ring ? "ring-2 ring-[#F0A71F] ring-offset-2 ring-offset-background" : ""}`;
   if (!src || broken)
     return (
-      <span className={`${cls} flex items-center justify-center bg-[#053877]/10 font-bold text-[#053877]`} style={{ width: size, height: size, fontSize: size / 2.8 }}>
+      <span className={`${cls} flex items-center justify-center bg-[#053877]/10 font-semibold text-[#053877]`} style={{ width: size, height: size, fontSize: size / 2.8 }}>
         {initials}
       </span>
     );
@@ -394,7 +393,7 @@ export default function Discover() {
         )}
         {tab === "search" && userResult && (!submitted || submitted.mode === "username") && (
           <section className="mb-10">
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-[0.14em] text-muted-foreground">Account</h2>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">Account</h2>
             <div className="max-w-sm"><CreatorCard c={userResult} saved={saved.has(`${userResult.platform}:${userResult.handle.toLowerCase()}`)} onOpen={() => setOpen(userResult)} onSave={isMember ? () => saveTo.mutate({ card: userResult }) : undefined} /></div>
           </section>
         )}
@@ -452,7 +451,7 @@ export default function Discover() {
                 <ResultsSkeleton />
               ) : results.length === 0 && r ? (
                 <div className="rounded-2xl border border-dashed border-border p-10 text-center">
-                  <p className="text-lg font-semibold" style={HEADLINE}>Nobody matched that.</p>
+                  <p className="text-lg font-semibold">Nobody matched that.</p>
                   <p className="mt-1 text-sm text-muted-foreground">Try fewer words, another platform, or a wider audience size.</p>
                 </div>
               ) : (
@@ -506,7 +505,7 @@ function ModeMenu({ mode, setMode, onOpenChange }: { mode: Mode; setMode: (m: Mo
   const Icon = cur.icon;
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open} className="flex h-12 w-full items-center gap-2 whitespace-nowrap rounded-xl bg-[#053877]/[0.07] px-3 text-sm font-semibold text-[#053877] hover:bg-[#053877]/[0.11] sm:w-auto" data-testid="discover-mode">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open} className="flex h-12 w-full items-center gap-2 whitespace-nowrap rounded-xl bg-[#053877]/[0.07] px-3 text-sm font-medium text-[#053877] hover:bg-[#053877]/[0.11] sm:w-auto" data-testid="discover-mode">
         <Icon className="h-4 w-4" /> {cur.label}
         <ChevronRight className={`ml-auto h-3.5 w-3.5 transition-transform sm:ml-0 ${open ? "-rotate-90" : "rotate-90"}`} />
       </button>
@@ -552,10 +551,10 @@ function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder,
           {mode !== "username" && (
             <button type="button" onClick={onFilters} className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground hover:border-[#053877]/40 hover:text-[#053877]" aria-label="Filters" title="All filters" data-testid="discover-bar-filters">
               <SlidersHorizontal className="h-5 w-5" />
-              {filterCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#F0A71F] px-1 text-[11px] font-bold text-[#1a1200]">{filterCount}</span>}
+              {filterCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#F0A71F] px-1 text-[11px] font-semibold text-[#1a1200]">{filterCount}</span>}
             </button>
           )}
-          <Button type="submit" disabled={busy} className="h-12 flex-1 gap-2 rounded-xl bg-[#053877] px-6 text-base font-semibold text-white hover:bg-[#0a4a99] sm:flex-none" data-testid="discover-go">
+          <Button type="submit" disabled={busy} className="h-12 flex-1 gap-2 rounded-xl bg-[#053877] px-6 text-base font-medium text-white hover:bg-[#0a4a99] sm:flex-none" data-testid="discover-go">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} {mode === "username" ? "Look up" : "Search"}
           </Button>
         </div>
@@ -582,7 +581,7 @@ function HeroA({ raised, door, setDoor, bar, tries, onEnrich, allowance }: HeroP
           <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]"><Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery</p>
           {allowance && <p className="text-xs text-white/60" data-testid="discover-allowance">{Math.max(0, allowance.allowance - allowance.used)} of {allowance.allowance} free contacts left this month</p>}
         </div>
-        <h1 className="mt-5 max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-6xl" style={HEADLINE}>
+        <h1 className="mt-5 max-w-3xl text-4xl font-semibold leading-[1.05] tracking-tight text-white sm:text-6xl">
           Find the military and veteran voices <span style={{ color: GOLD }}>worth working with.</span>
         </h1>
         <p className="mt-4 max-w-2xl text-lg text-white/70">Creators to sponsor, guests to book, speakers for the stage. Search in plain English across Instagram, YouTube, TikTok, X and Twitch, with the audience data that tells you who's real.</p>
@@ -593,7 +592,7 @@ function HeroA({ raised, door, setDoor, bar, tries, onEnrich, allowance }: HeroP
             return (
               <button key={x.key} type="button" role="tab" aria-selected={on} onClick={() => setDoor(x.key)} className={`group flex items-start gap-3 rounded-2xl border p-4 text-left transition-all ${on ? "border-[#F0A71F] bg-white text-foreground shadow-lg" : "border-white/10 bg-white/[0.04] text-white hover:border-white/25 hover:bg-white/[0.08]"}`} data-testid={`door-${x.key}`}>
                 <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${on ? "bg-[#053877] text-white" : "bg-white/10 text-[#F0A71F]"}`}><Icon className="h-5 w-5" /></span>
-                <span className="min-w-0"><span className="block text-base font-bold" style={HEADLINE}>{x.title}</span><span className={`block text-sm ${on ? "text-muted-foreground" : "text-white/60"}`}>{x.blurb}</span></span>
+                <span className="min-w-0"><span className="block text-base font-semibold">{x.title}</span><span className={`block text-sm ${on ? "text-muted-foreground" : "text-white/60"}`}>{x.blurb}</span></span>
               </button>
             );
           })}
@@ -630,7 +629,7 @@ function HeroB({ raised, door, setDoor, bar, tries, onEnrich, verified, onOpen }
           <p className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/30 bg-[#F0A71F]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">
             <Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery
           </p>
-          <h1 className="mt-6 text-[2.75rem] font-bold leading-[0.98] tracking-[-0.03em] text-white sm:text-7xl" style={HEADLINE}>
+          <h1 className="mt-6 text-[2.5rem] font-semibold leading-[1.02] tracking-[-0.02em] text-white sm:text-6xl">
             Military creators,
             <br />
             <span className="bg-gradient-to-r from-[#F0A71F] via-[#ffd27a] to-[#F0A71F] bg-clip-text text-transparent">measured.</span>
@@ -645,7 +644,7 @@ function HeroB({ raised, door, setDoor, bar, tries, onEnrich, verified, onOpen }
               const Icon = x.icon;
               const on = door === x.key;
               return (
-                <button key={x.key} type="button" role="tab" aria-selected={on} onClick={() => setDoor(x.key)} className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition-all ${on ? "bg-white text-[#04102b] shadow" : "text-white/70 hover:bg-white/[0.07] hover:text-white"}`} data-testid={`door-${x.key}`}>
+                <button key={x.key} type="button" role="tab" aria-selected={on} onClick={() => setDoor(x.key)} className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all ${on ? "bg-white text-[#04102b] shadow" : "text-white/70 hover:bg-white/[0.07] hover:text-white"}`} data-testid={`door-${x.key}`}>
                   <Icon className={`h-4 w-4 ${on ? "text-[#053877]" : "text-[#F0A71F]"}`} /> {x.title}
                 </button>
               );
@@ -706,19 +705,19 @@ function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card
         <div className="relative aspect-[4/3] w-full overflow-hidden">
           <img src={c.picture.startsWith("/api/") ? c.picture : resolveUploadUrl(c.picture)} alt="" className="h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-[#0b1733] via-[#0b1733]/10 to-transparent" />
-          <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F] px-2.5 py-1 text-xs font-bold text-[#1a1200] shadow"><BadgeCheck className="h-3.5 w-3.5" /> Verified on MilitaryVoices</span>
+          <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F] px-2.5 py-1 text-xs font-semibold text-[#1a1200] shadow"><BadgeCheck className="h-3.5 w-3.5" /> Verified on MilitaryVoices</span>
           <span className="absolute right-4 top-4 rounded-full bg-black/45 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur">{platformLabel(c.platform)}</span>
         </div>
         <div className="-mt-12 px-5 pb-5">
           <div className="relative">
-            <div className="truncate text-2xl font-bold tracking-tight text-white" style={HEADLINE}>{c.name}</div>
+            <div className="truncate text-xl font-semibold tracking-tight text-white">{c.name}</div>
             <div className="truncate text-sm text-white/65">{c.verified?.show ?? `@${c.handle}`}{c.branch ? ` · ${c.branch}` : ""}</div>
           </div>
           <div className="mt-4 grid gap-px overflow-hidden rounded-2xl bg-white/10" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0,1fr))` }}>
             {tiles.map(([l, v]) => (
               <div key={l} className="bg-[#0e1d3f] px-3 py-3">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/50">{l}</div>
-                <div className="mt-1 text-xl font-bold tabular-nums text-white">{v}</div>
+                <div className="mt-1 text-xl font-medium tabular-nums text-white">{v}</div>
               </div>
             ))}
           </div>
@@ -839,7 +838,7 @@ function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified,
       {!isMember && !loading && (
         <section className="grid gap-6 rounded-3xl border border-border bg-card p-6 sm:p-8 lg:grid-cols-[1.2fr_1fr] lg:items-center">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE}>{signedIn ? "Add Discovery to your account" : "Free account. Real audience data."}</h2>
+            <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{signedIn ? "Add Discovery to your account" : "Free account. Real audience data."}</h2>
             <p className="mt-2 text-muted-foreground">
               {signedIn
                 ? "One click and Discovery sits beside your show on your dashboard. Same sign-in, nothing new to remember."
@@ -892,7 +891,7 @@ function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified,
 function CoverImage({ src, name }: { src: string; name: string }) {
   const [broken, setBroken] = useState(false);
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
-  if (!src || broken) return <span className="flex h-full w-full items-center justify-center text-5xl font-bold text-white/25" style={HEADLINE}>{initials}</span>;
+  if (!src || broken) return <span className="flex h-full w-full items-center justify-center text-5xl font-semibold text-white/25">{initials}</span>;
   return <img src={src.startsWith("/api/") ? src : resolveUploadUrl(src)} alt="" loading="lazy" onError={() => setBroken(true)} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />;
 }
 
@@ -915,14 +914,14 @@ function CreatorCard({ c, saved, onOpen, onSave }: { c: Card; saved: boolean; on
         <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
         <span className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {c.verified ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-bold text-[#1a1200] shadow"><BadgeCheck className="h-3 w-3" /> Verified</span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-semibold text-[#1a1200] shadow"><BadgeCheck className="h-3 w-3" /> Verified</span>
           ) : c.platform ? (
             <span className="rounded-full bg-black/45 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur">{platformLabel(c.platform)}</span>
           ) : null}
           {c.branch && c.quality != null && <span className="rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">{c.branch}</span>}
         </span>
         <span className="absolute inset-x-3 bottom-3">
-          <span className="block truncate text-lg font-bold leading-tight text-white drop-shadow" style={HEADLINE}>{c.name}</span>
+          <span className="block truncate text-lg font-semibold leading-tight text-white drop-shadow">{c.name}</span>
           <span className="block truncate text-xs text-white/75">{c.verified ? c.verified.show : c.handle ? `@${c.handle}` : ""}</span>
         </span>
       </button>
@@ -935,7 +934,7 @@ function CreatorCard({ c, saved, onOpen, onSave }: { c: Card; saved: boolean; on
         <button type="button" onClick={onOpen} className="grid divide-x divide-border text-left" style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0,1fr))` }} tabIndex={-1}>
           {stats.map(([l, v]) => (
             <span key={l} className="min-w-0 px-3 py-3">
-              <span className="block truncate text-base font-bold tabular-nums leading-none">{v}</span>
+              <span className="block truncate text-base font-medium tabular-nums leading-none">{v}</span>
               <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">{l}</span>
             </span>
           ))}
@@ -971,7 +970,7 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
   return (
     <div className="rounded-xl border border-border bg-card p-3">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`mt-1 text-xl font-bold tabular-nums ${color}`}>{value}</div>
+      <div className={`mt-1 text-xl font-semibold tabular-nums ${color}`}>{value}</div>
       {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
     </div>
   );
@@ -1306,13 +1305,13 @@ function Lists({ lists, onOpen }: { lists: List[]; onOpen: (c: Card) => void }) 
       <section>
         {!current ? (
           <div className="rounded-2xl border border-dashed border-border p-10 text-center">
-            <p className="text-lg font-semibold" style={HEADLINE}>No saved creators yet.</p>
+            <p className="text-lg font-semibold">No saved creators yet.</p>
             <p className="mt-1 text-sm text-muted-foreground">Press the bookmark on any creator and they land here.</p>
           </div>
         ) : (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-2xl font-bold tracking-tight" style={HEADLINE}>{current.name}</h2>
+              <h2 className="text-2xl font-semibold tracking-tight">{current.name}</h2>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={exportCsv} disabled={!current.items.length}><Download className="h-4 w-4" /> Export CSV</Button>
                 <Button variant="ghost" size="sm" className="gap-1.5 rounded-full text-muted-foreground" onClick={async () => { if (window.confirm(`Delete "${current.name}"?`)) { await apiRequest("DELETE", `/api/discover/lists/${current.id}`); setActive(null); refresh(); } }}><Trash2 className="h-4 w-4" /> Delete list</Button>
@@ -1391,7 +1390,7 @@ function JoinDialog({ open, me, onClose, onDone, defaultRole, source }: { open: 
       <DialogContent className="max-w-md overflow-hidden p-0">
         <div className="px-6 pb-2 pt-6" style={{ background: NAVY }}>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">MilitaryVoices Discovery</p>
-          <DialogTitle className="mt-2 text-2xl font-bold text-white" style={HEADLINE}>
+          <DialogTitle className="mt-2 text-2xl font-semibold text-white">
             {step === "about" ? (me?.isPodcaster ? "Add Discovery to your account" : "One last thing") : "Create your free account"}
           </DialogTitle>
           <DialogDescription className="pb-4 text-white/70">

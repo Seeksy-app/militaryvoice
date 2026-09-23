@@ -81,13 +81,13 @@ export function FiltersPanel({ value, onChange, onApply, onClose, platform }: { 
   return (
     <div className="rounded-3xl border border-border bg-card p-5 shadow-xl sm:p-6" data-testid="discover-filters-panel">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold tracking-tight">All filters{count ? <span className="ml-2 rounded-full bg-[#053877] px-2 py-0.5 text-xs text-white">{count}</span> : null}</h3>
+        <h3 className="text-lg font-semibold tracking-tight">All filters{count ? <span className="ml-2 rounded-full bg-[#053877] px-2 py-0.5 text-xs text-white">{count}</span> : null}</h3>
         <button type="button" onClick={onClose} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close filters"><X className="h-5 w-5" /></button>
       </div>
 
       <div className="mt-5 grid gap-8 lg:grid-cols-3">
         <section className="flex flex-col gap-4">
-          <h4 className="text-xs font-bold uppercase tracking-[0.16em] text-[#053877] dark:text-[#8fb5e8]">The creator</h4>
+          <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#053877] dark:text-[#8fb5e8]">The creator</h4>
           <Field label="Based in">
             <select className={control} value={value.location ?? ""} onChange={(e) => set({ location: e.target.value })}>
               <option value="">Anywhere</option>
@@ -111,7 +111,7 @@ export function FiltersPanel({ value, onChange, onApply, onClose, platform }: { 
         </section>
 
         <section className="flex flex-col gap-4">
-          <h4 className="text-xs font-bold uppercase tracking-[0.16em] text-[#053877] dark:text-[#8fb5e8]">Their content</h4>
+          <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#053877] dark:text-[#8fb5e8]">Their content</h4>
           <Field label="Engagement rate, at least">
             <select className={control} value={value.engagementMin ?? ""} onChange={(e) => set({ engagementMin: e.target.value })}>
               <option value="">Any</option>
@@ -134,7 +134,7 @@ export function FiltersPanel({ value, onChange, onApply, onClose, platform }: { 
         </section>
 
         <section className="flex flex-col gap-4">
-          <h4 className="text-xs font-bold uppercase tracking-[0.16em] text-[#053877] dark:text-[#8fb5e8]">Who follows them</h4>
+          <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#053877] dark:text-[#8fb5e8]">Who follows them</h4>
           <Field label="Audience in">
             <div className="grid grid-cols-[1fr_6rem] gap-2">
               <select className={control} value={value.audienceCountry ?? ""} onChange={(e) => set({ audienceCountry: e.target.value })}>
