@@ -13,7 +13,7 @@ const SITE = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").repl
 
 /** Header images live in /public/email; one per mood so emails can rotate. */
 export const EMAIL_BANNERS = {
-  welcome: `${SITE}/email/welcome.jpg`,
+  welcome: `${SITE}/email/creators.jpg`,
   podcasters: `${SITE}/email/podcasters.jpg`,
   studio: `${SITE}/email/studio.jpg`,
   conversation: `${SITE}/email/conversation.jpg`,
@@ -894,7 +894,7 @@ function textToHtml(text: string): string {
  * that key; renaming it would blank the header on every draft that has it.
  */
 const BROADCAST_BANNERS: Record<string, string> = {
-  welcome: `${SITE}/email/welcome.jpg`,
+  welcome: `${SITE}/email/creators.jpg`,
   podcasters: `${SITE}/email/podcasters.jpg`,
   marathon: `${SITE}/email/studio.jpg`,
   studio: `${SITE}/email/studio.jpg`,
