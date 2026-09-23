@@ -59,7 +59,10 @@ async function main() {
   const sponsorFor = new Map<number, string>();
   for (const r of showSponsorRows as any[]) sponsorFor.set(r.signup_id, r.read_line || `This show is sponsored by ${r.name}.`);
 
-  const pick = all ? (rows as any[]) : (rows as any[]).slice(1, 3);
+  // --only <run item id[,id]> rewrites just those handovers.
+  const onlyArg = args[args.indexOf("--only") + 1];
+  const only = new Set(args.includes("--only") && onlyArg ? onlyArg.split(",").map((n) => Number(n.trim())) : []);
+  const pick = only.size ? (rows as any[]).filter((r) => only.has(r.id)) : all ? (rows as any[]) : (rows as any[]).slice(1, 3);
   const anthropic = new Anthropic();
   let stored = 0;
   for (const r of pick) {
