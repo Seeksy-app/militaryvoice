@@ -59,7 +59,19 @@ async function main() {
   // published note remembers which cut, so later steps still find the slot.
   let cutId = 0;
   try { cutId = Number(JSON.parse(await fs.readFile(path.join(HOME, "published.json"), "utf8")).cutAssetId) || 0; } catch { /* not published yet */ }
-  const [item] = await sql`SELECT r.id, r.signup_id, r.title, r.notes, s.podcast_name, s.host_name, s.slot_index FROM run_of_show r JOIN signups s ON s.id = r.signup_id WHERE r.kind = 'Segment' AND (r.media_url = ${`${API}/api/studio/media/${EP}`} OR r.media_url = ${`${API}/api/studio/media/${cutId}`})`;
+  const [found] = await sql`SELECT r.id, r.signup_id, r.title, r.notes, s.podcast_name, s.host_name, s.slot_index FROM run_of_show r JOIN signups s ON s.id = r.signup_id WHERE r.kind = 'Segment' AND (r.media_url = ${`${API}/api/studio/media/${EP}`} OR r.media_url = ${`${API}/api/studio/media/${cutId}`})`;
+  // A show that has left the lineup still owns its clips: find it through them.
+  let item = found;
+  if (!item) {
+    try {
+      const pub = JSON.parse(await fs.readFile(path.join(HOME, "published.json"), "utf8")) as { clipIds?: Record<string, number> };
+      const anyClip = Object.values(pub.clipIds ?? {})[0];
+      if (anyClip) {
+        const [c] = await sql`SELECT signup_id FROM clips WHERE recording_id = 0 AND (vertical_url LIKE ${`%/media/${anyClip}`} OR url LIKE ${`%/media/${anyClip}`} OR square_url LIKE ${`%/media/${anyClip}`}) LIMIT 1`;
+        if (c) [item] = await sql`SELECT 0 AS id, s.id AS signup_id, '' AS title, '' AS notes, s.podcast_name, s.host_name, s.slot_index FROM signups s WHERE s.id = ${c.signup_id}`;
+      }
+    } catch { /* nothing published */ }
+  }
   if (!asset || !item) throw new Error("That file isn't on a segment.");
   const plan = PLANS[EP];
   const show = String(item.podcast_name).trim() || String(item.host_name);
