@@ -874,7 +874,7 @@ export function registerRoutes(app: Express): void {
     // Only our domain: Resend refuses anything else, and so should we.
     const fromRaw = String(req.body?.from ?? "").trim();
     const fromAddr = (fromRaw.match(/<([^>]+)>/)?.[1] ?? fromRaw).trim().toLowerCase();
-    if (fromRaw && !/@militaryvoice\.(ai|io)$/.test(fromAddr)) return res.status(400).json({ message: "The sender has to be on our domain." });
+    if (fromRaw && !/@militaryvoices?\.(ai|io)$/.test(fromAddr)) return res.status(400).json({ message: "The sender has to be on our domain." });
     const headers: Record<string, string> = {};
     if (req.body?.inReplyTo) { headers["In-Reply-To"] = String(req.body.inReplyTo); headers["References"] = String(req.body.inReplyTo); }
     const id = await sendOneOffEmail({ to, subject, html, text, replyTo: String(req.body?.replyTo ?? "") || undefined, from: fromRaw || undefined, headers });
@@ -4940,7 +4940,7 @@ export function registerRoutes(app: Express): void {
    * sender typed — several recipients, display names, capitals — and because
    * one Resend account serves more than one of these projects.
    */
-  const OUR_DOMAINS = (process.env.INBOUND_DOMAINS || "militaryvoice.ai,militaryvoice.io")
+  const OUR_DOMAINS = (process.env.INBOUND_DOMAINS || "militaryvoices.ai,militaryvoice.ai,militaryvoice.io")
     .split(",")
     .map((d) => d.trim().toLowerCase())
     .filter(Boolean);
