@@ -1998,6 +1998,13 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 muted={false}
                 idleTitle={currentStudio?.name}
                 onReorder={(ids) => patchStudio.mutate({ stageOrder: ids.join(",") })}
+                // A scene set to "Switch to next scene" moves on when its clip
+                // ends. The server checks the scene is still the one on air,
+                // so a second console hearing the same end changes nothing.
+                onMediaEnded={() => {
+                  const id = studio?.currentSceneId;
+                  if (id) void adminSend("POST", `/api/admin/scenes/${id}/ended`).then(() => refresh()).catch(() => {});
+                }}
               />
               {recording && (
                 <span className="pointer-events-none absolute right-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-[12px] font-semibold text-white">

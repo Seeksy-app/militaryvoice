@@ -3832,9 +3832,15 @@ export function registerRoutes(app: Express): void {
     // A scene made by hand goes to the top, where the producer is looking;
     // one made from the agenda keeps the agenda's order, at the end.
     const top = existing.length ? Math.min(...existing.map((sc) => sc.sortIndex)) - 1 : 0;
-    res.status(201).json(
-      await storage.createScene({ studioId: studio.id, sortIndex: v.runItemId ? existing.length : top, ...v }),
-    );
+    const created = await storage.createScene({ studioId: studio.id, sortIndex: v.runItemId ? existing.length : top, ...v });
+    // Duplicate and paste land right under the scene they came from.
+    const afterId = Number(req.body?.afterId);
+    if (afterId && existing.some((sc) => sc.id === afterId)) {
+      const ids = existing.map((sc) => sc.id);
+      ids.splice(ids.indexOf(afterId) + 1, 0, created.id);
+      await storage.reorderScenes(studio.id, ids);
+    }
+    res.status(201).json(created);
   });
 
   app.patch("/api/admin/scenes/:id", requireAdmin, async (req, res) => {
@@ -3992,7 +3998,7 @@ export function registerRoutes(app: Express): void {
     if (scene.runItemId) {
       const row = await storage.getRunItem(scene.runItemId);
       if (row) {
-        const taken = await takeRunRow(studio, row);
+        const taken = await takeRunRow(studio, row, { keepPeople: scene.withPeople });
         const who = row.signupId ? await storage.getSignupById(row.signupId) : undefined;
         const sponsor = row.signupId ? (await sponsorsBySignup(studio.eventId)).get(row.signupId) : undefined;
         // A podcaster's segment names them at the bottom of the frame without
@@ -4025,6 +4031,7 @@ export function registerRoutes(app: Express): void {
           stageMediaKind: mediaKind,
           stageMediaLabel: scene.mediaUrl ? scene.mediaLabel : "",
           stageMediaPlaying: Boolean(mediaUrl),
+          stageMediaPeople: Boolean(scene.withPeople && mediaUrl),
           ...banner,
           // The sponsor rides on the lower third too, when there is one.
           ...(sponsor && banner.bannerTitle ? { bannerSubtitle: [banner.bannerSubtitle, `Presented by ${sponsor.name}`].filter(Boolean).join(" · ") } : {}),
@@ -4063,6 +4070,7 @@ export function registerRoutes(app: Express): void {
             stageMediaLabel: scene.mediaUrl ? scene.mediaLabel : "",
             // A scene with no media and no picture is "back to the cameras".
             stageMediaPlaying: Boolean(mediaUrl),
+            stageMediaPeople: Boolean(scene.withPeople && mediaUrl),
             stageCardName: "",
             stageCardShow: "",
             stageCardPhoto: "",
@@ -4084,6 +4092,24 @@ export function registerRoutes(app: Express): void {
   app.post("/api/admin/scenes/:id/apply", requireAdmin, async (req, res) => {
     const r = await applyScene(Number(req.params.id));
     res.status(r.status).json(r.body);
+  });
+
+  /**
+   * A scene's clip finished on the producer's monitor. If the scene is set to
+   * switch on by itself, take the next one. Safe to hear more than once — two
+   * consoles open (Michael's and Andrew's) both report the end, and only the
+   * first finds the scene still on air.
+   */
+  app.post("/api/admin/scenes/:id/ended", requireAdmin, async (req, res) => {
+    const scene = await storage.getScene(Number(req.params.id));
+    const studio = scene ? await storage.getStudioById(scene.studioId) : null;
+    if (!scene || !studio) return res.status(404).json({ message: "Not found" });
+    if (!scene.autoNext || studio.currentSceneId !== scene.id) return res.json({ advanced: false });
+    const list = await storage.listScenes(studio.id);
+    const next = list[list.findIndex((s) => s.id === scene.id) + 1];
+    if (!next) return res.json({ advanced: false });
+    const r = await applyScene(next.id);
+    res.status(r.status).json({ advanced: true, sceneId: next.id });
   });
 
   /** Crew in the green room bring a guest on or take them off, same rules as the console. */
@@ -4137,7 +4163,7 @@ export function registerRoutes(app: Express): void {
    * steps off unless the podcaster asked for an interviewer. Every other kind
    * of row is the host's — intro, handoff, sponsor read.
    */
-  async function takeRunRow(studio: StudioRow, row: RunItemRow) {
+  async function takeRunRow(studio: StudioRow, row: RunItemRow, opts: { keepPeople?: boolean } = {}) {
     const signup = row.signupId ? await storage.getSignupById(row.signupId) : undefined;
     const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     const nameMatch = (a: string, b: string) => {
@@ -4151,7 +4177,8 @@ export function registerRoutes(app: Express): void {
     const guestScene = row.kind === "Segment" && Boolean(signup);
     // A sponsor video or any clip plays full frame: the hosts step off (still
     // in the room, mics off the programme) and come back on the next scene.
-    const mediaScene = Boolean(row.mediaUrl) && (row.mediaKind || "video") === "video";
+    // Unless the scene keeps the people beside the clip.
+    const mediaScene = !opts.keepPeople && Boolean(row.mediaUrl) && (row.mediaKind || "video") === "video";
 
     const moved: { id: number; to: string }[] = [];
     const present = (await storage.listStudioParticipants(studio.id)).filter(withPresence);

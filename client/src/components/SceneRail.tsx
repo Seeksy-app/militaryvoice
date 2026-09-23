@@ -34,7 +34,15 @@ import {
   Check,
   Captions,
   ArrowRight,
+  MoreVertical,
+  Copy,
+  ClipboardPaste,
+  CopyPlus,
+  Trash2,
+  PlayCircle,
+  Users,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 
 // The scene rail: the whole show, top to bottom, one press per cut.
 //
@@ -57,7 +65,36 @@ export interface SceneSpec {
   /** The lower third this scene puts on air when it is taken. */
   bannerTitle?: string;
   bannerSubtitle?: string;
+  thumbUrl?: string;
+  /** Take the next scene when this one's clip ends. */
+  autoNext?: boolean;
+  /** Keep the people on screen beside the clip. */
+  withPeople?: boolean;
+  /** Duplicate and paste: put the new scene right under this one. */
+  afterId?: number;
 }
+
+/** The scene clipboard, kept in the browser so a copy survives a reload or crosses tabs. */
+const CLIP_KEY = "mv-scene-clipboard";
+function specOf(sc: SceneRow): SceneSpec {
+  return {
+    name: sc.name,
+    kind: (sc.kind as SceneSpec["kind"]) || "camera",
+    mediaUrl: sc.mediaUrl,
+    mediaKind: (sc.mediaKind as "video" | "image") || "video",
+    mediaLabel: sc.mediaLabel,
+    countdownSeconds: sc.countdownSeconds,
+    bannerTitle: sc.bannerTitle,
+    bannerSubtitle: sc.bannerSubtitle,
+    thumbUrl: sc.thumbUrl || undefined,
+    autoNext: sc.autoNext,
+    withPeople: sc.withPeople,
+  };
+}
+function readClip(): SceneSpec | null {
+  try { const v = localStorage.getItem(CLIP_KEY); return v ? (JSON.parse(v) as SceneSpec) : null; } catch { return null; }
+}
+const MOD = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 
 export interface MediaChoice {
   id: number;
@@ -143,6 +180,23 @@ export function SceneRail({
   const [addKind, setAddKind] = useState<null | "media" | "countdown">(null);
   const [agendaOpen, setAgendaOpen] = useState(false);
   const [renaming, setRenaming] = useState<number | null>(null);
+  // The ⋮ menu that is open, the scene under the pointer (what ⌘C/⌘V/⌘D act
+  // on, as in Restream), and whatever was last copied.
+  const [menuFor, setMenuFor] = useState<number | null>(null);
+  const [hoverId, setHoverId] = useState<number | null>(null);
+  const [clip, setClip] = useState<SceneSpec | null>(() => readClip());
+  const copyScene = (sc: SceneRow) => {
+    const spec = specOf(sc);
+    setClip(spec);
+    try { localStorage.setItem(CLIP_KEY, JSON.stringify(spec)); } catch { /* private window */ }
+  };
+  const pasteAfter = (sc: SceneRow | null) => {
+    const spec = clip ?? readClip();
+    if (!spec) return;
+    onAdd({ ...spec, afterId: sc?.id });
+  };
+  const duplicateScene = (sc: SceneRow) => onAdd({ ...specOf(sc), name: `${sc.name} (copy)`.slice(0, 60), afterId: sc.id });
+  const deleteScene = (sc: SceneRow) => onDelete(sc.id);
   const [bannering, setBannering] = useState<number | null>(null);
   const [bannerDraft, setBannerDraft] = useState({ title: "", sub: "" });
   const [draft, setDraft] = useState("");
@@ -270,6 +324,29 @@ export function SceneRail({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [scenes, onApply, readOnly]);
+
+  // ⌘C / ⌘V / ⌘D / ⌫ on the scene under the pointer. Never while typing, and
+  // ⌘C leaves a real text selection alone so copying words still works.
+  useEffect(() => {
+    if (readOnly || takeOnly) return;
+    function onKey(e: KeyboardEvent) {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
+      const sc = scenes.find((x) => x.id === hoverId);
+      const mod = e.metaKey || e.ctrlKey;
+      const k = e.key.toLowerCase();
+      if (mod && k === "c" && sc && !String(window.getSelection() ?? "")) { e.preventDefault(); copyScene(sc); }
+      else if (mod && k === "v" && (clip ?? readClip())) { e.preventDefault(); pasteAfter(sc ?? null); }
+      else if (mod && k === "d" && sc) { e.preventDefault(); duplicateScene(sc); }
+      else if (!mod && (e.key === "Backspace" || e.key === "Delete") && sc) {
+        e.preventDefault();
+        if (window.confirm(`Delete the scene "${sc.name}"?`)) deleteScene(sc);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scenes, hoverId, clip, readOnly, takeOnly]);
 
 
   const nextScene = liveIndex >= 0 ? scenes[liveIndex + 1] : scenes[0];
@@ -435,6 +512,8 @@ export function SceneRail({
               onDragLeave={() => setOverId((o) => (o === sc.id ? null : o))}
               onDrop={(e) => { e.preventDefault(); dropOn(sc.id); setDragId(null); setOverId(null); }}
               onDragEnd={() => { setDragId(null); setOverId(null); }}
+              onMouseEnter={() => setHoverId(sc.id)}
+              onMouseLeave={() => setHoverId((h) => (h === sc.id ? null : h))}
               className={`group relative rounded-xl transition-all ${editable ? "cursor-grab active:cursor-grabbing" : ""} ${dragId === sc.id ? "opacity-40" : ""} ${overId === sc.id && dragId !== sc.id ? "ring-2 ring-[#F0A71F] ring-offset-2 ring-offset-[#000741]" : ""} ${justAdded === sc.id ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#000741]" : ""}`}
             >
               <button
@@ -581,33 +660,55 @@ export function SceneRail({
                 </div>
               </button>
 
-              {/* Editing controls stay out of the way until wanted — this is a
-                  surface you press during a show, not one you fiddle with. */}
-              <div className={`pointer-events-none absolute right-1.5 top-8 flex-col gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 ${editable ? "flex" : "hidden"}`}>
-                <span title="Drag to move" className="flex h-6 w-6 cursor-grab items-center justify-center rounded-md bg-black/70 text-white/80">
-                  <GripVertical className="h-3 w-3" />
-                </span>
-                <IconBtn
-                  label="Rename"
-                  onClick={() => {
-                    setRenaming(sc.id);
-                    setDraft(sc.name);
-                  }}
-                >
-                  <Pencil className="h-3 w-3" />
-                </IconBtn>
-                <IconBtn
-                  label={sc.bannerTitle ? "Edit the lower third" : "Add a lower third"}
-                  onClick={() => {
-                    setBannering(sc.id);
-                    setBannerDraft({ title: sc.bannerTitle ?? "", sub: sc.bannerSubtitle ?? "" });
-                  }}
-                >
-                  <Captions className="h-3 w-3" />
-                </IconBtn>
-                <IconBtn label="Remove scene" onClick={() => onDelete(sc.id)}>
-                  <X className="h-3 w-3" />
-                </IconBtn>
+              {/* One ⋮ menu per scene, as Restream has it: out of the way until
+                  wanted, because this is a surface you press during a show. */}
+              <div className={`absolute right-1.5 top-8 ${editable ? "" : "hidden"} ${menuFor === sc.id ? "" : "opacity-0 group-hover:opacity-100"} transition-opacity`}>
+                <DropdownMenu open={menuFor === sc.id} onOpenChange={(v) => setMenuFor(v ? sc.id : null)}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`Options for ${sc.name}`}
+                      className="flex h-7 w-7 items-center justify-center rounded-md bg-black/70 text-white/85 transition-colors hover:bg-black/90 hover:text-white"
+                      data-testid={`button-scene-menu-${sc.id}`}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" side="right" className="w-64">
+                    <MenuRow icon={Pencil} label="Rename" onSelect={() => { setRenaming(sc.id); setDraft(sc.name); }} />
+                    <MenuRow
+                      icon={Captions}
+                      label={sc.bannerTitle ? "Edit the lower third" : "Add a lower third"}
+                      onSelect={() => { setBannering(sc.id); setBannerDraft({ title: sc.bannerTitle ?? "", sub: sc.bannerSubtitle ?? "" }); }}
+                    />
+                    <DropdownMenuSeparator />
+                    <MenuRow icon={Copy} label="Copy" keys={[MOD, "C"]} onSelect={() => copyScene(sc)} />
+                    <MenuRow icon={ClipboardPaste} label="Paste" keys={[MOD, "V"]} disabled={!clip} onSelect={() => pasteAfter(sc)} />
+                    <MenuRow icon={CopyPlus} label="Duplicate" keys={[MOD, "D"]} onSelect={() => duplicateScene(sc)} />
+                    <MenuRow icon={Trash2} label="Delete" keys={["⌫"]} danger onSelect={() => deleteScene(sc)} />
+                    {kindOf(sc) === "media" && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <ToggleRow
+                          icon={PlayCircle}
+                          label="Switch to next scene"
+                          hint={isImage(sc) || youtubeId(sc.mediaUrl) ? "When a video file ends" : "When this clip ends"}
+                          checked={Boolean(sc.autoNext)}
+                          onChange={(v) => onPatch(sc.id, { autoNext: v })}
+                          testId={`switch-scene-autonext-${sc.id}`}
+                        />
+                        <ToggleRow
+                          icon={Users}
+                          label="Keep people on screen"
+                          hint="The clip on the left, everyone on stage beside it"
+                          checked={Boolean(sc.withPeople)}
+                          onChange={(v) => onPatch(sc.id, { withPeople: v })}
+                          testId={`switch-scene-people-${sc.id}`}
+                        />
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
 
               {editable && renaming === sc.id && (
@@ -772,6 +873,65 @@ export function SceneRail({
       runItemId: r.id,
     });
   }
+}
+
+/** One line of the scene menu: icon, words, and the shortcut on the right. */
+function MenuRow({
+  icon: Icon,
+  label,
+  keys,
+  onSelect,
+  disabled,
+  danger,
+}: {
+  icon: typeof Pencil;
+  label: string;
+  keys?: string[];
+  onSelect: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <DropdownMenuItem disabled={disabled} onSelect={onSelect} className={`gap-2.5 py-2 ${danger ? "text-red-600 focus:text-red-600" : ""}`}>
+      <Icon className="h-4 w-4" />
+      <span className="flex-1">{label}</span>
+      {keys && (
+        <span className="flex gap-1">
+          {keys.map((k) => (
+            <kbd key={k} className="min-w-[1.4rem] rounded bg-muted px-1.5 py-0.5 text-center text-[11px] font-medium text-muted-foreground">{k}</kbd>
+          ))}
+        </span>
+      )}
+    </DropdownMenuItem>
+  );
+}
+
+/** A switch in the scene menu that doesn't close the menu when flipped. */
+function ToggleRow({
+  icon: Icon,
+  label,
+  hint,
+  checked,
+  onChange,
+  testId,
+}: {
+  icon: typeof Pencil;
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  testId: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2.5 rounded-sm px-2 py-2 text-sm hover:bg-accent">
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className="min-w-0 flex-1 leading-tight">
+        {label}
+        {hint && <span className="block text-[11px] text-muted-foreground">{hint}</span>}
+      </span>
+      <Switch checked={checked} onCheckedChange={onChange} data-testid={testId} />
+    </label>
+  );
 }
 
 function IconBtn({

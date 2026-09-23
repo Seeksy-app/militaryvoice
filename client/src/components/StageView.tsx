@@ -40,6 +40,8 @@ export interface RoomMeta {
   stageLayout?: string;
   /** The producer's arrangement, identities comma-separated; first is the big picture. */
   stageOrder?: string;
+  /** The clip shares the frame with the people, who sit in a column beside it. */
+  stageMediaPeople?: boolean;
   /** The lower third that is on air. Blank when it's off. */
   bannerTitle?: string;
   bannerSubtitle?: string;
@@ -511,6 +513,27 @@ function StageLayout({
   );
 }
 
+/** Everyone on stage in a column down the right, beside a clip. */
+function PeopleColumn({ tiles: raw, muted, order }: { tiles: StageTile[]; muted: boolean; order?: string }) {
+  const pref = (order ?? "").split(",").filter(Boolean);
+  const rank = (t: StageTile) => { const i = pref.indexOf(t.identity); return i < 0 ? 1e6 : i; };
+  const tiles = [...raw].sort((a, b) => rank(a) - rank(b) || Number(!!a.host) - Number(!!b.host) || a.identity.localeCompare(b.identity));
+  const shown = tiles.slice(0, 4);
+  const gap = 1.8;
+  const h = Math.min(26, (79 - gap * (shown.length - 1)) / shown.length);
+  const top = 50 - (h * shown.length + gap * (shown.length - 1)) / 2;
+  return (
+    <>
+      {shown.map((t, i) => (
+        <div key={t.identity} className="absolute grid" style={{ left: "79%", width: "19.8%", top: `${top + i * (h + gap)}%`, height: `${h}%` }}>
+          <Tile tile={t} muted={muted} namePos="bottom" fit="full" />
+        </div>
+      ))}
+      {tiles.length > 4 && <div className="hidden">{tiles.slice(4).map((t) => <Tile key={t.identity} tile={t} muted={muted} namePos="none" />)}</div>}
+    </>
+  );
+}
+
 /** A clip, a slide or a sponsor card, filling the frame. */
 function FullFrameMedia({
   url,
@@ -518,6 +541,7 @@ function FullFrameMedia({
   label,
   muted,
   loop = false,
+  onEnded,
 }: {
   url: string;
   kind: string;
@@ -526,6 +550,8 @@ function FullFrameMedia({
   /** Standby holds the frame for hours, so its clip runs on repeat. A show's
       own episode does not — it ends when it ends. */
   loop?: boolean;
+  /** The clip reached its end (files only — a YouTube frame doesn't say). */
+  onEnded?: () => void;
 }) {
   const yt = youtubeId(url);
   return (
@@ -543,7 +569,7 @@ function FullFrameMedia({
           className="h-full w-full border-0"
         />
       ) : (
-        <video src={url} autoPlay playsInline loop={loop} muted={muted} className="h-full w-full object-contain" />
+        <video src={url} autoPlay playsInline loop={loop} muted={muted} onEnded={onEnded} className="h-full w-full object-contain" />
       )}
       {label && (
         <div
@@ -728,6 +754,7 @@ export function StageGrid({
   idleTitle,
   caption,
   onReorder,
+  onMediaEnded,
 }: {
   tiles: StageTile[];
   meta: RoomMeta;
@@ -736,6 +763,8 @@ export function StageGrid({
   caption?: { speaker: string; text: string } | null;
   /** Console only: drag people to swap places on stage. */
   onReorder?: (identities: string[]) => void;
+  /** Console only: the stage clip finished, for scenes that move on by themselves. */
+  onMediaEnded?: () => void;
 }) {
   // Standby is the emergency, so it outranks anything chosen deliberately.
   // Before the event opens it plays the pre-event card instead, decided here
@@ -756,12 +785,24 @@ export function StageGrid({
       <FullFrameMedia url={standby.url} kind="video" label={standby.label} muted={muted} loop />
     ) : Number.isFinite(countdownEnds) ? (
       <CountdownFrame endsAt={countdownEnds} label={meta.countdownLabel} />
+    ) : meta.stageMediaPlaying && meta.stageMediaUrl && meta.stageMediaPeople && tiles.length > 0 ? (
+      // The clip and the people together, as Restream does it: the clip in a
+      // big frame on the left, everyone on stage stacked down the right —
+      // a host talking over a sponsor reel, or a podcaster over their slides.
+      <>
+        <BackgroundLayer url={meta.backgroundUrl ?? ""} />
+        <div className="absolute overflow-hidden rounded-xl bg-black" style={{ left: "1.2%", top: "10.5%", width: "76%", height: "79%" }}>
+          <FullFrameMedia url={meta.stageMediaUrl} kind={meta.stageMediaKind ?? "video"} muted={muted} onEnded={onMediaEnded} />
+        </div>
+        <PeopleColumn tiles={tiles} muted={muted} order={meta.stageOrder} />
+      </>
     ) : meta.stageMediaPlaying && meta.stageMediaUrl ? (
       <FullFrameMedia
         url={meta.stageMediaUrl}
         kind={meta.stageMediaKind ?? "video"}
         label={meta.stageMediaLabel}
         muted={muted}
+        onEnded={onMediaEnded}
       />
     ) : tiles.length === 0 ? (
       <div className="relative flex h-full w-full flex-col items-center justify-center gap-5 px-6 text-center">

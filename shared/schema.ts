@@ -978,6 +978,8 @@ export const studios = pgTable("studios", {
   stageLayout: text("stage_layout").notNull().default("contain"),
   /** The producer's arrangement: participant identities, first is the big picture. Empty = guests first. */
   stageOrder: text("stage_order").notNull().default(""),
+  /** The clip on stage shares the frame with the people (set by the scene). */
+  stageMediaPeople: boolean("stage_media_people").notNull().default(false),
   // The lower third that is on air *right now*. Usually put there by taking a
   // scene, which carries its own; the ad-lib box in the rail writes here too,
   // for the thing nobody planned for.
@@ -1045,6 +1047,10 @@ export const scenes = pgTable("scenes", {
    *  the sponsor reel. Empty means the rail decides (a still, a headshot, or
    *  the camera glyph). */
   thumbUrl: text("thumb_url").notNull().default(""),
+  /** When this scene's clip ends, take the next scene on its own. */
+  autoNext: boolean("auto_next").notNull().default(false),
+  /** A media scene that keeps the people on screen, in a column beside the clip. */
+  withPeople: boolean("with_people").notNull().default(false),
   createdAt: text("created_at").notNull(),
 });
 export type SceneRow = typeof scenes.$inferSelect;
@@ -1557,6 +1563,8 @@ export const sceneInputSchema = z.object({
   bannerSubtitle: z.string().trim().max(120).default(""),
   /** A picture for the rail when the scene's own file doesn't give a good one. */
   thumbUrl: z.string().trim().max(600).optional(),
+  autoNext: z.boolean().optional(),
+  withPeople: z.boolean().optional(),
 });
 export const scenePatchSchema = sceneInputSchema.partial();
 
