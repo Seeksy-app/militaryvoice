@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,9 +20,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, slotEnd, onAirWindow, totalSlots } from "@/lib/schedule";
 import { isLiveOnlyBlock } from "@shared/slots";
 import type { PublicEvent } from "@shared/schema";
-import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2, Megaphone, Rocket } from "lucide-react";
+import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2, Megaphone, Rocket, Mic2 } from "lucide-react";
 import { GreenRoomButton } from "@/components/GreenRoomButton";
 import { CohostSlots } from "@/components/CohostSlots";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { StudioIcon } from "@/components/GreenRoomButton";
 
 // Choose an event, then set up the show you're bringing to it. Everything
 // about one event lives behind its own card, so a podcaster in two events
@@ -85,14 +87,7 @@ export function EventSettings({
     enabled: openId != null,
   });
 
-  if (isLoading) {
-    return (
-      <div className="mt-6 space-y-3">
-        <Skeleton className="h-24 w-full rounded-2xl" />
-        <Skeleton className="h-24 w-full rounded-2xl" />
-      </div>
-    );
-  }
+
 
   const open = entries?.find((e) => e.event.id === openId) ?? null;
   const eventFull =
@@ -126,6 +121,42 @@ export function EventSettings({
       slotEnd(open.event.startAtUtc, open.event.slotMinutes, open.slotIndex),
     );
 
+  // The show is the thing to do on this page. The green room and co-hosting
+  // come once it exists: before that they were the first two things anybody
+  // saw, asking them to test a camera and take an extra hour for a show they
+  // hadn't set up yet.
+  const showReady = !!open?.show?.showName;
+  const [cohostOpen, setCohostOpen] = useState(false);
+  const { data: cohostBoard } = useQuery<{ blocks: { mine: boolean; takenBy: unknown; yourShow: boolean }[] }>({
+    queryKey: ["/api/host/cohost-slots", open?.event.id],
+    queryFn: async () => (await apiRequest("GET", `/api/host/cohost-slots/${open!.event.id}`)).json(),
+    enabled: !!open && open.slotIndex != null && showReady,
+  });
+  const cohostOpenCount = (cohostBoard?.blocks ?? []).filter((b) => !b.takenBy && !b.mine && !b.yourShow).length;
+  const cohostMine = (cohostBoard?.blocks ?? []).filter((b) => b.mine).length;
+  // Once, the moment the show is first saved: offer the desk as a pop-up
+  // rather than a section, because it is an extra and not the job.
+  const hadShow = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    if (hadShow.current === null) { hadShow.current = showReady; return; }
+    if (!hadShow.current && showReady && open.slotIndex != null) {
+      const key = `mv_cohost_offer_${open.event.id}`;
+      try {
+        if (!localStorage.getItem(key)) { localStorage.setItem(key, "1"); setCohostOpen(true); }
+      } catch { /* private window */ }
+    }
+    hadShow.current = showReady;
+  }, [showReady, open]);
+
+  if (isLoading) {
+    return (
+      <div className="mt-6 space-y-3">
+        <Skeleton className="h-24 w-full rounded-2xl" />
+        <Skeleton className="h-24 w-full rounded-2xl" />
+      </div>
+    );
+  }
   // ------------------------------------------------------------ chooser
   if (!open) {
     const all = entries ?? [];
@@ -272,61 +303,68 @@ export function EventSettings({
           a screen before anybody reached the thing they came to do. The slot
           is a clock and a time; the green room is the button beside it. */}
       {open.slotIndex != null ? (
-        <div
-          className="mt-4 flex scroll-mt-24 flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border border-border bg-card px-5 py-4"
-          id="your-time-slot"
-        >
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877]">
-              <Clock className="h-5 w-5" />
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate text-base font-bold leading-tight text-[#053877] dark:text-[#8ab4f8]">
-                {onAirLabel}
+        showReady ? (
+          /* Three narrow cards: your time, the green room, and the desk. */
+          <div className="mt-4 grid scroll-mt-24 gap-3 sm:grid-cols-3" id="your-time-slot" data-testid="event-strip">
+            <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877]">
+                <Clock className="h-4.5 w-4.5" />
               </span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {zoneLabel(zone)} · you're on the schedule
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold text-[#053877] dark:text-[#8ab4f8]">{onAirLabel}</span>
+                <span className="block truncate text-xs text-muted-foreground">{zoneLabel(zone)} · your time</span>
               </span>
-            </span>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="shrink-0 gap-1.5 text-muted-foreground hover:text-destructive">
+                  <Trash2 className="h-3.5 w-3.5" /> Remove
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Give up this time?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {onAirLabel} goes back on the open schedule for anyone to claim, and you can pick a different
+                    time straight after. Anyone who set a reminder for this slot won't be notified.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep it</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={() => open.signupId != null && removeSlot.mutate(open.signupId)}
+                    disabled={removeSlot.isPending}
+                    data-testid="button-remove-slot"
+                  >
+                    {removeSlot.isPending ? "Removing…" : "Remove it"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            </div>
+            <a href={greenRoomHref} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 transition-colors hover:border-emerald-600/60" data-testid="link-green-room">
+              <StudioIcon className="h-9 w-9 shrink-0 rounded-xl" tone="green" />
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-foreground">Green room</span>
+                <span className="block truncate text-xs text-muted-foreground">Check your camera and mic, any time</span>
+              </span>
+            </a>
+            <button type="button" onClick={() => setCohostOpen(true)} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-left transition-colors hover:border-[#F0A71F]/70" data-testid="button-cohost-card">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F0A71F]/15 text-[#b77a00]">
+                <Mic2 className="h-4.5 w-4.5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-foreground">{cohostMine > 0 ? `Co-hosting ${cohostMine} hour${cohostMine === 1 ? "" : "s"}` : "Co-host an hour"}</span>
+                <span className="block truncate text-xs text-muted-foreground">{cohostBoard ? `${cohostOpenCount} open at the desk` : "Sit in with Alex or Riccoh"}</span>
+              </span>
+            </button>
           </div>
-
-          <span className="hidden h-8 w-px bg-border sm:block" aria-hidden="true" />
-
-          <GreenRoomButton href={greenRoomHref} testId="link-green-room" />
-          <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-            Check your camera, mic and lighting. Open any time — nothing in there goes on air.
-          </span>
-
-          {/* Giving up a slot is rare and permanent, so it sits at the far end
-              looking like what it is rather than beside the primary action. */}
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="sm" className="shrink-0 gap-1.5 text-muted-foreground hover:text-destructive">
-                <Trash2 className="h-3.5 w-3.5" /> Remove
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Give up this time?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {onAirLabel} goes back on the open schedule for anyone to claim, and you can pick a different
-                  time straight after. Anyone who set a reminder for this slot won't be notified.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Keep it</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  onClick={() => open.signupId != null && removeSlot.mutate(open.signupId)}
-                  disabled={removeSlot.isPending}
-                  data-testid="button-remove-slot"
-                >
-                  {removeSlot.isPending ? "Removing…" : "Remove it"}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
+        ) : (
+          /* No show yet: the time, quietly, and straight into the form below. */
+          <p className="mt-2 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground" id="your-time-slot" data-testid="event-time-line">
+            <Clock className="h-3.5 w-3.5" /> Your time: <span className="font-semibold text-foreground">{onAirLabel}</span> · {zoneLabel(zone)}
+          </p>
+        )
       ) : (
         <div className="mt-4 scroll-mt-24 rounded-2xl border border-border bg-card p-5" id="your-time-slot">
           <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">Choose a time</h3>
@@ -343,13 +381,17 @@ export function EventSettings({
         </div>
       )}
 
-      {/* Co-host hours belong to the event, so they sit on its page: only for
-          somebody on its lineup, because an hour at the desk is between shows. */}
-      {open.slotIndex != null && (
-        <div className="mt-4 rounded-2xl border border-border bg-card p-5" data-testid="section-cohost">
-          <CohostSlots eventId={open.event.id} zone={zone} />
-        </div>
-      )}
+      {/* The desk, as a pop-up: offered once when the show is first saved,
+          and from the co-host card any time after. */}
+      <Dialog open={cohostOpen} onOpenChange={setCohostOpen}>
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto" data-testid="dialog-cohost">
+          <DialogHeader>
+            <DialogTitle>Your show's set up. Want to co-host an hour too?</DialogTitle>
+            <DialogDescription>Optional. Sit in at the desk between shows with Alex or Riccoh — take one hour or several.</DialogDescription>
+          </DialogHeader>
+          {open.slotIndex != null && <CohostSlots eventId={open.event.id} zone={zone} />}
+        </DialogContent>
+      </Dialog>
 
       {/* Nothing to set up for an event you cannot get on to. Leaving the form
           live invites somebody to fill in a show, artwork and a format for a

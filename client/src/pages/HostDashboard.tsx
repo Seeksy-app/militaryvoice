@@ -1374,13 +1374,15 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                               : "On the team for the day"}
                           </p>
                           <div className="mt-3 flex flex-wrap gap-2">
-                            {greenRoomHref && (
+                            {/* The green room comes once the show is set up —
+                                until then, setting it up is the one thing to do. */}
+                            {greenRoomHref && (onTeamForGreenRoom || !!hostEvents?.find((e) => e.slotIndex != null)?.show?.showName) ? (
                               <a href={greenRoomHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-white px-3 py-1.5 text-sm font-medium text-foreground hover:bg-emerald-50 dark:bg-card" data-testid="link-on-the-day-green-room">
                                 <StudioIcon className="h-5 w-5 rounded-md" tone="green" /> Green room
                               </a>
-                            )}
+                            ) : null}
                             <button type="button" onClick={() => goTo("events")} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:border-[#053877]/40" data-testid="button-event-details">
-                              Event details <ArrowRight className="h-3.5 w-3.5" />
+                              {hostEvents?.find((e) => e.slotIndex != null)?.show?.showName || onTeamForGreenRoom ? "Event details" : "Set up your show"} <ArrowRight className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         </div>
