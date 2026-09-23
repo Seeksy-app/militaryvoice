@@ -51,7 +51,7 @@ for (const s of signups) {
     headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
     body: JSON.stringify({ fileName: `analytics-${s.id}-${stamp}.jpg`, contentType: "image/jpeg", size: buf.length }),
   })).json()) as { uploadUrl: string; publicUrl: string };
-  execFileSync("curl", ["-s", "-f", "-X", "PUT", signed.uploadUrl, "-H", "content-type: image/jpeg", "--data-binary", `@${file}`]);
+  execFileSync("curl", ["-s", "-f", "--retry", "5", "--retry-all-errors", "--retry-delay", "2", "-X", "PUT", signed.uploadUrl, "-H", "content-type: image/jpeg", "--data-binary", `@${file}`]);
   const image = signed.publicUrl;
   rows.push({ signupId: s.id, email: s.email.trim(), first: s.host_name.trim().split(/\s+/)[0] || "there", show: s.podcast_name.trim(), image });
 }
