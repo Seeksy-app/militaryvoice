@@ -25,6 +25,10 @@ export interface RoomPeer {
   audioTrack: RemoteTrack | null;
   /** You. Your picture goes on the stage with the others; your sound never plays back to you. */
   self?: boolean;
+  /** Whoever is running the room from the console. */
+  isHost?: boolean;
+  title?: string;
+  photoUrl?: string;
 }
 
 interface Args {
@@ -83,6 +87,9 @@ export function useStudioRoom({ enabled, clientKey, slug, studioId, stream }: Ar
           state: p.attributes?.state ?? "Green room",
           videoTrack: video,
           audioTrack: audio,
+          isHost: p.attributes?.role === "studio-host" || p.identity.startsWith("producer-"),
+          title: p.attributes?.displayTitle || "",
+          photoUrl: p.attributes?.photoUrl || "",
         });
       });
       // You are a participant too. The stage in the middle is what the

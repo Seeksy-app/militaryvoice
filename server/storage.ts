@@ -751,6 +751,7 @@ export interface IStorage {
   setParticipantState(id: number, state: string): Promise<StudioParticipantRow | undefined>;
   setParticipantTitle(id: number, displayTitle: string): Promise<StudioParticipantRow | undefined>;
   removeStudioParticipant(id: number): Promise<void>;
+  getStudioParticipantById(id: number): Promise<StudioParticipantRow | undefined>;
   createRecording(v: {
     eventId: number;
     studioId: number;
@@ -1731,6 +1732,12 @@ class DatabaseStorage implements IStorage {
   async removeStudioParticipant(id: number): Promise<void> {
     await ready();
     await db.delete(studioParticipants).where(eq(studioParticipants.id, id));
+  }
+
+  async getStudioParticipantById(id: number): Promise<StudioParticipantRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(studioParticipants).where(eq(studioParticipants.id, id));
+    return row;
   }
 
   // ---- Recordings ------------------------------------------------------------

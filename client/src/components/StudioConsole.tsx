@@ -808,6 +808,12 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   // can see where the name bar came from before they overwrite it.
   // Time left before the next scene is due, on the same clock the green
   // room and Alex read, so everybody at the desk sees one number.
+  // The signed-in studio manager, for the avatar at the right of the bar.
+  const { data: me0 } = useQuery<{ displayName: string; title: string; photoUrl: string }>({
+    queryKey: ["/api/admin/me"],
+    queryFn: () => adminGet("/api/admin/me"),
+    staleTime: 10 * 60_000,
+  });
   const [tick, setTick] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setTick(Date.now()), 1000); return () => clearInterval(id); }, []);
   const timeLeft = useMemo(() => {
@@ -1080,8 +1086,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-muted-foreground hover:text-destructive"
-            onClick={() => drop.mutate(p.id)}
+            onClick={() => { if (window.confirm(`Remove ${p.displayName || "this person"} from the studio? They'll be disconnected; they can rejoin from their link.`)) drop.mutate(p.id); }}
             aria-label="Remove from studio"
+            title="Remove from the studio"
           >
             <X className="h-3.5 w-3.5" />
           </Button>
@@ -1659,6 +1666,21 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               </>
             )}
 
+            {/* Who is at this desk: with Michael watching from a second
+                machine, the bar says which seat this one is. */}
+            {me0 && (
+              <span className="ml-1 flex items-center gap-2 border-l border-white/15 pl-3" title={`${me0.displayName}${me0.title ? ` · ${me0.title}` : ""}`} data-testid="studio-manager">
+                {me0.photoUrl ? (
+                  <img src={me0.photoUrl} alt="" className="h-8 w-8 rounded-full object-cover ring-2 ring-[#F0A71F]/70" />
+                ) : (
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F0A71F]/20 text-xs font-bold text-[#F0A71F] ring-2 ring-[#F0A71F]/40">{me0.displayName.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}</span>
+                )}
+                <span className="hidden text-left leading-tight lg:block">
+                  <span className="block text-xs font-semibold text-white">{me0.displayName}</span>
+                  <span className="block text-[10px] text-white/55">{me0.title || "Studio host"}</span>
+                </span>
+              </span>
+            )}
           </div>
         </div>
 

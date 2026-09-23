@@ -335,10 +335,17 @@ function PeerTile({ peer, muted = false, fill = false, keyed = false }: { peer: 
           the names are underneath but the eye goes to the picture. */}
       {!peer.videoTrack && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-lg font-bold text-white/60 ring-1 ring-white/15">
-            {initialsOf(peer.name)}
-          </span>
+          {peer.photoUrl ? (
+            <img src={peer.photoUrl} alt="" className={`h-14 w-14 rounded-full object-cover ${peer.isHost ? "ring-2 ring-[#F0A71F]" : "ring-1 ring-white/15"}`} />
+          ) : (
+            <span className={`flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-lg font-bold text-white/60 ${peer.isHost ? "ring-2 ring-[#F0A71F]" : "ring-1 ring-white/15"}`}>
+              {initialsOf(peer.name)}
+            </span>
+          )}
         </div>
+      )}
+      {peer.isHost && !fill && (
+        <span className="absolute left-1.5 top-1.5 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#1a1200]">{peer.title || "Studio host"}</span>
       )}
       {!fill && (
         <span className="absolute inset-x-1.5 bottom-1.5 truncate rounded bg-black/60 px-1.5 py-0.5 text-[12px] text-white">
@@ -399,6 +406,18 @@ export default function Studio({ slug }: { slug?: string }) {
   const rafRef = useRef<number | null>(null);
 
   const [key] = useState(clientKey);
+  // Closing the tab is leaving too: tell the room, so nobody waits on a ghost.
+  useEffect(() => {
+    const bye = () => {
+      try {
+        navigator.sendBeacon?.("/api/studio/leave", new Blob([JSON.stringify({ clientKey: key, slug, studioId })], { type: "application/json" }));
+      } catch {
+        /* the heartbeat's timeout clears them anyway */
+      }
+    };
+    window.addEventListener("pagehide", bye);
+    return () => window.removeEventListener("pagehide", bye);
+  }, [key, slug, studioId]);
   const [name, setName] = useState("");
   const [joined, setJoined] = useState(false);
   const [camOn, setCamOn] = useState(false);
@@ -608,9 +627,10 @@ export default function Studio({ slug }: { slug?: string }) {
   // hear, publishing nothing. It showed up as an empty box with initials
   // beside her, which reads as a broken second guest.
   const isCohostEar = (p: { identity: string }) => p.identity === "alex-ears";
-  const greenRoomPeers = peers.filter(
-    (p) => p.state !== "On stage" && !isViewer(p) && !isCohost(p) && !isCohostEar(p) && !p.self,
-  );
+  // The studio host first: the person a guest is waiting for.
+  const greenRoomPeers = peers
+    .filter((p) => p.state !== "On stage" && !isViewer(p) && !isCohost(p) && !isCohostEar(p) && !p.self)
+    .sort((a, b) => Number(!!b.isHost) - Number(!!a.isHost));
   const cohost = peers.find((p) => isCohost(p) && !isViewer(p));
   const watchingCount = peers.filter(isViewer).length;
   // Whether we're listening to the programme while we wait. Off by default:
@@ -768,13 +788,19 @@ export default function Studio({ slug }: { slug?: string }) {
             exactly over the programme and the two cards over the rail. */}
         <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px] xl:items-start">
           <div>
-            <Link
-              href="/host/dashboard"
-              className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white"
-              data-testid="link-back-to-dashboard"
+            {/* Leaving is a real leave: off the room's list and out of the
+                call, then home. A plain link left you listed as waiting. */}
+            <button
+              type="button"
+              onClick={async () => {
+                await fetch("/api/studio/leave", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ clientKey: key, slug, studioId }) }).catch(() => {});
+                window.location.href = "/host/dashboard";
+              }}
+              className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-sm font-medium text-white/75 transition-colors hover:border-white/30 hover:text-white"
+              data-testid="button-leave-studio"
             >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to your dashboard
-            </Link>
+              <ArrowLeft className="h-3.5 w-3.5" /> Leave studio
+            </button>
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
               Green Room
             </h1>

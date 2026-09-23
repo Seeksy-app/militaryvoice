@@ -1834,8 +1834,24 @@ export function registerRoutes(app: Express): void {
     }
     const admins = await storage.listAdmins();
     const me = admins.find((a) => a.email === email);
-    res.json({ email, name: me?.name ?? "", isOwner: !!me?.isOwner });
+    const person = await studioPerson(email);
+    res.json({ email, name: me?.name ?? "", isOwner: !!me?.isOwner, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
   });
+
+  /**
+   * The person behind an admin sign-in, as the studio should show them: their
+   * entry on the event team if they have one (name, title, photo), else the
+   * admin list's name, else their address.
+   */
+  async function studioPerson(email: string): Promise<{ name: string; title: string; photoUrl: string }> {
+    const e = email.toLowerCase().trim();
+    const ev = await storage.getFeaturedEvent().catch(() => null);
+    const team = ev ? await storage.listEventTeam(ev.id).catch(() => []) : [];
+    const t = team.find((m) => (m.email ?? "").toLowerCase().trim() === e);
+    const admin = (await storage.listAdmins()).find((a) => a.email === e);
+    const fallback = e.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    return { name: t?.name || admin?.name || fallback, title: t?.title || "Studio host", photoUrl: t?.photoUrl || "" };
+  }
 
   app.post("/api/admin/request-code", async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
@@ -3334,9 +3350,10 @@ export function registerRoutes(app: Express): void {
     // wants to appear needs a real participant row, so they show up in the
     // green room and get promoted the same way as everyone else — the stage
     // shouldn't have a special case for the person running it.
+    const person = await studioPerson(email);
     if (req.body?.publish === true) {
       const row = await storage.upsertStudioParticipant(studio.id, `admin:${email}`, {
-        displayName: String(req.body?.displayName ?? "").trim() || "Host",
+        displayName: person.name || String(req.body?.displayName ?? "").trim() || "Host",
         email,
         role: "Host",
       });
@@ -3353,7 +3370,7 @@ export function registerRoutes(app: Express): void {
           name: row.displayName || "Host",
           canPublish: true,
           admin: true,
-          attributes: { state: row.state, participantId: String(row.id), displayTitle: row.displayTitle ?? "" },
+          attributes: { state: row.state, participantId: String(row.id), displayTitle: row.displayTitle || person.title, role: "studio-host", photoUrl: person.photoUrl },
         }),
       });
       return;
@@ -3364,12 +3381,14 @@ export function registerRoutes(app: Express): void {
       url: publicLiveKitUrl(),
       room,
       publishing: false,
+      // Named and pictured, so the people waiting can see who is running the room.
       token: await studioToken({
         room,
         identity: `producer-${email}`,
-        name: "Control room",
+        name: person.name,
         canPublish: false,
         admin: true,
+        attributes: { state: "Green room", role: "studio-host", displayTitle: person.title, photoUrl: person.photoUrl },
       }),
     });
   });
@@ -5327,8 +5346,16 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // Remove someone from the studio: out of the room itself, not just off the
+  // list. Deleting the row alone left them connected, and their next
+  // heartbeat put them straight back.
   app.delete("/api/admin/studio/participants/:id", requireAdmin, async (req, res) => {
-    await storage.removeStudioParticipant(Number(req.params.id));
+    const id = Number(req.params.id);
+    const row = await storage.getStudioParticipantById(id);
+    if (row && isLiveKitConfigured()) {
+      await rooms().removeParticipant(roomName(row.studioId), `p-${id}`).catch(() => {});
+    }
+    await storage.removeStudioParticipant(id);
     res.json({ ok: true });
   });
 
