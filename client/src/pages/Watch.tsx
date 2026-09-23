@@ -80,7 +80,7 @@ export default function Watch({ slug }: { slug?: string }) {
   const onAir = tiles.length > 0 || meta.fallbackPlaying;
 
   useEffect(() => {
-    document.title = `Watch — ${data?.eventName ?? "MilitaryVoice.ai"}`;
+    document.title = `Watch — ${data?.eventName ?? "MilitaryVoices.ai"}`;
   }, [data?.eventName]);
 
   return (

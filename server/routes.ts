@@ -347,7 +347,7 @@ function calendarLinksFor(signup: { id: number; podcastName: string; hostName: s
   const { start, end } = slotWindow(event, signup.slotIndex);
   return buildCalendarLinks({
     title: `${signup.podcastName} — ${event.name.trim()}`,
-    details: `${signup.hostName} is live on the MilitaryVoice.ai ${event.name.trim()}. Agenda: ${origin}/agenda`,
+    details: `${signup.hostName} is live on the MilitaryVoices.ai ${event.name.trim()}. Agenda: ${origin}/agenda`,
     start,
     end,
     icsUrl: `${origin}/api/signups/${signup.id}/calendar.ics`,
@@ -1646,7 +1646,7 @@ export function registerRoutes(app: Express): void {
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}" />
 <meta property="og:type" content="website" />
-<meta property="og:site_name" content="MilitaryVoice.ai" />
+<meta property="og:site_name" content="MilitaryVoices.ai" />
 <meta property="og:title" content="${esc(title)}" />
 <meta property="og:description" content="${esc(desc)}" />
 <meta property="og:url" content="${origin}/s/${id}" />
@@ -1776,7 +1776,7 @@ export function registerRoutes(app: Express): void {
       const feedRes = await fetch(resolved, {
         signal: controller.signal,
         redirect: "follow",
-        headers: { "User-Agent": "MilitaryVoice.ai/1.0 (+https://www.militaryvoices.ai)" },
+        headers: { "User-Agent": "MilitaryVoices.ai/1.0 (+https://www.militaryvoices.ai)" },
       });
       clearTimeout(timer);
       if (feedRes.ok) {
@@ -2402,7 +2402,7 @@ export function registerRoutes(app: Express): void {
       try {
         const b = await createBroadcast(token, {
           title: event.name,
-          description: `${event.tagline || event.name} — live from MilitaryVoice.ai, the whole day.`,
+          description: `${event.tagline || event.name} — live from MilitaryVoices.ai, the whole day.`,
           startAtIso: event.startAtUtc,
         });
         await storage.createDestination(event.id, email, {
@@ -2534,7 +2534,7 @@ export function registerRoutes(app: Express): void {
       const event = await storage.getEventById(signup.eventId);
       const b = await createBroadcast(token, {
         title: signup.podcastName || signup.hostName,
-        description: `Live from ${event?.name ?? "MilitaryVoice.ai"}.`,
+        description: `Live from ${event?.name ?? "MilitaryVoices.ai"}.`,
         startAtIso: new Date().toISOString(),
       });
       const created = await storage.createDestination(signup.eventId, signup.email, {
@@ -5879,15 +5879,15 @@ export function registerRoutes(app: Express): void {
     const ics = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//MilitaryVoice.ai//Podcast Marathon//EN",
+      "PRODID:-//MilitaryVoices.ai//Podcast Marathon//EN",
       "CALSCALE:GREGORIAN",
       "BEGIN:VEVENT",
       `UID:militaryvoice-signup-${signup.id}@militaryvoice.ai`,
       `DTSTAMP:${toIcsUtcStamp(new Date())}`,
       `DTSTART:${toIcsUtcStamp(start)}`,
       `DTEND:${toIcsUtcStamp(end)}`,
-      `SUMMARY:${icsEscape(`${signup.podcastName} — MilitaryVoice.ai Podcast Marathon`)}`,
-      `DESCRIPTION:${icsEscape(`${signup.hostName} is live on the MilitaryVoice.ai Podcast Marathon. Tune in!${bufferNote}`)}`,
+      `SUMMARY:${icsEscape(`${signup.podcastName} — MilitaryVoices.ai Podcast Marathon`)}`,
+      `DESCRIPTION:${icsEscape(`${signup.hostName} is live on the MilitaryVoices.ai Podcast Marathon. Tune in!${bufferNote}`)}`,
       "END:VEVENT",
       "END:VCALENDAR",
     ].join("\r\n");
@@ -7365,7 +7365,7 @@ export function registerRoutes(app: Express): void {
       return res.status(400).send("Invalid unsubscribe link.");
     }
     await storage.unsubscribeContact(email);
-    res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:60px 20px"><h2>You're unsubscribed.</h2><p>You won't receive any more emails from MilitaryVoice.ai.</p></body></html>`);
+    res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:60px 20px"><h2>You're unsubscribed.</h2><p>You won't receive any more emails from MilitaryVoices.ai.</p></body></html>`);
   });
 
   // ---- Admin: CRM broadcasts -------------------------------------------------
@@ -7807,7 +7807,7 @@ export function registerRoutes(app: Express): void {
     if (!prompt?.trim()) return res.status(400).json({ error: "prompt required" });
     const Anthropic = (await import("@anthropic-ai/sdk")).default;
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const systemPrompt = `You are an email copywriter for MilitaryVoice.ai — a platform celebrating military and veteran podcasters. Write broadcast emails that are warm, direct, and community-focused. Always return a JSON object with two fields: "subject" (the email subject line, no quotes around it) and "body" (the email body as plain text with blank lines between paragraphs). The body should start with "Hi {{First_Name}}," on the first line. Keep it concise: 3-5 short paragraphs max. Do not include an unsubscribe line or signature — those are added automatically.${context ? `\n\nContext about this broadcast: ${context}` : ""}`;
+    const systemPrompt = `You are an email copywriter for MilitaryVoices.ai — a platform celebrating military and veteran podcasters. Write broadcast emails that are warm, direct, and community-focused. Always return a JSON object with two fields: "subject" (the email subject line, no quotes around it) and "body" (the email body as plain text with blank lines between paragraphs). The body should start with "Hi {{First_Name}}," on the first line. Keep it concise: 3-5 short paragraphs max. Do not include an unsubscribe line or signature — those are added automatically.${context ? `\n\nContext about this broadcast: ${context}` : ""}`;
     const msg = await client.messages.create({
       model: "claude-opus-5",
       max_tokens: 1024,

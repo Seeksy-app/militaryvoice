@@ -13,7 +13,7 @@ const CONTACT = "hello@militaryvoice.ai";
 
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
   useEffect(() => {
-    document.title = `${title} — MilitaryVoice.ai`;
+    document.title = `${title} — MilitaryVoices.ai`;
   }, [title]);
 
   return (
@@ -56,7 +56,7 @@ export function PrivacyPolicy() {
   return (
     <Shell title="Privacy policy">
       <p className="text-base text-foreground">
-        MilitaryVoice.ai is a platform for running live, multi-speaker podcast events. This explains what we hold
+        MilitaryVoices.ai is a platform for running live, multi-speaker podcast events. This explains what we hold
         about you, why, and how to get rid of it. It is written to be read, not to protect us.
       </p>
 
@@ -95,7 +95,7 @@ export function PrivacyPolicy() {
           also revoke us at any time from your Google account's security settings.
         </p>
         <p className="rounded-xl border border-border bg-muted/40 p-4 text-sm">
-          MilitaryVoice.ai's use and transfer of information received from Google APIs to any other app will adhere to
+          MilitaryVoices.ai's use and transfer of information received from Google APIs to any other app will adhere to
           the{" "}
           <a
             className="text-primary hover:underline"
@@ -184,7 +184,7 @@ export function PrivacyPolicy() {
       </Section>
 
       <Section heading="Children">
-        <p>MilitaryVoice.ai is for adults. We do not knowingly collect information from anyone under 13.</p>
+        <p>MilitaryVoices.ai is for adults. We do not knowingly collect information from anyone under 13.</p>
       </Section>
 
       <Section heading="Changes">
@@ -201,7 +201,7 @@ export function TermsOfService() {
   return (
     <Shell title="Terms of service">
       <p className="text-base text-foreground">
-        These are the terms for using MilitaryVoice.ai. Booking a slot or signing in means you accept them.
+        These are the terms for using MilitaryVoices.ai. Booking a slot or signing in means you accept them.
       </p>
 
       <Section heading="What the service is">

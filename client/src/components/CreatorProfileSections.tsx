@@ -17,7 +17,7 @@ type Audience = {
   interests: (W & { affinity: number | null; brands: W[] })[];
   brandAffinity: W[]; notable: Person[]; notableRatio: number | null; lookalikes: Person[];
 };
-type Post = { url: string; date: string; text: string; thumb: string; likes: number | null; comments: number | null; views: number | null; kind: string };
+type Post = { url: string; date: string; text: string; thumb: string; video?: string; likes: number | null; comments: number | null; views: number | null; kind: string };
 export type Profile = {
   platform: string; handle: string; fetchedAt: string;
   identity: { name: string; bio: string; picture: string; followers: number | null; following: number | null; posts: number | null; totalViews: number | null; verified: boolean; creatorType: string; category: string; country: string; since: string; links: string[] };
@@ -72,6 +72,13 @@ function Img({ src, className, alt = "" }: { src: string; className?: string; al
   const [broken, setBroken] = useState(false);
   if (!src || broken) return null;
   return <img src={src} alt={alt} loading="lazy" onError={() => setBroken(true)} className={className} />;
+}
+
+/** A reel's first frame, for posts that come with a video and no still. */
+function Frame({ src }: { src: string }) {
+  const [broken, setBroken] = useState(false);
+  if (!src || broken) return null;
+  return <video src={`${src}#t=0.5`} muted playsInline preload="metadata" onError={() => setBroken(true)} className="absolute inset-0 h-full w-full object-cover" />;
 }
 
 function Face({ p, size = 44 }: { p: Pick<Person, "picture" | "name">; size?: number }) {
@@ -387,7 +394,7 @@ export function CreatorProfileSections({ profile, cardEngagement, scrollRoot, on
               <a key={p.url || p.date} href={p.url} target="_blank" rel="noreferrer" className="group flex flex-col overflow-hidden rounded-2xl border border-border hover:border-[#053877]/40">
                 <div className="relative aspect-video bg-muted">
                   <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">{yt ? <Youtube className="h-8 w-8" /> : p.kind === "reel" ? <Film className="h-8 w-8" /> : <ImageIcon className="h-8 w-8" />}</div>
-                  <Img src={p.thumb} className="absolute inset-0 h-full w-full object-cover" />
+                  {p.thumb ? <Img src={p.thumb} className="absolute inset-0 h-full w-full object-cover" /> : p.video ? <Frame src={p.video} /> : null}
                   <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold capitalize text-white">{p.kind}</span>
                 </div>
                 <div className="flex flex-1 flex-col gap-2 p-3">

@@ -8,7 +8,7 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_BASE = process.env.CUSTOM_CRED_API_RESEND_COM_URL || "https://api.resend.com";
 const RESEND_PROXY_TOKEN = process.env.CUSTOM_CRED_API_RESEND_COM_TOKEN;
 
-const FROM_ADDRESS = "MilitaryVoice.ai <hello@militaryvoice.ai>";
+const FROM_ADDRESS = "MilitaryVoices.ai <hello@militaryvoice.ai>";
 const SITE = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 
 /** Header images live in /public/email; one per mood so emails can rotate. */
@@ -57,7 +57,7 @@ export function emailShell(o: {
              the wave in half. A plain <img> has none of those problems: it
              always shows the whole thing, at every width, in every client. -->
         <tr><td style="padding:0;background:#053877;font-size:0;line-height:0;" bgcolor="#053877">
-          <img src="${o.banner}" width="700" alt="${escapeHtml(o.bannerAlt ?? "MilitaryVoice.ai")}"
+          <img src="${o.banner}" width="700" alt="${escapeHtml(o.bannerAlt ?? "MilitaryVoices.ai")}"
                style="display:block;width:100%;max-width:700px;height:auto;border:0;">
         </td></tr>
         <!-- The brand bar: what this email is on the left, the mark on the
@@ -71,7 +71,7 @@ export function emailShell(o: {
               </td>
               <td align="right" valign="middle" style="font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;white-space:nowrap;padding-left:18px;">
                 <img src="${SITE}/logo-wave.png" width="58" height="17" alt="" style="display:block;border:0;margin:0 0 5px auto;">
-                <p style="margin:0;color:#ffffff;font-size:10px;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;opacity:0.85;">MilitaryVoice.ai</p>
+                <p style="margin:0;color:#ffffff;font-size:10px;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;opacity:0.85;">MilitaryVoices.ai</p>
               </td>
             </tr>
           </table>
@@ -85,7 +85,7 @@ export function emailShell(o: {
         <tr><td style="padding:16px 32px 28px;color:#6b7280;font-size:13px;line-height:1.6;">${o.footerNote ?? "Questions? Reply to this email and a human will read it."}</td></tr>
         <tr><td style="background:#053877;padding:20px 32px;">
           <img src="${SITE}/logo-wave.png" width="54" alt="" style="display:block;border:0;margin:0 0 8px;">
-          <p style="margin:0;color:#ffffff;font-size:14px;font-weight:700;">MilitaryVoice.ai</p>
+          <p style="margin:0;color:#ffffff;font-size:14px;font-weight:700;">MilitaryVoices.ai</p>
           <p style="margin:2px 0 0;color:#c8d8ee;font-size:12px;line-height:1.6;">The Podcast Marathon for National Military Podcast Day ·
             <a href="${SITE}/agenda" style="color:#F0A71F;text-decoration:none;">Agenda</a> ·
             <a href="${SITE}/host/dashboard" style="color:#F0A71F;text-decoration:none;">Your dashboard</a></p>
@@ -312,13 +312,13 @@ export async function sendLoginCodeEmail(input: LoginCodeEmailInput): Promise<bo
     subject: `Your sign-in code: ${input.code}`,
     html: emailShell({
       banner: EMAIL_BANNERS.welcome,
-      bannerAlt: "MilitaryVoice.ai",
+      bannerAlt: "MilitaryVoices.ai",
       eyebrow: "Sign-in",
       heading: "Your sign-in code",
       body: `<p style="margin:0 0 16px;">Enter this code on the sign-in page. It expires in 15 minutes.</p>${codeBlock}<p style="margin:0;color:#9ca3af;font-size:13px;">If you didn't request this, you can ignore this email.</p>`,
       footerNote: "One-time code — expires in 15 minutes.",
     }),
-    text: `Your MilitaryVoice.ai sign-in code: ${input.code}\n\nThis code expires in 15 minutes. If you didn't request this, you can ignore this email.\n`,
+    text: `Your MilitaryVoices.ai sign-in code: ${input.code}\n\nThis code expires in 15 minutes. If you didn't request this, you can ignore this email.\n`,
   });
 }
 
@@ -393,7 +393,7 @@ export async function sendSponsorThanksEmail(input: {
 
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
-    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoice.ai</p>
+    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoices.ai</p>
     <h1 style="margin:0 0 16px;color:#111827;font-size:20px;font-weight:700;">Thanks, ${escapeHtml(first)} — we've got it.</h1>
     <p style="margin:0;color:#374151;font-size:15px;line-height:1.65;">26.2 miles of military and veteran stories, going out back to back on National Military Podcast Day. Your name sits with it.</p>
     ${pay}
@@ -419,7 +419,7 @@ export async function sendSponsorInquiryEmail(input: {
     value ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;font-size:13px;">${escapeHtml(label)}</td><td style="padding:4px 0;color:#111827;font-size:14px;">${escapeHtml(value)}</td></tr>` : "";
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
-    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoice.ai</p>
+    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoices.ai</p>
     <h1 style="margin:0 0 16px;color:#111827;font-size:20px;font-weight:700;">New sponsor inquiry</h1>
     <table style="border-collapse:collapse;">
       ${row("Name", input.name)}${row("Company", input.company)}${row("Email", input.email)}${row("Phone", input.phone)}
@@ -455,7 +455,7 @@ export async function sendPlatformInterestEmail(v: PlatformInterestInput): Promi
   ];
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
-    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoice.ai platform</p>
+    <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoices.ai platform</p>
     <h1 style="margin:0 0 20px;color:#111827;font-size:20px;font-weight:700;">${escapeHtml(heading)}</h1>
     <table style="width:100%;border-collapse:collapse;font-size:14px;">
       ${rows
@@ -497,7 +497,7 @@ function nudgeShell(opts: { eyebrow: string; heading: string; body: string; cta?
     heading: opts.heading,
     body: opts.body,
     cta: opts.cta,
-    footerNote: "You're getting this because you hold a slot on MilitaryVoice.ai. Reply to this email and a human will read it.",
+    footerNote: "You're getting this because you hold a slot on MilitaryVoices.ai. Reply to this email and a human will read it.",
   });
 }
 
@@ -732,7 +732,7 @@ export async function sendHelpRequestAlert(v: {
         <p style="margin:0 0 6px;font-weight:700;">Their question</p>
         <p style="margin:0 0 16px;padding:12px 16px;background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;">${escapeHtml(v.question)}</p>
         ${lines ? `<p style="margin:0 0 6px;font-weight:700;">What the assistant and they said first</p><div style="padding:12px 16px;background:#f3f4f6;border-radius:12px;font-size:14px;color:#374151;">${lines}</div>` : ""}`,
-      cta: { href: `mailto:${v.email}?subject=${encodeURIComponent("Re: your question on MilitaryVoice.ai")}`, label: "Reply to them" },
+      cta: { href: `mailto:${v.email}?subject=${encodeURIComponent("Re: your question on MilitaryVoices.ai")}`, label: "Reply to them" },
       footerNote: "Hit reply on this email and it goes straight to them.",
     }),
     text: `${v.name || "A visitor"} (${v.email}) asked to talk to a person.\nPage: ${v.page}\n\nQuestion:\n${v.question}\n\nTranscript:\n${v.transcript}\n\nReply to this email to answer them.`,
@@ -916,7 +916,7 @@ const RICO_SIGNATURE = `
     </td>
     <td style="vertical-align:top;">
       <p style="margin:0;color:#0b1220;font-size:14px;font-weight:700;line-height:1.4;">Riccoh Player</p>
-      <p style="margin:2px 0 0;color:#053877;font-size:12px;">Host · MilitaryVoice.ai</p>
+      <p style="margin:2px 0 0;color:#053877;font-size:12px;">Host · MilitaryVoices.ai</p>
     </td>
   </tr>
 </table>`;
@@ -972,21 +972,21 @@ export function renderBroadcastEmail(opts: BroadcastEmailOptions): { subject: st
   const bodyHtml = `${textToHtml(resolvedBodyText)}${isRico ? RICO_SIGNATURE : memberSignature}`;
   const bannerUrl = BROADCAST_BANNERS[opts.banner ?? "welcome"] ?? BROADCAST_BANNERS.welcome;
   const eyebrow = opts.bannerTitle?.trim() || "The Podcast Marathon";
-  const fromName = member ? `${member.name} | MilitaryVoice.ai` : isRico ? "Riccoh Player | MilitaryVoice.ai" : "MilitaryVoice.ai";
+  const fromName = member ? `${member.name} | MilitaryVoices.ai` : isRico ? "Riccoh Player | MilitaryVoices.ai" : "MilitaryVoices.ai";
 
   return {
     subject: resolvedSubject,
     fromName,
     html: emailShell({
       banner: bannerUrl,
-      bannerAlt: "MilitaryVoice.ai",
+      bannerAlt: "MilitaryVoices.ai",
       eyebrow,
       heading: "",
       body: bodyHtml,
-      cta: { href: SITE, label: "Visit MilitaryVoice.ai" },
+      cta: { href: SITE, label: "Visit MilitaryVoices.ai" },
       footerNote: `Questions? Reply to this email. · <a href="${opts.unsubscribeUrl}" style="color:#6b7280;">Unsubscribe</a>`,
     }),
-    text: `${resolvedBodyText}${member ? `\n\n— ${member.name}\n${member.title}, MilitaryVoice.ai` : isRico ? "\n\n— Riccoh Player\nHost, MilitaryVoice.ai" : ""}\n\n---\nVisit: ${SITE}\nUnsubscribe: ${opts.unsubscribeUrl}`,
+    text: `${resolvedBodyText}${member ? `\n\n— ${member.name}\n${member.title}, MilitaryVoices.ai` : isRico ? "\n\n— Riccoh Player\nHost, MilitaryVoices.ai" : ""}\n\n---\nVisit: ${SITE}\nUnsubscribe: ${opts.unsubscribeUrl}`,
   };
 }
 

@@ -21,7 +21,7 @@ export function DiscoveryPromo({ src, audience = "everyone" }: { src: string; au
       <div className="relative mx-auto grid max-w-6xl gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:items-center lg:py-16">
         <div>
           <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">
-            <Sparkles className="h-3.5 w-3.5" /> New · MilitaryVoice Discovery
+            <Sparkles className="h-3.5 w-3.5" /> New · MilitaryVoices Discovery
           </p>
           <h2 className="mt-4 text-3xl font-bold leading-tight tracking-tight sm:text-4xl" style={HEADLINE}>
             {audience === "brands" ? "Beyond one day: find the military and veteran creators your brand should work with." : "Find the military and veteran voices worth working with."}

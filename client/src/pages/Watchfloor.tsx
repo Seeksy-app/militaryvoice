@@ -138,7 +138,7 @@ export default function Watchfloor() {
         <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-24">
           <div className="max-w-3xl">
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] backdrop-blur">
-              <Radio className="h-3.5 w-3.5 text-[#F0A71F]" /> Watchfloor · the MilitaryVoice.ai studio
+              <Radio className="h-3.5 w-3.5 text-[#F0A71F]" /> Watchfloor · the MilitaryVoices.ai studio
             </div>
             <h1 className="text-4xl font-bold leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl" style={HEADLINE_FONT}>
               The show takes an hour.

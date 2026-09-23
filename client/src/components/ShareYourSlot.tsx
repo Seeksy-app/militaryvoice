@@ -63,7 +63,7 @@ export function ShareYourSlot({
 
   const caption =
     `I'm live on National Military Podcast Day.\n\n` +
-    `${podcastName} — ${whenLabel}, as part of the Podcast Marathon on MilitaryVoice.ai.\n\n` +
+    `${podcastName} — ${whenLabel}, as part of the Podcast Marathon on MilitaryVoices.ai.\n\n` +
     `Set a reminder and tune in: ${url}`;
 
   const targets = [

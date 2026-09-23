@@ -27,7 +27,7 @@ interface Post {
   comment: string;
 }
 
-const CORE_TAGS = "#NationalMilitaryPodcastDay #MilitaryPodcast #VeteranVoices #MilitaryVoice";
+const CORE_TAGS = "#NationalMilitaryPodcastDay #MilitaryPodcast #VeteranVoices #MilitaryVoices";
 
 function buildPosts(dateLong: string, dateShort: string, slots: number, url: string): Post[] {
   return [

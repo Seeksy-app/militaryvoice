@@ -147,7 +147,7 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
           <section className="rounded-2xl border border-[#F0A71F]/50 bg-[#F0A71F]/10 p-5" data-testid="cohost-house-read">
             <h3 className="text-sm font-bold">On the hour: the Discovery read</h3>
             <p className="mt-2 text-sm leading-relaxed text-foreground">
-              "Brands, podcasters, event planners: MilitaryVoice Discovery finds military and veteran creators to sponsor, guests to book and speakers for your stage. Everyone on today's lineup is in it, verified. It's free at militaryvoice dot A I slash find."
+              "Brands, podcasters, event planners: MilitaryVoices Discovery finds military and veteran creators to sponsor, guests to book and speakers for your stage. Everyone on today's lineup is in it, verified. It's free at militaryvoice dot A I slash find."
             </p>
             <p className="mt-2 text-xs text-muted-foreground">Once an hour, at the first handoff after the top of the hour. About fifteen seconds.</p>
           </section>

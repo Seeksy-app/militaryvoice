@@ -90,7 +90,7 @@ export async function createConnectUrl(input: {
     username: input.username,
     redirect_url: input.redirectUrl,
     logo_image: input.logoUrl,
-    redirect_button_text: "Back to MilitaryVoice.ai",
+    redirect_button_text: "Back to MilitaryVoices.ai",
     connect_title: "Connect your show's social accounts",
     connect_description:
       "Link the accounts where listeners can follow your podcast. They'll appear on your card in the marathon lineup.",

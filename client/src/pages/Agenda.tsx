@@ -329,7 +329,7 @@ export default function Agenda({ slug }: Props) {
                     const shareText = `I'm tuning in to ${signup.hostName} on ${signup.podcastName} — ${s.dateLabel}, ${formatTimeInZone(
                       s.start,
                       viewZone
-                    )} ${zoneLabel(viewZone)}, during the MilitaryVoice.ai Podcast Marathon! ${
+                    )} ${zoneLabel(viewZone)}, during the MilitaryVoices.ai Podcast Marathon! ${
                       typeof window !== "undefined" ? window.location.href : ""
                     }`;
 
@@ -494,7 +494,7 @@ export default function Agenda({ slug }: Props) {
         zone={viewZone}
         shareText={
           selected
-            ? `I'm tuning in to ${selected.signup.hostName} on ${selected.signup.podcastName} during the MilitaryVoice.ai Podcast Marathon! ${
+            ? `I'm tuning in to ${selected.signup.hostName} on ${selected.signup.podcastName} during the MilitaryVoices.ai Podcast Marathon! ${
                 typeof window !== "undefined" ? window.location.href : ""
               }`
             : undefined

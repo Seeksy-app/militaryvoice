@@ -39,7 +39,7 @@ const WAYS_TO_CELEBRATE = [
   {
     icon: Users,
     title: "Join the Marathon",
-    body: "Claim a 30-minute live slot on MilitaryVoice.ai and broadcast to the whole community on October 5th — from anywhere, free of charge. One day. Every mic. All in.",
+    body: "Claim a 30-minute live slot on MilitaryVoices.ai and broadcast to the whole community on October 5th — from anywhere, free of charge. One day. Every mic. All in.",
   },
 ];
 
@@ -217,7 +217,7 @@ export default function NationalMilitaryPodcastDay() {
               className="h-full w-full border-0"
               allow="autoplay; camera; microphone"
               scrolling="no"
-              title="MilitaryVoice.ai Live Stream"
+              title="MilitaryVoices.ai Live Stream"
             />
           </div>
           <p className="mt-3 text-center text-xs text-white/40">
@@ -356,7 +356,7 @@ export default function NationalMilitaryPodcastDay() {
       {/* ── FOOTER ── */}
       <footer className="border-t border-border bg-background py-8 text-center">
         <p className="text-xs text-muted-foreground">
-          &copy; {new Date().getFullYear()} MilitaryVoice.ai &middot;{" "}
+          &copy; {new Date().getFullYear()} MilitaryVoices.ai &middot;{" "}
           <Link href="/policy" className="hover:text-foreground">Privacy</Link>
           {" · "}
           <Link href="/terms" className="hover:text-foreground">Terms</Link>

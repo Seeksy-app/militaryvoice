@@ -18,7 +18,7 @@ Give it another go:
 
 1. Go to https://www.militaryvoice.ai/host/dashboard and sign in with this address. We email you a 6-digit code; no password.
 2. Click Integrations, then Connect YouTube.
-3. Google will show a screen that says the app isn't verified yet. That's expected — we're in Google's review queue. Click Advanced, then "Go to MilitaryVoice.ai", and you're through.
+3. Google will show a screen that says the app isn't verified yet. That's expected — we're in Google's review queue. Click Advanced, then "Go to MilitaryVoices.ai", and you're through.
 
 If it gives you any trouble at all, reply here and I'll sort it with you.
 
@@ -31,7 +31,7 @@ const html = `<p>Frank,</p>
 <ol>
   <li>Go to <a href="https://www.militaryvoice.ai/host/dashboard">militaryvoice.ai/host/dashboard</a> and sign in with this address. We email you a 6-digit code; no password.</li>
   <li>Click <strong>Integrations</strong>, then <strong>Connect YouTube</strong>.</li>
-  <li>Google will show a screen that says the app isn't verified yet. That's expected — we're in Google's review queue. Click <strong>Advanced</strong>, then <strong>Go to MilitaryVoice.ai</strong>, and you're through.</li>
+  <li>Google will show a screen that says the app isn't verified yet. That's expected — we're in Google's review queue. Click <strong>Advanced</strong>, then <strong>Go to MilitaryVoices.ai</strong>, and you're through.</li>
 </ol>
 <p>If it gives you any trouble at all, reply here and I'll sort it with you.</p>
 <p>Michael<br><span style="color:#5b6478">Producer · The Podcast Marathon<br>michael@militaryvoice.ai</span></p>`;

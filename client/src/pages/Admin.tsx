@@ -4831,7 +4831,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
                     return (
                       <div className="absolute inset-0 flex flex-col justify-end p-6" style={{ background: "linear-gradient(135deg,rgba(5,56,119,0.90) 0%,rgba(5,56,119,0.60) 100%)" }}>
                         <p className="text-[#F0A71F] text-xs font-bold uppercase tracking-widest opacity-75">
-                          {previewMember ? `${previewMember.name} · MilitaryVoice.ai` : "MilitaryVoice.ai"}
+                          {previewMember ? `${previewMember.name} · MilitaryVoices.ai` : "MilitaryVoices.ai"}
                         </p>
                       </div>
                     );
@@ -4853,7 +4853,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
                           {previewMember.photoUrl && <img src={previewMember.photoUrl} alt={previewMember.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />}
                           <div>
                             <p className="font-semibold text-sm">{previewMember.name}</p>
-                            <p className="text-xs text-gray-500">{previewMember.title}, MilitaryVoice.ai</p>
+                            <p className="text-xs text-gray-500">{previewMember.title}, MilitaryVoices.ai</p>
                           </div>
                         </div>
                       )}
@@ -4909,7 +4909,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="team">MilitaryVoice.ai Team</SelectItem>
+                        <SelectItem value="team">MilitaryVoices.ai Team</SelectItem>
                         {teamMembers.map((m) => (
                           <SelectItem key={m.id} value={`member:${m.id}`}>
                             {m.name} — {m.title}

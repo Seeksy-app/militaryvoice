@@ -1583,7 +1583,7 @@ export const broadcasts = pgTable("broadcasts", {
   status: text("status").notNull().default("draft"),
   // Which contacts to send to: "signups"|"contacts"|"all"|"segment:<id>"
   segment: text("segment").notNull().default("contacts"),
-  // "team" = MilitaryVoice.ai Team, "rico" = Riccoh Player with signature
+  // "team" = MilitaryVoices.ai Team, "rico" = Riccoh Player with signature
   sender: text("sender").notNull().default("team"),
   // header banner image key: "welcome" | "podcasters" | "marathon" | "schedule"
   banner: text("banner").notNull().default("welcome"),
@@ -1831,7 +1831,7 @@ export const discoveryVisits = pgTable("discovery_visits", {
   createdAt: text("created_at").notNull(),
 });
 
-/** A request, through us, to reach a verified MilitaryVoice creator. */
+/** A request, through us, to reach a verified MilitaryVoices creator. */
 export const discoveryIntros = pgTable("discovery_intros", {
   id: serial("id").primaryKey(),
   requester: text("requester").notNull(),

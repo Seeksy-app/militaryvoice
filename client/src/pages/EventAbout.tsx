@@ -18,7 +18,7 @@ const DEFAULT_ABOUT = `## What it is
 
 National Military Podcast Day is a day set aside for the shows made by and for the military and veteran community — the hosts who talk about service, transition, family, business, humour and everything after the uniform.
 
-On MilitaryVoice.ai we mark it with a marathon: 26.2 — twenty-six shows and the bonus sessions that make up the point-two — back to back from breakfast to late evening, one stage, dozens of podcasters, each bringing their own audience to everyone else's.
+On MilitaryVoices.ai we mark it with a marathon: 26.2 — twenty-six shows and the bonus sessions that make up the point-two — back to back from breakfast to late evening, one stage, dozens of podcasters, each bringing their own audience to everyone else's.
 
 ## Why it matters
 
@@ -72,7 +72,7 @@ export default function EventAbout({ slug }: { slug?: string }) {
 
   const occasion = event?.occasion || "National Military Podcast Day";
   useEffect(() => {
-    document.title = `About ${occasion} — MilitaryVoice.ai`;
+    document.title = `About ${occasion} — MilitaryVoices.ai`;
   }, [occasion]);
 
   const when = event

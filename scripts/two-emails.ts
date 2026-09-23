@@ -22,7 +22,7 @@ const notes: { to: string; subject: string; html: string; text: string }[] = [
 <p>You gave us your Amplified Voices program group rather than one episode, so we need to know which one you'd like us to run:</p>
 <p><a href="https://tv.amplifiedvoices.com/program-group/f4e0a93dc8590ee5a7f921030f4a4594">tv.amplifiedvoices.com/program-group/f4e0a93dc8590ee5a7f921030f4a4594</a></p>
 <p>Just reply with the episode name, or a direct link to it. If there's a video version, that's the one we want — the marathon streams to YouTube, so an audio-only file needs a still behind it.</p>
-<p>Thanks,<br>MilitaryVoice.ai</p>`,
+<p>Thanks,<br>MilitaryVoices.ai</p>`,
       cta: { href: AGENDA, label: "See the agenda" },
     }),
     text: `Hi Greg,
@@ -35,7 +35,7 @@ https://tv.amplifiedvoices.com/program-group/f4e0a93dc8590ee5a7f921030f4a4594
 Just reply with the episode name, or a direct link to it. If there's a video version, that's the one we want - the marathon streams to YouTube, so an audio-only file needs a still behind it.
 
 Thanks,
-MilitaryVoice.ai
+MilitaryVoices.ai
 ${AGENDA}`,
   },
   {
@@ -50,7 +50,7 @@ ${AGENDA}`,
 <p>We've given you <strong>mile marker 13, at 1:30 PM ET</strong> — and you finalized our line-up. Every slot on the 26.2-mile course is now filled.</p>
 <p>We have your episode on file, so there's nothing you need to send us.</p>
 <p>Please let us know if you have any questions.</p>
-<p>Thanks,<br>MilitaryVoice.ai</p>`,
+<p>Thanks,<br>MilitaryVoices.ai</p>`,
       cta: { href: AGENDA, label: "See the agenda" },
     }),
     text: `Hi Rob,
@@ -64,7 +64,7 @@ We have your episode on file, so there's nothing you need to send us.
 Please let us know if you have any questions.
 
 Thanks,
-MilitaryVoice.ai
+MilitaryVoices.ai
 ${AGENDA}`,
   },
 ];

@@ -24,7 +24,7 @@ const BODY_HTML = `<p>Hi there,</p>
   <li><strong>Turn on auto-post promotions.</strong> We'll push your slot out across your channels in the run-up, so you don't have to remember to. <a href="${SITE}/host/dashboard/promotion#section-autopost">Set it up here</a>.</li>
   <li><strong>Log in to the green room and check your audio and video.</strong> Ten minutes now is worth an hour on the day. <a href="${SITE}/studio">Open the studio</a>.</li>
 </ol>
-<p>See you on the start line,<br>MilitaryVoice.ai</p>`;
+<p>See you on the start line,<br>MilitaryVoices.ai</p>`;
 
 const BODY_TEXT = `Hi there,
 
@@ -42,7 +42,7 @@ Three things worth doing before the day:
    ${SITE}/studio
 
 See you on the start line,
-MilitaryVoice.ai`;
+MilitaryVoices.ai`;
 
 async function main() {
   const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1 });

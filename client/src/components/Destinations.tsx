@@ -245,7 +245,7 @@ function AddForm({
           className="mt-1"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="MilitaryVoice YouTube"
+          placeholder="MilitaryVoices YouTube"
           data-testid="input-destination-label"
         />
       </div>

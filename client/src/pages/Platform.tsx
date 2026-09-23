@@ -141,7 +141,7 @@ function InterestDialog({
           </DialogTitle>
           <DialogDescription>
             {intent === "register"
-              ? "A few details and we'll come back with what running it on MilitaryVoice.ai would look like."
+              ? "A few details and we'll come back with what running it on MilitaryVoices.ai would look like."
               : "We're onboarding organizations in small groups. Tell us who you are and we'll be in touch."}
           </DialogDescription>
         </DialogHeader>
@@ -243,7 +243,7 @@ export default function Platform() {
               <span className="block text-[#F0A71F]">without running it yourself</span>
             </h1>
             <p className="mt-6 text-lg leading-relaxed text-white/90">
-              MilitaryVoice.ai is the software we built to put a podcast marathon on the air with one small
+              MilitaryVoices.ai is the software we built to put a podcast marathon on the air with one small
               team — and it doesn't care what shape your event is. Live, pre-recorded, or the two side by side. A single
               session or a hundred across three days. Scheduling, promotion, a studio, and a run of show the control
               room can actually follow.

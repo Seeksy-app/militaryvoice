@@ -53,7 +53,7 @@ export function SiteFooter({ slug }: { slug?: string }) {
         </div>
 
         <div className="mt-8 flex flex-col gap-3 border-t border-white/15 pt-6 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} MilitaryVoice.ai. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} MilitaryVoices.ai. All rights reserved.</p>
           <nav className="flex flex-wrap gap-x-5 gap-y-2">
             <Link href="/help" className="transition-colors hover:text-white">
               Help

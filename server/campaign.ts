@@ -109,7 +109,7 @@ export function caption(kind: CampaignKind, c: CampaignContext): string {
   const day = occasion(c);
   switch (kind) {
     case "join":
-      return `I'm on ${day}! ${show} goes live ${c.whenLabel} as part of the ${c.event.name} on MilitaryVoice.ai. Set a reminder: ${c.shareUrl}`;
+      return `I'm on ${day}! ${show} goes live ${c.whenLabel} as part of the ${c.event.name} on MilitaryVoices.ai. Set a reminder: ${c.shareUrl}`;
     case "share":
       return `Know someone who'd want to hear this? Pass it on. ${show} — live ${c.whenLabel} for ${day}. ${c.shareUrl}`;
     case "about":

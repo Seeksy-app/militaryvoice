@@ -810,7 +810,7 @@ class DatabaseStorage implements IStorage {
     await db.insert(events).values({
       slug: DEFAULT_EVENT_SLUG,
       isFeatured: true,
-      name: "MilitaryVoice.ai Podcast Marathon",
+      name: "MilitaryVoices.ai Podcast Marathon",
       tagline: "One mic, every time zone, 26.2 miles of stories.",
       description:
         "Claim your hour. We'll build the on-air agenda automatically as podcasters sign up around the clock.",

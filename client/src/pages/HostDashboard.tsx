@@ -442,7 +442,7 @@ function StreamStatusRow({ onOpen }: { onOpen: () => void }) {
         </span>
         <span className="min-w-0">
           <span className="block text-sm font-semibold text-card-foreground">
-            {connected ? `Also going out to your YouTube — ${data?.channelTitle ?? "your channel"}` : "Going out on MilitaryVoice.ai only"}
+            {connected ? `Also going out to your YouTube — ${data?.channelTitle ?? "your channel"}` : "Going out on MilitaryVoices.ai only"}
           </span>
           <span className="mt-0.5 block text-sm text-muted-foreground">
             {connected
@@ -1135,7 +1135,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 <AnchoredHeading id="section-going-out-live" icon={Radio} label="Going out live" />
                 <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
                   Do you want your slot to go out on your own channel as well as ours? Optional — it airs on
-                  MilitaryVoice.ai either way.
+                  MilitaryVoices.ai either way.
                 </p>
                 <ConnectYoutube
                   locked={noWayIn}

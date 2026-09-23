@@ -1016,7 +1016,7 @@ export default function Landing({ slug }: Props) {
         zone={zone}
         shareText={
           selectedPodcaster
-            ? `I'm tuning in to ${selectedPodcaster.signup.hostName} on ${selectedPodcaster.signup.podcastName} during the MilitaryVoice.ai Podcast Marathon! ${
+            ? `I'm tuning in to ${selectedPodcaster.signup.hostName} on ${selectedPodcaster.signup.podcastName} during the MilitaryVoices.ai Podcast Marathon! ${
                 typeof window !== "undefined" ? window.location.href : ""
               }`
             : undefined

@@ -36,7 +36,7 @@ export const HELP_INDEX: HelpEntry[] = [
   },
   {
     title: "Google says the app isn't verified",
-    summary: "That screen is expected while we're in Google's review. Press Advanced, then Go to MilitaryVoice.ai, then Continue.",
+    summary: "That screen is expected while we're in Google's review. Press Advanced, then Go to Military Voice (unsafe), then Continue.",
     href: "/help/youtube#verified",
     keywords: "google not verified unverified warning advanced continue access blocked review",
     audience: "podcasters",

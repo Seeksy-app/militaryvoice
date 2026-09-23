@@ -23,7 +23,7 @@ const html = emailShell({
 <p>Thanks for flagging that error. It wasn't anything you did and it wasn't your account — it was a limit on our side that stopped the connection page from opening. That's sorted now, and we've tested it on your account specifically.</p>
 <p>Head back to <strong>Integrations</strong> in your dashboard and hit connect again. It should take you straight through to the platform picker.</p>
 <p>If it still gives you trouble, just reply with your handles and we'll add them to your card by hand — it's optional either way, and it has no bearing on your slot. <strong>Cold War Conversations is confirmed at Mile 11, 12:30 PM ET on Monday, 5 October.</strong></p>
-<p>Sorry for the run-around,<br>MilitaryVoice.ai</p>`,
+<p>Sorry for the run-around,<br>MilitaryVoices.ai</p>`,
   cta: { href: "https://militaryvoice.ai/host/dashboard/integrations", label: "Connect your accounts" },
 });
 
@@ -36,7 +36,7 @@ Head back to Integrations in your dashboard and hit connect again. It should tak
 If it still gives you trouble, just reply with your handles and we'll add them to your card by hand - it's optional either way, and it has no bearing on your slot. Cold War Conversations is confirmed at Mile 11, 12:30 PM ET on Monday, 5 October.
 
 Sorry for the run-around,
-MilitaryVoice.ai
+MilitaryVoices.ai
 
 Connect your accounts: https://militaryvoice.ai/host/dashboard/integrations`;
 

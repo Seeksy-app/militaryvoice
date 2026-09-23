@@ -99,6 +99,7 @@ function readPosts(platform: string, raw: any) {
           likes: num(e.like_count),
           comments: num(e.comment_count),
           views: num(e.view_count),
+          video: "",
           kind: "video",
         };
       }
@@ -109,6 +110,8 @@ function readPosts(platform: string, raw: any) {
         date: str(p?.created_at ?? p?.create_time),
         text: str(p?.caption ?? p?.description ?? p?.text).slice(0, 400),
         thumb: viaProxy(str(image)),
+        // Reels have no still: the page shows the video's first frame instead.
+        video: image ? "" : str(media.find((m) => str(m?.type) === "video")?.url),
         likes: num(e.likes ?? e.like_count ?? p?.likes),
         comments: num(e.comments ?? e.comment_count ?? p?.comments),
         views: num(e.view_count ?? e.play_count ?? p?.views),
@@ -153,11 +156,11 @@ export function buildProfile(platform: string, handle: string, analytics: any, r
   if (platform === "youtube") {
     const perView = posts.filter((p) => (p.views ?? 0) > 0).map((p) => ((p.likes ?? 0) + (p.comments ?? 0)) / (p.views as number));
     const m = median(perView);
-    if (m != null) { engagementRate = Math.round(m * 1000) / 10; engagementBasis = "likes + comments / views"; }
+    if (m != null) { engagementRate = Math.round(m * 10000) / 100; engagementBasis = "likes + comments / views"; }
   } else if (followers) {
     const likes = num(a.likes_median), comments = num(a.comments_median);
     const m = likes != null ? likes + (comments ?? 0) : median(interactions);
-    if (m != null) { engagementRate = Math.round((m / followers) * 1000) / 10; engagementBasis = "likes + comments / followers"; }
+    if (m != null) { engagementRate = Math.round((m / followers) * 10000) / 100; engagementBasis = "likes + comments / followers"; }
   }
 
   // Cadence from the dates themselves, over the span the posts cover.

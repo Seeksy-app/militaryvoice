@@ -147,7 +147,7 @@ export async function createBroadcast(
   }>(accessToken, "liveStreams?part=snippet,cdn,status", {
     method: "POST",
     body: JSON.stringify({
-      snippet: { title: `${opts.title.slice(0, 80)} — MilitaryVoice` },
+      snippet: { title: `${opts.title.slice(0, 80)} — MilitaryVoices` },
       cdn: { frameRate: "30fps", ingestionType: "rtmp", resolution: "1080p" },
     }),
   });

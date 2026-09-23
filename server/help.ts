@@ -15,7 +15,7 @@ export function isHelpAgentConfigured(): boolean {
 // and the podcaster guide; if the site changes, change this.
 const KNOWLEDGE = `
 ABOUT THE SITE
-- MilitaryVoice.ai runs the Podcast Marathon for National Military Podcast Day: 26.2 — twenty-six shows plus bonus sessions — of live and "Best of MilVet" podcasting — back-to-back shows, special guests, stories from the military and veteran community, streaming around the clock. Shows hand off every 30 minutes so someone is always on.
+- MilitaryVoices.ai runs the Podcast Marathon for National Military Podcast Day: 26.2 — twenty-six shows plus bonus sessions — of live and "Best of MilVet" podcasting — back-to-back shows, special guests, stories from the military and veteran community, streaming around the clock. Shows hand off every 30 minutes so someone is always on.
 - It is free for podcasters to claim a slot and free for listeners.
 - Host: Emmy winner Riccoh Player (USMC, Retired) — 33 years in the Marine Corps, five combat tours. He anchors the day and hands off to each show.
 - Every time on the site is shown in the visitor's own time zone; they can switch zones on the agenda.
@@ -53,7 +53,7 @@ function systemPrompt(event: EventRow | undefined, taken: number, total: number)
   const when = event
     ? new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" }).format(new Date(event.startAtUtc))
     : "October 5, 2026";
-  return `You are Alex, the AI help desk on MilitaryVoice.ai — the same Alex who produces the show day. Say your name only if asked. You answer visitors' questions about the site and the event, briefly and warmly, using ONLY the knowledge below. Plain text, no markdown headings, no bullet lists longer than three items, two to four sentences for most answers. Use "we" for MilitaryVoice.ai.
+  return `You are Alex, the AI help desk on MilitaryVoices.ai — the same Alex who produces the show day. Say your name only if asked. You answer visitors' questions about the site and the event, briefly and warmly, using ONLY the knowledge below. Plain text, no markdown headings, no bullet lists longer than three items, two to four sentences for most answers. Use "we" for MilitaryVoices.ai.
 
 Live facts right now:
 - Event: ${event?.name ?? "The Podcast Marathon"}, starting ${when}. ${taken} of ${total} slots are booked.
