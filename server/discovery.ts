@@ -244,7 +244,7 @@ async function verifiedCreators(): Promise<(CreatorCard & { match: string })[]> 
       const enriched = enrichedBySignup.get(s.id);
       const best = enriched ? { platform: enriched.platform, username: enriched.handle } : [...accounts].sort((x, y) => (y.followers ?? 0) - (x.followers ?? 0))[0];
       const total = enriched?.reach ?? accounts.reduce((n, a) => n + (a.followers ?? 0), 0);
-      const branch = prof?.branch && prof.branch !== "None" ? prof.branch : "";
+      const branch = prof?.branch && !["none", "not applicable", "n/a", ""].includes(prof.branch.trim().toLowerCase()) ? prof.branch : "";
       return {
         platform: best?.platform ?? "",
         handle: best?.username ?? "",
@@ -405,7 +405,12 @@ export function registerDiscoveryRoutes(app: Express): void {
             // Nothing on file: ask the index who owns this email (0.05 credits).
             const r = await ic("/creators/enrich/email/", { email }).catch(() => null);
             const res0 = r?.result ?? {};
-            if (res0?.username && (PLATFORMS as readonly string[]).includes(String(res0.platform))) {
+            // An email can belong to someone else's account (a manager, a
+            // partner). Keep the match only when the handle plainly belongs to
+            // this person or their show.
+            const tokens = `${s.hostName} ${s.podcastName}`.toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter((t) => t.length >= 4 && !["podcast", "show", "with", "the", "radio", "network"].includes(t));
+            const owns = res0?.username && tokens.some((t) => String(res0.username).toLowerCase().includes(t));
+            if (owns && (PLATFORMS as readonly string[]).includes(String(res0.platform))) {
               platform = String(res0.platform);
               handle = String(res0.username);
               followers = num(pick(res0, "followers", "follower_count")) ?? 0;
@@ -614,9 +619,10 @@ export function registerDiscoveryRoutes(app: Express): void {
       const [l] = await db.select().from(discoveryLists).where(and(eq(discoveryLists.id, id), eq(discoveryLists.email, email)));
       if (!l) throw new HttpError(404, "No such list.");
       const card = req.body?.card as CreatorCard | undefined;
-      if (!card?.handle) throw new HttpError(400, "Which creator?");
-      const platform = String(card.platform || "instagram");
-      const handle = String(card.handle).toLowerCase();
+      if (!card?.handle && !card?.signupId) throw new HttpError(400, "Which creator?");
+      // One of ours with no social handle is saved by their booking.
+      const platform = card.handle ? String(card.platform || "instagram") : "militaryvoice";
+      const handle = card.handle ? String(card.handle).toLowerCase() : `signup-${card.signupId}`;
       const existing = await db.select().from(discoveryListItems).where(and(eq(discoveryListItems.listId, id), eq(discoveryListItems.platform, platform), eq(discoveryListItems.handle, handle)));
       if (existing.length) return existing[0];
       const [row] = await db

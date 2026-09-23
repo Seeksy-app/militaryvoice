@@ -347,7 +347,7 @@ export default function Discover() {
         {tab === "lists" && isMember ? (
           <Lists lists={lists.data ?? []} onOpen={setOpen} />
         ) : !submitted || !isMember ? (
-          <Welcome verified={verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={setOpen} onJoin={() => setGate(true)} loading={meLoading} />
+          <Welcome verified={verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={setOpen} onSaveVerified={(c) => saveTo.mutate({ card: c })} onJoin={() => setGate(true)} loading={meLoading} />
         ) : (
           <>
             {/* what ran */}
@@ -433,7 +433,7 @@ export default function Discover() {
 // Before a search: our creators, and what Discovery is
 // ===========================================================================
 
-function Welcome({ verified, isMember, signedIn, onOpenVerified, onJoin, loading }: { verified: Card[]; isMember: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onJoin: () => void; loading: boolean }) {
+function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified, onJoin, loading }: { verified: Card[]; isMember: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onJoin: () => void; loading: boolean }) {
   return (
     <div className="flex flex-col gap-12">
       {!isMember && !loading && (
@@ -478,7 +478,7 @@ function Welcome({ verified, isMember, signedIn, onOpenVerified, onJoin, loading
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {verified.length === 0
             ? Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-44 rounded-2xl" />)
-            : verified.map((c) => <CreatorCard key={`v-${c.name}-${c.verified?.show}`} c={c} saved={false} onOpen={() => onOpenVerified(c)} />)}
+            : verified.map((c) => <CreatorCard key={`v-${c.name}-${c.verified?.show}`} c={c} saved={false} onOpen={() => onOpenVerified(c)} onSave={isMember ? () => onSaveVerified(c) : undefined} />)}
         </div>
       </section>
     </div>
@@ -490,8 +490,10 @@ function Welcome({ verified, isMember, signedIn, onOpenVerified, onJoin, loading
 // ===========================================================================
 
 function CreatorCard({ c, saved, onOpen, onSave }: { c: Card; saved: boolean; onOpen: () => void; onSave?: () => void }) {
+  // One card for everyone: our verified podcasters look like every other
+  // creator, with the show where the handle goes and their air time as a tag.
   return (
-    <div className="group relative flex flex-col rounded-2xl border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-[#053877]/30 hover:shadow-lg" data-testid={`creator-${c.handle || c.name}`}>
+    <div className={`group relative flex flex-col rounded-2xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg ${c.verified ? "border-[#F0A71F]/40 hover:border-[#F0A71F]" : "border-border hover:border-[#053877]/30"}`} data-testid={`creator-${c.handle || c.name}`}>
       <button type="button" onClick={onOpen} className="flex items-start gap-3 text-left" aria-label={`Open ${c.name}`}>
         <Avatar src={c.picture} name={c.name} size={52} ring={!!c.verified} />
         <span className="min-w-0 flex-1">
@@ -499,34 +501,31 @@ function CreatorCard({ c, saved, onOpen, onSave }: { c: Card; saved: boolean; on
             <span className="truncate text-[15px] font-bold leading-tight" style={HEADLINE}>{c.name}</span>
             {c.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-[#F0A71F]" aria-label="Verified on MilitaryVoice" />}
           </span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {c.verified ? c.verified.show : `@${c.handle}`}
-          </span>
+          <span className="block truncate text-xs text-muted-foreground">{c.verified ? c.verified.show : `@${c.handle}`}</span>
         </span>
       </button>
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {c.branch && <span className="rounded-full bg-[#053877]/10 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">{c.branch}</span>}
-        {c.verified?.serviceStatus && <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{c.verified.serviceStatus}</span>}
-        {c.verified && <span className="rounded-full bg-[#F0A71F]/15 px-2 py-0.5 text-[11px] font-semibold text-[#8a5a00]">On air {c.verified.slotLabel}</span>}
-        {!c.verified && c.platform && <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{platformLabel(c.platform)}</span>}
+      <div className="mt-3 flex h-6 flex-nowrap gap-1.5 overflow-hidden">
+        {c.branch && <span className="shrink-0 rounded-full bg-[#053877]/10 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">{c.branch}</span>}
+        {c.verified && <span className="shrink-0 rounded-full bg-[#F0A71F]/15 px-2 py-0.5 text-[11px] font-semibold text-[#8a5a00]">On air {c.verified.slotLabel.replace(" ET", "")}</span>}
+        {!c.verified && c.platform && <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{platformLabel(c.platform)}</span>}
       </div>
       <div className="mt-auto flex items-end justify-between gap-2 pt-4">
-        <div className="flex gap-4">
-          {c.followers != null ? (
+        {c.followers != null ? (
+          <div className="flex gap-5">
             <div>
               <div className="text-lg font-bold tabular-nums leading-none">{compact(c.followers)}</div>
-              <div className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">{c.verified ? "reach" : "followers"}</div>
+              <div className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">followers</div>
             </div>
-          ) : c.verified ? (
-            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Mic2 className="h-3.5 w-3.5 text-[#053877]" /> Podcast host</div>
-          ) : null}
-          {c.engagement != null && (
-            <div>
-              <div className="text-lg font-bold tabular-nums leading-none">{pct(c.engagement, 2)}</div>
-              <div className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">engagement</div>
-            </div>
-          )}
-        </div>
+            {c.engagement != null && (
+              <div>
+                <div className="text-lg font-bold tabular-nums leading-none">{pct(c.engagement, 2)}</div>
+                <div className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">engagement</div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 pb-1 text-xs font-medium text-muted-foreground"><Mic2 className="h-3.5 w-3.5 text-[#053877]" /> Podcast host</div>
+        )}
         {onSave && (
           <button type="button" onClick={onSave} disabled={saved} className={`rounded-full p-2 transition-colors ${saved ? "text-[#8a5a00]" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} title={saved ? "Saved" : "Save to shortlist"} data-testid="creator-save">
             {saved ? <BookmarkCheck className="h-5 w-5" /> : <Bookmark className="h-5 w-5" />}
