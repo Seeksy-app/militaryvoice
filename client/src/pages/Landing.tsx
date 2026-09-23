@@ -391,15 +391,9 @@ export default function Landing({ slug }: Props) {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ED1C24] opacity-75" />
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#ED1C24]" />
                 </span>
-                <span className="text-[#F0A71F]">★ Featured event</span>
+                <span className="whitespace-nowrap text-[#F0A71F]">★ Featured event</span>
                 <span className="opacity-40">·</span>
-                National Military Podcast Day
-                {start && (
-                  <>
-                    <span className="opacity-40">·</span>
-                    {longDate(start, zone)}
-                  </>
-                )}
+                <span className="whitespace-nowrap">National Military Podcast Day</span>
               </motion.div>
               <motion.h1
                 variants={FADE_UP}
