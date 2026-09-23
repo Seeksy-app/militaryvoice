@@ -19,6 +19,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RUN_ITEM_KINDS, type RunItemRow, type SignupRow, type ShowAssetRow, type EventRow } from "@shared/schema";
 import { detectLocalTimeZone, formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
 import {
@@ -69,13 +70,39 @@ const COLLAPSED_ROWS = 8;
  * in a given hour. Every hour of the day, named or open, so the gaps read as
  * gaps.
  */
-function CohostStrip({ adminGet, event, zone }: { adminGet: Props["adminGet"]; event: EventRow | undefined; zone: string }) {
+function CohostStrip({ adminGet, adminSend, event, zone, signups }: { adminGet: Props["adminGet"]; adminSend: Props["adminSend"]; event: EventRow | undefined; zone: string; signups: SignupRow[] }) {
   type Claim = { blockIndex: number; startAtUtc: string; email: string; hostName: string; podcastName: string; claimedAt: string };
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState<number | null>(null);
+  const [pick, setPick] = useState("");
   const { data: claims } = useQuery<Claim[]>({
     queryKey: ["/api/admin/cohost-slots", event?.id],
     queryFn: () => adminGet<Claim[]>(`/api/admin/cohost-slots?eventId=${event!.id}`),
     enabled: !!event,
     staleTime: 30_000,
+  });
+  // Anyone booked on the day can sit at the desk; one address each.
+  const people = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const sg of signups) {
+      const e = sg.email.trim().toLowerCase();
+      if (sg.status !== "cancelled" && e && !seen.has(e)) seen.set(e, `${sg.hostName} · ${sg.podcastName}`);
+    }
+    return Array.from(seen.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [signups]);
+  const done = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/cohost-slots", event?.id] });
+  const assign = useMutation({
+    mutationFn: async ({ blockIndex, email }: { blockIndex: number; email: string }) =>
+      adminSend("POST", "/api/admin/cohost-slots", { eventId: event!.id, blockIndex, email }),
+    onSuccess: () => { done(); setOpen(null); setPick(""); },
+    onError: (e: Error) => toast({ title: "Couldn't place them", description: e.message, variant: "destructive" }),
+  });
+  const release = useMutation({
+    mutationFn: async ({ blockIndex, email }: { blockIndex: number; email: string }) =>
+      adminSend("DELETE", `/api/admin/cohost-slots/${event!.id}/${blockIndex}?email=${encodeURIComponent(email)}`),
+    onSuccess: () => { done(); setOpen(null); },
+    onError: (e: Error) => toast({ title: "Couldn't take them off", description: e.message, variant: "destructive" }),
   });
   if (!event) return null;
   const hours = Math.max(1, Math.round(event.durationHours));
@@ -89,7 +116,7 @@ function CohostStrip({ adminGet, event, zone }: { adminGet: Props["adminGet"]; e
           <Users className="h-3.5 w-3.5" /> Co-hosts
         </span>
         <span className="text-xs text-muted-foreground">
-          {filled === 0 ? "Nobody has taken an hour yet" : `${filled} of ${hours} hours have a person beside Alex`} · podcasters pick these from their dashboard
+          {filled === 0 ? "Nobody has taken an hour yet" : `${filled} of ${hours} hours have a co-host`} · click an hour to place someone, or podcasters pick from their dashboard
         </span>
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -97,15 +124,61 @@ function CohostStrip({ adminGet, event, zone }: { adminGet: Props["adminGet"]; e
           const c = byBlock.get(i);
           const at = new Date(start + i * 3_600_000);
           return (
-            <div
-              key={i}
-              title={c ? `${c.hostName} · ${c.podcastName}` : "Open"}
-              className={`flex min-w-[6.5rem] flex-col rounded-lg border px-2.5 py-1.5 text-xs ${c ? "border-primary/40 bg-primary/5" : "border-dashed border-border text-muted-foreground"}`}
-              data-testid={`cohost-hour-${i}`}
-            >
-              <span className="tabular-nums font-semibold">{formatTimeInZone(at, zone)}</span>
-              <span className="truncate">{c ? (c.hostName.trim().split(/\s+/)[0] || c.email) : "open"}</span>
-            </div>
+            <Popover key={i} open={open === i} onOpenChange={(v) => { setOpen(v ? i : null); setPick(""); }}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  title={c ? `${c.hostName || c.email}${c.podcastName ? ` · ${c.podcastName}` : ""}` : "Open — click to place a co-host"}
+                  className={`flex min-w-[6.5rem] flex-col rounded-lg border px-2.5 py-1.5 text-left text-xs transition-colors ${c ? "border-primary/40 bg-primary/5 hover:bg-primary/10" : "border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
+                  data-testid={`cohost-hour-${i}`}
+                >
+                  <span className="tabular-nums font-semibold">{formatTimeInZone(at, zone)}</span>
+                  <span className="truncate">{c ? (c.hostName.trim().split(/\s+/)[0] || c.email) : "open"}</span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-72 p-3">
+                <p className="text-sm font-semibold">Co-host · {formatTimeInZone(at, zone)}</p>
+                {c ? (
+                  <>
+                    <p className="mt-1 text-sm">{c.hostName || c.email}</p>
+                    {c.podcastName && <p className="text-xs text-muted-foreground">{c.podcastName}</p>}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 w-full rounded-full"
+                      disabled={release.isPending}
+                      onClick={() => release.mutate({ blockIndex: i, email: c.email })}
+                      data-testid={`button-cohost-release-${i}`}
+                    >
+                      Take them off this hour
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-1 text-xs text-muted-foreground">Sits at the desk with Riccoh for the hour, on stage for the intros and handoffs.</p>
+                    <Select value={pick} onValueChange={setPick}>
+                      <SelectTrigger className="mt-3 h-9" data-testid={`select-cohost-${i}`}>
+                        <SelectValue placeholder="Choose a person" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {people.map(([email, label]) => (
+                          <SelectItem key={email} value={email}>{label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm"
+                      className="mt-2 w-full rounded-full"
+                      disabled={!pick || assign.isPending}
+                      onClick={() => assign.mutate({ blockIndex: i, email: pick })}
+                      data-testid={`button-cohost-assign-${i}`}
+                    >
+                      Make co-host for this hour
+                    </Button>
+                  </>
+                )}
+              </PopoverContent>
+            </Popover>
           );
         })}
       </div>
@@ -379,7 +452,7 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
       </CardHeader>
 
       <CardContent>
-        <CohostStrip adminGet={adminGet} event={event} zone={zone} />
+        <CohostStrip adminGet={adminGet} adminSend={adminSend} event={event} zone={zone} signups={signups ?? []} />
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : !items || items.length === 0 ? (

@@ -1859,22 +1859,44 @@ export function registerRoutes(app: Express): void {
    * name when they typed it into a guest link. Cached a minute, because the
    * console polls the studio every couple of seconds.
    */
-  let showHostsCache: { at: number; emails: Set<string>; names: string[] } | null = null;
-  async function showHosts() {
+  type ShowHosts = { at: number; emails: Set<string>; names: string[]; cohosts: Map<string, number[]>; startMs: number };
+  let showHostsCache: ShowHosts | null = null;
+  async function showHosts(): Promise<ShowHosts> {
     if (showHostsCache && Date.now() - showHostsCache.at < 60_000) return showHostsCache;
     const ev = await storage.getFeaturedEvent().catch(() => null);
     const team = ev ? await storage.listEventTeam(ev.id).catch(() => []) : [];
     const hosts = team.filter((m) => /host|emcee|mc\b/i.test(m.title) && !/produc|director|crew/i.test(m.title));
+    // Co-hosts hold hours at the desk (Amy, 9 to 4): hosts for those hours.
+    const cohosts = new Map<string, number[]>();
+    for (const c of ev ? await storage.listCohostSlots(ev.id).catch(() => []) : []) {
+      const e = c.email.trim().toLowerCase();
+      cohosts.set(e, [...(cohosts.get(e) ?? []), c.blockIndex]);
+    }
     showHostsCache = {
       at: Date.now(),
       emails: new Set(hosts.map((m) => (m.email ?? "").toLowerCase().trim()).filter(Boolean)),
       names: hosts.map((m) => m.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()).filter(Boolean),
+      cohosts,
+      startMs: ev ? Date.parse(ev.startAtUtc) : NaN,
     };
     return showHostsCache;
   }
-  function isShowHost(p: StudioParticipantRow, hosts: { emails: Set<string>; names: string[] }) {
+  /** A host of the show — at any hour. The console seats them on the right. */
+  function isShowHost(p: StudioParticipantRow, hosts: ShowHosts) {
     const name = p.displayName.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-    return p.role === "Host" || name === "host" || hosts.emails.has(p.email.toLowerCase().trim()) || (name.length > 2 && hosts.names.includes(name));
+    const email = p.email.toLowerCase().trim();
+    return p.role === "Host" || name === "host" || hosts.emails.has(email) || (name.length > 2 && hosts.names.includes(name)) || hosts.cohosts.has(email);
+  }
+  /** A host at this moment: the main hosts always, a co-host only in their own hours. */
+  function isHostAt(p: StudioParticipantRow, hosts: ShowHosts, atUtc: string) {
+    if (!isShowHost(p, hosts)) return false;
+    const blocks = hosts.cohosts.get(p.email.toLowerCase().trim());
+    const name = p.displayName.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const main = p.role === "Host" || name === "host" || hosts.emails.has(p.email.toLowerCase().trim()) || hosts.names.includes(name);
+    if (main || !blocks) return true;
+    const at = Date.parse(atUtc);
+    if (!Number.isFinite(at) || !Number.isFinite(hosts.startMs)) return false;
+    return blocks.includes(Math.floor((at - hosts.startMs) / (COHOST_BLOCK_MINUTES * 60_000)));
   }
 
   app.post("/api/admin/request-code", async (req, res) => {
@@ -4076,7 +4098,7 @@ export function registerRoutes(app: Express): void {
       return x.length > 2 && y.length > 2 && (x.includes(y) || y.includes(x));
     };
     const hosts = await showHosts();
-    const isHost = (p: StudioParticipantRow) => isShowHost(p, hosts);
+    const isHost = (p: StudioParticipantRow) => isHostAt(p, hosts, row.startAtUtc);
     const belongs = (p: StudioParticipantRow) =>
       Boolean(signup) && (p.signupId === signup!.id || nameMatch(p.displayName, signup!.hostName) || nameMatch(p.displayName, signup!.podcastName));
     const guestScene = row.kind === "Segment" && Boolean(signup);
@@ -4090,6 +4112,8 @@ export function registerRoutes(app: Express): void {
     for (const p of present) {
       let target: "On stage" | "Green room";
       if (mediaScene) target = "Green room";
+      // A co-host who is also a podcaster is the guest on their own show.
+      else if (guestScene && belongs(p)) target = "On stage";
       else if (isHost(p)) target = guestScene && !signup!.needsInterviewer ? "Green room" : "On stage";
       // A podcaster's guest comes on with them: anyone who joined through the
       // same signup link.
@@ -4116,7 +4140,7 @@ export function registerRoutes(app: Express): void {
       const ev = await storage.getEventById(studio.eventId);
       await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
     }
-    const missing = guestScene && !present.some((p) => !isHost(p) && belongs(p));
+    const missing = guestScene && !present.some((p) => belongs(p));
     return { studio: updated, moved, missing: missing ? signup!.podcastName : null };
   }
 
@@ -6992,11 +7016,13 @@ export function registerRoutes(app: Express): void {
     }
     const row = await storage.claimCohostSlot(eventId, blockIndex, email);
     if (!row) return res.status(409).json({ message: "Somebody already has that hour." });
+    showHostsCache = null;
     res.json(row);
   });
   app.delete("/api/admin/cohost-slots/:eventId/:blockIndex", requireAdmin, async (req, res) => {
     const email = String(req.query.email ?? "").trim().toLowerCase();
     const ok = await storage.releaseCohostSlot(Number(req.params.eventId), Number(req.params.blockIndex), email);
+    showHostsCache = null;
     res.json({ ok });
   });
 
