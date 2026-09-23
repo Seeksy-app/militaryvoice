@@ -3,7 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import {
   Search, Sparkles, BadgeCheck, Bookmark, BookmarkCheck, Users, Mail, Phone, Globe, ShieldCheck,
   Mic2, Megaphone, CalendarDays, X, Loader2, ExternalLink, Plus, Trash2, Download, ChevronRight, Lock, MapPin, Heart, Hash, Handshake, Info,
-  Check, SlidersHorizontal, AtSign, Type as TypeIcon, Wand2, TrendingUp, Instagram, Youtube, Twitter, Twitch, Music2, Share2,
+  Check, SlidersHorizontal, AtSign, Type as TypeIcon, Wand2, TrendingUp, Instagram, Youtube, Twitter, Twitch, Music2, Share2, Linkedin, Facebook,
 } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -171,6 +171,9 @@ export default function Discover() {
   const [showFilters, setShowFilters] = useState(false);
   // While the search-mode menu is open the hero sits above the sticky filter bar, so the menu isn't painted over.
   const [menuOpen, setMenuOpen] = useState(false);
+  // The hero demo's typing and the list it lights up.
+  const [ghost, setGhost] = useState("");
+  const [spotlight, setSpotlight] = useState(false);
   const [submitted, setSubmitted] = useState<null | { q: string; platform: string; branch: string; size: number; sort: string; mode: Mode; filters: Filters }>(null);
   const [heroVariant] = useState(() => {
     try {
@@ -309,7 +312,8 @@ export default function Discover() {
   }, [search.data]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="relative min-h-screen bg-background">
+      <SearchDemo enabled={!submitted && tab === "search"} onType={setGhost} onSpotlight={setSpotlight} />
       <NavBar product="discovery" account={isMember ? { label: "Saved", onClick: () => { setTab("lists"); document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }); } } : { label: me?.signedIn ? "Add Discovery" : "Sign in", onClick: () => setGate(true) }} />
 
       {/* ---------------------------------------------------------------- hero */}
@@ -323,6 +327,7 @@ export default function Discover() {
             q={q}
             setQ={setQ}
             placeholder={mode === "ai" ? d.placeholder : mode === "keywords" ? "army wife, military spouse, milso" : "@handle, or paste a profile link"}
+            ghost={ghost}
             onSubmit={() => run()}
             busy={userLoading}
             filterCount={activeFilters(filters).length}
@@ -350,7 +355,7 @@ export default function Discover() {
             )}
             {/* The search lives with the filters, not up in the hero. */}
             <section className={`relative border-b border-border bg-background ${menuOpen ? "z-30" : "z-10"}`}>
-              <div className="mx-auto w-full max-w-6xl px-4 pb-5 pt-6 sm:px-6">
+              <div className="mx-auto w-full max-w-[88rem] px-4 pb-5 pt-6 sm:px-6">
                 {bar}
                 {tries}
                 <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
@@ -367,7 +372,7 @@ export default function Discover() {
 
       {/* -------------------------------------------------------- filter bar */}
       <div className="sticky top-[77px] z-20 border-b border-border bg-background/90 backdrop-blur lg:top-[93px]">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex w-full max-w-[88rem] flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
           {(
             <div className="mr-2 flex rounded-full bg-muted p-1 text-sm">
               {(isMember ? (["search", "enrich", "lists"] as const) : (["search", "enrich"] as const)).map((t) => (
@@ -406,7 +411,7 @@ export default function Discover() {
         </div>
       </div>
 
-      <main id="discover-main" className="mx-auto w-full max-w-6xl scroll-mt-16 px-4 py-8 sm:px-6">
+      <main id="discover-main" className="mx-auto w-full max-w-[88rem] scroll-mt-16 px-4 py-8 sm:px-6">
         {tab !== "enrich" && showFilters && (
           <div className="mb-8">
             <FiltersPanel value={filters} onChange={setFilters} platform={platform} onClose={() => setShowFilters(false)} onApply={() => run()} />
@@ -433,7 +438,7 @@ export default function Discover() {
         ) : tab === "lists" && isMember ? (
           <Lists lists={lists.data ?? []} onOpen={(c) => openIn((lists.data ?? []).flatMap((l) => l.items.map((i) => i.snapshot)))(c)} />
         ) : !submitted || !isMember || submitted.mode === "username" ? (
-          <Welcome verified={verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} onJoin={() => setGate(true)} loading={meLoading} />
+          <Welcome verified={verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} onJoin={() => setGate(true)} loading={meLoading} />
         ) : (
           <>
             {/* what ran */}
@@ -554,8 +559,10 @@ function ModeMenu({ mode, setMode, onOpenChange }: { mode: Mode; setMode: (m: Mo
   );
 }
 
-function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder, onSubmit, busy, filterCount, onFilters, onMenu }: {
+function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder, onSubmit, busy, filterCount, onFilters, onMenu, ghost }: {
   onMenu?: (open: boolean) => void;
+  /** The demo's typing, shown as if typed; never the real value. */
+  ghost?: string;
   platform: string; setPlatform: (p: string) => void; mode: Mode; setMode: (m: Mode) => void; q: string; setQ: (q: string) => void;
   placeholder: string; onSubmit: () => void; busy: boolean; filterCount: number; onFilters: () => void;
 }) {
@@ -571,7 +578,7 @@ function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder,
         </div>
         <div className="relative flex-1">
           <Lead className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} className="h-12 border-0 pl-11 text-base shadow-none focus-visible:ring-0" data-testid="discover-q" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={!q && ghost ? ghost : placeholder} className={`h-12 border-0 pl-11 text-base shadow-none focus-visible:ring-0 ${!q && ghost ? "placeholder:text-foreground" : ""}`} data-testid="discover-q" />
         </div>
         <div className="flex gap-2">
           {mode !== "username" && (
@@ -602,7 +609,7 @@ function HeroA({ raised, door, setDoor, bar, tries, onEnrich, allowance }: HeroP
         <div className="absolute -right-40 -top-40 h-[32rem] w-[32rem] rounded-full opacity-[0.16] blur-3xl" style={{ background: GOLD }} />
         <div className="absolute -bottom-48 -left-32 h-[28rem] w-[28rem] rounded-full bg-[#1d5cc4] opacity-20 blur-3xl" />
       </div>
-      <div className="relative mx-auto w-full max-w-6xl px-4 pb-10 pt-12 sm:px-6 sm:pt-16">
+      <div className="relative mx-auto w-full max-w-[88rem] px-4 pb-10 pt-12 sm:px-6 sm:pt-16">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]"><Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery</p>
           {allowance && <p className="text-xs text-white/60" data-testid="discover-allowance">{Math.max(0, allowance.allowance - allowance.used)} of {allowance.allowance} free contacts left this month</p>}
@@ -649,7 +656,7 @@ function HeroB({ raised, door, setDoor, bar, tries, onEnrich, verified, onOpen }
 
       </div>
 
-      <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 pb-16 pt-14 sm:px-6 sm:pt-20 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:pb-24 lg:pt-24">
+      <div className="mx-auto grid w-full max-w-[88rem] items-center gap-12 px-4 pb-16 pt-14 sm:px-6 sm:pt-20 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:pb-24 lg:pt-24">
         <div className="min-w-0">
           <p className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/30 bg-[#F0A71F]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">
             <Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery
@@ -684,6 +691,70 @@ function HeroB({ raised, door, setDoor, bar, tries, onEnrich, verified, onOpen }
 
       </div>
     </section>
+  );
+}
+
+/**
+ * The second half of the hero's demo: the cursor leaves the creator card, goes
+ * down to the search, types "Military podcasters", presses Search, and our
+ * verified list lights up. Visual only — nothing is searched or spent — and it
+ * gives way the moment someone touches the search box.
+ */
+function SearchDemo({ enabled, onType, onSpotlight }: { enabled: boolean; onType: (t: string) => void; onSpotlight: (on: boolean) => void }) {
+  const [pos, setPos] = useState({ x: 0, y: 0, on: false, click: 0 });
+  const live = useRef(enabled);
+  live.current = enabled;
+  useEffect(() => {
+    let timers: number[] = [];
+    const done = () => window.dispatchEvent(new Event("mv-demo-search-done"));
+    const stop = () => {
+      timers.forEach(clearTimeout);
+      timers = [];
+      setPos((p) => ({ ...p, on: false }));
+      onType("");
+      onSpotlight(false);
+      done();
+    };
+    const at = (sel: string, dx = 0.5, dy = 0.5) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.left + window.scrollX + r.width * dx, y: r.top + window.scrollY + r.height * dy };
+    };
+    const run = () => {
+      const input = document.querySelector('[data-testid="discover-q"]') as HTMLInputElement | null;
+      const card = at('[data-testid="hero-preview"]', 0.54, 0.4);
+      const q = at('[data-testid="discover-q"]', 0.12, 0.55);
+      const go = at('[data-testid="discover-go"]', 0.5, 0.55);
+      if (!live.current || !input || input.value || document.activeElement === input || !card || !q || !go) return done();
+      const T = (ms: number, f: () => void) => { timers.push(window.setTimeout(f, ms)); };
+      const text = "Military podcasters";
+      setPos({ ...card, on: true, click: 0 });
+      T(250, () => setPos((p) => ({ ...p, ...q })));
+      T(1350, () => setPos((p) => ({ ...p, click: p.click + 1 })));
+      for (let k = 1; k <= text.length; k++) T(1500 + k * 75, () => onType(text.slice(0, k)));
+      const end = 1500 + text.length * 75;
+      T(end + 350, () => setPos((p) => ({ ...p, ...go })));
+      T(end + 1350, () => setPos((p) => ({ ...p, click: p.click + 1 })));
+      T(end + 1500, () => onSpotlight(true));
+      T(end + 2300, () => { setPos((p) => ({ ...p, on: false })); onType(""); });
+      T(end + 4600, () => { onSpotlight(false); done(); });
+    };
+    const touched = (e: Event) => { if ((e.target as HTMLElement)?.getAttribute?.("data-testid") === "discover-q" && timers.length) stop(); };
+    window.addEventListener("mv-demo-search", run);
+    document.addEventListener("focusin", touched);
+    return () => {
+      window.removeEventListener("mv-demo-search", run);
+      document.removeEventListener("focusin", touched);
+      timers.forEach(clearTimeout);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div aria-hidden className="pointer-events-none absolute left-0 top-0 z-50 transition-all duration-1000 ease-[cubic-bezier(.4,0,.2,1)]" style={{ transform: `translate(${pos.x}px, ${pos.y}px)`, opacity: pos.on ? 1 : 0 }}>
+      {pos.click > 0 && <span key={pos.click} className="absolute -left-3 -top-3 h-8 w-8 rounded-full bg-[#F0A71F]/60" style={{ animation: "mv-click .5s ease-out forwards" }} />}
+      <style>{`@keyframes mv-click{0%{transform:scale(.4);opacity:.9}100%{transform:scale(2.2);opacity:0}}`}</style>
+      <svg width="26" height="26" viewBox="0 0 24 24" className="drop-shadow-[0_4px_8px_rgba(0,0,0,0.45)]"><path d="M4 2l15 8.2-6.4 1.6 3.9 7.3-2.9 1.5-3.9-7.3L4 18z" fill="white" stroke="#0b1733" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+    </div>
   );
 }
 
@@ -805,16 +876,32 @@ function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card
   // idle → cursor travels → click → the profile rises → it reads → it slides away → next
   const [phase, setPhase] = useState<"idle" | "move" | "click" | "open" | "read" | "close">("idle");
   const [paused, setPaused] = useState(false);
+  // After the first look at a profile, the demo walks down to the search once, then comes back here.
+  const [waiting, setWaiting] = useState(false);
+  const handedOff = useRef(false);
   useEffect(() => {
-    if (!pool.length || paused) return;
+    const done = () => setWaiting(false);
+    window.addEventListener("mv-demo-search-done", done);
+    return () => window.removeEventListener("mv-demo-search-done", done);
+  }, []);
+  useEffect(() => {
+    if (!pool.length || paused || waiting) return;
     const plan: [typeof phase, number][] = [["idle", 1600], ["move", 1000], ["click", 350], ["open", 800], ["read", 6200], ["close", 800]];
     const at = plan.findIndex(([p]) => p === phase);
     const t = setTimeout(() => {
-      if (at === plan.length - 1) { setPhase("idle"); setI((n) => (n + 1) % pool.length); }
+      if (at === plan.length - 1) {
+        setPhase("idle");
+        setI((n) => (n + 1) % pool.length);
+        if (!handedOff.current) {
+          handedOff.current = true;
+          setWaiting(true);
+          window.dispatchEvent(new Event("mv-demo-search"));
+        }
+      }
       else setPhase(plan[at + 1][0]);
     }, plan[at][1]);
     return () => clearTimeout(t);
-  }, [phase, paused, pool.length]);
+  }, [phase, paused, waiting, pool.length]);
 
   if (!pool.length) return <div className="aspect-[4/5] w-full rounded-[28px] border border-white/10 bg-white/[0.03]" />;
   const c = pool[i % pool.length];
@@ -833,9 +920,9 @@ function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card
     <div className="relative mx-auto w-full max-w-[29rem] select-none" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
       <style>{`@keyframes mv-click{0%{transform:scale(.4);opacity:.9}100%{transform:scale(2.2);opacity:0}}`}</style>
       {/* the next one, waiting behind */}
-      <div aria-hidden className="absolute inset-x-6 top-0 h-full overflow-hidden rounded-[28px] border border-white/10 bg-[#0b1733] opacity-50 shadow-2xl" style={{ transform: "translateY(-18px) scale(0.94)" }}>
+      {pool.length > 1 && <div aria-hidden className="absolute inset-x-6 top-0 h-full overflow-hidden rounded-[28px] border border-white/10 bg-[#0b1733] opacity-50 shadow-2xl" style={{ transform: "translateY(-18px) scale(0.94)" }}>
         <img src={src(next.picture)} alt="" className="h-2/3 w-full object-cover opacity-60" />
-      </div>
+      </div>}
 
       <div className={`relative overflow-hidden rounded-[28px] border border-white/15 bg-[#0b1733] text-left shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)] transition-transform duration-200 ${phase === "click" ? "scale-[0.985]" : ""}`}>
         <button key={c.handle} type="button" onClick={() => onOpen(asCard())} className="block w-full text-left animate-in fade-in-0 duration-500" data-testid="hero-preview">
@@ -922,7 +1009,7 @@ function SonarLoader({ steps, title }: { steps: string[]; title?: string }) {
 
 function PlatformIcon({ platform, className = "h-4 w-4" }: { platform: string; className?: string }) {
   const I = PLATFORM_ICON[platform] ?? Globe;
-  const color = platform === "instagram" ? "text-[#d62976]" : platform === "youtube" ? "text-[#ff0000]" : platform === "twitch" ? "text-[#9146ff]" : "text-foreground";
+  const color = platform === "instagram" ? "text-[#d62976]" : platform === "youtube" ? "text-[#ff0000]" : platform === "twitch" ? "text-[#9146ff]" : platform === "linkedin" ? "text-[#0a66c2]" : platform === "facebook" ? "text-[#1877f2]" : "text-foreground";
   return <I className={`${className} ${color}`} />;
 }
 
@@ -956,7 +1043,7 @@ function ResultsList({ rows, total, saved, isMember, isAdmin, onOpen, onSave, on
   // Each column shows only when some row on the page has it.
   const has = {
     quality: rows.some((c) => c.quality != null),
-    channels: rows.some((c) => (c.channels ?? []).length > 0),
+    channels: rows.some((c) => (c.channels ?? []).some((ch) => PLATFORM_ICON[ch])),
     growth: rows.some((c) => (ex(c)?.growth.length ?? 0) > 1),
     country: rows.some((c) => ex(c)?.country),
     niches: rows.some((c) => (ex(c)?.niches.length ?? 0) > 0),
@@ -1033,7 +1120,7 @@ function ResultsList({ rows, total, saved, isMember, isAdmin, onOpen, onSave, on
                     </button>
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 text-right font-medium tabular-nums"><span className="inline-flex items-center gap-1.5">{c.platform && <PlatformIcon platform={c.platform} className="h-3.5 w-3.5" />}{c.followers != null ? compact(c.followers) : "–"}</span></td>
-                  {has.channels && <td className="px-3 py-3"><span className="flex gap-1.5">{(c.channels ?? []).slice(0, 4).map((ch) => <PlatformIcon key={ch} platform={ch} className="h-4 w-4" />)}</span></td>}
+                  {has.channels && <td className="px-3 py-3"><span className="flex gap-1.5">{(c.channels ?? []).filter((ch) => PLATFORM_ICON[ch]).slice(0, 4).map((ch) => <PlatformIcon key={ch} platform={ch} className="h-4 w-4" />)}</span></td>}
                   {has.growth && (
                     <td className="whitespace-nowrap px-3 py-3">
                       {x && x.growth.length > 1 ? (
@@ -1105,9 +1192,20 @@ function ResultsSkeleton() {
 // Before a search: our creators, and what Discovery is
 // ===========================================================================
 
-function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified, onSaveMany, saved, onJoin, loading }: { verified: Card[]; isMember: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; saved: Set<string>; onJoin: () => void; loading: boolean }) {
+function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified, onSaveMany, saved, spotlight, onJoin, loading }: { verified: Card[]; isMember: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; saved: Set<string>; spotlight?: boolean; onJoin: () => void; loading: boolean }) {
   return (
     <div className="flex flex-col gap-12">
+      <section>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+            <BadgeCheck className="h-5 w-5 text-[#F0A71F]" /> Verified on MilitaryVoices
+          </h2>
+          <p className="text-sm text-muted-foreground">Creators we know personally. Every one checked by our team.</p>
+        </div>
+        <div className={`mt-5 rounded-2xl transition-all duration-500 ${spotlight ? "ring-4 ring-[#F0A71F]/50 shadow-[0_0_48px_rgba(240,167,31,0.35)]" : ""}`}>
+          {verified.length === 0 ? <ResultsSkeleton /> : <ResultsList rows={verified} saved={saved} isMember={isMember} onOpen={onOpenVerified} onSave={onSaveVerified} onSaveMany={onSaveMany} />}
+        </div>
+      </section>
       {!isMember && !loading && (
         <section className="grid gap-6 rounded-3xl border border-border bg-card p-6 sm:p-8 lg:grid-cols-[1.2fr_1fr] lg:items-center">
           <div>
@@ -1140,17 +1238,6 @@ function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified,
         </section>
       )}
 
-      <section>
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
-            <BadgeCheck className="h-5 w-5 text-[#F0A71F]" /> Verified on MilitaryVoices
-          </h2>
-          <p className="text-sm text-muted-foreground">Creators we know personally. Every one checked by our team.</p>
-        </div>
-        <div className="mt-5">
-          {verified.length === 0 ? <ResultsSkeleton /> : <ResultsList rows={verified} saved={saved} isMember={isMember} onOpen={onOpenVerified} onSave={onSaveVerified} onSaveMany={onSaveMany} />}
-        </div>
-      </section>
     </div>
   );
 }
@@ -1299,7 +1386,7 @@ function RequestButton({ kind, card, isMember, onJoin }: { kind: "email" | "phon
   );
 }
 
-const PLATFORM_ICON: Record<string, typeof Instagram> = { instagram: Instagram, youtube: Youtube, tiktok: Music2, twitter: Twitter, twitch: Twitch };
+const PLATFORM_ICON: Record<string, typeof Instagram> = { instagram: Instagram, youtube: Youtube, tiktok: Music2, twitter: Twitter, x: Twitter, twitch: Twitch, linkedin: Linkedin, facebook: Facebook };
 
 /**
  * A creator, opened: a panel over the results, so the list stays in view. The

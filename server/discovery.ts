@@ -38,7 +38,7 @@ type Platform = (typeof PLATFORMS)[number];
 const FREE_REVEALS_PER_MONTH = 10;
 const PAGE_SIZE = 10;
 /** Featured in the hero's demo ahead of our lineup, as platform:handle. Read from cache only. */
-const SHOWCASE: string[] = ["instagram:dr.brittiniewick_dpt", "instagram:vfwhq"];
+const SHOWCASE: string[] = ["instagram:dr.brittiniewick_dpt"];
 const DAY = 86_400_000;
 
 // ---------------------------------------------------------------------------
