@@ -294,7 +294,7 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
             <Tile label="Est. income" value={s.incomeMin == null ? "–" : s.incomeMax && s.incomeMax !== s.incomeMin ? `${money(s.incomeMin)}–${money(s.incomeMax)}` : money(s.incomeMin)} sub="from sponsored posts, a month" />
             <Tile label="Creator type" value={profile.identity.creatorType || "–"} sub={profile.identity.category || (profile.identity.verified ? "verified account" : undefined)} />
             <Tile label="Top audience country" value={s.topCountry ? pctText(s.topCountry.pct) : "–"} sub={s.topCountry?.name} />
-            <Tile label="Audience gender" value={s.femalePct == null ? "–" : `${Math.round(s.femalePct)}% F · ${Math.round(s.malePct ?? 100 - s.femalePct)}% M`} />
+            <Tile label="Audience gender" value={s.femalePct == null ? "–" : `${Math.round(s.femalePct)}% F · ${100 - Math.round(s.femalePct)}% M`} />
             <Tile star label="Real reach" value={compact(s.realReach)} sub={s.realPct != null ? `${pctText(s.realPct)} of followers are real people` : undefined} />
             <Tile star label="Audience credibility" value={s.credibility == null ? "–" : <>{s.credibility}<span className="text-sm font-medium text-muted-foreground"> /100</span></>} tone={s.credibility == null ? undefined : s.credibility >= 80 ? "good" : s.credibility >= 60 ? "warn" : "bad"} />
             <Tile star label="Followers" value={compact(profile.identity.followers)} sub={profile.identity.posts != null ? `${compact(profile.identity.posts)} ${yt ? "videos" : "posts"}` : undefined} />
