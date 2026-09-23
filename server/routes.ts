@@ -4770,6 +4770,8 @@ export function registerRoutes(app: Express): void {
         verticalUrl: c.verticalUrl,
         squareUrl: c.squareUrl,
         subtitlesUrl: c.subtitlesUrl,
+        sourceAssetId: 0,
+        cutAssetId: 0,
       }));
     const saved = await storage.replaceClips(rec.id, rows);
     await storage.setClipStatus(rec.id, "done", "");
@@ -4854,6 +4856,47 @@ export function registerRoutes(app: Express): void {
       };
     }).sort((a, b) => (signups.find((x) => x.id === a.signupId)?.slotIndex ?? 0) - (signups.find((x) => x.id === b.signupId)?.slotIndex ?? 0));
     res.json([...episodeRows, ...withClips]);
+  });
+
+  /**
+   * What cutting the episodes cost, show by show: transcription, the AI
+   * picks, the fade point, rendering and storage. Estimated from each file's
+   * length and size, at the rates below; the section says so.
+   */
+  app.get("/api/admin/production-costs", requireAdmin, async (req, res) => {
+    noStore(res);
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    const R = { scribePerHour: 0.40, opusIn: 5 / 1e6, opusOut: 25 / 1e6, sonnetIn: 2 / 1e6, sonnetOut: 10 / 1e6, r2PerGbMonth: 0.015, wordsPerMin: 150, tokensPerWord: 1.35 };
+    const signups = await storage.listSignups(eventId);
+    const assets = await storage.listAllAssets();
+    const byId = new Map(assets.map((a) => [a.id, a]));
+    const idOf = (url: string) => Number(/\/api\/studio\/media\/(\d+)/.exec(url || "")?.[1] ?? 0);
+    const clips = (await storage.listClips(0)).filter((c) => c.eventId === eventId);
+    const groups = new Map<number, typeof clips>();
+    for (const c of clips) groups.set(c.signupId ?? 0, [...(groups.get(c.signupId ?? 0) ?? []), c]);
+    const shows = Array.from(groups.entries()).map(([signupId, list]) => {
+      const sg = signups.find((x) => x.id === signupId);
+      const clipAssets = list.flatMap((c) => [c.url, c.verticalUrl, c.squareUrl].map((u) => byId.get(idOf(u)))).filter(Boolean) as typeof assets;
+      const original = byId.get(list[0]?.sourceAssetId ?? 0);
+      const cut = byId.get(list[0]?.cutAssetId ?? 0);
+      const minutes = (original?.durationSeconds ?? 0) / 60;
+      const inTok = minutes * R.wordsPerMin * R.tokensPerWord + 1500;
+      const faded = cut ? /fades at/.test(cut.label) : false;
+      const gb = [...clipAssets, ...(cut ? [cut] : [])].reduce((n, a) => n + Number(a.sizeBytes || 0), 0) / 1073741824;
+      const items = [
+        { label: "Transcription", note: `ElevenLabs Scribe · ${Math.round(minutes)} min of audio, word timings and speakers`, cost: (minutes / 60) * R.scribePerHour },
+        { label: "Clip picks", note: `Claude Opus 5 · reads the transcript, picks ${list.length} moments · ~${Math.round(inTok / 1000)}k tokens`, cost: inTok * R.opusIn + 4000 * R.opusOut },
+        ...(faded ? [{ label: "Fade point", note: "Claude Sonnet 5 · finds the break to fade on", cost: 2500 * R.sonnetIn + 300 * R.sonnetOut }] : []),
+        { label: "Rendering", note: `Broadcast cut and ${list.length * 3} clip files (vertical, square, wide) · on our VPS, no per-job charge`, cost: 0 },
+        { label: "Storage", note: `${gb.toFixed(2)} GB on Cloudflare R2 · per month`, cost: gb * R.r2PerGbMonth },
+      ];
+      return {
+        signupId, podcaster: sg?.hostName ?? "", show: (sg?.podcastName ?? "").trim(), onLineup: sg?.status !== "cancelled",
+        episode: original?.label ?? "", episodeMinutes: Math.round(minutes), clips: list.length,
+        cutLabel: cut?.label ?? "", items, total: items.reduce((n, i) => n + i.cost, 0),
+      };
+    }).sort((a, b) => b.total - a.total);
+    res.json({ rates: R, shows, total: shows.reduce((n, s) => n + s.total, 0) });
   });
 
   app.post("/api/admin/recordings/:id/reclip", requireAdmin, async (req, res) => {

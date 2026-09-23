@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { adminGet } from "@/lib/adminApi";
 import { Slider } from "@/components/ui/slider";
 import type { PublicEvent } from "@shared/schema";
-import { Calculator, TrendingUp, AlertTriangle } from "lucide-react";
+import { Calculator, TrendingUp, AlertTriangle, Film, ChevronRight } from "lucide-react";
 
 // What the event costs to run, and what to charge afterwards.
 //
@@ -247,6 +249,8 @@ export function FinancesCard({ event }: { event: PublicEvent }) {
         </div>
       </section>
 
+      <ProductionCosts eventId={event.id} />
+
       {/* ---------------------------------------------------------- what to charge */}
       <section>
         <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
@@ -324,5 +328,90 @@ export function FinancesCard({ event }: { event: PublicEvent }) {
         </p>
       </section>
     </div>
+  );
+}
+
+type ProductionShow = {
+  signupId: number; podcaster: string; show: string; onLineup: boolean;
+  episode: string; episodeMinutes: number; clips: number; cutLabel: string;
+  items: { label: string; note: string; cost: number }[]; total: number;
+};
+
+/**
+ * What cutting the sent-in episodes cost: one row per show, opening to its
+ * line items. Estimated from each file's length and size at published rates.
+ */
+export function ProductionCosts({ eventId }: { eventId: number }) {
+  const [open, setOpen] = useState<Record<number, boolean>>({});
+  const { data } = useQuery<{ shows: ProductionShow[]; total: number }>({
+    queryKey: ["/api/admin/production-costs", eventId],
+    queryFn: () => adminGet(`/api/admin/production-costs?eventId=${eventId}`),
+  });
+  const shows = data?.shows ?? [];
+  const cents = (n: number) => (n > 0 && n < 0.01 ? "<$0.01" : usd(n));
+  return (
+    <section data-testid="production-costs">
+      <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+        <Film className="h-4 w-4" /> Clips and editing
+      </h3>
+      <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+        What it cost to fit each sent-in episode to its slot and cut its clips. Open a show for the line items.
+      </p>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
+        {shows.length === 0 ? (
+          <p className="px-5 py-4 text-sm text-muted-foreground">No episodes cut yet.</p>
+        ) : (
+          shows.map((s) => {
+            const isOpen = !!open[s.signupId];
+            return (
+              <div key={s.signupId} className="border-b border-border last:border-0">
+                <button
+                  type="button"
+                  onClick={() => setOpen((o) => ({ ...o, [s.signupId]: !o[s.signupId] }))}
+                  className="flex w-full items-center gap-3 px-5 py-3 text-left hover:bg-muted/40"
+                  aria-expanded={isOpen}
+                  data-testid={`production-row-${s.signupId}`}
+                >
+                  <ChevronRight className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">
+                      {s.podcaster} · {s.show}
+                      {!s.onLineup && <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">off the lineup</span>}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {s.episode || "Episode"} · {s.episodeMinutes} min · {s.clips} clips
+                    </span>
+                  </span>
+                  <span className="shrink-0 tabular-nums text-sm">{cents(s.total)}</span>
+                </button>
+                {isOpen && (
+                  <div className="bg-muted/20 pb-2">
+                    {s.cutLabel && <p className="px-12 pt-1 text-xs text-muted-foreground">On air: {s.cutLabel.replace(/^.*\(broadcast cut,?\s*/, "broadcast cut, ").replace(/\)$/, "")}</p>}
+                    {s.items.map((it) => (
+                      <div key={it.label} className="flex items-start gap-3 px-12 py-2">
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm">{it.label}</span>
+                          <span className="block text-xs text-muted-foreground">{it.note}</span>
+                        </span>
+                        <span className="shrink-0 tabular-nums text-sm text-muted-foreground">{it.cost === 0 ? "included" : cents(it.cost)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+        {shows.length > 0 && (
+          <div className="flex items-center justify-between border-t border-border bg-muted/30 px-5 py-3 text-sm font-semibold">
+            <span>{shows.length} episodes · {shows.reduce((n, s) => n + s.clips, 0)} clips</span>
+            <span className="tabular-nums">{usd(data?.total ?? 0)}</span>
+          </div>
+        )}
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Estimated from each file's length and size: Scribe at $0.40 an hour of audio, Claude Opus 5 at $5 / $25 per million tokens, Sonnet 5 at $2 / $10, R2 at $0.015 a GB a month. Rendering runs on the VPS we already pay for.
+      </p>
+    </section>
   );
 }

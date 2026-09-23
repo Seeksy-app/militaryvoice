@@ -1154,6 +1154,9 @@ export const clips = pgTable(
     verticalUrl: text("vertical_url").notNull().default(""),
     squareUrl: text("square_url").notNull().default(""),
     subtitlesUrl: text("subtitles_url").notNull().default(""),
+    /** For clips cut from a sent-in episode: the library file it came from, and its broadcast cut. */
+    sourceAssetId: integer("source_asset_id").notNull().default(0),
+    cutAssetId: integer("cut_asset_id").notNull().default(0),
     createdAt: text("created_at").notNull(),
   },
   (t) => ({

@@ -170,10 +170,12 @@ async function main() {
     };
     const now = new Date().toISOString();
     let cutAssetId = cutId;
+    // (attachClips reads cutId; keep it current after a fresh cut)
     if (!clipsOnly) {
       const cutLabel = `${asset.label} (broadcast cut${p.speed !== 1 ? `, ×${p.speed}` : ""}${p.outSec ? `, fades at ${mmss(Math.min(ON_AIR, p.outSec / p.speed))}` : ""})`;
       const cut = await register(`ep${EP}-broadcast.mp4`, cutLabel, `${asset.file_name.replace(/\.mp4$/i, "")} - broadcast cut.mp4`);
       cutAssetId = cut.id;
+      cutId = cut.id;
       const note = `Broadcast cut rolls on air (${mmss(cut.dur)}). Full episode for the replay: library #${EP}.`;
       await sql`UPDATE run_of_show SET media_url = ${`${API}/api/studio/media/${cut.id}`}, media_label = ${cutLabel}, notes = ${[String(item.notes || "").trim(), note].filter(Boolean).join("\n")} WHERE id = ${item.id}`;
       await sql`UPDATE scenes SET media_url = ${`${API}/api/studio/media/${cut.id}`}, media_label = ${cutLabel} WHERE run_item_id = ${item.id} AND media_url = ${`${API}/api/studio/media/${EP}`}`;
@@ -212,9 +214,9 @@ async function main() {
     const now = new Date().toISOString();
     for (let i = 0; i < moments.length; i++) {
       const m = moments[i];
-      await sql`INSERT INTO clips (recording_id, event_id, signup_id, email, title, caption, reason, start_sec, end_sec, url, vertical_url, square_url, created_at)
+      await sql`INSERT INTO clips (recording_id, event_id, signup_id, email, title, caption, reason, start_sec, end_sec, url, vertical_url, square_url, source_asset_id, cut_asset_id, created_at)
         VALUES (0, ${sg.event_id}, ${sg.id}, ${String(sg.email).trim().toLowerCase()}, ${m.title}, ${m.caption ?? ""}, ${m.reason ?? ""}, ${Math.floor(m.startSec)}, ${Math.ceil(m.endSec)},
-                ${media(clipIds[`clip${i + 1}-wide`])}, ${media(clipIds[`clip${i + 1}-vertical`])}, ${media(clipIds[`clip${i + 1}-square`])}, ${now})`;
+                ${media(clipIds[`clip${i + 1}-wide`])}, ${media(clipIds[`clip${i + 1}-vertical`])}, ${media(clipIds[`clip${i + 1}-square`])}, ${EP}, ${cutId || 0}, ${now})`;
     }
     console.log(`  ${moments.length} clips on ${sg.email}'s dashboard`);
   }
