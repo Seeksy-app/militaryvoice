@@ -319,12 +319,13 @@ export default function Landing({ slug }: Props) {
 
   return (
     <div className="min-h-screen">
-      <NavBar />
+      {/* The header sits on the same navy as the platform band: one block, no white bar. */}
+      <NavBar tone="dark" />
 
       {/* ----------------------------------------------- THE PLATFORM, FIRST */}
       <section className="relative overflow-hidden border-b border-white/10 bg-[#030b1f] text-white" data-testid="section-platform-band">
         <div aria-hidden className="pointer-events-none absolute -right-32 -top-32 h-80 w-80 rounded-full bg-[#F0A71F] opacity-[0.12] blur-3xl" />
-        <div className="relative mx-auto grid w-full max-w-7xl items-center gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:px-10 lg:py-10">
+        <div className="relative mx-auto grid w-full max-w-7xl items-center gap-6 px-4 pb-10 pt-4 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:px-10 lg:pb-12 lg:pt-6">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">MilitaryVoices.ai</div>
             <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">The platform for military voices.</h2>

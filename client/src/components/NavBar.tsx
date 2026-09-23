@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Moon, Sun, LogIn, LayoutDashboard, Menu } from "lucide-react";
-import { LogoLockup } from "@/components/Logo";
+import { LogoLockup, LogoLockupOnDark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -45,7 +45,8 @@ const DISCOVERY_LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/platform", label: "About MilitaryVoices" },
 ];
 
-export function NavBar({ product, account }: { product?: "discovery"; account?: { label: string; onClick: () => void } } = {}) {
+export function NavBar({ product, account, tone = "light" }: { product?: "discovery"; account?: { label: string; onClick: () => void }; /** "dark": sits on a navy band (the homepage), white type, the dark logo. */ tone?: "light" | "dark" } = {}) {
+  const dark = tone === "dark";
   const [location] = useLocation();
   const links = product === "discovery" ? DISCOVERY_LINKS : LINKS;
   const { theme, toggle } = useTheme();
@@ -60,15 +61,17 @@ export function NavBar({ product, account }: { product?: "discovery"; account?: 
   const signedIn = me !== null && me !== undefined;
 
   const linkCls = (active: boolean) =>
-    `whitespace-nowrap rounded-md px-2.5 py-2 text-[15px] font-medium transition-colors hover-elevate ${
-      active ? "text-primary" : "text-muted-foreground"
-    }`;
+    dark
+      ? `whitespace-nowrap rounded-md px-2.5 py-2 text-[15px] font-medium transition-colors ${active ? "text-[#F0A71F]" : "text-white/75 hover:text-white"}`
+      : `whitespace-nowrap rounded-md px-2.5 py-2 text-[15px] font-medium transition-colors hover-elevate ${
+          active ? "text-primary" : "text-muted-foreground"
+        }`;
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
+    <header className={dark ? "sticky top-0 z-40 bg-[#030b1f]/95 text-white backdrop-blur" : "sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur"}>
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-2.5 sm:px-6">
         <Link href="/" className="shrink-0" data-testid="link-home-logo">
-          <LogoLockup />
+          {dark ? <LogoLockupOnDark className="h-14 lg:h-[72px]" /> : <LogoLockup />}
         </Link>
 
         {/* Desktop links */}
@@ -103,7 +106,7 @@ export function NavBar({ product, account }: { product?: "discovery"; account?: 
               <Button
                 size="sm"
                 variant={location.startsWith("/host") ? "default" : "outline"}
-                className="gap-1.5 rounded-full"
+                className={dark ? "gap-1.5 rounded-full border-white/25 bg-white/5 text-white hover:bg-white/15 hover:text-white" : "gap-1.5 rounded-full"}
               >
                 {signedIn ? <LayoutDashboard className="h-3.5 w-3.5" /> : <LogIn className="h-3.5 w-3.5" />}
                 <span>{signedIn ? "Dashboard" : "Sign in"}</span>
@@ -113,6 +116,7 @@ export function NavBar({ product, account }: { product?: "discovery"; account?: 
           <Button
             variant="ghost"
             size="icon"
+            className={dark ? "text-white hover:bg-white/10 hover:text-white" : undefined}
             onClick={toggle}
             aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
             data-testid="button-theme-toggle"
@@ -123,7 +127,7 @@ export function NavBar({ product, account }: { product?: "discovery"; account?: 
           {/* Mobile menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open menu" data-testid="button-nav-menu">
+              <Button variant="ghost" size="icon" className={`lg:hidden ${dark ? "text-white hover:bg-white/10 hover:text-white" : ""}`} aria-label="Open menu" data-testid="button-nav-menu">
                 <Menu className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>
