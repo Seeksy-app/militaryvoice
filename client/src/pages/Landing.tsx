@@ -145,17 +145,16 @@ function Reveal({ children, delay = 0, className = "" }: { children: React.React
   );
 }
 
-/** Riccoh's co-hosts for the day. Photos are the ones on their lineup cards. */
+/**
+ * Riccoh's co-hosts for the day. Photos are the ones on their lineup cards.
+ * Jane is not a co-host of the day (23 Sep 2026) — she joins Riccoh for the
+ * opening segment only, which the lineup card for that segment shows.
+ */
 const CO_HOSTS = [
   {
     name: "Amy Forsythe",
     line: "Author and Veteran Advocate · U.S. Navy, Retired",
     photo: "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789581359972-53a24ac49334.jpg",
-  },
-  {
-    name: "Jane Babcock",
-    line: "U.S. Army, Retired",
-    photo: "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1790012616137-e235fd8fe9d1.jpg",
   },
 ];
 
@@ -702,9 +701,9 @@ export default function Landing({ slug }: Props) {
               ))}
             </div>
 
-            {/* The co-hosts, beside him: the two who share the desk through the day. */}
+            {/* The co-hosts, beside him: who shares the desk through the day. */}
             <div className="mt-8 border-t border-border pt-6" data-testid="row-cohosts">
-              <div className="text-sm font-bold uppercase tracking-[0.18em] text-primary">With co-hosts</div>
+              <div className="text-sm font-bold uppercase tracking-[0.18em] text-primary">{CO_HOSTS.length === 1 ? "With co-host" : "With co-hosts"}</div>
               <div className="mt-4 flex flex-wrap gap-x-8 gap-y-4">
                 {CO_HOSTS.map((c) => (
                   <div key={c.name} className="flex items-center gap-3" data-testid={`cohost-${c.name.split(" ")[0].toLowerCase()}`}>

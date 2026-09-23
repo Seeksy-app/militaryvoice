@@ -2984,7 +2984,7 @@ export function registerRoutes(app: Express): void {
         mayJoin =
           Boolean(host) &&
           ((await storage.listSignups(event.id)).some(
-            (sg) => sg.status !== "cancelled" && sg.email.trim().toLowerCase() === host,
+            (sg) => sg.status !== "cancelled" && (sg.email.trim().toLowerCase() === host || (sg.coHostEmail ?? "").trim().toLowerCase() === host),
           ) || (await storage.listCohostSlots(event.id)).some((c) => c.email.trim().toLowerCase() === host));
       }
     }
@@ -3221,7 +3221,11 @@ export function registerRoutes(app: Express): void {
       (await storage.listSignups(found.event.id)).some(
         (sg) => sg.status !== "cancelled" && sg.email.trim().toLowerCase() === me,
       );
-    const coHost = Boolean(me) && (await storage.listCohostSlots(found.event.id)).some((c) => c.email.trim().toLowerCase() === me);
+    const coHost =
+      Boolean(me) &&
+      ((await storage.listCohostSlots(found.event.id)).some((c) => c.email.trim().toLowerCase() === me) ||
+        // The second host on somebody's booking — Jane on the opening.
+        (await storage.listSignups(found.event.id)).some((sg) => sg.status !== "cancelled" && (sg.coHostEmail ?? "").trim().toLowerCase() === me));
     if (!crew && !onTheAgenda && !coHost) {
       res.status(403).json({
         message: hostEmail
@@ -4178,8 +4182,10 @@ export function registerRoutes(app: Express): void {
     };
     const hosts = await showHosts();
     const isHost = (p: StudioParticipantRow) => isHostAt(p, hosts, row.startAtUtc);
+    // The booking's second host (Jane beside Riccoh at the opening) comes on with it.
+    const coHostEmail = (signup?.coHostEmail ?? "").trim().toLowerCase();
     const belongs = (p: StudioParticipantRow) =>
-      Boolean(signup) && (p.signupId === signup!.id || nameMatch(p.displayName, signup!.hostName) || nameMatch(p.displayName, signup!.podcastName));
+      Boolean(signup) && (p.signupId === signup!.id || nameMatch(p.displayName, signup!.hostName) || nameMatch(p.displayName, signup!.podcastName) || (Boolean(coHostEmail) && p.email.trim().toLowerCase() === coHostEmail));
     const guestScene = row.kind === "Segment" && Boolean(signup);
     // A sponsor video or any clip plays full frame: the hosts step off (still
     // in the room, mics off the programme) and come back on the next scene.
