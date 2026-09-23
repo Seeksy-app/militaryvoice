@@ -312,8 +312,8 @@ export default function Faq() {
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Ask Alex, or email{" "}
-                <a href="mailto:hello@militaryvoice.ai" className="text-primary underline-offset-2 hover:underline">
-                  hello@militaryvoice.ai
+                <a href="mailto:hello@militaryvoices.ai" className="text-primary underline-offset-2 hover:underline">
+                  hello@militaryvoices.ai
                 </a>{" "}
                 and a human will get back to you.
               </p>
@@ -322,7 +322,7 @@ export default function Faq() {
               <Button type="button" onClick={() => askAlex()} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="faq-ask-alex">
                 <img src="/alex.jpg" alt="" className="-ml-1.5 h-6 w-6 rounded-full object-cover ring-2 ring-white/30" /> Ask Alex
               </Button>
-              <a href="mailto:hello@militaryvoice.ai">
+              <a href="mailto:hello@militaryvoices.ai">
                 <Button variant="outline" className="gap-1.5 rounded-full">
                   <Mail className="h-4 w-4" /> Email us
                 </Button>

@@ -7904,7 +7904,7 @@ The ${eventName} team`;
     const paragraphs = text.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
     const body = from === "alex" ? paragraphs.replace(/<p>Alex<\/p>\s*$/, "") + alexSignatureHtml() : paragraphs;
     const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: subject.replace(/^re:\s*/i, ""), body });
-    const named = from === "michael" ? { from: "Michael <michael@militaryvoice.ai>", replyTo: "michael@militaryvoice.ai" } : {};
+    const named = from === "michael" ? { from: "Michael <michael@militaryvoices.ai>", replyTo: "michael@militaryvoices.ai" } : {};
     // Threads under their latest message to us, when there is one.
     const latest = (await storage.listInboundByEmail(to))[0];
     const headers: Record<string, string> = {};

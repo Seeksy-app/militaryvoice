@@ -460,8 +460,8 @@ export default function Platform() {
               Private beta
             </Badge>
           </div>
-          <a href="mailto:hello@militaryvoice.ai" className="hover:text-foreground">
-            hello@militaryvoice.ai
+          <a href="mailto:hello@militaryvoices.ai" className="hover:text-foreground">
+            hello@militaryvoices.ai
           </a>
         </div>
       </footer>

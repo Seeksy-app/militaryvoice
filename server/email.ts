@@ -8,7 +8,7 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_BASE = process.env.CUSTOM_CRED_API_RESEND_COM_URL || "https://api.resend.com";
 const RESEND_PROXY_TOKEN = process.env.CUSTOM_CRED_API_RESEND_COM_TOKEN;
 
-const FROM_ADDRESS = "MilitaryVoices.ai <hello@militaryvoice.ai>";
+const FROM_ADDRESS = "MilitaryVoices.ai <hello@militaryvoices.ai>";
 const SITE = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 
 /** Header images live in /public/email; one per mood so emails can rotate. */
@@ -1010,7 +1010,7 @@ export async function sendBroadcastEmail(opts: BroadcastEmailOptions): Promise<s
   const rendered = renderBroadcastEmail(opts);
   return sendRawEmail({
     to: opts.to,
-    from: `${rendered.fromName} <hello@militaryvoice.ai>`,
+    from: `${rendered.fromName} <hello@militaryvoices.ai>`,
     subject: rendered.subject,
     html: rendered.html,
     text: rendered.text,

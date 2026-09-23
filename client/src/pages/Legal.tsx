@@ -9,7 +9,7 @@ import { NavBar } from "@/components/NavBar";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const UPDATED = "13 September 2026";
-const CONTACT = "hello@militaryvoice.ai";
+const CONTACT = "hello@militaryvoices.ai";
 
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
   useEffect(() => {

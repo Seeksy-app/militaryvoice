@@ -303,7 +303,7 @@ export default function Prepare() {
                   Open your profile <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
               </Link>
-              <a href="mailto:hello@militaryvoice.ai">
+              <a href="mailto:hello@militaryvoices.ai">
                 <Button variant="outline" className="gap-1.5 rounded-full">
                   <Mail className="h-4 w-4" /> Email us
                 </Button>

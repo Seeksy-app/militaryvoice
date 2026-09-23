@@ -64,7 +64,7 @@ export function SiteFooter({ slug }: { slug?: string }) {
             <Link href="/terms" className="transition-colors hover:text-white">
               Terms &amp; Conditions
             </Link>
-            <a href="mailto:hello@militaryvoice.ai" className="transition-colors hover:text-white">
+            <a href="mailto:hello@militaryvoices.ai" className="transition-colors hover:text-white">
               Contact
             </a>
           </nav>
