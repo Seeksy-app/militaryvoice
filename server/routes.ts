@@ -3653,6 +3653,9 @@ export function registerRoutes(app: Express): void {
         // Clips are posts on the podcaster's dashboard, not scene material —
         // including the older ones filed as "Other" ("… - clip 2 - square.mp4").
         .filter((a) => a.kind !== "Clip" && !/ - clip \d+ - (wide|square|vertical)\./i.test(a.fileName))
+        // The site's own furniture (marketing previews, help videos) lives in
+        // the same table but is not show material.
+        .filter((a) => !/^(Pro preview|Help):/i.test(a.label))
         // Playable by everyone who needs to (the watch page, the recorder):
         // a public file, a link, or house media in R2 behind /api/studio/media.
         .filter((a) => a.fileUrl || a.linkUrl || (a.email === HOUSE_EMAIL && a.storageKey.startsWith("studio/")))
