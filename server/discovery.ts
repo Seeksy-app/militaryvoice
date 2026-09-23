@@ -27,6 +27,7 @@ import {
   discoveryReveals,
   discoveryVisits,
   discoveryIntros,
+  discoveryLookups,
   podcasterProfiles,
   socialMetrics,
 } from "../shared/schema.js";
@@ -350,6 +351,45 @@ function send(res: Response, fn: () => Promise<unknown>) {
 }
 const asPlatform = (v: unknown): Platform => (PLATFORMS.includes(String(v) as Platform) ? (String(v) as Platform) : "instagram");
 
+// ---------------------------------------------------------------------------
+// Enrich
+// ---------------------------------------------------------------------------
+
+const ENRICH_BATCH = 10;
+const ENRICH_PER_MONTH = 200;
+const platformName = (p: string) => ({ instagram: "Instagram", youtube: "YouTube", tiktok: "TikTok", twitter: "X", twitch: "Twitch" })[p] ?? p;
+
+/** What someone typed or pasted, read as a lookup. Links name their own platform. */
+export function parseLookup(raw: string, fallback: Platform): { kind: "email"; email: string } | { kind: "handle"; platform: Platform; handle: string } | null {
+  const v = raw.trim().replace(/^["'<(]+|[">)'.,;]+$/g, "");
+  if (!v) return null;
+  if (/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(v)) return { kind: "email", email: v.toLowerCase() };
+  let platform: Platform = fallback;
+  let handle = v;
+  const m = v.match(/^(?:https?:\/\/)?(?:www\.|m\.)?(instagram\.com|youtube\.com|youtu\.be|tiktok\.com|x\.com|twitter\.com|twitch\.tv)\/(.*)$/i);
+  if (m) {
+    const host = m[1].toLowerCase();
+    const path = m[2].split(/[?#]/)[0].split("/").filter(Boolean);
+    platform = host.startsWith("instagram") ? "instagram" : host.startsWith("youtu") ? "youtube" : host.startsWith("tiktok") ? "tiktok" : host.startsWith("twitch") ? "twitch" : "twitter";
+    handle = platform === "youtube" ? (path.find((x) => x.startsWith("@")) ?? (["c", "user", "channel"].includes(path[0]) ? path[1] : path[0]) ?? "") : (path[0] ?? "");
+  }
+  handle = handle.replace(/^@/, "").trim();
+  return /^[A-Za-z0-9._-]{1,80}$/.test(handle) && !["p", "reel", "watch", "explore"].includes(handle.toLowerCase()) ? { kind: "handle", platform, handle } : null;
+}
+
+async function isFresh(k: string, maxAgeMs: number): Promise<boolean> {
+  const [row] = await db.select({ createdAt: discoveryCache.createdAt }).from(discoveryCache).where(eq(discoveryCache.key, k));
+  return !!row && Date.now() - Date.parse(row.createdAt) < maxAgeMs;
+}
+
+async function lookupsThisMonth(email: string): Promise<number> {
+  const start = new Date();
+  start.setUTCDate(1);
+  start.setUTCHours(0, 0, 0, 0);
+  const rows = await db.select({ id: discoveryLookups.id }).from(discoveryLookups).where(and(eq(discoveryLookups.email, email), gte(discoveryLookups.createdAt, start.toISOString())));
+  return rows.length;
+}
+
 export function registerDiscoveryRoutes(app: Express): void {
   /** Who's asking: signed in or not, and whether Discovery is on their account. */
   app.get("/api/discover/me", (req, res) =>
@@ -366,6 +406,7 @@ export function registerDiscoveryRoutes(app: Express): void {
         isPodcaster: !!profile,
         member: member ? { role: member.role, orgName: member.orgName, since: member.createdAt } : null,
         reveals: member ? { used: await revealsThisMonth(email), allowance: FREE_REVEALS_PER_MONTH } : null,
+        lookups: member && member.role !== "admin" ? { used: await lookupsThisMonth(email), allowance: ENRICH_PER_MONTH } : null,
       };
     }),
   );
@@ -694,6 +735,96 @@ export function registerDiscoveryRoutes(app: Express): void {
       if (!l) throw new HttpError(404, "No such list.");
       await db.delete(discoveryListItems).where(and(eq(discoveryListItems.id, Number(req.params.itemId)), eq(discoveryListItems.listId, l.id)));
       return { ok: true };
+    }),
+  );
+
+  // ---- Enrich: a handle, a profile link, an email, or a whole list of them --------
+  //      The client sends ten at a time and draws a progress bar between
+  //      batches, so a 500-row sheet never rides on one long request. Answers we
+  //      already hold are free and don't count; only a fresh read is paid for.
+  app.post("/api/discover/enrich", (req, res) =>
+    send(res, async () => {
+      const { email: who, member } = await requireMember(req);
+      const items = (Array.isArray(req.body?.items) ? req.body.items : []).map((x: unknown) => String(x ?? "")).slice(0, ENRICH_BATCH);
+      const fallback = asPlatform(req.body?.platform);
+      const unlimited = member.role === "admin";
+      let used = unlimited ? 0 : await lookupsThisMonth(who);
+      const lineup = await verifiedCreators().catch(() => []);
+
+      const rows: Record<string, unknown>[] = [];
+      // Side by side. The allowance is checked and counted in the same tick
+      // as each paid read is decided, so parallel rows can't overspend it.
+      await Promise.all(
+        items.map(async (input: string, i: number) => {
+          const want = parseLookup(input, fallback);
+          if (!want) return void (rows[i] = { input, status: "invalid", message: "Not a handle, profile link or email." });
+          const subject = want.kind === "email" ? want.email : `${want.platform}:${want.handle.toLowerCase()}`;
+          const free = await isFresh(want.kind === "email" ? `email:${want.email}` : `raw:${subject}`, want.kind === "email" ? 365 * DAY : 7 * DAY);
+          if (!free && !unlimited) {
+            if (used >= ENRICH_PER_MONTH) return void (rows[i] = { input, status: "limit", message: `You've used this month's ${ENRICH_PER_MONTH} look-ups.` });
+            used++;
+          }
+          try {
+            let platform = want.kind === "handle" ? want.platform : "";
+            let handle = want.kind === "handle" ? want.handle : "";
+            if (want.kind === "email") {
+              const found = await cached(`email:${want.email}`, 365 * DAY, async () => {
+                const r = await ic("/creators/enrich/email/", { email: want.email }).catch((e: any) => {
+                  if (e instanceof HttpError && e.status === 400) return null; // "No creator found": nothing charged
+                  throw e;
+                });
+                const x = r?.result ?? null;
+                return x?.username ? { platform: String(x.platform ?? ""), handle: String(x.username).replace(/^@/, "") } : null;
+              });
+              if (!found || !(PLATFORMS as readonly string[]).includes(found.platform)) return void (rows[i] = { input, kind: "email", status: "not_found", message: "No creator account found for this email.", free });
+              platform = found.platform;
+              handle = found.handle;
+            }
+            const acct = await rawAccount(platform, handle).catch((e: any) => {
+              if (e instanceof HttpError && e.status === 400) return null;
+              throw e;
+            });
+            if (!free && !unlimited) await db.insert(discoveryLookups).values({ email: who, kind: want.kind, subject, createdAt: new Date().toISOString() });
+            if (!acct || acct.exists === false || String(acct.exists) === "False") return void (rows[i] = { input, kind: want.kind, status: "not_found", message: `No ${platformName(platform)} account @${handle}.`, free });
+            const prof = buildProfile(platform, handle, {}, acct, new Date().toISOString());
+            const realHandle = String(acct.username ?? acct.custom_url ?? handle).replace(/^@/, "");
+            const rawPicture = String(acct.profile_picture_hd ?? acct.profile_picture ?? "");
+            const ours = lineup.find((c) => c.platform === platform && c.handle.toLowerCase() === realHandle.toLowerCase());
+            const card: CreatorCard = {
+              platform,
+              handle: realHandle,
+              name: prof.identity.name || realHandle,
+              picture: pic(platform, realHandle, rawPicture),
+              rawPicture,
+              followers: prof.identity.followers,
+              engagement: prof.signals.engagementRate,
+              branch: branchOf(`${prof.identity.name} ${realHandle} ${prof.identity.bio}`),
+              ...(ours ? { verified: ours.verified, signupId: ours.signupId } : {}),
+            };
+            keepPictures([card]);
+            const { rawPicture: _drop, ...clean } = card;
+            rows[i] = {
+              input,
+              kind: want.kind,
+              status: "found",
+              free,
+              card: clean,
+              extra: {
+                bio: prof.identity.bio.slice(0, 280),
+                posts: prof.identity.posts,
+                lastPostAt: prof.signals.lastPostAt,
+                postsPerWeek: prof.signals.postsPerWeek,
+                verifiedAccount: prof.identity.verified,
+                category: prof.identity.category,
+                country: prof.identity.country,
+              },
+            };
+          } catch (e: any) {
+            rows[i] = { input, status: "error", message: e?.message ?? "Couldn't read this one." };
+          }
+        }),
+      );
+      return { rows, lookups: unlimited ? null : { used, allowance: ENRICH_PER_MONTH } };
     }),
   );
 

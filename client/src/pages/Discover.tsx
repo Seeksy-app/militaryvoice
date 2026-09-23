@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { CreatorProfileSections, type Profile, type ProfilePerson } from "@/components/CreatorProfileSections";
+import { DiscoverEnrich, type EnrichCard } from "@/components/DiscoverEnrich";
 
 const HEADLINE = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const NAVY = "#04102b";
@@ -32,7 +33,7 @@ type Card = {
   signupId?: number;
   quality?: number | null;
 };
-type Me = { signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number } | null };
+type Me = { signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number } | null; lookups?: { used: number; allowance: number } | null };
 type SearchResult = { brief: string; total: number; page: number; pageSize: number; results: Card[]; verified: Card[]; understood?: { notes?: string[]; from_nlp?: Record<string, unknown> } | null };
 type Analytics = {
   incomeMin: number | null; incomeMax: number | null; likesMedian: number | null; commentsMedian: number | null;
@@ -144,7 +145,7 @@ export default function Discover() {
   const [sort, setSort] = useState("relevancy");
   const [page, setPage] = useState(0);
   const [submitted, setSubmitted] = useState<null | { q: string; platform: string; branch: string; size: number; sort: string }>(null);
-  const [tab, setTab] = useState<"search" | "lists">("search");
+  const [tab, setTab] = useState<"search" | "enrich" | "lists">("search");
   const [open, setOpen] = useState<Card | null>(null);
   const [gate, setGate] = useState(false);
   const d = DOORS.find((x) => x.key === door)!;
@@ -211,6 +212,14 @@ export default function Discover() {
     },
     onError: (e: Error) => toast({ title: "Couldn't save that", description: e.message, variant: "destructive" }),
   });
+
+  // Enrich's "Save all": one new list per run, so a campaign's sheet stays together.
+  const saveAll = async (cards: EnrichCard[]) => {
+    const name = `Enriched ${new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+    const id = (await (await apiRequest("POST", "/api/discover/lists", { name })).json()).id;
+    for (const card of cards) await apiRequest("POST", `/api/discover/lists/${id}/items`, { card }).catch(() => null);
+    queryClient.invalidateQueries({ queryKey: ["/api/discover/lists"] });
+  };
 
   const r = search.data?.pages[0];
   const results = useMemo(() => {
@@ -306,21 +315,25 @@ export default function Discover() {
               </button>
             ))}
           </div>
+          <button type="button" onClick={() => { setTab("enrich"); setTimeout(() => document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }), 50); }} className="mt-4 text-sm font-medium text-[#F0A71F] hover:underline" data-testid="discover-to-enrich">
+            Already have a list? Enrich handles, links or emails →
+          </button>
         </div>
       </section>
 
       {/* -------------------------------------------------------- filter bar */}
       <div className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
-          {isMember && (
+          {(
             <div className="mr-2 flex rounded-full bg-muted p-1 text-sm">
-              {(["search", "lists"] as const).map((t) => (
+              {(isMember ? (["search", "enrich", "lists"] as const) : (["search", "enrich"] as const)).map((t) => (
                 <button key={t} type="button" onClick={() => setTab(t)} className={`rounded-full px-3 py-1 font-medium ${tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`} data-testid={`discover-tab-${t}`}>
-                  {t === "search" ? "Search" : `Saved${(lists.data?.reduce((n, l) => n + l.items.length, 0) ?? 0) ? ` · ${lists.data!.reduce((n, l) => n + l.items.length, 0)}` : ""}`}
+                  {t === "search" ? "Search" : t === "enrich" ? "Enrich" : `Saved${(lists.data?.reduce((n, l) => n + l.items.length, 0) ?? 0) ? ` · ${lists.data!.reduce((n, l) => n + l.items.length, 0)}` : ""}`}
                 </button>
               ))}
             </div>
           )}
+          {tab !== "enrich" && <>
           <div className="flex flex-wrap gap-1.5" aria-label="Branch">
             {BRANCHES.map((b) => (
               <button
@@ -342,11 +355,21 @@ export default function Discover() {
               {SORTS.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
             </select>
           </div>
+          </>}
         </div>
       </div>
 
-      <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-        {tab === "lists" && isMember ? (
+      <main id="discover-main" className="mx-auto w-full max-w-6xl scroll-mt-16 px-4 py-8 sm:px-6">
+        {tab === "enrich" ? (
+          <DiscoverEnrich
+            isMember={isMember}
+            onJoin={() => setGate(true)}
+            onOpen={(c) => setOpen(c)}
+            onSaveAll={saveAll}
+            lookups={me?.lookups}
+            onUsed={() => queryClient.invalidateQueries({ queryKey: ["/api/discover/me"] })}
+          />
+        ) : tab === "lists" && isMember ? (
           <Lists lists={lists.data ?? []} onOpen={setOpen} />
         ) : !submitted || !isMember ? (
           <Welcome verified={verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={setOpen} onSaveVerified={(c) => saveTo.mutate({ card: c })} onJoin={() => setGate(true)} loading={meLoading} />

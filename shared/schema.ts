@@ -1824,6 +1824,15 @@ export const discoveryReveals = pgTable("discovery_reveals", {
   createdAt: text("created_at").notNull(),
 }, (t) => [index("discovery_reveals_email_idx").on(t.email)]);
 
+/** A paid Enrich look-up, counted against a member's month. Cached answers aren't recorded. */
+export const discoveryLookups = pgTable("discovery_lookups", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  kind: text("kind").notNull(), // handle | email
+  subject: text("subject").notNull(), // platform:handle, or the address looked up
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("discovery_lookups_email_idx").on(t.email)]);
+
 /** A visit to Discovery, by where it came from. */
 export const discoveryVisits = pgTable("discovery_visits", {
   id: serial("id").primaryKey(),
