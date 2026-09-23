@@ -432,7 +432,7 @@ export default function Discover() {
           <button type="button" onClick={() => setTab("search")} className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="back-to-search"><ChevronRight className="h-4 w-4 rotate-180" /> Back to search</button>
           <Lists lists={lists.data ?? []} onOpen={(c) => openIn((lists.data ?? []).flatMap((l) => l.items.map((i) => i.snapshot)))(c)} />
           </>
-        ) : !submitted || !isMember || submitted.mode === "username" ? (
+        ) : !submitted || submitted.mode === "username" ? (
           <Welcome isAdmin={!!me?.isAdmin} verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} hidden={demoHide} onJoin={() => setGate(true)} loading={meLoading} />
         ) : (
           <>
