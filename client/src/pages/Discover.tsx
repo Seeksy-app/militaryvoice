@@ -807,7 +807,8 @@ function DemoRail({ c, open, reading }: { c: Showcase; open: boolean; reading: b
     const start = performance.now();
     const to = Math.min(el.scrollHeight - el.clientHeight, 1700);
     const tick = (t: number) => {
-      const k = Math.min(1, (t - start) / 5600);
+      // About a second: Andrew wants the read to feel brisk, not a slow crawl.
+      const k = Math.min(1, (t - start) / 1000);
       const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
       el.scrollTop = to * e;
       if (k < 1) raf = requestAnimationFrame(tick);
@@ -895,7 +896,7 @@ export function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (
   }, []);
   useEffect(() => {
     if (!pool.length || paused || waiting) return;
-    const plan: [typeof phase, number][] = [["idle", 1600], ["move", 1000], ["click", 350], ["open", 800], ["read", 6200], ["close", 800]];
+    const plan: [typeof phase, number][] = [["idle", 1200], ["move", 1000], ["click", 300], ["open", 700], ["read", 2200], ["close", 700]];
     const at = plan.findIndex(([p]) => p === phase);
     const t = setTimeout(() => {
       if (at === plan.length - 1) {
