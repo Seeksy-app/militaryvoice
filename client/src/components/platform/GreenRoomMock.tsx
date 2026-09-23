@@ -135,7 +135,7 @@ export function WaitingRoomMock() {
         </div>
         <div className="mt-3 flex flex-col gap-2 text-[13px] leading-snug">
           <p className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-[#053877] px-3 py-2 text-white">Is my audio OK? And when am I on?</p>
-          <p className="max-w-[90%] rounded-2xl rounded-bl-md bg-slate-100 px-3 py-2">Clear and level, Kim. You're on at 10:00, right after Homefront Hour. Riccoh will introduce you, then it's your 25 minutes.</p>
+          <p className="max-w-[90%] rounded-2xl rounded-bl-md bg-slate-100 px-3 py-2">Clear and level, Kim. You're on at 10:00, right after Homefront Hour. Sofia will introduce you, then it's your 25 minutes.</p>
         </div>
       </div>
     </div>

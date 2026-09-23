@@ -38,7 +38,7 @@ const LAYOUTS: { key: string; label: string; icon: ReactNode }[] = [
 
 const SCENES = [
   { n: 1, title: "Stream live — pre-show", time: "6:45 AM", kind: "Video", thumb: "/scenes/pre-show.jpg" },
-  { n: 2, title: "Welcome — Riccoh Player", time: "7:00 AM", kind: "Cameras", thumb: CAST.riccoh.cam, face: CAST.riccoh.face },
+  { n: 2, title: "Welcome — Sofia Reyes", time: "7:00 AM", kind: "Cameras", thumb: CAST.sofia.cam, face: CAST.sofia.face },
   { n: 3, title: "The Long Watch — Marcus Hale", time: "9:00 AM", kind: "Cameras", thumb: CAST.marcus.cam, face: CAST.marcus.face, live: true },
   { n: 4, title: "Sponsor reel", time: "9:25 AM", kind: "Video", thumb: "/scenes/sponsor-reel.jpg" },
   { n: 5, title: "Homefront Hour — Dana Ortiz", time: "9:30 AM", kind: "Cameras", thumb: CAST.dana.cam, face: CAST.dana.face },
@@ -54,7 +54,7 @@ const TOOLS = [
 
 export function StudioConsoleMock() {
   const marcus = useFakeCamera(CAST.marcus.cam);
-  const riccoh = useFakeCamera(CAST.riccoh.cam);
+  const host = useFakeCamera(CAST.sofia.cam);
   const andre = useFakeCamera(CAST.andre.cam);
   const auto = useTicker(LAYOUTS.length, 3200);
   const [picked, setPicked] = useState<string | null>(null);
@@ -71,7 +71,7 @@ export function StudioConsoleMock() {
   const tiles = [
     castTile("marcus", marcus, talking === 0),
     castTile("andre", andre, talking === 1),
-    castTile("riccoh", riccoh, talking === 2, true),
+    castTile("sofia", host, talking === 2, true),
   ];
 
   return (
@@ -144,8 +144,8 @@ export function StudioConsoleMock() {
             <div className="hidden shrink-0 items-center gap-1.5 border-l border-white/15 pl-3 sm:flex">
               <span className="hidden text-[9px] font-bold uppercase tracking-[0.14em] text-white/45 xl:block">Hosts</span>
               {[
-                { f: CAST.riccoh.face, on: true, n: CAST.riccoh.name },
-                { f: CAST.sofia.face, on: false, n: CAST.sofia.name },
+                { f: CAST.sofia.face, on: true, n: CAST.sofia.name },
+                { f: CAST.dana.face, on: false, n: `${CAST.dana.name} (co-host)` },
               ].map((h) => (
                 <span key={h.f} title={`${h.n} — ${h.on ? "on stage" : "off stage"}`} className={`relative h-8 w-8 overflow-hidden rounded-full ring-2 ${h.on ? "ring-emerald-400" : "ring-[#ED1C24]"}`}>
                   <img src={h.f} alt="" className="h-full w-full object-cover" />

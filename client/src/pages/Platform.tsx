@@ -295,7 +295,7 @@ export default function Platform() {
             </div>
             <ul className="mx-auto mt-10 hidden max-w-md grid-cols-3 gap-4 border-t border-white/10 pt-6 text-left sm:grid lg:mx-0">
               {[
-                ["Live", "to YouTube, LinkedIn, X and more"],
+                ["Live", "to YouTube · more platforms soon"],
                 ["AI", "producer in the green room"],
                 ["300M+", "creators in Discovery"],
               ].map(([v, l]) => (

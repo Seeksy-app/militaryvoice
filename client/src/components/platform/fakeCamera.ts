@@ -89,12 +89,11 @@ export function useFakeCamera(src: string, fps = 12): Track | null {
   return track;
 }
 
-/** The cast of the illustrations. Fictional people on stock photos, apart from the host. */
+/** The cast of the illustrations: fictional people on stock photos, host included. */
 export const CAST = {
-  riccoh: { name: "Riccoh Player", title: "Host", cam: "/platform/cam-riccoh.jpg", face: "/platform/face-riccoh.jpg" },
   marcus: { name: "Marcus Hale", title: "Army veteran · The Long Watch", cam: "/platform/cam-marcus.jpg", face: "/platform/face-marcus.jpg" },
   dana: { name: "Dana Ortiz", title: "Navy spouse · Homefront Hour", cam: "/platform/cam-dana.jpg", face: "/platform/face-dana.jpg" },
-  sofia: { name: "Sofia Reyes", title: "Co-host", cam: "/platform/cam-sofia.jpg", face: "/platform/face-sofia.jpg" },
+  sofia: { name: "Sofia Reyes", title: "Host", cam: "/platform/cam-sofia.jpg", face: "/platform/face-sofia.jpg" },
   kim: { name: "Kim Rowe", title: "Air Force veteran · Squad Bay Radio", cam: "/platform/cam-kim.jpg", face: "/platform/face-kim.jpg" },
   andre: { name: "Andre Mills", title: "Marine veteran · After the Uniform", cam: "/platform/cam-andre.jpg", face: "/platform/face-andre.jpg" },
 } as const;

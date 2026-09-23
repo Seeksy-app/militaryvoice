@@ -46,12 +46,12 @@ function useClock(startSeconds: number) {
 
 export function LiveEventMock() {
   const marcus = useFakeCamera(CAST.marcus.cam);
-  const riccoh = useFakeCamera(CAST.riccoh.cam);
+  const host = useFakeCamera(CAST.sofia.cam);
   const talking = useTicker(2, 4200);
   const viewers = useViewers(12480);
   const clock = useClock(7 * 3600 + 12 * 60 + 41);
 
-  const tiles = [castTile("marcus", marcus, talking === 0), castTile("riccoh", riccoh, talking === 1, true)];
+  const tiles = [castTile("marcus", marcus, talking === 0), castTile("sofia", host, talking === 1, true)];
 
   return (
     <div className="relative" aria-label="An illustration of a live MilitaryVoices broadcast" role="img">
