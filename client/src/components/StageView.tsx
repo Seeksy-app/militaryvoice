@@ -228,7 +228,7 @@ function fitBox(fit: string | undefined): CSSProperties {
   return { width: "min(100%, calc(100cqh * 16 / 9))", aspectRatio: "16 / 9" };
 }
 
-function Tile({ tile, muted, nameBar = true, fit }: { tile: StageTile; muted: boolean; nameBar?: boolean; fit?: string }) {
+function Tile({ tile, muted, namePos = "bottom", fit }: { tile: StageTile; muted: boolean; namePos?: "bottom" | "top" | "none"; fit?: string }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -334,10 +334,11 @@ function Tile({ tile, muted, nameBar = true, fit }: { tile: StageTile; muted: bo
         </div>
       )}
 
-      {/* Lower third — broadcast-style name bar. Hidden while a banner from the
-          rail is up: two name bars stacked in one corner is the thing that
-          makes a stream look unmanned. */}
-      <div className={`absolute bottom-0 left-0 right-0 px-3 pb-3 ${nameBar ? "" : "hidden"}`}>
+      {/* Each person's name, as they typed it in the green room. While a
+          scene's lower third is up the tag moves to the top of the tile, so
+          the two never stack in one corner; alone on stage under a lower
+          third it steps aside, since the banner already names them. */}
+      <div className={`absolute left-0 right-0 px-3 ${namePos === "top" ? "top-0 pt-3" : "bottom-0 pb-3"} ${namePos === "none" ? "hidden" : ""}`}>
         <div className="flex items-stretch overflow-hidden rounded-md shadow-lg" style={{ maxWidth: "calc(100% - 0px)" }}>
           {/* Accent stripe */}
           <div className="w-1 shrink-0 bg-[#F0A71F]" />
@@ -649,7 +650,7 @@ export function StageGrid({
         <BackgroundLayer url={meta.backgroundUrl ?? ""} />
         <div className={`relative grid h-full w-full gap-3 p-3 ${gridFor(tiles.length)}`}>
           {tiles.map((t) => (
-            <Tile key={t.identity} tile={t} muted={muted} nameBar={!banner} fit={meta.tileFit} />
+            <Tile key={t.identity} tile={t} muted={muted} namePos={!banner ? "bottom" : tiles.length > 1 ? "top" : "none"} fit={meta.tileFit} />
           ))}
         </div>
         <Captions caption={caption} lifted={Boolean(ticker)} />
