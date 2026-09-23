@@ -147,6 +147,11 @@ export default function Discover() {
     void fetch("/api/discover/visit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source }) }).catch(() => {});
   }, [source]);
 
+  useEffect(() => {
+    const was = document.title;
+    document.title = "Discovery — MilitaryVoices.ai";
+    return () => { document.title = was; };
+  }, []);
   const [door, setDoor] = useState<(typeof DOORS)[number]["key"]>("brand");
   const [q, setQ] = useState("");
   const [platform, setPlatform] = useState("instagram");
@@ -618,20 +623,22 @@ function HeroB({ door, setDoor, bar, tries, onEnrich, verified, onOpen }: HeroPr
             })}
           </div>
           <p className="mt-2 text-sm text-white/50">{d.blurb}</p>
+        </div>
 
-          <div className="mt-4">{bar}</div>
+        <div className="hidden lg:block">
+          <PreviewStack verified={verified} onOpen={onOpen} />
+        </div>
+
+        {/* the search gets the full width: it's the product */}
+        <div className="min-w-0 lg:col-span-2 lg:-mt-2">
+          {bar}
           {tries}
-
-          <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-white/60">
+          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-white/60">
             {["Free account", "No card", "Audience data on every profile"].map((t) => (
               <span key={t} className="inline-flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-[#F0A71F]" /> {t}</span>
             ))}
             <button type="button" onClick={onEnrich} className="font-semibold text-[#F0A71F] hover:underline" data-testid="discover-to-enrich">Have a list? Enrich it →</button>
           </div>
-        </div>
-
-        <div className="hidden lg:block">
-          <PreviewStack verified={verified} onOpen={onOpen} />
         </div>
       </div>
     </section>
