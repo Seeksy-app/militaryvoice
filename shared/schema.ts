@@ -1781,6 +1781,8 @@ export const discoveryMembers = pgTable("discovery_members", {
   email: text("email").notNull().unique(),
   role: text("role").notNull().default("other"), // brand | podcaster | event | agency | other
   orgName: text("org_name").notNull().default(""),
+  /** Where they came from: sponsor-page, home, studio-slide, on-air… */
+  source: text("source").notNull().default(""),
   createdAt: text("created_at").notNull(),
 });
 export type DiscoveryMemberRow = typeof discoveryMembers.$inferSelect;
@@ -1821,3 +1823,10 @@ export const discoveryReveals = pgTable("discovery_reveals", {
   handle: text("handle").notNull(),
   createdAt: text("created_at").notNull(),
 }, (t) => [index("discovery_reveals_email_idx").on(t.email)]);
+
+/** A visit to Discovery, by where it came from. */
+export const discoveryVisits = pgTable("discovery_visits", {
+  id: serial("id").primaryKey(),
+  source: text("source").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});

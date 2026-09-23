@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, PlatformIcon, platformLabel, parseSocialAccounts } from "@/components/SocialIcons";
 import { spotlightFromSignup, type SpotlightItem } from "@/components/SpotlightCard";
 import { sponsorHref, SponsorRibbon } from "@/components/SponsorRibbon";
+import { DiscoveryPromo } from "@/components/DiscoveryPromo";
 import { SponsorDialog } from "@/components/SponsorDialog";
 import { PodcasterDialog } from "@/components/PodcasterDialog";
 import { useCountdown } from "@/hooks/use-countdown";
@@ -921,6 +922,8 @@ export default function Landing({ slug }: Props) {
           </div>
         </div>
       </section>
+
+      <DiscoveryPromo src="home" />
 
       {/* ------------------------------------------------------- FINAL CTA */}
       <section className="bg-[#F0A71F] text-[#1a1200]">

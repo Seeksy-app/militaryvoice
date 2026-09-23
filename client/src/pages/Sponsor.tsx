@@ -12,6 +12,7 @@ import type { PublicEvent, PublicSignup } from "@shared/schema";
 import { slotStart, totalSlots, formatTimeInZone } from "@/lib/schedule";
 import { Check, Radio, Clock, ArrowRight, Megaphone, Users } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
+import { DiscoveryPromo } from "@/components/DiscoveryPromo";
 
 // The open sponsorship page, linked from the footer. /vfw is the same pitch
 // addressed to one organisation; this one is for everybody else, so it names
@@ -455,6 +456,8 @@ export default function Sponsor() {
           </div>
         </div>
       </section>
+
+      <DiscoveryPromo src="sponsor-page" audience="brands" />
 
       {/* --------------------------------------------------------------- CTA */}
       <section className="mx-auto max-w-4xl px-4 py-20 text-center sm:px-6">

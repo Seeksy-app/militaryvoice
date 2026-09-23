@@ -26,6 +26,7 @@ import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi";
 import { SocialCalendar } from "@/components/SocialCalendar";
+import { DiscoveryStats } from "@/components/DiscoveryStats";
 import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
 import { RiccohPosts } from "@/components/RiccohPosts";
@@ -5278,6 +5279,7 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   <EventTeamPanel eventId={selectedEventId} />
                 </TabsContent>
                 <TabsContent value="promotion" className="mt-2 flex flex-col gap-12 lg:mt-0">
+                  <DiscoveryStats />
                   <RiccohImages event={selectedEvent} />
                   <RiccohPosts event={selectedEvent} />
                 </TabsContent>

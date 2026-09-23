@@ -77,6 +77,8 @@ function AppRouter() {
       <Route path="/faq">{() => <Faq />}</Route>
       <Route path="/help">{() => <HelpIndex />}</Route>
       <Route path="/discover">{() => <Discover />}</Route>
+      {/* The address read on air: short to say, and counted as on-air when it lands. */}
+      <Route path="/find">{() => { if (typeof window !== "undefined") window.location.replace("/discover?src=on-air"); return null; }}</Route>
       <Route path="/help/youtube">{() => <HelpYoutube />}</Route>
       {/* Registered on the Google OAuth consent screen — these URLs are
           load-bearing for verification, so don't rename them. */}

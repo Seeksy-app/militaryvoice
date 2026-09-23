@@ -144,6 +144,13 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
               ].map((t) => <li key={t} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#15834f]" /><span>{t}</span></li>)}
             </ul>
           </section>
+          <section className="rounded-2xl border border-[#F0A71F]/50 bg-[#F0A71F]/10 p-5" data-testid="cohost-house-read">
+            <h3 className="text-sm font-bold">On the hour: the Discovery read</h3>
+            <p className="mt-2 text-sm leading-relaxed text-foreground">
+              "Brands, podcasters, event planners: MilitaryVoice Discovery finds military and veteran creators to sponsor, guests to book and speakers for your stage. Everyone on today's lineup is in it, verified. It's free at militaryvoice dot A I slash find."
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">Once an hour, at the first handoff after the top of the hour. About fifteen seconds.</p>
+          </section>
           <a href="/agenda" target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 hover:border-primary/40" data-testid="cohost-agenda">
             <CalendarDays className="h-5 w-5 text-[#053877]" /><span><span className="block text-sm font-semibold">Full agenda</span><span className="block text-xs text-muted-foreground">Every show, every time</span></span>
           </a>

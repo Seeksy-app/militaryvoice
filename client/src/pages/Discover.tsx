@@ -118,6 +118,19 @@ export default function Discover() {
   const { data: me, isLoading: meLoading } = useQuery<Me>({ queryKey: ["/api/discover/me"], queryFn: async () => (await apiRequest("GET", "/api/discover/me")).json() });
   const { data: verified = [] } = useQuery<Card[]>({ queryKey: ["/api/discover/verified"], queryFn: async () => (await apiRequest("GET", "/api/discover/verified")).json() });
   const isMember = !!me?.member;
+  // Where they came from (?src=), remembered for the account they create, and a visit counted once per load.
+  const [source] = useState(() => {
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get("src") ?? "";
+      if (fromUrl) sessionStorage.setItem("mv_discover_src", fromUrl);
+      return fromUrl || sessionStorage.getItem("mv_discover_src") || "direct";
+    } catch {
+      return "direct";
+    }
+  });
+  useEffect(() => {
+    void fetch("/api/discover/visit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source }) }).catch(() => {});
+  }, [source]);
 
   const [door, setDoor] = useState<(typeof DOORS)[number]["key"]>("brand");
   const [q, setQ] = useState("");
@@ -402,6 +415,7 @@ export default function Discover() {
           queryClient.invalidateQueries({ queryKey: ["/api/discover/me"] });
         }}
         defaultRole={door}
+        source={source}
       />
       <SiteFooter />
     </div>
@@ -896,7 +910,7 @@ function Lists({ lists, onOpen }: { lists: List[]; onOpen: (c: Card) => void }) 
 // The free account: email, code, and what they're here for
 // ===========================================================================
 
-function JoinDialog({ open, me, onClose, onDone, defaultRole }: { open: boolean; me?: Me; onClose: () => void; onDone: () => void; defaultRole: string }) {
+function JoinDialog({ open, me, onClose, onDone, defaultRole, source }: { open: boolean; me?: Me; onClose: () => void; onDone: () => void; defaultRole: string; source: string }) {
   const { toast } = useToast();
   const siteKey = useTurnstileSiteKey();
   const [step, setStep] = useState<"email" | "code" | "about">("email");
@@ -935,7 +949,7 @@ function JoinDialog({ open, me, onClose, onDone, defaultRole }: { open: boolean;
   const join = async () => {
     setBusy(true);
     try {
-      await apiRequest("POST", "/api/discover/join", { role, orgName: org.trim() });
+      await apiRequest("POST", "/api/discover/join", { role, orgName: org.trim(), source });
       toast({ title: "Discovery is on your account" });
       onDone();
     } catch (e) {

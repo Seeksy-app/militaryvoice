@@ -21,6 +21,7 @@ import {
   discoveryLists,
   discoveryListItems,
   discoveryReveals,
+  discoveryVisits,
   podcasterProfiles,
 } from "../shared/schema.js";
 
@@ -275,11 +276,36 @@ export function registerDiscoveryRoutes(app: Express): void {
       const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
       const role = ["brand", "podcaster", "event", "agency", "other"].includes(String(req.body?.role)) ? String(req.body.role) : "other";
       const orgName = String(req.body?.orgName ?? "").trim().slice(0, 120);
+      const source = String(req.body?.source ?? "").replace(/[^a-z0-9-]/gi, "").slice(0, 40);
       await db
         .insert(discoveryMembers)
-        .values({ email, role, orgName, createdAt: new Date().toISOString() })
+        .values({ email, role, orgName, source, createdAt: new Date().toISOString() })
         .onConflictDoUpdate({ target: discoveryMembers.email, set: { role, orgName } });
       return { ok: true };
+    }),
+  );
+
+  /** A visit, by where it came from. One per page load; nothing personal kept. */
+  app.post("/api/discover/visit", (req, res) =>
+    send(res, async () => {
+      const source = String(req.body?.source ?? "").replace(/[^a-z0-9-]/gi, "").slice(0, 40) || "direct";
+      await db.insert(discoveryVisits).values({ source, createdAt: new Date().toISOString() });
+      return { ok: true };
+    }),
+  );
+
+  /** For the admin: visits and new accounts by source, members by role. */
+  app.get("/api/admin/discover/stats", (req, res) =>
+    send(res, async () => {
+      if (!getAdminEmail(req) && String(req.get("x-admin-password") ?? "") !== (await storage.getFeaturedEvent()).adminPassword) throw new HttpError(401, "Admins only.");
+      const visits = await db.select().from(discoveryVisits);
+      const members = await db.select().from(discoveryMembers);
+      const bySource: Record<string, { visits: number; joins: number }> = {};
+      for (const v of visits) (bySource[v.source] ??= { visits: 0, joins: 0 }).visits++;
+      for (const m of members) (bySource[m.source || "direct"] ??= { visits: 0, joins: 0 }).joins++;
+      const byRole: Record<string, number> = {};
+      for (const m of members) byRole[m.role] = (byRole[m.role] ?? 0) + 1;
+      return { visits: visits.length, members: members.length, bySource, byRole, recent: members.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10).map((m) => ({ email: m.email, role: m.role, orgName: m.orgName, source: m.source, createdAt: m.createdAt })) };
     }),
   );
 
