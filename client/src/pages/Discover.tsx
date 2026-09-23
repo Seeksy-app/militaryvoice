@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search, Sparkles, BadgeCheck, Bookmark, BookmarkCheck, Users, Mail, Phone, Globe, ShieldCheck,
@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
+import { CreatorProfileSections, type Profile, type ProfilePerson } from "@/components/CreatorProfileSections";
 
 const HEADLINE = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const NAVY = "#04102b";
@@ -46,6 +47,7 @@ type Analytics = {
     languages: { name: string; pct: number }[]; interests: { name: string; pct: number }[]; brandAffinity: { name: string; pct: number }[];
   };
   fetchedAt: string;
+  profile?: Profile;
 };
 type List = { id: number; name: string; createdAt: string; items: { id: number; platform: string; handle: string; snapshot: Card; createdAt: string }[] };
 
@@ -227,7 +229,7 @@ export default function Discover() {
         <div className="relative mx-auto w-full max-w-6xl px-4 pb-10 pt-12 sm:px-6 sm:pt-16">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">
-              <Sparkles className="h-3.5 w-3.5" /> MilitaryVoice Discovery
+              <Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery
             </p>
             {isMember && me?.reveals && (
               <p className="text-xs text-white/60" data-testid="discover-allowance">
@@ -377,7 +379,7 @@ export default function Discover() {
             {/* ours first */}
             {!!r?.verified?.length && (
               <section className="mt-8">
-                <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.14em] text-[#8a5a00]"><BadgeCheck className="h-4 w-4" /> Verified on MilitaryVoice</h3>
+                <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.14em] text-[#8a5a00]"><BadgeCheck className="h-4 w-4" /> Verified on MilitaryVoices</h3>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {r.verified.map((c) => <CreatorCard key={`v-${c.name}`} c={c} saved={false} onOpen={() => setOpen(c)} />)}
                 </div>
@@ -412,7 +414,7 @@ export default function Discover() {
         )}
       </main>
 
-      <ProfileDrawer card={open} onClose={() => setOpen(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
+      <ProfileDrawer card={open} onOpenCreator={setOpen} onClose={() => setOpen(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
       <JoinDialog
         open={gate}
         me={me}
@@ -471,7 +473,7 @@ function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified,
       <section>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight" style={HEADLINE}>
-            <BadgeCheck className="h-6 w-6 text-[#F0A71F]" /> Verified on MilitaryVoice
+            <BadgeCheck className="h-6 w-6 text-[#F0A71F]" /> Verified on MilitaryVoices
           </h2>
           <p className="text-sm text-muted-foreground">Podcasters on The Podcast Marathon, October 5. We know every one of them.</p>
         </div>
@@ -499,7 +501,7 @@ function CreatorCard({ c, saved, onOpen, onSave }: { c: Card; saved: boolean; on
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1">
             <span className="truncate text-[15px] font-bold leading-tight" style={HEADLINE}>{c.name}</span>
-            {c.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-[#F0A71F]" aria-label="Verified on MilitaryVoice" />}
+            {c.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-[#F0A71F]" aria-label="Verified on MilitaryVoices" />}
           </span>
           <span className="block truncate text-xs text-muted-foreground">{c.verified ? c.verified.show : `@${c.handle}`}</span>
         </span>
@@ -618,12 +620,14 @@ function RequestButton({ kind, card, isMember, onJoin }: { kind: "email" | "phon
   );
 }
 
-function ProfileDrawer({ card, onClose, isMember, onJoin, lists, onSave, saved }: { card: Card | null; onClose: () => void; isMember: boolean; onJoin: () => void; lists: List[]; onSave: (c: Card, listId?: number) => void; saved: boolean }) {
+function ProfileDrawer({ card, onClose, onOpenCreator, isMember, onJoin, lists, onSave, saved }: { card: Card | null; onClose: () => void; onOpenCreator: (c: Card) => void; isMember: boolean; onJoin: () => void; lists: List[]; onSave: (c: Card, listId?: number) => void; saved: boolean }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [view, setView] = useState<"overview" | "audience" | "content" | "similar">("overview");
+  const [wantSimilar, setWantSimilar] = useState(false);
+  const scroller = useRef<HTMLDivElement>(null);
   const [contact, setContact] = useState<null | { email: string | null; phone: string | null; website: string | null; location: string | null }>(null);
-  useEffect(() => { setView("overview"); setContact(null); }, [card?.handle, card?.name]);
+  useEffect(() => { setView("overview"); setContact(null); setWantSimilar(false); scroller.current?.scrollTo({ top: 0 }); }, [card?.handle, card?.name]);
   const canAnalyze = !!card && !!card.handle && !!card.platform && isMember && ["instagram", "youtube", "tiktok", "twitter", "twitch"].includes(card.platform);
   const a = useQuery<Analytics>({
     queryKey: ["/api/discover/creator", card?.platform, card?.handle],
@@ -639,7 +643,7 @@ function ProfileDrawer({ card, onClose, isMember, onJoin, lists, onSave, saved }
   });
   const similar = useQuery<Card[]>({
     queryKey: ["/api/discover/similar", card?.platform, card?.handle],
-    enabled: canAnalyze && view === "similar",
+    enabled: canAnalyze && (view === "similar" || wantSimilar),
     queryFn: async () => {
       const res = await fetch(`/api/discover/similar?platform=${card!.platform}&handle=${encodeURIComponent(card!.handle)}`, { credentials: "include" });
       const j = await res.json();
@@ -671,7 +675,7 @@ function ProfileDrawer({ card, onClose, isMember, onJoin, lists, onSave, saved }
 
   return (
     <Sheet open={!!card} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-2xl">
+      <SheetContent ref={scroller} side="right" className="w-full overflow-y-auto p-0 sm:max-w-3xl lg:max-w-6xl">
         {card && (
           <>
             <SheetTitle className="sr-only">{card.name}</SheetTitle>
@@ -743,7 +747,7 @@ function ProfileDrawer({ card, onClose, isMember, onJoin, lists, onSave, saved }
                       <Icon className="h-4 w-4 text-muted-foreground" />
                       <span className="flex-1">
                         <span className="block font-medium">{label}</span>
-                        <span className="block text-xs text-muted-foreground">Shared through MilitaryVoice, with their say-so</span>
+                        <span className="block text-xs text-muted-foreground">Shared through MilitaryVoices, with their say-so</span>
                       </span>
                       <RequestButton kind={kind} card={card} isMember={isMember} onJoin={onJoin} />
                     </div>
@@ -761,6 +765,29 @@ function ProfileDrawer({ card, onClose, isMember, onJoin, lists, onSave, saved }
                   <p className="mt-1 text-sm text-muted-foreground">Free with a Discovery account.</p>
                   <Button onClick={onJoin} className="mt-4 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">Create your free account</Button>
                 </div>
+              </div>
+            ) : a.data?.profile ? (
+              <CreatorProfileSections
+                profile={a.data.profile}
+                cardEngagement={card.engagement}
+                scrollRoot={scroller}
+                onOpenCreator={(p: ProfilePerson) => onOpenCreator({ platform: p.platform, handle: p.handle, name: p.name, picture: p.picture, followers: p.followers, engagement: null, branch: "" })}
+                similar={
+                  !wantSimilar ? (
+                    <Button variant="outline" className="self-start rounded-full" onClick={() => setWantSimilar(true)} data-testid="find-similar">Search for more creators like this</Button>
+                  ) : similar.isLoading ? (
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-36 rounded-2xl" />)}</div>
+                  ) : similar.isError ? (
+                    <p className="text-sm text-destructive">{(similar.error as Error).message}</p>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{(similar.data ?? []).map((c) => <CreatorCard key={c.handle} c={c} saved={false} onOpen={() => onOpenCreator(c)} />)}</div>
+                  )
+                }
+              />
+            ) : a.isLoading ? (
+              <div className="p-6">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+                <p className="mt-4 text-sm text-muted-foreground">Reading their audience, growth, posts and brand history…</p>
               </div>
             ) : (
               <div className="p-6">
@@ -1009,7 +1036,7 @@ function JoinDialog({ open, me, onClose, onDone, defaultRole, source }: { open: 
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md overflow-hidden p-0">
         <div className="px-6 pb-2 pt-6" style={{ background: NAVY }}>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">MilitaryVoice Discovery</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">MilitaryVoices Discovery</p>
           <DialogTitle className="mt-2 text-2xl font-bold text-white" style={HEADLINE}>
             {step === "about" ? (me?.isPodcaster ? "Add Discovery to your account" : "One last thing") : "Create your free account"}
           </DialogTitle>
@@ -1025,7 +1052,7 @@ function JoinDialog({ open, me, onClose, onDone, defaultRole, source }: { open: 
               <Button type="submit" disabled={busy || !email.includes("@") || (!!siteKey && !human)} className="h-11 rounded-full bg-[#053877] font-semibold text-white hover:bg-[#0a4a99]" data-testid="join-send">
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send me a code"}
               </Button>
-              <p className="text-center text-xs text-muted-foreground">Already on MilitaryVoice? Use the same email and Discovery joins your account.</p>
+              <p className="text-center text-xs text-muted-foreground">Already on MilitaryVoices? Use the same email and Discovery joins your account.</p>
             </form>
           )}
           {step === "code" && (

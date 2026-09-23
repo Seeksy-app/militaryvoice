@@ -11,6 +11,7 @@
 // a creator's analytics for a month, a contact for good. Revealing a contact
 // is the expensive, personal step, so each member gets an allowance a month.
 import crypto from "node:crypto";
+import { buildProfile } from "./creatorProfile.js";
 import type { Express, Request, Response } from "express";
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { db, storage } from "./storage.js";
@@ -125,6 +126,29 @@ async function cached<T>(k: string, maxAgeMs: number, make: () => Promise<T>): P
 }
 const hash = (v: unknown) => crypto.createHash("sha1").update(JSON.stringify(v)).digest("hex").slice(0, 20);
 
+/**
+ * The account as the platform shows it, with its latest posts — Influencers
+ * Club's "raw" read, 0.03 credits. Shared by the profile and by Enrich, and
+ * kept a week so a creator looked up twice is paid for once. Posts are trimmed
+ * before they're stored: a YouTube answer carries fifty full descriptions.
+ */
+export async function rawAccount(platform: string, handle: string): Promise<any | null> {
+  return cached(`raw:${platform}:${handle.toLowerCase()}`, 7 * DAY, async () => {
+    const r = await ic("/creators/enrich/handle/raw/", { handle, platform });
+    const acct = r?.result?.[platform] ?? null;
+    if (!acct) return null;
+    const cut = (v: unknown, n: number) => (typeof v === "string" ? v.slice(0, n) : v);
+    acct.post_data = (Array.isArray(acct.post_data) ? acct.post_data : []).slice(0, 15).map((p: any) => ({
+      ...p,
+      caption: cut(p?.caption, 600),
+      description: cut(p?.description, 300),
+      localized: undefined,
+      media: Array.isArray(p?.media) ? p.media.slice(0, 2) : p?.media,
+    }));
+    return acct;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Shapes
 // ---------------------------------------------------------------------------
@@ -169,7 +193,7 @@ const img = (u: string) => (u ? `/api/discover/img?u=${encodeURIComponent(u)}` :
  */
 const pic = (platform: string, handle: string, u: string) =>
   handle ? `/api/discover/pic/${platform}/${encodeURIComponent(handle.toLowerCase())}${u ? `?u=${encodeURIComponent(u)}` : ""}` : img(u);
-const PIC_HOSTS = /(^|\.)(cdninstagram\.com|fbcdn\.net|ytimg\.com|ggpht\.com|googleusercontent\.com|tiktokcdn(-us)?\.com|ibyteimg\.com|twimg\.com|jtvnw\.net|influencers\.club|amazonaws\.com|cloudfront\.net|imgix\.net|influencersclub\.workers\.dev)$/i;
+const PIC_HOSTS = /(^|\.)(cdninstagram\.com|fbcdn\.net|ytimg\.com|ggpht\.com|googleusercontent\.com|tiktokcdn(-us)?\.com|ibyteimg\.com|twimg\.com|jtvnw\.net|influencers\.club|amazonaws\.com|cloudfront\.net|imgix\.net|influencersclub\.workers\.dev|onsocial\.ai)$/i;
 async function savePicture(platform: string, handle: string, u: string): Promise<string | null> {
   const k = `pic:${platform}:${handle.toLowerCase()}`;
   const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, k));
@@ -549,13 +573,18 @@ export function registerDiscoveryRoutes(app: Express): void {
       const platform = asPlatform(req.query.platform);
       const handle = String(req.query.handle ?? "").replace(/^@/, "").trim().slice(0, 100);
       if (!handle) throw new HttpError(400, "Which creator?");
-      const full = await cached(`analytics:${platform}:${handle.toLowerCase()}`, 30 * DAY, async () => {
-        const r = await ic("/creators/enrich/handle/analytics/", { handle, platform, include_lookalikes: false });
-        return normalizeAnalytics(platform, handle, r);
-      });
-      // The raw answer stays in the cache for correcting the readers; admins can see it.
+      const [full, account] = await Promise.all([
+        cached(`analytics:${platform}:${handle.toLowerCase()}`, 30 * DAY, async () => {
+          const r = await ic("/creators/enrich/handle/analytics/", { handle, platform, include_lookalikes: false });
+          return normalizeAnalytics(platform, handle, r);
+        }),
+        // The account and its latest posts: cheap, and it fills the recent-posts section.
+        rawAccount(platform, handle).catch(() => null),
+      ]);
+      // The raw answers stay in the cache for correcting the readers; admins can see them.
       const { raw, ...rest } = full;
-      return req.query.raw === "1" && (await storage.isAdminEmail(String(getSessionEmail(req) ?? ""))) ? full : rest;
+      const profile = buildProfile(platform, handle, raw, account, full.fetchedAt);
+      return req.query.raw === "1" && (await storage.isAdminEmail(String(getSessionEmail(req) ?? ""))) ? { ...full, profile, account } : { ...rest, profile };
     }),
   );
 
@@ -689,7 +718,7 @@ export function registerDiscoveryRoutes(app: Express): void {
     } catch {
       return res.status(400).end();
     }
-    const okHost = /(^|\.)(cdninstagram\.com|fbcdn\.net|ytimg\.com|ggpht\.com|googleusercontent\.com|tiktokcdn(-us)?\.com|tiktokcdn\.com|ibyteimg\.com|twimg\.com|jtvnw\.net|influencers\.club|amazonaws\.com|cloudfront\.net|imgix\.net|influencersclub\.workers\.dev)$/i.test(url.hostname);
+    const okHost = /(^|\.)(cdninstagram\.com|fbcdn\.net|ytimg\.com|ggpht\.com|googleusercontent\.com|tiktokcdn(-us)?\.com|tiktokcdn\.com|ibyteimg\.com|twimg\.com|jtvnw\.net|influencers\.club|amazonaws\.com|cloudfront\.net|imgix\.net|influencersclub\.workers\.dev|onsocial\.ai)$/i.test(url.hostname);
     if (url.protocol !== "https:" || !okHost) return res.status(404).end();
     try {
       const r = await fetch(url, { headers: { "user-agent": "Mozilla/5.0" } });
