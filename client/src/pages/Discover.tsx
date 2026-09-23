@@ -178,6 +178,7 @@ export default function Discover() {
   // The hero demo's typing and the list it lights up.
   const [ghost, setGhost] = useState("");
   const [spotlight, setSpotlight] = useState(false);
+  const [demoHide, setDemoHide] = useState(false);
   const [submitted, setSubmitted] = useState<null | { q: string; platform: string; branch: string; size: number; sort: string; mode: Mode; filters: Filters }>(null);
   const [heroVariant] = useState(() => {
     try {
@@ -317,7 +318,7 @@ export default function Discover() {
 
   return (
     <div className="relative min-h-screen bg-background">
-      <SearchDemo enabled={!submitted && tab === "search"} onType={setGhost} onSpotlight={setSpotlight} />
+      <SearchDemo enabled={!submitted && tab === "search"} onType={setGhost} onSpotlight={setSpotlight} onHide={setDemoHide} />
       <NavBar product="discovery" account={isMember ? { label: "Saved", onClick: () => { setTab("lists"); document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }); } } : { label: me?.signedIn ? "Add Discovery" : "Sign in", onClick: () => setGate(true) }} />
 
       {/* ---------------------------------------------------------------- hero */}
@@ -428,7 +429,7 @@ export default function Discover() {
           <Lists lists={lists.data ?? []} onOpen={(c) => openIn((lists.data ?? []).flatMap((l) => l.items.map((i) => i.snapshot)))(c)} />
           </>
         ) : !submitted || !isMember || submitted.mode === "username" ? (
-          <Welcome isAdmin={!!me?.isAdmin} verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} onJoin={() => setGate(true)} loading={meLoading} />
+          <Welcome isAdmin={!!me?.isAdmin} verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} hidden={demoHide} onJoin={() => setGate(true)} loading={meLoading} />
         ) : (
           <>
             {/* what ran */}
@@ -690,7 +691,7 @@ function HeroB({ raised, door, setDoor, bar, tries, onEnrich, verified, onOpen }
  * verified list lights up. Visual only — nothing is searched or spent — and it
  * gives way the moment someone touches the search box.
  */
-function SearchDemo({ enabled, onType, onSpotlight }: { enabled: boolean; onType: (t: string) => void; onSpotlight: (on: boolean) => void }) {
+function SearchDemo({ enabled, onType, onSpotlight, onHide }: { enabled: boolean; onType: (t: string) => void; onSpotlight: (on: boolean) => void; onHide: (hide: boolean) => void }) {
   const [pos, setPos] = useState({ x: 0, y: 0, on: false, click: 0 });
   const live = useRef(enabled);
   live.current = enabled;
@@ -703,6 +704,7 @@ function SearchDemo({ enabled, onType, onSpotlight }: { enabled: boolean; onType
       setPos((p) => ({ ...p, on: false }));
       onType("");
       onSpotlight(false);
+      onHide(false);
       done();
     };
     const at = (sel: string, dx = 0.5, dy = 0.5) => {
@@ -717,6 +719,8 @@ function SearchDemo({ enabled, onType, onSpotlight }: { enabled: boolean; onType
       if (!live.current || !input || !form || input.value || document.activeElement === input) return done();
       // Glide down so the search sits under the site header with the first few
       // verified creators below it: the visitor sees the typing and the answer.
+      // The answer isn't shown until the question is asked.
+      onHide(true);
       const header = (document.querySelector("header") as HTMLElement | null)?.offsetHeight ?? 80;
       const target = Math.max(0, form.getBoundingClientRect().top + window.scrollY - header - 24);
       if (Math.abs(window.scrollY - target) > 8) window.scrollTo({ top: target, behavior: "smooth" });
@@ -727,7 +731,7 @@ function SearchDemo({ enabled, onType, onSpotlight }: { enabled: boolean; onType
       const card = at('[data-testid="hero-preview"]', 0.54, 0.4);
       const q = at('[data-testid="discover-q"]', 0.12, 0.55);
       const go = at('[data-testid="discover-go"]', 0.5, 0.55);
-      if (!live.current || !input || input.value || document.activeElement === input || !card || !q || !go) return done();
+      if (!live.current || !input || input.value || document.activeElement === input || !card || !q || !go) { onHide(false); return done(); }
       // Start from the card if it's still on screen, else just above the search.
       const start = card.y > window.scrollY + 60 ? card : { x: q.x + 180, y: q.y - 90 };
       const T = (ms: number, f: () => void) => { timers.push(window.setTimeout(f, ms)); };
@@ -739,7 +743,7 @@ function SearchDemo({ enabled, onType, onSpotlight }: { enabled: boolean; onType
       const end = 1500 + text.length * 75;
       T(end + 350, () => setPos((p) => ({ ...p, ...go })));
       T(end + 1350, () => setPos((p) => ({ ...p, click: p.click + 1 })));
-      T(end + 1500, () => onSpotlight(true));
+      T(end + 1450, () => { onHide(false); onSpotlight(true); });
       T(end + 2300, () => { setPos((p) => ({ ...p, on: false })); onType(""); });
       T(end + 4600, () => { onSpotlight(false); done(); });
     };
@@ -1052,7 +1056,7 @@ function ResultsList({ rows, total, saved, isMember, isAdmin, onOpen, onSave, on
     growth: rows.some((c) => (ex(c)?.growth.length ?? 0) > 1),
     country: rows.some((c) => ex(c)?.country),
     niches: rows.some((c) => (ex(c)?.niches.length ?? 0) > 0),
-    collabs: rows.some((c) => ex(c)?.collabCount),
+    collabs: false, // left out so the table fits; the profile carries the brand history
   };
   const missing = rows.filter((c) => c.handle && !ex(c));
   const fill = async () => {
@@ -1197,7 +1201,7 @@ function ResultsSkeleton() {
 // Before a search: our creators, and what Discovery is
 // ===========================================================================
 
-function Welcome({ verified, isMember, isAdmin, signedIn, onOpenVerified, onSaveVerified, onSaveMany, saved, spotlight, onJoin, loading }: { verified: Card[]; isMember: boolean; isAdmin?: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; saved: Set<string>; spotlight?: boolean; onJoin: () => void; loading: boolean }) {
+function Welcome({ verified, isMember, isAdmin, signedIn, onOpenVerified, onSaveVerified, onSaveMany, saved, spotlight, hidden, onJoin, loading }: { verified: Card[]; isMember: boolean; isAdmin?: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; saved: Set<string>; spotlight?: boolean; hidden?: boolean; onJoin: () => void; loading: boolean }) {
   return (
     <div className="flex flex-col gap-12">
       <section>
@@ -1207,7 +1211,7 @@ function Welcome({ verified, isMember, isAdmin, signedIn, onOpenVerified, onSave
           </h2>
           <p className="text-sm text-muted-foreground">Creators we know personally. Every one checked by our team.</p>
         </div>
-        <div className={`mt-5 rounded-2xl transition-all duration-500 ${spotlight ? "ring-4 ring-[#F0A71F]/50 shadow-[0_0_48px_rgba(240,167,31,0.35)]" : ""}`}>
+        <div className={`mt-5 rounded-2xl transition-all duration-700 ${hidden ? "pointer-events-none translate-y-6 opacity-0" : "translate-y-0 opacity-100"} ${spotlight ? "ring-4 ring-[#F0A71F]/50 shadow-[0_0_48px_rgba(240,167,31,0.35)]" : ""}`}>
           {verified.length === 0 ? <ResultsSkeleton /> : <ResultsList rows={verified} saved={saved} isMember={isMember} isAdmin={isAdmin} onOpen={onOpenVerified} onSave={onSaveVerified} onSaveMany={onSaveMany} />}
         </div>
       </section>

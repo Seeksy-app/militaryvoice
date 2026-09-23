@@ -1630,11 +1630,18 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                         <ChevronDown className="h-3.5 w-3.5 opacity-80" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-64">
+                    <DropdownMenuContent align="end" className="w-72">
+                      <DropdownMenuItem onClick={() => { broadcast.mutate("start"); record.mutate({ action: "start", signupId: current?.signupId ?? undefined }); }} data-testid="menu-go-live-record">
+                        <Signal className="mr-2 h-4 w-4 text-[#ED1C24]" />
+                        <span>
+                          <span className="block font-semibold">Live stream + record <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Go live</span></span>
+                          <span className="block text-xs text-muted-foreground">Out to every destination, and the file is saved</span>
+                        </span>
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => broadcast.mutate("start")} data-testid="menu-go-live">
                         <Signal className="mr-2 h-4 w-4" />
                         <span>
-                          <span className="block font-semibold">Live stream</span>
+                          <span className="block font-semibold">Live stream only</span>
                           <span className="block text-xs text-muted-foreground">Watch page and the destinations above</span>
                         </span>
                       </DropdownMenuItem>
