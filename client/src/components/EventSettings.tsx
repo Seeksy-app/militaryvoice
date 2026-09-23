@@ -384,7 +384,9 @@ export function EventSettings({
       {/* The desk, as a pop-up: offered once when the show is first saved,
           and from the co-host card any time after. */}
       <Dialog open={cohostOpen} onOpenChange={setCohostOpen}>
-        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto" data-testid="dialog-cohost">
+        {/* No auto-focus: the first focusable thing is the info icon, and
+            focusing it opened its tooltip over the heading on arrival. */}
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto" data-testid="dialog-cohost" onOpenAutoFocus={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Your show's set up. Want to co-host an hour too?</DialogTitle>
             <DialogDescription>Optional. Sit in at the desk between shows with Alex or Riccoh — take one hour or several.</DialogDescription>
