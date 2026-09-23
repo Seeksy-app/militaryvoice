@@ -325,9 +325,12 @@ export function registerDiscoveryRoutes(app: Express): void {
       // Ours first, on the first page, when the words match.
       let verified: CreatorCard[] = [];
       if (page === 0) {
-        const words = `${q} ${branch}`.toLowerCase().split(/\s+/).filter((w) => w.length > 2 && !["the", "and", "with", "for", "who", "creators", "followers"].includes(w));
+        // Every meaningful word has to match, so "veteran fitness coaches" doesn't
+        // pull in every veteran podcaster on the lineup. Plurals fold to singular.
+        const stop = new Set(["the", "and", "with", "for", "who", "that", "creators", "creator", "followers", "veteran", "veterans", "military", "vets", "about", "talk"]);
+        const words = `${q}`.toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !stop.has(w)).map((w) => w.replace(/s$/, ""));
         verified = (await verifiedCreators())
-          .filter((c) => (!branch || c.branch.toLowerCase() === branch.toLowerCase()) && (words.length === 0 || words.some((w) => c.match.includes(w))))
+          .filter((c) => (!branch || c.branch.toLowerCase() === branch.toLowerCase()) && words.every((w) => c.match.includes(w)))
           .slice(0, 8)
           .map(({ match: _m, ...c }) => c);
       }
