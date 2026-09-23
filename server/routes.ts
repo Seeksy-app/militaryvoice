@@ -3944,7 +3944,15 @@ export function registerRoutes(app: Express): void {
         const taken = await takeRunRow(studio, row);
         const who = row.signupId ? await storage.getSignupById(row.signupId) : undefined;
         const sponsor = row.signupId ? (await sponsorsBySignup(studio.eventId)).get(row.signupId) : undefined;
-        const banner = bannerFor(scene);
+        // A podcaster's segment names them at the bottom of the frame without
+        // anyone typing it: the host (and co-host, when there is one) over the
+        // show's name. A banner written on the scene still wins.
+        let banner = bannerFor(scene);
+        if (!banner.bannerTitle && who && row.kind === "Segment" && who.hostName.trim()) {
+          const co = who.coHostEmail ? await storage.getProfileByEmail(who.coHostEmail.trim().toLowerCase()).catch(() => undefined) : undefined;
+          const names = [who.hostName.trim(), co?.hostName?.trim()].filter(Boolean).join(" & ");
+          banner = { bannerTitle: names, bannerSubtitle: who.podcastName.trim(), bannerVisible: true };
+        }
         // The desk scene: the card is whoever holds that hour as co-host,
         // so the stage says who is talking rather than nobody.
         const desk = row.kind === "Handoff" && !who ? await deskHostFor(studio.eventId, row.startAtUtc) : null;
