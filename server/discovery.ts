@@ -778,10 +778,53 @@ export function registerDiscoveryRoutes(app: Express): void {
   /** A creator's analytics: growth, engagement, income, hashtags, past sponsors. */
   app.get("/api/discover/creator", (req, res) =>
     send(res, async () => {
-      await requireMember(req);
       const platform = asPlatform(req.query.platform);
       const handle = String(req.query.handle ?? "").replace(/^@/, "").trim().slice(0, 100);
       if (!handle) throw new HttpError(400, "Which creator?");
+      // A lineup podcaster's own profile opens for anyone — that's what their
+      // Share link is for — but only from what we already hold: a visitor never
+      // spends a credit. Everything else needs Discovery.
+      try {
+        await requireMember(req);
+      } catch (err) {
+        const ours = (await verifiedCreators()).some((c) => c.platform === platform && c.handle.toLowerCase() === handle.toLowerCase());
+        const held = ours && (await db.select().from(discoveryCache).where(eq(discoveryCache.key, `analytics:${platform}:${handle.toLowerCase()}`))).length > 0;
+        if (!held) throw err;
+      }
+      return loadCreator(platform, handle, req);
+    }),
+  );
+
+  /**
+   * A podcaster's own analytics, for their dashboard: the account we matched
+   * them to on the lineup (or their biggest connected one), read once and kept
+   * for a month.
+   */
+  app.get("/api/host/my-analytics", (req, res) =>
+    send(res, async () => {
+      const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+      if (!email) throw new HttpError(401, "Sign in to see your analytics.");
+      const ev = await storage.getFeaturedEvent();
+      const mine = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled" && s.email.trim().toLowerCase() === email);
+      const card = (await verifiedCreators()).find((c) => mine.some((s) => s.id === c.signupId) && c.handle);
+      let platform = card?.platform ?? "";
+      let handle = card?.handle ?? "";
+      if (!handle) {
+        const [prof] = await db.select().from(podcasterProfiles).where(eq(podcasterProfiles.email, email));
+        let accounts: { platform: string; username: string; followers?: number }[] = [];
+        try { accounts = JSON.parse(prof?.socialAccounts || "[]"); } catch { /* none */ }
+        const best = accounts.filter((a) => ["instagram", "youtube", "tiktok"].includes(String(a.platform))).sort((x, y) => (y.followers ?? 0) - (x.followers ?? 0))[0];
+        platform = best?.platform ?? "";
+        handle = best?.username ?? "";
+      }
+      if (!handle) return { none: true };
+      const loaded = await loadCreator(asPlatform(platform), handle, req);
+      return { platform, handle, card: card ?? null, ...loaded };
+    }),
+  );
+
+  async function loadCreator(platform: Platform, handle: string, req: Request) {
+    {
       const [fullOrErr, account] = await Promise.all([
         cached(`analytics:${platform}:${handle.toLowerCase()}`, 30 * DAY, async () => {
           const r = await ic("/creators/enrich/handle/analytics/", { handle, platform, include_lookalikes: false });
@@ -802,8 +845,8 @@ export function registerDiscoveryRoutes(app: Express): void {
       const { raw, ...rest } = full;
       const profile = buildProfile(platform, handle, raw, account, full.fetchedAt);
       return req.query.raw === "1" && (await storage.isAdminEmail(String(getSessionEmail(req) ?? ""))) ? { ...full, profile, account } : { ...rest, profile };
-    }),
-  );
+    }
+  }
 
   /** Creators like this one. */
   app.get("/api/discover/similar", (req, res) =>

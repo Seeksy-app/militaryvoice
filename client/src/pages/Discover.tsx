@@ -304,13 +304,13 @@ export default function Discover() {
     toast({ title: `Saved ${cards.length} to your list` });
   };
 
-  // A shared profile link: /discover?creator=instagram:handle opens it.
+  // A shared profile link: /discover?creator=instagram:handle opens it — for
+  // anyone when it's a lineup podcaster's own (their Share link), for members otherwise.
+  const sharedKey = useMemo(() => new URLSearchParams(window.location.search).get("creator") ?? "", []);
   useEffect(() => {
-    if (!isMember) return;
-    const raw = new URLSearchParams(window.location.search).get("creator") ?? "";
-    const [pf, h] = raw.split(":");
+    const [pf, h] = sharedKey.split(":");
     if (pf && h && PLATFORMS.some((x) => x.v === pf)) setOpen({ platform: pf, handle: h, name: h, picture: "", followers: null, engagement: null, branch: "" });
-  }, [isMember]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sharedKey]);
 
   const r = search.data?.pages[0];
   const results = useMemo(() => {
@@ -494,7 +494,7 @@ export default function Discover() {
         )}
       </main>
 
-      <ProfileDrawer card={open} siblings={openFrom} allowance={me?.reveals} onOpenCreator={setOpenRaw} onClose={() => setOpenRaw(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
+      <ProfileDrawer card={open} siblings={openFrom} sharedKey={sharedKey} allowance={me?.reveals} onOpenCreator={setOpenRaw} onClose={() => setOpenRaw(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
       <JoinDialog
         open={gate}
         me={me}
@@ -896,12 +896,16 @@ export function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (
   const pool = useMemo(() => {
     const demo = (showcase.data ?? []).filter((d) => d.picture);
     if (demo.length) return demo;
+    // Still loading hers: wait (the placeholder shows) rather than flash the
+    // first lineup podcaster and swap. The lineup is only the fallback if the
+    // showcase comes back empty.
+    if (showcase.isLoading) return [];
     return verified.filter((c) => c.picture && (c.followers ?? 0) > 0).slice(0, 8).map((c) => ({
       platform: c.platform, handle: c.handle, name: c.name, picture: c.picture, show: c.verified?.show ?? "", verified: !!c.verified, branch: c.branch,
       followers: c.followers, engagement: c.engagement, realReach: null, realPct: null, credibility: c.quality ?? null, credibilityClass: "",
       types: { real: null, massFollowers: null, influencers: null, suspicious: null }, topCountry: null, femalePct: null, postsPerWeek: null, interests: [],
     }) as Showcase);
-  }, [showcase.data, verified]);
+  }, [showcase.data, showcase.isLoading, verified]);
 
   const [i, setI] = useState(0);
   // idle → cursor travels → click → the profile rises → it reads → it slides away → next
@@ -1432,8 +1436,8 @@ const PLATFORM_ICON: Record<string, typeof Instagram> = { instagram: Instagram, 
  * toolbar that follows you (back, next, add to list, share, close), who they
  * are, and then the nine sections.
  */
-function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoin, lists, onSave, saved, allowance }: {
-  card: Card | null; siblings: Card[]; onClose: () => void; onOpenCreator: (c: Card) => void; isMember: boolean; onJoin: () => void;
+function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoin, lists, onSave, saved, allowance, sharedKey = "" }: {
+  card: Card | null; siblings: Card[]; onClose: () => void; onOpenCreator: (c: Card) => void; isMember: boolean; onJoin: () => void; sharedKey?: string;
   lists: List[]; onSave: (c: Card, listId?: number) => void; saved: boolean; allowance: { used: number; allowance: number } | null | undefined;
 }) {
   const { toast } = useToast();
@@ -1442,7 +1446,8 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
   const scroller = useRef<HTMLDivElement>(null);
   const [contact, setContact] = useState<null | { email: string | null; phone: string | null; website: string | null; location: string | null }>(null);
   useEffect(() => { setContact(null); setWantSimilar(false); scroller.current?.scrollTo({ top: 0 }); }, [card?.handle, card?.name]);
-  const canAnalyze = !!card && !!card.handle && !!card.platform && isMember && ["instagram", "youtube", "tiktok", "twitter", "twitch"].includes(card.platform);
+  const viaShare = !!card && sharedKey.toLowerCase() === `${card.platform}:${card.handle}`.toLowerCase();
+  const canAnalyze = !!card && !!card.handle && !!card.platform && (isMember || viaShare) && ["instagram", "youtube", "tiktok", "twitter", "twitch"].includes(card.platform);
   const a = useQuery<Analytics>({
     queryKey: ["/api/discover/creator", card?.platform, card?.handle],
     enabled: canAnalyze,
@@ -1501,7 +1506,7 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
     const url = `${window.location.origin}/discover?creator=${encodeURIComponent(`${card.platform}:${card.handle}`)}`;
     try {
       await navigator.clipboard.writeText(url);
-      toast({ title: "Link copied", description: "Anyone with a Discovery account can open this profile." });
+      toast({ title: "Link copied", description: card.verified ? "Anyone can open this profile — send it to a sponsor." : "Anyone with a Discovery account can open this profile." });
     } catch {
       toast({ title: "Copy this link", description: url });
     }
