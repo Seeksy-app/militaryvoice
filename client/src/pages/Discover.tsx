@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search, Sparkles, BadgeCheck, Bookmark, BookmarkCheck, Users, Mail, Phone, Globe, ShieldCheck,
   Mic2, Megaphone, CalendarDays, X, Loader2, ExternalLink, Plus, Trash2, Download, ChevronRight, Lock, MapPin, Heart, Hash, Handshake, Info,
@@ -28,6 +28,8 @@ type Card = {
   engagement: number | null;
   branch: string;
   verified?: { show: string; host: string; serviceStatus: string; slotLabel: string } | null;
+  signupId?: number;
+  quality?: number | null;
 };
 type Me = { signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number } | null };
 type SearchResult = { brief: string; total: number; page: number; pageSize: number; results: Card[]; verified: Card[]; understood?: { notes?: string[]; from_nlp?: Record<string, unknown> } | null };
@@ -150,22 +152,24 @@ export default function Discover() {
   const run = (over?: Partial<{ q: string; branch: string; size: number; sort: string; platform: string }>) => {
     const next = { q: over?.q ?? q, platform: over?.platform ?? platform, branch: over?.branch ?? branch, size: over?.size ?? size, sort: over?.sort ?? sort };
     if (over?.q !== undefined) setQ(over.q);
-    setPage(0);
     setSubmitted(next);
     setTab("search");
     if (!isMember) setGate(true);
   };
 
-  const search = useQuery<SearchResult>({
-    queryKey: ["/api/discover/search", submitted, page],
+  // Ten at a time; "Load more" adds the next ten under them.
+  const search = useInfiniteQuery<SearchResult>({
+    queryKey: ["/api/discover/search", submitted],
     enabled: isMember && !!submitted,
-    queryFn: async () => {
+    initialPageParam: 0,
+    getNextPageParam: (last) => (last.total > (last.page + 1) * last.pageSize && last.page < 40 ? last.page + 1 : undefined),
+    queryFn: async ({ pageParam }) => {
       const s = submitted!;
       const res = await fetch("/api/discover/search", {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ q: s.q, platform: s.platform, branch: s.branch, sort: s.sort, page, minFollowers: SIZES[s.size].min, maxFollowers: SIZES[s.size].max }),
+        body: JSON.stringify({ q: s.q, platform: s.platform, branch: s.branch, sort: s.sort, page: pageParam, minFollowers: SIZES[s.size].min, maxFollowers: SIZES[s.size].max }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.message ?? "Search failed");
@@ -206,8 +210,11 @@ export default function Discover() {
     onError: (e: Error) => toast({ title: "Couldn't save that", description: e.message, variant: "destructive" }),
   });
 
-  const r = search.data;
-  const results = r?.results ?? [];
+  const r = search.data?.pages[0];
+  const results = useMemo(() => {
+    const seen = new Set<string>();
+    return (search.data?.pages ?? []).flatMap((p) => p.results).filter((c) => { const k = `${c.platform}:${c.handle}`; if (seen.has(k)) return false; seen.add(k); return true; });
+  }, [search.data]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -392,12 +399,12 @@ export default function Discover() {
                   ))}
                 </div>
               )}
-              {r && r.total > (page + 1) * r.pageSize && (
-                <div className="mt-6 flex justify-center gap-2">
-                  {page > 0 && <Button variant="outline" className="rounded-full" onClick={() => setPage(page - 1)}>Previous</Button>}
-                  <Button variant="outline" className="rounded-full" onClick={() => { setPage(page + 1); window.scrollTo({ top: 480, behavior: "smooth" }); }} data-testid="discover-more">
-                    Next {r.pageSize}
+              {search.hasNextPage && (
+                <div className="mt-6 flex flex-col items-center gap-1">
+                  <Button variant="outline" className="h-11 gap-2 rounded-full px-6" onClick={() => void search.fetchNextPage()} disabled={search.isFetchingNextPage} data-testid="discover-more">
+                    {search.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Load 10 more
                   </Button>
+                  <span className="text-xs text-muted-foreground">Showing {results.length} of {r!.total.toLocaleString()}</span>
                 </div>
               )}
             </section>
@@ -589,6 +596,29 @@ function Growth({ points }: { points: { monthsAgo: number; pct: number }[] }) {
   );
 }
 
+function RequestButton({ kind, card, isMember, onJoin }: { kind: "email" | "phone"; card: Card; isMember: boolean; onJoin: () => void }) {
+  const { toast } = useToast();
+  const [done, setDone] = useState(false);
+  const ask = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/discover/intro", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ signupId: card.signupId, kind }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message);
+    },
+    onSuccess: () => {
+      setDone(true);
+      toast({ title: "Requested", description: `We'll ask ${card.verified?.host.split(" ")[0] ?? "them"} and put you in touch, usually within a day.` });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't send that", description: e.message, variant: "destructive" }),
+  });
+  if (done) return <span className="text-xs font-semibold text-emerald-600">Requested</span>;
+  return (
+    <Button size="sm" variant="outline" className="h-8 rounded-full" disabled={ask.isPending} onClick={() => (isMember ? ask.mutate() : onJoin())} data-testid={`request-${kind}`}>
+      {ask.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Request"}
+    </Button>
+  );
+}
+
 function ProfileDrawer({ card, onClose, isMember, onJoin, lists, onSave, saved }: { card: Card | null; onClose: () => void; isMember: boolean; onJoin: () => void; lists: List[]; onSave: (c: Card, listId?: number) => void; saved: boolean }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -669,7 +699,7 @@ function ProfileDrawer({ card, onClose, isMember, onJoin, lists, onSave, saved }
                 </div>
               </div>
               <div className="relative mt-5 grid grid-cols-3 gap-2">
-                {[["Followers", compact(card.followers)], ["Engagement", card.engagement != null ? pct(card.engagement, 2) : "–"], ["Audience quality", aud?.credibility != null ? `${aud.credibility}/100` : isMember ? (a.isLoading ? "…" : "–") : "🔒"]].map(([l, v]) => (
+                {[["Followers", compact(card.followers)], ["Engagement", card.engagement != null ? pct(card.engagement, 2) : "–"], ["Audience quality", aud?.credibility != null ? `${aud.credibility}/100` : card.quality != null ? `${card.quality}/100` : isMember ? (a.isLoading ? "…" : "–") : "🔒"]].map(([l, v]) => (
                   <div key={l} className="rounded-xl bg-white/[0.07] p-3">
                     <div className="text-[11px] uppercase tracking-wide text-white/60">{l}</div>
                     <div className="mt-0.5 text-xl font-bold tabular-nums">{v}</div>
@@ -677,7 +707,7 @@ function ProfileDrawer({ card, onClose, isMember, onJoin, lists, onSave, saved }
                 ))}
               </div>
               <div className="relative mt-4 flex flex-wrap gap-2">
-                {isMember && card.handle && !card.verified && (
+                {isMember && (card.handle || card.verified) && (
                   <Button size="sm" onClick={() => onSave(card, lists[0]?.id)} disabled={saved} className="gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="drawer-save">
                     {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />} {saved ? "Saved" : "Save"}
                   </Button>
@@ -702,11 +732,28 @@ function ProfileDrawer({ card, onClose, isMember, onJoin, lists, onSave, saved }
             </div>
 
             {/* body */}
-            {card.verified ? (
-              <div className="p-6 text-sm text-muted-foreground">
-                <p>{card.verified.host} hosts <span className="font-semibold text-foreground">{card.verified.show}</span> and is on the lineup for The Podcast Marathon at {card.verified.slotLabel} on October 5.</p>
-                <p className="mt-3">Want to book them, sponsor their show or bring them to your event? We'll make the introduction: <a className="font-semibold text-[#053877] underline underline-offset-2" href={`mailto:hello@militaryvoice.ai?subject=${encodeURIComponent(`Introduction to ${card.verified.host}`)}`}>hello@militaryvoice.ai</a></p>
+            {card.verified && (
+              <div className="border-b border-border p-6 text-sm">
+                <p className="text-muted-foreground">
+                  {card.verified.host} hosts <span className="font-semibold text-foreground">{card.verified.show}</span> and is on the lineup for The Podcast Marathon at {card.verified.slotLabel} on October 5.
+                </p>
+                {/* Contacts for our own podcasters go through us: they asked us, not the world. */}
+                <div className="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border">
+                  {([["email", Mail, "Email"], ["phone", Phone, "Phone"]] as const).map(([kind, Icon, label]) => (
+                    <div key={kind} className="flex items-center gap-3 px-4 py-3">
+                      <Icon className="h-4 w-4 text-muted-foreground" />
+                      <span className="flex-1">
+                        <span className="block font-medium">{label}</span>
+                        <span className="block text-xs text-muted-foreground">Shared through MilitaryVoice, with their say-so</span>
+                      </span>
+                      <RequestButton kind={kind} card={card} isMember={isMember} onJoin={onJoin} />
+                    </div>
+                  ))}
+                </div>
               </div>
+            )}
+            {card.verified && !card.handle ? (
+              <p className="p-6 text-sm text-muted-foreground">No public social account on file for audience data yet.</p>
             ) : !isMember ? (
               <div className="p-6">
                 <div className="rounded-2xl border border-dashed border-border p-6 text-center">

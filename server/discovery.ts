@@ -14,6 +14,9 @@ import crypto from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { db, storage } from "./storage.js";
+import { uploadPhoto } from "./photoStorage.js";
+import { waitUntil } from "@vercel/functions";
+import sharp from "sharp";
 import { getAdminEmail, getSessionEmail, requireHostSession } from "./session.js";
 import {
   discoveryMembers,
@@ -22,14 +25,16 @@ import {
   discoveryListItems,
   discoveryReveals,
   discoveryVisits,
+  discoveryIntros,
   podcasterProfiles,
+  socialMetrics,
 } from "../shared/schema.js";
 
 const BASE = "https://api-dashboard.influencers.club/public/v1";
 export const PLATFORMS = ["instagram", "youtube", "tiktok", "twitter", "twitch"] as const;
 type Platform = (typeof PLATFORMS)[number];
 const FREE_REVEALS_PER_MONTH = 10;
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 10;
 const DAY = 86_400_000;
 
 // ---------------------------------------------------------------------------
@@ -127,6 +132,10 @@ export interface CreatorCard {
   branch: string;
   /** On our lineup: verified by us, with their show. */
   verified?: { show: string; host: string; serviceStatus: string; slotLabel: string } | null;
+  signupId?: number;
+  quality?: number | null;
+  /** Their link, only on the server, for keeping the picture. */
+  rawPicture?: string;
 }
 
 const BRANCHES: [string, RegExp][] = [
@@ -145,6 +154,49 @@ function branchOf(text: string): string {
 
 /** Their picture links expire; ours go through a proxy that the browser caches. */
 const img = (u: string) => (u ? `/api/discover/img?u=${encodeURIComponent(u)}` : "");
+/**
+ * A creator's picture, kept by us. Their link expires after a day and the
+ * same creator gets a new link each time, so we key by platform and handle:
+ * the first time we see a picture it's saved to our storage and every later
+ * view is our copy. Refreshed after two months.
+ */
+const pic = (platform: string, handle: string, u: string) =>
+  handle ? `/api/discover/pic/${platform}/${encodeURIComponent(handle.toLowerCase())}${u ? `?u=${encodeURIComponent(u)}` : ""}` : img(u);
+const PIC_HOSTS = /(^|\.)(cdninstagram\.com|fbcdn\.net|ytimg\.com|ggpht\.com|googleusercontent\.com|tiktokcdn(-us)?\.com|ibyteimg\.com|twimg\.com|jtvnw\.net|influencers\.club|amazonaws\.com|cloudfront\.net|imgix\.net|influencersclub\.workers\.dev)$/i;
+async function savePicture(platform: string, handle: string, u: string): Promise<string | null> {
+  const k = `pic:${platform}:${handle.toLowerCase()}`;
+  const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, k));
+  if (row && Date.now() - Date.parse(row.createdAt) < 60 * DAY) return JSON.parse(row.payload).url as string;
+  let url: URL;
+  try {
+    url = new URL(u);
+  } catch {
+    return row ? (JSON.parse(row.payload).url as string) : null;
+  }
+  if (url.protocol !== "https:" || !PIC_HOSTS.test(url.hostname)) return row ? (JSON.parse(row.payload).url as string) : null;
+  try {
+    const r = await fetch(url, { headers: { "user-agent": "Mozilla/5.0" } });
+    if (!r.ok || !(r.headers.get("content-type") ?? "").startsWith("image/")) throw new Error(`picture ${r.status}`);
+    const small = await sharp(Buffer.from(await r.arrayBuffer())).rotate().resize(320, 320, { fit: "cover" }).jpeg({ quality: 84 }).toBuffer();
+    const saved = await uploadPhoto(`discovery/${platform}-${handle.toLowerCase().replace(/[^a-z0-9._-]/g, "_")}-${Date.now()}.jpg`, small);
+    const createdAt = new Date().toISOString();
+    await db.insert(discoveryCache).values({ key: k, payload: JSON.stringify({ url: saved }), createdAt }).onConflictDoUpdate({ target: discoveryCache.key, set: { payload: JSON.stringify({ url: saved }), createdAt } });
+    return saved;
+  } catch {
+    return row ? (JSON.parse(row.payload).url as string) : null;
+  }
+}
+/** Keep every picture in a fresh answer, after the answer has gone back. */
+function keepPictures(cards: { platform: string; handle: string; rawPicture?: string }[]) {
+  const work = (async () => {
+    for (const c of cards) if (c.handle && c.rawPicture) await savePicture(c.platform, c.handle, c.rawPicture).catch(() => null);
+  })();
+  try {
+    waitUntil(work);
+  } catch {
+    /* not on Vercel: it simply runs */
+  }
+}
 
 function toCard(platform: string, a: any): CreatorCard {
   const p = a?.profile ?? a ?? {};
@@ -153,11 +205,13 @@ function toCard(platform: string, a: any): CreatorCard {
   const bio = String(pick(p, "biography", "bio", "description") ?? "");
   let eng = num(pick(p, "engagement_percent", "engagement_rate"));
   if (eng != null && eng > 0 && eng < 1 && !pick(p, "engagement_percent")) eng = eng * 100;
+  const raw = String(pick(p, "picture", "profile_picture", "avatar") ?? "");
   return {
     platform,
     handle,
     name: name || handle,
-    picture: img(String(pick(p, "picture", "profile_picture", "avatar") ?? "")),
+    picture: pic(platform, handle, raw),
+    rawPicture: raw,
     followers: num(pick(p, "followers", "subscribers", "number_of_followers")),
     engagement: eng,
     branch: branchOf(`${name} ${handle} ${bio}`),
@@ -175,6 +229,8 @@ async function verifiedCreators(): Promise<(CreatorCard & { match: string })[]> 
   const profiles = emails.length ? await db.select().from(podcasterProfiles).where(inArray(podcasterProfiles.email, emails)) : [];
   const when = (slot: number) =>
     new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(Date.parse(ev.startAtUtc) + slot * ev.slotMinutes * 60_000)) + " ET";
+  const enrichedRows = signups.length ? await db.select().from(discoveryCache).where(inArray(discoveryCache.key, signups.map((s) => `verified:${s.id}`))) : [];
+  const enrichedBySignup = new Map(enrichedRows.map((r) => [Number(r.key.split(":")[1]), JSON.parse(r.payload) as { platform: string; handle: string; reach: number; engagement: number | null; quality: number | null }]));
   return signups
     .sort((a, b) => a.slotIndex - b.slotIndex)
     .map((s) => {
@@ -185,8 +241,9 @@ async function verifiedCreators(): Promise<(CreatorCard & { match: string })[]> 
       } catch {
         /* none */
       }
-      const best = [...accounts].sort((x, y) => (y.followers ?? 0) - (x.followers ?? 0))[0];
-      const total = accounts.reduce((n, a) => n + (a.followers ?? 0), 0);
+      const enriched = enrichedBySignup.get(s.id);
+      const best = enriched ? { platform: enriched.platform, username: enriched.handle } : [...accounts].sort((x, y) => (y.followers ?? 0) - (x.followers ?? 0))[0];
+      const total = enriched?.reach ?? accounts.reduce((n, a) => n + (a.followers ?? 0), 0);
       const branch = prof?.branch && prof.branch !== "None" ? prof.branch : "";
       return {
         platform: best?.platform ?? "",
@@ -194,7 +251,9 @@ async function verifiedCreators(): Promise<(CreatorCard & { match: string })[]> 
         name: s.hostName.trim(),
         picture: s.photoUrl,
         followers: total || null,
-        engagement: null,
+        engagement: enriched?.engagement ?? null,
+        quality: enriched?.quality ?? null,
+        signupId: s.id,
         branch,
         verified: { show: s.podcastName.trim(), host: s.hostName.trim(), serviceStatus: prof?.serviceStatus ?? "", slotLabel: when(s.slotIndex) },
         match: `${s.podcastName} ${s.hostName} ${branch} ${prof?.serviceStatus ?? ""} podcast podcaster guest speaker veteran military`.toLowerCase(),
@@ -319,6 +378,78 @@ export function registerDiscoveryRoutes(app: Express): void {
     }),
   );
 
+  /**
+   * Fill in the lineup: for each podcaster, the strongest handle we know
+   * (their audience figures, or Influencers Club's look-up by their email),
+   * then that handle's analytics, cached where the profile drawer reads it.
+   * Admin-only; spends credits once per podcaster.
+   */
+  app.post("/api/admin/discover/enrich-verified", (req, res) =>
+    send(res, async () => {
+      if (!getAdminEmail(req) && String(req.get("x-admin-password") ?? "") !== (await storage.getFeaturedEvent()).adminPassword) throw new HttpError(401, "Admins only.");
+      const ev = await storage.getFeaturedEvent();
+      const only = Number(req.body?.signupId) || 0;
+      const signups = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled" && s.email !== "hello@militaryvoice.ai" && s.email !== "andrew@smartloads.io" && (!only || s.id === only));
+      const metrics = await db.select().from(socialMetrics);
+      const out: { signupId: number; host: string; platform?: string; handle?: string; reach?: number; quality?: number | null; error?: string }[] = [];
+      for (const s of signups) {
+        const email = s.email.trim().toLowerCase();
+        try {
+          const mine = metrics.filter((m) => m.email.trim().toLowerCase() === email && (m.followers ?? 0) > 0);
+          const reach = mine.reduce((n, m) => n + (m.followers ?? 0), 0);
+          let pick0 = mine.filter((m) => (PLATFORMS as readonly string[]).includes(m.platform === "x" ? "twitter" : m.platform)).sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0))[0];
+          let platform = pick0 ? (pick0.platform === "x" ? "twitter" : pick0.platform) : "";
+          let handle = pick0?.handle ?? "";
+          let followers = pick0?.followers ?? 0;
+          if (!handle) {
+            // Nothing on file: ask the index who owns this email (0.05 credits).
+            const r = await ic("/creators/enrich/email/", { email }).catch(() => null);
+            const res0 = r?.result ?? {};
+            if (res0?.username && (PLATFORMS as readonly string[]).includes(String(res0.platform))) {
+              platform = String(res0.platform);
+              handle = String(res0.username);
+              followers = num(pick(res0, "followers", "follower_count")) ?? 0;
+            }
+          }
+          if (!handle) {
+            out.push({ signupId: s.id, host: s.hostName, error: "no social account found" });
+            continue;
+          }
+          const a = await cached(`analytics:${platform}:${handle.toLowerCase()}`, 30 * DAY, async () => normalizeAnalytics(platform, handle, await ic("/creators/enrich/handle/analytics/", { handle, platform, include_lookalikes: false })));
+          const engagement = followers && a.likesMedian != null ? Math.round((((a.likesMedian ?? 0) + (a.commentsMedian ?? 0)) / followers) * 10000) / 100 : null;
+          const payload = { platform, handle, reach: Math.max(reach, followers), engagement, quality: a.audience?.credibility ?? null };
+          const createdAt = new Date().toISOString();
+          await db.insert(discoveryCache).values({ key: `verified:${s.id}`, payload: JSON.stringify(payload), createdAt }).onConflictDoUpdate({ target: discoveryCache.key, set: { payload: JSON.stringify(payload), createdAt } });
+          out.push({ signupId: s.id, host: s.hostName, platform, handle, reach: payload.reach, quality: payload.quality });
+        } catch (err: any) {
+          out.push({ signupId: s.id, host: s.hostName, error: String(err?.message ?? err).slice(0, 120) });
+        }
+      }
+      return out;
+    }),
+  );
+
+  /** Ask us to put you in touch with a verified creator. We make the introduction. */
+  app.post("/api/discover/intro", (req, res) =>
+    send(res, async () => {
+      const { email } = await requireMember(req);
+      const signupId = Number(req.body?.signupId);
+      const kind = ["email", "phone", "intro"].includes(String(req.body?.kind)) ? String(req.body.kind) : "intro";
+      if (!signupId) throw new HttpError(400, "Which creator?");
+      await db.insert(discoveryIntros).values({ requester: email, signupId, kind, note: String(req.body?.note ?? "").slice(0, 500), createdAt: new Date().toISOString() });
+      return { ok: true };
+    }),
+  );
+  app.get("/api/admin/discover/intros", (req, res) =>
+    send(res, async () => {
+      if (!getAdminEmail(req) && String(req.get("x-admin-password") ?? "") !== (await storage.getFeaturedEvent()).adminPassword) throw new HttpError(401, "Admins only.");
+      const rows = await db.select().from(discoveryIntros).orderBy(desc(discoveryIntros.createdAt));
+      const ev = await storage.getFeaturedEvent();
+      const signups = await storage.listSignups(ev.id);
+      return rows.map((r) => ({ ...r, host: signups.find((s) => s.id === r.signupId)?.hostName ?? "", show: signups.find((s) => s.id === r.signupId)?.podcastName ?? "" }));
+    }),
+  );
+
   /** Our own lineup: verified MilitaryVoice creators. Public and free. */
   app.get("/api/discover/verified", (_req, res) =>
     send(res, async () => {
@@ -354,10 +485,15 @@ export function registerDiscoveryRoutes(app: Express): void {
       if (minF != null || maxF != null) filters.number_of_followers = { ...(minF != null ? { min: minF } : {}), ...(maxF != null ? { max: maxF } : {}) };
       const body = { platform, nlp_search: brief, paging: { limit: PAGE_SIZE, page }, sort: { sort_by: sortBy, sort_order: "desc" }, filters };
 
-      const found = await cached(`search:${hash(body)}`, DAY - 3_600_000, async () => {
+      // A week: the same search by anyone this week costs nothing. Pictures
+      // are kept by us, so an old answer never shows a broken face.
+      const found = await cached(`search:${hash(body)}`, 7 * DAY, async () => {
         const r = await ic("/discovery/", body);
-        return { total: num(r?.total) ?? 0, accounts: (r?.accounts ?? []).map((a: any) => toCard(platform, a)), understood: r?.nlp_search ?? null, applied: r?.applied_filters ?? null };
+        const accounts = (r?.accounts ?? []).map((a: any) => toCard(platform, a));
+        keepPictures(accounts);
+        return { total: num(r?.total) ?? 0, accounts, understood: r?.nlp_search ?? null, applied: r?.applied_filters ?? null };
       });
+      found.accounts = found.accounts.map(({ rawPicture: _r, ...c }: CreatorCard) => c);
 
       // Ours first, on the first page, when the words match.
       let verified: CreatorCard[] = [];
@@ -399,10 +535,13 @@ export function registerDiscoveryRoutes(app: Express): void {
       const platform = asPlatform(req.query.platform);
       const handle = String(req.query.handle ?? "").replace(/^@/, "").trim().slice(0, 100);
       if (!handle) throw new HttpError(400, "Which creator?");
-      return cached(`similar:${platform}:${handle.toLowerCase()}`, 7 * DAY, async () => {
+      const list = await cached(`similar:${platform}:${handle.toLowerCase()}`, 30 * DAY, async () => {
         const r = await ic("/discovery/creators/similar/", { platform, filter_key: "username", filter_value: handle, paging: { limit: 12, page: 0 } });
-        return (r?.accounts ?? []).map((a: any) => toCard(platform, a));
+        const cards = (r?.accounts ?? []).map((a: any) => toCard(platform, a));
+        keepPictures(cards);
+        return cards;
       });
+      return list.map(({ rawPicture: _r, ...c }: CreatorCard) => c);
     }),
   );
 
@@ -496,6 +635,15 @@ export function registerDiscoveryRoutes(app: Express): void {
       return { ok: true };
     }),
   );
+
+  app.get("/api/discover/pic/:platform/:handle", async (req, res) => {
+    const platform = asPlatform(req.params.platform);
+    const handle = String(req.params.handle ?? "").toLowerCase().slice(0, 100);
+    const saved = await savePicture(platform, handle, String(req.query.u ?? "")).catch(() => null);
+    if (!saved) return res.status(404).end();
+    res.set("Cache-Control", "public, max-age=86400, s-maxage=2592000");
+    res.redirect(302, saved);
+  });
 
   /**
    * Creator pictures, through us: their links expire in a day and some CDNs

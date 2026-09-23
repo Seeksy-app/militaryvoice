@@ -1830,3 +1830,13 @@ export const discoveryVisits = pgTable("discovery_visits", {
   source: text("source").notNull().default(""),
   createdAt: text("created_at").notNull(),
 });
+
+/** A request, through us, to reach a verified MilitaryVoice creator. */
+export const discoveryIntros = pgTable("discovery_intros", {
+  id: serial("id").primaryKey(),
+  requester: text("requester").notNull(),
+  signupId: integer("signup_id").notNull(),
+  kind: text("kind").notNull().default("intro"), // email | phone | intro
+  note: text("note").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});
