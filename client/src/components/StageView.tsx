@@ -224,6 +224,7 @@ function Tile({ tile, muted, nameBar = true }: { tile: StageTile; muted: boolean
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [portrait, setPortrait] = useState(false);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -290,20 +291,28 @@ function Tile({ tile, muted, nameBar = true }: { tile: StageTile; muted: boolean
   }, [tile.audio]);
 
   return (
+    // Every face gets the same 16:9 box, as big as its cell allows, so a
+    // laptop's 4:3 camera and a webcam's 16:9 sit side by side at one size.
+    // The box sizes off the cell (a size container), not off the video.
+    <div className="relative flex min-h-0 min-w-0 items-center justify-center [container-type:size]">
     <div
       className={`relative overflow-hidden rounded-2xl bg-[#04102b] ${
         tile.speaking ? "ring-4 ring-[#F0A71F]" : "ring-1 ring-white/10"
       }`}
+      style={{ width: "min(100%, calc(100cqh * 16 / 9))", aspectRatio: "16 / 9" }}
     >
-      {/* contain, not cover: a camera that isn't exactly 16:9 gets letterboxed
-          rather than cropped. Losing the top of someone's head on air is worse
-          than a black bar. */}
+      {/* Cover, weighted to the top third where the face is: a 4:3 camera
+          loses a sliver of desk and ceiling, not the top of anyone's head.
+          A phone held upright would lose half of itself that way, so a
+          portrait feed is letterboxed instead. */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className={`h-full w-full object-contain ${tile.keyed ? "invisible absolute" : ""}`}
+        onLoadedMetadata={(e) => setPortrait(e.currentTarget.videoHeight > e.currentTarget.videoWidth)}
+        onResize={(e) => setPortrait(e.currentTarget.videoHeight > e.currentTarget.videoWidth)}
+        className={`h-full w-full ${portrait ? "object-contain" : "object-cover object-[50%_30%]"} ${tile.keyed ? "invisible absolute" : ""}`}
       />
       {tile.keyed && <canvas ref={canvasRef} className="h-full w-full object-contain" />}
       <audio ref={audioRef} autoPlay muted={muted} />
@@ -335,6 +344,7 @@ function Tile({ tile, muted, nameBar = true }: { tile: StageTile; muted: boolean
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
