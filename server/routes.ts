@@ -17,6 +17,7 @@ import {
   runItemInputSchema,
   platformInterestSchema,
   studioJoinSchema,
+  isPodcaster,
   studioHeartbeatSchema,
   studioUpdateSchema,
   destinationInputSchema,
@@ -1823,6 +1824,79 @@ export function registerRoutes(app: Express): void {
       socialAccounts: p.socialAccounts,
     }));
     res.json(out);
+  });
+
+  // ---- The directory ------------------------------------------------------------
+  /**
+   * Everyone with a directory card: a name and a photo. Podcasters and
+   * everyone else — the card is how organizers find people and invite them.
+   * Public, so nothing private travels: no email, no phone.
+   */
+  app.get("/api/directory", async (_req, res) => {
+    publicCache(res);
+    const featured = await storage.getFeaturedEvent().catch(() => null);
+    const onLineup = new Set<string>();
+    if (featured) {
+      const dayLength = Math.floor((featured.durationHours * 60) / featured.slotMinutes);
+      for (const sg of await storage.listSignups(featured.id)) {
+        if (sg.status !== "cancelled" && sg.slotIndex < dayLength) onLineup.add(sg.email.trim().toLowerCase());
+      }
+    }
+    const rows = (await storage.listAllProfiles()).filter((p) => p.hostName.trim() && p.photoUrl.trim());
+    res.json(
+      rows.map((p) => ({
+        id: p.id,
+        hostName: p.hostName,
+        podcastName: p.podcastName,
+        photoUrl: p.photoUrl,
+        branch: p.branch,
+        serviceStatus: p.serviceStatus,
+        podcaster: isPodcaster(p.interests) && Boolean(p.podcastName.trim()),
+        interests: p.interests,
+        rssUrl: p.rssUrl,
+        youtubeUrl: p.youtubeUrl,
+        socialLinks: p.socialLinks,
+        socialAccounts: p.socialAccounts,
+        onLineup: featured && onLineup.has(p.email.trim().toLowerCase()) ? featured.name.trim() : "",
+      })),
+    );
+  });
+
+  /**
+   * Invite somebody from the directory to an event. Organizers only (admins
+   * for now). The email points them at the event in their dashboard, where
+   * setting up a show for it is how they join.
+   */
+  app.post("/api/admin/directory/:id/invite", requireAdmin, async (req, res) => {
+    const profile = (await storage.listAllProfiles()).find((p) => p.id === Number(req.params.id));
+    if (!profile) return res.status(404).json({ message: "No such card." });
+    const event = await storage.getEventById(Number(req.body?.eventId));
+    if (!event) return res.status(400).json({ message: "Pick an event." });
+    const note = String(req.body?.message ?? "").trim().slice(0, 1500);
+    const first = profile.hostName.trim().split(/\s+/)[0] || "there";
+    const link = `${PUBLIC_ORIGIN}/host/dashboard/events`;
+    const when = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/New_York" }).format(new Date(event.startAtUtc));
+    const text = [
+      `${first},`,
+      "",
+      `We'd love to have you on ${event.name.trim()}, ${when}.`,
+      ...(note ? ["", note] : []),
+      "",
+      `If you're in, sign in and set up your show for it here: ${link}`,
+      "",
+      "MilitaryVoices.ai",
+    ].join("\n");
+    const paragraphs = text.split(/\n{2,}/).map((para) => `<p>${esc(para).replace(/\n/g, "<br>")}</p>`).join("\n");
+    const subject = `An invitation: ${event.name.trim()}`;
+    const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: `${event.name.trim()} · ${when}`, heading: "You're invited", body: paragraphs, cta: { href: link, label: "Set up your show" } });
+    const id = await sendOneOffEmail({ to: profile.email, subject, html, text });
+    if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
+    try {
+      await storage.recordOneOffSend({ eventId: event.id, subject, bodyText: text, sender: "team", banner: "podcasters", email: profile.email, resendId: id });
+    } catch (err) {
+      console.error("Invite sent but not logged:", err);
+    }
+    res.json({ ok: true, to: profile.hostName });
   });
 
   // ---- Admin auth: one-time email code, no shared password ---------------------

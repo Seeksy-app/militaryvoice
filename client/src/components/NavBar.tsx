@@ -32,6 +32,7 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/#listeners", label: "Listeners", anchor: true },
   { href: "/agenda", label: "Agenda" },
   { href: "/discover", label: "Discovery" },
+  { href: "/directory", label: "Directory" },
   { href: "/faq", label: "FAQ" },
   { href: "/platform", label: "About Us" },
 ];
@@ -42,6 +43,7 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
  */
 const DISCOVERY_LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/discover", label: "Discovery" },
+  { href: "/directory", label: "Directory" },
   { href: "/platform", label: "About MilitaryVoices" },
 ];
 

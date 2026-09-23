@@ -18,6 +18,7 @@ import Faq from "@/pages/Faq";
 import HelpYoutube from "@/pages/HelpYoutube";
 import HelpIndex from "@/pages/HelpIndex";
 import Discover from "@/pages/Discover";
+import Directory from "@/pages/Directory";
 import PromoDiscovery from "@/pages/PromoDiscovery";
 import Prepare from "@/pages/Prepare";
 import Platform from "@/pages/Platform";
@@ -97,6 +98,7 @@ function AppRouter() {
       <Route path="/studio/composite">{() => <StudioComposite />}</Route>
       <Route path="/watch">{() => <Watch />}</Route>
       <Route path="/event/:slug/watch">{(params) => <Watch slug={params.slug} />}</Route>
+      <Route path="/directory">{() => <Directory />}</Route>
       <Route path="/studio">{() => <Studio />}</Route>
       {/* The name people actually say. Same page. */}
       <Route path="/green-room">{() => <Studio />}</Route>
