@@ -89,7 +89,7 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
         let audio: Track | null = null;
         p.trackPublications.forEach((pub: TrackPublication) => {
           if (!pub.track) return;
-          if (pub.kind === Track.Kind.Video) video = pub.track;
+          if (pub.kind === Track.Kind.Video && !pub.isMuted) video = pub.track;
           if (pub.kind === Track.Kind.Audio) audio = pub.track;
         });
         next.set(p.identity, {

@@ -82,7 +82,8 @@ export function useStudioRoom({ enabled, clientKey, slug, studioId, stream }: Ar
         let audio: RemoteTrack | null = null;
         p.trackPublications.forEach((pub: RemoteTrackPublication) => {
           if (!pub.track) return;
-          if (pub.kind === Track.Kind.Video) video = pub.track;
+          // Camera switched off: the track stays but sends black, so show their picture instead.
+          if (pub.kind === Track.Kind.Video && !pub.isMuted) video = pub.track;
           if (pub.kind === Track.Kind.Audio) audio = pub.track;
         });
         next.push({
@@ -133,6 +134,8 @@ export function useStudioRoom({ enabled, clientKey, slug, studioId, stream }: Ar
         .on(RoomEvent.ParticipantDisconnected, refresh)
         .on(RoomEvent.TrackSubscribed, refresh)
         .on(RoomEvent.TrackUnsubscribed, refresh)
+        .on(RoomEvent.TrackMuted, refresh)
+        .on(RoomEvent.TrackUnmuted, refresh)
         .on(RoomEvent.ParticipantAttributesChanged, refresh)
         .on(RoomEvent.LocalTrackPublished, refresh)
         .on(RoomEvent.LocalTrackUnpublished, refresh)

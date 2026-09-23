@@ -1881,6 +1881,27 @@ export function registerRoutes(app: Express): void {
     };
     return showHostsCache;
   }
+  /**
+   * A person's picture for when their camera is off: their booking's artwork,
+   * then their profile, then their event-team card. Cached five minutes — the
+   * console asks for every participant on every poll.
+   */
+  const photoCache = new Map<string, { at: number; url: string }>();
+  async function personPhoto(eventId: number, email: string): Promise<string> {
+    const e = email.trim().toLowerCase();
+    if (!e) return "";
+    const key = `${eventId}:${e}`;
+    const hit = photoCache.get(key);
+    if (hit && Date.now() - hit.at < 300_000) return hit.url;
+    const sg = (await storage.listSignups(eventId).catch(() => [])).find((x) => x.status !== "cancelled" && x.email.trim().toLowerCase() === e);
+    const url = sg?.photoUrl
+      || (await storage.getProfileByEmail(e).catch(() => undefined))?.photoUrl
+      || (await storage.listEventTeam(eventId).catch(() => [])).find((m) => m.email.trim().toLowerCase() === e)?.photoUrl
+      || "";
+    photoCache.set(key, { at: Date.now(), url });
+    return url;
+  }
+
   /** A host of the show — at any hour. The console seats them on the right. */
   function isShowHost(p: StudioParticipantRow, hosts: ShowHosts) {
     const name = p.displayName.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -3277,7 +3298,9 @@ export function registerRoutes(app: Express): void {
         identity: `p-${me.id}`,
         name: me.displayName || "Speaker",
         canPublish: true,
-        attributes: { state: me.state, participantId: String(me.id), displayTitle: me.displayTitle ?? "" },
+        // Their picture travels with them, so wherever their camera is off —
+        // the stage, the console, the green room — it shows who they are.
+        attributes: { state: me.state, participantId: String(me.id), displayTitle: me.displayTitle ?? "", photoUrl: await personPhoto(found.studio.eventId, me.email) },
       }),
     });
   });
@@ -3380,9 +3403,10 @@ export function registerRoutes(app: Express): void {
     const { studio } = await adminStudio(req);
     const participants = await storage.listStudioParticipants(studio.id);
     const hosts = await showHosts();
+    const photos = await Promise.all(participants.map((p) => (withPresence(p) ? personPhoto(studio.eventId, p.email) : Promise.resolve(""))));
     res.json({
       studio,
-      participants: participants.map((p) => ({ ...p, present: withPresence(p), isHost: isShowHost(p, hosts) })),
+      participants: participants.map((p, i) => ({ ...p, present: withPresence(p), isHost: isShowHost(p, hosts), photoUrl: photos[i] })),
     });
   });
 

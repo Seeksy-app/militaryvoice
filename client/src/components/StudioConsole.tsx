@@ -98,7 +98,7 @@ interface Props {
   view: "live" | "set";
 }
 
-type Participant = StudioParticipantRow & { present: boolean; isHost?: boolean };
+type Participant = StudioParticipantRow & { present: boolean; isHost?: boolean; photoUrl?: string };
 interface StudioPayload {
   studio: StudioRow;
   participants: Participant[];
@@ -126,7 +126,7 @@ function DestIcon({ platform }: { platform: string }) {
   );
 }
 
-function FeedThumb({ feed, initials, fill }: { feed?: ProducerFeed; initials: string; fill?: boolean }) {
+function FeedThumb({ feed, initials, fill, photo }: { feed?: ProducerFeed; initials: string; fill?: boolean; photo?: string }) {
   const ref = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
@@ -149,7 +149,12 @@ function FeedThumb({ feed, initials, fill }: { feed?: ProducerFeed; initials: st
       {feed?.video ? (
         <video ref={ref} autoPlay playsInline muted className="h-full w-full object-contain" />
       ) : (
-        <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white">{initials}</div>
+        photo ? (
+          // Camera off: their picture rather than a black circle.
+          <img src={photo} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-sm font-bold text-white">{initials}</div>
+        )
       )}
     </div>
   );
@@ -261,7 +266,7 @@ function GreenRoomStrip({
                   }`}
                   data-testid={`green-room-avatar-${p.id}`}
                 >
-                  <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={name.slice(0, 2).toUpperCase()} fill />
+                  <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={name.slice(0, 2).toUpperCase()} photo={p.photoUrl} fill />
                 </button>
               </PopoverTrigger>
               <PopoverContent align="start" className="w-60 p-3">
@@ -335,7 +340,7 @@ function HostSeats({
                 className={`relative h-9 w-9 shrink-0 overflow-hidden rounded-full ring-2 transition hover:scale-105 ${on ? "ring-emerald-400" : "ring-[#ED1C24]"}`}
                 data-testid={`host-seat-${p.id}`}
               >
-                <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()} fill />
+                <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()} photo={p.photoUrl} fill />
                 {on && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-[#000741]" />}
               </button>
             </PopoverTrigger>
@@ -1100,7 +1105,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
         }`}
         data-testid={`studio-participant-${p.id}`}
       >
-        <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={(p.displayName || "?").slice(0, 2).toUpperCase()} />
+        <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={(p.displayName || "?").slice(0, 2).toUpperCase()} photo={p.photoUrl} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">{p.displayName || "Unnamed"}</div>
           {editingTitle === p.id ? (

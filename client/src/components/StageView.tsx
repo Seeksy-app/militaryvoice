@@ -77,6 +77,8 @@ export interface StageTile {
   speaking: boolean;
   /** An avatar, whose feed arrives on a chroma-key green background. */
   keyed?: boolean;
+  /** Shown in their place while their camera is off. */
+  photoUrl?: string;
 }
 
 /**
@@ -135,13 +137,15 @@ export function useStageRoom(
         let audio: RemoteTrack | null = null;
         p.trackPublications.forEach((pub: RemoteTrackPublication) => {
           if (!pub.track) return;
-          if (pub.kind === Track.Kind.Video) video = pub.track;
+          // A camera switched off still has a track; it just sends black.
+          if (pub.kind === Track.Kind.Video && !pub.isMuted) video = pub.track;
           if (pub.kind === Track.Kind.Audio) audio = pub.track;
         });
         next.push({
           identity: p.identity,
           name: p.name || p.identity,
           displayTitle: p.attributes?.displayTitle || "",
+          photoUrl: p.attributes?.photoUrl || "",
           video, audio, speaking: p.isSpeaking,
           // The avatar renders on green — that is the right output for a
           // source meant to be composited, not a shortcoming. It gets keyed
@@ -158,6 +162,8 @@ export function useStageRoom(
       .on(RoomEvent.ParticipantDisconnected, snapshot)
       .on(RoomEvent.TrackSubscribed, snapshot)
       .on(RoomEvent.TrackUnsubscribed, snapshot)
+      .on(RoomEvent.TrackMuted, snapshot)
+      .on(RoomEvent.TrackUnmuted, snapshot)
       .on(RoomEvent.ParticipantAttributesChanged, snapshot)
       .on(RoomEvent.ActiveSpeakersChanged, snapshot)
       .on(RoomEvent.RoomMetadataChanged, readMeta)
@@ -326,11 +332,20 @@ function Tile({ tile, muted, namePos = "bottom", fit }: { tile: StageTile; muted
       {tile.keyed && <canvas ref={canvasRef} className="h-full w-full object-contain" />}
       <audio ref={audioRef} autoPlay muted={muted} />
 
+      {/* Camera off: their picture, large and centred, over a soft wash of
+          itself — never a black box. Initials when there is no picture. */}
       {!tile.video && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#053877]">
-          <span className="text-5xl font-bold text-white/80" style={HEADLINE_FONT}>
-            {tile.name.slice(0, 2).toUpperCase()}
-          </span>
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden bg-[#053877]" data-testid="stage-tile-placeholder">
+          {tile.photoUrl ? (
+            <>
+              <img src={tile.photoUrl} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full scale-110 object-cover opacity-35 blur-2xl" />
+              <img src={tile.photoUrl} alt="" className="relative h-[46%] w-auto max-w-[70%] rounded-full object-cover shadow-2xl ring-4 ring-white/20" style={{ aspectRatio: "1 / 1" }} />
+            </>
+          ) : (
+            <span className="text-5xl font-bold text-white/80" style={HEADLINE_FONT}>
+              {tile.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
+            </span>
+          )}
         </div>
       )}
 
