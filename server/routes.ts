@@ -3228,6 +3228,7 @@ export function registerRoutes(app: Express): void {
     const row = await storage.upsertStudioParticipant(found.studio.id, parsed.data.clientKey, {
       ...(parsed.data.signupId ? { signupId: parsed.data.signupId } : {}),
       displayName: parsed.data.displayName || profile?.hostName || "",
+      ...(parsed.data.displayTitle !== undefined ? { displayTitle: parsed.data.displayTitle } : {}),
       email: hostEmail || parsed.data.email,
       role: "Speaker",
     });

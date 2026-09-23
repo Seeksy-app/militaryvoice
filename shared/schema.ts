@@ -1498,6 +1498,8 @@ export type StudioParticipantRow = typeof studioParticipants.$inferSelect;
 export const studioJoinSchema = z.object({
   clientKey: z.string().trim().min(8).max(64),
   displayName: z.string().trim().min(1, "Tell us your name").max(80),
+  /** Under their name on air: "Host", "Army Ranger". Optional. */
+  displayTitle: z.string().trim().max(120).optional(),
   email: z.string().trim().max(200),
   signupId: z.number().int().positive().optional(),
 });

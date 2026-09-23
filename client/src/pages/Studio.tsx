@@ -1,4 +1,5 @@
 import { AlexChat } from "@/components/AlexChat";
+import { StudioJoin } from "@/components/StudioJoin";
 import { GreenRoomButton } from "@/components/GreenRoomButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
@@ -432,6 +433,8 @@ export default function Studio({ slug }: { slug?: string }) {
     return () => window.removeEventListener("pagehide", bye);
   }, [key, slug, studioId]);
   const [name, setName] = useState("");
+  const [title, setTitle] = useState("");
+  const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
   const [camOn, setCamOn] = useState(false);
   const [micOn, setMicOn] = useState(false);
@@ -539,8 +542,19 @@ export default function Studio({ slug }: { slug?: string }) {
   }, [state?.myName]);
 
   /** Camera and mic run entirely in the browser — no server, no SDK. */
-  const startMedia = useCallback(async () => {
+  const startMedia = useCallback(async (dev?: { video?: string; audio?: string }) => {
     setMediaError(null);
+    // A device switch on the way in: let go of the old one first, or the
+    // browser holds two cameras and the new one can fail to open.
+    const prev = streamRef.current;
+    const keepVideo = prev?.getVideoTracks()[0]?.getSettings().deviceId;
+    const keepAudio = prev?.getAudioTracks()[0]?.getSettings().deviceId;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    prev?.getTracks().forEach((t) => t.stop());
+    let saved: { video?: string; audio?: string } = {};
+    try { saved = { video: localStorage.getItem("mv-green-cam") ?? undefined, audio: localStorage.getItem("mv-green-mic") ?? undefined }; } catch { /* private window */ }
+    const videoId = dev?.video ?? keepVideo ?? saved.video;
+    const audioId = dev?.audio ?? keepAudio ?? saved.audio;
     try {
       // Bare `audio: true` leaves the browser's defaults, and the default
       // that hurts is auto gain: in a quiet room it winds the gain up until
@@ -550,8 +564,10 @@ export default function Studio({ slug }: { slug?: string }) {
       // words. Everything is a hint — a device that cannot do it ignores it
       // rather than failing the request.
       const s = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false },
+        // "ideal", not "exact": a camera that has since been unplugged falls
+        // back to the default instead of failing the whole request.
+        video: videoId ? { deviceId: { ideal: videoId } } : true,
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false, ...(audioId ? { deviceId: { ideal: audioId } } : {}) },
       });
       streamRef.current = s;
       setStream(s);
@@ -590,6 +606,12 @@ export default function Studio({ slug }: { slug?: string }) {
     };
   }, []);
 
+  // The camera usually starts on the way in, before your own tile exists, so
+  // hand it the stream once the room is on screen.
+  useEffect(() => {
+    if (joined && stream && videoRef.current && videoRef.current.srcObject !== stream) videoRef.current.srcObject = stream;
+  }, [joined, stream]);
+
   // Tell the control room we're still here, and whether our kit is working.
   useEffect(() => {
     if (!joined) return;
@@ -614,12 +636,15 @@ export default function Studio({ slug }: { slug?: string }) {
   }, [joined, camOn, micOn, key, slug, studioId]);
 
   async function join() {
+    setJoining(true);
     try {
-      await apiRequest("POST", "/api/studio/join", { clientKey: key, displayName: name.trim(), email: "", slug, studioId, signupId });
+      await apiRequest("POST", "/api/studio/join", { clientKey: key, displayName: name.trim(), displayTitle: title.trim(), email: "", slug, studioId, signupId });
       setJoined(true);
       if (!streamRef.current) void startMedia();
     } catch (err) {
       toast({ title: "Couldn't join", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setJoining(false);
     }
   }
 
@@ -819,6 +844,38 @@ export default function Studio({ slug }: { slug?: string }) {
   // Standby rolling with nobody up is not a live show, whatever the flag says.
   const showIsLive =
     state?.studio.status === "Live" && !state?.studio.fallbackPlaying && onAirPeers.length > 0;
+
+  // The way in, Restream-style: your camera, your devices, your name and title.
+  // A returning guest (already a participant) goes straight to the room.
+  if (!joined && !state?.me && state?.mayJoin !== false) {
+    const host = state?.hosts?.[0] ?? state?.producers?.[0] ?? null;
+    const start = state?.meta?.eventStartAtUtc ? new Date(state.meta.eventStartAtUtc) : null;
+    const whenLabel = slotLabel
+      ? `You're on at ${slotLabel}`
+      : start
+        ? `${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(start)} · ${formatTimeInZone(start, zone)}`
+        : "";
+    return (
+      <StudioJoin
+        inviter={host ? { name: host.name, photoUrl: host.photoUrl } : null}
+        eventName={state?.eventName ?? ""}
+        whenLabel={whenLabel}
+        stream={stream}
+        camOn={camOn}
+        micOn={micOn}
+        level={level}
+        mediaError={mediaError}
+        onStartMedia={(dev) => void startMedia(dev)}
+        onToggle={toggleTrack}
+        name={name}
+        setName={setName}
+        title={title}
+        setTitle={setTitle}
+        onJoin={() => void join()}
+        joining={joining}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#04102b] text-white">
