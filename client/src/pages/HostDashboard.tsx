@@ -913,7 +913,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
              is gone because the highlighted tab below already says
              "Integrations" — printing it twice, with the address bar saying it
              a third time, was three answers to a question nobody asked. */
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
             <Link href="/host/dashboard" className="shrink-0" data-testid="link-workspace-home">
               <LogoLockup className="h-9 w-auto" />
             </Link>
@@ -922,10 +922,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 <img
                   src={resolveUploadUrl(profile.photoUrl)}
                   alt=""
-                  className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-border"
+                  className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-border"
                 />
               ) : (
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-xs font-bold text-[#053877]">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-xs font-bold text-[#053877]">
                   {(profile?.podcastName || data?.email || "?").trim().charAt(0).toUpperCase()}
                 </span>
               )}
@@ -933,10 +933,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 <span className="block truncate text-sm font-semibold text-foreground">
                   {profile?.podcastName || data?.email}
                 </span>
-                <span className="block truncate text-xs text-muted-foreground">
-                  {data?.email}
-                  {sessionLine && <span data-testid="text-session-until"> · {sessionLine}</span>}
-                </span>
+                <span className="block truncate text-xs text-muted-foreground">{data?.email}</span>
+                {sessionLine && <span className="block truncate text-[11px] text-muted-foreground/80" data-testid="text-session-until">{sessionLine}</span>}
               </span>
               <SeatSwitcher current={data?.email ?? ""} />
               <Button
@@ -998,7 +996,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             cohostHours={cohostHours}
           />
         )}
-        <div className="min-w-0">
+        {/* Top-justified: whatever the screen is, it starts level with the
+            top of the nav, not a band of white below it. */}
+        <div className="min-w-0 [&>*:first-child]:mt-0">
 
         {loadingProfile ? (
           <div className="mt-8 space-y-4">

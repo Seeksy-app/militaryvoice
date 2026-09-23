@@ -258,7 +258,7 @@ export function EventSettings({
       <button
         type="button"
         onClick={() => setOpenId(null)}
-        className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+        className="mb-1.5 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
         data-testid="button-back-to-events"
       >
         <ArrowLeft className="h-3.5 w-3.5" /> All events
