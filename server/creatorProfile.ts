@@ -166,8 +166,17 @@ export function buildProfile(platform: string, handle: string, analytics: any, r
   // Cadence from the dates themselves, over the span the posts cover.
   const dates = posts.map((p) => Date.parse(p.date)).filter((t) => Number.isFinite(t)).sort((x, y) => y - x);
   const lastPostAt = dates[0] ? new Date(dates[0]).toISOString() : str(a.last_short_video_upload_date || a.last_long_video_upload_date) || null;
-  const spanWeeks = dates.length > 1 ? (dates[0] - dates[dates.length - 1]) / (7 * 86_400_000) : 0;
-  const postsPerWeek = spanWeeks >= 1 ? Math.round(((dates.length - 1) / spanWeeks) * 10) / 10 : num(a.posting_frequency) != null ? Math.round(((num(a.posting_frequency) as number) / 4.33) * 10) / 10 : null;
+  // Pinned posts come back with the latest ones and can be years old, so they
+  // would stretch the span and sink the rate. The rate is the posts from the
+  // last 90 days across their own span; one post in 90 days is one in 13 weeks.
+  const DAY_MS = 86_400_000;
+  const recent = dates.filter((t) => Date.now() - t <= 90 * DAY_MS);
+  const spanDays = recent.length > 1 ? Math.max(1, (recent[0] - recent[recent.length - 1]) / DAY_MS) : 0;
+  const postsPerWeek =
+    recent.length > 1 ? Math.round((((recent.length - 1) / spanDays) * 7) * 10) / 10
+    : dates.length ? Math.round((recent.length / (90 / 7)) * 10) / 10
+    : num(a.posting_frequency) != null ? Math.round(((num(a.posting_frequency) as number) / 4.33) * 10) / 10
+    : null;
 
   const growth = Object.entries(a.creator_follower_growth ?? {})
     .map(([k, v]) => ({ monthsAgo: Number(String(k).match(/\d+/)?.[0] ?? 0), pct: num(v) }))
