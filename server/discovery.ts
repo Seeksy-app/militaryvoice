@@ -307,7 +307,7 @@ export function registerDiscoveryRoutes(app: Express): void {
         .trim() || "US military veterans and military spouses";
       const filters: Record<string, unknown> = {};
       if (minF != null || maxF != null) filters.number_of_followers = { ...(minF != null ? { min: minF } : {}), ...(maxF != null ? { max: maxF } : {}) };
-      const body = { platform, nlp_search: brief, paging: { limit: PAGE_SIZE, page }, sort: { sort_by: sortBy, sort_order: "desc" }, ...(Object.keys(filters).length ? { filters } : {}) };
+      const body = { platform, nlp_search: brief, paging: { limit: PAGE_SIZE, page }, sort: { sort_by: sortBy, sort_order: "desc" }, filters };
 
       const found = await cached(`search:${hash(body)}`, DAY - 3_600_000, async () => {
         const r = await ic("/discovery/", body);
