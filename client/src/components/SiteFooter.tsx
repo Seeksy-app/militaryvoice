@@ -14,11 +14,16 @@ import { LogoLockupOnDark } from "@/components/Logo";
 
 const NAVY = "#000741";
 
-export function SiteFooter({ slug }: { slug?: string }) {
+export function SiteFooter({ slug, product }: { slug?: string; product?: "discovery" }) {
   const agendaHref = slug ? `/event/${slug}/agenda` : "/agenda";
   const scheduleHref = slug ? `/event/${slug}/schedule` : "/schedule";
 
-  const links = [
+  // Discovery is its own product: its footer points at the product, not the event.
+  const links = product === "discovery" ? [
+    { href: "/discover", label: "Discovery" },
+    { href: "/platform", label: "About MilitaryVoices" },
+    { href: "/help", label: "Help" },
+  ] : [
     { href: "/#podcasters", label: "Podcasters", external: true },
     { href: "/#listeners", label: "Listeners", external: true },
     { href: scheduleHref, label: "Schedule" },

@@ -3,6 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import {
   Search, Sparkles, BadgeCheck, Bookmark, BookmarkCheck, Users, Mail, Phone, Globe, ShieldCheck,
   Mic2, Megaphone, CalendarDays, X, Loader2, ExternalLink, Plus, Trash2, Download, ChevronRight, Lock, MapPin, Heart, Hash, Handshake, Info,
+  SlidersHorizontal, AtSign, Type as TypeIcon, Wand2, TrendingUp,
 } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -16,6 +17,7 @@ import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { CreatorProfileSections, type Profile, type ProfilePerson } from "@/components/CreatorProfileSections";
 import { DiscoverEnrich, type EnrichCard } from "@/components/DiscoverEnrich";
+import { FiltersPanel, FilterChips, activeFilters, filtersForServer, type Filters } from "@/components/DiscoverFilters";
 
 const HEADLINE = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const NAVY = "#04102b";
@@ -34,7 +36,7 @@ type Card = {
   quality?: number | null;
 };
 type Me = { signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number } | null; lookups?: { used: number; allowance: number } | null };
-type SearchResult = { brief: string; total: number; page: number; pageSize: number; results: Card[]; verified: Card[]; understood?: { notes?: string[]; from_nlp?: Record<string, unknown> } | null };
+type SearchResult = { brief: string; mode?: string; total: number; page: number; pageSize: number; results: Card[]; verified: Card[]; understood?: { notes?: string[]; from_nlp?: Record<string, unknown> } | null };
 type Analytics = {
   incomeMin: number | null; incomeMax: number | null; likesMedian: number | null; commentsMedian: number | null;
   reelsPercent: number | null; reelsMedianViews: number | null;
@@ -92,6 +94,14 @@ const DOORS = [
   },
 ] as const;
 
+/** Three ways to ask: describe them, name the words in their bio, or name the account. */
+const MODES = [
+  { v: "ai", label: "AI search", icon: Wand2, hint: "Describe who you want, in plain English." },
+  { v: "keywords", label: "Keywords in bio", icon: TypeIcon, hint: "Words that appear in their bio. Separate with commas." },
+  { v: "username", label: "Username", icon: AtSign, hint: "A handle or a profile link. Opens their full profile." },
+] as const;
+type Mode = (typeof MODES)[number]["v"];
+
 const compact = (n: number | null | undefined) =>
   n == null ? "–" : n >= 1_000_000 ? `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K` : String(Math.round(n));
 const pct = (n: number | null | undefined, d = 1) => (n == null ? "–" : `${n.toFixed(d)}%`);
@@ -144,7 +154,17 @@ export default function Discover() {
   const [size, setSize] = useState(0);
   const [sort, setSort] = useState("relevancy");
   const [page, setPage] = useState(0);
-  const [submitted, setSubmitted] = useState<null | { q: string; platform: string; branch: string; size: number; sort: string }>(null);
+  const [mode, setMode] = useState<Mode>("ai");
+  const [filters, setFilters] = useState<Filters>({});
+  const [showFilters, setShowFilters] = useState(false);
+  const [submitted, setSubmitted] = useState<null | { q: string; platform: string; branch: string; size: number; sort: string; mode: Mode; filters: Filters }>(null);
+  const [heroVariant] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("hero") === "a" ? "a" : "b";
+    } catch {
+      return "b";
+    }
+  });
   const [tab, setTab] = useState<"search" | "enrich" | "lists">("search");
   const [open, setOpen] = useState<Card | null>(null);
   const [gate, setGate] = useState(false);
@@ -152,18 +172,44 @@ export default function Discover() {
 
   // Anything that runs a search asks for an account first; the search it
   // wanted runs the moment the account exists.
-  const run = (over?: Partial<{ q: string; branch: string; size: number; sort: string; platform: string }>) => {
-    const next = { q: over?.q ?? q, platform: over?.platform ?? platform, branch: over?.branch ?? branch, size: over?.size ?? size, sort: over?.sort ?? sort };
+  const run = (over?: Partial<{ q: string; branch: string; size: number; sort: string; platform: string; mode: Mode }>) => {
+    const m = over?.mode ?? mode;
+    const next = { q: over?.q ?? q, platform: over?.platform ?? platform, branch: over?.branch ?? branch, size: over?.size ?? size, sort: over?.sort ?? sort, mode: m, filters };
     if (over?.q !== undefined) setQ(over.q);
-    setSubmitted(next);
+    if (over?.mode) setMode(over.mode);
+    setShowFilters(false);
     setTab("search");
-    if (!isMember) setGate(true);
+    if (!isMember) { setSubmitted(next); setGate(true); return; }
+    if (m === "username") return void lookupUser(next.q, next.platform);
+    if (m === "keywords" && !next.q.trim() && !filters.keywordsInBio?.trim()) return toast({ title: "Type a word to look for", description: "For example: army wife, milso, veteran owned." });
+    setSubmitted(next);
+  };
+
+  // Username: straight to the account, no search. The same cached read Enrich uses.
+  const [userResult, setUserResult] = useState<Card | null>(null);
+  const [userLoading, setUserLoading] = useState(false);
+  const lookupUser = async (handle: string, onPlatform: string) => {
+    if (!handle.trim()) return;
+    setUserLoading(true);
+    try {
+      const res = await fetch("/api/discover/enrich", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ items: [handle.trim()], platform: onPlatform }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message ?? "Couldn't look that up.");
+      const row = j.rows?.[0];
+      if (row?.status !== "found" || !row.card) throw new Error(row?.message ?? "No account by that name.");
+      setUserResult(row.card);
+      setOpen(row.card);
+    } catch (e) {
+      toast({ title: "Not found", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setUserLoading(false);
+    }
   };
 
   // Ten at a time; "Load more" adds the next ten under them.
   const search = useInfiniteQuery<SearchResult>({
     queryKey: ["/api/discover/search", submitted],
-    enabled: isMember && !!submitted,
+    enabled: isMember && !!submitted && submitted.mode !== "username",
     initialPageParam: 0,
     getNextPageParam: (last) => (last.total > (last.page + 1) * last.pageSize && last.page < 40 ? last.page + 1 : undefined),
     queryFn: async ({ pageParam }) => {
@@ -172,7 +218,7 @@ export default function Discover() {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ q: s.q, platform: s.platform, branch: s.branch, sort: s.sort, page: pageParam, minFollowers: SIZES[s.size].min, maxFollowers: SIZES[s.size].max }),
+        body: JSON.stringify({ q: s.q, mode: s.mode, filters: filtersForServer(s.filters), platform: s.platform, branch: s.branch, sort: s.sort, page: pageParam, minFollowers: SIZES[s.size].min, maxFollowers: SIZES[s.size].max }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.message ?? "Search failed");
@@ -184,9 +230,9 @@ export default function Discover() {
 
   // Filters re-run the search once one has been asked.
   useEffect(() => {
-    if (submitted) setSubmitted((s) => (s ? { ...s, platform, branch, size, sort } : s));
+    if (submitted) setSubmitted((s) => (s ? { ...s, platform, branch, size, sort, filters } : s));
     setPage(0);
-  }, [platform, branch, size, sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [platform, branch, size, sort, filters]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lists = useQuery<List[]>({
     queryKey: ["/api/discover/lists"],
@@ -229,97 +275,42 @@ export default function Discover() {
 
   return (
     <div className="min-h-screen bg-background">
-      <NavBar />
+      <NavBar product="discovery" account={isMember ? { label: "Saved", onClick: () => { setTab("lists"); document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }); } } : { label: me?.signedIn ? "Add Discovery" : "Sign in", onClick: () => setGate(true) }} />
 
       {/* ---------------------------------------------------------------- hero */}
-      <section className="relative overflow-hidden" style={{ background: NAVY }}>
-        <div aria-hidden className="pointer-events-none absolute -right-40 -top-40 h-[32rem] w-[32rem] rounded-full opacity-[0.16] blur-3xl" style={{ background: GOLD }} />
-        <div aria-hidden className="pointer-events-none absolute -bottom-48 -left-32 h-[28rem] w-[28rem] rounded-full bg-[#1d5cc4] opacity-20 blur-3xl" />
-        <div className="relative mx-auto w-full max-w-6xl px-4 pb-10 pt-12 sm:px-6 sm:pt-16">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">
-              <Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery
-            </p>
-            {isMember && me?.reveals && (
-              <p className="text-xs text-white/60" data-testid="discover-allowance">
-                {Math.max(0, me.reveals.allowance - me.reveals.used)} of {me.reveals.allowance} free contacts left this month
-              </p>
-            )}
-          </div>
-          <h1 className="mt-5 max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-6xl" style={HEADLINE}>
-            Find the military and veteran voices <span style={{ color: GOLD }}>worth working with.</span>
-          </h1>
-          <p className="mt-4 max-w-2xl text-lg text-white/70">
-            Creators to sponsor, guests to book, speakers for the stage. Search in plain English across Instagram, YouTube, TikTok, X and Twitch, with the audience data that tells you who's real.
-          </p>
-
-          {/* the three doors */}
-          <div className="mt-8 grid gap-2 sm:grid-cols-3" role="tablist" aria-label="What you're looking for">
-            {DOORS.map((x) => {
-              const Icon = x.icon;
-              const on = door === x.key;
-              return (
-                <button
-                  key={x.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  onClick={() => setDoor(x.key)}
-                  className={`group flex items-start gap-3 rounded-2xl border p-4 text-left transition-all ${on ? "border-[#F0A71F] bg-white text-foreground shadow-lg" : "border-white/10 bg-white/[0.04] text-white hover:border-white/25 hover:bg-white/[0.08]"}`}
-                  data-testid={`door-${x.key}`}
-                >
-                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${on ? "bg-[#053877] text-white" : "bg-white/10 text-[#F0A71F]"}`}><Icon className="h-5 w-5" /></span>
-                  <span className="min-w-0">
-                    <span className="block text-base font-bold" style={HEADLINE}>{x.title}</span>
-                    <span className={`block text-sm ${on ? "text-muted-foreground" : "text-white/60"}`}>{x.blurb}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* the search */}
-          <form
-            onSubmit={(e) => { e.preventDefault(); run(); }}
-            className="mt-4 flex flex-col gap-2 rounded-2xl bg-white p-2 shadow-2xl sm:flex-row sm:items-center"
-            data-testid="discover-search-form"
-          >
-            <select
-              value={platform}
-              onChange={(e) => setPlatform(e.target.value)}
-              className="h-12 rounded-xl border-0 bg-muted/60 px-3 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-[#053877] sm:w-40"
-              aria-label="Platform"
-              data-testid="discover-platform"
-            >
-              {PLATFORMS.map((p) => <option key={p.v} value={p.v}>{p.label}</option>)}
-            </select>
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder={d.placeholder}
-                className="h-12 border-0 pl-11 text-base text-foreground shadow-none focus-visible:ring-0"
-                data-testid="discover-q"
-              />
-            </div>
-            <Button type="submit" className="h-12 gap-2 rounded-xl bg-[#053877] px-6 text-base font-semibold text-white hover:bg-[#0a4a99]" data-testid="discover-go">
-              <Search className="h-4 w-4" /> Search
-            </Button>
-          </form>
+      {(() => {
+        const bar = (
+          <SearchBar
+            platform={platform}
+            setPlatform={setPlatform}
+            mode={mode}
+            setMode={setMode}
+            q={q}
+            setQ={setQ}
+            placeholder={mode === "ai" ? d.placeholder : mode === "keywords" ? "army wife, military spouse, milso" : "@handle, or paste a profile link"}
+            onSubmit={() => run()}
+            busy={userLoading}
+            filterCount={activeFilters(filters).length}
+            onFilters={() => { setShowFilters((v) => !v); setTimeout(() => document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }), 60); }}
+          />
+        );
+        const tries = (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50">Try</span>
             {d.tries.map((t) => (
-              <button key={t} type="button" onClick={() => run({ q: t })} className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/85 hover:bg-white/10" data-testid="discover-try">
+              <button key={t} type="button" onClick={() => run({ q: t, mode: "ai" })} className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/85 transition-colors hover:border-white/30 hover:bg-white/10" data-testid="discover-try">
                 {t}
               </button>
             ))}
           </div>
-          <button type="button" onClick={() => { setTab("enrich"); setTimeout(() => document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }), 50); }} className="mt-4 text-sm font-medium text-[#F0A71F] hover:underline" data-testid="discover-to-enrich">
-            Already have a list? Enrich handles, links or emails →
-          </button>
-        </div>
-      </section>
+        );
+        const toEnrich = () => { setTab("enrich"); setTimeout(() => document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }), 50); };
+        return heroVariant === "a" ? (
+          <HeroA door={door} setDoor={setDoor} bar={bar} tries={tries} onEnrich={toEnrich} allowance={isMember ? me?.reveals ?? null : null} />
+        ) : (
+          <HeroB door={door} setDoor={setDoor} bar={bar} tries={tries} onEnrich={toEnrich} verified={verified} onOpen={setOpen} />
+        );
+      })()}
 
       {/* -------------------------------------------------------- filter bar */}
       <div className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
@@ -348,6 +339,9 @@ export default function Discover() {
             ))}
           </div>
           <div className="ml-auto flex items-center gap-2">
+            <button type="button" onClick={() => setShowFilters((v) => !v)} className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors ${showFilters || activeFilters(filters).length ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card hover:border-[#053877]/40"}`} data-testid="discover-filters">
+              <SlidersHorizontal className="h-4 w-4" /> Filters{activeFilters(filters).length ? ` · ${activeFilters(filters).length}` : ""}
+            </button>
             <select value={size} onChange={(e) => setSize(Number(e.target.value))} className="h-9 rounded-full border border-border bg-card px-3 text-sm" aria-label="Audience size">
               {SIZES.map((s, i) => <option key={s.label} value={i}>{s.label}</option>)}
             </select>
@@ -360,6 +354,20 @@ export default function Discover() {
       </div>
 
       <main id="discover-main" className="mx-auto w-full max-w-6xl scroll-mt-16 px-4 py-8 sm:px-6">
+        {tab !== "enrich" && showFilters && (
+          <div className="mb-8">
+            <FiltersPanel value={filters} onChange={setFilters} platform={platform} onClose={() => setShowFilters(false)} onApply={() => run()} />
+          </div>
+        )}
+        {tab !== "enrich" && !showFilters && activeFilters(filters).length > 0 && (
+          <div className="mb-6"><FilterChips value={filters} onChange={setFilters} /></div>
+        )}
+        {tab === "search" && userResult && (!submitted || submitted.mode === "username") && (
+          <section className="mb-10">
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-[0.14em] text-muted-foreground">Account</h2>
+            <div className="max-w-sm"><CreatorCard c={userResult} saved={saved.has(`${userResult.platform}:${userResult.handle.toLowerCase()}`)} onOpen={() => setOpen(userResult)} onSave={isMember ? () => saveTo.mutate({ card: userResult }) : undefined} /></div>
+          </section>
+        )}
         {tab === "enrich" ? (
           <DiscoverEnrich
             isMember={isMember}
@@ -371,7 +379,7 @@ export default function Discover() {
           />
         ) : tab === "lists" && isMember ? (
           <Lists lists={lists.data ?? []} onOpen={setOpen} />
-        ) : !submitted || !isMember ? (
+        ) : !submitted || !isMember || submitted.mode === "username" ? (
           <Welcome verified={verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={setOpen} onSaveVerified={(c) => saveTo.mutate({ card: c })} onJoin={() => setGate(true)} loading={meLoading} />
         ) : (
           <>
@@ -381,7 +389,7 @@ export default function Discover() {
                 <h2 className="text-2xl font-bold tracking-tight" style={HEADLINE}>
                   {search.isLoading ? "Searching…" : r ? `${r.total.toLocaleString()} creators on ${platformLabel(submitted.platform)}` : "Search"}
                 </h2>
-                {r && <p className="mt-1 text-sm text-muted-foreground">We searched for <span className="font-medium text-foreground">"{r.brief}"</span></p>}
+                {r && <p className="mt-1 text-sm text-muted-foreground">{r.mode === "keywords" ? <>Creators whose <span className="font-medium text-foreground">{r.brief}</span></> : <>We searched for <span className="font-medium text-foreground">"{r.brief}"</span></>}</p>}
               </div>
             </div>
             {r?.understood?.notes?.length ? (
@@ -449,7 +457,246 @@ export default function Discover() {
         defaultRole={door}
         source={source}
       />
-      <SiteFooter />
+      <SiteFooter product="discovery" />
+    </div>
+  );
+}
+
+// ===========================================================================
+// The search bar: platform, how to search, what, and the filters
+// ===========================================================================
+
+function ModeMenu({ mode, setMode }: { mode: Mode; setMode: (m: Mode) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", off);
+    return () => document.removeEventListener("mousedown", off);
+  }, [open]);
+  const cur = MODES.find((m) => m.v === mode)!;
+  const Icon = cur.icon;
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open} className="flex h-12 w-full items-center gap-2 whitespace-nowrap rounded-xl bg-[#053877]/[0.07] px-3 text-sm font-semibold text-[#053877] hover:bg-[#053877]/[0.11] sm:w-auto" data-testid="discover-mode">
+        <Icon className="h-4 w-4" /> {cur.label}
+        <ChevronRight className={`ml-auto h-3.5 w-3.5 transition-transform sm:ml-0 ${open ? "-rotate-90" : "rotate-90"}`} />
+      </button>
+      {open && (
+        <ul role="listbox" className="absolute left-0 top-[calc(100%+6px)] z-30 w-72 overflow-hidden rounded-2xl border border-border bg-popover p-1.5 text-foreground shadow-2xl">
+          {MODES.map((m) => {
+            const I = m.icon;
+            return (
+              <li key={m.v}>
+                <button type="button" role="option" aria-selected={m.v === mode} onClick={() => { setMode(m.v); setOpen(false); }} className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-muted ${m.v === mode ? "bg-[#053877]/[0.06]" : ""}`} data-testid={`discover-mode-${m.v}`}>
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#053877]/10 text-[#053877]"><I className="h-4 w-4" /></span>
+                  <span><span className="block text-sm font-semibold">{m.label}</span><span className="block text-xs text-muted-foreground">{m.hint}</span></span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder, onSubmit, busy, filterCount, onFilters }: {
+  platform: string; setPlatform: (p: string) => void; mode: Mode; setMode: (m: Mode) => void; q: string; setQ: (q: string) => void;
+  placeholder: string; onSubmit: () => void; busy: boolean; filterCount: number; onFilters: () => void;
+}) {
+  const Lead = mode === "username" ? AtSign : Search;
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="rounded-2xl bg-white p-2 text-foreground shadow-[0_24px_60px_-12px_rgba(0,0,0,0.55)] ring-1 ring-black/5" data-testid="discover-search-form">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="h-12 rounded-xl border-0 bg-muted/60 px-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#053877] sm:w-[8.5rem]" aria-label="Platform" data-testid="discover-platform">
+            {PLATFORMS.map((p) => <option key={p.v} value={p.v}>{p.label}</option>)}
+          </select>
+          <ModeMenu mode={mode} setMode={setMode} />
+        </div>
+        <div className="relative flex-1">
+          <Lead className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={placeholder} className="h-12 border-0 pl-11 text-base shadow-none focus-visible:ring-0" data-testid="discover-q" />
+        </div>
+        <div className="flex gap-2">
+          {mode !== "username" && (
+            <button type="button" onClick={onFilters} className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground hover:border-[#053877]/40 hover:text-[#053877]" aria-label="Filters" title="All filters" data-testid="discover-bar-filters">
+              <SlidersHorizontal className="h-5 w-5" />
+              {filterCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#F0A71F] px-1 text-[11px] font-bold text-[#1a1200]">{filterCount}</span>}
+            </button>
+          )}
+          <Button type="submit" disabled={busy} className="h-12 flex-1 gap-2 rounded-xl bg-[#053877] px-6 text-base font-semibold text-white hover:bg-[#0a4a99] sm:flex-none" data-testid="discover-go">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} {mode === "username" ? "Look up" : "Search"}
+          </Button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+// ===========================================================================
+// Two heroes: B is the default; A is the one before it, at ?hero=a
+// ===========================================================================
+
+type HeroProps = { door: (typeof DOORS)[number]["key"]; setDoor: (d: (typeof DOORS)[number]["key"]) => void; bar: React.ReactNode; tries: React.ReactNode; onEnrich: () => void };
+
+function HeroA({ door, setDoor, bar, tries, onEnrich, allowance }: HeroProps & { allowance: { used: number; allowance: number } | null }) {
+  return (
+    <section className="relative overflow-hidden" style={{ background: NAVY }}>
+      <div aria-hidden className="pointer-events-none absolute -right-40 -top-40 h-[32rem] w-[32rem] rounded-full opacity-[0.16] blur-3xl" style={{ background: GOLD }} />
+      <div aria-hidden className="pointer-events-none absolute -bottom-48 -left-32 h-[28rem] w-[28rem] rounded-full bg-[#1d5cc4] opacity-20 blur-3xl" />
+      <div className="relative mx-auto w-full max-w-6xl px-4 pb-10 pt-12 sm:px-6 sm:pt-16">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]"><Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery</p>
+          {allowance && <p className="text-xs text-white/60" data-testid="discover-allowance">{Math.max(0, allowance.allowance - allowance.used)} of {allowance.allowance} free contacts left this month</p>}
+        </div>
+        <h1 className="mt-5 max-w-3xl text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-6xl" style={HEADLINE}>
+          Find the military and veteran voices <span style={{ color: GOLD }}>worth working with.</span>
+        </h1>
+        <p className="mt-4 max-w-2xl text-lg text-white/70">Creators to sponsor, guests to book, speakers for the stage. Search in plain English across Instagram, YouTube, TikTok, X and Twitch, with the audience data that tells you who's real.</p>
+        <div className="mt-8 grid gap-2 sm:grid-cols-3" role="tablist" aria-label="What you're looking for">
+          {DOORS.map((x) => {
+            const Icon = x.icon;
+            const on = door === x.key;
+            return (
+              <button key={x.key} type="button" role="tab" aria-selected={on} onClick={() => setDoor(x.key)} className={`group flex items-start gap-3 rounded-2xl border p-4 text-left transition-all ${on ? "border-[#F0A71F] bg-white text-foreground shadow-lg" : "border-white/10 bg-white/[0.04] text-white hover:border-white/25 hover:bg-white/[0.08]"}`} data-testid={`door-${x.key}`}>
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${on ? "bg-[#053877] text-white" : "bg-white/10 text-[#F0A71F]"}`}><Icon className="h-5 w-5" /></span>
+                <span className="min-w-0"><span className="block text-base font-bold" style={HEADLINE}>{x.title}</span><span className={`block text-sm ${on ? "text-muted-foreground" : "text-white/60"}`}>{x.blurb}</span></span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-4">{bar}</div>
+        {tries}
+        <button type="button" onClick={onEnrich} className="mt-4 text-sm font-medium text-[#F0A71F] hover:underline" data-testid="discover-to-enrich">Already have a list? Enrich handles, links or emails →</button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Hero B. The product is the pitch: the search bar is the biggest thing on the
+ * page, and beside it a real creator from our verified list, turning over, with
+ * the numbers a brand would see. No invented figures: every tile on the preview
+ * is that creator's own.
+ */
+function HeroB({ door, setDoor, bar, tries, onEnrich, verified, onOpen }: HeroProps & { verified: Card[]; onOpen: (c: Card) => void }) {
+  const d = DOORS.find((x) => x.key === door)!;
+  return (
+    <section className="relative isolate overflow-hidden" style={{ background: "#030b1f" }}>
+      {/* depth: a fine grid that fades out, and two soft lights */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-[0.55]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)", backgroundSize: "44px 44px", maskImage: "radial-gradient(ellipse 80% 70% at 70% 30%, black 20%, transparent 75%)", WebkitMaskImage: "radial-gradient(ellipse 80% 70% at 70% 30%, black 20%, transparent 75%)" }} />
+      <div aria-hidden className="pointer-events-none absolute -top-48 right-[-10%] -z-10 h-[40rem] w-[40rem] rounded-full opacity-25 blur-[120px]" style={{ background: GOLD }} />
+      <div aria-hidden className="pointer-events-none absolute -bottom-64 -left-40 -z-10 h-[36rem] w-[36rem] rounded-full bg-[#1d5cc4] opacity-30 blur-[120px]" />
+
+      <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 pb-14 pt-12 sm:px-6 sm:pt-16 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:pb-20 lg:pt-20">
+        <div className="min-w-0">
+          <p className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/30 bg-[#F0A71F]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">
+            <Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery
+          </p>
+          <h1 className="mt-6 text-[2.75rem] font-bold leading-[0.98] tracking-[-0.03em] text-white sm:text-7xl" style={HEADLINE}>
+            Military creators,
+            <br />
+            <span className="bg-gradient-to-r from-[#F0A71F] via-[#ffd27a] to-[#F0A71F] bg-clip-text text-transparent">measured.</span>
+          </h1>
+          <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/70">
+            Veterans, service members and military spouses across Instagram, YouTube, TikTok, X and Twitch, with real reach, audience quality and brand history on every profile.
+          </p>
+
+          {/* what you're here for: three doors, one row */}
+          <div className="mt-8 inline-flex flex-wrap gap-1 rounded-2xl border border-white/10 bg-white/[0.04] p-1" role="tablist" aria-label="What you're looking for">
+            {DOORS.map((x) => {
+              const Icon = x.icon;
+              const on = door === x.key;
+              return (
+                <button key={x.key} type="button" role="tab" aria-selected={on} onClick={() => setDoor(x.key)} className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition-all ${on ? "bg-white text-[#04102b] shadow" : "text-white/70 hover:bg-white/[0.07] hover:text-white"}`} data-testid={`door-${x.key}`}>
+                  <Icon className={`h-4 w-4 ${on ? "text-[#053877]" : "text-[#F0A71F]"}`} /> {x.title}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-sm text-white/50">{d.blurb}</p>
+
+          <div className="mt-4">{bar}</div>
+          {tries}
+
+          <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-white/60">
+            {["Free account", "No card", "Audience data on every profile"].map((t) => (
+              <span key={t} className="inline-flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-[#F0A71F]" /> {t}</span>
+            ))}
+            <button type="button" onClick={onEnrich} className="font-semibold text-[#F0A71F] hover:underline" data-testid="discover-to-enrich">Have a list? Enrich it →</button>
+          </div>
+        </div>
+
+        <div className="hidden lg:block">
+          <PreviewStack verified={verified} onOpen={onOpen} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** A real verified creator, turning over every few seconds, as a brand would see them. */
+function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card) => void }) {
+  const pool = useMemo(() => verified.filter((c) => c.picture && (c.followers ?? 0) > 0).sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0)).slice(0, 8), [verified]);
+  const [i, setI] = useState(0);
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (pool.length < 2 || paused) return;
+    const t = setInterval(() => setI((n) => (n + 1) % pool.length), 4200);
+    return () => clearInterval(t);
+  }, [pool.length, paused]);
+  if (!pool.length) return <div className="aspect-[4/5] w-full rounded-[28px] border border-white/10 bg-white/[0.03]" />;
+  const c = pool[i % pool.length];
+  const next = pool[(i + 1) % pool.length];
+  const after = pool[(i + 2) % pool.length];
+  const tiles = [
+    ["Followers", compact(c.followers)],
+    c.engagement != null ? ["Engagement", pct(c.engagement, 2)] : null,
+    c.quality != null ? ["Audience quality", `${c.quality}/100`] : null,
+  ].filter(Boolean) as [string, string][];
+  return (
+    <div className="relative mx-auto w-full max-w-[25rem]" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+      {/* the two behind */}
+      {[after, next].map((b, k) => (
+        <div key={`${b.name}-${k}`} aria-hidden className="absolute inset-x-6 top-0 h-full overflow-hidden rounded-[28px] border border-white/10 bg-[#0b1733] shadow-2xl" style={{ transform: `translateY(${(2 - k) * -18}px) scale(${0.9 + k * 0.05})`, opacity: 0.35 + k * 0.25 }}>
+          <img src={b.picture.startsWith("/api/") ? b.picture : resolveUploadUrl(b.picture)} alt="" className="h-2/3 w-full object-cover opacity-60" />
+        </div>
+      ))}
+      {/* the one in front */}
+      <button key={c.name} type="button" onClick={() => onOpen(c)} className="relative block w-full overflow-hidden rounded-[28px] border border-white/15 bg-[#0b1733] text-left shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)] transition-transform duration-500 animate-in fade-in-0 zoom-in-95 hover:-translate-y-1" data-testid="hero-preview">
+        <div className="relative aspect-[4/3] w-full overflow-hidden">
+          <img src={c.picture.startsWith("/api/") ? c.picture : resolveUploadUrl(c.picture)} alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0b1733] via-[#0b1733]/10 to-transparent" />
+          <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F] px-2.5 py-1 text-xs font-bold text-[#1a1200] shadow"><BadgeCheck className="h-3.5 w-3.5" /> Verified on MilitaryVoices</span>
+          <span className="absolute right-4 top-4 rounded-full bg-black/45 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur">{platformLabel(c.platform)}</span>
+        </div>
+        <div className="-mt-12 px-5 pb-5">
+          <div className="relative">
+            <div className="truncate text-2xl font-bold tracking-tight text-white" style={HEADLINE}>{c.name}</div>
+            <div className="truncate text-sm text-white/65">{c.verified?.show ?? `@${c.handle}`}{c.branch ? ` · ${c.branch}` : ""}</div>
+          </div>
+          <div className="mt-4 grid gap-px overflow-hidden rounded-2xl bg-white/10" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0,1fr))` }}>
+            {tiles.map(([l, v]) => (
+              <div key={l} className="bg-[#0e1d3f] px-3 py-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/50">{l}</div>
+                <div className="mt-1 text-xl font-bold tabular-nums text-white">{v}</div>
+              </div>
+            ))}
+          </div>
+          {c.quality != null && (
+            <div className="mt-3">
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-[#F0A71F]" style={{ width: `${Math.min(100, c.quality)}%` }} /></div>
+            </div>
+          )}
+          <div className="mt-4 flex items-center justify-between text-xs text-white/50">
+            <span className="inline-flex items-center gap-1.5"><TrendingUp className="h-3.5 w-3.5 text-[#F0A71F]" /> Open the full profile</span>
+            <span className="flex gap-1">{pool.map((_, k) => <span key={k} className={`h-1.5 rounded-full transition-all ${k === i % pool.length ? "w-5 bg-[#F0A71F]" : "w-1.5 bg-white/25"}`} />)}</span>
+          </div>
+        </div>
+      </button>
     </div>
   );
 }
@@ -498,7 +745,7 @@ function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified,
           <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight" style={HEADLINE}>
             <BadgeCheck className="h-6 w-6 text-[#F0A71F]" /> Verified on MilitaryVoices
           </h2>
-          <p className="text-sm text-muted-foreground">Podcasters on The Podcast Marathon, October 5. We know every one of them.</p>
+          <p className="text-sm text-muted-foreground">Creators we know personally. Every one checked by our team.</p>
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {verified.length === 0
@@ -514,49 +761,60 @@ function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified,
 // A creator, as a card
 // ===========================================================================
 
+function CoverImage({ src, name }: { src: string; name: string }) {
+  const [broken, setBroken] = useState(false);
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
+  if (!src || broken) return <span className="flex h-full w-full items-center justify-center text-5xl font-bold text-white/25" style={HEADLINE}>{initials}</span>;
+  return <img src={src.startsWith("/api/") ? src : resolveUploadUrl(src)} alt="" loading="lazy" onError={() => setBroken(true)} className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]" />;
+}
+
+/**
+ * A creator as a card: the face is the card. The photo runs edge to edge with
+ * the name set on it, and the three numbers a brand reads first sit under it
+ * in one row. Verified creators carry the gold edge and badge; nothing else
+ * about them is different.
+ */
 function CreatorCard({ c, saved, onOpen, onSave }: { c: Card; saved: boolean; onOpen: () => void; onSave?: () => void }) {
-  // One card for everyone: our verified podcasters look like every other
-  // creator, with the show where the handle goes and their air time as a tag.
+  const stats = [
+    c.followers != null ? ["Followers", compact(c.followers)] : null,
+    c.engagement != null ? ["Engagement", pct(c.engagement, 2)] : null,
+    c.quality != null ? ["Quality", `${c.quality}`] : c.branch ? ["Branch", c.branch.replace("Military spouse", "Spouse")] : null,
+  ].filter(Boolean) as [string, string][];
   return (
-    <div className={`group relative flex flex-col rounded-2xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:shadow-lg ${c.verified ? "border-[#F0A71F]/40 hover:border-[#F0A71F]" : "border-border hover:border-[#053877]/30"}`} data-testid={`creator-${c.handle || c.name}`}>
-      <button type="button" onClick={onOpen} className="flex items-start gap-3 text-left" aria-label={`Open ${c.name}`}>
-        <Avatar src={c.picture} name={c.name} size={52} ring={!!c.verified} />
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1">
-            <span className="truncate text-[15px] font-bold leading-tight" style={HEADLINE}>{c.name}</span>
-            {c.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-[#F0A71F]" aria-label="Verified on MilitaryVoices" />}
-          </span>
-          <span className="block truncate text-xs text-muted-foreground">{c.verified ? c.verified.show : `@${c.handle}`}</span>
+    <div className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-card transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_40px_-16px_rgba(4,16,43,0.45)] ${c.verified ? "border-[#F0A71F]/60 ring-1 ring-[#F0A71F]/25" : "border-border hover:border-[#053877]/30"}`} data-testid={`creator-${c.handle || c.name}`}>
+      <button type="button" onClick={onOpen} className="relative block aspect-[4/3] w-full overflow-hidden bg-gradient-to-br from-[#0a2a5e] to-[#04102b] text-left" aria-label={`Open ${c.name}`}>
+        <CoverImage src={c.picture} name={c.name} />
+        <span aria-hidden className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
+        <span className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+          {c.verified ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-bold text-[#1a1200] shadow"><BadgeCheck className="h-3 w-3" /> Verified</span>
+          ) : c.platform ? (
+            <span className="rounded-full bg-black/45 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur">{platformLabel(c.platform)}</span>
+          ) : null}
+          {c.branch && c.quality != null && <span className="rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">{c.branch}</span>}
+        </span>
+        <span className="absolute inset-x-3 bottom-3">
+          <span className="block truncate text-lg font-bold leading-tight text-white drop-shadow" style={HEADLINE}>{c.name}</span>
+          <span className="block truncate text-xs text-white/75">{c.verified ? c.verified.show : c.handle ? `@${c.handle}` : ""}</span>
         </span>
       </button>
-      <div className="mt-3 flex h-6 flex-nowrap gap-1.5 overflow-hidden">
-        {c.branch && <span className="shrink-0 rounded-full bg-[#053877]/10 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">{c.branch}</span>}
-        {c.verified && <span className="shrink-0 rounded-full bg-[#F0A71F]/15 px-2 py-0.5 text-[11px] font-semibold text-[#8a5a00]">On air {c.verified.slotLabel.replace(" ET", "")}</span>}
-        {!c.verified && c.platform && <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">{platformLabel(c.platform)}</span>}
-      </div>
-      <div className="mt-auto flex items-end justify-between gap-2 pt-4">
-        {c.followers != null ? (
-          <div className="flex gap-5">
-            <div>
-              <div className="text-lg font-bold tabular-nums leading-none">{compact(c.followers)}</div>
-              <div className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">followers</div>
-            </div>
-            {c.engagement != null && (
-              <div>
-                <div className="text-lg font-bold tabular-nums leading-none">{pct(c.engagement, 2)}</div>
-                <div className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">engagement</div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5 pb-1 text-xs font-medium text-muted-foreground"><Mic2 className="h-3.5 w-3.5 text-[#053877]" /> Podcast host</div>
-        )}
-        {onSave && (
-          <button type="button" onClick={onSave} disabled={saved} className={`rounded-full p-2 transition-colors ${saved ? "text-[#8a5a00]" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} title={saved ? "Saved" : "Save to shortlist"} data-testid="creator-save">
-            {saved ? <BookmarkCheck className="h-5 w-5" /> : <Bookmark className="h-5 w-5" />}
-          </button>
-        )}
-      </div>
+      {onSave && (
+        <button type="button" onClick={onSave} disabled={saved} className={`absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full backdrop-blur transition-colors ${saved ? "bg-[#F0A71F] text-[#1a1200]" : "bg-black/40 text-white hover:bg-black/60"}`} title={saved ? "Saved" : "Save to shortlist"} data-testid="creator-save">
+          {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+        </button>
+      )}
+      {stats.length ? (
+        <button type="button" onClick={onOpen} className="grid divide-x divide-border text-left" style={{ gridTemplateColumns: `repeat(${stats.length}, minmax(0,1fr))` }} tabIndex={-1}>
+          {stats.map(([l, v]) => (
+            <span key={l} className="min-w-0 px-3 py-3">
+              <span className="block truncate text-base font-bold tabular-nums leading-none">{v}</span>
+              <span className="mt-1.5 block text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">{l}</span>
+            </span>
+          ))}
+        </button>
+      ) : (
+        <div className="flex items-center gap-1.5 px-3 py-3 text-xs font-medium text-muted-foreground"><Mic2 className="h-3.5 w-3.5 text-[#053877]" /> Podcast host</div>
+      )}
     </div>
   );
 }
@@ -717,7 +975,7 @@ function ProfileDrawer({ card, onClose, onOpenCreator, isMember, onJoin, lists, 
                       @{card.handle} on {platformLabel(card.platform)} <ExternalLink className="h-3.5 w-3.5" />
                     </a>
                   )}
-                  {card.verified && <p className="mt-1 text-sm text-white/80">{card.verified.show} · on air {card.verified.slotLabel}, October 5</p>}
+                  {card.verified && <p className="mt-1 text-sm text-white/80">{card.verified.show} · Verified on MilitaryVoices</p>}
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {card.branch && <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white">{card.branch}</span>}
                     {card.verified?.serviceStatus && <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs text-white/80">{card.verified.serviceStatus}</span>}
@@ -743,10 +1001,7 @@ function ProfileDrawer({ card, onClose, onOpenCreator, isMember, onJoin, lists, 
                     {reveal.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Reveal contact
                   </Button>
                 )}
-                {card.verified && (
-                  <a href="/agenda" target="_blank" rel="noreferrer"><Button size="sm" variant="outline" className="gap-1.5 rounded-full border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white"><CalendarDays className="h-4 w-4" /> See their show</Button></a>
-                )}
-              </div>
+                              </div>
               {contact && (
                 <div className="relative mt-4 grid gap-1.5 rounded-xl bg-white p-3 text-sm text-foreground">
                   {contact.email && <a href={`mailto:${contact.email}`} className="flex items-center gap-2 font-medium text-[#053877] hover:underline"><Mail className="h-4 w-4" /> {contact.email}</a>}
@@ -761,8 +1016,7 @@ function ProfileDrawer({ card, onClose, onOpenCreator, isMember, onJoin, lists, 
             {card.verified && (
               <div className="border-b border-border p-6 text-sm">
                 <p className="text-muted-foreground">
-                  {card.verified.host} hosts <span className="font-semibold text-foreground">{card.verified.show}</span> and is on the lineup for The Podcast Marathon at {card.verified.slotLabel} on October 5.
-                </p>
+                  {card.verified.host} hosts <span className="font-semibold text-foreground">{card.verified.show}</span>. Verified by our team: we know them, and we can introduce you.</p>
                 {/* Contacts for our own podcasters go through us: they asked us, not the world. */}
                 <div className="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border">
                   {([["email", Mail, "Email"], ["phone", Phone, "Phone"]] as const).map(([kind, Icon, label]) => (

@@ -352,6 +352,43 @@ function send(res: Response, fn: () => Promise<unknown>) {
 const asPlatform = (v: unknown): Platform => (PLATFORMS.includes(String(v) as Platform) ? (String(v) as Platform) : "instagram");
 
 // ---------------------------------------------------------------------------
+// Search filters: the ones a brand manager actually reaches for, whitelisted
+// into Influencers Club's shape. Anything unknown is dropped, not forwarded.
+// ---------------------------------------------------------------------------
+
+function readFilters(raw: any): Record<string, unknown> {
+  const f: Record<string, unknown> = {};
+  if (!raw || typeof raw !== "object") return f;
+  const text = (v: unknown, n = 60) => String(v ?? "").trim().slice(0, n);
+  const words = (v: unknown) => (Array.isArray(v) ? v : String(v ?? "").split(","))
+    .map((w) => text(w, 40))
+    .filter((w) => w.length > 1)
+    .slice(0, 10);
+  const pct = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 && n <= 100 ? n : null;
+  };
+  if (text(raw.location)) f.location = [text(raw.location)];
+  if (raw.gender === "male" || raw.gender === "female") f.gender = raw.gender;
+  const eng = Number(raw.engagementMin);
+  if (Number.isFinite(eng) && eng > 0 && eng <= 50) f.engagement_percent = { min: eng };
+  if (raw.lastPost === "90" || raw.lastPost === "365") f.last_post = raw.lastPost;
+  if (raw.verifiedOnly === true) f.is_verified = true;
+  if (raw.brandDeals === true) f.has_done_brand_deals = true;
+  if (raw.excludePrivate === true) f.exclude_private_profile = true;
+  if (raw.hasPodcast === true) f.creator_has = { has_podcast: true };
+  if (words(raw.keywordsInBio).length) f.keywords_in_bio = words(raw.keywordsInBio);
+  if (words(raw.excludeKeywords).length) f.exclude_keywords_in_bio = words(raw.excludeKeywords);
+  if (words(raw.hashtags).length) f.hashtags = words(raw.hashtags).map((h) => h.replace(/^#/, ""));
+  const audience: Record<string, unknown> = {};
+  if (text(raw.audienceCountry)) audience.location = [{ name: text(raw.audienceCountry), type: "country", min_pct: pct(raw.audienceCountryMin) ?? 30 }];
+  if (raw.audienceGender === "male" || raw.audienceGender === "female") audience.gender = { type: raw.audienceGender, min_pct: pct(raw.audienceGenderMin) ?? 50 };
+  if (["normal", "good", "high", "best"].includes(raw.credibility)) audience.credibility = raw.credibility;
+  if (Object.keys(audience).length) f.audience = audience;
+  return f;
+}
+
+// ---------------------------------------------------------------------------
 // Enrich
 // ---------------------------------------------------------------------------
 
@@ -577,9 +614,18 @@ export function registerDiscoveryRoutes(app: Express): void {
         .filter(Boolean)
         .join(" ")
         .trim() || "US military veterans and military spouses";
-      const filters: Record<string, unknown> = {};
+      const filters: Record<string, unknown> = readFilters(req.body?.filters);
       if (minF != null || maxF != null) filters.number_of_followers = { ...(minF != null ? { min: minF } : {}), ...(maxF != null ? { max: maxF } : {}) };
-      const body = { platform, nlp_search: brief, paging: { limit: PAGE_SIZE, page }, sort: { sort_by: sortBy, sort_order: "desc" }, filters };
+      // Keywords mode: the words themselves, matched in the bio, any of them.
+      // No AI brief, so nothing is reinterpreted; the branch chip adds its word.
+      const mode = req.body?.mode === "keywords" ? "keywords" : "ai";
+      if (mode === "keywords") {
+        const words = q.split(/,|\bor\b|\n/i).map((w) => w.trim()).filter((w) => w.length > 1).slice(0, 10);
+        if (branch) words.push(branch === "Military spouse" ? "military spouse" : branch.toLowerCase());
+        if (!words.length) throw new HttpError(400, "Type a word or two to find in creators' bios.");
+        filters.keywords_in_bio = Array.from(new Set([...(Array.isArray(filters.keywords_in_bio) ? (filters.keywords_in_bio as string[]) : []), ...words]));
+      }
+      const body = { platform, ...(mode === "ai" ? { nlp_search: brief } : {}), paging: { limit: PAGE_SIZE, page }, sort: { sort_by: sortBy, sort_order: "desc" }, filters };
 
       // A week: the same search by anyone this week costs nothing. Pictures
       // are kept by us, so an old answer never shows a broken face.
@@ -603,7 +649,8 @@ export function registerDiscoveryRoutes(app: Express): void {
           .slice(0, 8)
           .map(({ match: _m, ...c }) => c);
       }
-      return { brief, platform, page, pageSize: PAGE_SIZE, total: found.total, results: found.accounts, verified, understood: found.understood };
+      if (mode === "keywords") verified = [];
+      return { brief: mode === "keywords" ? `bio mentions ${(filters.keywords_in_bio as string[]).join(" or ")}` : brief, mode, platform, page, pageSize: PAGE_SIZE, total: found.total, results: found.accounts, verified, understood: found.understood };
     }),
   );
 

@@ -36,8 +36,18 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/platform", label: "About Us" },
 ];
 
-export function NavBar() {
+/**
+ * Discovery is its own MilitaryVoices product, not a page of the event: on it
+ * the bar carries the product's links, and "Sign in" is the Discovery account.
+ */
+const DISCOVERY_LINKS: { href: string; label: string; anchor?: boolean }[] = [
+  { href: "/discover", label: "Discovery" },
+  { href: "/platform", label: "About MilitaryVoices" },
+];
+
+export function NavBar({ product, account }: { product?: "discovery"; account?: { label: string; onClick: () => void } } = {}) {
   const [location] = useLocation();
+  const links = product === "discovery" ? DISCOVERY_LINKS : LINKS;
   const { theme, toggle } = useTheme();
 
   // Signed-in podcasters see "Dashboard" instead of "Sign in". 401 → null.
@@ -63,7 +73,7 @@ export function NavBar() {
 
         {/* Desktop links */}
         <nav className="hidden items-center gap-3 lg:flex xl:gap-5" aria-label="Primary">
-          {LINKS.map((link) => {
+          {links.map((link) => {
             const active = !link.anchor && (location === link.href || (location.startsWith("/event/") && location.endsWith(link.href)));
             return link.anchor ? (
               <a key={link.href} href={link.href} onClick={(e) => scrollToAnchor(e, link.href)} className={linkCls(false)} data-testid={`link-nav-${link.label.toLowerCase()}`}>
@@ -75,22 +85,31 @@ export function NavBar() {
               </Link>
             );
           })}
-          <Link href="/sponsor" className={linkCls(location === "/sponsor")} data-testid="link-nav-sponsors">
-            Sponsors
-          </Link>
+          {product !== "discovery" && (
+            <Link href="/sponsor" className={linkCls(location === "/sponsor")} data-testid="link-nav-sponsors">
+              Sponsors
+            </Link>
+          )}
         </nav>
 
         <div className="flex items-center gap-1.5">
-          <Link href="/host/dashboard" data-testid="link-nav-signin">
-            <Button
-              size="sm"
-              variant={location.startsWith("/host") ? "default" : "outline"}
-              className="gap-1.5 rounded-full"
-            >
-              {signedIn ? <LayoutDashboard className="h-3.5 w-3.5" /> : <LogIn className="h-3.5 w-3.5" />}
-              <span>{signedIn ? "Dashboard" : "Sign in"}</span>
+          {account ? (
+            <Button size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={account.onClick} data-testid="link-nav-signin">
+              <LogIn className="h-3.5 w-3.5" />
+              <span>{account.label}</span>
             </Button>
-          </Link>
+          ) : (
+            <Link href="/host/dashboard" data-testid="link-nav-signin">
+              <Button
+                size="sm"
+                variant={location.startsWith("/host") ? "default" : "outline"}
+                className="gap-1.5 rounded-full"
+              >
+                {signedIn ? <LayoutDashboard className="h-3.5 w-3.5" /> : <LogIn className="h-3.5 w-3.5" />}
+                <span>{signedIn ? "Dashboard" : "Sign in"}</span>
+              </Button>
+            </Link>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -109,7 +128,7 @@ export function NavBar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              {LINKS.map((link) =>
+              {links.map((link) =>
                 link.anchor ? (
                   <DropdownMenuItem key={link.href} asChild>
                     <a href={link.href} onClick={(e) => scrollToAnchor(e, link.href)}>{link.label}</a>
@@ -120,13 +139,17 @@ export function NavBar() {
                   </DropdownMenuItem>
                 ),
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href="/sponsor">Sponsors</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/events">All events</Link>
-              </DropdownMenuItem>
+              {product !== "discovery" && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/sponsor">Sponsors</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/events">All events</Link>
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
