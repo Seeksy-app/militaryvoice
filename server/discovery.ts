@@ -402,6 +402,25 @@ export function registerDiscoveryRoutes(app: Express): void {
           let handle = pick0?.handle ?? "";
           let followers = pick0?.followers ?? 0;
           if (!handle) {
+            // Accounts they connected themselves: trustworthy, and free.
+            const prof = await storage.getProfileByEmail(email);
+            let connected: { platform: string; username: string; followers?: number }[] = [];
+            try {
+              connected = JSON.parse(s.socialAccounts || prof?.socialAccounts || "[]");
+            } catch {
+              /* none */
+            }
+            const c0 = connected
+              .map((c) => ({ ...c, platform: c.platform === "x" ? "twitter" : c.platform }))
+              .filter((c) => (PLATFORMS as readonly string[]).includes(c.platform) && c.username)
+              .sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0))[0];
+            if (c0) {
+              platform = c0.platform;
+              handle = c0.username;
+              followers = c0.followers ?? 0;
+            }
+          }
+          if (!handle) {
             // Nothing on file: ask the index who owns this email (0.05 credits).
             const r = await ic("/creators/enrich/email/", { email }).catch(() => null);
             const res0 = r?.result ?? {};
