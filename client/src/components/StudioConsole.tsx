@@ -837,6 +837,21 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     }
     patchStudio.mutate(pch);
   }
+  // Asked only on the way out: "You made changes — save them?" A bar during
+  // the show was noise; the question matters when the host is leaving.
+  const [leaveAsk, setLeaveAsk] = useState(false);
+  function leaveNow() {
+    setLeaveAsk(false);
+    setFocus(false);
+    if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
+    onLeave?.();
+  }
+  function saveLook() {
+    if (!lookDirty) return;
+    const a = lookDirty.after;
+    patchScene.mutate({ id: lookDirty.sceneId, patch: { stageLayout: a.stageLayout, backgroundUrl: a.backgroundVisible ? a.backgroundUrl : "none" } });
+    setLookDirty(null);
+  }
   useEffect(() => {
     if (!lookDirty) return;
     const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
@@ -1564,9 +1579,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 size="sm"
                 className="h-9 gap-1.5 rounded-full px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white"
                 onClick={() => {
-                  setFocus(false);
-                  if (document.fullscreenElement) void document.exitFullscreen?.().catch(() => {});
-                  onLeave?.();
+                  // Unsaved changes to a scene's look: ask before going.
+                  if (lookDirty) { setLeaveAsk(true); return; }
+                  leaveNow();
                 }}
                 data-testid="button-studio-exit-focus"
               >
@@ -2050,40 +2065,25 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               ) : null}
             </div>
             </div>
-            {lookDirty && (() => {
-              const sc = (scenes ?? []).find((x) => x.id === lookDirty.sceneId);
-              return (
-                <div className="flex shrink-0 flex-wrap items-center justify-center gap-3 bg-[#F0A71F] px-4 py-2 text-[13px] font-semibold text-[#1a1200]" data-testid="bar-look-unsaved">
-                  <span>You made changes to {sc ? `"${sc.name}"` : "this scene"}. Save them to the scene?</span>
-                  <button
-                    type="button"
-                    className="rounded-full bg-[#1a1200] px-3.5 py-1 text-white hover:bg-black"
-                    onClick={() => {
-                      const a = lookDirty.after;
-                      patchScene.mutate({ id: lookDirty.sceneId, patch: { stageLayout: a.stageLayout, backgroundUrl: a.backgroundVisible ? a.backgroundUrl : "none" } });
-                      setLookDirty(null);
-                      toast({ title: "Saved to the scene", description: sc ? `Taking "${sc.name}" puts this look up.` : undefined });
-                    }}
-                    data-testid="button-look-save"
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-full border border-[#1a1200]/40 px-3.5 py-1 hover:bg-[#1a1200]/10"
-                    onClick={() => {
-                      // Put back what was up, if we're still on that scene.
-                      if (studio?.currentSceneId === lookDirty.sceneId) patchStudio.mutate({ ...lookDirty.before });
-                      setLookDirty(null);
-                    }}
-                    data-testid="button-look-discard"
-                  >
-                    Discard
-                  </button>
-                </div>
-              );
-            })()}
             <LayoutBar layout={studio?.stageLayout || "contain"} onLayout={setLayout} />
+            <AlertDialog open={leaveAsk} onOpenChange={setLeaveAsk}>
+              <AlertDialogContent data-testid="dialog-leave-unsaved">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>You made some changes. Do you want to save them?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {(() => {
+                      const sc = (scenes ?? []).find((x) => x.id === lookDirty?.sceneId);
+                      return `The layout and background you set on ${sc ? `"${sc.name}"` : "this scene"} go with the scene, so taking it again puts them back up.`;
+                    })()}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="button-leave-stay">Stay</AlertDialogCancel>
+                  <Button variant="outline" onClick={() => { setLookDirty(null); leaveNow(); }} data-testid="button-leave-discard">Don't save</Button>
+                  <AlertDialogAction onClick={() => { saveLook(); leaveNow(); }} data-testid="button-leave-save">Save and leave</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
             </div>
 
             {/* The graphics rail. It takes its width out of the stage rather

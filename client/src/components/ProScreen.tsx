@@ -28,7 +28,7 @@ const FEATURES = [
     key: "studio",
     title: "Your own studio",
     icon: MonitorPlay,
-    image: "/pro/studio.jpg",
+    image: "/pro/studio-real.jpg",
     lead: "The studio that runs the marathon, on any day you like.",
     points: ["Green room, scenes and a producer — for your show, on your schedule", "Stream to your YouTube; record in the cloud; clips cut for you", "Guests join from a link. No software."],
   },
