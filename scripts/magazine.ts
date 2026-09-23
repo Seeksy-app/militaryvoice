@@ -40,11 +40,11 @@ const SHEET = { w: TRIM.w + BLEED * 2, h: TRIM.h + BLEED * 2 };
 // in full on the cover and in short in every folio.
 const BRAND = "MilitaryVoices";
 const DOMAIN = "militaryvoices.ai";
-const FOLIO = `${BRAND}.ai · Issue One`;
+const FOLIO = `Issue One · A publication of ${BRAND}.ai`;
 
 type Page =
   | { kind: "cover" }
-  | { kind: "editorial"; slug: "riccoh" }
+  | { kind: "host"; part: "photo" | "story" }
   | { kind: "contents" }
   | { kind: "schedule" }
   | { kind: "profile"; i: number }
@@ -174,19 +174,39 @@ function folio(mile: string, n: number | string): string {
 }
 
 /**
- * The cover.
+ * The cover: every show on the day, as a mosaic behind the masthead.
  *
- * Built around the logo rather than a full-bleed photograph, because the best
- * picture of Riccoh is 910px wide and a full-bleed cover wants 2588 — it would
- * print at about a hundred dots to the inch, which on the one page everybody
- * looks at is not a trade worth making. A contained panel puts him at 227dpi,
- * which is honest, and the logo carries the rest of the page at 2000px square.
+ * The book is about thirty-odd podcasters, so the cover is too — no one face
+ * on it, the day's whole line-up instead. The pictures are small (720px web
+ * photos, feed artwork), which is why each tile is only an inch and a quarter
+ * wide: at that size even the web photos print at well over 300 dots to the
+ * inch. The mosaic sits under a navy wash that is solid behind the masthead
+ * and the cover lines and thins out across the middle, so the faces carry the
+ * page without a word of the type ever sitting on a busy picture.
  *
- * With a bigger file of Riccoh this becomes a full-bleed cover in one line.
+ * Tiles are laid so the middle rows — the ones the wash leaves visible — get
+ * every show once before any show is repeated; the repeats go to the edges,
+ * where the wash all but hides them.
  */
-function coverPage(showCount: number): string {
+function coverPage(showCount: number, images: string[]): string {
+  const COLS = 7, ROWS = 8;
+  const visible = [2, 3, 4, 5, 6]; // rows the wash leaves open, best first
+  const order = [...visible, 1, 7, 0];
+  const cells: string[] = new Array(COLS * ROWS).fill("");
+  let k = 0;
+  // Spread neighbours apart: step through the list by a stride coprime with
+  // its length, so the same show never sits beside itself.
+  const stride = images.length % 5 === 0 ? 7 : 5;
+  for (const row of order) {
+    for (let c = 0; c < COLS; c++) cells[row * COLS + c] = images.length ? images[(k++ * stride) % images.length] : "";
+  }
+  const tiles = cells
+    .map((u) => `<div class="cv-tile"${u ? ` style="background-image:url('${esc(u)}')"` : ""}></div>`)
+    .join("");
   return `<section class="page cover">
   <div class="cover-field"></div>
+  <div class="cv-mosaic">${tiles}</div>
+  <div class="cv-wash"></div>
   <div class="live" style="display:flex;flex-direction:column">
     <div class="cover-top">
       <img class="cover-wave" src="${ASSET("logo-wave.png")}" alt="">
@@ -198,18 +218,16 @@ function coverPage(showCount: number): string {
       ${esc(numberWord(showCount))} shows. Twenty-six point two miles.<br>One day on the air.
     </div>
 
-    <div class="cover-art">
-      <img class="cover-logo" src="${ASSET("nmpd-logo.jpg")}" alt="">
-      <div class="cover-portrait" style="background-image:url('${ASSET("riccoh-emmy.jpg")}')"></div>
-    </div>
-
-    <div style="margin-top:auto;max-width:4.8in">
-      <div class="coverline" style="border-top:.75pt solid rgba(255,255,255,.28);padding-top:11pt">
-        <b>Riccoh Player</b> hosts sixteen hours of it<br>
-        <span style="color:rgba(255,255,255,.72)">Inside: a page for every show on the line-up</span>
+    <div class="cv-foot">
+      <div class="cv-lines">
+        <div class="cv-issue">Issue One</div>
+        <div class="coverline cv-lead"><b>Every show, a page of its own</b><br>
+          <span>The podcasters of the Podcast Marathon</span></div>
+        <div class="coverline cv-sub"><b>Col. Riccoh Player</b> on sixteen hours at the desk</div>
       </div>
-      <div class="kicker" style="margin-top:13pt;opacity:.6">Issue One · www.${DOMAIN}</div>
+      <img class="cv-seal" src="${ASSET("nmpd-logo.jpg")}" alt="">
     </div>
+    <div class="cv-pub">A publication of ${BRAND}.ai · www.${DOMAIN}</div>
   </div>${crops()}
 </section>`;
 }
@@ -223,26 +241,101 @@ function numberWord(n: number): string {
   return String(n);
 }
 
-function riccohPage(r: Show | undefined, pageNo: number): string {
-  const img = ASSET("riccoh-emmy.jpg");
-  return `<section class="page">
-  ${proofMarks({ text: "Editorial — to be written by hand", kind: "draft" })}
-  ${img ? `<div class="portrait" style="background-image:url('${esc(img)}')"></div>` : ""}
-  <div class="live" style="width:3.5in">
-    <span class="badge">The host</span>
-    <div class="showname" style="margin-top:14pt">Riccoh<br>Player</div>
-    <div class="hostline" style="margin-top:9pt">${esc(r?.podcastName ?? "Welcoming Ceremonies")}</div>
-    <div class="pull" style="margin-top:20pt">
-      <span class="ph">[PULL QUOTE — one line from Riccoh, in his own words]</span>
+/**
+ * The host, as a spread: his photograph on the left, his story on the right.
+ *
+ * The photograph is 910 pixels wide, so it is framed rather than bled — at
+ * 3.9 inches it prints at about 230 dots to the inch, which is honest; run
+ * across a whole page it would be a hundred and soft.
+ *
+ * What the page says about him comes from three places, and nowhere else:
+ * the booking (he opens and closes the day, with Jane Babcock beside him for
+ * the opening), the WARRIOR Legacy Network's feed (which credits him as
+ * "Col. Riccoh Player (USMC, Ret.)", a co-host there), and the host section of
+ * our own sponsor page (thirty-three years in the Marine Corps, five combat
+ * tours, an Emmy). Anything that needs his own voice is left as a placeholder
+ * for him to fill, and the whole spread is marked as a draft until he has
+ * read it.
+ */
+interface HostInfo {
+  opens: string; closes: string; closingName: string; cohost: string;
+  warriorPage: number | undefined; shows: number; hours: number; qr: string;
+}
+
+function hostPhotoPage(pageNo: number, h: HostInfo): string {
+  return `<section class="page host-photo">
+  ${proofMarks({ text: "Draft — awaiting Riccoh's approval", kind: "draft" })}
+  <div class="live" style="display:flex;flex-direction:column">
+    <div class="kicker" style="color:var(--amber)">The host of the day</div>
+    <div class="hp-row">
+      <div class="hp-frame" style="background-image:url('${ASSET("riccoh-emmy.jpg")}')"></div>
+      <div class="hp-facts">
+        <div><b>33</b><span>years in the Marine Corps</span></div>
+        <div><b>5</b><span>combat tours</span></div>
+        <div><b>${h.hours}</b><span>hours on the air, 5 October</span></div>
+        <div><b>${h.shows}</b><span>shows on the line-up</span></div>
+      </div>
     </div>
-    <div class="body" style="margin-top:20pt">
-      <p class="ph">[ABOUT THE HOST — who Riccoh is, why he built this, and what
-      sixteen hours on the air asks of somebody. Two to three hundred words.
-      This page is the inside front cover, which is the first thing anybody
-      reads, so it is the one page worth writing by hand rather than drafting.]</p>
+    <div class="hp-name">Riccoh<br>Player</div>
+    <div class="hp-caption">Col. Riccoh Player, USMC (Ret.), with his Emmy</div>
+  </div>
+  ${folio("The host", pageNo)}
+  ${crops()}
+</section>`;
+}
+
+function hostStoryPage(pageNo: number, h: HostInfo): string {
+  return `<section class="page host-story">
+  ${proofMarks({ text: "Draft — awaiting Riccoh's approval", kind: "draft" }, { text: "His own words still to come" })}
+  <div class="live" style="display:flex;flex-direction:column">
+    <div class="p-show">The host · Riccoh Player</div>
+    <div class="showname hs-headline">Sixteen hours at the desk</div>
+    <p class="standfirst hs-standfirst">He opens National Military Podcast Day at ${esc(h.opens)} on Monday 5 October
+      and closes it at ${esc(h.closes)}. In between, ${esc(numberWord(h.shows).toLowerCase())} military and
+      veteran podcasts take the air, one after another, live — and Col. Riccoh Player is the host of it all.</p>
+
+    <div class="pull hs-pull"><span class="ph">[PULL QUOTE — one line from Riccoh, in his own words: why a whole day, and why these shows]</span></div>
+
+    <div class="p-body hs-body">
+      <h3 class="xhead">Thirty-three years, then a microphone</h3>
+      <p class="lede">Riccoh Player spent thirty-three years in the Marine Corps and served five combat tours,
+        retiring as a colonel. He is also an Emmy winner — that is the award in his hands on the facing
+        page.</p>
+      <p>He co-hosts the WARRIOR Legacy Network podcast with Zachary Green and LtCol Oliver Stolley, a show built
+        to help veterans make the move from active duty to civilian life — mentorship, the Transition
+        Assistance Program, and the network a veteran needs when the formation is gone${h.warriorPage ? ` (page ${h.warriorPage})` : ""}.
+        His own show is the <i>Devil Dawg Double Dare Podcast</i>.</p>
+      <h3 class="xhead">Opening and closing the day</h3>
+      <p>On the day he is the constant. He opens at ${esc(h.opens)} Eastern with the Welcoming Ceremonies,
+        ${h.cohost ? `with ${esc(h.cohost)} beside him, ` : ""}and closes at ${esc(h.closes)} with the
+        ${esc(h.closingName)}. Every show in this book goes on the air between those two moments.</p>
+      <p class="ph">[IN HIS OWN WORDS — why he built the day, what sixteen hours on the air asks of somebody,
+        and what he wants a listener to take from it. A hundred words, from Riccoh.]</p>
+    </div>
+
+    <div class="hs-day">
+      <div class="hs-stop"><b>${esc(h.opens)}</b><span>Welcoming Ceremonies</span>${h.cohost ? `<i>with ${esc(h.cohost)}</i>` : ""}</div>
+      <div class="hs-line"><span>${h.shows} shows · ${h.hours} hours · one after another</span></div>
+      <div class="hs-stop hs-end"><b>${esc(h.closes)}</b><span>${esc(h.closingName)}</span><i>Eastern time</i></div>
+    </div>
+
+    <div class="p-foot hs-foot">
+      <div class="hs-show">
+        <img src="${ASSET("devil-dawg-logo.jpg")}" alt="">
+        <div>
+          <div class="latest-k">His show</div>
+          <div class="latest-t">Devil Dawg Double Dare Podcast</div>
+          <div class="latest-s">On Instagram @riccoh_player · co-host, WARRIOR Legacy Network</div>
+        </div>
+      </div>
+      <div class="listen-block">
+        <div class="qr">${h.qr}</div>
+        <div class="listen">Scan for the day<br><b>${esc(DOMAIN)}</b><br>
+          <span class="listen-note">The running order, live from ${esc(h.opens)} Eastern</span></div>
+      </div>
     </div>
   </div>
-  <div class="folio-narrow">${folio("The host", pageNo)}</div>
+  ${folio("The host", pageNo)}
   ${crops()}
 </section>`;
 }
@@ -263,7 +356,7 @@ function contentsPage(rows: { name: string; host: string; page: number }[], page
     <div class="toc">${html}</div>
     <div class="toc-foot">
       <img src="${ASSET("logo-wave.png")}" alt="" style="height:18pt">
-      <span>Published by ${BRAND}.ai</span>
+      <span>A publication of ${BRAND}.ai · www.${DOMAIN}</span>
     </div>
   </div>
   ${folio("Contents", pageNo)}
@@ -381,25 +474,29 @@ function profilePage(s: Show, pageNo: number): string {
  * day, so it is set as a timetable rather than as prose — Eastern time, which
  * is what the whole event runs on, with the page each show is on beside it.
  */
-function runningOrderPage(ev: EventInfo, shows: Show[], pageFor: Map<Show, number>, pageNo: number): string {
+interface Slot { slotIndex: number; podcastName: string; hostName: string; page?: number }
+
+const slotTime = (ev: EventInfo, i: number) =>
+  new Date(Date.parse(ev.startAtUtc) + i * ev.slotMinutes * 60000)
+    .toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
+    .replace(" AM", " am").replace(" PM", " pm");
+
+function runningOrderPage(ev: EventInfo, shows: Slot[], showCount: number, pageNo: number): string {
   const slots = Math.floor((ev.durationHours * 60) / ev.slotMinutes);
-  const at = (i: number) =>
-    new Date(Date.parse(ev.startAtUtc) + i * ev.slotMinutes * 60000)
-      .toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
-      .replace(" AM", " am").replace(" PM", " pm");
+  const at = (i: number) => slotTime(ev, i);
   const outside = shows.filter((s) => s.slotIndex >= slots);
   const rows = shows
     .map((s) => `<div class="ro-row${s.slotIndex >= slots ? " ro-out" : ""}">
       <span class="ro-t">${at(s.slotIndex)}</span>
       <span class="ro-name">${esc(s.podcastName)}<span class="ro-host">${esc(s.hostName)}</span></span>
-      <span class="ro-p">${pageFor.get(s) ?? ""}</span></div>`)
+      <span class="ro-p">${s.page ?? ""}</span></div>`)
     .join("");
   return `<section class="page">
   ${proofMarks(outside.length ? { text: `${outside.map((s) => s.podcastName).join(", ")}: slot outside the ${ev.durationHours}-hour day — check` } : { text: "" })}
   <div class="live" style="display:flex;flex-direction:column">
     <div class="kicker" style="color:var(--amber)">Monday 5 October 2026 · All times Eastern</div>
     <div class="showname" style="margin-top:8pt;font-size:36pt">The running order</div>
-    <div class="toc-intro">${esc(numberWord(shows.length))} shows, one after another, ${ev.slotMinutes} minutes apiece —
+    <div class="toc-intro">${esc(numberWord(showCount))} shows, one after another, ${ev.slotMinutes} minutes apiece —
       live at www.${DOMAIN}/watch from ${at(0)} until the last one signs off.</div>
     <div class="ro">${rows}</div>
   </div>
@@ -496,6 +593,16 @@ async function main() {
     FROM signups s LEFT JOIN podcaster_profiles p ON p.email = s.email
     WHERE s.event_id = 1 AND s.status <> 'cancelled'
     ORDER BY s.email, s.slot_index`;
+  // Every booked slot, for the running order. The rows above are one per
+  // podcaster, which is right for the profiles but drops Riccoh's second slot —
+  // the closing ceremony — from the timetable.
+  const allSlots = await sql<any[]>`
+    SELECT slot_index, podcast_name, host_name, lower(trim(email)) AS email, co_host_email
+    FROM signups WHERE event_id = 1 AND status <> 'cancelled' ORDER BY slot_index`;
+  const cohostEmails = allSlots.map((r) => String(r.co_host_email || "").trim().toLowerCase()).filter(Boolean);
+  const cohostRows = cohostEmails.length
+    ? await sql<any[]>`SELECT lower(email) AS email, host_name FROM podcaster_profiles WHERE lower(email) IN ${sql(cohostEmails)}`
+    : [];
   const [evRow] = await sql<any[]>`
     SELECT name, start_at_utc, duration_hours, slot_minutes FROM events WHERE id = 1`;
   const sponsorRows = await sql<any[]>`
@@ -534,10 +641,11 @@ async function main() {
   // The order of the book. Covers are C1–C4 and are sold by those names.
   const pages: Page[] = [
     { kind: "cover" },
-    { kind: "editorial", slug: "riccoh" },
+    { kind: "host", part: "photo" },
+    { kind: "host", part: "story" },
     { kind: "contents" },
-    { kind: "ad", position: "Front of book — full page", note: "Premium. The first ad anybody sees, facing the running order." },
     { kind: "schedule" },
+    { kind: "ad", position: "Front of book — full page", note: "Premium. The first ad anybody sees, facing the first show." },
   ];
   profiled.forEach((_, i) => {
     pages.push({ kind: "profile", i });
@@ -568,18 +676,42 @@ async function main() {
   const pageOf = new Map<number, number>();
   pages.forEach((p, n) => p.kind === "profile" && pageOf.set(p.i, n + 1));
   const pageForShow = new Map<Show, number>(profiled.map((s, i) => [s, pageOf.get(i)!]));
-  if (riccoh) pageForShow.set(riccoh, 2);
+  const hostPage = pages.findIndex((p) => p.kind === "host" && p.part === "story") + 1;
+  if (riccoh) pageForShow.set(riccoh, 3);
   const toc = shows.map((s) => ({ name: s.podcastName, host: s.hostName, page: pageForShow.get(s)! }));
   const schedulePage = pages.findIndex((p) => p.kind === "schedule") + 1;
+
+  const pageByEmail = new Map(shows.map((s) => [s.email, pageForShow.get(s)]));
+  const slotList: Slot[] = allSlots.map((r) => ({
+    slotIndex: r.slot_index, podcastName: tidyName(r.podcast_name), hostName: tidyName(r.host_name),
+    page: /riccoh/i.test(r.host_name) ? hostPage : pageByEmail.get(r.email),
+  }));
+
+  const opening = allSlots.find((r) => r.slot_index === riccoh?.slotIndex);
+  const closing = allSlots.filter((r) => /riccoh/i.test(r.host_name)).at(-1);
+  const cohostName = cohostRows.find((c) => c.email === String(opening?.co_host_email || "").trim().toLowerCase())?.host_name ?? "";
+  const hostInfo: HostInfo = {
+    opens: slotTime(ev, opening?.slot_index ?? 0),
+    closes: slotTime(ev, closing?.slot_index ?? 0),
+    closingName: tidyName(closing?.podcast_name ?? "closing ceremony"),
+    cohost: cohostName.trim(),
+    warriorPage: pageForShow.get(profiled.find((s) => /warrior legacy/i.test(s.podcastName))!),
+    shows: profiled.length,
+    hours: ev.durationHours,
+    qr: await qrFor(`${SITE}/agenda`),
+  };
+
+  // The cover's mosaic: the picture each show's page already uses.
+  const coverImages = shows.map((s) => bestImage(s).url).filter(Boolean);
 
   const html = pages
     .map((p, n) => {
       const no = n + 1;
       switch (p.kind) {
-        case "cover": return coverPage(shows.length);
-        case "editorial": return riccohPage(riccoh, no);
+        case "cover": return coverPage(profiled.length, coverImages);
+        case "host": return p.part === "photo" ? hostPhotoPage(no, hostInfo) : hostStoryPage(no, hostInfo);
         case "contents": return contentsPage(toc, no, schedulePage);
-        case "schedule": return runningOrderPage(ev, shows, pageForShow, no);
+        case "schedule": return runningOrderPage(ev, slotList, profiled.length, no);
         case "profile": return profilePage(profiled[p.i], no);
         case "ad": return adPage(p.position, p.note);
         case "sponsors": return sponsorsPage(sponsors, no);

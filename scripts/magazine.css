@@ -355,3 +355,82 @@
 .ro-host { display: block; font-size: 7.2pt; font-weight: 400; color: #8a8f9c; margin-top: 1pt; }
 .ro-p { width: 16pt; text-align: right; font-size: 7.5pt; color: #8a8f9c; }
 .ro-out .ro-t { color: #d6006e; }
+
+/* ---- cover mosaic ---------------------------------------------------------- */
+/* Inch-and-a-quarter tiles: small enough that a 720px web photo still prints
+   at over 500dpi, big enough that a face reads as a face. */
+.cv-mosaic {
+  position: absolute; left: -0.08in; right: -0.08in; top: 1.3in;
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 3pt;
+}
+.cv-tile {
+  aspect-ratio: 1 / 1; background-size: cover; background-position: 50% 35%;
+  background-color: #0a1650; filter: saturate(.88) contrast(1.04);
+}
+/* The wash: solid navy behind the masthead, open across the middle of the
+   page, closing again under the cover lines. A second, sideways wash keeps
+   the left edge — where the type sits — a shade darker than the right. */
+.cv-wash {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(180deg,
+      rgba(0,7,65,1) 0%, rgba(0,7,65,.97) 30%, rgba(0,7,65,.9) 35%, rgba(0,7,65,.5) 42%,
+      rgba(0,7,65,.18) 50%, rgba(0,7,65,.14) 62%, rgba(0,7,65,.5) 72%, rgba(0,7,65,.9) 80%, rgba(0,7,65,1) 88%),
+    linear-gradient(90deg, rgba(0,7,65,.35) 0%, rgba(0,7,65,0) 45%),
+    radial-gradient(90% 60% at 50% 58%, rgba(5,56,119,0) 60%, rgba(0,7,65,.45) 100%);
+}
+.cover .live { z-index: 2; }
+.cover .masthead { text-shadow: 0 2pt 18pt rgba(0,7,65,.6); }
+.cv-foot { margin-top: auto; display: flex; align-items: flex-end; justify-content: space-between; gap: 20pt; }
+.cv-lines { max-width: 4.9in; }
+.cv-issue { display: inline-block; background: var(--amber); color: var(--navy); font-size: 7.5pt; font-weight: 700;
+  letter-spacing: .22em; text-transform: uppercase; padding: 3pt 8pt; border-radius: 2pt; }
+.cv-lead { margin-top: 10pt; font-size: 16pt; line-height: 1.3; }
+.cv-lead b { font-family: Fraunces, Georgia, serif; font-weight: 900; font-size: 22pt; letter-spacing: -.01em; }
+.cv-lead span { color: rgba(255,255,255,.78); font-size: 12pt; }
+.cv-sub { margin-top: 10pt; padding-top: 10pt; border-top: .75pt solid rgba(255,255,255,.28); font-size: 12pt; }
+.cv-sub b { color: var(--amber); }
+.cv-seal { width: 1.35in; height: auto; border-radius: 50%; box-shadow: 0 6pt 22pt rgba(0,0,0,.5); flex: none; }
+.cv-pub { margin-top: 14pt; font-size: 7pt; letter-spacing: .24em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+
+/* ---- the host spread --------------------------------------------------------- */
+.host-photo { background: var(--navy); color: #fff; }
+.host-photo .folio { color: rgba(255,255,255,.5); }
+.hp-row { margin-top: 16pt; display: flex; gap: 22pt; align-items: stretch; }
+/* 910px at 4.1in is 222dpi — framed, not bled, so it prints sharp. */
+.hp-frame { flex: none; width: 4.1in; height: 6.05in; background-size: cover; background-position: 50% 30%;
+  border-radius: 4pt; outline: 2pt solid rgba(240,167,31,.85); outline-offset: -2pt;
+  box-shadow: 0 10pt 36pt rgba(0,0,0,.55); }
+.hp-facts { flex: 1; display: flex; flex-direction: column; justify-content: space-between; padding: 4pt 0; }
+.hp-facts div { border-top: .75pt solid rgba(255,255,255,.22); padding-top: 9pt; }
+.hp-facts b { display: block; font-family: Fraunces, Georgia, serif; font-weight: 900; font-size: 46pt; line-height: .95;
+  color: var(--amber); letter-spacing: -.02em; }
+.hp-facts span { display: block; margin-top: 5pt; font-size: 8.5pt; letter-spacing: .14em; text-transform: uppercase;
+  color: rgba(255,255,255,.72); line-height: 1.4; }
+.hp-name { margin-top: auto; font-family: Fraunces, Georgia, serif; font-weight: 900; font-size: 66pt; line-height: .86;
+  letter-spacing: -.03em; text-transform: uppercase; }
+.hp-caption { margin: 10pt 0 34pt; font-size: 8pt; letter-spacing: .16em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+
+.host-story .live { padding-bottom: 30pt; }
+.hs-headline { margin-top: 10pt; font-size: 40pt; line-height: .98; }
+.hs-standfirst { font-size: 13.5pt; max-width: 6.4in; }
+.hs-pull { margin-top: 20pt; max-width: 5.8in; font-size: 16pt; }
+.hs-body { margin-top: 20pt; }
+.hs-body .ph { text-indent: 0; }
+.hs-foot { margin-top: auto; }
+.hs-show { flex: 1; display: flex; gap: 12pt; align-items: center; min-width: 0; }
+.hs-show img { width: .95in; height: .95in; border-radius: 4pt; object-fit: cover; flex: none; }
+.hs-body { font-size: 10.3pt; line-height: 1.64; }
+.hs-day { margin: auto 0 22pt; display: flex; align-items: center; gap: 14pt;
+  padding: 16pt 18pt; background: #f1eee6; border-radius: 4pt; }
+.hs-stop { flex: none; display: flex; flex-direction: column; }
+.hs-stop b { font-family: Fraunces, Georgia, serif; font-weight: 900; font-size: 24pt; color: var(--navy); line-height: 1; }
+.hs-stop span { margin-top: 4pt; font-size: 8pt; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); }
+.hs-stop i { margin-top: 2pt; font-size: 7.5pt; font-style: normal; color: #8a8f9c; }
+.hs-end { text-align: right; }
+.hs-line { flex: 1; position: relative; height: 1px; border-top: 1.5pt dotted var(--amber); }
+.hs-line span { position: absolute; left: 50%; top: -8pt; transform: translate(-50%, -100%); white-space: nowrap;
+  font-size: 7.2pt; letter-spacing: .14em; text-transform: uppercase; color: #8a8f9c; background: #f1eee6; padding: 0 6pt; }
+.hs-foot { margin-top: 0; }
+.hp-frame { width: 4.25in; height: 6.27in; }
+.hp-name { font-size: 76pt; }
