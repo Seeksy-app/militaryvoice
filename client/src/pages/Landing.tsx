@@ -39,6 +39,8 @@ import {
   MousePointerClick,
   Headphones,
   Tag,
+  Sparkles,
+  Search,
 } from "lucide-react";
 
 interface Props {
@@ -209,6 +211,8 @@ export default function Landing({ slug }: Props) {
   const slotCount = event ? totalSlots(event.durationHours, event.slotMinutes) : 0;
   const booked = useMemo(() => (signups ?? []).filter((s) => s.status !== "cancelled"), [signups]);
   const openCount = Math.max(slotCount - booked.length, 0);
+  // Every slot claimed: the page celebrates it instead of asking for sign-ups.
+  const lineupFull = dataReady && slotCount > 0 && openCount === 0;
 
   const lineup = useMemo(() => {
     if (!event) return [];
@@ -317,6 +321,32 @@ export default function Landing({ slug }: Props) {
     <div className="min-h-screen">
       <NavBar />
 
+      {/* ----------------------------------------------- THE PLATFORM, FIRST */}
+      <section className="relative overflow-hidden border-b border-white/10 bg-[#030b1f] text-white" data-testid="section-platform-band">
+        <div aria-hidden className="pointer-events-none absolute -right-32 -top-32 h-80 w-80 rounded-full bg-[#F0A71F] opacity-[0.12] blur-3xl" />
+        <div className="relative mx-auto grid w-full max-w-7xl items-center gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:px-10 lg:py-10">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">MilitaryVoices.ai</div>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">The platform for military voices.</h2>
+            <p className="mt-2 max-w-xl text-base text-white/70">Stage a live, multi-speaker event without running it yourself, let AI run the show, and find the voices worth hearing.</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {[
+              { href: "/platform", icon: Radio, title: "Live events", body: "In the room or online" },
+              { href: "/platform", icon: Sparkles, title: "Run by AI", body: "Agenda, show, clips" },
+              { href: "/discover?src=home-band", icon: Search, title: "Discovery", body: "300M+ creator profiles" },
+            ].map(({ href, icon: Icon, title, body }) => (
+              <Link key={title} href={href}>
+                <span className="group flex h-full cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3.5 transition-colors hover:border-[#F0A71F]/50 hover:bg-white/[0.08]" data-testid={`platform-band-${title}`}>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F0A71F]/15 text-[#F0A71F]"><Icon className="h-4 w-4" /></span>
+                  <span><span className="flex items-center gap-1 text-sm font-medium">{title} <ArrowRight className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" /></span><span className="block text-xs text-white/60">{body}</span></span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ------------------------------------------------------------ HERO */}
       <section className="relative flex min-h-[88vh] items-center overflow-hidden bg-[#000741] text-white">
         {/* rotating studio photos + navy wash (kept lighter on the right so the room reads) */}
@@ -361,6 +391,8 @@ export default function Landing({ slug }: Props) {
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#ED1C24] opacity-75" />
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#ED1C24]" />
                 </span>
+                <span className="text-[#F0A71F]">★ Featured event</span>
+                <span className="opacity-40">·</span>
                 National Military Podcast Day
                 {start && (
                   <>
@@ -383,36 +415,59 @@ export default function Landing({ slug }: Props) {
               </motion.p>
 
               <motion.div variants={FADE_UP} className="mt-8 flex flex-wrap items-center gap-3">
-                <Link href={openSlotsHref}>
-                  <Button
-                    size="lg"
-                    className="h-14 gap-2 rounded-full bg-[#F0A71F] px-8 text-lg font-semibold text-[#1a1200] shadow-[0_10px_30px_rgba(240,167,31,0.35)] hover:bg-[#f5b944]"
-                    data-testid="button-landing-claim"
-                  >
-                    <Mic2 className="h-4 w-4" /> Pick your slot
-                  </Button>
-                </Link>
-                <Link href={agendaHref}>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="h-14 gap-2 rounded-full border-white/30 bg-white/5 px-8 text-lg text-white backdrop-blur hover:bg-white/15 hover:text-white"
-                    data-testid="button-landing-lineup"
-                  >
-                    See who's on <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
+                {lineupFull ? (
+                  <>
+                    <Link href={agendaHref}>
+                      <Button size="lg" className="h-14 gap-2 rounded-full bg-[#F0A71F] px-8 text-lg font-semibold text-[#1a1200] shadow-[0_10px_30px_rgba(240,167,31,0.35)] hover:bg-[#f5b944]" data-testid="button-landing-lineup">
+                        <Mic2 className="h-4 w-4" /> Meet the lineup
+                      </Button>
+                    </Link>
+                    <Link href="/watch">
+                      <Button size="lg" variant="outline" className="h-14 gap-2 rounded-full border-white/30 bg-white/5 px-8 text-lg text-white backdrop-blur hover:bg-white/15 hover:text-white" data-testid="button-landing-watch">
+                        Watch live, free <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link href={openSlotsHref}>
+                      <Button
+                        size="lg"
+                        className="h-14 gap-2 rounded-full bg-[#F0A71F] px-8 text-lg font-semibold text-[#1a1200] shadow-[0_10px_30px_rgba(240,167,31,0.35)] hover:bg-[#f5b944]"
+                        data-testid="button-landing-claim"
+                      >
+                        <Mic2 className="h-4 w-4" /> Pick your slot
+                      </Button>
+                    </Link>
+                    <Link href={agendaHref}>
+                      <Button
+                        size="lg"
+                        variant="outline"
+                        className="h-14 gap-2 rounded-full border-white/30 bg-white/5 px-8 text-lg text-white backdrop-blur hover:bg-white/15 hover:text-white"
+                        data-testid="button-landing-lineup"
+                      >
+                        See who's on <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                  </>
+                )}
               </motion.div>
 
               <motion.div variants={FADE_UP} className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-base text-white/75">
                 <span className="inline-flex items-center gap-1.5">
                   <Users className="h-4 w-4 text-[#F0A71F]" /> {dataReady ? showCount : "…"} confirmed
                 </span>
+                {lineupFull ? (
+                  <span className="inline-flex items-center gap-1.5 font-medium text-white" data-testid="text-lineup-full">
+                    <Sparkles className="h-4 w-4 text-[#F0A71F]" /> Sold out. Every one of the {slotCount} slots is claimed!
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Clock className="h-4 w-4 text-[#F0A71F]" /> {dataReady ? `${openCount} of ${slotCount}` : "…"} slots open
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1.5">
-                  <Clock className="h-4 w-4 text-[#F0A71F]" /> {dataReady ? `${openCount} of ${slotCount}` : "…"} slots open
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Radio className="h-4 w-4 text-[#F0A71F]" /> Free for podcasters
+                  <Radio className="h-4 w-4 text-[#F0A71F]" /> {lineupFull ? "Free to watch" : "Free for podcasters"}
                 </span>
               </motion.div>
             </motion.div>
@@ -491,7 +546,7 @@ export default function Landing({ slug }: Props) {
 
                 <div className="mt-4">
                   <div className="mb-1.5 flex items-center justify-between text-[12px] font-semibold uppercase tracking-wide text-white/55">
-                    <span>Lineup filling</span>
+                    <span className={lineupFull ? "text-[#F0A71F]" : ""}>{lineupFull ? "Lineup full · every slot claimed" : "Lineup filling"}</span>
                     <span className="tabular-nums">{dataReady ? `${booked.length}/${slotCount}` : "…"}</span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-white/10">
@@ -930,20 +985,20 @@ export default function Landing({ slug }: Props) {
         <div className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-4 py-14 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
-              Ready to put your show on the board?
+              {lineupFull ? "The lineup is full, and we couldn't be prouder." : "Ready to put your show on the board?"}
             </h2>
             <p className="mt-2 text-[#1a1200]/75">
-              {openCount > 0 ? `${openCount} slots open. ` : ""}
+              {lineupFull ? `All ${slotCount} slots claimed. ` : openCount > 0 ? `${openCount} slots open. ` : ""}
               {countdown.phase === "upcoming" ? countdown.label + "." : ""}
             </p>
           </div>
-          <Link href={openSlotsHref}>
+          <Link href={lineupFull ? "/watch" : openSlotsHref}>
             <Button
               size="lg"
               className="gap-2 rounded-full bg-[#053877] px-7 text-base font-semibold text-white hover:bg-[#0a4a99]"
               data-testid="button-landing-claim-3"
             >
-              <Mic2 className="h-4 w-4" /> Pick your slot
+              <Mic2 className="h-4 w-4" /> {lineupFull ? "Watch live, free" : "Pick your slot"}
             </Button>
           </Link>
         </div>
