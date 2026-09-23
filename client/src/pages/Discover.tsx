@@ -649,7 +649,7 @@ function HeroB({ raised, door, setDoor, bar, tries, onEnrich, verified, onOpen }
 
       </div>
 
-      <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 pb-16 pt-14 sm:px-6 sm:pt-20 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:pb-24 lg:pt-24">
+      <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 pb-16 pt-14 sm:px-6 sm:pt-20 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] lg:pb-24 lg:pt-24">
         <div className="min-w-0">
           <p className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/30 bg-[#F0A71F]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">
             <Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery
@@ -694,7 +694,93 @@ type Showcase = {
   types: { real: number | null; massFollowers: number | null; influencers: number | null; suspicious: number | null };
   topCountry: { name: string; pct: number } | null; femalePct: number | null; postsPerWeek: number | null;
   interests: { name: string; pct: number }[];
+  profile?: Profile;
 };
+
+/**
+ * The profile panel, the real one, drawn at full size and scaled down into the
+ * card, scrolling itself while the "cursor" reads. Not a mock-up of the panel:
+ * the same component a member sees, with the creator's own data.
+ */
+function DemoRail({ c, open, reading }: { c: Showcase; open: boolean; reading: boolean }) {
+  const W = 860;
+  const outer = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 400, h: 500 });
+  useEffect(() => {
+    const el = outer.current;
+    if (!el) return;
+    const measure = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    if (!reading) {
+      if (!open) el.scrollTop = 0;
+      return;
+    }
+    let raf = 0;
+    const start = performance.now();
+    const to = Math.min(el.scrollHeight - el.clientHeight, 1700);
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - start) / 5600);
+      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      el.scrollTop = to * e;
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [reading, open]);
+  if (!c.profile) return null;
+  const scale = box.w / W;
+  const id = c.profile.identity;
+  const niches = Array.from(new Set([...(c.profile.content.categories ?? []), ...(c.profile.content.niches ?? [])])).slice(0, 3);
+  const toolbar = (
+    <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-background/95 px-6 py-2.5">
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground"><ChevronRight className="h-4 w-4 rotate-180" /></span>
+      <span className="text-sm text-muted-foreground"><b className="font-medium text-foreground">1</b> of 30</span>
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground"><ChevronRight className="h-4 w-4" /></span>
+      <span className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-[#053877]/30 px-2.5 py-1.5 text-sm font-medium"><PlatformIcon platform={c.platform} /> {compact(c.followers)}</span>
+      <span className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#2563eb] px-3 text-sm font-medium text-white"><Plus className="h-4 w-4" /> Add to list</span>
+      <span className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-muted/70 px-3 text-sm font-medium"><Share2 className="h-4 w-4" /> Share</span>
+      <X className="ml-1 h-4 w-4 text-muted-foreground" />
+    </div>
+  );
+  const header = (
+    <div className="border-b-8 border-muted/60 bg-card px-8 py-6">
+      <div className="flex items-start gap-5">
+        <img src={c.picture.startsWith("/api/") ? c.picture : resolveUploadUrl(c.picture)} alt="" className={`h-[84px] w-[84px] rounded-full object-cover ${c.verified ? "ring-2 ring-[#F0A71F] ring-offset-2 ring-offset-background" : ""}`} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl font-semibold tracking-tight">{id.name || c.name}</span>
+            <BadgeCheck className={`h-5 w-5 ${c.verified ? "text-[#F0A71F]" : "text-[#2563eb]"}`} />
+            <span className="text-sm text-[#2563eb]">@{c.handle}</span>
+          </div>
+          {id.bio && <p className="mt-1.5 line-clamp-2 text-sm text-muted-foreground">{id.bio}</p>}
+          <p className="mt-2 text-sm"><b className="font-semibold">{compact(c.followers)}</b> <span className="text-muted-foreground">followers</span>{c.engagement != null && <> · <b className="font-semibold">{pct(c.engagement, 2)}</b> <span className="text-muted-foreground">engagement</span></>}</p>
+          <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            {c.branch && <span className="rounded-md bg-[#053877]/[0.07] px-2 py-0.5 font-medium text-[#053877]">{c.branch}</span>}
+            {c.verified && <span className="inline-flex items-center gap-1 rounded-md border border-[#F0A71F]/50 bg-[#F0A71F]/10 px-2 py-0.5 font-medium text-[#8a5a00]"><BadgeCheck className="h-3.5 w-3.5" /> Verified on MilitaryVoices{c.show ? ` · ${c.show}` : ""}</span>}
+            {niches.map((n) => <span key={n} className="rounded-md border border-[#2563eb]/25 bg-[#2563eb]/[0.05] px-2 py-0.5 font-medium capitalize text-[#1e3a8a]">{n}</span>)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+  return (
+    <div ref={outer} aria-hidden className={`pointer-events-none absolute inset-0 overflow-hidden bg-background transition-transform duration-700 ease-[cubic-bezier(.2,.8,.2,1)] ${open ? "translate-y-0" : "translate-y-full"}`}>
+      <div style={{ width: W, height: box.h / scale, transform: `scale(${scale})`, transformOrigin: "top left" }}>
+        <div ref={scroller} className="h-full overflow-hidden bg-background text-foreground">
+          <CreatorProfileSections profile={c.profile} toolbar={toolbar} header={header} cardEngagement={c.engagement} scrollRoot={scroller} onOpenCreator={() => {}} similar={null} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * The hero's demo. A real creator's card; a cursor comes in and clicks it; their
@@ -721,7 +807,7 @@ function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card
   const [paused, setPaused] = useState(false);
   useEffect(() => {
     if (!pool.length || paused) return;
-    const plan: [typeof phase, number][] = [["idle", 1400], ["move", 1000], ["click", 350], ["open", 700], ["read", 3400], ["close", 700]];
+    const plan: [typeof phase, number][] = [["idle", 1600], ["move", 1000], ["click", 350], ["open", 800], ["read", 6200], ["close", 800]];
     const at = plan.findIndex(([p]) => p === phase);
     const t = setTimeout(() => {
       if (at === plan.length - 1) { setPhase("idle"); setI((n) => (n + 1) % pool.length); }
@@ -741,20 +827,10 @@ function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card
     c.engagement != null ? ["Engagement", pct(c.engagement, 2)] : null,
     c.credibility != null ? ["Audience quality", `${c.credibility}/100`] : null,
   ].filter(Boolean) as [string, string][];
-  const railTiles = [
-    c.engagement != null ? ["Engagement", pct(c.engagement, 2)] : null,
-    c.realReach != null ? ["Real reach", compact(c.realReach)] : null,
-    c.credibility != null ? ["Credibility", `${c.credibility}/100`] : null,
-    c.topCountry ? ["Top country", `${Math.round(c.topCountry.pct)}% ${c.topCountry.name === "United States" ? "US" : c.topCountry.name}`] : null,
-    c.femalePct != null ? ["Audience", `${Math.round(c.femalePct)}% F · ${100 - Math.round(c.femalePct)}% M`] : null,
-    c.postsPerWeek != null ? ["Cadence", `${c.postsPerWeek}/wk`] : null,
-  ].filter(Boolean).slice(0, 4) as [string, string][];
-  const bar = [["#16a34a", c.types.real], ["#d4a017", c.types.massFollowers], ["#3b82f6", c.types.influencers], ["#c2410c", c.types.suspicious]].filter(([, v]) => v != null) as [string, number][];
-  const toc = ["Decision signals", "Audience quality", "Growth", "Recent posts", "Demographics"];
   const asCard = (): Card => ({ platform: c.platform, handle: c.handle, name: c.name, picture: c.picture, followers: c.followers, engagement: c.engagement, branch: c.branch, quality: c.credibility });
 
   return (
-    <div className="relative mx-auto w-full max-w-[25rem] select-none" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+    <div className="relative mx-auto w-full max-w-[29rem] select-none" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
       <style>{`@keyframes mv-click{0%{transform:scale(.4);opacity:.9}100%{transform:scale(2.2);opacity:0}}`}</style>
       {/* the next one, waiting behind */}
       <div aria-hidden className="absolute inset-x-6 top-0 h-full overflow-hidden rounded-[28px] border border-white/10 bg-[#0b1733] opacity-50 shadow-2xl" style={{ transform: "translateY(-18px) scale(0.94)" }}>
@@ -789,60 +865,8 @@ function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card
           </div>
         </button>
 
-        {/* the profile, rising over the card */}
-        <div aria-hidden className={`pointer-events-none absolute inset-0 flex overflow-hidden bg-[#f7f8fb] text-[#0b1733] transition-transform duration-700 ease-[cubic-bezier(.2,.8,.2,1)] ${open ? "translate-y-0" : "translate-y-full"}`}>
-          <div className="w-[34%] shrink-0 border-r border-black/5 bg-[#eef1f6] px-2.5 py-4">
-            <div className="px-1 pb-2 text-[8px] font-medium uppercase tracking-[0.16em] text-black/40">Sections</div>
-            {toc.map((t, k) => (
-              <div key={t} className={`mb-0.5 flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] transition-colors duration-500 ${phase === "read" && k === 1 ? "bg-[#053877]/10 font-medium text-[#053877]" : k === 0 && phase !== "read" ? "bg-[#053877]/10 font-medium text-[#053877]" : "text-black/55"}`}>
-                <span className="tabular-nums opacity-60">0{k + 1}</span>{t}
-              </div>
-            ))}
-          </div>
-          <div className="min-w-0 flex-1 overflow-hidden">
-            <div className={`transition-transform duration-[2600ms] ease-in-out ${phase === "read" ? "-translate-y-[38%]" : "translate-y-0"}`}>
-              <div className="flex items-center gap-2.5 border-b border-black/5 bg-white px-3 py-3">
-                <img src={src(c.picture)} alt="" className={`h-10 w-10 rounded-full object-cover ${c.verified ? "ring-2 ring-[#F0A71F]" : ""}`} />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1 truncate text-[13px] font-semibold">{c.name}{c.verified && <BadgeCheck className="h-3.5 w-3.5 text-[#F0A71F]" />}</div>
-                  <div className="truncate text-[10px] text-[#2563eb]">@{c.handle}</div>
-                  <div className="text-[10px] text-black/55"><b className="text-black/80">{compact(c.followers)}</b> followers{c.engagement != null && <> · <b className="text-black/80">{pct(c.engagement, 2)}</b> eng.</>}</div>
-                </div>
-              </div>
-              <div className="bg-white px-3 pb-3 pt-2.5">
-                <div className="mb-1.5 text-[10px]"><span className="text-black/40">01</span> <span className="font-semibold">Decision signals</span></div>
-                <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-black/10">
-                  {railTiles.map(([l, v]) => (
-                    <div key={l} className="-mb-px -mr-px border-b border-r border-black/10 px-2 py-1.5">
-                      <div className="text-[7.5px] font-medium uppercase tracking-[0.1em] text-black/45">{l}</div>
-                      <div className="text-[13px] font-semibold tabular-nums">{v}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="mt-1.5 bg-white px-3 pb-3 pt-2.5">
-                <div className="mb-1.5 text-[10px]"><span className="text-black/40">02</span> <span className="font-semibold">Audience quality</span></div>
-                {c.credibility != null && <div className="mb-1 flex items-baseline justify-between text-[9px] text-black/55"><span>Credibility</span><span className="text-[12px] font-semibold text-black/85">{c.credibility}<span className="text-[9px] font-normal text-black/45">/100</span></span></div>}
-                {bar.length > 0 && (
-                  <>
-                    <div className="flex h-1.5 overflow-hidden rounded-full bg-black/5">{bar.map(([col, v]) => <span key={col} style={{ width: `${v}%`, background: col }} />)}</div>
-                    <div className="mt-1 text-[8.5px] text-black/55"><b className="text-black/80">{c.types.real != null ? Math.round(c.types.real) : "–"}%</b> real people</div>
-                  </>
-                )}
-                {c.interests.length > 0 && (
-                  <div className="mt-2 flex flex-col gap-1">
-                    {c.interests.map((it) => (
-                      <div key={it.name} className="grid grid-cols-[1fr_2.25rem] items-center gap-1.5 text-[9px]">
-                        <span className="truncate text-black/70">{it.name}</span>
-                        <span className="text-right font-medium tabular-nums">{Math.round(it.pct)}%</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* the profile, the real panel, rising over the card */}
+        <DemoRail c={c} open={open} reading={phase === "read"} />
       </div>
 
       {/* the cursor */}

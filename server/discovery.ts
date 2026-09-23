@@ -38,7 +38,7 @@ type Platform = (typeof PLATFORMS)[number];
 const FREE_REVEALS_PER_MONTH = 10;
 const PAGE_SIZE = 10;
 /** Featured in the hero's demo ahead of our lineup, as platform:handle. Read from cache only. */
-const SHOWCASE: string[] = ["instagram:vfwhq"];
+const SHOWCASE: string[] = ["instagram:dr.brittiniewick_dpt", "instagram:vfwhq"];
 const DAY = 86_400_000;
 
 // ---------------------------------------------------------------------------
@@ -952,11 +952,12 @@ export function registerDiscoveryRoutes(app: Express): void {
   app.get("/api/discover/showcase", (_req, res) =>
     send(res, async () => {
       res.set("Cache-Control", "public, max-age=300, s-maxage=3600");
+      // Only the featured accounts, in order; our own lineup cards lend them their photo and show.
       const lineup = (await verifiedCreators()).filter((c) => c.platform && c.handle);
-      const wanted = [
-        ...SHOWCASE.map((k) => { const [platform, handle] = k.split(":"); return { platform, handle, card: null as (CreatorCard & { match: string }) | null }; }),
-        ...lineup.map((c) => ({ platform: c.platform, handle: c.handle, card: c })),
-      ];
+      const wanted = SHOWCASE.map((k) => {
+        const [platform, handle] = k.split(":");
+        return { platform, handle, card: lineup.find((c) => c.platform === platform && c.handle.toLowerCase() === handle.toLowerCase()) ?? null };
+      });
       const keys = wanted.flatMap((w) => [`analytics:${w.platform}:${w.handle.toLowerCase()}`, `raw:${w.platform}:${w.handle.toLowerCase()}`]);
       const rows = keys.length ? await db.select().from(discoveryCache).where(inArray(discoveryCache.key, keys)) : [];
       const byKey = new Map(rows.map((r) => [r.key, r.payload]));
@@ -988,6 +989,8 @@ export function registerDiscoveryRoutes(app: Express): void {
           femalePct: p.signals.femalePct,
           postsPerWeek: p.signals.postsPerWeek,
           interests: aud.interests.slice(0, 3).map((i) => ({ name: i.name, pct: i.pct })),
+          // The whole profile, for the demo panel to render as the real thing.
+          profile: p,
         });
         if (out.length >= 14) break;
       }
