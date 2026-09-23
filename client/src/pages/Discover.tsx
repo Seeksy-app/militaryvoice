@@ -713,13 +713,26 @@ function SearchDemo({ enabled, onType, onSpotlight }: { enabled: boolean; onType
     };
     const run = () => {
       const input = document.querySelector('[data-testid="discover-q"]') as HTMLInputElement | null;
+      const form = document.querySelector('[data-testid="discover-search-form"]');
+      if (!live.current || !input || !form || input.value || document.activeElement === input) return done();
+      // Glide down so the search sits under the site header with the first few
+      // verified creators below it: the visitor sees the typing and the answer.
+      const header = (document.querySelector("header") as HTMLElement | null)?.offsetHeight ?? 80;
+      const target = Math.max(0, form.getBoundingClientRect().top + window.scrollY - header - 24);
+      if (Math.abs(window.scrollY - target) > 8) window.scrollTo({ top: target, behavior: "smooth" });
+      timers.push(window.setTimeout(play, Math.abs(window.scrollY - target) > 8 ? 900 : 0));
+    };
+    const play = () => {
+      const input = document.querySelector('[data-testid="discover-q"]') as HTMLInputElement | null;
       const card = at('[data-testid="hero-preview"]', 0.54, 0.4);
       const q = at('[data-testid="discover-q"]', 0.12, 0.55);
       const go = at('[data-testid="discover-go"]', 0.5, 0.55);
       if (!live.current || !input || input.value || document.activeElement === input || !card || !q || !go) return done();
+      // Start from the card if it's still on screen, else just above the search.
+      const start = card.y > window.scrollY + 60 ? card : { x: q.x + 180, y: q.y - 90 };
       const T = (ms: number, f: () => void) => { timers.push(window.setTimeout(f, ms)); };
       const text = "Military podcasters";
-      setPos({ ...card, on: true, click: 0 });
+      setPos({ ...start, on: true, click: 0 });
       T(250, () => setPos((p) => ({ ...p, ...q })));
       T(1350, () => setPos((p) => ({ ...p, click: p.click + 1 })));
       for (let k = 1; k <= text.length; k++) T(1500 + k * 75, () => onType(text.slice(0, k)));
@@ -764,7 +777,8 @@ type Showcase = {
  * the same component a member sees, with the creator's own data.
  */
 function DemoRail({ c, open, reading }: { c: Showcase; open: boolean; reading: boolean }) {
-  const W = 860;
+  // Drawn at a narrower width than the real panel, so it scales up: bigger and easier to read.
+  const W = 700;
   const outer = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 400, h: 500 });
@@ -776,7 +790,8 @@ function DemoRail({ c, open, reading }: { c: Showcase; open: boolean; reading: b
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+    // Measured again once the profile arrives: before it, the panel isn't drawn and there's nothing to measure.
+  }, [!!c.profile]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
