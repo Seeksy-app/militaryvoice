@@ -21,68 +21,56 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import {
-  Megaphone,
-  ListOrdered,
-  CalendarClock,
-  MonitorPlay,
-  Plug,
-  ArrowRight,
-  Check,
-  Mic2,
-  Sparkles,
-  Users,
-  Radio,
-  RefreshCw,
-} from "lucide-react";
+import { ArrowRight, Check, Mic2, Sparkles, Users, Radio, Wand2, Compass, BadgeCheck, CalendarClock, ShieldCheck } from "lucide-react";
+import { SiteFooter } from "@/components/SiteFooter";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
-const CAPABILITIES = [
+/** What the platform is, in the order someone planning an event meets it. */
+const PILLARS = [
   {
-    icon: CalendarClock,
-    title: "Scheduling",
-    body: "Publish your slots and let speakers claim their own time, shown in their own zone. They fill in their details once, hold one slot each, and can move to any open time without re-entering a thing. A cancellation puts the time straight back on the board.",
-    saves: "No more back-and-forth over time zones",
+    icon: Radio,
+    kicker: "Events",
+    title: "Live, pre-recorded, in the room or online",
+    body: "Stream a virtual event, broadcast an in-person one, or run both at once. Speakers claim their own slots in their own time zone, the public page and lineup build themselves, and the show goes out to YouTube and anywhere else your audience already watches.",
+    points: ["Scheduling in every time zone", "Event pages that promote themselves", "One broadcast, every destination"],
   },
   {
-    icon: RefreshCw,
-    title: "Everyone in sync",
-    body: "One change updates everywhere at once. A speaker renames their show or swaps their time and the public page, the lineup, the run of show and the studio all follow immediately. Confirmations and reminders go out on their own.",
-    saves: "One source of truth, never a stale document",
+    icon: Wand2,
+    kicker: "Run by AI",
+    title: "The agenda and the show, handled",
+    body: "Alex, our AI producer, turns your lineup into an agenda and a minute-by-minute run of show, writes the host lines and the reminders, keeps every file cued, and after the last segment cuts the clips for each speaker. Your team steers; the busywork is done.",
+    points: ["Agenda and run of show from your lineup", "Host lines, reminders and follow-ups written for you", "Clips for every speaker, after the show"],
   },
   {
-    icon: ListOrdered,
-    title: "Run of show",
-    body: "A minute-by-minute plan generated from your real schedule: pre-roll, sponsor reads, intros, every segment and handoff. Edit any line, add your own, export it for the control room. Rebuild when the lineup shifts and your edits stay put.",
-    saves: "Hours of rebuilding a spreadsheet by hand",
+    icon: Compass,
+    kicker: "Discovery",
+    title: "Find the right voices for it",
+    body: "Search over 300 million creator profiles for veterans, service members and military spouses. Every profile shows the audience behind the follower count: how much of it is real, where it lives, what it cares about, and which brands have already paid for it.",
+    points: ["Over 300 million creator profiles", "Audience quality, real reach and brand history", "Email and phone where creators publish them"],
   },
   {
-    icon: MonitorPlay,
-    title: "Studio",
-    body: "A place for speakers to arrive, get checked and go live. Intros, outros, mid-rolls and images are uploaded ahead of time and labelled, so the operator has everything cued before the segment starts.",
-    saves: "No scrambling for a file mid-broadcast",
-  },
-  {
-    icon: Megaphone,
-    title: "Promotion",
-    body: "A public event page and live lineup that build themselves as speakers sign up, each with their own card, links, socials and episode player. Reminder sign-ups and ready-made share text are built in.",
-    saves: "Your speakers do the promoting for you",
-  },
-  {
-    icon: Plug,
-    title: "Integrations",
-    body: "Zoom, and any RTMP destination you already stream to. Bring the tools your team already knows instead of learning ours, and point the output wherever your audience already is.",
-    saves: "Nothing new for your crew to learn",
+    icon: BadgeCheck,
+    kicker: "Verified",
+    title: "Every speaker becomes a verified voice",
+    body: "The people who take part are checked by our team: that they are who they say they are, and that they served or serve alongside. They carry the Verified on MilitaryVoices badge in Discovery, so the brands and shows looking for them can find them, and reach them through us.",
+    points: ["Identity and service checked by our team", "A badge that travels with them", "Introductions made through us, with their say-so"],
   },
 ];
 
+const FLOW = [
+  ["Plan", "Tell us the shape: a single session or a hundred across three days. The agenda builds from your lineup."],
+  ["Fill", "Speakers claim their slots. Need more? Discovery finds them, measured, with a way to reach them."],
+  ["Run", "The studio brings each speaker on in turn while Alex keeps the run of show and the files in order."],
+  ["After", "Recordings, clips for every speaker, and the social posts to share them, ready the next morning."],
+] as const;
+
 const AUDIENCES = [
-  "Associations running a members' day",
-  "Nonprofits with a fundraising telethon",
+  "Veteran service organizations and their members' days",
+  "Nonprofits running a fundraising broadcast",
   "Podcast networks staging a crossover",
   "Conferences with a virtual track",
-  "Brands running an always-on broadcast",
+  "Brands looking for military creators to sponsor",
 ];
 
 /** Beta / event-registration capture. Both buttons open the same short form. */
@@ -211,125 +199,78 @@ function InterestDialog({
 
 export default function Platform() {
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-background">
       <NavBar />
 
       {/* ------------------------------------------------------------- hero */}
-      <section className="relative overflow-hidden bg-[#053877] text-white">
-        <img
-          src="/platform-hero.jpg"
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover object-[center_42%]"
-        />
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-[linear-gradient(90deg,rgba(0,7,65,0.90)_0%,rgba(0,7,65,0.80)_44%,rgba(5,56,119,0.50)_74%,rgba(5,56,119,0.24)_100%)]"
-        />
-        <motion.div
-          aria-hidden="true"
-          className="pointer-events-none absolute -left-24 top-1/4 h-96 w-96 rounded-full bg-[#F0A71F] opacity-[0.16] blur-3xl"
-          animate={{ x: [0, 30, 0], y: [0, -20, 0] }}
-          transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
-        />
+      <section className="relative isolate overflow-hidden bg-[#030b1f] text-white">
+        <img src="/podcasters-bg.jpg" alt="" aria-hidden="true" className="absolute inset-0 -z-10 h-full w-full object-cover object-[center_40%] opacity-60" />
+        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(3,11,31,0.97)_0%,rgba(3,11,31,0.88)_45%,rgba(3,11,31,0.45)_80%,rgba(3,11,31,0.25)_100%)]" />
+        <motion.div aria-hidden="true" className="pointer-events-none absolute -left-24 top-1/3 -z-10 h-96 w-96 rounded-full bg-[#F0A71F] opacity-[0.14] blur-3xl" animate={{ x: [0, 30, 0], y: [0, -20, 0] }} transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }} />
 
-        <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6 lg:py-24">
+        <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6 lg:py-28">
           <div className="max-w-2xl">
-            <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 text-[#F0A71F]" /> The platform behind the Marathonon
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/30 bg-[#F0A71F]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#F0A71F]">
+              <Sparkles className="h-3.5 w-3.5" /> About MilitaryVoices
             </div>
-            <h1 className="text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl" style={HEADLINE_FONT}>
+            <h1 className="text-[2.6rem] font-semibold leading-[1.04] tracking-[-0.02em] sm:text-6xl">
               Stage a live, multi-speaker event
-              <span className="block text-[#F0A71F]">without running it yourself</span>
+              <span className="block text-[#F0A71F]">without running it yourself.</span>
             </h1>
-            <p className="mt-6 text-lg leading-relaxed text-white/90">
-              MilitaryVoices.ai is the software we built to put a podcast marathon on the air with one small
-              team — and it doesn't care what shape your event is. Live, pre-recorded, or the two side by side. A single
-              session or a hundred across three days. Scheduling, promotion, a studio, and a run of show the control
-              room can actually follow.
+            <p className="mt-6 text-lg leading-relaxed text-white/80 sm:text-xl">
+              MilitaryVoices is the platform for military and veteran voices. It runs your event, runs the show with AI, and finds and verifies the people worth putting on it.
             </p>
-
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+            <div className="mt-9 flex flex-wrap items-center gap-3">
               <InterestDialog
                 intent="register"
                 trigger={
-                  <Button
-                    size="lg"
-                    className="h-12 gap-2 rounded-full bg-[#F0A71F] px-7 text-base font-semibold text-[#1a1200] shadow-[0_10px_30px_rgba(240,167,31,0.35)] hover:bg-[#f5b944]"
-                    data-testid="button-register-event"
-                  >
-                    <CalendarClock className="h-4 w-4" /> Register your upcoming event
+                  <Button size="lg" className="h-12 gap-2 rounded-full bg-[#F0A71F] px-7 text-base font-medium text-[#1a1200] shadow-[0_10px_30px_rgba(240,167,31,0.35)] hover:bg-[#f5b944]" data-testid="button-register-event">
+                    <CalendarClock className="h-4 w-4" /> Plan an event with us
                   </Button>
                 }
               />
-              <InterestDialog
-                intent="beta"
-                trigger={
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="h-12 gap-2 rounded-full border-white/30 bg-white/5 px-7 text-base text-white backdrop-blur hover:bg-white/15 hover:text-white"
-                    data-testid="button-join-beta"
-                  >
-                    Get on the beta list <ArrowRight className="h-4 w-4" />
-                  </Button>
-                }
-              />
+              <Link href="/discover">
+                <Button size="lg" variant="outline" className="h-12 gap-2 rounded-full border-white/30 bg-white/5 px-7 text-base text-white backdrop-blur hover:bg-white/15 hover:text-white" data-testid="button-try-discovery">
+                  <Compass className="h-4 w-4" /> Explore Discovery
+                </Button>
+              </Link>
             </div>
-            <p className="mt-5 text-sm text-white/75">In private beta. No card, no commitment — we onboard in small groups.</p>
           </div>
         </div>
       </section>
 
-      {/* --------------------------------------------------------- the pitch */}
+      {/* ------------------------------------------------------ four pillars */}
       <section className="border-b border-border">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+        <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
           <div className="max-w-2xl">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">What it is</div>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
-              One place for everyone taking part, and everyone watching
-            </h2>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#b36b00]">What it is</div>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">One platform, from the first speaker to the last clip</h2>
             <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-              Most live events are held together by a spreadsheet, a group chat and somebody's memory. Speakers email
-              their files. Times get confused across zones. The person in the control room is reading a document that
-              went out of date two days ago.
-            </p>
-            <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-              The cost of that is time, and it's nearly all spent chasing people and re-writing the same information.
-              Here, speakers enter their own details and the whole event updates itself around them. Change one thing
-              and the public page, the lineup, the run of show and the studio all agree, instantly.
+              Most events are held together by a spreadsheet, a group chat and somebody's memory. Here the event, the show and the people in it live in one place, and the work that used to eat the week is done for you.
             </p>
           </div>
-
-          <div className="mt-10 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {CAPABILITIES.map(({ icon: Icon, title, body, saves }, i) => (
+          <div className="mt-12 grid gap-5 md:grid-cols-2">
+            {PILLARS.map(({ icon: Icon, kicker, title, body, points }, i) => (
               <motion.div
-                key={title}
+                key={kicker}
                 initial={{ opacity: 0, y: 16 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.4, delay: Math.min(i, 5) * 0.06 }}
-                className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-lg"
+                transition={{ duration: 0.45, delay: i * 0.07 }}
+                className="group relative flex flex-col overflow-hidden rounded-3xl border border-border bg-card p-7 shadow-sm transition-shadow hover:shadow-lg"
               >
-                <div className="h-1 bg-[#F0A71F]" />
-                <div className="flex flex-1 flex-col p-6">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#053877] text-[#F0A71F]">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <span className="font-mono text-xs font-bold text-muted-foreground/50">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                  </div>
-                  <h3 className="mt-4 text-lg font-semibold tracking-tight" style={HEADLINE_FONT}>
-                    {title}
-                  </h3>
-                  <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">{body}</p>
-                  <p className="mt-4 flex items-start gap-2 border-t border-border pt-3 text-sm font-medium text-primary">
-                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
-                    {saves}
-                  </p>
+                <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#F0A71F]/10 blur-2xl transition-opacity group-hover:opacity-100" />
+                <div className="flex items-center gap-3">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Icon className="h-5 w-5" /></span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{String(i + 1).padStart(2, "0")} · {kicker}</span>
                 </div>
+                <h3 className="mt-5 text-xl font-semibold tracking-tight">{title}</h3>
+                <p className="mt-3 flex-1 text-[15px] leading-relaxed text-muted-foreground">{body}</p>
+                <ul className="mt-5 flex flex-col gap-2 border-t border-border pt-4">
+                  {points.map((pt) => (
+                    <li key={pt} className="flex items-start gap-2 text-sm"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" /> {pt}</li>
+                  ))}
+                </ul>
               </motion.div>
             ))}
           </div>
@@ -337,134 +278,133 @@ export default function Platform() {
       </section>
 
       {/* --------------------------------------------------------- the studio */}
-      <section className="relative overflow-hidden border-b border-border">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-[radial-gradient(70%_100%_at_50%_0%,rgba(5,56,119,0.10),transparent_70%)]"
-        />
-        <div className="relative mx-auto max-w-6xl px-4 py-16 sm:px-6">
-          <div className="max-w-2xl">
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">The studio</div>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
-              This is what the control room looks like
-            </h2>
+      <section className="relative isolate overflow-hidden border-b border-border bg-[#030b1f] text-white">
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-40" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)", backgroundSize: "44px 44px", maskImage: "radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent 80%)", WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent 80%)" }} />
+        <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-center">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#F0A71F]">The studio</div>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">A control room your whole team can run</h2>
+              <p className="mt-4 text-base leading-relaxed text-white/70">
+                Speakers wait in a green room where you can see their camera and hear their mic before anyone is on air. Bring them up when it's their turn, mid-broadcast, without stopping. The run of show says what's live and what's next, and one button rolls the standby clip if anything goes wrong.
+              </p>
+              <ul className="mt-6 grid gap-3 text-sm text-white/80">
+                {[
+                  ["Up to five on stage", "Add and drop people live; nobody leaves and rejoins."],
+                  ["Files cued ahead", "Intros, outros, sponsor reels and images, labelled before the segment."],
+                  ["In the room or online", "Put an in-person stage on the stream, or run it all virtually."],
+                ].map(([t, b]) => (
+                  <li key={t} className="flex gap-3"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" /><span><span className="font-medium text-white">{t}.</span> {b}</span></li>
+                ))}
+              </ul>
+            </div>
+            <motion.div initial={{ opacity: 0, y: 20, scale: 0.98 }} whileInView={{ opacity: 1, y: 0, scale: 1 }} viewport={{ once: true, margin: "-80px" }} transition={{ duration: 0.6 }} className="rounded-3xl border border-white/10 bg-white/[0.03] p-2 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.8)]">
+              <StudioDemo />
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* --------------------------------------------------------- how it goes */}
+      <section className="border-b border-border">
+        <div className="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#b36b00]">How it goes</div>
+          <h2 className="mt-2 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">Four steps, and most of them aren't yours</h2>
+          <ol className="mt-12 grid gap-6 md:grid-cols-4">
+            {FLOW.map(([t, b], i) => (
+              <li key={t} className="relative">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[#F0A71F]/60 text-sm font-semibold text-[#b36b00]">{i + 1}</span>
+                  {i < FLOW.length - 1 && <span aria-hidden className="hidden h-px flex-1 bg-gradient-to-r from-[#F0A71F]/60 to-transparent md:block" />}
+                </div>
+                <h3 className="mt-4 text-lg font-semibold">{t}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{b}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* ----------------------------------------------------- discovery + verified */}
+      <section className="border-b border-border bg-muted/40">
+        <div className="mx-auto grid max-w-6xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:items-center">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#b36b00]">Discovery</div>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">The military voices worth working with, measured</h2>
             <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-              Speakers arrive in a green room where you can see their camera and hear their mic before anyone is on air.
-              You bring them up when it's their turn — mid-broadcast, without stopping — and the run of show tells you
-              what's playing now and what's next. If something goes wrong, one button rolls the standby clip.
+              Brands find creators to sponsor, shows find guests, events find speakers. Search in plain English, by the words in a bio, or by name, and open anyone to see the audience behind the number.
             </p>
+            <Link href="/discover">
+              <Button size="lg" className="mt-7 gap-2 rounded-full bg-[#053877] px-7 font-medium text-white hover:bg-[#0a4a99]">
+                Open Discovery <ArrowRight className="h-4 w-4" />
+              </Button>
+            </Link>
           </div>
-
-          <div className="mt-8">
-            <StudioDemo />
-          </div>
-
-          <div className="mt-5 grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
-            <p>
-              <span className="font-semibold text-foreground">Up to five on stage.</span> Add and drop people while
-              you're live; nobody has to leave and rejoin.
-            </p>
-            <p>
-              <span className="font-semibold text-foreground">Files cued ahead.</span> Intros, outros, sponsor reels and
-              images are uploaded and labelled before the segment starts.
-            </p>
-            <p>
-              <span className="font-semibold text-foreground">Out to where your audience is.</span> One broadcast, sent
-              to every destination you've connected.
-            </p>
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-3xl border border-border bg-border">
+            {[
+              ["300M+", "creator profiles searched"],
+              ["9", "sections of audience data on every profile"],
+              ["Real reach", "how much of a following is real people"],
+              ["Verified", "voices checked by our team, reached through us"],
+            ].map(([v, l]) => (
+              <div key={l} className="bg-card p-6">
+                <div className="text-3xl font-semibold tracking-tight text-[#053877] dark:text-[#8fb5e8]">{v}</div>
+                <div className="mt-1.5 text-sm text-muted-foreground">{l}</div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
       {/* -------------------------------------------------------- proof / who */}
-      <section className="border-b border-border bg-muted/40">
-        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:py-20">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Built in the open</div>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
-              We use it ourselves, in public
-            </h2>
-            <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-              The Podcast Marathon runs on this platform: thirty-two slots, speakers in every time zone, live shows
-              and pre-recorded episodes side by side, all of it visible to anyone who visits. If you want to know whether
-              it works, go and look at it.
-            </p>
-            <Link href="/">
-              <Button
-                size="lg"
-                className="mt-6 gap-2 rounded-full bg-[#F0A71F] px-6 font-semibold text-[#1a1200] hover:bg-[#f5b944]"
-                data-testid="button-see-live-event"
-              >
-                <Radio className="h-4 w-4" /> See it running
-              </Button>
-            </Link>
-          </div>
-
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <Users className="h-3.5 w-3.5 text-[#F0A71F]" /> Who it's for
+      <section className="border-b border-border">
+        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:items-center">
+          <div className="relative overflow-hidden rounded-3xl">
+            <img src="/platform-hero.jpg" alt="An audience watching a speaker on stage" className="aspect-[4/3] w-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#030b1f]/85 via-transparent to-transparent" />
+            <div className="absolute inset-x-6 bottom-6 text-white">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#F0A71F]">We run our own</div>
+              <p className="mt-1.5 text-lg font-medium">Our own events run on the platform, in public.</p>
             </div>
-            <ul className="mt-4 flex flex-col gap-3">
-              {AUDIENCES.map((a) => (
-                <li key={a} className="flex items-start gap-2.5 text-sm text-foreground">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
-                  {a}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-5 text-sm text-muted-foreground">
-              If it has a schedule, speakers and an audience, it fits. One slot or two hundred.
+          </div>
+          <div>
+            <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">Built by people who put shows on the air</h2>
+            <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+              We use MilitaryVoices for our own events. The Podcast Marathon for National Military Podcast Day is one of them: dozens of shows, speakers in every time zone, live and pre-recorded side by side.
             </p>
+            <div className="mt-7 rounded-2xl border border-border bg-card p-6">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><Users className="h-3.5 w-3.5 text-[#F0A71F]" /> Who it's for</div>
+              <ul className="mt-4 flex flex-col gap-3">
+                {AUDIENCES.map((a) => (
+                  <li key={a} className="flex items-start gap-2.5 text-sm"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" /> {a}</li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
       </section>
 
       {/* ------------------------------------------------------------- close */}
       <section className="bg-[#F0A71F] text-[#1a1200]">
-        <div className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-4 py-14 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-4 py-16 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
-              Got an event coming up?
-            </h2>
-            <p className="mt-2 max-w-xl text-[#1a1200]/80">
-              Tell us the date and roughly what you're planning. We'll show you what it looks like on the platform, and
-              whether we're the right fit.
-            </p>
+            <h2 className="text-3xl font-semibold tracking-tight">Got an event coming up?</h2>
+            <p className="mt-2 max-w-xl text-[#1a1200]/80">Tell us the date and roughly what you're planning. We'll show you how it runs on MilitaryVoices, and whether we're the right fit.</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <InterestDialog
               intent="register"
-              trigger={
-                <Button size="lg" className="gap-2 rounded-full bg-[#053877] px-7 text-base font-semibold text-white hover:bg-[#0a4a99]">
-                  <CalendarClock className="h-4 w-4" /> Register your event
-                </Button>
-              }
+              trigger={<Button size="lg" className="gap-2 rounded-full bg-[#053877] px-7 text-base font-medium text-white hover:bg-[#0a4a99]"><CalendarClock className="h-4 w-4" /> Plan an event with us</Button>}
             />
             <InterestDialog
               intent="beta"
-              trigger={
-                <Button size="lg" variant="outline" className="gap-2 rounded-full border-[#1a1200]/30 bg-transparent px-7 text-base text-[#1a1200] hover:bg-[#1a1200]/10">
-                  Join the beta list
-                </Button>
-              }
+              trigger={<Button size="lg" variant="outline" className="gap-2 rounded-full border-[#1a1200]/30 bg-transparent px-7 text-base text-[#1a1200] hover:bg-[#1a1200]/10">Join the beta list</Button>}
             />
           </div>
         </div>
       </section>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex items-center gap-2">
-            <Mic2 className="h-4 w-4 text-primary" />
-            <Badge variant="outline" className="border-primary/40 text-primary">
-              Private beta
-            </Badge>
-          </div>
-          <a href="mailto:hello@militaryvoices.ai" className="hover:text-foreground">
-            hello@militaryvoices.ai
-          </a>
-        </div>
-      </footer>
+      <SiteFooter product="discovery" />
     </div>
   );
 }
