@@ -865,7 +865,7 @@ function DemoRail({ c, open, reading }: { c: Showcase; open: boolean; reading: b
  * creators we already hold data for are shown, and every figure is theirs.
  * Hovering pauses it; clicking opens the real profile.
  */
-function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card) => void }) {
+export function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card) => void }) {
   const showcase = useQuery<Showcase[]>({ queryKey: ["/api/discover/showcase"], queryFn: async () => (await fetch("/api/discover/showcase")).json(), staleTime: 30 * 60_000 });
   const pool = useMemo(() => {
     const demo = (showcase.data ?? []).filter((d) => d.picture);

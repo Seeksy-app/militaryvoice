@@ -18,6 +18,7 @@ import Faq from "@/pages/Faq";
 import HelpYoutube from "@/pages/HelpYoutube";
 import HelpIndex from "@/pages/HelpIndex";
 import Discover from "@/pages/Discover";
+import PromoDiscovery from "@/pages/PromoDiscovery";
 import Prepare from "@/pages/Prepare";
 import Platform from "@/pages/Platform";
 import Headshot from "@/pages/Headshot";
@@ -77,6 +78,7 @@ function AppRouter() {
       <Route path="/faq">{() => <Faq />}</Route>
       <Route path="/help">{() => <HelpIndex />}</Route>
       <Route path="/discover">{() => <Discover />}</Route>
+      <Route path="/promo/discovery">{() => <PromoDiscovery />}</Route>
       {/* The address read on air: short to say, and counted as on-air when it lands. */}
       <Route path="/find">{() => { if (typeof window !== "undefined") window.location.replace("/discover?src=on-air"); return null; }}</Route>
       <Route path="/help/youtube">{() => <HelpYoutube />}</Route>
