@@ -245,6 +245,11 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
    *  (comma-separated). Empty for everyone who signed up before it was asked —
    *  they came for the Marathon, so they count as podcasters. */
   interests: text("interests").notNull().default(""),
+  /** The directory's own say over this card: left out, pinned higher (lower
+   *  number first), or shown with the show's logo instead of the photo. */
+  directoryHidden: boolean("directory_hidden").notNull().default(false),
+  directoryOrder: integer("directory_order").notNull().default(1000),
+  directoryImage: text("directory_image").notNull().default(""),
   phone: text("phone").notNull().default(""),
   numPeople: integer("num_people").notNull().default(1),
   hasVideoIntro: boolean("has_video_intro").notNull().default(false),

@@ -1842,15 +1842,20 @@ export function registerRoutes(app: Express): void {
         if (sg.status !== "cancelled" && sg.slotIndex < dayLength) onLineup.add(sg.email.trim().toLowerCase());
       }
     }
-    // Andrew's own test seat ("American Warriors") is not a member to invite.
-    const hidden = new Set(["andrew@smartloads.io"]);
-    const rows = (await storage.listAllProfiles()).filter((p) => p.hostName.trim() && p.photoUrl.trim() && !hidden.has(p.email.trim().toLowerCase()));
+    // Hidden cards stay out (test seats, people who asked); pinned ones lead,
+    // then the lineup, then everyone else in the order they joined.
+    const rows = (await storage.listAllProfiles())
+      .filter((p) => p.hostName.trim() && p.photoUrl.trim() && !p.directoryHidden)
+      .sort((a, b) =>
+        a.directoryOrder - b.directoryOrder ||
+        Number(onLineup.has(b.email.trim().toLowerCase())) - Number(onLineup.has(a.email.trim().toLowerCase())) ||
+        a.id - b.id);
     res.json(
       rows.map((p) => ({
         id: p.id,
         hostName: p.hostName,
         podcastName: p.podcastName,
-        photoUrl: p.photoUrl,
+        photoUrl: p.directoryImage || p.photoUrl,
         branch: p.branch,
         serviceStatus: p.serviceStatus,
         podcaster: isPodcaster(p.interests) && Boolean(p.podcastName.trim()),

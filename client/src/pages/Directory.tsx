@@ -74,7 +74,7 @@ export default function Directory() {
       <section className="bg-[#04102b] text-white">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#F0A71F]">The directory</p>
-          <h1 className="mt-2 max-w-3xl text-3xl font-bold tracking-tight sm:text-5xl" style={HEADLINE}>
+          <h1 className="mt-2 max-w-3xl text-balance text-3xl font-bold tracking-tight sm:text-5xl" style={HEADLINE}>
             Military and veteran voices, ready to invite.
           </h1>
           <p className="mt-4 max-w-2xl text-base text-white/75 sm:text-lg">
@@ -167,7 +167,7 @@ function DirectoryCard({ card: c, onOpen }: { card: Card; onOpen: () => void }) 
       data-testid={`directory-card-${c.id}`}
     >
       <img src={resolveUploadUrl(c.photoUrl)} alt="" loading="lazy" className="h-24 w-24 rounded-full object-cover ring-4 ring-[#053877]/10" />
-      <p className="mt-3 line-clamp-2 font-semibold leading-tight text-foreground" style={HEADLINE}>
+      <p className="mt-3 line-clamp-2 text-balance font-semibold leading-tight text-foreground" style={HEADLINE}>
         {c.podcaster ? c.podcastName : c.hostName}
       </p>
       {c.podcaster && <p className="mt-0.5 truncate text-sm text-muted-foreground">{c.hostName}</p>}
@@ -213,7 +213,7 @@ function CardDialog({ card: c, onClose, canInvite }: { card: Card | null; onClos
       <DialogContent className="max-w-md" data-testid="dialog-directory-card">
         <DialogHeader className="items-center text-center">
           <img src={resolveUploadUrl(c.photoUrl)} alt="" className="h-28 w-28 rounded-full object-cover ring-4 ring-[#053877]/10" />
-          <DialogTitle className="mt-3 text-xl" style={HEADLINE}>{c.podcaster ? c.podcastName : c.hostName}</DialogTitle>
+          <DialogTitle className="mt-3 text-balance text-xl" style={HEADLINE}>{c.podcaster ? c.podcastName : c.hostName}</DialogTitle>
           <DialogDescription>
             {c.podcaster ? `${c.hostName}${who(c) ? ` · ${who(c)}` : ""}` : who(c) || "MilitaryVoices member"}
           </DialogDescription>
