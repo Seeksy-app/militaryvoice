@@ -282,6 +282,8 @@ async function ensureSchema() {
   await sql`ALTER TABLE studios ADD COLUMN IF NOT EXISTS stage_media_people BOOLEAN NOT NULL DEFAULT false`;
   await sql`ALTER TABLE scenes ADD COLUMN IF NOT EXISTS auto_next BOOLEAN NOT NULL DEFAULT false`;
   await sql`ALTER TABLE scenes ADD COLUMN IF NOT EXISTS with_people BOOLEAN NOT NULL DEFAULT false`;
+  await sql`ALTER TABLE scenes ADD COLUMN IF NOT EXISTS stage_layout TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE scenes ADD COLUMN IF NOT EXISTS background_url TEXT NOT NULL DEFAULT ''`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS scenes (

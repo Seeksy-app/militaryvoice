@@ -3988,6 +3988,18 @@ export function registerRoutes(app: Express): void {
    * two fields directly, and is overwritten by the next take — which is what
    * an ad-lib should be.
    */
+  /** The layout and background a scene brings, when it has saved one. */
+  function lookFor(scene: SceneRow) {
+    return {
+      ...(scene.stageLayout ? { stageLayout: scene.stageLayout } : {}),
+      ...(scene.backgroundUrl === "none"
+        ? { backgroundVisible: false }
+        : scene.backgroundUrl
+          ? { backgroundUrl: scene.backgroundUrl, backgroundVisible: true }
+          : {}),
+    };
+  }
+
   function bannerFor(scene: SceneRow) {
     return {
       bannerTitle: scene.bannerTitle ?? "",
@@ -4079,6 +4091,7 @@ export function registerRoutes(app: Express): void {
           stageMediaLabel: scene.mediaUrl ? scene.mediaLabel : "",
           stageMediaPlaying: Boolean(mediaUrl),
           stageMediaPeople: Boolean(scene.withPeople && mediaUrl),
+          ...lookFor(scene),
           ...banner,
           // The sponsor rides on the lower third too, when there is one.
           ...(sponsor && banner.bannerTitle ? { bannerSubtitle: [banner.bannerSubtitle, `Presented by ${sponsor.name}`].filter(Boolean).join(" · ") } : {}),
@@ -4118,6 +4131,7 @@ export function registerRoutes(app: Express): void {
             // A scene with no media and no picture is "back to the cameras".
             stageMediaPlaying: Boolean(mediaUrl),
             stageMediaPeople: Boolean(scene.withPeople && mediaUrl),
+            ...lookFor(scene),
             stageCardName: "",
             stageCardShow: "",
             stageCardPhoto: "",

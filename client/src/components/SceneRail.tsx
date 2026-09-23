@@ -72,6 +72,9 @@ export interface SceneSpec {
   withPeople?: boolean;
   /** Duplicate and paste: put the new scene right under this one. */
   afterId?: number;
+  /** The look the scene brings: a layout, and a background ("none" clears it). */
+  stageLayout?: string;
+  backgroundUrl?: string;
 }
 
 /** The scene clipboard, kept in the browser so a copy survives a reload or crosses tabs. */
@@ -89,6 +92,8 @@ function specOf(sc: SceneRow): SceneSpec {
     thumbUrl: sc.thumbUrl || undefined,
     autoNext: sc.autoNext,
     withPeople: sc.withPeople,
+    stageLayout: sc.stageLayout || undefined,
+    backgroundUrl: sc.backgroundUrl || undefined,
   };
 }
 function readClip(): SceneSpec | null {

@@ -810,7 +810,39 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
 
   // Stable, so the Shift+1…6 listener isn't torn down on every poll.
   const patchRef = useRef<(v: Record<string, unknown>) => void>(() => {});
-  patchRef.current = (v) => patchStudio.mutate(v);
+  patchRef.current = (v) => patchLook(v);
+
+  /**
+   * "You made changes — save them to the scene?"
+   *
+   * A scene carries its own look (layout and background), and taking it puts
+   * that look up. Changing the look while a scene is on air changes only what
+   * is up now; this remembers the change so the producer can keep it on the
+   * scene or put it back, and warns before the tab is closed on it.
+   */
+  type Look = { stageLayout: string; backgroundUrl: string; backgroundVisible: boolean };
+  const [lookDirty, setLookDirty] = useState<{ sceneId: number; before: Look; after: Look } | null>(null);
+  function patchLook(pch: Record<string, unknown>) {
+    const touches = ["stageLayout", "backgroundUrl", "backgroundVisible"].some((k) => k in pch);
+    const sceneId = studio?.currentSceneId ?? 0;
+    if (touches && sceneId && studio) {
+      const now: Look = { stageLayout: studio.stageLayout, backgroundUrl: studio.backgroundUrl, backgroundVisible: studio.backgroundVisible };
+      setLookDirty((d) => {
+        const before = d && d.sceneId === sceneId ? d.before : now;
+        const base = d && d.sceneId === sceneId ? d.after : now;
+        const after = { ...base, ...(pch as Partial<Look>) };
+        const same = after.stageLayout === before.stageLayout && after.backgroundVisible === before.backgroundVisible && (!after.backgroundVisible || after.backgroundUrl === before.backgroundUrl);
+        return same ? null : { sceneId, before, after };
+      });
+    }
+    patchStudio.mutate(pch);
+  }
+  useEffect(() => {
+    if (!lookDirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [lookDirty]);
   const setLayout = useMemo(() => (v: string) => patchRef.current({ stageLayout: v }), []);
 
   const setState = useMutation({
@@ -2018,6 +2050,39 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               ) : null}
             </div>
             </div>
+            {lookDirty && (() => {
+              const sc = (scenes ?? []).find((x) => x.id === lookDirty.sceneId);
+              return (
+                <div className="flex shrink-0 flex-wrap items-center justify-center gap-3 bg-[#F0A71F] px-4 py-2 text-[13px] font-semibold text-[#1a1200]" data-testid="bar-look-unsaved">
+                  <span>You made changes to {sc ? `"${sc.name}"` : "this scene"}. Save them to the scene?</span>
+                  <button
+                    type="button"
+                    className="rounded-full bg-[#1a1200] px-3.5 py-1 text-white hover:bg-black"
+                    onClick={() => {
+                      const a = lookDirty.after;
+                      patchScene.mutate({ id: lookDirty.sceneId, patch: { stageLayout: a.stageLayout, backgroundUrl: a.backgroundVisible ? a.backgroundUrl : "none" } });
+                      setLookDirty(null);
+                      toast({ title: "Saved to the scene", description: sc ? `Taking "${sc.name}" puts this look up.` : undefined });
+                    }}
+                    data-testid="button-look-save"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-full border border-[#1a1200]/40 px-3.5 py-1 hover:bg-[#1a1200]/10"
+                    onClick={() => {
+                      // Put back what was up, if we're still on that scene.
+                      if (studio?.currentSceneId === lookDirty.sceneId) patchStudio.mutate({ ...lookDirty.before });
+                      setLookDirty(null);
+                    }}
+                    data-testid="button-look-discard"
+                  >
+                    Discard
+                  </button>
+                </div>
+              );
+            })()}
             <LayoutBar layout={studio?.stageLayout || "contain"} onLayout={setLayout} />
             </div>
 
@@ -2028,7 +2093,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               studio={studio ?? null}
               media={mediaItems ?? []}
               sceneBanner={currentSceneBanner}
-              patch={(pch) => patchStudio.mutate(pch as Record<string, unknown>)}
+              patch={(pch) => patchLook(pch as Record<string, unknown>)}
               uploadLogo={uploadLogo}
               logoBusy={logoBusy}
               adminGet={adminGet}

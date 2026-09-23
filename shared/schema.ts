@@ -1051,6 +1051,10 @@ export const scenes = pgTable("scenes", {
   autoNext: boolean("auto_next").notNull().default(false),
   /** A media scene that keeps the people on screen, in a column beside the clip. */
   withPeople: boolean("with_people").notNull().default(false),
+  /** The look this scene brings with it: a layout, and a background ("none"
+   *  clears it). Empty means "leave whatever is up". */
+  stageLayout: text("stage_layout").notNull().default(""),
+  backgroundUrl: text("background_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
 });
 export type SceneRow = typeof scenes.$inferSelect;
@@ -1565,6 +1569,8 @@ export const sceneInputSchema = z.object({
   thumbUrl: z.string().trim().max(600).optional(),
   autoNext: z.boolean().optional(),
   withPeople: z.boolean().optional(),
+  stageLayout: z.union([z.enum(STAGE_LAYOUTS), z.literal("")]).optional(),
+  backgroundUrl: z.string().trim().max(600).optional(),
 });
 export const scenePatchSchema = sceneInputSchema.partial();
 
