@@ -666,7 +666,9 @@ export function registerDiscoveryRoutes(app: Express): void {
       await requireMember(req);
       const platform = asPlatform(req.body?.platform);
       const q = String(req.body?.q ?? "").trim().slice(0, 200);
-      const branch = String(req.body?.branch ?? "").trim().slice(0, 40);
+      // One branch or several ("Army,Navy"): a search for any of them.
+      const branches = String(req.body?.branch ?? "").split(",").map((b) => b.trim()).filter(Boolean).slice(0, 7);
+      const branch = branches.join(" ");
       const page = Math.max(0, Math.min(40, Number(req.body?.page) || 0));
       const minF = num(req.body?.minFollowers);
       const maxF = num(req.body?.maxFollowers);
@@ -676,7 +678,7 @@ export function registerDiscoveryRoutes(app: Express): void {
       // this is a military and veteran index, not a general one.
       const military = /\b(military|veteran|vet|army|navy|marine|usmc|air force|coast guard|space force|spouse|milspouse|service ?member|soldier|sailor|airman)\b/i.test(`${q} ${branch}`);
       const brief = [
-        branch === "Military spouse" ? "military spouse" : branch ? `${branch} veteran` : "",
+        branches.length ? branches.map((b) => (b === "Military spouse" ? "military spouse" : `${b} veteran`)).join(" or ") : "",
         q,
         military ? "" : "in the US military and veteran community",
       ]
@@ -690,7 +692,7 @@ export function registerDiscoveryRoutes(app: Express): void {
       const mode = req.body?.mode === "keywords" ? "keywords" : "ai";
       if (mode === "keywords") {
         const words = q.split(/,|\bor\b|\n/i).map((w) => w.trim()).filter((w) => w.length > 1).slice(0, 10);
-        if (branch) words.push(branch === "Military spouse" ? "military spouse" : branch.toLowerCase());
+        for (const b of branches) words.push(b === "Military spouse" ? "military spouse" : b.toLowerCase());
         if (!words.length) throw new HttpError(400, "Type a word or two to find in creators' bios.");
         filters.keywords_in_bio = Array.from(new Set([...(Array.isArray(filters.keywords_in_bio) ? (filters.keywords_in_bio as string[]) : []), ...words]));
       }
@@ -714,7 +716,7 @@ export function registerDiscoveryRoutes(app: Express): void {
         const stop = new Set(["the", "and", "with", "for", "who", "that", "creators", "creator", "followers", "veteran", "veterans", "military", "vets", "about", "talk"]);
         const words = `${q}`.toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !stop.has(w)).map((w) => w.replace(/s$/, ""));
         verified = (await verifiedCreators())
-          .filter((c) => (!branch || c.branch.toLowerCase() === branch.toLowerCase()) && words.every((w) => c.match.includes(w)))
+          .filter((c) => (!branches.length || branches.some((b) => c.branch.toLowerCase() === b.toLowerCase())) && words.every((w) => c.match.includes(w)))
           .slice(0, 8)
           .map(({ match: _m, ...c }) => c);
         verified = await withExtras(verified);
@@ -951,7 +953,7 @@ export function registerDiscoveryRoutes(app: Express): void {
   //      SHOWCASE adds featured accounts beyond our own lineup, first in line.
   app.get("/api/discover/showcase", (_req, res) =>
     send(res, async () => {
-      res.set("Cache-Control", "public, max-age=300, s-maxage=3600");
+      res.set("Cache-Control", "public, max-age=300, s-maxage=300");
       // Only the featured accounts, in order; our own lineup cards lend them their photo and show.
       const lineup = (await verifiedCreators()).filter((c) => c.platform && c.handle);
       const wanted = SHOWCASE.map((k) => {

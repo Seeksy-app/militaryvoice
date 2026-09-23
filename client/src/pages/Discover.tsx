@@ -162,7 +162,9 @@ export default function Discover() {
   const [door, setDoor] = useState<(typeof DOORS)[number]["key"]>("brand");
   const [q, setQ] = useState("");
   const [platform, setPlatform] = useState("instagram");
+  // Branches combine: "Army,Navy" searches both.
   const [branch, setBranch] = useState("");
+  const branchList = branch ? branch.split(",") : [];
   const [size, setSize] = useState(0);
   const [sort, setSort] = useState("relevancy");
   const [page, setPage] = useState(0);
@@ -339,7 +341,7 @@ export default function Discover() {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Try</span>
             {d.tries.map((t) => (
-              <button key={t} type="button" onClick={() => run({ q: t, mode: "ai" })} className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-foreground/80 transition-colors hover:border-[#053877]/40 hover:text-foreground" data-testid="discover-try">
+              <button key={t} type="button" onClick={() => run({ q: t, mode: "ai" })} className="rounded-full bg-[#2563eb] px-3.5 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#1d4ed8]" data-testid="discover-try">
                 {t}
               </button>
             ))}
@@ -353,63 +355,46 @@ export default function Discover() {
             ) : (
               <HeroB raised={false} door={door} setDoor={setDoor} bar={null} tries={null} onEnrich={toEnrich} verified={verified} onOpen={openIn(verified)} />
             )}
-            {/* The search lives with the filters, not up in the hero. */}
-            <section className={`relative border-b border-border bg-background ${menuOpen ? "z-30" : "z-10"}`}>
-              <div className="mx-auto w-full max-w-[88rem] px-4 pb-5 pt-6 sm:px-6">
+            {/* The search, the suggestions and the filters: one block, straight under the hero. */}
+            <section className={`relative bg-background ${menuOpen ? "z-30" : "z-10"}`}>
+              <div className="mx-auto w-full max-w-[88rem] px-4 pb-2 pt-6 sm:px-6">
                 {bar}
                 {tries}
-                <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
-                  {["Free account", "No card", "Audience data on every profile"].map((t) => (
-                    <span key={t} className="inline-flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-[#b36b00]" /> {t}</span>
-                  ))}
-                  <button type="button" onClick={toEnrich} className="font-medium text-[#b36b00] hover:underline" data-testid="discover-to-enrich">Have a list? Enrich it →</button>
-                </div>
+                {tab !== "enrich" && (
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap gap-1.5" aria-label="Branch">
+                      {BRANCHES.map((b) => {
+                        const on = branchList.includes(b);
+                        return (
+                          <button
+                            key={b}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => setBranch((on ? branchList.filter((x) => x !== b) : [...branchList, b]).join(","))}
+                            className={`rounded-full border px-3 py-1 text-sm transition-colors ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card text-foreground hover:border-[#053877]/40"}`}
+                            data-testid={`branch-${b}`}
+                          >
+                            {b}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button type="button" onClick={() => setShowFilters((v) => !v)} className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors ${showFilters || activeFilters(filters).length ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card hover:border-[#053877]/40"}`} data-testid="discover-filters">
+                      <SlidersHorizontal className="h-4 w-4" /> Filters{activeFilters(filters).length ? ` · ${activeFilters(filters).length}` : ""}
+                    </button>
+                    <select value={size} onChange={(e) => setSize(Number(e.target.value))} className="h-9 rounded-full border border-border bg-card px-3 text-sm" aria-label="Audience size">
+                      {SIZES.map((sz, i) => <option key={sz.label} value={i}>{sz.label}</option>)}
+                    </select>
+                    <select value={sort} onChange={(e) => setSort(e.target.value)} className="h-9 rounded-full border border-border bg-card px-3 text-sm" aria-label="Sort">
+                      {SORTS.map((so) => <option key={so.v} value={so.v}>{so.label}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
             </section>
           </>
         );
       })()}
-
-      {/* -------------------------------------------------------- filter bar */}
-      <div className="sticky top-[77px] z-20 border-b border-border bg-background/90 backdrop-blur lg:top-[93px]">
-        <div className="mx-auto flex w-full max-w-[88rem] flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
-          {(
-            <div className="mr-2 flex rounded-full bg-muted p-1 text-sm">
-              {(isMember ? (["search", "enrich", "lists"] as const) : (["search", "enrich"] as const)).map((t) => (
-                <button key={t} type="button" onClick={() => setTab(t)} className={`rounded-full px-3 py-1 font-medium ${tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`} data-testid={`discover-tab-${t}`}>
-                  {t === "search" ? "Search" : t === "enrich" ? "Enrich" : `Saved${(lists.data?.reduce((n, l) => n + l.items.length, 0) ?? 0) ? ` · ${lists.data!.reduce((n, l) => n + l.items.length, 0)}` : ""}`}
-                </button>
-              ))}
-            </div>
-          )}
-          {tab !== "enrich" && <>
-          <div className="flex flex-wrap gap-1.5" aria-label="Branch">
-            {BRANCHES.map((b) => (
-              <button
-                key={b}
-                type="button"
-                onClick={() => setBranch(branch === b ? "" : b)}
-                className={`rounded-full border px-3 py-1 text-sm transition-colors ${branch === b ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card text-foreground hover:border-[#053877]/40"}`}
-                data-testid={`branch-${b}`}
-              >
-                {b}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setShowFilters((v) => !v)} className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors ${showFilters || activeFilters(filters).length ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card hover:border-[#053877]/40"}`} data-testid="discover-filters">
-              <SlidersHorizontal className="h-4 w-4" /> Filters{activeFilters(filters).length ? ` · ${activeFilters(filters).length}` : ""}
-            </button>
-            <select value={size} onChange={(e) => setSize(Number(e.target.value))} className="h-9 rounded-full border border-border bg-card px-3 text-sm" aria-label="Audience size">
-              {SIZES.map((s, i) => <option key={s.label} value={i}>{s.label}</option>)}
-            </select>
-            <select value={sort} onChange={(e) => setSort(e.target.value)} className="h-9 rounded-full border border-border bg-card px-3 text-sm" aria-label="Sort">
-              {SORTS.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
-            </select>
-          </div>
-          </>}
-        </div>
-      </div>
 
       <main id="discover-main" className="mx-auto w-full max-w-[88rem] scroll-mt-16 px-4 py-8 sm:px-6">
         {tab !== "enrich" && showFilters && (
@@ -436,7 +421,10 @@ export default function Discover() {
             onUsed={() => queryClient.invalidateQueries({ queryKey: ["/api/discover/me"] })}
           />
         ) : tab === "lists" && isMember ? (
+          <>
+          <button type="button" onClick={() => setTab("search")} className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="back-to-search"><ChevronRight className="h-4 w-4 rotate-180" /> Back to search</button>
           <Lists lists={lists.data ?? []} onOpen={(c) => openIn((lists.data ?? []).flatMap((l) => l.items.map((i) => i.snapshot)))(c)} />
+          </>
         ) : !submitted || !isMember || submitted.mode === "username" ? (
           <Welcome verified={verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} onJoin={() => setGate(true)} loading={meLoading} />
         ) : (
