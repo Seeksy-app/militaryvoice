@@ -410,15 +410,22 @@ export function SceneRail({
                       {/* On air, the card plays: what the producer sees on the
                           monitor is what the rail shows, so a glance at the
                           rail says the episode is rolling. Off air, a frame. */}
-                      <video
-                        key={on ? "playing" : "still"}
-                        src={on ? sceneVideo : `${sceneVideo}#t=1`}
-                        muted
-                        playsInline
-                        autoPlay={on}
-                        preload="metadata"
-                        className="absolute inset-0 h-full w-full object-cover"
-                      />
+                      {/* Off air, a thumbnail set on the scene wins over the
+                          file's first second, which for a promo that fades in
+                          is just black. */}
+                      {!on && sc.thumbUrl ? (
+                        <img src={sc.thumbUrl} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
+                      ) : (
+                        <video
+                          key={on ? "playing" : "still"}
+                          src={on ? sceneVideo : `${sceneVideo}#t=1`}
+                          muted
+                          playsInline
+                          autoPlay={on}
+                          preload="metadata"
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
+                      )}
                       <span className="absolute left-2 top-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">{on ? "▶ Video" : "Video"}</span>
                     </>
                   ) : thumb ? (

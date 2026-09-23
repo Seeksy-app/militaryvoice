@@ -1539,6 +1539,8 @@ export const sceneInputSchema = z.object({
   runItemId: z.number().int().min(0).default(0),
   bannerTitle: z.string().trim().max(80).default(""),
   bannerSubtitle: z.string().trim().max(120).default(""),
+  /** A picture for the rail when the scene's own file doesn't give a good one. */
+  thumbUrl: z.string().trim().max(600).optional(),
 });
 export const scenePatchSchema = sceneInputSchema.partial();
 
