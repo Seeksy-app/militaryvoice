@@ -37,6 +37,8 @@ export const PLATFORMS = ["instagram", "youtube", "tiktok", "twitter", "twitch"]
 type Platform = (typeof PLATFORMS)[number];
 const FREE_REVEALS_PER_MONTH = 10;
 const PAGE_SIZE = 10;
+/** Featured in the hero's demo ahead of our lineup, as platform:handle. Read from cache only. */
+const SHOWCASE: string[] = [];
 const DAY = 86_400_000;
 
 // ---------------------------------------------------------------------------
@@ -872,6 +874,56 @@ export function registerDiscoveryRoutes(app: Express): void {
         }),
       );
       return { rows, lookups: unlimited ? null : { used, allowance: ENRICH_PER_MONTH } };
+    }),
+  );
+
+  // ---- The hero's demo: a trimmed profile for creators we've already paid for ---
+  //      Public (the hero plays before anyone signs in), so it only ever reads
+  //      the cache — never buys — and carries headline numbers, not the profile.
+  //      SHOWCASE adds featured accounts beyond our own lineup, first in line.
+  app.get("/api/discover/showcase", (_req, res) =>
+    send(res, async () => {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=3600");
+      const lineup = (await verifiedCreators()).filter((c) => c.platform && c.handle);
+      const wanted = [
+        ...SHOWCASE.map((k) => { const [platform, handle] = k.split(":"); return { platform, handle, card: null as (CreatorCard & { match: string }) | null }; }),
+        ...lineup.map((c) => ({ platform: c.platform, handle: c.handle, card: c })),
+      ];
+      const keys = wanted.flatMap((w) => [`analytics:${w.platform}:${w.handle.toLowerCase()}`, `raw:${w.platform}:${w.handle.toLowerCase()}`]);
+      const rows = keys.length ? await db.select().from(discoveryCache).where(inArray(discoveryCache.key, keys)) : [];
+      const byKey = new Map(rows.map((r) => [r.key, r.payload]));
+      const out = [];
+      for (const w of wanted) {
+        const a = byKey.get(`analytics:${w.platform}:${w.handle.toLowerCase()}`);
+        if (!a) continue;
+        const full = JSON.parse(a);
+        const acct = byKey.get(`raw:${w.platform}:${w.handle.toLowerCase()}`);
+        const p = buildProfile(w.platform, w.handle, full.raw, acct ? JSON.parse(acct) : null, full.fetchedAt);
+        const aud = p.audiences.followers ?? p.audiences.likers ?? p.audiences.commenters ?? null;
+        if (!aud) continue;
+        out.push({
+          platform: w.platform,
+          handle: w.handle,
+          name: w.card?.name ?? p.identity.name,
+          picture: w.card?.picture || p.identity.picture,
+          show: w.card?.verified?.show ?? "",
+          verified: !!w.card,
+          branch: w.card?.branch ?? "",
+          followers: w.card?.followers ?? p.identity.followers,
+          engagement: w.card?.engagement ?? p.signals.engagementRate,
+          realReach: p.signals.realReach,
+          realPct: p.signals.realPct,
+          credibility: aud.credibility,
+          credibilityClass: aud.credibilityClass,
+          types: aud.types,
+          topCountry: p.signals.topCountry,
+          femalePct: p.signals.femalePct,
+          postsPerWeek: p.signals.postsPerWeek,
+          interests: aud.interests.slice(0, 3).map((i) => ({ name: i.name, pct: i.pct })),
+        });
+        if (out.length >= 10) break;
+      }
+      return out;
     }),
   );
 

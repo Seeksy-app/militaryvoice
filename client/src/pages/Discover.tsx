@@ -680,65 +680,169 @@ function HeroB({ raised, door, setDoor, bar, tries, onEnrich, verified, onOpen }
   );
 }
 
-/** A real verified creator, turning over every few seconds, as a brand would see them. */
+type Showcase = {
+  platform: string; handle: string; name: string; picture: string; show: string; verified: boolean; branch: string;
+  followers: number | null; engagement: number | null; realReach: number | null; realPct: number | null;
+  credibility: number | null; credibilityClass: string;
+  types: { real: number | null; massFollowers: number | null; influencers: number | null; suspicious: number | null };
+  topCountry: { name: string; pct: number } | null; femalePct: number | null; postsPerWeek: number | null;
+  interests: { name: string; pct: number }[];
+};
+
+/**
+ * The hero's demo. A real creator's card; a cursor comes in and clicks it; their
+ * profile rises over the card with the numbers a brand would see, the contents
+ * ticking down; then it slides away and the next creator comes round. Only
+ * creators we already hold data for are shown, and every figure is theirs.
+ * Hovering pauses it; clicking opens the real profile.
+ */
 function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card) => void }) {
-  const pool = useMemo(() => verified.filter((c) => c.picture && (c.followers ?? 0) > 0).sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0)).slice(0, 8), [verified]);
+  const showcase = useQuery<Showcase[]>({ queryKey: ["/api/discover/showcase"], queryFn: async () => (await fetch("/api/discover/showcase")).json(), staleTime: 30 * 60_000 });
+  const pool = useMemo(() => {
+    const demo = (showcase.data ?? []).filter((d) => d.picture);
+    if (demo.length) return demo;
+    return verified.filter((c) => c.picture && (c.followers ?? 0) > 0).slice(0, 8).map((c) => ({
+      platform: c.platform, handle: c.handle, name: c.name, picture: c.picture, show: c.verified?.show ?? "", verified: !!c.verified, branch: c.branch,
+      followers: c.followers, engagement: c.engagement, realReach: null, realPct: null, credibility: c.quality ?? null, credibilityClass: "",
+      types: { real: null, massFollowers: null, influencers: null, suspicious: null }, topCountry: null, femalePct: null, postsPerWeek: null, interests: [],
+    }) as Showcase);
+  }, [showcase.data, verified]);
+
   const [i, setI] = useState(0);
+  // idle → cursor travels → click → the profile rises → it reads → it slides away → next
+  const [phase, setPhase] = useState<"idle" | "move" | "click" | "open" | "read" | "close">("idle");
   const [paused, setPaused] = useState(false);
   useEffect(() => {
-    if (pool.length < 2 || paused) return;
-    const t = setInterval(() => setI((n) => (n + 1) % pool.length), 4200);
-    return () => clearInterval(t);
-  }, [pool.length, paused]);
+    if (!pool.length || paused) return;
+    const plan: [typeof phase, number][] = [["idle", 1400], ["move", 1000], ["click", 350], ["open", 700], ["read", 3400], ["close", 700]];
+    const at = plan.findIndex(([p]) => p === phase);
+    const t = setTimeout(() => {
+      if (at === plan.length - 1) { setPhase("idle"); setI((n) => (n + 1) % pool.length); }
+      else setPhase(plan[at + 1][0]);
+    }, plan[at][1]);
+    return () => clearTimeout(t);
+  }, [phase, paused, pool.length]);
+
   if (!pool.length) return <div className="aspect-[4/5] w-full rounded-[28px] border border-white/10 bg-white/[0.03]" />;
   const c = pool[i % pool.length];
   const next = pool[(i + 1) % pool.length];
-  const after = pool[(i + 2) % pool.length];
+  const src = (u: string) => (u.startsWith("/api/") ? u : resolveUploadUrl(u));
+  const open = phase === "open" || phase === "read";
+  const cursorOn = phase === "move" || phase === "click" || phase === "open";
   const tiles = [
     ["Followers", compact(c.followers)],
     c.engagement != null ? ["Engagement", pct(c.engagement, 2)] : null,
-    c.quality != null ? ["Audience quality", `${c.quality}/100`] : null,
+    c.credibility != null ? ["Audience quality", `${c.credibility}/100`] : null,
   ].filter(Boolean) as [string, string][];
+  const railTiles = [
+    c.engagement != null ? ["Engagement", pct(c.engagement, 2)] : null,
+    c.realReach != null ? ["Real reach", compact(c.realReach)] : null,
+    c.credibility != null ? ["Credibility", `${c.credibility}/100`] : null,
+    c.topCountry ? ["Top country", `${Math.round(c.topCountry.pct)}% ${c.topCountry.name === "United States" ? "US" : c.topCountry.name}`] : null,
+    c.femalePct != null ? ["Audience", `${Math.round(c.femalePct)}% F · ${100 - Math.round(c.femalePct)}% M`] : null,
+    c.postsPerWeek != null ? ["Cadence", `${c.postsPerWeek}/wk`] : null,
+  ].filter(Boolean).slice(0, 4) as [string, string][];
+  const bar = [["#16a34a", c.types.real], ["#d4a017", c.types.massFollowers], ["#3b82f6", c.types.influencers], ["#c2410c", c.types.suspicious]].filter(([, v]) => v != null) as [string, number][];
+  const toc = ["Decision signals", "Audience quality", "Growth", "Recent posts", "Demographics"];
+  const asCard = (): Card => ({ platform: c.platform, handle: c.handle, name: c.name, picture: c.picture, followers: c.followers, engagement: c.engagement, branch: c.branch, quality: c.credibility });
+
   return (
-    <div className="relative mx-auto w-full max-w-[25rem]" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-      {/* the two behind */}
-      {[after, next].map((b, k) => (
-        <div key={`${b.name}-${k}`} aria-hidden className="absolute inset-x-6 top-0 h-full overflow-hidden rounded-[28px] border border-white/10 bg-[#0b1733] shadow-2xl" style={{ transform: `translateY(${(2 - k) * -18}px) scale(${0.9 + k * 0.05})`, opacity: 0.35 + k * 0.25 }}>
-          <img src={b.picture.startsWith("/api/") ? b.picture : resolveUploadUrl(b.picture)} alt="" className="h-2/3 w-full object-cover opacity-60" />
-        </div>
-      ))}
-      {/* the one in front */}
-      <button key={c.name} type="button" onClick={() => onOpen(c)} className="relative block w-full overflow-hidden rounded-[28px] border border-white/15 bg-[#0b1733] text-left shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)] transition-transform duration-500 animate-in fade-in-0 zoom-in-95 hover:-translate-y-1" data-testid="hero-preview">
-        <div className="relative aspect-[4/3] w-full overflow-hidden">
-          <img src={c.picture.startsWith("/api/") ? c.picture : resolveUploadUrl(c.picture)} alt="" className="h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0b1733] via-[#0b1733]/10 to-transparent" />
-          <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F] px-2.5 py-1 text-xs font-semibold text-[#1a1200] shadow"><BadgeCheck className="h-3.5 w-3.5" /> Verified on MilitaryVoices</span>
-          <span className="absolute right-4 top-4 rounded-full bg-black/45 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur">{platformLabel(c.platform)}</span>
-        </div>
-        <div className="-mt-12 px-5 pb-5">
-          <div className="relative">
-            <div className="truncate text-xl font-semibold tracking-tight text-white">{c.name}</div>
-            <div className="truncate text-sm text-white/65">{c.verified?.show ?? `@${c.handle}`}{c.branch ? ` · ${c.branch}` : ""}</div>
+    <div className="relative mx-auto w-full max-w-[25rem] select-none" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+      <style>{`@keyframes mv-click{0%{transform:scale(.4);opacity:.9}100%{transform:scale(2.2);opacity:0}}`}</style>
+      {/* the next one, waiting behind */}
+      <div aria-hidden className="absolute inset-x-6 top-0 h-full overflow-hidden rounded-[28px] border border-white/10 bg-[#0b1733] opacity-50 shadow-2xl" style={{ transform: "translateY(-18px) scale(0.94)" }}>
+        <img src={src(next.picture)} alt="" className="h-2/3 w-full object-cover opacity-60" />
+      </div>
+
+      <div className={`relative overflow-hidden rounded-[28px] border border-white/15 bg-[#0b1733] text-left shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)] transition-transform duration-200 ${phase === "click" ? "scale-[0.985]" : ""}`}>
+        <button key={c.handle} type="button" onClick={() => onOpen(asCard())} className="block w-full text-left animate-in fade-in-0 duration-500" data-testid="hero-preview">
+          <div className="relative aspect-[4/3] w-full overflow-hidden">
+            <img src={src(c.picture)} alt="" className="h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0b1733] via-[#0b1733]/10 to-transparent" />
+            {c.verified && <span className="absolute left-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F] px-2.5 py-1 text-xs font-semibold text-[#1a1200] shadow"><BadgeCheck className="h-3.5 w-3.5" /> Verified on MilitaryVoices</span>}
+            <span className="absolute right-4 top-4 rounded-full bg-black/45 px-2.5 py-1 text-xs font-medium text-white backdrop-blur">{platformLabel(c.platform)}</span>
           </div>
-          <div className="mt-4 grid gap-px overflow-hidden rounded-2xl bg-white/10" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0,1fr))` }}>
-            {tiles.map(([l, v]) => (
-              <div key={l} className="bg-[#0e1d3f] px-3 py-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/50">{l}</div>
-                <div className="mt-1 text-xl font-medium tabular-nums text-white">{v}</div>
+          <div className="-mt-12 px-5 pb-5">
+            <div className="relative">
+              <div className="truncate text-xl font-semibold tracking-tight text-white">{c.name}</div>
+              <div className="truncate text-sm text-white/65">{c.show || `@${c.handle}`}{c.branch ? ` · ${c.branch}` : ""}</div>
+            </div>
+            <div className="mt-4 grid gap-px overflow-hidden rounded-2xl bg-white/10" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0,1fr))` }}>
+              {tiles.map(([l, v]) => (
+                <div key={l} className="bg-[#0e1d3f] px-3 py-3">
+                  <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-white/50">{l}</div>
+                  <div className="mt-1 text-xl font-medium tabular-nums text-white">{v}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex items-center justify-between text-xs text-white/50">
+              <span className="inline-flex items-center gap-1.5"><TrendingUp className="h-3.5 w-3.5 text-[#F0A71F]" /> Open the full profile</span>
+              <span className="flex gap-1">{pool.map((_, k) => <span key={k} className={`h-1.5 rounded-full transition-all ${k === i % pool.length ? "w-5 bg-[#F0A71F]" : "w-1.5 bg-white/25"}`} />)}</span>
+            </div>
+          </div>
+        </button>
+
+        {/* the profile, rising over the card */}
+        <div aria-hidden className={`pointer-events-none absolute inset-0 flex overflow-hidden bg-[#f7f8fb] text-[#0b1733] transition-transform duration-700 ease-[cubic-bezier(.2,.8,.2,1)] ${open ? "translate-y-0" : "translate-y-full"}`}>
+          <div className="w-[34%] shrink-0 border-r border-black/5 bg-[#eef1f6] px-2.5 py-4">
+            <div className="px-1 pb-2 text-[8px] font-medium uppercase tracking-[0.16em] text-black/40">Sections</div>
+            {toc.map((t, k) => (
+              <div key={t} className={`mb-0.5 flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10px] transition-colors duration-500 ${phase === "read" && k === 1 ? "bg-[#053877]/10 font-medium text-[#053877]" : k === 0 && phase !== "read" ? "bg-[#053877]/10 font-medium text-[#053877]" : "text-black/55"}`}>
+                <span className="tabular-nums opacity-60">0{k + 1}</span>{t}
               </div>
             ))}
           </div>
-          {c.quality != null && (
-            <div className="mt-3">
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-[#F0A71F]" style={{ width: `${Math.min(100, c.quality)}%` }} /></div>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <div className={`transition-transform duration-[2600ms] ease-in-out ${phase === "read" ? "-translate-y-[38%]" : "translate-y-0"}`}>
+              <div className="flex items-center gap-2.5 border-b border-black/5 bg-white px-3 py-3">
+                <img src={src(c.picture)} alt="" className={`h-10 w-10 rounded-full object-cover ${c.verified ? "ring-2 ring-[#F0A71F]" : ""}`} />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1 truncate text-[13px] font-semibold">{c.name}{c.verified && <BadgeCheck className="h-3.5 w-3.5 text-[#F0A71F]" />}</div>
+                  <div className="truncate text-[10px] text-[#2563eb]">@{c.handle}</div>
+                  <div className="text-[10px] text-black/55"><b className="text-black/80">{compact(c.followers)}</b> followers{c.engagement != null && <> · <b className="text-black/80">{pct(c.engagement, 2)}</b> eng.</>}</div>
+                </div>
+              </div>
+              <div className="bg-white px-3 pb-3 pt-2.5">
+                <div className="mb-1.5 text-[10px]"><span className="text-black/40">01</span> <span className="font-semibold">Decision signals</span></div>
+                <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-black/10">
+                  {railTiles.map(([l, v]) => (
+                    <div key={l} className="-mb-px -mr-px border-b border-r border-black/10 px-2 py-1.5">
+                      <div className="text-[7.5px] font-medium uppercase tracking-[0.1em] text-black/45">{l}</div>
+                      <div className="text-[13px] font-semibold tabular-nums">{v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-1.5 bg-white px-3 pb-3 pt-2.5">
+                <div className="mb-1.5 text-[10px]"><span className="text-black/40">02</span> <span className="font-semibold">Audience quality</span></div>
+                {c.credibility != null && <div className="mb-1 flex items-baseline justify-between text-[9px] text-black/55"><span>Credibility</span><span className="text-[12px] font-semibold text-black/85">{c.credibility}<span className="text-[9px] font-normal text-black/45">/100</span></span></div>}
+                {bar.length > 0 && (
+                  <>
+                    <div className="flex h-1.5 overflow-hidden rounded-full bg-black/5">{bar.map(([col, v]) => <span key={col} style={{ width: `${v}%`, background: col }} />)}</div>
+                    <div className="mt-1 text-[8.5px] text-black/55"><b className="text-black/80">{c.types.real != null ? Math.round(c.types.real) : "–"}%</b> real people</div>
+                  </>
+                )}
+                {c.interests.length > 0 && (
+                  <div className="mt-2 flex flex-col gap-1">
+                    {c.interests.map((it) => (
+                      <div key={it.name} className="grid grid-cols-[1fr_2.25rem] items-center gap-1.5 text-[9px]">
+                        <span className="truncate text-black/70">{it.name}</span>
+                        <span className="text-right font-medium tabular-nums">{Math.round(it.pct)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-          <div className="mt-4 flex items-center justify-between text-xs text-white/50">
-            <span className="inline-flex items-center gap-1.5"><TrendingUp className="h-3.5 w-3.5 text-[#F0A71F]" /> Open the full profile</span>
-            <span className="flex gap-1">{pool.map((_, k) => <span key={k} className={`h-1.5 rounded-full transition-all ${k === i % pool.length ? "w-5 bg-[#F0A71F]" : "w-1.5 bg-white/25"}`} />)}</span>
           </div>
         </div>
-      </button>
+      </div>
+
+      {/* the cursor */}
+      <div aria-hidden className="pointer-events-none absolute z-10 transition-all duration-1000 ease-[cubic-bezier(.4,0,.2,1)]" style={{ left: cursorOn ? "54%" : "96%", top: cursorOn ? "40%" : "104%", opacity: cursorOn ? 1 : 0 }}>
+        {phase === "click" && <span className="absolute -left-3 -top-3 h-8 w-8 rounded-full bg-[#F0A71F]/60" style={{ animation: "mv-click .5s ease-out forwards" }} />}
+        <svg width="26" height="26" viewBox="0 0 24 24" className="drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)]"><path d="M4 2l15 8.2-6.4 1.6 3.9 7.3-2.9 1.5-3.9-7.3L4 18z" fill="white" stroke="#0b1733" strokeWidth="1.3" strokeLinejoin="round" /></svg>
+      </div>
     </div>
   );
 }
