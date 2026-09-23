@@ -61,40 +61,35 @@ export function CrewDashboard({ crew, email, onPickEvent, cohost }: { crew: Crew
   return (
     <div className="lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-8" data-testid="crew-dashboard">
       <nav className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-10rem)]" aria-label="Crew sections">
-        <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-5 rounded-2xl border border-border bg-card p-3 shadow-sm">
+        {/* Navy, like the podcaster's nav and the header above it. */}
+        <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-5 rounded-2xl bg-[#04102b] p-3 shadow-sm">
           <div>
-            <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">You</p>
+            <p className="mb-1 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">You</p>
             <div className="flex flex-col gap-0.5">
               {nav.map((it) => {
                 const Icon = it.icon;
                 const active = screen === it.key;
                 return (
-                  <button key={it.key} type="button" onClick={() => setScreen(it.key)} className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-left transition-colors ${active ? "bg-[#053877] text-white shadow-sm" : "text-foreground hover:bg-[#053877]/[0.06]"}`} data-testid={`nav-crew-${it.key}`}>
-                    <Icon className={`h-4 w-4 shrink-0 ${active ? "text-white" : "text-[#053877]"}`} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] font-semibold tracking-[-0.01em]">{it.label}</span>
-                      <span className={`block text-xs ${active ? "text-white/80" : "text-foreground/80"}`}>{it.hint}</span>
-                    </span>
+                  <button key={it.key} type="button" title={it.hint} onClick={() => setScreen(it.key)} className={`relative flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${active ? "bg-white/[0.12] text-white before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-[#F0A71F]" : "text-white/75 hover:bg-white/10 hover:text-white"}`} data-testid={`nav-crew-${it.key}`}>
+                    <Icon className={`h-4 w-4 shrink-0 ${active ? "text-[#F0A71F]" : "text-white/60"}`} />
+                    <span className="min-w-0 flex-1 text-[14.5px] font-medium">{it.label}</span>
                   </button>
                 );
               })}
             </div>
           </div>
           <div>
-            <p className="mb-1.5 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">The day</p>
+            <p className="mb-1 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">The day</p>
             <div className="flex flex-col gap-0.5">
               {links.map((it) => {
                 const Icon = it.icon;
                 const inner = (
                   <>
-                    {it.green ? <StudioIcon className="h-6 w-6 rounded-md" tone="green" /> : <Icon className="h-4 w-4 shrink-0 text-[#053877]" />}
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] font-semibold tracking-[-0.01em]">{it.label}</span>
-                      <span className="block text-xs text-foreground/80">{it.hint}</span>
-                    </span>
+                    {it.green ? <StudioIcon className="h-5 w-5 rounded-md" tone="green" /> : <Icon className="h-4 w-4 shrink-0 text-white/60" />}
+                    <span className="min-w-0 flex-1 text-[14.5px] font-medium">{it.label}</span>
                   </>
                 );
-                const cls = "flex items-center gap-2.5 rounded-xl px-3 py-2 text-left text-foreground transition-colors hover:bg-[#053877]/[0.06]";
+                const cls = "flex items-center gap-3 rounded-lg px-3 py-2 text-left text-white/75 transition-colors hover:bg-white/10 hover:text-white";
                 return it.external ? (
                   <a key={it.label} href={it.href} target="_blank" rel="noreferrer" className={cls} data-testid={`nav-crew-${it.label.toLowerCase().replace(/\s+/g, "-")}`}>{inner}</a>
                 ) : it.href.startsWith("#") ? (

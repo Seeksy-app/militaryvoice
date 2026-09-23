@@ -40,7 +40,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { NavBar } from "@/components/NavBar";
-import { LogoLockup } from "@/components/Logo";
+import { LogoLockup, LogoLockupOnDark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -913,34 +913,37 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
              is gone because the highlighted tab below already says
              "Integrations" — printing it twice, with the address bar saying it
              a third time, was three answers to a question nobody asked. */
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+          /* A navy bar across the top, the same navy as the nav and the
+             command card, so the page is one frame: the mark on the left,
+             who you are and the way out on the right. */
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#04102b] px-4 py-3 text-white sm:px-5" data-testid="workspace-header">
             <Link href="/host/dashboard" className="shrink-0" data-testid="link-workspace-home">
-              <LogoLockup className="h-9 w-auto" />
+              <LogoLockupOnDark className="h-9 w-auto" />
             </Link>
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 items-center gap-3">
               {profile?.photoUrl ? (
                 <img
                   src={resolveUploadUrl(profile.photoUrl)}
                   alt=""
-                  className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-border"
+                  className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white/20"
                 />
               ) : (
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-xs font-bold text-[#053877]">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white">
                   {(profile?.podcastName || data?.email || "?").trim().charAt(0).toUpperCase()}
                 </span>
               )}
-              <span className="hidden min-w-0 sm:block">
-                <span className="block truncate text-sm font-semibold text-foreground">
+              <span className="hidden min-w-0 leading-tight sm:block">
+                <span className="block truncate text-sm font-semibold text-white">
                   {profile?.podcastName || data?.email}
                 </span>
-                <span className="block truncate text-xs text-muted-foreground">{data?.email}</span>
-                {sessionLine && <span className="block truncate text-[11px] text-muted-foreground/80" data-testid="text-session-until">{sessionLine}</span>}
+                <span className="block truncate text-xs text-white/65">{data?.email}</span>
+                {sessionLine && <span className="block truncate text-[11px] text-white/45" data-testid="text-session-until">{sessionLine}</span>}
               </span>
               <SeatSwitcher current={data?.email ?? ""} />
               <Button
                 variant="outline"
                 size="sm"
-                className="ml-1 shrink-0 gap-1.5 rounded-full"
+                className="ml-1 shrink-0 gap-1.5 rounded-full border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white"
                 onClick={() => logout.mutate()}
                 disabled={logout.isPending}
                 data-testid="button-host-logout"
