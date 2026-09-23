@@ -241,7 +241,7 @@ function RunningOrder({ slug, studioId, searchable = false, canTake = false }: {
 }
 
 /** Attaches a subscribed LiveKit track to a real media element. */
-function PeerTile({ peer, muted = false, fill = false, keyed = false, onBring }: { peer: RoomPeer; muted?: boolean; fill?: boolean; keyed?: boolean; onBring?: () => void }) {
+function PeerTile({ peer, muted = false, fill = false, keyed = false, onBring, compact = false }: { peer: RoomPeer; muted?: boolean; fill?: boolean; keyed?: boolean; onBring?: () => void; compact?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -300,6 +300,7 @@ function PeerTile({ peer, muted = false, fill = false, keyed = false, onBring }:
 
   return (
     <div
+      title={compact ? `${peer.name}${peer.title ? ` · ${peer.title}` : ""}` : undefined}
       className={`relative overflow-hidden bg-black ${
         // aspect-video is right for a grid of equal tiles and wrong inside a
         // card that sets its own height — it letterboxed her into a strip.
@@ -338,10 +339,11 @@ function PeerTile({ peer, muted = false, fill = false, keyed = false, onBring }:
         <button
           type="button"
           onClick={onBring}
-          className="absolute right-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-bold text-white shadow-lg transition-colors hover:bg-emerald-400"
+          title={`Bring ${peer.name} on stage`}
+          className={`absolute right-1 top-1 z-10 inline-flex items-center gap-1 rounded-full bg-emerald-500 font-bold text-white shadow-lg transition-colors hover:bg-emerald-400 ${compact ? "p-1" : "px-2.5 py-1 text-[11px]"}`}
           data-testid={`button-bring-on-${peer.identity}`}
         >
-          <ArrowUp className="h-3 w-3" /> Bring on stage
+          <ArrowUp className="h-3 w-3" />{!compact && " Bring on stage"}
         </button>
       )}
       {/* Their initials rather than a crossed-out camera icon. Four tiles all
@@ -350,9 +352,9 @@ function PeerTile({ peer, muted = false, fill = false, keyed = false, onBring }:
       {!peer.videoTrack && (
         <div className="absolute inset-0 flex items-center justify-center">
           {peer.photoUrl ? (
-            <img src={peer.photoUrl} alt="" className={`h-14 w-14 rounded-full object-cover ${peer.isHost ? "ring-2 ring-[#F0A71F]" : "ring-1 ring-white/15"}`} />
+            <img src={peer.photoUrl} alt="" className={`${compact ? "h-9 w-9" : "h-14 w-14"} rounded-full object-cover ${peer.isHost ? "ring-2 ring-[#F0A71F]" : "ring-1 ring-white/15"}`} />
           ) : (
-            <span className={`flex h-14 w-14 items-center justify-center rounded-full bg-white/10 text-lg font-bold text-white/60 ${peer.isHost ? "ring-2 ring-[#F0A71F]" : "ring-1 ring-white/15"}`}>
+            <span className={`flex ${compact ? "h-9 w-9 text-xs" : "h-14 w-14 text-lg"} items-center justify-center rounded-full bg-white/10 font-bold text-white/60 ${peer.isHost ? "ring-2 ring-[#F0A71F]" : "ring-1 ring-white/15"}`}>
               {initialsOf(peer.name)}
             </span>
           )}
@@ -362,7 +364,7 @@ function PeerTile({ peer, muted = false, fill = false, keyed = false, onBring }:
         <span className="absolute left-1.5 top-1.5 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#1a1200]">{peer.title || "Studio host"}</span>
       )}
       {!fill && (
-        <span className="absolute inset-x-1.5 bottom-1.5 truncate rounded bg-black/60 px-1.5 py-0.5 text-[12px] text-white">
+        <span className={`absolute truncate rounded bg-black/60 text-white ${compact ? "inset-x-1 bottom-1 px-1 py-px text-[10px]" : "inset-x-1.5 bottom-1.5 px-1.5 py-0.5 text-[12px]"}`}>
           {peer.name}
         </span>
       )}
@@ -1404,9 +1406,13 @@ export default function Studio({ slug }: { slug?: string }) {
                   <div className="mb-2 flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-white/50">
                     <Users className="h-3.5 w-3.5 text-[#F0A71F]" /> In here with you ({greenRoomPeers.length})
                   </div>
-                  <div className="grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto pr-1">
+                  {/* Small thumbnails, three across: the room can hold a dozen
+                      guests between segments and your own picture is the one
+                      that matters here. Hover a face for the full name. */}
+                  <div className="grid max-h-[22rem] grid-cols-3 gap-1.5 overflow-y-auto pr-1">
                     {greenRoomPeers.map((p) => (
                       <PeerTile
+                        compact
                         key={p.identity}
                         peer={p}
                         muted={consoleHere}
