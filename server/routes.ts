@@ -2980,12 +2980,12 @@ export function registerRoutes(app: Express): void {
       crew = await isCrew(req, event.id);
       if (crew) mayJoin = true;
       else {
-        const host = getSessionEmail(req);
+        const host = (getSessionEmail(req) ?? "").trim().toLowerCase();
         mayJoin =
           Boolean(host) &&
-          (await storage.listSignups(event.id)).some(
-            (sg) => sg.status !== "cancelled" && sg.email.trim().toLowerCase() === host!.trim().toLowerCase(),
-          );
+          ((await storage.listSignups(event.id)).some(
+            (sg) => sg.status !== "cancelled" && sg.email.trim().toLowerCase() === host,
+          ) || (await storage.listCohostSlots(event.id)).some((c) => c.email.trim().toLowerCase() === host));
       }
     }
     const all = await storage.listStudioParticipants(studio.id);
@@ -3209,14 +3209,20 @@ export function registerRoutes(app: Express): void {
      * check is here rather than in the browser because the browser is not
      * where a stranger would be.
      */
-    const adminEmail = getAdminEmail(req);
-    const isCrew = Boolean(adminEmail && (await storage.isAdminEmail(adminEmail)));
+    // Crew is the same test the page uses to show the way in — admins, the
+    // event team (Riccoh, the producers) and the studio crew list — plus the
+    // co-hosts who hold an hour at the desk. It used to be admins only here,
+    // so a team member signed in as a podcaster was shown "Join" and then
+    // refused.
+    const crew = await isCrew(req, found.event.id);
+    const me = (hostEmail ?? "").trim().toLowerCase();
     const onTheAgenda =
-      Boolean(hostEmail) &&
+      Boolean(me) &&
       (await storage.listSignups(found.event.id)).some(
-        (sg) => sg.status !== "cancelled" && sg.email.trim().toLowerCase() === hostEmail!.trim().toLowerCase(),
+        (sg) => sg.status !== "cancelled" && sg.email.trim().toLowerCase() === me,
       );
-    if (!isCrew && !onTheAgenda) {
+    const coHost = Boolean(me) && (await storage.listCohostSlots(found.event.id)).some((c) => c.email.trim().toLowerCase() === me);
+    if (!crew && !onTheAgenda && !coHost) {
       res.status(403).json({
         message: hostEmail
           ? "The green room is for podcasters on this event's lineup. Take a time on the agenda and it opens for you."
