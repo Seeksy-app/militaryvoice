@@ -3523,7 +3523,7 @@ export function registerRoutes(app: Express): void {
     const assets = await storage.listAllAssets();
     res.json(
       assets
-        .filter((a) => a.fileUrl || a.linkUrl)
+        .filter((a) => (a.fileUrl || a.linkUrl) && a.kind !== "Clip") // clips are posts on the podcaster's dashboard, not scene material
         .map((a) => {
           const url = a.fileUrl || a.linkUrl;
           const sg = byEmail.get(a.email.toLowerCase().trim());
