@@ -549,9 +549,11 @@ type HeroProps = { door: (typeof DOORS)[number]["key"]; setDoor: (d: (typeof DOO
 
 function HeroA({ door, setDoor, bar, tries, onEnrich, allowance }: HeroProps & { allowance: { used: number; allowance: number } | null }) {
   return (
-    <section className="relative overflow-clip" style={{ background: NAVY }}>
-      <div aria-hidden className="pointer-events-none absolute -right-40 -top-40 h-[32rem] w-[32rem] rounded-full opacity-[0.16] blur-3xl" style={{ background: GOLD }} />
-      <div aria-hidden className="pointer-events-none absolute -bottom-48 -left-32 h-[28rem] w-[28rem] rounded-full bg-[#1d5cc4] opacity-20 blur-3xl" />
+    <section className="relative isolate" style={{ background: NAVY }}>
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+        <div className="absolute -right-40 -top-40 h-[32rem] w-[32rem] rounded-full opacity-[0.16] blur-3xl" style={{ background: GOLD }} />
+        <div className="absolute -bottom-48 -left-32 h-[28rem] w-[28rem] rounded-full bg-[#1d5cc4] opacity-20 blur-3xl" />
+      </div>
       <div className="relative mx-auto w-full max-w-6xl px-4 pb-10 pt-12 sm:px-6 sm:pt-16">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]"><Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery</p>
@@ -590,11 +592,15 @@ function HeroA({ door, setDoor, bar, tries, onEnrich, allowance }: HeroProps & {
 function HeroB({ door, setDoor, bar, tries, onEnrich, verified, onOpen }: HeroProps & { verified: Card[]; onOpen: (c: Card) => void }) {
   const d = DOORS.find((x) => x.key === door)!;
   return (
-    <section className="relative isolate overflow-clip" style={{ background: "#030b1f" }}>
-      {/* depth: a fine grid that fades out, and two soft lights */}
+    <section className="relative isolate" style={{ background: "#030b1f" }}>
+      {/* depth: a fine grid that fades out, and two soft lights, clipped on their own layer so the section never scrolls or clips its menus */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+      
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-[0.55]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)", backgroundSize: "44px 44px", maskImage: "radial-gradient(ellipse 80% 70% at 70% 30%, black 20%, transparent 75%)", WebkitMaskImage: "radial-gradient(ellipse 80% 70% at 70% 30%, black 20%, transparent 75%)" }} />
       <div aria-hidden className="pointer-events-none absolute -top-48 right-[-10%] -z-10 h-[40rem] w-[40rem] rounded-full opacity-25 blur-[120px]" style={{ background: GOLD }} />
       <div aria-hidden className="pointer-events-none absolute -bottom-64 -left-40 -z-10 h-[36rem] w-[36rem] rounded-full bg-[#1d5cc4] opacity-30 blur-[120px]" />
+
+      </div>
 
       <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 pb-14 pt-12 sm:px-6 sm:pt-16 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:pb-20 lg:pt-20">
         <div className="min-w-0">
