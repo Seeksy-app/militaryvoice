@@ -1,30 +1,36 @@
-Stock video on the About page (/platform)
-=========================================
+Stock footage and stills on the About page (/platform)
+======================================================
 
-All clips are from Pexels, used under the Pexels License (free for commercial
-and non-commercial use, no attribution required): https://www.pexels.com/license/
-Each file is trimmed to 7-8 s, re-encoded to H.264 at 960 px (main stage) or
-480-640 px wide, 24 fps, with no audio. The .jpg next to each clip is its first frame (poster).
-The face-*.jpg avatars are cropped from frames of the guest clips.
+Everything here is from Pexels, used under the Pexels License (free for
+commercial and non-commercial use, no attribution required):
+https://www.pexels.com/license/
+Clips are trimmed to 8-9 s and re-encoded to H.264, 24 fps, with no audio.
+keynote.mp4 is 1280 px wide; the others are 480-640 px. The .jpg next to each
+clip is its first frame (poster). The face-*.jpg avatars are cropped from
+frames of the guest clips.
 
-main-stage.mp4    "A Professional Doing a Public Speaking" by Henri Mathieu-Saint-Laurent
-                  https://www.pexels.com/video/a-professional-doing-a-public-speaking-8244322/
-stage-2.mp4       "Man Talking at a Conference" by Pavel Danilyuk
+Hero
+keynote.mp4       "Speaker Addressing Illuminated Audience at Night" by JD MONTORO
+                  https://www.pexels.com/video/speaker-addressing-illuminated-audience-at-night-35451425/
+stage-2.mp4       "Man Talking at a Conference" by Pavel Danilyuk (picture-in-picture)
                   https://www.pexels.com/video/man-talking-at-a-conference-8716579/
-expo-floor.mp4    "Busy Trade Show Exhibition with Visitors" by Val A
-                  https://www.pexels.com/video/busy-trade-show-exhibition-with-visitors-35213845/
-camera-2.mp4      Videographer filming a live event, by Nino Souza
-                  https://www.pexels.com/video/2317031/
-control-room.mp4  "People Works On A Broadcast Of An Event" by Nino Souza
-                  https://www.pexels.com/video/people-works-on-a-broadcast-of-an-event-2890236/
+
+Studio and green room
+guest-ray.mp4     "A Man Talking in Microphone" by cottonbro studio
+                  https://www.pexels.com/video/a-man-talking-in-microphone-6878208/
 guest-jordan.mp4  "Man Talking in the Microphone While Using Laptop" by TREEDEO.ST
                   https://www.pexels.com/video/man-talking-in-the-microphone-while-using-laptop-8068263/
 guest-daniel.mp4  "Man Talking In Front of Camera" by Antoni Shkraba
                   https://www.pexels.com/video/man-talking-in-front-of-camera-8048256/
-guest-ray.mp4     "A Man Sitting and Talking with a Microphone" by cottonbro studio
-                  https://www.pexels.com/video/a-man-sitting-and-talking-with-a-microphone-6878209/
 guest-lena.mp4    "Woman Doing Podcast" by Karola G. (kaboompics)
                   https://www.pexels.com/video/woman-doing-podcast-4540151/
 
-The names shown on screen for the people in these clips (Jordan Blake, Daniel Cho,
-Ray Castillo, Lena Park, James Okafor) are fictional.
+Studio scene rail stills
+scene-conference.jpg  a frame of "A Professional Doing a Public Speaking" by Henri Mathieu-Saint-Laurent
+                      https://www.pexels.com/video/a-professional-doing-a-public-speaking-8244322/
+scene-sponsor.jpg     photo "A Bearded Man in Blue Long Sleeves Holding a Notebook" by Antoni Shkraba
+                      https://www.pexels.com/photo/a-bearded-man-in-blue-long-sleeves-holding-a-notebook-7175991/
+
+The names shown on screen for the people in these clips (James Okafor,
+Jordan Blake, Daniel Cho, Ray Castillo, Lena Park) and the sponsor
+"Ironside Coffee" are fictional.

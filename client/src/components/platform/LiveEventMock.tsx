@@ -1,12 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Eye, Video } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Eye } from "lucide-react";
 import { PlatformIcon } from "@/components/SocialIcons";
-import { CLIPS, VCAST, LoopVideo, SoonPill } from "./stockVideo";
+import { CLIPS, LoopVideo } from "./stockVideo";
 
-// The hero's picture: a live event as the production team sees it. The main
-// stage on air, the other feeds around it — a second stage, the expo floor,
-// a camera on the audience, the control room, a guest in the green room —
-// with our LIVE bar across the top. Real footage (Pexels), muted and looped.
+// The hero's picture: one big, immersive keynote — a speaker at a lectern
+// facing a full hall — with just enough of our product laid over it to read
+// as "this is running on MilitaryVoices": the LIVE bar, a lower third, and a
+// second stage in picture-in-picture. Real footage (Pexels), muted, looped.
 
 function useViewers(start: number) {
   const [n, setN] = useState(start);
@@ -28,123 +28,92 @@ function useClock(startSeconds: number) {
   return `${h}:${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
-/** One feed in the multiview: the clip, its name, and a tally light. */
-function Feed({
-  src,
-  poster,
-  label,
-  tally,
-  className = "",
-  children,
-}: {
-  src: string;
-  poster: string;
-  label: string;
-  tally?: "pgm" | "pvw";
-  className?: string;
-  children?: ReactNode;
-}) {
+function LiveBar({ compact = false }: { compact?: boolean }) {
+  const viewers = useViewers(12480);
+  const clock = useClock(1 * 3600 + 14 * 60 + 41);
   return (
-    <div
-      className={`relative overflow-hidden rounded-md bg-[#04102b] ${
-        tally === "pgm" ? "ring-2 ring-[#ED1C24]" : tally === "pvw" ? "ring-2 ring-emerald-400" : "ring-1 ring-white/10"
-      } ${className}`}
-      style={{ containerType: "inline-size" }}
-    >
-      <LoopVideo src={src} poster={poster} className="absolute inset-0 h-full w-full object-cover" />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-      <span className="absolute bottom-[5%] left-[4%] flex max-w-[92%] items-center gap-1 truncate rounded bg-black/55 px-1.5 py-0.5 text-[clamp(8px,6.5cqw,11px)] font-semibold text-white backdrop-blur-sm">
-        {tally === "pvw" && <span className="rounded-sm bg-emerald-500 px-1 text-[0.85em] font-bold uppercase leading-tight">Next</span>}
-        <span className="truncate">{label}</span>
+    <div className="inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-[#000741]/70 py-1 pl-1 pr-3 text-white shadow-lg backdrop-blur-md">
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ED1C24] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] sm:text-[11px]">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+        </span>
+        Live
       </span>
-      {children}
+      {!compact && <span className="font-mono text-xs tabular-nums text-white/70">{clock}</span>}
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold tabular-nums">
+        <Eye className="h-3.5 w-3.5 text-[#F0A71F]" /> {viewers.toLocaleString("en-US")}
+      </span>
+      <span className="inline-flex items-center" title="Streaming to YouTube">
+        <PlatformIcon platform="youtube" className="h-4 w-4" />
+      </span>
     </div>
   );
 }
 
-export function LiveEventMock() {
-  const viewers = useViewers(12480);
-  const clock = useClock(2 * 3600 + 14 * 60 + 41);
-
+function LowerThird({ size = "lg" }: { size?: "lg" | "sm" }) {
   return (
-    <div className="relative" aria-label="An illustration of a live event running on MilitaryVoices: two stages, the expo floor, cameras and the green room" role="img">
-      {/* The glow the frame sits in. */}
-      <div aria-hidden className="pointer-events-none absolute -inset-10 -z-10 rounded-[3rem] bg-[radial-gradient(60%_55%_at_55%_45%,rgba(240,167,31,0.22),transparent_70%)]" />
-
-      <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#000741] shadow-[0_50px_100px_-30px_rgba(0,0,0,0.85)] ring-1 ring-black/40">
-        {/* Broadcast chrome */}
-        <div className="flex items-center gap-2.5 border-b border-white/10 bg-[#04102b] px-3 py-2 sm:gap-3 sm:px-4">
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-[#ED1C24] px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white">
-            <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
-            </span>
-            Live
-          </span>
-          <span className="hidden font-mono text-xs tabular-nums text-white/55 sm:inline">{clock}</span>
-          <span className="min-w-0 truncate text-xs font-medium text-white/85 sm:text-sm"><span className="sm:hidden">Veterans Summit</span><span className="hidden sm:inline">Veterans Leadership Summit</span></span>
-          <span className="ml-auto flex shrink-0 items-center gap-2.5">
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold tabular-nums text-white">
-              <Eye className="h-3.5 w-3.5 text-[#F0A71F]" /> {viewers.toLocaleString("en-US")}
-            </span>
-            <span className="inline-flex items-center gap-1 text-white" title="Streaming to YouTube">
-              <PlatformIcon platform="youtube" className="h-4 w-4" />
-            </span>
-          </span>
-        </div>
-
-        {/* The multiview */}
-        <div className="grid grid-cols-3 gap-1.5 bg-black p-1.5">
-          <Feed
-            src={CLIPS.mainStage.src}
-            poster={CLIPS.mainStage.poster}
-            label="Main Stage · Camera 1"
-            tally="pgm"
-            className="col-span-3 aspect-video sm:col-span-2 sm:row-span-2 sm:aspect-auto"
-          >
-            {/* On air, the station mark, and the speaker's lower third. */}
-            <span className="absolute left-[3%] top-[4%] inline-flex items-center gap-1 rounded bg-[#ED1C24] px-1.5 py-0.5 text-[clamp(8px,1.9cqw,11px)] font-bold uppercase tracking-[0.12em] text-white">On air</span>
-            <img src="/logo-wave.png?v=2" alt="" className="absolute right-[3%] top-[4%] w-[9%] drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]" />
-            <div className="absolute bottom-[14%] left-[3%] max-w-[70%]" style={{ fontSize: "clamp(10px, 3.2cqw, 19px)" }}>
-              <div className="flex items-stretch overflow-hidden rounded-md shadow-[0_4px_20px_rgba(0,0,0,0.5)]">
-                <div className="w-[0.28em] shrink-0 bg-[#F0A71F]" />
-                <div className="min-w-0 bg-[#000741]/92 px-[0.7em] py-[0.35em] backdrop-blur-sm">
-                  <p className="truncate font-bold leading-tight text-white" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>James Okafor</p>
-                  <p className="truncate text-[0.7em] leading-tight text-[#F0A71F]">Army veteran · Keynote: Leading after service</p>
-                </div>
-              </div>
-            </div>
-          </Feed>
-          <Feed src={CLIPS.stage2.src} poster={CLIPS.stage2.poster} label="Stage 2 · Workshop" tally="pvw" className="aspect-video" />
-          <Feed src={CLIPS.expo.src} poster={CLIPS.expo.poster} label="Expo floor" className="aspect-video" />
-          <Feed src={CLIPS.camera.src} poster={CLIPS.camera.poster} label="Camera 3 · Audience" className="aspect-video" />
-          <Feed src={CLIPS.control.src} poster={CLIPS.control.poster} label="Control room" className="hidden aspect-video sm:block" />
-          <Feed src={VCAST.jordan.src} poster={VCAST.jordan.poster} label="Green room · Jordan" className="hidden aspect-video sm:block" />
-        </div>
-
-        {/* Where it's going out */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-white/10 bg-[#04102b] px-3 py-2 text-[11px] text-white/70 sm:px-4">
-          <span className="inline-flex items-center gap-1.5 font-semibold text-white"><Video className="h-3.5 w-3.5 text-[#F0A71F]" /> 6 feeds · 2 stages</span>
-          <span className="inline-flex items-center gap-1.5"><PlatformIcon platform="youtube" className="h-3.5 w-3.5 text-white" /> YouTube</span>
-          <span className="inline-flex items-center gap-1.5 text-white/45">
-            <PlatformIcon platform="linkedin" className="h-3.5 w-3.5" />
-            <PlatformIcon platform="facebook" className="h-3.5 w-3.5" />
-            <PlatformIcon platform="x" className="h-3.5 w-3.5" />
-            <SoonPill />
-          </span>
-        </div>
+    <div className="flex items-stretch overflow-hidden rounded-md shadow-[0_8px_30px_rgba(0,0,0,0.5)]">
+      <div className={`shrink-0 bg-[#F0A71F] ${size === "lg" ? "w-1.5" : "w-1"}`} />
+      <div className={`min-w-0 bg-[#000741]/90 backdrop-blur-sm ${size === "lg" ? "px-4 py-2.5" : "px-2.5 py-1.5"}`}>
+        <p className={`truncate font-bold leading-tight text-white ${size === "lg" ? "text-lg" : "text-sm"}`} style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
+          James Okafor
+        </p>
+        <p className={`truncate leading-tight text-[#F0A71F] ${size === "lg" ? "text-[13px]" : "text-[11px]"}`}>{size === "lg" ? "Army veteran · Keynote: Leading after service" : "Keynote · Leading after service"}</p>
       </div>
+    </div>
+  );
+}
 
-      {/* Alex, in the green room */}
-      <div className="absolute right-5 top-full -mt-4 hidden w-64 rounded-2xl border border-white/10 bg-white/95 p-3 text-slate-900 shadow-2xl backdrop-blur xl:block">
-        <div className="flex items-center gap-2.5">
-          <img src="/alex.jpg" alt="" className="h-8 w-8 rounded-full object-cover ring-2 ring-[#F0A71F]" />
-          <div className="min-w-0">
-            <p className="text-xs font-semibold leading-tight">Alex <span className="font-normal text-slate-500">· AI producer</span></p>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">In the green room</p>
-          </div>
+function Pip({ className = "" }: { className?: string }) {
+  return (
+    <div className={`overflow-hidden rounded-lg bg-[#04102b] shadow-[0_12px_40px_rgba(0,0,0,0.6)] ring-1 ring-white/25 ${className}`}>
+      <div className="relative aspect-video">
+        <LoopVideo src={CLIPS.stage2.src} poster={CLIPS.stage2.poster} className="absolute inset-0 h-full w-full object-cover" />
+        <span className="absolute left-1.5 top-1.5 rounded bg-emerald-500 px-1 text-[9px] font-bold uppercase leading-4 tracking-wider text-white">Next</span>
+      </div>
+      <p className="truncate px-2 py-1 text-[11px] font-semibold text-white/90">Stage 2<span className="hidden sm:inline"> · Workshop</span></p>
+    </div>
+  );
+}
+
+/**
+ * Desktop: the keynote fills the right of the hero edge to edge, fading into
+ * navy under the headline so the words always sit on a solid ground.
+ */
+export function HeroBackdrop() {
+  return (
+    <div className="absolute inset-y-0 right-0 hidden w-[66%] lg:block xl:w-[68%]" aria-label="A keynote speaker at a lectern, live on MilitaryVoices, with a second stage in picture-in-picture" role="img">
+      <LoopVideo src={CLIPS.keynote.src} poster={CLIPS.keynote.poster} className="absolute inset-0 h-full w-full object-cover object-[60%_50%]" />
+      {/* Navy under the words, a little vignette everywhere else. */}
+      <div aria-hidden className="absolute inset-0 bg-[linear-gradient(90deg,#030b1f_0%,rgba(3,11,31,0.92)_22%,rgba(3,11,31,0.45)_46%,rgba(3,11,31,0)_68%)]" />
+      <div aria-hidden className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,11,31,0.55)_0%,rgba(3,11,31,0)_24%,rgba(3,11,31,0)_70%,rgba(3,11,31,0.85)_100%)]" />
+
+      <div className="absolute right-8 top-8">
+        <LiveBar />
+      </div>
+      <div className="absolute bottom-[13%] left-[38%] max-w-[46%]">
+        <LowerThird />
+      </div>
+      <Pip className="absolute bottom-28 right-8 w-52 xl:w-56" />
+    </div>
+  );
+}
+
+/** Phones and tablets: the same scene as a card under the buttons. */
+export function HeroCard() {
+  return (
+    <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.85)] lg:hidden" aria-label="A keynote speaker at a lectern, live on MilitaryVoices" role="img">
+      <div className="relative aspect-[4/3] sm:aspect-video">
+        <LoopVideo src={CLIPS.keynote.src} poster={CLIPS.keynote.poster} className="absolute inset-0 h-full w-full object-cover object-[62%_50%]" />
+        <div aria-hidden className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,11,31,0.45)_0%,rgba(3,11,31,0)_30%,rgba(3,11,31,0)_55%,rgba(3,11,31,0.85)_100%)]" />
+        <div className="absolute left-3 top-3">
+          <LiveBar compact />
         </div>
-        <p className="mt-2 text-[13px] leading-snug text-slate-700">Jordan, you're on Stage 2 after this session, about four minutes. Camera and mic look great.</p>
+        <div className="absolute bottom-3 left-3 max-w-[64%]">
+          <LowerThird size="sm" />
+        </div>
+        <Pip className="absolute bottom-3 right-3 w-[30%] sm:w-40" />
       </div>
     </div>
   );

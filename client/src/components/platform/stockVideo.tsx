@@ -9,11 +9,14 @@ import type { StageTile } from "@/components/StageView";
 const V = "/platform/video";
 
 export const CLIPS = {
-  mainStage: { src: `${V}/main-stage.mp4`, poster: `${V}/main-stage.jpg` },
+  keynote: { src: `${V}/keynote.mp4`, poster: `${V}/keynote.jpg` },
   stage2: { src: `${V}/stage-2.mp4`, poster: `${V}/stage-2.jpg` },
-  expo: { src: `${V}/expo-floor.mp4`, poster: `${V}/expo-floor.jpg` },
-  camera: { src: `${V}/camera-2.mp4`, poster: `${V}/camera-2.jpg` },
-  control: { src: `${V}/control-room.mp4`, poster: `${V}/control-room.jpg` },
+} as const;
+
+/** Stills for the studio's scene rail: real people and a real (fictional-brand) sponsor spot. */
+export const SCENE_STILLS = {
+  conference: `${V}/scene-conference.jpg`,
+  sponsor: `${V}/scene-sponsor.jpg`,
 } as const;
 
 /** People in the clips. The names are fictional. */

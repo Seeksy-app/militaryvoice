@@ -4,7 +4,8 @@ import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { NavBar } from "@/components/NavBar";
-import { LiveEventMock } from "@/components/platform/LiveEventMock";
+import { HeroBackdrop, HeroCard } from "@/components/platform/LiveEventMock";
+import { PillarArt } from "@/components/platform/PillarArt";
 import { StudioConsoleMock } from "@/components/platform/StudioConsoleMock";
 import { ReadyToJoinMock, WaitingRoomMock } from "@/components/platform/GreenRoomMock";
 import { DiscoverySearchMock, CreatorProfileMock } from "@/components/platform/DiscoveryMock";
@@ -262,13 +263,15 @@ export default function Platform() {
       {/* ------------------------------------------------------------- hero */}
       <section className="relative isolate overflow-hidden bg-[#030b1f] text-white">
         {/* A room full of people, far back, so the page opens on an event. */}
-        <img src="/platform-hero.jpg" alt="" aria-hidden="true" className="absolute inset-0 -z-20 h-full w-full object-cover object-[center_60%] opacity-[0.16]" />
-        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[radial-gradient(90%_70%_at_75%_40%,rgba(5,56,119,0.55),transparent_70%),linear-gradient(180deg,rgba(3,11,31,0.55)_0%,rgba(3,11,31,0.92)_70%,#030b1f_100%)]" />
-        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-40" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px)", backgroundSize: "48px 48px", maskImage: "radial-gradient(ellipse 60% 70% at 70% 40%, black, transparent 80%)", WebkitMaskImage: "radial-gradient(ellipse 60% 70% at 70% 40%, black, transparent 80%)" }} />
+        <img src="/platform-hero.jpg" alt="" aria-hidden="true" className="absolute inset-0 -z-20 h-full w-full object-cover object-[center_60%] opacity-[0.16] lg:hidden" />
+        <div aria-hidden="true" className="absolute inset-0 -z-10 lg:hidden bg-[radial-gradient(90%_70%_at_75%_40%,rgba(5,56,119,0.55),transparent_70%),linear-gradient(180deg,rgba(3,11,31,0.55)_0%,rgba(3,11,31,0.92)_70%,#030b1f_100%)]" />
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-40 lg:hidden" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px)", backgroundSize: "48px 48px", maskImage: "radial-gradient(ellipse 60% 70% at 70% 40%, black, transparent 80%)", WebkitMaskImage: "radial-gradient(ellipse 60% 70% at 70% 40%, black, transparent 80%)" }} />
         <motion.div aria-hidden="true" className="pointer-events-none absolute -left-24 top-1/3 -z-10 h-96 w-96 rounded-full bg-[#F0A71F] opacity-[0.12] blur-3xl" animate={{ x: [0, 30, 0], y: [0, -20, 0] }} transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }} />
 
-        <div className="mx-auto grid max-w-7xl items-center gap-12 px-4 pb-20 pt-14 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.12fr)] lg:gap-14 lg:pb-28 lg:pt-20">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="text-center lg:text-left">
+        <HeroBackdrop />
+
+        <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-4 pb-16 pt-14 sm:px-6 lg:min-h-[660px] lg:pb-24 lg:pt-20">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="text-center lg:max-w-[31rem] lg:text-left xl:max-w-[34rem]">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/30 bg-[#F0A71F]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#F0A71F]">
               <Sparkles className="h-3.5 w-3.5" /> About MilitaryVoices
             </div>
@@ -308,8 +311,8 @@ export default function Platform() {
             </ul>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 24, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, delay: 0.1 }} className="min-w-0">
-            <LiveEventMock />
+          <motion.div initial={{ opacity: 0, y: 24, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, delay: 0.1 }} className="min-w-0 lg:hidden">
+            <HeroCard />
           </motion.div>
         </div>
       </section>
@@ -334,7 +337,7 @@ export default function Platform() {
                 transition={{ duration: 0.45, delay: i * 0.07 }}
                 className="group relative flex flex-col overflow-hidden rounded-3xl border border-border bg-card p-7 shadow-sm transition-shadow hover:shadow-lg"
               >
-                <div aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#F0A71F]/10 blur-2xl transition-opacity group-hover:opacity-100" />
+                <PillarArt kicker={kicker} />
                 <div className="flex items-center gap-3">
                   <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Icon className="h-5 w-5" /></span>
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{String(i + 1).padStart(2, "0")} · {kicker}</span>
@@ -371,7 +374,7 @@ export default function Platform() {
             <ul className="grid gap-3 text-sm text-white/80 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
               {[
                 ["Up to five on stage", "Add and drop people live; nobody leaves and rejoins."],
-                ["Six layouts, one press", "Showtime, Contain, Cover, Sidebar, Picture-in-Picture, Thumbnails."],
+                ["The whole day, queued", "Every segment is a scene down the left; press it to cut."],
                 ["Files cued ahead", "Intros, outros, sponsor reels and images, labelled before the segment."],
                 ["In the room or online", "Put an in-person stage on the stream, or run it all virtually."],
               ].map(([t, b]) => (
@@ -379,9 +382,45 @@ export default function Platform() {
               ))}
             </ul>
           </div>
-          <motion.div {...reveal} className="mt-12">
-            <StudioConsoleMock />
-          </motion.div>
+          {/* The real thing, in a browser frame. */}
+          <motion.figure {...reveal} className="mt-12">
+            <div className="overflow-hidden rounded-2xl bg-[#0b1433] shadow-[0_60px_120px_-40px_rgba(0,0,0,0.9)] ring-1 ring-white/15">
+              <div className="flex items-center gap-3 border-b border-white/10 bg-[#0e1a3d] px-4 py-2.5">
+                <span className="flex gap-1.5" aria-hidden>
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+                </span>
+                <span className="mx-auto hidden max-w-xs flex-1 truncate rounded-md bg-white/10 px-3 py-1 text-center text-xs text-white/60 sm:block">militaryvoices.ai/studio</span>
+                <span className="hidden w-[46px] sm:block" aria-hidden />
+              </div>
+              <img
+                src="/platform/studio-real.jpg"
+                width={1800}
+                height={956}
+                loading="lazy"
+                alt="The MilitaryVoices studio console: the scene rail of shows on the left, the Discovery promo on stage in rehearsal, the six layout buttons underneath, and graphics tools on the right."
+                className="block h-auto w-full"
+              />
+            </div>
+            <figcaption className="mt-4 flex flex-col items-center justify-center gap-2 text-center text-sm text-white/60 sm:flex-row">
+              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#F0A71F]/15 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">The real studio</span>
+              A rehearsal before going live.
+            </figcaption>
+          </motion.figure>
+
+          {/* Secondary: the same console, drawn live, to try the layouts. */}
+          <div className="mt-20">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] lg:items-end lg:gap-14">
+              <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Six layouts, one press</h3>
+              <p className="text-[15px] leading-relaxed text-white/70">
+                Showtime, Contain, Cover, Sidebar, Picture-in-Picture, Thumbnails. The console below steps through them on its own; press any layout to hold it.
+              </p>
+            </div>
+            <motion.div {...reveal} className="mt-8">
+              <StudioConsoleMock />
+            </motion.div>
+          </div>
         </div>
       </section>
 

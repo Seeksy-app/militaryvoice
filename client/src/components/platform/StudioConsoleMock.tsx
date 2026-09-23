@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Clapperboard,
   Plus,
@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { StageGrid, type RoomMeta } from "@/components/StageView";
 import { CAST, castTile, useFakeCamera, useTicker } from "./fakeCamera";
-import { VCAST, useClipTrack, vcastTile } from "./stockVideo";
+import { SCENE_STILLS, VCAST, useClipTrack, vcastTile } from "./stockVideo";
 
 // The control room, drawn from the same parts as the real console: the scene
 // rail down the left, the programme in the middle with Restream's six layouts
@@ -38,11 +38,11 @@ const LAYOUTS: { key: string; label: string; icon: ReactNode }[] = [
 ];
 
 const SCENES = [
-  { n: 1, title: "Stream live — pre-show", time: "6:45 AM", kind: "Video", thumb: "/scenes/pre-show.jpg" },
-  { n: 2, title: "Welcome — Sofia Reyes", time: "7:00 AM", kind: "Cameras", thumb: CAST.sofia.cam, face: CAST.sofia.face },
-  { n: 3, title: "Deckplate Radio — Daniel Cho", time: "9:00 AM", kind: "Cameras", thumb: VCAST.daniel.poster, face: VCAST.daniel.face, live: true },
-  { n: 4, title: "Sponsor reel", time: "9:25 AM", kind: "Video", thumb: "/scenes/sponsor-reel.jpg" },
-  { n: 5, title: "Two Tours — Ray Castillo", time: "9:30 AM", kind: "Cameras", thumb: VCAST.ray.poster, face: VCAST.ray.face },
+  { n: 1, title: "Opening panel — Main stage", time: "8:30 AM", kind: "Cameras", thumb: SCENE_STILLS.conference },
+  { n: 2, title: "Welcome — Sofia Reyes", time: "9:00 AM", kind: "Cameras", thumb: CAST.sofia.cam, face: CAST.sofia.face },
+  { n: 3, title: "Two Tours — Ray Castillo", time: "9:05 AM", kind: "Cameras", thumb: VCAST.ray.poster, face: VCAST.ray.face, live: true },
+  { n: 4, title: "Sponsor — Ironside Coffee, veteran-owned", time: "9:30 AM", kind: "Video", thumb: SCENE_STILLS.sponsor },
+  { n: 5, title: "Ruck Talk — Jordan Blake", time: "9:35 AM", kind: "Cameras", thumb: VCAST.jordan.poster, face: VCAST.jordan.face },
 ];
 
 const TOOLS = [
@@ -54,12 +54,24 @@ const TOOLS = [
 ];
 
 export function StudioConsoleMock() {
-  const daniel = useClipTrack(VCAST.daniel.src, VCAST.daniel.poster);
   const ray = useClipTrack(VCAST.ray.src, VCAST.ray.poster);
+  const jordan = useClipTrack(VCAST.jordan.src, VCAST.jordan.poster);
   const host = useFakeCamera(CAST.sofia.cam);
-  const auto = useTicker(LAYOUTS.length, 3200);
+  // On a narrow screen the column layouts shrink their side tiles below the
+  // size a name fits in, so a phone gets the three two-shot layouts only.
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setNarrow(e.contentRect.width < 760));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const shown = narrow ? LAYOUTS.slice(0, 3) : LAYOUTS;
+  const auto = useTicker(shown.length, 3200);
   const [picked, setPicked] = useState<string | null>(null);
-  const layout = picked ?? LAYOUTS[auto].key;
+  const layout = (picked && shown.some((l) => l.key === picked) ? picked : null) ?? shown[auto % shown.length].key;
   const talking = useTicker(3, 3700);
 
   const meta: RoomMeta = {
@@ -68,15 +80,21 @@ export function StudioConsoleMock() {
     logoUrl: "/logo-wave.png?v=2",
     logoCorner: "top-right",
     logoSize: 90,
+    stageOrder: "ray,jordan,sofia",
   };
+  // Showtime, picture-in-picture, Contain and Cover read best as two-shots:
+  // with a third camera they leave a sliver or an empty quarter. The second
+  // guest steps back to the green room for those, as a producer would, and
+  // comes up for Sidebar and Thumbnails, which are built for a column.
+  const twoShot = layout !== "sidebar" && layout !== "thumbnails";
   const tiles = [
-    vcastTile("daniel", daniel, talking === 0),
-    vcastTile("ray", ray, talking === 1),
-    castTile("sofia", host, talking === 2, true),
+    vcastTile("ray", ray, talking === 0),
+    ...(twoShot ? [] : [vcastTile("jordan", jordan, talking === 1)]),
+    castTile("sofia", host, talking === 2 || (twoShot && talking === 1), true),
   ];
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#000741] text-white shadow-[0_50px_100px_-30px_rgba(0,0,0,0.85)]">
+    <div ref={boxRef} className="overflow-hidden rounded-2xl border border-white/10 bg-[#000741] text-white shadow-[0_50px_100px_-30px_rgba(0,0,0,0.85)]">
       {/* Top bar */}
       <div className="flex items-center gap-3 border-b border-white/10 px-3 py-2 sm:px-4">
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10"><Clapperboard className="h-4 w-4 text-[#F0A71F]" /></span>
@@ -92,14 +110,17 @@ export function StudioConsoleMock() {
 
       <div className="grid lg:grid-cols-[13.5rem_minmax(0,1fr)_4.5rem]">
         {/* Scene rail */}
-        <aside className="hidden flex-col gap-2 border-r border-white/10 bg-[#050e2e] p-2.5 lg:flex">
+        <aside className="relative hidden border-r border-white/10 bg-[#050e2e] lg:block">
+          {/* Out of the flow, so the rail never makes the stage taller than it is. */}
+          <div className="absolute inset-0 flex flex-col gap-2 p-2.5">
           <div className="flex items-center justify-between px-1 pt-0.5">
             <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-white/70">Scenes <span className="rounded bg-white/10 px-1.5 text-white/80">24</span></span>
             <span className="flex items-center gap-1 text-[11px] text-white/70"><Plus className="h-3 w-3" /> Add scene</span>
           </div>
           <div className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[11px] text-white/35"><Search className="h-3 w-3" /> Find a scene or a name…</div>
-          {SCENES.slice(0, 4).map((s) => (
-            <div key={s.n} className={`relative overflow-hidden rounded-lg ${s.live ? "ring-2 ring-[#ED1C24]" : "ring-1 ring-white/10"}`}>
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+          {SCENES.map((s) => (
+            <div key={s.n} className={`relative shrink-0 overflow-hidden rounded-lg ${s.live ? "ring-2 ring-[#ED1C24]" : "ring-1 ring-white/10"}`}>
               <img src={s.thumb} alt="" loading="lazy" className="aspect-[16/8] w-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-[#04102b] via-[#04102b]/40 to-transparent" />
               <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 text-[9px] font-bold">{s.n}</span>
@@ -113,8 +134,10 @@ export function StudioConsoleMock() {
               </div>
             </div>
           ))}
-          <div className="mt-auto flex items-center justify-between gap-1 rounded-full bg-[#F0A71F] px-3 py-1.5 text-[11px] font-semibold text-[#1a1200]">
-            <span className="truncate">Next · Sponsor reel</span> <ArrowRight className="h-3 w-3 shrink-0" />
+          </div>
+          <div className="flex shrink-0 items-center justify-between gap-1 rounded-full bg-[#F0A71F] px-3 py-1.5 text-[11px] font-semibold text-[#1a1200]">
+            <span className="truncate">Next · Sponsor, Ironside Coffee</span> <ArrowRight className="h-3 w-3 shrink-0" />
+          </div>
           </div>
         </aside>
 
@@ -125,7 +148,7 @@ export function StudioConsoleMock() {
           </div>
           <div className="flex items-center gap-3 overflow-hidden px-2 py-2 sm:px-3">
             <div className="flex min-w-0 flex-1 items-center justify-center gap-1 sm:gap-1.5">
-              {LAYOUTS.map((l) => (
+              {shown.map((l) => (
                 <button
                   key={l.key}
                   type="button"

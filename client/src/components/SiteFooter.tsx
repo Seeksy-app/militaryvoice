@@ -41,7 +41,7 @@ export function SiteFooter({ slug, product }: { slug?: string; product?: "discov
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           {/* Always the dark-ground lockup: this band is navy in both themes,
               so the theme-swapping one puts near-black letters on navy. */}
-          <LogoLockupOnDark className="h-12" />
+          <LogoLockupOnDark className="h-12 w-auto shrink-0 self-start" />
           <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/65">
             {links.map((l) =>
               l.external ? (

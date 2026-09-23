@@ -58,7 +58,7 @@ export function ReadyToJoinMock() {
 }
 
 const WAITING = [
-  { key: "jordan", name: VCAST.jordan.name, show: "Ruck Talk", status: "Next up · 4 min", ok: true, cam: VCAST.jordan.poster, face: VCAST.jordan.face },
+  { key: "daniel", name: VCAST.daniel.name, show: "Deckplate Radio", status: "Next up · 4 min", ok: true, cam: VCAST.daniel.poster, face: VCAST.daniel.face },
   { key: "lena", name: VCAST.lena.name, show: "Home Base", status: "Mic and camera OK", ok: true, cam: VCAST.lena.poster, face: VCAST.lena.face },
   { key: "andre", name: CAST.andre.name, show: "After the Uniform", status: "Camera off", ok: false, cam: "", face: CAST.andre.face },
 ];
@@ -93,7 +93,7 @@ export function WaitingRoomMock() {
                     {w.ok && <Check className="h-3 w-3 shrink-0" />} {w.status}
                   </p>
                 </div>
-                {w.key === "jordan" ? (
+                {w.key === "daniel" ? (
                   <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#3B82F6] text-white shadow-[0_0_0_4px_rgba(59,130,246,0.25)]" title="Bring on stage">
                     <ArrowUp className="h-3.5 w-3.5" />
                   </span>
@@ -117,7 +117,7 @@ export function WaitingRoomMock() {
         </div>
         <div className="mt-3 flex flex-col gap-2 text-[13px] leading-snug">
           <p className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-[#053877] px-3 py-2 text-white">Is my audio OK? And when am I on?</p>
-          <p className="max-w-[90%] rounded-2xl rounded-bl-md bg-slate-100 px-3 py-2">Clear and level, Lena. You're on at 10:00, right after Ruck Talk. Sofia will introduce you, then it's your 25 minutes.</p>
+          <p className="max-w-[90%] rounded-2xl rounded-bl-md bg-slate-100 px-3 py-2">Clear and level, Lena. You're on at 10:00, right after Deckplate Radio. Sofia will introduce you, then it's your 25 minutes.</p>
         </div>
       </div>
     </div>
