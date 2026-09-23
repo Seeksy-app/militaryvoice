@@ -8,6 +8,7 @@ import { LiveEventMock } from "@/components/platform/LiveEventMock";
 import { StudioConsoleMock } from "@/components/platform/StudioConsoleMock";
 import { ReadyToJoinMock, WaitingRoomMock } from "@/components/platform/GreenRoomMock";
 import { DiscoverySearchMock, CreatorProfileMock } from "@/components/platform/DiscoveryMock";
+import { SoonPill } from "@/components/platform/stockVideo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,8 +58,8 @@ const PILLARS = [
     icon: Radio,
     kicker: "Events",
     title: "Live, pre-recorded, in the room or online",
-    body: "Stream a virtual event, broadcast an in-person one, or run both at once. Speakers claim their own slots in their own time zone, the public page and lineup build themselves, and the show goes out to YouTube and anywhere else your audience already watches.",
-    points: ["Scheduling in every time zone", "Event pages that promote themselves", "One broadcast, every destination"],
+    body: "Stream a virtual event, broadcast an in-person one, or run both at once. Speakers claim their own slots in their own time zone, the public page and lineup build themselves, and the show goes out live on YouTube, with more destinations on the way.",
+    points: ["Scheduling in every time zone", "Event pages that promote themselves", "One broadcast, every destination*"],
   },
   {
     icon: Wand2,
@@ -342,7 +343,10 @@ export default function Platform() {
                 <p className="mt-3 flex-1 text-[15px] leading-relaxed text-muted-foreground">{body}</p>
                 <ul className="mt-5 flex flex-col gap-2 border-t border-border pt-4">
                   {points.map((pt) => (
-                    <li key={pt} className="flex items-start gap-2 text-sm"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" /> {pt}</li>
+                    <li key={pt} className="flex items-start gap-2 text-sm">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">{pt.replace(/\*$/, "")}{pt.endsWith("*") && <SoonPill tone="light" />}</span>
+                    </li>
                   ))}
                 </ul>
               </motion.div>
@@ -383,10 +387,10 @@ export default function Platform() {
 
       {/* ------------------------------------------------------- green room */}
       <section className="relative isolate overflow-hidden border-b border-border bg-[#eef2fa] dark:bg-[#07112e]">
-        <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] lg:items-center lg:gap-14 lg:py-24">
+        <div className="mx-auto grid max-w-7xl gap-12 px-4 py-20 sm:px-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-center lg:gap-14 lg:py-24">
           <div>
             <Kicker>The green room</Kicker>
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Guests wait backstage. Alex keeps them company.</h2>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl"><span className="block">Guests wait backstage.</span> <span className="block">Alex keeps them company.</span></h2>
             <p className="mt-4 text-base leading-relaxed text-muted-foreground">
               A guest opens their link, sees their own camera and mic, types the name and title that go under their picture, and walks into the green room. Nothing there is on air. You see and hear every one of them before they're live, and bring them up when it's their turn.
             </p>
@@ -548,6 +552,10 @@ export default function Platform() {
           </div>
         </div>
       </section>
+
+      <p className="border-b border-border bg-background px-4 py-4 text-center text-xs text-muted-foreground">
+        Some features shown are on our roadmap.
+      </p>
 
       <SiteFooter product="discovery" />
     </div>

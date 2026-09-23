@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { StageGrid, type RoomMeta } from "@/components/StageView";
 import { CAST, castTile, useFakeCamera, useTicker } from "./fakeCamera";
+import { VCAST, useClipTrack, vcastTile } from "./stockVideo";
 
 // The control room, drawn from the same parts as the real console: the scene
 // rail down the left, the programme in the middle with Restream's six layouts
@@ -39,9 +40,9 @@ const LAYOUTS: { key: string; label: string; icon: ReactNode }[] = [
 const SCENES = [
   { n: 1, title: "Stream live — pre-show", time: "6:45 AM", kind: "Video", thumb: "/scenes/pre-show.jpg" },
   { n: 2, title: "Welcome — Sofia Reyes", time: "7:00 AM", kind: "Cameras", thumb: CAST.sofia.cam, face: CAST.sofia.face },
-  { n: 3, title: "The Long Watch — Marcus Hale", time: "9:00 AM", kind: "Cameras", thumb: CAST.marcus.cam, face: CAST.marcus.face, live: true },
+  { n: 3, title: "Deckplate Radio — Daniel Cho", time: "9:00 AM", kind: "Cameras", thumb: VCAST.daniel.poster, face: VCAST.daniel.face, live: true },
   { n: 4, title: "Sponsor reel", time: "9:25 AM", kind: "Video", thumb: "/scenes/sponsor-reel.jpg" },
-  { n: 5, title: "Homefront Hour — Dana Ortiz", time: "9:30 AM", kind: "Cameras", thumb: CAST.dana.cam, face: CAST.dana.face },
+  { n: 5, title: "Two Tours — Ray Castillo", time: "9:30 AM", kind: "Cameras", thumb: VCAST.ray.poster, face: VCAST.ray.face },
 ];
 
 const TOOLS = [
@@ -53,9 +54,9 @@ const TOOLS = [
 ];
 
 export function StudioConsoleMock() {
-  const marcus = useFakeCamera(CAST.marcus.cam);
+  const daniel = useClipTrack(VCAST.daniel.src, VCAST.daniel.poster);
+  const ray = useClipTrack(VCAST.ray.src, VCAST.ray.poster);
   const host = useFakeCamera(CAST.sofia.cam);
-  const andre = useFakeCamera(CAST.andre.cam);
   const auto = useTicker(LAYOUTS.length, 3200);
   const [picked, setPicked] = useState<string | null>(null);
   const layout = picked ?? LAYOUTS[auto].key;
@@ -69,8 +70,8 @@ export function StudioConsoleMock() {
     logoSize: 90,
   };
   const tiles = [
-    castTile("marcus", marcus, talking === 0),
-    castTile("andre", andre, talking === 1),
+    vcastTile("daniel", daniel, talking === 0),
+    vcastTile("ray", ray, talking === 1),
     castTile("sofia", host, talking === 2, true),
   ];
 
@@ -85,7 +86,7 @@ export function StudioConsoleMock() {
         </div>
         <span className="ml-auto hidden items-center gap-1.5 text-xs text-white/60 md:flex"><LogOut className="h-3.5 w-3.5" /> Leave the room</span>
         <span className="ml-auto inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[#ED1C24] px-3 py-1.5 text-xs font-bold text-white md:ml-0">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> Live<span className="hidden sm:inline"> · 3 destinations</span>
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> <span>Live<span className="hidden sm:inline"> on YouTube</span></span>
         </span>
       </div>
 
