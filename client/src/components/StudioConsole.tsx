@@ -98,7 +98,7 @@ interface Props {
   view: "live" | "set";
 }
 
-type Participant = StudioParticipantRow & { present: boolean };
+type Participant = StudioParticipantRow & { present: boolean; isHost?: boolean };
 interface StudioPayload {
   studio: StudioRow;
   participants: Participant[];
@@ -286,6 +286,66 @@ function GreenRoomStrip({
           );
         })}
       </span>
+    </span>
+  );
+}
+
+/**
+ * The hosts and co-hosts, on the right of the bar: a face each, lit red while
+ * they are on stage and dimmed while they are off (during a guest's segment or
+ * a sponsor video). Off means back in the green room, still connected, not on
+ * the programme; one tap brings them back.
+ */
+function HostSeats({
+  hosts,
+  feeds,
+  stageFull,
+  onState,
+}: {
+  hosts: Participant[];
+  feeds: Map<string, ProducerFeed>;
+  stageFull: boolean;
+  onState: (id: number, state: "On stage" | "Green room") => void;
+}) {
+  if (hosts.length === 0) return null;
+  return (
+    <span className="ml-1 flex items-center gap-1.5 border-l border-white/15 pl-3" data-testid="host-seats">
+      <span className="hidden text-[10px] font-bold uppercase tracking-[0.14em] text-white/45 xl:block">{hosts.length > 1 ? "Hosts" : "Host"}</span>
+      {hosts.map((p) => {
+        const name = p.displayName || "Host";
+        const on = p.state === "On stage";
+        return (
+          <Popover key={p.id}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                title={`${name}${p.displayTitle ? ` · ${p.displayTitle}` : ""} — ${on ? "on stage" : "off stage"}`}
+                className={`relative h-9 w-9 shrink-0 overflow-hidden rounded-full ring-2 transition hover:scale-105 ${on ? "ring-[#ED1C24]" : "opacity-60 ring-white/30"}`}
+                data-testid={`host-seat-${p.id}`}
+              >
+                <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()} fill />
+                {on && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-[#ED1C24] ring-2 ring-[#000741]" />}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-60 p-3">
+              <p className="truncate text-sm font-semibold">{name}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {p.displayTitle || "Host"} · {on ? "on stage" : "off stage, in the green room"}
+              </p>
+              <Button
+                size="sm"
+                variant={on ? "outline" : "default"}
+                className="mt-3 w-full gap-1.5 rounded-full"
+                disabled={!on && stageFull}
+                onClick={() => onState(p.id, on ? "Green room" : "On stage")}
+                data-testid={`button-host-seat-${p.id}`}
+              >
+                {on ? <><ArrowDown className="h-3 w-3" /> Step off stage</> : <><ArrowUp className="h-3 w-3" /> Bring on stage</>}
+              </Button>
+            </PopoverContent>
+          </Popover>
+        );
+      })}
     </span>
   );
 }
@@ -549,7 +609,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   const paused = Boolean(studio?.fallbackPlaying) && stageMuted;
   const present = (data?.participants ?? []).filter((p) => p.present);
   const onStage = present.filter((p) => p.state === "On stage");
-  const greenRoom = present.filter((p) => p.state !== "On stage");
+  // Hosts and co-hosts are not waiting to come on — they run the show. They
+  // sit on the right of the bar, on stage or off, and the strip on the left is
+  // only the people waiting their turn.
+  const greenRoom = present.filter((p) => p.state !== "On stage" && !p.isHost);
+  const hostSeats = present.filter((p) => p.isHost);
   /**
    * The producer's own participant row.
    *
@@ -1668,7 +1732,13 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
 
             {/* Who is at this desk: with Michael watching from a second
                 machine, the bar says which seat this one is. */}
-            {me0 && (
+            <HostSeats
+              hosts={hostSeats}
+              feeds={feeds}
+              stageFull={stageFull}
+              onState={(id, state) => setState.mutate({ id, state })}
+            />
+            {me0 && !hostSeats.some((h) => h.displayName.trim().toLowerCase() === me0.displayName.trim().toLowerCase()) && (
               <span className="ml-1 flex items-center gap-2 border-l border-white/15 pl-3" title={`${me0.displayName}${me0.title ? ` · ${me0.title}` : ""}`} data-testid="studio-manager">
                 {me0.photoUrl ? (
                   <img src={me0.photoUrl} alt="" className="h-8 w-8 rounded-full object-cover ring-2 ring-[#F0A71F]/70" />

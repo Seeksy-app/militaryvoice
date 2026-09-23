@@ -1853,6 +1853,30 @@ export function registerRoutes(app: Express): void {
     return { name: t?.name || admin?.name || fallback, title: t?.title || "Studio host", photoUrl: t?.photoUrl || "" };
   }
 
+  /**
+   * Who hosts the show: anyone joined as Host, plus the event team's hosts and
+   * co-hosts (Riccoh, Jane, Amy) however they came in — by their address, or by
+   * name when they typed it into a guest link. Cached a minute, because the
+   * console polls the studio every couple of seconds.
+   */
+  let showHostsCache: { at: number; emails: Set<string>; names: string[] } | null = null;
+  async function showHosts() {
+    if (showHostsCache && Date.now() - showHostsCache.at < 60_000) return showHostsCache;
+    const ev = await storage.getFeaturedEvent().catch(() => null);
+    const team = ev ? await storage.listEventTeam(ev.id).catch(() => []) : [];
+    const hosts = team.filter((m) => /host|emcee|mc\b/i.test(m.title) && !/produc|director|crew/i.test(m.title));
+    showHostsCache = {
+      at: Date.now(),
+      emails: new Set(hosts.map((m) => (m.email ?? "").toLowerCase().trim()).filter(Boolean)),
+      names: hosts.map((m) => m.name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()).filter(Boolean),
+    };
+    return showHostsCache;
+  }
+  function isShowHost(p: StudioParticipantRow, hosts: { emails: Set<string>; names: string[] }) {
+    const name = p.displayName.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    return p.role === "Host" || name === "host" || hosts.emails.has(p.email.toLowerCase().trim()) || (name.length > 2 && hosts.names.includes(name));
+  }
+
   app.post("/api/admin/request-code", async (req, res) => {
     const email = String(req.body?.email || "").trim().toLowerCase();
     if (!email || !email.includes("@")) {
@@ -3333,9 +3357,10 @@ export function registerRoutes(app: Express): void {
     noStore(res);
     const { studio } = await adminStudio(req);
     const participants = await storage.listStudioParticipants(studio.id);
+    const hosts = await showHosts();
     res.json({
       studio,
-      participants: participants.map((p) => ({ ...p, present: withPresence(p) })),
+      participants: participants.map((p) => ({ ...p, present: withPresence(p), isHost: isShowHost(p, hosts) })),
     });
   });
 
@@ -4042,17 +4067,24 @@ export function registerRoutes(app: Express): void {
       const x = norm(a), y = norm(b);
       return x.length > 2 && y.length > 2 && (x.includes(y) || y.includes(x));
     };
-    const isHost = (p: StudioParticipantRow) => p.role === "Host" || norm(p.displayName) === "host";
+    const hosts = await showHosts();
+    const isHost = (p: StudioParticipantRow) => isShowHost(p, hosts);
     const belongs = (p: StudioParticipantRow) =>
       Boolean(signup) && (p.signupId === signup!.id || nameMatch(p.displayName, signup!.hostName) || nameMatch(p.displayName, signup!.podcastName));
     const guestScene = row.kind === "Segment" && Boolean(signup);
+    // A sponsor video or any clip plays full frame: the hosts step off (still
+    // in the room, mics off the programme) and come back on the next scene.
+    const mediaScene = Boolean(row.mediaUrl) && (row.mediaKind || "video") === "video";
 
     const moved: { id: number; to: string }[] = [];
     const present = (await storage.listStudioParticipants(studio.id)).filter(withPresence);
     let onStage = 0;
     for (const p of present) {
       let target: "On stage" | "Green room";
-      if (isHost(p)) target = guestScene && !signup!.needsInterviewer ? "Green room" : "On stage";
+      if (mediaScene) target = "Green room";
+      else if (isHost(p)) target = guestScene && !signup!.needsInterviewer ? "Green room" : "On stage";
+      // A podcaster's guest comes on with them: anyone who joined through the
+      // same signup link.
       else target = guestScene && belongs(p) ? "On stage" : "Green room";
       if (target === "On stage") {
         if (onStage >= studio.maxOnStage) target = "Green room";
