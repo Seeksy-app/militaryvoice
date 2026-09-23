@@ -363,7 +363,7 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
           it. Sized to the frame, so it reads the same big or small. */}
       <div
         className={`absolute bottom-0 left-0 max-w-[85%] ${namePos === "none" ? "hidden" : ""}`}
-        style={{ padding: "0 0 clamp(6px, 3.5cqh, 22px) clamp(6px, 2.2cqw, 22px)", fontSize: "clamp(10px, 3.6cqh, 26px)" }}
+        style={{ padding: "0 0 clamp(5px, 3.5cqh, 22px) clamp(5px, 2.2cqw, 22px)", fontSize: "clamp(11px, 5cqh, 26px)" }}
       >
         <div className="flex items-stretch overflow-hidden rounded-md shadow-lg">
           <div className="w-[0.22em] shrink-0 bg-[#F0A71F]" />
@@ -491,7 +491,7 @@ function StageLayout({
     return (
       <div className="relative h-full w-full">
         {box({ inset: 0 }, main, { flat: true })}
-        {inset.map((t, i) => box({ right: `${1.5 + i * 14}%`, bottom: "2.5%", width: "12.5%", aspectRatio: "4 / 3", zIndex: 1 }, t, { small: true }))}
+        {inset.map((t, i) => box({ right: `${1.5 + i * 16}%`, bottom: "2.5%", width: "14.5%", aspectRatio: "4 / 3", zIndex: 1 }, t, { small: true }))}
         {rest.length > 3 && <div className="hidden">{rest.slice(3).map((t) => <Tile key={t.identity} tile={t} muted={muted} namePos="none" />)}</div>}
       </div>
     );
