@@ -1842,7 +1842,9 @@ export function registerRoutes(app: Express): void {
         if (sg.status !== "cancelled" && sg.slotIndex < dayLength) onLineup.add(sg.email.trim().toLowerCase());
       }
     }
-    const rows = (await storage.listAllProfiles()).filter((p) => p.hostName.trim() && p.photoUrl.trim());
+    // Andrew's own test seat ("American Warriors") is not a member to invite.
+    const hidden = new Set(["andrew@smartloads.io"]);
+    const rows = (await storage.listAllProfiles()).filter((p) => p.hostName.trim() && p.photoUrl.trim() && !hidden.has(p.email.trim().toLowerCase()));
     res.json(
       rows.map((p) => ({
         id: p.id,
