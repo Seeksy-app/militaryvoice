@@ -89,10 +89,12 @@ function Face({ p, size = 44 }: { p: Pick<Person, "picture" | "name">; size?: nu
   return <img src={p.picture} alt="" loading="lazy" onError={() => setBroken(true)} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />;
 }
 
-function Tile({ label, value, sub, star, tone }: { label: string; value: ReactNode; sub?: ReactNode; star?: boolean; tone?: "good" | "warn" | "bad" }) {
+function Tile({ label, value, sub, star, tone, keep }: { label: string; value: ReactNode; sub?: ReactNode; star?: boolean; tone?: "good" | "warn" | "bad"; keep?: boolean }) {
+  // A figure the index didn't send is left out, not printed as a dash.
+  if (!keep && (value === "–" || value == null || value === "")) return null;
   const color = tone === "good" ? "text-emerald-600 dark:text-emerald-400" : tone === "warn" ? "text-[#b36b00]" : tone === "bad" ? "text-destructive" : "text-foreground";
   return (
-    <div className={`px-4 py-3.5 ${star ? "bg-[#f6f6fe] dark:bg-[#11163a]" : "bg-card"}`}>
+    <div className={`-mb-px -mr-px border-b border-r border-border px-4 py-3.5 ${star ? "bg-[#f6f6fe] dark:bg-[#11163a]" : "bg-card"}`}>
       <div className={`flex items-center gap-1 text-[10.5px] font-medium uppercase tracking-[0.12em] ${star ? "text-[#4f46e5] dark:text-[#a5b4fc]" : "text-muted-foreground"}`}>
         {star && <Star className="h-3 w-3 fill-current" />} {label}
       </div>
@@ -103,7 +105,7 @@ function Tile({ label, value, sub, star, tone }: { label: string; value: ReactNo
 }
 
 function TileGrid({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-3 lg:grid-cols-4">{children}</div>;
+  return <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-border bg-card sm:grid-cols-3 lg:grid-cols-4">{children}</div>;
 }
 
 function Bars({ items, color = NAVY, max: fixedMax }: { items: W[]; color?: string; max?: number }) {
@@ -284,8 +286,8 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
         {header}
         {section("signals", 0, (
           <TileGrid>
-            <Tile label="Engagement rate" value={pctText(engagement, 2)} sub={s.engagementBasis || "per post"} tone={engagement == null ? undefined : engagement >= 3 ? "good" : engagement >= 1 ? undefined : "warn"} />
-            <Tile label="Most recent post" value={last?.value ?? "–"} sub={last?.sub} tone={!s.lastPostAt ? undefined : Date.now() - Date.parse(s.lastPostAt) < 30 * 86_400_000 ? "good" : "warn"} />
+            <Tile keep label="Engagement rate" value={pctText(engagement, 2)} sub={s.engagementBasis || "per post"} tone={engagement == null ? undefined : engagement >= 3 ? "good" : engagement >= 1 ? undefined : "warn"} />
+            <Tile keep label="Most recent post" value={last?.value ?? "–"} sub={last?.sub} tone={!s.lastPostAt ? undefined : Date.now() - Date.parse(s.lastPostAt) < 30 * 86_400_000 ? "good" : "warn"} />
             <Tile label="Follower change · 6 mo" value={s.growth6m == null ? "–" : `${s.growth6m > 0 ? "+" : ""}${s.growth6m.toFixed(1)}%`} sub="as reported by the index" />
             <Tile label="Posting cadence" value={s.postsPerWeek == null ? "–" : <>{s.postsPerWeek}<span className="text-sm font-medium text-muted-foreground"> / wk</span></>} />
             <Tile label="Est. income" value={s.incomeMin == null ? "–" : s.incomeMax && s.incomeMax !== s.incomeMin ? `${money(s.incomeMin)}–${money(s.incomeMax)}` : money(s.incomeMin)} sub="from sponsored posts, a month" />

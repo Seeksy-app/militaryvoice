@@ -1153,7 +1153,7 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
   const header = card && (
     <div className="border-b-8 border-muted/60 bg-card px-5 py-6 sm:px-8">
       <div className="flex items-start gap-5">
-        <Avatar src={id?.picture || card.picture} name={card.name} size={84} ring={!!card.verified} />
+        <Avatar src={card.picture || id?.picture || ""} name={card.name} size={84} ring={!!card.verified} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h2 className="text-2xl font-semibold tracking-tight">{id?.name || card.name}</h2>
