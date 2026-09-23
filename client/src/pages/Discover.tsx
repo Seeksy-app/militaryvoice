@@ -491,10 +491,14 @@ function CreatorCard({ c, saved, onOpen, onSave }: { c: Card; saved: boolean; on
       </div>
       <div className="mt-auto flex items-end justify-between gap-2 pt-4">
         <div className="flex gap-4">
-          <div>
-            <div className="text-lg font-bold tabular-nums leading-none">{compact(c.followers)}</div>
-            <div className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">{c.verified ? "reach" : "followers"}</div>
-          </div>
+          {c.followers != null ? (
+            <div>
+              <div className="text-lg font-bold tabular-nums leading-none">{compact(c.followers)}</div>
+              <div className="mt-1 text-[11px] uppercase tracking-wide text-muted-foreground">{c.verified ? "reach" : "followers"}</div>
+            </div>
+          ) : c.verified ? (
+            <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><Mic2 className="h-3.5 w-3.5 text-[#053877]" /> Podcast host</div>
+          ) : null}
           {c.engagement != null && (
             <div>
               <div className="text-lg font-bold tabular-nums leading-none">{pct(c.engagement, 2)}</div>

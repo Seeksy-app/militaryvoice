@@ -14,7 +14,7 @@ import crypto from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { db, storage } from "./storage.js";
-import { getSessionEmail, requireHostSession } from "./session.js";
+import { getAdminEmail, getSessionEmail, requireHostSession } from "./session.js";
 import {
   discoveryMembers,
   discoveryCache,
@@ -209,6 +209,13 @@ async function memberFor(email: string) {
   return m;
 }
 async function requireMember(req: Request): Promise<{ email: string; member: NonNullable<Awaited<ReturnType<typeof memberFor>>> }> {
+  // Admins always have Discovery: by their admin session, or the admin key.
+  const adminEmail = getAdminEmail(req);
+  const adminKey = String(req.get("x-admin-password") ?? "");
+  if (adminEmail || (adminKey && adminKey === (await storage.getFeaturedEvent()).adminPassword)) {
+    const e = (adminEmail || "admin@militaryvoice.ai").toLowerCase();
+    return { email: e, member: (await memberFor(e)) ?? { id: 0, email: e, role: "admin", orgName: "MilitaryVoice", createdAt: "" } };
+  }
   const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
   if (!email) throw new HttpError(401, "Create your free account to search.");
   const member = await memberFor(email);
@@ -246,9 +253,10 @@ export function registerDiscoveryRoutes(app: Express): void {
   app.get("/api/discover/me", (req, res) =>
     send(res, async () => {
       res.set("Cache-Control", "no-store");
-      const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+      const adminEmail = (getAdminEmail(req) ?? "").toLowerCase();
+      const email = ((getSessionEmail(req) ?? "") || adminEmail).trim().toLowerCase();
       if (!email) return { signedIn: false };
-      const member = await memberFor(email);
+      const member = (await memberFor(email)) ?? (adminEmail ? { role: "admin", orgName: "MilitaryVoice", createdAt: "" } : undefined);
       const profile = await storage.getProfileByEmail(email);
       return {
         signedIn: true,
