@@ -3710,7 +3710,7 @@ export function registerRoutes(app: Express): void {
           studioId: studio.id,
           name,
           kind: playing ? "media" : "camera",
-          sortIndex: existing.length,
+          sortIndex: existing.length ? Math.min(...existing.map((sc) => sc.sortIndex)) - 1 : 0,
           mediaUrl: playing ? studio.stageMediaUrl : "",
           mediaKind: studio.stageMediaKind,
           mediaLabel: studio.stageMediaLabel,
@@ -3729,8 +3729,11 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: "A media scene needs a file or a link." });
       return;
     }
+    // A scene made by hand goes to the top, where the producer is looking;
+    // one made from the agenda keeps the agenda's order, at the end.
+    const top = existing.length ? Math.min(...existing.map((sc) => sc.sortIndex)) - 1 : 0;
     res.status(201).json(
-      await storage.createScene({ studioId: studio.id, sortIndex: existing.length, ...v }),
+      await storage.createScene({ studioId: studio.id, sortIndex: v.runItemId ? existing.length : top, ...v }),
     );
   });
 

@@ -27,8 +27,7 @@ import {
   Plus,
   X,
   Search,
-  ChevronUp,
-  ChevronDown,
+  GripVertical,
   Pencil,
   ListOrdered,
   Clapperboard,
@@ -165,6 +164,43 @@ export function SceneRail({
   // keeps the page itself still: `block: "start"` would drag the whole window
   // up to satisfy the request.
   const anchored = useRef(false);
+  // A scene just added lands at the top: show it there, lit for a moment,
+  // instead of the rail jumping back to whatever is live.
+  const knownIds = useRef<Set<number> | null>(null);
+  const [justAdded, setJustAdded] = useState<number | null>(null);
+  const skipAnchor = useRef(false);
+  useEffect(() => {
+    const ids = new Set(scenes.map((sc) => sc.id));
+    const prev = knownIds.current;
+    knownIds.current = ids;
+    if (!prev) return;
+    const fresh = scenes.find((sc) => !prev.has(sc.id));
+    if (!fresh) return;
+    skipAnchor.current = true;
+    setJustAdded(fresh.id);
+    requestAnimationFrame(() => {
+      const box = railRef.current;
+      const card = box?.querySelector(`[data-scene-id="${fresh.id}"]`) as HTMLElement | null;
+      if (box && card) box.scrollTo({ top: Math.max(0, card.offsetTop - box.offsetTop - 8), behavior: "smooth" });
+    });
+    const t = window.setTimeout(() => setJustAdded(null), 2600);
+    return () => window.clearTimeout(t);
+  }, [scenes]);
+
+  // Drag a card onto another to put it there.
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [overId, setOverId] = useState<number | null>(null);
+  function dropOn(targetId: number) {
+    if (dragId == null || dragId === targetId) return;
+    const order = scenes.map((sc) => sc.id).filter((id) => id !== dragId);
+    const from = scenes.findIndex((sc) => sc.id === dragId);
+    const to = scenes.findIndex((sc) => sc.id === targetId);
+    const at = order.indexOf(targetId);
+    // Dropped on a card below where it was: goes after it. Above: before it.
+    order.splice(from < to ? at + 1 : at, 0, dragId);
+    onReorder(order);
+  }
+
   useEffect(() => {
     // A frame later, so the measurement is taken against a laid-out rail
     // rather than the one React has only just described.
@@ -201,6 +237,10 @@ export function SceneRail({
       });
       anchored.current = true;
     };
+    if (skipAnchor.current) {
+      skipAnchor.current = false;
+      return;
+    }
     raf = requestAnimationFrame(() => {
       anchor();
       for (const ms of [120, 400, 900]) timers.push(window.setTimeout(anchor, ms));
@@ -231,13 +271,6 @@ export function SceneRail({
     return () => window.removeEventListener("keydown", onKey);
   }, [scenes, onApply, readOnly]);
 
-  function move(index: number, by: number) {
-    const next = [...scenes];
-    const target = index + by;
-    if (target < 0 || target >= next.length) return;
-    [next[index], next[target]] = [next[target], next[index]];
-    onReorder(next.map((s) => s.id));
-  }
 
   const nextScene = liveIndex >= 0 ? scenes[liveIndex + 1] : scenes[0];
 
@@ -285,7 +318,7 @@ export function SceneRail({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem onClick={() => onAdd({ name: "Cameras", kind: "camera" })} data-testid="menu-add-camera">
+            <DropdownMenuItem onClick={() => onAdd({ name: "New camera scene", kind: "camera" })} data-testid="menu-add-camera">
               <Video className="mr-2 h-3.5 w-3.5" /> Camera
               <span className="ml-auto text-[11px] text-muted-foreground">whoever's on stage</span>
             </DropdownMenuItem>
@@ -392,7 +425,18 @@ export function SceneRail({
             : false;
 
           return (
-            <div key={sc.id} ref={on ? liveRef : undefined} className="group relative">
+            <div
+              key={sc.id}
+              ref={on ? liveRef : undefined}
+              data-scene-id={sc.id}
+              draggable={editable && renaming !== sc.id}
+              onDragStart={(e) => { setDragId(sc.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(sc.id)); }}
+              onDragOver={(e) => { if (dragId == null) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (overId !== sc.id) setOverId(sc.id); }}
+              onDragLeave={() => setOverId((o) => (o === sc.id ? null : o))}
+              onDrop={(e) => { e.preventDefault(); dropOn(sc.id); setDragId(null); setOverId(null); }}
+              onDragEnd={() => { setDragId(null); setOverId(null); }}
+              className={`group relative rounded-xl transition-all ${editable ? "cursor-grab active:cursor-grabbing" : ""} ${dragId === sc.id ? "opacity-40" : ""} ${overId === sc.id && dragId !== sc.id ? "ring-2 ring-[#F0A71F] ring-offset-2 ring-offset-[#000741]" : ""} ${justAdded === sc.id ? "ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#000741]" : ""}`}
+            >
               <button
                 type="button"
                 disabled={busy || readOnly}
@@ -540,12 +584,9 @@ export function SceneRail({
               {/* Editing controls stay out of the way until wanted — this is a
                   surface you press during a show, not one you fiddle with. */}
               <div className={`pointer-events-none absolute right-1.5 top-8 flex-col gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 ${editable ? "flex" : "hidden"}`}>
-                <IconBtn label="Move up" onClick={() => move(i, -1)} disabled={i === 0}>
-                  <ChevronUp className="h-3 w-3" />
-                </IconBtn>
-                <IconBtn label="Move down" onClick={() => move(i, 1)} disabled={i === scenes.length - 1}>
-                  <ChevronDown className="h-3 w-3" />
-                </IconBtn>
+                <span title="Drag to move" className="flex h-6 w-6 cursor-grab items-center justify-center rounded-md bg-black/70 text-white/80">
+                  <GripVertical className="h-3 w-3" />
+                </span>
                 <IconBtn
                   label="Rename"
                   onClick={() => {
@@ -658,7 +699,7 @@ export function SceneRail({
               being cut — "Next · Welcome & introduction — Riccoh Player" was
               wider than the rail it sits in. */}
           <span className="min-w-0 truncate">
-            {nextScene ? `Next · ${nextScene.name}` : "End of the rail"}
+            {nextScene ? `Next scene · ${nextScene.name}` : "End of the rail"}
           </span>
           <ArrowRight className="h-3.5 w-3.5 shrink-0" />
         </Button>

@@ -321,32 +321,6 @@ export default function Landing({ slug }: Props) {
     <div className="min-h-screen">
       <NavBar />
 
-      {/* ----------------------------------------------- THE PLATFORM, FIRST */}
-      <section className="relative overflow-hidden border-b border-white/10 bg-[#030b1f] text-white" data-testid="section-platform-band">
-        <div aria-hidden className="pointer-events-none absolute -right-32 -top-32 h-80 w-80 rounded-full bg-[#F0A71F] opacity-[0.12] blur-3xl" />
-        <div className="relative mx-auto grid w-full max-w-7xl items-center gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.1fr_1fr] lg:px-10 lg:py-10">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">MilitaryVoices.ai</div>
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">The platform for military voices.</h2>
-            <p className="mt-2 max-w-xl text-base text-white/70">Stage a live, multi-speaker event without running it yourself, let AI run the show, and find the voices worth hearing.</p>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {[
-              { href: "/platform", icon: Radio, title: "Live events", body: "In the room or online" },
-              { href: "/platform", icon: Sparkles, title: "Run by AI", body: "Agenda, show, clips" },
-              { href: "/discover?src=home-band", icon: Search, title: "Discovery", body: "300M+ creator profiles" },
-            ].map(({ href, icon: Icon, title, body }) => (
-              <Link key={title} href={href}>
-                <span className="group flex h-full cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3.5 transition-colors hover:border-[#F0A71F]/50 hover:bg-white/[0.08]" data-testid={`platform-band-${title}`}>
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F0A71F]/15 text-[#F0A71F]"><Icon className="h-4 w-4" /></span>
-                  <span><span className="flex items-center gap-1 text-sm font-medium">{title} <ArrowRight className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" /></span><span className="block text-xs text-white/60">{body}</span></span>
-                </span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ------------------------------------------------------------ HERO */}
       <section className="relative flex min-h-[88vh] items-center overflow-hidden bg-[#000741] text-white">
         {/* rotating studio photos + navy wash (kept lighter on the right so the room reads) */}
