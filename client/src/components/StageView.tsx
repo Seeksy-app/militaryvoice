@@ -36,6 +36,8 @@ export interface RoomMeta {
   backgroundUrl?: string;
   /** full · wide (16:9) · square — the shape each camera takes on stage. */
   tileFit?: string;
+  /** grid · focus · pip · solo — how the people on stage share the frame. */
+  stageLayout?: string;
   /** The lower third that is on air. Blank when it's off. */
   bannerTitle?: string;
   bannerSubtitle?: string;
@@ -79,6 +81,8 @@ export interface StageTile {
   keyed?: boolean;
   /** Shown in their place while their camera is off. */
   photoUrl?: string;
+  /** A host or co-host: placed after the guests. */
+  host?: boolean;
 }
 
 /**
@@ -146,6 +150,7 @@ export function useStageRoom(
           name: p.name || p.identity,
           displayTitle: p.attributes?.displayTitle || "",
           photoUrl: p.attributes?.photoUrl || "",
+          host: p.attributes?.role === "studio-host",
           video, audio, speaking: p.isSpeaking,
           // The avatar renders on green — that is the right output for a
           // source meant to be composited, not a shortcoming. It gets keyed
@@ -370,6 +375,77 @@ function Tile({ tile, muted, namePos = "bottom", fit }: { tile: StageTile; muted
         </div>
       </div>
     </div>
+    </div>
+  );
+}
+
+/**
+ * How the people on stage share the frame. Guests first and hosts last, so
+ * the host sits on the right (or in the inset) and the guest is the main
+ * picture. Whoever a layout leaves out of view is still heard: their tile
+ * renders hidden for the sound.
+ */
+function StageLayout({ tiles: raw, layout, fit, muted, banner }: { tiles: StageTile[]; layout?: string; fit?: string; muted: boolean; banner: boolean }) {
+  const tiles = [...raw].sort((a, b) => Number(!!a.host) - Number(!!b.host) || a.identity.localeCompare(b.identity));
+  const n = tiles.length;
+  // Under a scene's lower third the tags move to the top; alone on stage the
+  // lower third already names them, so theirs steps aside.
+  const name = (_i: number): "bottom" | "top" | "none" => (!banner ? "bottom" : n > 1 ? "top" : "none");
+  const [main, ...rest] = tiles;
+  const heard = (list: StageTile[]) =>
+    list.length > 0 && (
+      <div className="hidden" aria-hidden="true">
+        {list.map((t) => <Tile key={t.identity} tile={t} muted={muted} namePos="none" fit={fit} />)}
+      </div>
+    );
+
+  if (n > 1 && layout === "solo") {
+    return (
+      <div className="relative grid h-full w-full p-3">
+        <Tile key={main.identity} tile={main} muted={muted} namePos={banner ? "none" : "bottom"} fit={fit} />
+        {heard(rest)}
+      </div>
+    );
+  }
+  if (n > 1 && layout === "pip") {
+    const inset = rest.slice(0, 2);
+    return (
+      <div className="relative h-full w-full">
+        <div className="absolute inset-0 grid p-3">
+          <Tile key={main.identity} tile={main} muted={muted} namePos={name(0)} fit={fit} />
+        </div>
+        <div className="absolute bottom-5 right-5 flex w-[26%] flex-col gap-2">
+          {inset.map((t) => (
+            <div key={t.identity} className="grid aspect-video">
+              <Tile tile={t} muted={muted} namePos="bottom" fit="full" />
+            </div>
+          ))}
+        </div>
+        {heard(rest.slice(2))}
+      </div>
+    );
+  }
+  if (n > 1 && layout === "focus") {
+    return (
+      <div className="relative flex h-full w-full gap-3 p-3">
+        <div className="grid min-w-0 flex-[2]">
+          <Tile key={main.identity} tile={main} muted={muted} namePos={name(0)} fit={fit} />
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          {rest.map((t, i) => (
+            <div key={t.identity} className="grid min-h-0 flex-1">
+              <Tile tile={t} muted={muted} namePos={name(i + 1)} fit={fit} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className={`relative grid h-full w-full gap-3 p-3 ${gridFor(n)}`}>
+      {tiles.map((t, i) => (
+        <Tile key={t.identity} tile={t} muted={muted} namePos={name(i)} fit={fit} />
+      ))}
     </div>
   );
 }
@@ -666,11 +742,7 @@ export function StageGrid({
             exactly where a set would be. Media and the break clock cover the
             frame, so they hide it without needing to be told to. */}
         <BackgroundLayer url={meta.backgroundUrl ?? ""} />
-        <div className={`relative grid h-full w-full gap-3 p-3 ${gridFor(tiles.length)}`}>
-          {tiles.map((t) => (
-            <Tile key={t.identity} tile={t} muted={muted} namePos={!banner ? "bottom" : tiles.length > 1 ? "top" : "none"} fit={meta.tileFit} />
-          ))}
-        </div>
+        <StageLayout tiles={tiles} layout={meta.stageLayout} fit={meta.tileFit} muted={muted} banner={Boolean(banner)} />
         <Captions caption={caption} lifted={Boolean(ticker)} />
       </>
     );

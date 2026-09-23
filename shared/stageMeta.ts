@@ -40,6 +40,7 @@ export function stageMetaFromStudio(st: StudioRow) {
     logoSize: st.logoSize,
     backgroundUrl: st.backgroundVisible ? st.backgroundUrl : "",
     tileFit: st.tileFit,
+    stageLayout: st.stageLayout,
     bannerTitle: st.bannerVisible ? st.bannerTitle : "",
     bannerSubtitle: st.bannerVisible ? st.bannerSubtitle : "",
     tickerText: st.tickerVisible ? st.tickerText : "",

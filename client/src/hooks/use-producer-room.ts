@@ -11,6 +11,8 @@ export interface ProducerFeed {
   /** Mirrored from our database onto the LiveKit participant by the server. */
   state: string;
   displayTitle: string;
+  photoUrl?: string;
+  host?: boolean;
   speaking: boolean;
   /** Remote tracks for everyone else; the producer's own local tracks when on camera. */
   video: Track | null;
@@ -97,6 +99,8 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
           name: p.name || p.identity,
           state: p.attributes?.state ?? "Green room",
           displayTitle: p.attributes?.displayTitle ?? "",
+          photoUrl: p.attributes?.photoUrl ?? "",
+          host: p.attributes?.role === "studio-host",
           speaking: p.isSpeaking,
           video,
           audio,

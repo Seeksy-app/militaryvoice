@@ -308,6 +308,71 @@ function GreenRoomStrip({
 }
 
 /**
+ * The layouts under the programme, as Restream has them: how the people on
+ * stage share the frame, and what shape each camera takes. One press, on air.
+ */
+function LayoutBar({
+  layout,
+  fit,
+  onLayout,
+  onFit,
+}: {
+  layout: string;
+  fit: string;
+  onLayout: (v: string) => void;
+  onFit: (v: string) => void;
+}) {
+  const cell = "rounded-[2px] bg-current";
+  const LAYOUTS: { key: string; label: string; icon: React.ReactNode }[] = [
+    { key: "grid", label: "Side by side", icon: <span className="flex h-full w-full items-center gap-[3px] p-[3px]"><span className={`h-[70%] flex-1 ${cell}`} /><span className={`h-[70%] flex-1 ${cell}`} /></span> },
+    { key: "focus", label: "Focus — one big, the rest beside", icon: <span className="flex h-full w-full gap-[3px] p-[3px]"><span className={`flex-[2] ${cell}`} /><span className="flex flex-1 flex-col gap-[3px]"><span className={`flex-1 ${cell}`} /><span className={`flex-1 ${cell}`} /></span></span> },
+    { key: "pip", label: "Picture in picture", icon: <span className="relative block h-full w-full p-[3px]"><span className={`block h-full w-full ${cell} opacity-70`} /><span className={`absolute bottom-[5px] right-[5px] h-[36%] w-[34%] ${cell} ring-2 ring-[#0b1433]`} /></span> },
+    { key: "solo", label: "Solo — the guest alone (everyone still heard)", icon: <span className="flex h-full w-full p-[3px]"><span className={`flex-1 ${cell}`} /></span> },
+  ];
+  const FITS = [
+    { key: "full", label: "Full", hint: "Each camera fills its space" },
+    { key: "wide", label: "Wide", hint: "16:9 boxes, background around them" },
+    { key: "square", label: "Square", hint: "Square boxes, background around them" },
+  ];
+  return (
+    <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-white/10 bg-[#050b24] px-3 py-2" data-testid="layout-bar">
+      {LAYOUTS.map((l) => (
+        <button
+          key={l.key}
+          type="button"
+          title={l.label}
+          aria-label={l.label}
+          onClick={() => onLayout(l.key)}
+          className={`h-9 w-14 rounded-md border-2 transition-colors ${
+            layout === l.key ? "border-[#3B82F6] bg-white/10 text-white" : "border-transparent bg-white/5 text-white/45 hover:text-white/80"
+          }`}
+          data-testid={`button-layout-${l.key}`}
+        >
+          {l.icon}
+        </button>
+      ))}
+      <span className="mx-1 h-6 w-px bg-white/15" aria-hidden="true" />
+      <div className="flex rounded-full bg-white/5 p-0.5">
+        {FITS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            title={f.hint}
+            onClick={() => onFit(f.key)}
+            className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${
+              fit === f.key ? "bg-white text-[#050b24]" : "text-white/55 hover:text-white"
+            }`}
+            data-testid={`button-tile-fit-${f.key}`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
  * The hosts and co-hosts, on the right of the bar: a face each, ringed green
  * while they are on stage and red while they are off (during a guest's segment or
  * a sponsor video). Off means back in the green room, still connected, not on
@@ -1185,7 +1250,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     .filter((f) => f.state === "On stage")
     // Never your own microphone back at you: that is a network round trip
     // late, and it reads as an echo. Your picture stays; your sound does not.
-    .map((f) => ({ identity: f.identity, name: f.name, displayTitle: f.displayTitle, video: f.video, audio: me && f.identity === `p-${me.id}` ? null : f.audio, speaking: f.speaking }))
+    .map((f) => ({ identity: f.identity, name: f.name, displayTitle: f.displayTitle, photoUrl: f.photoUrl, host: f.host, video: f.video, audio: me && f.identity === `p-${me.id}` ? null : f.audio, speaking: f.speaking }))
     .sort((a, b) => a.identity.localeCompare(b.identity));
 
   useEffect(() => {
@@ -1900,8 +1965,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               )}
             </aside>
 
-            {/* the programme, filling whatever is left */}
-            <div className="relative min-w-0 flex-1 bg-black">
+            {/* The programme as the audience gets it — a 16:9 frame, as big as
+                the space allows — with the layouts underneath, like Restream. */}
+            <div className="flex min-w-0 flex-1 flex-col bg-black">
+            <div className="relative flex min-h-0 flex-1 items-center justify-center p-3 [container-type:size]">
+            <div className="relative overflow-hidden rounded-lg ring-1 ring-white/10" style={{ width: "min(100%, calc(100cqh * 16 / 9))", aspectRatio: "16 / 9" }}>
               <StageGrid
                 tiles={monitorTiles}
                 // The monitor has to be the programme, not an approximation of
@@ -1941,6 +2009,14 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   Rehearsal · only you see this
                 </span>
               ) : null}
+            </div>
+            </div>
+            <LayoutBar
+              layout={studio?.stageLayout || "grid"}
+              fit={studio?.tileFit || "wide"}
+              onLayout={(v) => patchStudio.mutate({ stageLayout: v })}
+              onFit={(v) => patchStudio.mutate({ tileFit: v })}
+            />
             </div>
 
             {/* The graphics rail. It takes its width out of the stage rather

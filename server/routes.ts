@@ -3300,7 +3300,11 @@ export function registerRoutes(app: Express): void {
         canPublish: true,
         // Their picture travels with them, so wherever their camera is off —
         // the stage, the console, the green room — it shows who they are.
-        attributes: { state: me.state, participantId: String(me.id), displayTitle: me.displayTitle ?? "", photoUrl: await personPhoto(found.studio.eventId, me.email) },
+        attributes: {
+          state: me.state, participantId: String(me.id), displayTitle: me.displayTitle ?? "", photoUrl: await personPhoto(found.studio.eventId, me.email),
+          // Co-hosts coming in through a guest link still sit with the hosts.
+          ...(isShowHost(me, await showHosts()) ? { role: "studio-host" } : {}),
+        },
       }),
     });
   });
