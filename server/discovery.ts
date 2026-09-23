@@ -170,6 +170,65 @@ export interface CreatorCard {
   quality?: number | null;
   /** Their link, only on the server, for keeping the picture. */
   rawPicture?: string;
+  /** Their other networks, where we know them. */
+  channels?: string[];
+  /** The list columns, from an analytics read we already hold. */
+  extra?: RowExtra | null;
+}
+
+/** What a results row can show beyond the search answer: read from cache, never bought here. */
+export interface RowExtra {
+  growth: { monthsAgo: number; pct: number }[];
+  growth6m: number | null;
+  country: { name: string; code: string; pct: number } | null;
+  niches: { name: string; pct: number }[];
+  collabs: string[];
+  collabCount: number;
+}
+
+function rowExtra(platform: string, raw: any): RowExtra | null {
+  const a = raw?.[platform] ?? raw;
+  if (!a) return null;
+  const aud = a.audience?.audience_followers?.data ?? a.audience?.audience_likers?.data ?? a.audience?.audience_commenters?.data ?? {};
+  const growth = Object.entries(a.creator_follower_growth ?? {})
+    .map(([k, v]) => ({ monthsAgo: Number(String(k).match(/\d+/)?.[0] ?? 0), pct: num(v) }))
+    .filter((x): x is { monthsAgo: number; pct: number } => !!x.monthsAgo && x.pct != null)
+    .sort((x, y) => y.monthsAgo - x.monthsAgo)
+    .map((x) => ({ ...x, pct: Math.round(x.pct * 100) / 100 }));
+  const c0 = (Array.isArray(aud.audience_geo?.countries) ? aud.audience_geo.countries : []).slice().sort((x: any, y: any) => (num(y?.weight) ?? 0) - (num(x?.weight) ?? 0))[0];
+  const niches = (Array.isArray(aud.audience_interests) ? aud.audience_interests : [])
+    .map((i: any) => ({ name: String(i?.name ?? ""), pct: Math.round((num(i?.weight) ?? 0) * 1000) / 10 }))
+    .filter((i: { name: string; pct: number }) => i.name && i.pct > 0)
+    .sort((x: { pct: number }, y: { pct: number }) => y.pct - x.pct)
+    .slice(0, 3);
+  const sponsors = (Array.isArray(a.past_sponsors) ? a.past_sponsors : []).map((x: any) => String(x?.handle ?? x?.brand ?? "")).filter(Boolean);
+  return {
+    growth,
+    growth6m: growth.find((g) => g.monthsAgo === 6)?.pct ?? null,
+    country: c0 ? { name: String(c0.name ?? ""), code: String(c0.code ?? ""), pct: Math.round((num(c0.weight) ?? 0) * 1000) / 10 } : null,
+    niches,
+    collabs: sponsors.slice(0, 3),
+    collabCount: sponsors.length,
+  };
+}
+
+/** Fill the list columns for whichever rows we already hold analytics for. */
+async function withExtras<T extends { platform: string; handle: string }>(rows: T[]): Promise<(T & { extra: RowExtra | null })[]> {
+  const keys = Array.from(new Set(rows.filter((r) => r.platform && r.handle).map((r) => `analytics:${r.platform}:${r.handle.toLowerCase()}`)));
+  const found = keys.length ? await db.select().from(discoveryCache).where(inArray(discoveryCache.key, keys)) : [];
+  const by = new Map(found.map((f) => [f.key, f.payload]));
+  return rows.map((r) => {
+    const hit = by.get(`analytics:${r.platform}:${r.handle.toLowerCase()}`);
+    let extra: RowExtra | null = null;
+    if (hit) {
+      try {
+        extra = rowExtra(r.platform, JSON.parse(hit).raw);
+      } catch {
+        /* an odd cache row: the columns just stay empty */
+      }
+    }
+    return { ...r, extra };
+  });
 }
 
 const BRANCHES: [string, RegExp][] = [
@@ -290,6 +349,7 @@ async function verifiedCreators(): Promise<(CreatorCard & { match: string })[]> 
         signupId: s.id,
         branch,
         verified: { show: s.podcastName.trim(), host: s.hostName.trim(), serviceStatus: prof?.serviceStatus ?? "", slotLabel: when(s.slotIndex) },
+        channels: Array.from(new Set(accounts.map((a) => String(a.platform ?? "").toLowerCase()).filter((p) => p && p !== (best?.platform ?? "")))),
         match: `${s.podcastName} ${s.hostName} ${branch} ${prof?.serviceStatus ?? ""} podcast podcaster guest speaker veteran military`.toLowerCase(),
       };
     });
@@ -512,6 +572,13 @@ export function registerDiscoveryRoutes(app: Express): void {
           let platform = pick0 ? (pick0.platform === "x" ? "twitter" : pick0.platform) : "";
           let handle = pick0?.handle ?? "";
           let followers = pick0?.followers ?? 0;
+          // An admin who found the account by hand says so, and that wins.
+          if (only && req.body?.handle) {
+            platform = asPlatform(req.body.platform);
+            handle = String(req.body.handle).replace(/^@/, "").trim();
+            const acct = await rawAccount(platform, handle).catch(() => null);
+            followers = num(acct?.follower_count ?? acct?.subscriber_count) ?? 0;
+          }
           if (!handle) {
             // Accounts they connected themselves: trustworthy, and free.
             const prof = await storage.getProfileByEmail(email);
@@ -589,7 +656,7 @@ export function registerDiscoveryRoutes(app: Express): void {
   app.get("/api/discover/verified", (_req, res) =>
     send(res, async () => {
       res.set("Cache-Control", "public, max-age=300");
-      return (await verifiedCreators()).map(({ match: _m, ...c }) => c);
+      return withExtras((await verifiedCreators()).map(({ match: _m, ...c }) => c));
     }),
   );
 
@@ -637,7 +704,7 @@ export function registerDiscoveryRoutes(app: Express): void {
         keepPictures(accounts);
         return { total: num(r?.total) ?? 0, accounts, understood: r?.nlp_search ?? null, applied: r?.applied_filters ?? null };
       });
-      found.accounts = found.accounts.map(({ rawPicture: _r, ...c }: CreatorCard) => c);
+      found.accounts = await withExtras(found.accounts.map(({ rawPicture: _r, ...c }: CreatorCard) => c));
 
       // Ours first, on the first page, when the words match.
       let verified: CreatorCard[] = [];
@@ -650,6 +717,7 @@ export function registerDiscoveryRoutes(app: Express): void {
           .filter((c) => (!branch || c.branch.toLowerCase() === branch.toLowerCase()) && words.every((w) => c.match.includes(w)))
           .slice(0, 8)
           .map(({ match: _m, ...c }) => c);
+        verified = await withExtras(verified);
       }
       if (mode === "keywords") verified = [];
       return { brief: mode === "keywords" ? `bio mentions ${(filters.keywords_in_bio as string[]).join(" or ")}` : brief, mode, platform, page, pageSize: PAGE_SIZE, total: found.total, results: found.accounts, verified, understood: found.understood };
@@ -929,6 +997,25 @@ export function registerDiscoveryRoutes(app: Express): void {
         .sort((a, b) => a.rank - b.rank || a.k - b.k)
         .slice(0, 10)
         .map(({ x }) => x);
+    }),
+  );
+
+  // ---- Admin: buy the analytics for a page of results, to fill the list columns ----
+  //      0.8 credits a creator the first time, nothing after. Admin only: it spends.
+  app.post("/api/admin/discover/fill", (req, res) =>
+    send(res, async () => {
+      const { member } = await requireMember(req);
+      if (member.role !== "admin") throw new HttpError(403, "Only an admin can spend credits on this.");
+      const rows = (Array.isArray(req.body?.rows) ? req.body.rows : []).slice(0, 12)
+        .map((r: any) => ({ platform: asPlatform(r?.platform), handle: String(r?.handle ?? "").replace(/^@/, "").trim().slice(0, 100) }))
+        .filter((r: { handle: string }) => r.handle);
+      let bought = 0;
+      await Promise.all(rows.map(async (r: { platform: string; handle: string }) => {
+        const k = `analytics:${r.platform}:${r.handle.toLowerCase()}`;
+        if (await isFresh(k, 30 * DAY)) return;
+        await cached(k, 30 * DAY, async () => normalizeAnalytics(r.platform, r.handle, await ic("/creators/enrich/handle/analytics/", { handle: r.handle, platform: r.platform, include_lookalikes: false }))).then(() => { bought++; }).catch(() => null);
+      }));
+      return { rows: await withExtras(rows), bought, credits: Math.round(bought * 0.8 * 100) / 100 };
     }),
   );
 

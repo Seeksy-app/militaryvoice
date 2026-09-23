@@ -34,6 +34,13 @@ type Card = {
   verified?: { show: string; host: string; serviceStatus: string; slotLabel: string } | null;
   signupId?: number;
   quality?: number | null;
+  channels?: string[];
+  extra?: RowExtra | null;
+};
+type RowExtra = {
+  growth: { monthsAgo: number; pct: number }[]; growth6m: number | null;
+  country: { name: string; code: string; pct: number } | null;
+  niches: { name: string; pct: number }[]; collabs: string[]; collabCount: number;
 };
 type Me = { signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number } | null; lookups?: { used: number; allowance: number } | null };
 type SearchResult = { brief: string; mode?: string; total: number; page: number; pageSize: number; results: Card[]; verified: Card[]; understood?: { notes?: string[]; from_nlp?: Record<string, unknown> } | null };
@@ -474,7 +481,7 @@ export default function Discover() {
                   <p className="mt-1 text-sm text-muted-foreground">Try fewer words, another platform, or a wider audience size.</p>
                 </div>
               ) : (
-                <ResultsList rows={results} total={r?.total} saved={saved} isMember={isMember} onOpen={openIn([...(r?.verified ?? []), ...results])} onSave={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} />
+                <ResultsList rows={results} total={r?.total} saved={saved} isMember={isMember} isAdmin={me?.member?.role === "admin"} onOpen={openIn([...(r?.verified ?? []), ...results])} onSave={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} />
               )}
               {search.hasNextPage && (
                 <div className="mt-6 flex flex-col items-center gap-1">
@@ -895,68 +902,161 @@ function PlatformIcon({ platform, className = "h-4 w-4" }: { platform: string; c
   return <I className={`${className} ${color}`} />;
 }
 
-function ResultsList({ rows, total, saved, isMember, onOpen, onSave, onSaveMany }: {
-  rows: Card[]; total?: number; saved: Set<string>; isMember: boolean;
-  onOpen: (c: Card) => void; onSave: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>;
+const flagOf = (code: string) => (/^[A-Za-z]{2}$/.test(code) ? String.fromCodePoint(...code.toUpperCase().split("").map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65)) : "");
+const NICHE_DOT = ["#16a34a", "#d97706", "#2563eb", "#db2777", "#7c3aed", "#0891b2"];
+
+/** A little line of the follower checkpoints, oldest to newest, as the index reports them. */
+function Spark({ points }: { points: { monthsAgo: number; pct: number }[] }) {
+  if (points.length < 2) return null;
+  const W = 64, H = 20;
+  const vals = points.map((p) => p.pct);
+  const min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
+  const d = points.map((p, i) => `${i ? "L" : "M"}${((i / (points.length - 1)) * W).toFixed(1)},${(H - 2 - ((p.pct - min) / span) * (H - 4)).toFixed(1)}`).join(" ");
+  const up = points[points.length - 1].pct >= points[0].pct;
+  return <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden><path d={d} fill="none" stroke={up ? "#16a34a" : "#dc2626"} strokeOpacity=".7" strokeWidth="1.5" strokeLinejoin="round" /></svg>;
+}
+
+function ResultsList({ rows, total, saved, isMember, isAdmin, onOpen, onSave, onSaveMany, onFilled }: {
+  rows: Card[]; total?: number; saved: Set<string>; isMember: boolean; isAdmin?: boolean;
+  onOpen: (c: Card) => void; onSave: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; onFilled?: (rows: Card[]) => void;
 }) {
+  const { toast } = useToast();
   const keyOf = (c: Card) => `${c.platform}:${c.handle.toLowerCase()}:${c.name}`;
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
+  const [filling, setFilling] = useState(false);
+  const [extras, setExtras] = useState<Record<string, RowExtra | null>>({});
   const all = rows.length > 0 && rows.every((c) => picked.has(keyOf(c)));
-  // Quality is only known for creators we've measured; the column shows when any row has it.
-  const hasQuality = rows.some((c) => c.quality != null);
   const toggle = (k: string) => setPicked((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const ex = (c: Card) => extras[`${c.platform}:${c.handle.toLowerCase()}`] ?? c.extra ?? null;
+  // Each column shows only when some row on the page has it.
+  const has = {
+    quality: rows.some((c) => c.quality != null),
+    channels: rows.some((c) => (c.channels ?? []).length > 0),
+    growth: rows.some((c) => (ex(c)?.growth.length ?? 0) > 1),
+    country: rows.some((c) => ex(c)?.country),
+    niches: rows.some((c) => (ex(c)?.niches.length ?? 0) > 0),
+    collabs: rows.some((c) => ex(c)?.collabCount),
+  };
+  const missing = rows.filter((c) => c.handle && !ex(c));
+  const fill = async () => {
+    setFilling(true);
+    try {
+      const res = await fetch("/api/admin/discover/fill", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ rows: missing.map((c) => ({ platform: c.platform, handle: c.handle })) }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message);
+      setExtras((prev) => ({ ...prev, ...Object.fromEntries((j.rows as Card[]).map((r) => [`${r.platform}:${r.handle.toLowerCase()}`, r.extra ?? null])) }));
+      toast({ title: `Filled ${j.bought} creators`, description: `${j.credits} credits used. Anyone who opens them now pays nothing.` });
+      onFilled?.(j.rows);
+    } catch (e) {
+      toast({ title: "Couldn't fill this page", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setFilling(false);
+    }
+  };
+  const head = "text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground";
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center gap-3 border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-        {isMember && <input type="checkbox" checked={all} onChange={() => setPicked(all ? new Set() : new Set(rows.map(keyOf)))} className="h-4 w-4 rounded border-border accent-[#053877]" aria-label="Select all on page" />}
-        <span className="flex-1">{picked.size ? `${picked.size} selected` : `Select all on page (${rows.length}${total && total > rows.length ? ` of ${total.toLocaleString()}` : ""})`}</span>
-        {picked.size > 0 && (
-          <Button size="sm" disabled={busy} onClick={async () => { setBusy(true); try { await onSaveMany(rows.filter((c) => picked.has(keyOf(c)))); setPicked(new Set()); } finally { setBusy(false); } }} className="h-7 gap-1.5 rounded-lg bg-[#2563eb] text-xs normal-case tracking-normal text-white hover:bg-[#1d4ed8]" data-testid="results-save-selected">
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Add {picked.size} to list
+      {isAdmin && missing.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-border bg-[#F0A71F]/[0.07] px-4 py-2.5 text-sm">
+          <span className="text-muted-foreground">Growth, audience country, niches and collaborations come with a creator's full read.</span>
+          <Button size="sm" variant="outline" disabled={filling} onClick={() => void fill()} className="ml-auto h-8 gap-1.5 rounded-lg" data-testid="results-fill">
+            {filling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Fill in {missing.length} · about {Math.round(missing.length * 0.8 * 10) / 10} credits
           </Button>
-        )}
-        <span className="hidden w-24 text-right sm:block">Followers</span>
-        <span className="hidden w-24 text-right sm:block">Engagement</span>
-        {hasQuality && <span className="hidden w-20 text-right md:block">Quality</span>}
-        <span className="w-8" />
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[46rem] text-sm">
+          <thead className="border-b border-border bg-muted/40">
+            <tr>
+              <th className="w-10 px-4 py-2.5 text-left">{isMember && <input type="checkbox" checked={all} onChange={() => setPicked(all ? new Set() : new Set(rows.map(keyOf)))} className="h-4 w-4 rounded border-border accent-[#053877]" aria-label="Select all on page" />}</th>
+              <th className={`py-2.5 pr-3 text-left ${head}`}>
+                {picked.size ? (
+                  <Button size="sm" disabled={busy} onClick={async () => { setBusy(true); try { await onSaveMany(rows.filter((c) => picked.has(keyOf(c)))); setPicked(new Set()); } finally { setBusy(false); } }} className="h-7 gap-1.5 rounded-lg bg-[#2563eb] text-xs normal-case tracking-normal text-white hover:bg-[#1d4ed8]" data-testid="results-save-selected">
+                    {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Add {picked.size} to list
+                  </Button>
+                ) : `Select all on page (${rows.length}${total && total > rows.length ? ` of ${total.toLocaleString()}` : ""})`}
+              </th>
+              <th className={`px-3 py-2.5 text-right ${head}`}>Followers</th>
+              {has.channels && <th className={`px-3 py-2.5 text-left ${head}`}>Other channels</th>}
+              {has.growth && <th className={`px-3 py-2.5 text-left ${head}`}>Follower growth</th>}
+              <th className={`px-3 py-2.5 text-right ${head}`}>ER %</th>
+              {has.quality && <th className={`px-3 py-2.5 text-right ${head}`}>Quality</th>}
+              {has.country && <th className={`px-3 py-2.5 text-left ${head}`}>Aud. primary country</th>}
+              {has.niches && <th className={`px-3 py-2.5 text-left ${head}`}>Aud. niches</th>}
+              {has.collabs && <th className={`px-3 py-2.5 text-left ${head}`}>Collabs</th>}
+              <th className="w-10" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((c) => {
+              const k = keyOf(c);
+              const x = ex(c);
+              const isSaved = saved.has(`${c.platform}:${c.handle.toLowerCase()}`);
+              return (
+                <tr key={k} className={`group transition-colors hover:bg-muted/40 ${picked.has(k) ? "bg-[#053877]/[0.04]" : ""}`} data-testid={`result-${c.handle || c.name}`}>
+                  <td className="px-4 py-3 align-middle">{isMember && <input type="checkbox" checked={picked.has(k)} onChange={() => toggle(k)} className="h-4 w-4 rounded border-border accent-[#053877]" aria-label={`Select ${c.name}`} />}</td>
+                  <td className="py-3 pr-3">
+                    <button type="button" onClick={() => onOpen(c)} className="flex min-w-0 items-center gap-3 text-left">
+                      <Avatar src={c.picture} name={c.name} size={44} ring={!!c.verified} />
+                      <span className="min-w-0">
+                        <span className="flex items-center gap-1.5">
+                          <span className="truncate font-medium group-hover:text-[#053877] dark:group-hover:text-[#8fb5e8]">{c.name}</span>
+                          {c.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-[#F0A71F]" aria-label="Verified on MilitaryVoices" />}
+                        </span>
+                        <span className="block max-w-[16rem] truncate text-xs text-muted-foreground">{c.verified ? c.verified.show : c.handle ? `@${c.handle}` : ""}{c.branch ? ` · ${c.branch}` : ""}</span>
+                      </span>
+                    </button>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right font-medium tabular-nums"><span className="inline-flex items-center gap-1.5">{c.platform && <PlatformIcon platform={c.platform} className="h-3.5 w-3.5" />}{c.followers != null ? compact(c.followers) : "–"}</span></td>
+                  {has.channels && <td className="px-3 py-3"><span className="flex gap-1.5">{(c.channels ?? []).slice(0, 4).map((ch) => <PlatformIcon key={ch} platform={ch} className="h-4 w-4" />)}</span></td>}
+                  {has.growth && (
+                    <td className="whitespace-nowrap px-3 py-3">
+                      {x && x.growth.length > 1 ? (
+                        <span className="inline-flex items-center gap-2"><Spark points={x.growth} /><span className="tabular-nums text-muted-foreground">{x.growth6m != null ? `${x.growth6m > 0 ? "+" : ""}${x.growth6m.toFixed(2)}%` : ""}</span></span>
+                      ) : <span className="text-muted-foreground">–</span>}
+                    </td>
+                  )}
+                  <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums">{c.engagement != null ? pct(c.engagement, 2) : "–"}</td>
+                  {has.quality && <td className="whitespace-nowrap px-3 py-3 text-right tabular-nums text-muted-foreground">{c.quality != null ? `${c.quality}/100` : "–"}</td>}
+                  {has.country && <td className="whitespace-nowrap px-3 py-3">{x?.country ? <span className="inline-flex items-center gap-2"><span className="text-base leading-none">{flagOf(x.country.code)}</span>{x.country.name}</span> : <span className="text-muted-foreground">–</span>}</td>}
+                  {has.niches && (
+                    <td className="px-3 py-2">
+                      {x?.niches.length ? (
+                        <ul className="flex flex-col gap-0.5 text-xs">
+                          {x.niches.map((n, ni) => (
+                            <li key={n.name} className={`flex items-center gap-2 ${ni === 0 ? "font-medium text-foreground" : "text-muted-foreground"}`}>
+                              <span className="flex gap-0.5">{[0, 1, 2].map((d) => <span key={d} className="h-1.5 w-1.5 rounded-full" style={{ background: d < 3 - ni ? NICHE_DOT[ni] : "hsl(var(--muted))" }} />)}</span>
+                              <span className="max-w-[12rem] truncate">{n.name}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : <span className="text-muted-foreground">–</span>}
+                    </td>
+                  )}
+                  {has.collabs && (
+                    <td className="px-3 py-3">
+                      {x?.collabCount ? (
+                        <span className="flex items-center" title={x.collabs.map((b) => `@${b}`).join(", ")}>
+                          {x.collabs.map((b, bi) => <span key={b} className="-ml-1.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-card text-[11px] font-semibold uppercase first:ml-0" style={{ background: ["#0b1733", "#e0f2e9", "#fde7ef"][bi % 3], color: bi % 3 === 0 ? "white" : "#0b1733" }}>{b[0]}</span>)}
+                          {x.collabCount > x.collabs.length && <span className="ml-1.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">+{x.collabCount - x.collabs.length}</span>}
+                        </span>
+                      ) : <span className="text-muted-foreground">–</span>}
+                    </td>
+                  )}
+                  <td className="px-2 py-3 text-right">
+                    {isMember && (
+                      <button type="button" onClick={() => onSave(c)} disabled={isSaved} className={`rounded-lg p-1.5 ${isSaved ? "text-[#b36b00]" : "text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100"}`} title={isSaved ? "Saved" : "Save"} aria-label="Save">
+                        {isSaved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-      <ul className="divide-y divide-border">
-        {rows.map((c) => {
-          const k = keyOf(c);
-          const isSaved = saved.has(`${c.platform}:${c.handle.toLowerCase()}`);
-          return (
-            <li key={k} className={`group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 ${picked.has(k) ? "bg-[#053877]/[0.04]" : ""}`} data-testid={`result-${c.handle || c.name}`}>
-              {isMember && <input type="checkbox" checked={picked.has(k)} onChange={() => toggle(k)} className="h-4 w-4 rounded border-border accent-[#053877]" aria-label={`Select ${c.name}`} />}
-              <button type="button" onClick={() => onOpen(c)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                <Avatar src={c.picture} name={c.name} size={44} ring={!!c.verified} />
-                <span className="min-w-0">
-                  <span className="flex items-center gap-1.5">
-                    <span className="truncate font-medium group-hover:text-[#053877] dark:group-hover:text-[#8fb5e8]">{c.name}</span>
-                    {c.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-[#F0A71F]" aria-label="Verified on MilitaryVoices" />}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {c.verified ? c.verified.show : c.handle ? `@${c.handle}` : ""}
-                    {c.branch ? ` · ${c.branch}` : ""}
-                  </span>
-                </span>
-              </button>
-              <span className="hidden w-24 items-center justify-end gap-1.5 text-sm font-medium tabular-nums sm:flex">
-                {c.platform && <PlatformIcon platform={c.platform} className="h-3.5 w-3.5" />} {c.followers != null ? compact(c.followers) : "–"}
-              </span>
-              <span className="hidden w-24 text-right text-sm tabular-nums text-muted-foreground sm:block">{c.engagement != null ? pct(c.engagement, 2) : "–"}</span>
-              {hasQuality && <span className="hidden w-20 text-right text-sm tabular-nums text-muted-foreground md:block">{c.quality != null ? `${c.quality}/100` : "–"}</span>}
-              <span className="flex w-8 justify-end">
-                {isMember && (
-                  <button type="button" onClick={() => onSave(c)} disabled={isSaved} className={`rounded-lg p-1.5 ${isSaved ? "text-[#b36b00]" : "text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100"}`} title={isSaved ? "Saved" : "Save"} aria-label="Save">
-                    {isSaved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
-                  </button>
-                )}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
     </div>
   );
 }
