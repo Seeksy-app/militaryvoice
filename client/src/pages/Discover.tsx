@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Search, Sparkles, BadgeCheck, Bookmark, BookmarkCheck, Users, TrendingUp, TrendingDown, Mail, Phone, Globe, ShieldCheck,
+  Search, Sparkles, BadgeCheck, Bookmark, BookmarkCheck, Users, Mail, Phone, Globe, ShieldCheck,
   Mic2, Megaphone, CalendarDays, X, Loader2, ExternalLink, Plus, Trash2, Download, ChevronRight, Lock, MapPin, Heart, Hash, Handshake, Info,
 } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
@@ -548,27 +548,29 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
 
 function Growth({ points }: { points: { monthsAgo: number; pct: number }[] }) {
   if (points.length < 2) return <p className="text-sm text-muted-foreground">Not enough history yet.</p>;
-  const all = [...points, { monthsAgo: 0, pct: 0 }];
-  const W = 320, H = 90, pad = 8;
-  const min = Math.min(...all.map((p) => p.pct)), max = Math.max(...all.map((p) => p.pct));
+  // Shown as reported, one figure per checkpoint. The index doesn't say
+  // which way its sign points, so the chart makes no claim of up or down.
+  const W = 320, H = 80, pad = 8;
+  const vals = points.map((p) => p.pct);
+  const min = Math.min(...vals), max = Math.max(...vals);
   const span = max - min || 1;
-  const x = (m: number) => pad + ((12 - m) / 12) * (W - pad * 2);
+  const x = (i: number) => pad + (i / (points.length - 1)) * (W - pad * 2);
   const y = (v: number) => pad + (1 - (v - min) / span) * (H - pad * 2);
-  const path = all.map((p, i) => `${i ? "L" : "M"}${x(p.monthsAgo).toFixed(1)},${y(p.pct).toFixed(1)}`).join(" ");
-  const first = points[0].pct;
-  const change = -first; // growth since the oldest point, as a share of today
-  const up = change >= 0;
+  const path = points.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.pct).toFixed(1)}`).join(" ");
   return (
     <div>
-      <div className={`flex items-center gap-1.5 text-sm font-semibold ${up ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}`}>
-        {up ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-        {up ? "+" : ""}{change.toFixed(1)}% in {points[0].monthsAgo} months
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="mt-2 h-24 w-full" preserveAspectRatio="none" aria-label="Follower growth">
-        <path d={path} fill="none" stroke={up ? "#16a34a" : "#dc2626"} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-        {all.map((p) => <circle key={p.monthsAgo} cx={x(p.monthsAgo)} cy={y(p.pct)} r="3" fill={up ? "#16a34a" : "#dc2626"} />)}
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-20 w-full" preserveAspectRatio="none" aria-label="Follower growth">
+        <path d={path} fill="none" stroke="#053877" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        {points.map((p, i) => <circle key={p.monthsAgo} cx={x(i)} cy={y(p.pct)} r="3" fill="#053877" />)}
       </svg>
-      <div className="flex justify-between text-[11px] text-muted-foreground"><span>{points[0].monthsAgo} months ago</span><span>Today</span></div>
+      <div className="mt-1 grid text-center text-[11px] text-muted-foreground" style={{ gridTemplateColumns: `repeat(${points.length}, minmax(0,1fr))` }}>
+        {points.map((p) => (
+          <span key={p.monthsAgo}>
+            <span className="block font-semibold tabular-nums text-foreground">{p.pct > 0 ? "+" : ""}{p.pct.toFixed(1)}%</span>
+            {p.monthsAgo} mo
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
