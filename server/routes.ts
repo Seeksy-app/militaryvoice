@@ -3745,7 +3745,11 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
-    res.json(await storage.updateScene(scene.id, parsed.data));
+    // Only the fields that were sent: the schema's defaults would otherwise
+    // blank the rest (a thumbnail-only update once wiped a scene's video).
+    const sent = new Set(Object.keys(req.body ?? {}));
+    const patch = Object.fromEntries(Object.entries(parsed.data).filter(([k]) => sent.has(k)));
+    res.json(await storage.updateScene(scene.id, patch));
   });
 
   /** Drag-and-drop, or the up/down buttons: the rail sends the order it wants. */
