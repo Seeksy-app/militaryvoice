@@ -36,8 +36,10 @@ export interface RoomMeta {
   backgroundUrl?: string;
   /** full · wide (16:9) · square — the shape each camera takes on stage. */
   tileFit?: string;
-  /** grid · focus · pip · solo — how the people on stage share the frame. */
+  /** One of Restream's six — how the people on stage share the frame. */
   stageLayout?: string;
+  /** The producer's arrangement, identities comma-separated; first is the big picture. */
+  stageOrder?: string;
   /** The lower third that is on air. Blank when it's off. */
   bannerTitle?: string;
   bannerSubtitle?: string;
@@ -354,20 +356,21 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
         </div>
       )}
 
-      {/* Each person's name, as they typed it in the green room. While a
-          scene's lower third is up the tag moves to the top of the tile, so
-          the two never stack in one corner; alone on stage under a lower
-          third it steps aside, since the banner already names them. */}
-      <div className={`absolute left-0 right-0 px-3 ${namePos === "top" ? "top-0 pt-3" : "bottom-0 pb-3"} ${namePos === "none" ? "hidden" : ""}`}>
-        <div className="flex items-stretch overflow-hidden rounded-md shadow-lg" style={{ maxWidth: "calc(100% - 0px)" }}>
-          {/* Accent stripe */}
-          <div className="w-1 shrink-0 bg-[#F0A71F]" />
-          <div className="bg-[#000741]/90 backdrop-blur-sm px-3 py-1.5 min-w-0">
-            <p className="whitespace-nowrap text-sm font-bold leading-tight text-white truncate" style={HEADLINE_FONT}>
+      {/* The one name on screen: each person's own, bottom left of their
+          frame, as they typed it in the green room, with their title under
+          it. Sized to the frame, so it reads the same big or small. */}
+      <div
+        className={`absolute bottom-0 left-0 max-w-[85%] ${namePos === "none" ? "hidden" : ""}`}
+        style={{ padding: "0 0 clamp(6px, 3.5cqh, 22px) clamp(6px, 2.2cqw, 22px)", fontSize: "clamp(10px, 3.6cqh, 26px)" }}
+      >
+        <div className="flex items-stretch overflow-hidden rounded-md shadow-lg">
+          <div className="w-[0.22em] shrink-0 bg-[#F0A71F]" />
+          <div className="min-w-0 bg-[#000741]/90 px-[0.6em] py-[0.3em] backdrop-blur-sm">
+            <p className="truncate whitespace-nowrap font-bold leading-tight text-white" style={HEADLINE_FONT}>
               {tile.name}
             </p>
             {tile.displayTitle && (
-              <p className="whitespace-nowrap text-xs leading-tight text-[#F0A71F]/90 truncate" style={HEADLINE_FONT}>
+              <p className="truncate whitespace-nowrap text-[0.72em] leading-tight text-[#F0A71F]" style={HEADLINE_FONT}>
                 {tile.displayTitle}
               </p>
             )}
@@ -385,16 +388,59 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
  * right or in the inset. Anyone a layout has no room for is still heard:
  * their tile renders out of sight for the sound.
  */
-function StageLayout({ tiles: raw, layout, muted, banner }: { tiles: StageTile[]; layout?: string; fit?: string; muted: boolean; banner: boolean }) {
-  const tiles = [...raw].sort((a, b) => Number(!!a.host) - Number(!!b.host) || a.identity.localeCompare(b.identity));
+function StageLayout({
+  tiles: raw,
+  layout,
+  muted,
+  order,
+  onReorder,
+}: {
+  tiles: StageTile[];
+  layout?: string;
+  fit?: string;
+  muted: boolean;
+  order?: string;
+  onReorder?: (identities: string[]) => void;
+}) {
+  // The producer's arrangement first; anyone it doesn't mention falls in
+  // after, guests before hosts.
+  const pref = (order ?? "").split(",").filter(Boolean);
+  const rank = (t: StageTile) => { const i = pref.indexOf(t.identity); return i < 0 ? 1e6 : i; };
+  const tiles = [...raw].sort((a, b) => rank(a) - rank(b) || Number(!!a.host) - Number(!!b.host) || a.identity.localeCompare(b.identity));
   const n = tiles.length;
-  // Under a scene's lower third the tags move to the top; alone on stage the
-  // lower third already names them, so theirs steps aside.
-  const tag: "bottom" | "top" | "none" = !banner ? "bottom" : n > 1 ? "top" : "none";
+  const tag = "bottom" as const;
   const [main, ...rest] = tiles;
+  // Drag one person onto another to swap them — the guest into the small
+  // frame and the host into the big one, say. Console only.
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const dnd = (t: StageTile) =>
+    onReorder
+      ? {
+          draggable: true,
+          onDragStart: (e: React.DragEvent) => { e.dataTransfer.setData("text/plain", t.identity); e.dataTransfer.effectAllowed = "move"; setDragging(t.identity); },
+          onDragEnd: () => { setDragging(null); setOver(null); },
+          onDragOver: (e: React.DragEvent) => { if (dragging && dragging !== t.identity) { e.preventDefault(); setOver(t.identity); } },
+          onDragLeave: () => setOver((v) => (v === t.identity ? null : v)),
+          onDrop: (e: React.DragEvent) => {
+            e.preventDefault();
+            const from = e.dataTransfer.getData("text/plain") || dragging;
+            setDragging(null); setOver(null);
+            if (!from || from === t.identity) return;
+            const ids = tiles.map((x) => x.identity);
+            const a = ids.indexOf(from), b = ids.indexOf(t.identity);
+            if (a < 0 || b < 0) return;
+            [ids[a], ids[b]] = [ids[b], ids[a]];
+            onReorder(ids);
+          },
+          title: "Drag onto someone to swap places",
+        }
+      : {};
+  const dragCls = (t: StageTile) =>
+    onReorder ? `cursor-grab active:cursor-grabbing ${over === t.identity ? "outline outline-4 outline-offset-[-4px] outline-[#3B82F6] rounded-xl" : ""} ${dragging === t.identity ? "opacity-60" : ""}` : "";
   const box = (style: CSSProperties, t: StageTile, opts: { contain?: boolean; flat?: boolean; small?: boolean } = {}) => (
-    <div key={t.identity} className="absolute grid" style={style}>
-      <Tile tile={t} muted={muted} namePos={opts.small ? "bottom" : tag} fit="full" contain={opts.contain} flat={opts.flat} />
+    <div key={t.identity} className={`absolute grid ${dragCls(t)}`} style={style} {...dnd(t)}>
+      <Tile tile={t} muted={muted} namePos={tag} fit="full" contain={opts.contain} flat={opts.flat} />
     </div>
   );
   const column = (list: StageTile[], left: number, width: number, top: number, bottom: number, gap: number) => {
@@ -424,7 +470,7 @@ function StageLayout({ tiles: raw, layout, muted, banner }: { tiles: StageTile[]
     // Edge to edge: every camera fills its share of the frame, no gaps.
     return (
       <div className={`relative grid h-full w-full ${n <= 2 ? "grid-cols-2" : n <= 4 ? "grid-cols-2 grid-rows-2" : "grid-cols-3 grid-rows-2"}`}>
-        {tiles.map((t) => <div key={t.identity} className="relative grid min-h-0"><Tile tile={t} muted={muted} namePos={tag} fit="full" flat /></div>)}
+        {tiles.map((t) => <div key={t.identity} className={`relative grid min-h-0 ${dragCls(t)}`} {...dnd(t)}><Tile tile={t} muted={muted} namePos={tag} fit="full" flat /></div>)}
       </div>
     );
   }
@@ -460,7 +506,7 @@ function StageLayout({ tiles: raw, layout, muted, banner }: { tiles: StageTile[]
   // Contain: side by side, each camera whole inside a 16:9 box, the background around them.
   return (
     <div className={`relative grid h-full w-full gap-3 p-4 ${gridFor(n)}`}>
-      {tiles.map((t) => <Tile key={t.identity} tile={t} muted={muted} namePos={tag} fit="wide" contain />)}
+      {tiles.map((t) => <div key={t.identity} className={`relative grid min-h-0 min-w-0 ${dragCls(t)}`} {...dnd(t)}><Tile tile={t} muted={muted} namePos={tag} fit="wide" contain /></div>)}
     </div>
   );
 }
@@ -681,12 +727,15 @@ export function StageGrid({
   muted = false,
   idleTitle,
   caption,
+  onReorder,
 }: {
   tiles: StageTile[];
   meta: RoomMeta;
   muted?: boolean;
   idleTitle?: string;
   caption?: { speaker: string; text: string } | null;
+  /** Console only: drag people to swap places on stage. */
+  onReorder?: (identities: string[]) => void;
 }) {
   // Standby is the emergency, so it outranks anything chosen deliberately.
   // Before the event opens it plays the pre-event card instead, decided here
@@ -696,8 +745,10 @@ export function StageGrid({
   const countdownEnds = meta.countdownEndsAtUtc ? Date.parse(meta.countdownEndsAtUtc) : NaN;
   // A name bar only names someone who is there. Over the empty holding card
   // it announced a person who was not on stage.
-  const nobodyOn = tiles.length === 0 && !(meta.stageMediaPlaying && meta.stageMediaUrl);
-  const banner = nobodyOn ? "" : (meta.bannerTitle ?? "").trim();
+  // One name on screen per person, and it is theirs, on their own frame. The
+  // scene's lower third is for moments with no cameras up — a sponsor clip,
+  // a slide — so it only shows over media.
+  const banner = tiles.length === 0 && meta.stageMediaPlaying && meta.stageMediaUrl ? (meta.bannerTitle ?? "").trim() : "";
   const ticker = (meta.tickerText ?? "").trim();
 
   const body =
@@ -757,7 +808,7 @@ export function StageGrid({
             exactly where a set would be. Media and the break clock cover the
             frame, so they hide it without needing to be told to. */}
         <BackgroundLayer url={meta.backgroundUrl ?? ""} />
-        <StageLayout tiles={tiles} layout={meta.stageLayout} fit={meta.tileFit} muted={muted} banner={Boolean(banner)} />
+        <StageLayout tiles={tiles} layout={meta.stageLayout} fit={meta.tileFit} muted={muted} order={meta.stageOrder} onReorder={onReorder} />
         <Captions caption={caption} lifted={Boolean(ticker)} />
       </>
     );

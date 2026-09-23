@@ -976,6 +976,8 @@ export const studios = pgTable("studios", {
   tileFit: text("tile_fit").notNull().default("wide"),
   /** How the people on stage share the frame — one of STAGE_LAYOUTS. */
   stageLayout: text("stage_layout").notNull().default("contain"),
+  /** The producer's arrangement: participant identities, first is the big picture. Empty = guests first. */
+  stageOrder: text("stage_order").notNull().default(""),
   // The lower third that is on air *right now*. Usually put there by taking a
   // scene, which carries its own; the ad-lib box in the rail writes here too,
   // for the thing nobody planned for.
@@ -1532,6 +1534,7 @@ export const studioUpdateSchema = z.object({
   backgroundVisible: z.boolean().optional(),
   tileFit: z.enum(TILE_FITS).optional(),
   stageLayout: z.enum(STAGE_LAYOUTS).optional(),
+  stageOrder: z.string().max(2000).optional(),
   bannerTitle: z.string().trim().max(80).optional(),
   bannerSubtitle: z.string().trim().max(120).optional(),
   bannerVisible: z.boolean().optional(),

@@ -1997,6 +1997,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 // Hear me toggle, both of which are fixed at the source.
                 muted={false}
                 idleTitle={currentStudio?.name}
+                onReorder={(ids) => patchStudio.mutate({ stageOrder: ids.join(",") })}
               />
               {recording && (
                 <span className="pointer-events-none absolute right-4 top-4 flex items-center gap-2 rounded-full bg-black/70 px-3 py-1.5 text-[12px] font-semibold text-white">
