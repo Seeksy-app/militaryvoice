@@ -45,7 +45,7 @@ const DISCOVERY_LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/platform", label: "About MilitaryVoices" },
 ];
 
-export function NavBar({ product, account, tone = "light" }: { product?: "discovery"; account?: { label: string; onClick: () => void }; /** "dark": sits on a navy band (the homepage), white type, the dark logo. */ tone?: "light" | "dark" } = {}) {
+export function NavBar({ product, account, tone = "light", bare = false }: { product?: "discovery"; account?: { label: string; onClick: () => void }; /** "dark": sits on a navy band (the homepage), white type, the dark logo. */ tone?: "light" | "dark"; /** Inside a band that already carries the logo: no logo, not sticky. */ bare?: boolean } = {}) {
   const dark = tone === "dark";
   const [location] = useLocation();
   const links = product === "discovery" ? DISCOVERY_LINKS : LINKS;
@@ -68,14 +68,16 @@ export function NavBar({ product, account, tone = "light" }: { product?: "discov
         }`;
 
   return (
-    <header className={dark ? "sticky top-0 z-40 bg-[#030b1f]/95 text-white backdrop-blur" : "sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur"}>
+    <header className={bare ? "relative z-40 border-t border-white/10 text-white" : dark ? "sticky top-0 z-40 bg-[#030b1f]/95 text-white backdrop-blur" : "sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur"}>
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-2.5 sm:px-6">
-        <Link href="/" className="shrink-0" data-testid="link-home-logo">
-          {dark ? <LogoLockupOnDark className="h-14 lg:h-[72px]" /> : <LogoLockup />}
-        </Link>
+        {!bare && (
+          <Link href="/" className="shrink-0" data-testid="link-home-logo">
+            {dark ? <LogoLockupOnDark className="h-14 lg:h-[72px]" /> : <LogoLockup />}
+          </Link>
+        )}
 
         {/* Desktop links */}
-        <nav className="hidden items-center gap-3 lg:flex xl:gap-5" aria-label="Primary">
+        <nav className={`hidden items-center gap-3 lg:flex xl:gap-5 ${bare ? "-ml-2.5" : ""}`} aria-label="Primary">
           {links.map((link) => {
             const active = !link.anchor && (location === link.href || (location.startsWith("/event/") && location.endsWith(link.href)));
             return link.anchor ? (
