@@ -146,7 +146,7 @@ function Reveal({ children, delay = 0, className = "" }: { children: React.React
 const CO_HOSTS = [
   {
     name: "Amy Forsythe",
-    line: "U.S. Navy, Retired",
+    line: "Author and Veteran Advocate · U.S. Navy, Retired",
     photo: "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789581359972-53a24ac49334.jpg",
   },
   {

@@ -8093,7 +8093,10 @@ Watch at militaryvoice.ai/agenda
     const email = String(req.body?.email ?? "").trim().toLowerCase();
     const seat = (await viewAsSeats()).find((x) => x.email === email);
     if (!seat) return res.status(400).json({ message: "That isn't one of your seats." });
-    setSessionCookie(res, email, false);
+    // The admin is already signed in for thirty days; viewing as someone else
+    // must not quietly swap that for a twelve-hour cookie that dies with the
+    // browser, which is what sent them back for a code every morning.
+    setSessionCookie(res, email, true);
     console.log(`Admin ${getAdminEmail(req)} viewing as ${email}`);
     res.json({ ok: true, to: "/host/dashboard" });
   });

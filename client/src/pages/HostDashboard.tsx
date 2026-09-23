@@ -226,7 +226,9 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
   const [code, setCode] = useState("");
   // Off by default, deliberately. The old behaviour gave everyone thirty days
   // whether they were on their own laptop or a library computer.
-  const [remember, setRemember] = useState(false);
+  // On by default: nearly everyone signs in on their own phone or laptop, and a
+  // code every visit is what they complained about. Untick on a shared machine.
+  const [remember, setRemember] = useState(true);
 
   // Cloudflare check on the code request — the one form a bot can use to
   // make us send email. Off entirely when the server has no keys.

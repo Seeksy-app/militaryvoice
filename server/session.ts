@@ -134,7 +134,7 @@ export function requireHostSession(req: Request, res: Response, next: NextFuncti
 // Admin sessions. Same signing, separate cookie, so signing in as a podcaster
 // never grants admin and vice versa.
 // ---------------------------------------------------------------------------
-const ADMIN_SESSION_DAYS = 14;
+const ADMIN_SESSION_DAYS = 30;
 
 export function setAdminCookie(res: Response, email: string): void {
   const exp = Date.now() + ADMIN_SESSION_DAYS * 24 * 60 * 60 * 1000;
