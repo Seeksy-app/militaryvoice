@@ -38,7 +38,7 @@ type Platform = (typeof PLATFORMS)[number];
 const FREE_REVEALS_PER_MONTH = 10;
 const PAGE_SIZE = 10;
 /** Featured in the hero's demo ahead of our lineup, as platform:handle. Read from cache only. */
-const SHOWCASE: string[] = [];
+const SHOWCASE: string[] = ["instagram:vfwhq"];
 const DAY = 86_400_000;
 
 // ---------------------------------------------------------------------------
@@ -905,7 +905,7 @@ export function registerDiscoveryRoutes(app: Express): void {
           platform: w.platform,
           handle: w.handle,
           name: w.card?.name ?? p.identity.name,
-          picture: w.card?.picture || p.identity.picture,
+          picture: w.card?.picture || (acct ? pic(w.platform, w.handle, String(JSON.parse(acct).profile_picture_hd ?? JSON.parse(acct).profile_picture ?? "")) : p.identity.picture),
           show: w.card?.verified?.show ?? "",
           verified: !!w.card,
           branch: w.card?.branch ?? "",
@@ -921,9 +921,14 @@ export function registerDiscoveryRoutes(app: Express): void {
           postsPerWeek: p.signals.postsPerWeek,
           interests: aud.interests.slice(0, 3).map((i) => ({ name: i.name, pct: i.pct })),
         });
-        if (out.length >= 10) break;
+        if (out.length >= 14) break;
       }
-      return out;
+      // Featured first, then the ones with a full audience reading, so the demo has something to show.
+      return out
+        .map((x, k) => ({ x, k, rank: SHOWCASE.includes(`${x.platform}:${x.handle}`) ? 0 : x.credibility != null ? 1 : 2 }))
+        .sort((a, b) => a.rank - b.rank || a.k - b.k)
+        .slice(0, 10)
+        .map(({ x }) => x);
     }),
   );
 
