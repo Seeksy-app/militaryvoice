@@ -224,7 +224,8 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
   const c = profile.content;
   const yt = profile.platform === "youtube";
   const last = ago(s.lastPostAt);
-  const engagement = s.engagementRate ?? cardEngagement;
+  // The index's own figure when it gave one, so the list, the filter and the profile agree.
+  const engagement = cardEngagement ?? s.engagementRate;
   const cls = (aud?.credibilityClass || "").toLowerCase();
   const credLabel = cls === "high" ? "High" : cls === "normal" ? "Normal" : cls === "bad" || cls === "low" ? "Low" : "";
   const credTone = aud?.credibility == null ? undefined : aud.credibility >= 80 ? "good" : aud.credibility >= 60 ? "warn" : "bad";
@@ -286,7 +287,7 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
         {header}
         {section("signals", 0, (
           <TileGrid>
-            <Tile keep label="Engagement rate" value={pctText(engagement, 2)} sub={s.engagementBasis || "per post"} tone={engagement == null ? undefined : engagement >= 3 ? "good" : engagement >= 1 ? undefined : "warn"} />
+            <Tile keep label="Engagement rate" value={pctText(engagement, 2)} sub={cardEngagement != null ? "as the index measures it" : s.engagementBasis || "per post"} tone={engagement == null ? undefined : engagement >= 3 ? "good" : engagement >= 1 ? undefined : "warn"} />
             <Tile keep label="Most recent post" value={last?.value ?? "–"} sub={last?.sub} tone={!s.lastPostAt ? undefined : Date.now() - Date.parse(s.lastPostAt) < 30 * 86_400_000 ? "good" : "warn"} />
             <Tile label="Follower change · 6 mo" value={s.growth6m == null ? "–" : `${s.growth6m > 0 ? "+" : ""}${s.growth6m.toFixed(1)}%`} sub="as reported by the index" />
             <Tile label="Posting cadence" value={s.postsPerWeek == null ? "–" : <>{s.postsPerWeek}<span className="text-sm font-medium text-muted-foreground"> / wk</span></>} />

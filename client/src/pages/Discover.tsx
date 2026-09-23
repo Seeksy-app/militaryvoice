@@ -755,6 +755,8 @@ function ResultsList({ rows, total, saved, isMember, onOpen, onSave, onSaveMany 
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const all = rows.length > 0 && rows.every((c) => picked.has(keyOf(c)));
+  // Quality is only known for creators we've measured; the column shows when any row has it.
+  const hasQuality = rows.some((c) => c.quality != null);
   const toggle = (k: string) => setPicked((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
@@ -768,7 +770,7 @@ function ResultsList({ rows, total, saved, isMember, onOpen, onSave, onSaveMany 
         )}
         <span className="hidden w-24 text-right sm:block">Followers</span>
         <span className="hidden w-24 text-right sm:block">Engagement</span>
-        <span className="hidden w-20 text-right md:block">Quality</span>
+        {hasQuality && <span className="hidden w-20 text-right md:block">Quality</span>}
         <span className="w-8" />
       </div>
       <ul className="divide-y divide-border">
@@ -795,7 +797,7 @@ function ResultsList({ rows, total, saved, isMember, onOpen, onSave, onSaveMany 
                 {c.platform && <PlatformIcon platform={c.platform} className="h-3.5 w-3.5" />} {c.followers != null ? compact(c.followers) : "–"}
               </span>
               <span className="hidden w-24 text-right text-sm tabular-nums text-muted-foreground sm:block">{c.engagement != null ? pct(c.engagement, 2) : "–"}</span>
-              <span className="hidden w-20 text-right text-sm tabular-nums text-muted-foreground md:block">{c.quality != null ? `${c.quality}/100` : "–"}</span>
+              {hasQuality && <span className="hidden w-20 text-right text-sm tabular-nums text-muted-foreground md:block">{c.quality != null ? `${c.quality}/100` : "–"}</span>}
               <span className="flex w-8 justify-end">
                 {isMember && (
                   <button type="button" onClick={() => onSave(c)} disabled={isSaved} className={`rounded-lg p-1.5 ${isSaved ? "text-[#b36b00]" : "text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100"}`} title={isSaved ? "Saved" : "Save"} aria-label="Save">
@@ -1163,8 +1165,8 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
           {id?.bio && <p className="mt-1.5 line-clamp-2 max-w-3xl text-sm text-muted-foreground">{id.bio}</p>}
           <p className="mt-2 text-sm">
             <span className="font-semibold tabular-nums">{compact(id?.followers ?? card.followers)}</span> <span className="text-muted-foreground">followers</span>
-            {(profile?.signals.engagementRate ?? card.engagement) != null && (
-              <> <span className="mx-1.5 text-muted-foreground/50">·</span><span className="font-semibold tabular-nums">{pct(profile?.signals.engagementRate ?? card.engagement, 2)}</span> <span className="text-muted-foreground">engagement</span></>
+            {(card.engagement ?? profile?.signals.engagementRate) != null && (
+              <> <span className="mx-1.5 text-muted-foreground/50">·</span><span className="font-semibold tabular-nums">{pct(card.engagement ?? profile?.signals.engagementRate, 2)}</span> <span className="text-muted-foreground">engagement</span></>
             )}
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
