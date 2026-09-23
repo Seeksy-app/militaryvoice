@@ -319,7 +319,7 @@ export default function Discover() {
   return (
     <div className="relative min-h-screen bg-background">
       <SearchDemo enabled={!submitted && tab === "search"} onType={setGhost} onSpotlight={setSpotlight} onHide={setDemoHide} />
-      <NavBar product="discovery" account={isMember ? { label: "Saved", onClick: () => { setTab("lists"); document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }); } } : { label: me?.signedIn ? "Add Discovery" : "Sign in", onClick: () => setGate(true) }} />
+      <NavBar product="discovery" account={isMember ? { label: "Saved", icon: "saved", onClick: () => { setTab("lists"); document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }); } } : { label: me?.signedIn ? "Add Discovery" : "Sign in", onClick: () => setGate(true) }} />
 
       {/* ---------------------------------------------------------------- hero */}
       {(() => {

@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Moon, Sun, LogIn, LayoutDashboard, Menu } from "lucide-react";
+import { Moon, Sun, LogIn, LayoutDashboard, Menu, Bookmark } from "lucide-react";
 import { LogoLockup, LogoLockupOnDark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,12 +42,14 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
  * the bar carries the product's links, and "Sign in" is the Discovery account.
  */
 const DISCOVERY_LINKS: { href: string; label: string; anchor?: boolean }[] = [
+  // One platform now: the way back to the events sits beside the tools.
+  { href: "/", label: "Events" },
   { href: "/discover", label: "Discovery" },
   { href: "/directory", label: "Directory" },
   { href: "/platform", label: "About MilitaryVoices" },
 ];
 
-export function NavBar({ product, account, tone = "light", bare = false }: { product?: "discovery"; account?: { label: string; onClick: () => void }; /** "dark": sits on a navy band (the homepage), white type, the dark logo. */ tone?: "light" | "dark"; /** Inside a band that already carries the logo: no logo, not sticky. */ bare?: boolean } = {}) {
+export function NavBar({ product, account, tone = "light", bare = false }: { product?: "discovery"; account?: { label: string; onClick: () => void; icon?: "saved" | "signin" }; /** "dark": sits on a navy band (the homepage), white type, the dark logo. */ tone?: "light" | "dark"; /** Inside a band that already carries the logo: no logo, not sticky. */ bare?: boolean } = {}) {
   const dark = tone === "dark";
   const [location] = useLocation();
   const links = product === "discovery" ? DISCOVERY_LINKS : LINKS;
@@ -101,10 +103,21 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
 
         <div className="flex items-center gap-1.5">
           {account ? (
-            <Button size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={account.onClick} data-testid="link-nav-signin">
-              <LogIn className="h-3.5 w-3.5" />
-              <span>{account.label}</span>
-            </Button>
+            <>
+              <Button size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={account.onClick} data-testid="link-nav-account">
+                {account.icon === "saved" ? <Bookmark className="h-3.5 w-3.5" /> : <LogIn className="h-3.5 w-3.5" />}
+                <span>{account.label}</span>
+              </Button>
+              {/* Signed in: the account's own home is one click away from any tool. */}
+              {signedIn && (
+                <Link href="/host/dashboard" data-testid="link-nav-signin">
+                  <Button size="sm" className="gap-1.5 rounded-full">
+                    <LayoutDashboard className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Dashboard</span>
+                  </Button>
+                </Link>
+              )}
+            </>
           ) : (
             <Link href="/host/dashboard" data-testid="link-nav-signin">
               <Button
