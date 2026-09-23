@@ -4839,7 +4839,21 @@ export function registerRoutes(app: Express): void {
         clips: await storage.listClips(r.id),
       })),
     );
-    res.json(withClips);
+    // Clips cut from an episode a podcaster sent, before the day: no
+    // recording behind them, so one row per show, above the day's recordings.
+    const signups = await storage.listSignups(eventId);
+    const fromEpisodes = (await storage.listClips(0)).filter((c) => c.eventId === eventId);
+    const bySignup = new Map<number, typeof fromEpisodes>();
+    for (const c of fromEpisodes) bySignup.set(c.signupId ?? 0, [...(bySignup.get(c.signupId ?? 0) ?? []), c]);
+    const episodeRows = Array.from(bySignup.entries()).map(([signupId, list]) => {
+      const sg = signups.find((x) => x.id === signupId);
+      return {
+        id: -signupId, title: `${sg?.podcastName.trim() || sg?.hostName || "Episode"} · from their episode`, status: "Episode",
+        durationSec: 0, sizeBytes: 0, startedAt: list[0]?.createdAt ?? "", signupId, email: sg?.email ?? list[0]?.email ?? "",
+        clipStatus: "done", clipError: "", clipClaimedAt: "", clips: list.sort((a, b) => a.startSec - b.startSec),
+      };
+    }).sort((a, b) => (signups.find((x) => x.id === a.signupId)?.slotIndex ?? 0) - (signups.find((x) => x.id === b.signupId)?.slotIndex ?? 0));
+    res.json([...episodeRows, ...withClips]);
   });
 
   app.post("/api/admin/recordings/:id/reclip", requireAdmin, async (req, res) => {

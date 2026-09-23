@@ -134,12 +134,12 @@ export function AdminClips({
                 <StatusBadge status={r.clipStatus} claimedAt={r.clipClaimedAt} />
               </div>
               <div className="text-xs text-muted-foreground">
-                {mmss(r.durationSec)} · {(Number(r.sizeBytes) / 1048576).toFixed(1)}MB ·{" "}
-                {new Date(r.startedAt).toLocaleString()}
-                {r.email ? ` · ${r.email}` : ""}
+                {r.id < 0
+                  ? `${r.clips.length} clips · on ${r.email}'s dashboard`
+                  : <>{mmss(r.durationSec)} · {(Number(r.sizeBytes) / 1048576).toFixed(1)}MB · {new Date(r.startedAt).toLocaleString()}{r.email ? ` · ${r.email}` : ""}</>}
               </div>
             </div>
-            <Button
+            {r.id > 0 && <Button
               size="sm"
               variant="outline"
               className="h-8 gap-1.5 rounded-full text-xs"
@@ -150,7 +150,7 @@ export function AdminClips({
             >
               <RefreshCw className={`h-3.5 w-3.5 ${busy === r.id ? "animate-spin" : ""}`} />
               {r.clips.length ? "Clip again" : "Clip it"}
-            </Button>
+            </Button>}
           </div>
 
           {/* The error is the useful part of a failed job, so it is shown, not
