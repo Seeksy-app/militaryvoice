@@ -625,6 +625,7 @@ export interface IStorage {
   getSignupBySlot(eventId: number, slotIndex: number): Promise<SignupRow | undefined>;
   createSignup(signup: InsertSignup): Promise<SignupRow>;
   cancelSignup(id: number): Promise<SignupRow | undefined>;
+  placeSignup(id: number, slotIndex: number, showFormat?: string): Promise<SignupRow | undefined>;
   deleteSignup(id: number): Promise<{ changes: number }>;
   getSignupById(id: number): Promise<SignupRow | undefined>;
   createReminder(reminder: InsertReminder): Promise<ReminderRow>;
@@ -898,6 +899,16 @@ class DatabaseStorage implements IStorage {
       .values({ ...signup, createdAt: new Date().toISOString(), status: "confirmed" })
       .returning();
     return created;
+  }
+
+  async placeSignup(id: number, slotIndex: number, showFormat?: string): Promise<SignupRow | undefined> {
+    await ready();
+    const [updated] = await db
+      .update(signups)
+      .set({ status: "confirmed", slotIndex, ...(showFormat ? { showFormat } : {}) })
+      .where(eq(signups.id, id))
+      .returning();
+    return updated;
   }
 
   async cancelSignup(id: number): Promise<SignupRow | undefined> {

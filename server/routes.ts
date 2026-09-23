@@ -6078,6 +6078,43 @@ export function registerRoutes(app: Express): void {
     res.json(updated);
   });
 
+  /**
+   * Put a booking in a slot: an organiser moving someone, or bringing back a
+   * cancelled booking into a slot that has come free. The slot must be empty.
+   * The run of show and scenes for that slot follow the booking, so the
+   * control room and the green room name the right person.
+   */
+  app.post("/api/admin/signups/:id/place", requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const slotIndex = Number(req.body?.slotIndex);
+    const showFormat = req.body?.showFormat === "prerecorded" || req.body?.showFormat === "live" ? req.body.showFormat : undefined;
+    const sg = await storage.getSignupById(id);
+    if (!sg) return res.status(404).json({ message: "No such booking." });
+    const ev = await storage.getEventById(sg.eventId);
+    if (!ev || !Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= Math.floor((ev.durationHours * 60) / ev.slotMinutes)) return res.status(400).json({ message: "That slot isn't on the schedule." });
+    const holder = (await storage.listSignups(sg.eventId)).find((x) => x.status !== "cancelled" && x.slotIndex === slotIndex && x.id !== id);
+    if (holder) return res.status(409).json({ message: `${holder.hostName} has that slot. Cancel or move them first.` });
+    const placed = await storage.placeSignup(id, slotIndex, showFormat);
+    if (showFormat) await storage.upsertEventShow(sg.email.trim().toLowerCase(), sg.eventId, { showFormat });
+    // The slot's rows in the run of show and their scenes now carry this booking.
+    const start = Date.parse(ev.startAtUtc) + slotIndex * ev.slotMinutes * 60_000;
+    const end = start + ev.slotMinutes * 60_000;
+    const show = (sg.podcastName.trim() || sg.hostName).trim();
+    const studio = (await storage.listStudios(sg.eventId))[0];
+    const scenes = studio ? await storage.listScenes(studio.id) : [];
+    for (const r of await storage.listRunOfShow(sg.eventId)) {
+      const t = r.startAtUtc ? Date.parse(r.startAtUtc) : NaN;
+      if (!(t >= start && t < end) || (r.kind !== "Intro" && r.kind !== "Segment")) continue;
+      const title = r.kind === "Intro" ? `Intro to ${show} — ${sg.hostName}` : `${show} — ${sg.hostName}`;
+      const segPatch = r.kind === "Segment" ? { mediaUrl: "", mediaLabel: "", notes: showFormat === "prerecorded" ? `PRE-RECORDED — roll the episode. Waiting on ${sg.hostName.split(/\s+/)[0]}'s file.` : "" } : {};
+      await storage.updateRunItem(r.id, { signupId: id, title, ...segPatch } as any);
+      for (const sc of scenes.filter((x) => x.runItemId === r.id && !x.name.startsWith("Sponsor video · "))) {
+        await storage.updateScene(sc.id, { name: title, thumbUrl: "", ...(r.kind === "Segment" ? { mediaUrl: "", mediaLabel: "", kind: "camera" } : {}) } as any);
+      }
+    }
+    res.json(placed);
+  });
+
   app.delete("/api/admin/signups/:id", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
     await storage.deleteSignup(id);
