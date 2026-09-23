@@ -534,6 +534,10 @@ function TickerOverlay({ text }: { text: string }) {
 /** The room the show appears to be in. Only ever visible where cameras aren't. */
 function BackgroundLayer({ url }: { url: string }) {
   if (!url) return null;
+  // A plain colour travels in the same field as #RRGGBB.
+  if (/^#[0-9a-f]{6}$/i.test(url)) {
+    return <div className="absolute inset-0" style={{ backgroundColor: url }} data-testid="stage-background" aria-hidden="true" />;
+  }
   return (
     <div
       className="absolute inset-0 bg-cover bg-center"
@@ -585,7 +589,7 @@ export function StageGrid({
             setting one up in an empty studio — which is exactly when you set
             one up — sees no change at all. */}
         <BackgroundLayer url={meta.backgroundUrl ?? ""} />
-        <div className="absolute inset-0 bg-[#04102b]/70" aria-hidden="true" />
+        <div className={`absolute inset-0 ${/^#[0-9a-f]{6}$/i.test(meta.backgroundUrl ?? "") ? "bg-[#04102b]/25" : "bg-[#04102b]/70"}`} aria-hidden="true" />
         {meta.stageCardName ? (
           /* A scene for a show, with nobody on stage yet: the producer has
              cut to them and they are on their way. Their face and the show,

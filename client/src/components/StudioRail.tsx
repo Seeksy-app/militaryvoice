@@ -225,7 +225,7 @@ async function uploadToLibrary(
   kind: string,
   adminSend: (method: string, path: string, body?: unknown) => Promise<Response>,
   onProgress: (pct: number) => void,
-): Promise<void> {
+): Promise<string> {
   onProgress(1);
   const signed = await (await adminSend("POST", "/api/admin/media/upload-url", { fileName: file.name })).json();
   await new Promise<void>((resolve, reject) => {
@@ -249,6 +249,7 @@ async function uploadToLibrary(
     kind,
     sizeBytes: file.size,
   });
+  return signed.publicUrl as string;
 }
 
 /** A file picker that looks like the rest of the rail. */
@@ -264,7 +265,7 @@ function UploadTile({
   kind: string;
   hint: string;
   adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
-  onDone: () => void;
+  onDone: (url: string) => void;
   testId: string;
 }) {
   const { toast } = useToast();
@@ -283,8 +284,7 @@ function UploadTile({
           e.target.value = "";
           if (!f) return;
           try {
-            await uploadToLibrary(f, kind, adminSend, setPct);
-            onDone();
+            onDone(await uploadToLibrary(f, kind, adminSend, setPct));
             toast({ title: "Added to the library", description: f.name });
           } catch (err) {
             toast({ title: "Couldn't upload that", description: (err as Error).message, variant: "destructive" });
@@ -547,6 +547,21 @@ function TickerPanel({ studio, patch }: { studio: StudioRow | null; patch: (p: P
   );
 }
 
+/** Plain colours to start from: the brand navy and blue, the service colours, and the neutrals. */
+const BG_COLORS: { hex: string; name: string }[] = [
+  { hex: "#000741", name: "Navy" },
+  { hex: "#053877", name: "MilitaryVoices blue" },
+  { hex: "#04102B", name: "Midnight" },
+  { hex: "#000000", name: "Black" },
+  { hex: "#1F2937", name: "Charcoal" },
+  { hex: "#4B5320", name: "Army green" },
+  { hex: "#7A0019", name: "Marine red" },
+  { hex: "#0B3D91", name: "Air Force blue" },
+  { hex: "#F0A71F", name: "Gold" },
+  { hex: "#FFFFFF", name: "White" },
+];
+const HEX = /^#[0-9a-f]{6}$/i;
+
 function BackgroundPanel({
   studio,
   media,
@@ -561,45 +576,115 @@ function BackgroundPanel({
   onMediaChanged: () => void;
 }) {
   const images = media.filter((m) => m.kind === "image");
+  // One field holds either: a picture's address, or a colour as #RRGGBB.
   const current = studio?.backgroundUrl ?? "";
+  const currentColor = HEX.test(current) ? current.toUpperCase() : "";
+  const [hex, setHex] = useState(currentColor || "#000741");
+  useEffect(() => {
+    if (currentColor) setHex(currentColor);
+  }, [currentColor]);
+  const pick = (value: string) => patch({ backgroundUrl: value, backgroundVisible: true });
+  // The wheel fires on every drag, so the stage follows once it settles.
+  const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <label className="flex items-center justify-between rounded-lg bg-white/5 px-2.5 py-1.5">
-        <span className="text-xs font-medium text-white/75">{studio?.backgroundVisible ? "On air" : "Off"}</span>
+        <span className="text-xs font-medium text-white/75">{studio?.backgroundVisible && current ? "On air" : "Off"}</span>
+        {/* Turning it on with nothing chosen used to do nothing at all; now
+            it puts up the navy, and you change it from there. */}
         <Switch
-          checked={Boolean(studio?.backgroundVisible)}
-          disabled={!current}
-          onCheckedChange={(v) => patch({ backgroundVisible: v })}
+          checked={Boolean(studio?.backgroundVisible && current)}
+          onCheckedChange={(v) => (v ? pick(current || "#000741") : patch({ backgroundVisible: false }))}
           data-testid="switch-background"
         />
       </label>
 
-      <div className="grid grid-cols-2 gap-1.5">
-        <button
-          type="button"
-          onClick={() => patch({ backgroundUrl: "", backgroundVisible: false })}
-          className={`flex h-14 items-center justify-center rounded-md border text-[11px] font-medium transition-colors ${
-            current ? "border-white/25 text-white/50 hover:bg-white/10" : "border-[#F0A71F] bg-[#F0A71F]/15 text-white"
-          }`}
-          data-testid="button-background-none"
-        >
-          None
-        </button>
-        {images.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            onClick={() => patch({ backgroundUrl: m.url, backgroundVisible: true })}
-            title={m.label}
-            className={`relative h-14 overflow-hidden rounded-md border transition-colors ${
-              current === m.url ? "border-[#F0A71F]" : "border-white/25 hover:border-white/40"
-            }`}
-            data-testid={`button-background-${m.id}`}
+      <div>
+        <Label className={CAP}>Colour</Label>
+        <div className="mt-1.5 grid grid-cols-5 gap-1.5">
+          {BG_COLORS.map((c) => (
+            <button
+              key={c.hex}
+              type="button"
+              title={`${c.name} · ${c.hex}`}
+              onClick={() => pick(c.hex)}
+              className={`h-9 rounded-md border-2 transition-transform hover:scale-105 ${
+                currentColor === c.hex ? "border-[#F0A71F]" : "border-white/20"
+              }`}
+              style={{ backgroundColor: c.hex }}
+              data-testid={`button-background-color-${c.hex.slice(1)}`}
+            />
+          ))}
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <input
+            type="color"
+            value={HEX.test(hex) ? hex : "#000741"}
+            onChange={(e) => {
+              const v = e.target.value.toUpperCase();
+              setHex(v);
+              if (wheelTimer.current) clearTimeout(wheelTimer.current);
+              wheelTimer.current = setTimeout(() => pick(v), 350);
+            }}
+            className="h-8 w-10 shrink-0 cursor-pointer rounded border border-white/25 bg-transparent p-0.5"
+            title="Pick any colour"
+            data-testid="input-background-wheel"
+          />
+          <Input
+            value={hex}
+            onChange={(e) => {
+              const v = e.target.value.trim();
+              setHex(v.startsWith("#") ? v.toUpperCase() : `#${v.toUpperCase()}`);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && HEX.test(hex)) pick(hex);
+            }}
+            maxLength={7}
+            placeholder="#000741"
+            className={`${FIELD} font-mono`}
+            data-testid="input-background-hex"
+          />
+          <Button
+            size="sm"
+            className="h-8 shrink-0 rounded-full px-3 text-xs"
+            disabled={!HEX.test(hex)}
+            onClick={() => pick(hex)}
+            data-testid="button-background-hex"
           >
-            <img src={m.url} alt="" className="h-full w-full object-cover" />
+            Use
+          </Button>
+        </div>
+      </div>
+
+      <div>
+        <Label className={CAP}>Picture</Label>
+        <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            onClick={() => patch({ backgroundUrl: "", backgroundVisible: false })}
+            className={`flex h-14 items-center justify-center rounded-md border text-[11px] font-medium transition-colors ${
+              current ? "border-white/25 text-white/50 hover:bg-white/10" : "border-[#F0A71F] bg-[#F0A71F]/15 text-white"
+            }`}
+            data-testid="button-background-none"
+          >
+            None
           </button>
-        ))}
+          {images.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => pick(m.url)}
+              title={m.label}
+              className={`relative h-14 overflow-hidden rounded-md border transition-colors ${
+                current === m.url ? "border-[#F0A71F]" : "border-white/25 hover:border-white/40"
+              }`}
+              data-testid={`button-background-${m.id}`}
+            >
+              <img src={m.url} alt="" className="h-full w-full object-cover" />
+            </button>
+          ))}
+        </div>
       </div>
 
       <UploadTile
@@ -610,15 +695,15 @@ function BackgroundPanel({
         // looks cheap, and the fix is telling people before they pick.
         hint="1920 × 1080 (16:9) works best — anything smaller gets stretched. PNG or JPG."
         adminSend={adminSend}
-        onDone={onMediaChanged}
+        onDone={(url) => {
+          onMediaChanged();
+          // You uploaded it to use it: it goes up straight away.
+          if (url) pick(url);
+        }}
         testId="button-background-upload"
       />
 
-      <p className="text-[11px] leading-snug text-white/55">
-        {images.length === 0
-          ? "Nothing here yet. Upload one, or add images from the media library."
-          : "Sits behind the cameras. A clip or the break clock covers it."}
-      </p>
+      <p className="text-[11px] leading-snug text-white/55">Sits behind the cameras. A clip or the break clock covers it.</p>
     </div>
   );
 }

@@ -1939,7 +1939,12 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               adminGet={adminGet}
               adminSend={adminSend}
               studioId={studioId}
-              onMediaChanged={refresh}
+              onMediaChanged={() => {
+                refresh();
+                // The rail's own list comes from the library, so an upload
+                // has to reload that too or it never shows up.
+                queryClient.invalidateQueries({ queryKey: ["/api/admin/media"] });
+              }}
             />
           </div>
 
