@@ -3,7 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import {
   Search, Sparkles, BadgeCheck, Bookmark, BookmarkCheck, Users, Mail, Phone, Globe, ShieldCheck,
   Mic2, Megaphone, CalendarDays, X, Loader2, ExternalLink, Plus, Trash2, Download, ChevronRight, Lock, MapPin, Heart, Hash, Handshake, Info,
-  SlidersHorizontal, AtSign, Type as TypeIcon, Wand2, TrendingUp, Instagram, Youtube, Twitter, Twitch, Music2, Share2,
+  Check, SlidersHorizontal, AtSign, Type as TypeIcon, Wand2, TrendingUp, Instagram, Youtube, Twitter, Twitch, Music2, Share2,
 } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -325,19 +325,36 @@ export default function Discover() {
         );
         const tries = (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50">Try</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Try</span>
             {d.tries.map((t) => (
-              <button key={t} type="button" onClick={() => run({ q: t, mode: "ai" })} className="rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/85 transition-colors hover:border-white/30 hover:bg-white/10" data-testid="discover-try">
+              <button key={t} type="button" onClick={() => run({ q: t, mode: "ai" })} className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-foreground/80 transition-colors hover:border-[#053877]/40 hover:text-foreground" data-testid="discover-try">
                 {t}
               </button>
             ))}
           </div>
         );
         const toEnrich = () => { setTab("enrich"); setTimeout(() => document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }), 50); };
-        return heroVariant === "a" ? (
-          <HeroA raised={menuOpen} door={door} setDoor={setDoor} bar={bar} tries={tries} onEnrich={toEnrich} allowance={isMember ? me?.reveals ?? null : null} />
-        ) : (
-          <HeroB raised={menuOpen} door={door} setDoor={setDoor} bar={bar} tries={tries} onEnrich={toEnrich} verified={verified} onOpen={openIn(verified)} />
+        return (
+          <>
+            {heroVariant === "a" ? (
+              <HeroA raised={false} door={door} setDoor={setDoor} bar={null} tries={null} onEnrich={toEnrich} allowance={isMember ? me?.reveals ?? null : null} />
+            ) : (
+              <HeroB raised={false} door={door} setDoor={setDoor} bar={null} tries={null} onEnrich={toEnrich} verified={verified} onOpen={openIn(verified)} />
+            )}
+            {/* The search lives with the filters, not up in the hero. */}
+            <section className={`relative border-b border-border bg-background ${menuOpen ? "z-30" : "z-10"}`}>
+              <div className="mx-auto w-full max-w-6xl px-4 pb-5 pt-6 sm:px-6">
+                {bar}
+                {tries}
+                <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                  {["Free account", "No card", "Audience data on every profile"].map((t) => (
+                    <span key={t} className="inline-flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-[#b36b00]" /> {t}</span>
+                  ))}
+                  <button type="button" onClick={toEnrich} className="font-medium text-[#b36b00] hover:underline" data-testid="discover-to-enrich">Have a list? Enrich it →</button>
+                </div>
+              </div>
+            </section>
+          </>
         );
       })()}
 
@@ -367,7 +384,7 @@ export default function Discover() {
               </button>
             ))}
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <button type="button" onClick={() => setShowFilters((v) => !v)} className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors ${showFilters || activeFilters(filters).length ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card hover:border-[#053877]/40"}`} data-testid="discover-filters">
               <SlidersHorizontal className="h-4 w-4" /> Filters{activeFilters(filters).length ? ` · ${activeFilters(filters).length}` : ""}
             </button>
@@ -409,7 +426,7 @@ export default function Discover() {
         ) : tab === "lists" && isMember ? (
           <Lists lists={lists.data ?? []} onOpen={(c) => openIn((lists.data ?? []).flatMap((l) => l.items.map((i) => i.snapshot)))(c)} />
         ) : !submitted || !isMember || submitted.mode === "username" ? (
-          <Welcome verified={verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onJoin={() => setGate(true)} loading={meLoading} />
+          <Welcome verified={verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} onJoin={() => setGate(true)} loading={meLoading} />
         ) : (
           <>
             {/* what ran */}
@@ -448,7 +465,9 @@ export default function Discover() {
 
             <section className="mt-8">
               {search.isLoading ? (
-                <ResultsSkeleton />
+                <div className="rounded-2xl border border-border bg-card">
+                  <SonarLoader title="Searching the index" steps={submitted?.mode === "keywords" ? ["Reading bios for your words", "Applying your filters", "Measuring each creator"] : ["Understanding your brief", "Searching across the network", "Applying your filters", "Measuring each creator"]} />
+                </div>
               ) : results.length === 0 && r ? (
                 <div className="rounded-2xl border border-dashed border-border p-10 text-center">
                   <p className="text-lg font-semibold">Nobody matched that.</p>
@@ -535,7 +554,7 @@ function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder,
 }) {
   const Lead = mode === "username" ? AtSign : Search;
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="rounded-2xl bg-white p-2 text-foreground shadow-[0_24px_60px_-12px_rgba(0,0,0,0.55)] ring-1 ring-black/5" data-testid="discover-search-form">
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="rounded-2xl border border-border bg-card p-2 text-foreground shadow-[0_12px_32px_-16px_rgba(4,16,43,0.35)]" data-testid="discover-search-form">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="grid grid-cols-2 gap-2 sm:flex">
           <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="h-12 rounded-xl border-0 bg-muted/60 px-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#053877] sm:w-[8.5rem]" aria-label="Platform" data-testid="discover-platform">
@@ -597,9 +616,8 @@ function HeroA({ raised, door, setDoor, bar, tries, onEnrich, allowance }: HeroP
             );
           })}
         </div>
-        <div className="mt-4">{bar}</div>
+        {bar}
         {tries}
-        <button type="button" onClick={onEnrich} className="mt-4 text-sm font-medium text-[#F0A71F] hover:underline" data-testid="discover-to-enrich">Already have a list? Enrich handles, links or emails →</button>
       </div>
     </section>
   );
@@ -624,17 +642,17 @@ function HeroB({ raised, door, setDoor, bar, tries, onEnrich, verified, onOpen }
 
       </div>
 
-      <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 pb-14 pt-12 sm:px-6 sm:pt-16 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:pb-20 lg:pt-20">
+      <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-4 pb-16 pt-14 sm:px-6 sm:pt-20 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:pb-24 lg:pt-24">
         <div className="min-w-0">
           <p className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/30 bg-[#F0A71F]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">
             <Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery
           </p>
-          <h1 className="mt-6 text-[2.5rem] font-semibold leading-[1.02] tracking-[-0.02em] text-white sm:text-6xl">
+          <h1 className="mt-6 text-5xl font-semibold leading-[1.02] tracking-[-0.02em] text-white sm:text-[4.5rem]">
             Military creators,
             <br />
             <span className="bg-gradient-to-r from-[#F0A71F] via-[#ffd27a] to-[#F0A71F] bg-clip-text text-transparent">measured.</span>
           </h1>
-          <p className="mt-5 max-w-xl text-lg leading-relaxed text-white/70">
+          <p className="mt-6 max-w-xl text-xl leading-relaxed text-white/70">
             Veterans, service members and military spouses across Instagram, YouTube, TikTok, X and Twitch, with real reach, audience quality and brand history on every profile.
           </p>
 
@@ -657,17 +675,6 @@ function HeroB({ raised, door, setDoor, bar, tries, onEnrich, verified, onOpen }
           <PreviewStack verified={verified} onOpen={onOpen} />
         </div>
 
-        {/* the search gets the full width: it's the product */}
-        <div className="min-w-0 lg:col-span-2 lg:-mt-2">
-          {bar}
-          {tries}
-          <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-white/60">
-            {["Free account", "No card", "Audience data on every profile"].map((t) => (
-              <span key={t} className="inline-flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-[#F0A71F]" /> {t}</span>
-            ))}
-            <button type="button" onClick={onEnrich} className="font-semibold text-[#F0A71F] hover:underline" data-testid="discover-to-enrich">Have a list? Enrich it →</button>
-          </div>
-        </div>
       </div>
     </section>
   );
@@ -732,6 +739,44 @@ function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card
           </div>
         </div>
       </button>
+    </div>
+  );
+}
+
+// ===========================================================================
+// Waiting, shown as work being done: a sonar sweep and the steps ticking off
+// ===========================================================================
+
+function SonarLoader({ steps, title }: { steps: string[]; title?: string }) {
+  const [at, setAt] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setAt((n) => Math.min(n + 1, steps.length - 1)), 1600);
+    return () => clearInterval(t);
+  }, [steps.length]);
+  return (
+    <div className="flex flex-col items-center px-6 py-12 text-center" role="status" aria-live="polite" data-testid="sonar-loader">
+      <style>{`@keyframes mv-sweep{to{transform:rotate(360deg)}}@keyframes mv-slide{0%{transform:translateX(-120%)}100%{transform:translateX(320%)}}@keyframes mv-ring{0%{transform:scale(.55);opacity:.7}100%{transform:scale(1.25);opacity:0}}`}</style>
+      <div className="relative h-28 w-28">
+        {[0, 0.8, 1.6].map((d) => (
+          <span key={d} className="absolute inset-0 rounded-full border border-[#053877]/40 dark:border-[#8fb5e8]/40" style={{ animation: `mv-ring 2.4s ease-out ${d}s infinite` }} />
+        ))}
+        <span className="absolute inset-2 rounded-full border border-[#053877]/15 dark:border-white/15" />
+        <span className="absolute inset-6 rounded-full border border-[#053877]/15 dark:border-white/15" />
+        <span className="absolute inset-2 rounded-full" style={{ background: "conic-gradient(from 0deg, rgba(240,167,31,0.55), rgba(240,167,31,0) 28%)", animation: "mv-sweep 1.8s linear infinite" }} />
+        <span className="absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#F0A71F] shadow-[0_0_16px_4px_rgba(240,167,31,0.45)]" />
+      </div>
+      {title && <p className="mt-6 text-base font-medium">{title}</p>}
+      <ul className="mt-4 flex flex-col gap-1.5 text-sm">
+        {steps.map((st, i) => (
+          <li key={st} className={`flex items-center justify-center gap-2 transition-all duration-500 ${i < at ? "text-muted-foreground" : i === at ? "font-medium text-foreground" : "text-muted-foreground/40"}`}>
+            {i < at ? <Check className="h-4 w-4 text-emerald-600" /> : i === at ? <Loader2 className="h-4 w-4 animate-spin text-[#F0A71F]" /> : <span className="h-4 w-4" />}
+            {st}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-6 h-1 w-64 overflow-hidden rounded-full bg-muted">
+        <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-[#053877] to-[#F0A71F]" style={{ animation: "mv-slide 1.3s ease-in-out infinite" }} />
+      </div>
     </div>
   );
 }
@@ -832,7 +877,7 @@ function ResultsSkeleton() {
 // Before a search: our creators, and what Discovery is
 // ===========================================================================
 
-function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified, onJoin, loading }: { verified: Card[]; isMember: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onJoin: () => void; loading: boolean }) {
+function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified, onSaveMany, saved, onJoin, loading }: { verified: Card[]; isMember: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; saved: Set<string>; onJoin: () => void; loading: boolean }) {
   return (
     <div className="flex flex-col gap-12">
       {!isMember && !loading && (
@@ -874,10 +919,8 @@ function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified,
           </h2>
           <p className="text-sm text-muted-foreground">Creators we know personally. Every one checked by our team.</p>
         </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {verified.length === 0
-            ? Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-44 rounded-2xl" />)
-            : verified.map((c) => <CreatorCard key={`v-${c.name}-${c.verified?.show}`} c={c} saved={false} onOpen={() => onOpenVerified(c)} onSave={isMember ? () => onSaveVerified(c) : undefined} />)}
+        <div className="mt-5">
+          {verified.length === 0 ? <ResultsSkeleton /> : <ResultsList rows={verified} saved={saved} isMember={isMember} onOpen={onOpenVerified} onSave={onSaveVerified} onSaveMany={onSaveMany} />}
         </div>
       </section>
     </div>
@@ -1222,10 +1265,10 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
   ) : a.isError ? (
     <p className="m-8 rounded-xl bg-destructive/5 p-4 text-sm text-destructive">{(a.error as Error).message}</p>
   ) : (
-    <div className="flex flex-col gap-2 p-5 sm:p-8">
-      <p className="text-sm text-muted-foreground">Reading their audience, growth, posts and brand history…</p>
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-4">{Array.from({ length: 8 }, (_, i) => <div key={i} className="bg-card p-4"><Skeleton className="h-3 w-20" /><Skeleton className="mt-3 h-6 w-16" /></div>)}</div>
-      <Skeleton className="mt-6 h-40 rounded-2xl" />
+    <div className="p-5 sm:p-8">
+      <div className="rounded-2xl border border-border bg-card">
+        <SonarLoader title={`Building ${card.name.split(" ")[0]}'s profile`} steps={["Reading their audience", "Measuring growth", "Pulling recent posts", "Checking brand history"]} />
+      </div>
     </div>
   );
 
