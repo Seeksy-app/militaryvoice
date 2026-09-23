@@ -396,15 +396,6 @@ function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
           )}
         </CardContent>
       </Card>
-      {!pending && (
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          First time here?{" "}
-          <Link href="/schedule" className="text-primary underline-offset-2 hover:underline">
-            Pick a slot on the schedule
-          </Link>{" "}
-          and we'll walk you through it.
-        </p>
-      )}
     </div>
   );
 }
