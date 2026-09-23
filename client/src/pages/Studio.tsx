@@ -147,6 +147,7 @@ interface StudioState {
   myName?: string;
   /** Who is producing the day. */
   producers?: { name: string; title: string; photoUrl: string }[];
+  hosts?: { name: string; title: string; photoUrl: string }[];
   /** Whether this visitor is on the lineup, or crew. */
   mayJoin?: boolean;
   studio: { name: string; status: string; fallbackPlaying: boolean; maxOnStage: number };
@@ -426,6 +427,27 @@ export default function Studio({ slug }: { slug?: string }) {
   const [mediaError, setMediaError] = useState<string | null>(null);
   // Kept in state as well as a ref so the page re-renders when the camera comes up.
   const [stream, setStream] = useState<MediaStream | null>(null);
+  // The studio console open in another tab of this browser (the producer
+  // checking the green room on the same machine). Both tabs in the room means
+  // this one plays the console's microphone straight back — you hear yourself
+  // typing. So this tab goes quiet, and says why.
+  const [consoleHere, setConsoleHere] = useState(false);
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const ch = new BroadcastChannel("mv-studio-console");
+    let last = 0;
+    ch.onmessage = (e) => {
+      if ((e.data as { publishing?: boolean })?.publishing) {
+        last = Date.now();
+        setConsoleHere(true);
+      }
+    };
+    const t = setInterval(() => { if (last && Date.now() - last > 9000) setConsoleHere(false); }, 3000);
+    return () => { clearInterval(t); ch.close(); };
+  }, []);
+  useEffect(() => {
+    stream?.getAudioTracks().forEach((t) => { t.enabled = consoleHere ? false : micOn; });
+  }, [consoleHere, stream, micOn]);
 
   const queryClient = useQueryClient();
 
@@ -801,6 +823,11 @@ export default function Studio({ slug }: { slug?: string }) {
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Leave studio
             </button>
+            {consoleHere && (
+              <p className="mb-4 rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/10 px-3 py-2 text-xs text-[#F0A71F]" data-testid="note-console-here">
+                The studio console is open in another tab, so this tab is muted to stop you hearing yourself. Close one of them to talk from the other.
+              </p>
+            )}
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
               Green Room
             </h1>
@@ -847,26 +874,6 @@ export default function Studio({ slug }: { slug?: string }) {
               {onStage ? "You're on air" : showIsLive ? "Show is live" : "Off air"}
             </Badge>
             </div>
-            {(state?.producers?.length ?? 0) > 0 && (
-              <div className="mt-3 rounded-xl border border-white/15 bg-white/[0.05] px-3 py-2" data-testid="card-your-producer">
-                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">Your producer{state!.producers!.length > 1 ? "s" : ""}</p>
-                <div className="mt-1.5 flex flex-col gap-1.5">
-                  {state!.producers!.map((p) => (
-                    <div key={`${p.name}-${p.title}`} className="flex items-center gap-2">
-                      {p.photoUrl ? (
-                        <img src={p.photoUrl} alt="" className="h-7 w-7 rounded-full object-cover ring-1 ring-white/20" />
-                      ) : (
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-xs font-bold">{p.name.slice(0, 1)}</span>
-                      )}
-                      <div className="min-w-0 leading-tight">
-                        <p className="truncate text-sm font-semibold">{p.name}</p>
-                        <p className="truncate text-[11px] text-white/60">{p.title}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
           {/* The co-host sits with the room's name, not in the queue of people
               waiting to go on. She is staff. By text here: her rendered face
@@ -875,7 +882,37 @@ export default function Studio({ slug }: { slug?: string }) {
           {/* Only once they are in the room. On the "add your name" screen
               she answered questions about a green room the person had not
               entered yet. */}
-          {joined ? <AlexChat studioId={studioId} /> : <div />}
+          {/* Alex, and beside her the two people running the day — the same
+              size as the Up next and Following cards, so the top reads as one row. */}
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,17rem)]">
+            {joined ? <AlexChat studioId={studioId} /> : <div />}
+            <div className="flex flex-col gap-3">
+              {[
+                { key: "producer", label: "Your producer", people: state?.producers ?? [] },
+                { key: "host", label: "Your host", people: state?.hosts ?? [] },
+              ].filter((c) => c.people.length > 0).map((c) => {
+                const p0 = c.people[0];
+                const inRoom = peers.some((x) => x.isHost && x.name.trim().toLowerCase() === p0.name.trim().toLowerCase());
+                return (
+                  <div key={c.key} className="flex flex-1 items-center gap-3 rounded-2xl border border-white/15 bg-white/[0.05] p-3" data-testid={`card-your-${c.key}`}>
+                    <span className="relative shrink-0">
+                      {p0.photoUrl ? (
+                        <img src={p0.photoUrl} alt="" className="h-12 w-12 rounded-full object-cover ring-2 ring-white/15" />
+                      ) : (
+                        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-sm font-bold">{p0.name.slice(0, 1)}</span>
+                      )}
+                      {inRoom && <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-400 ring-2 ring-[#050b2c]" title="In the room" />}
+                    </span>
+                    <span className="min-w-0 leading-tight">
+                      <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">{c.label}</span>
+                      <span className="block truncate text-sm font-semibold">{p0.name}{c.people.length > 1 ? ` +${c.people.length - 1}` : ""}</span>
+                      <span className="block truncate text-[11px] text-white/60">{inRoom ? "In the room now" : p0.title}</span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
           <div className="flex h-56 flex-col">
             {joined && <TimeLeftPill slug={slug} studioId={studioId} />}
             <div className="min-h-0 flex-1">
@@ -1276,7 +1313,7 @@ export default function Studio({ slug }: { slug?: string }) {
                   </div>
                   <div className="grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto pr-1">
                     {greenRoomPeers.map((p) => (
-                      <PeerTile key={p.identity} peer={p} />
+                      <PeerTile key={p.identity} peer={p} muted={consoleHere} />
                     ))}
                   </div>
                   <p className="mt-2 text-[11px] text-white/40">
@@ -1308,7 +1345,7 @@ export default function Studio({ slug }: { slug?: string }) {
                   // With people on stage, show the people. The standby's music
                   // is for the audience; in here it stays silent.
                   meta={{ ...((state?.meta ?? {}) as RoomMeta), ...(onAirPeers.length > 0 ? { fallbackPlaying: false } : {}) }}
-                  muted={(!onStage && !listenToShow) || (onAirPeers.length === 0 && Boolean(state?.meta?.fallbackPlaying))}
+                  muted={consoleHere || (!onStage && !listenToShow) || (onAirPeers.length === 0 && Boolean(state?.meta?.fallbackPlaying))}
                   idleTitle={state?.studio.name}
                 />
               </div>

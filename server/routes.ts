@@ -2974,11 +2974,16 @@ export function registerRoutes(app: Express): void {
     const producers = team
       .filter((m) => /produc|director|crew|stage/i.test(m.title))
       .map((m) => ({ name: m.name, title: m.title, photoUrl: m.photoUrl }));
+    // And who is hosting it: the face a guest will be talking to on air.
+    const hosts = team
+      .filter((m) => /host|emcee|mc\b/i.test(m.title) && !/produc|director|crew/i.test(m.title))
+      .map((m) => ({ name: m.name, title: m.title, photoUrl: m.photoUrl }));
 
     return {
       /** The crew member's own name from the team card, so the green room does not ask a producer to type it. */
       myName: teamMe?.name ?? "",
       producers,
+      hosts,
       eventName: event.name,
       studio: {
         name: studio.name,
