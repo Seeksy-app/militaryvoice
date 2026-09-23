@@ -650,9 +650,12 @@ export default function Studio({ slug }: { slug?: string }) {
   // beside her, which reads as a broken second guest.
   const isCohostEar = (p: { identity: string }) => p.identity === "alex-ears";
   // The studio host first: the person a guest is waiting for.
+  // The hosts are on the cards up top, with a green dot when they're in; a
+  // second picture of them among the guests was the same person twice. They
+  // are still heard: their tiles render out of sight for the sound.
+  const hostPeers = peers.filter((p) => p.isHost && p.state !== "On stage" && !isViewer(p) && !p.self);
   const greenRoomPeers = peers
-    .filter((p) => p.state !== "On stage" && !isViewer(p) && !isCohost(p) && !isCohostEar(p) && !p.self)
-    .sort((a, b) => Number(!!b.isHost) - Number(!!a.isHost));
+    .filter((p) => p.state !== "On stage" && !isViewer(p) && !isCohost(p) && !isCohostEar(p) && !p.self && !p.isHost);
   const cohost = peers.find((p) => isCohost(p) && !isViewer(p));
   const watchingCount = peers.filter(isViewer).length;
   // Whether we're listening to the programme while we wait. Off by default:
@@ -882,10 +885,9 @@ export default function Studio({ slug }: { slug?: string }) {
           {/* Only once they are in the room. On the "add your name" screen
               she answered questions about a green room the person had not
               entered yet. */}
-          {/* Alex, and beside her the two people running the day — the same
-              size as the Up next and Following cards, so the top reads as one row. */}
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,17rem)]">
-            {joined ? <AlexChat studioId={studioId} /> : <div />}
+          {/* The two people running the day, then Alex beside them — the cards
+              the same size as Up next and Following, so the top reads as one row. */}
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]">
             <div className="flex flex-col gap-3">
               {[
                 { key: "producer", label: "Your producer", people: state?.producers ?? [] },
@@ -912,6 +914,7 @@ export default function Studio({ slug }: { slug?: string }) {
                 );
               })}
             </div>
+            {joined ? <AlexChat studioId={studioId} /> : <div />}
           </div>
           <div className="flex h-56 flex-col">
             {joined && <TimeLeftPill slug={slug} studioId={studioId} />}
@@ -1298,6 +1301,14 @@ export default function Studio({ slug }: { slug?: string }) {
                   </p>
                 )}
               </div>
+
+              {hostPeers.length > 0 && (
+                <div className="hidden" aria-hidden="true">
+                  {hostPeers.map((p) => (
+                    <PeerTile key={p.identity} peer={p} muted={consoleHere} />
+                  ))}
+                </div>
+              )}
 
               {greenRoomPeers.length === 0 && (
                 <p className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-xs text-white/45">

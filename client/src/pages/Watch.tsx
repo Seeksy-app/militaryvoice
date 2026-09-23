@@ -77,7 +77,16 @@ export default function Watch({ slug }: { slug?: string }) {
   const startLabel = Number.isFinite(startMs)
     ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(startMs))
     : "";
-  const onAir = tiles.length > 0 || meta.fallbackPlaying;
+  // The public sees the stage only once the producer has pressed Go live.
+  // Until then — rehearsals, sound checks, the studio being set up — the page
+  // plays the pre-show video (or the standby clip) and nothing from the room:
+  // no faces, no sound, no lower thirds.
+  const streaming = (meta.status ?? data?.status) === "Live";
+  const shownTiles = streaming ? tiles : [];
+  const shownMeta = streaming
+    ? meta
+    : { ...meta, fallbackPlaying: true, stageMediaPlaying: false, countdownEndsAtUtc: "", bannerTitle: "", bannerSubtitle: "", tickerText: "", stageCardName: "" };
+  const onAir = shownTiles.length > 0 || Boolean(shownMeta.fallbackPlaying && (meta.preVideoUrl || meta.fallbackVideoUrl));
 
   useEffect(() => {
     document.title = `Watch — ${data?.eventName ?? "MilitaryVoices.ai"}`;
@@ -140,7 +149,7 @@ export default function Watch({ slug }: { slug?: string }) {
               </p>
             </div>
           ) : (
-            <StageGrid tiles={tiles} meta={meta} muted={muted} idleTitle={data?.eventName} caption={caption} />
+            <StageGrid tiles={shownTiles} meta={shownMeta} muted={muted} idleTitle={data?.eventName} caption={streaming ? caption : null} />
           )}
 
           {muted && onAir && (
@@ -159,7 +168,7 @@ export default function Watch({ slug }: { slug?: string }) {
 
         <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-white/55">
           <span className="inline-flex items-center gap-1.5">
-            <Users className="h-4 w-4 text-[#F0A71F]" /> {tiles.length} on stage
+            <Users className="h-4 w-4 text-[#F0A71F]" /> {shownTiles.length} on stage
           </span>
           <span>Also going out to our channels — follow along wherever you prefer.</span>
         </div>
