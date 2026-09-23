@@ -318,7 +318,7 @@ export default function Discover() {
       })()}
 
       {/* -------------------------------------------------------- filter bar */}
-      <div className="sticky top-0 z-20 border-b border-border bg-background/90 backdrop-blur">
+      <div className="sticky top-[77px] z-20 border-b border-border bg-background/90 backdrop-blur lg:top-[93px]">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
           {(
             <div className="mr-2 flex rounded-full bg-muted p-1 text-sm">
@@ -785,7 +785,7 @@ function CreatorCard({ c, saved, onOpen, onSave }: { c: Card; saved: boolean; on
   const stats = [
     c.followers != null ? ["Followers", compact(c.followers)] : null,
     c.engagement != null ? ["Engagement", pct(c.engagement, 2)] : null,
-    c.quality != null ? ["Quality", `${c.quality}`] : c.branch ? ["Branch", c.branch.replace("Military spouse", "Spouse")] : null,
+    c.quality != null ? ["Quality", `${c.quality}`] : c.branch ? ["Branch", c.branch.replace("Military spouse", "Spouse").replace("Marine Corps", "Marines")] : null,
   ].filter(Boolean) as [string, string][];
   return (
     <div className={`group relative flex flex-col overflow-hidden rounded-2xl border bg-card transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_18px_40px_-16px_rgba(4,16,43,0.45)] ${c.verified ? "border-[#F0A71F]/60 ring-1 ring-[#F0A71F]/25" : "border-border hover:border-[#053877]/30"}`} data-testid={`creator-${c.handle || c.name}`}>
