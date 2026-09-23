@@ -35,6 +35,8 @@ type Card = {
   signupId?: number;
   quality?: number | null;
   channels?: string[];
+  platformVerified?: boolean;
+  category?: string;
   extra?: RowExtra | null;
 };
 type RowExtra = {
@@ -713,10 +715,12 @@ function SearchDemo({ enabled, onType, onSpotlight, onHide }: { enabled: boolean
       const r = el.getBoundingClientRect();
       return { x: r.left + window.scrollX + r.width * dx, y: r.top + window.scrollY + r.height * dy };
     };
-    const run = () => {
+    const run = (e?: Event) => {
       const input = document.querySelector('[data-testid="discover-q"]') as HTMLInputElement | null;
       const form = document.querySelector('[data-testid="discover-search-form"]');
       if (!live.current || !input || !form || input.value || document.activeElement === input) return done();
+      // Scrolled into view by the visitor: type where they are, don't move the page.
+      if ((e as CustomEvent | undefined)?.detail === "in-view") { onHide(true); timers.push(window.setTimeout(play, 300)); return; }
       // Glide down so the search sits under the site header with the first few
       // verified creators below it: the visitor sees the typing and the answer.
       // The answer isn't shown until the question is asked.
@@ -750,9 +754,26 @@ function SearchDemo({ enabled, onType, onSpotlight, onHide }: { enabled: boolean
     const touched = (e: Event) => { if ((e.target as HTMLElement)?.getAttribute?.("data-testid") === "discover-q" && timers.length) stop(); };
     window.addEventListener("mv-demo-search", run);
     document.addEventListener("focusin", touched);
+    // Once, the first time the search is scrolled into view: it types
+    // "Military podcasters", presses Search, and the answer appears.
+    let io: IntersectionObserver | null = null;
+    let tries = 0;
+    const watch = () => {
+      const form = document.querySelector('[data-testid="discover-search-form"]');
+      if (!form) { if (tries++ < 20) timers.push(window.setTimeout(watch, 500)); return; }
+      io = new IntersectionObserver((entries) => {
+        if (entries.some((en) => en.isIntersecting && en.intersectionRatio >= 0.9) && window.scrollY > 120) {
+          io?.disconnect();
+          window.dispatchEvent(new CustomEvent("mv-demo-search", { detail: "in-view" }));
+        }
+      }, { threshold: [0.9] });
+      io.observe(form);
+    };
+    watch();
     return () => {
       window.removeEventListener("mv-demo-search", run);
       document.removeEventListener("focusin", touched);
+      io?.disconnect();
       timers.forEach(clearTimeout);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -894,8 +915,11 @@ export function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (
     window.addEventListener("mv-demo-search-done", done);
     return () => window.removeEventListener("mv-demo-search-done", done);
   }, []);
+  // No auto-play any more (Andrew, 23 Sep): the card just sits there with her
+  // picture and a pulsing invitation; clicking opens the real side panel.
+  const AUTOPLAY = false;
   useEffect(() => {
-    if (!pool.length || paused || waiting) return;
+    if (!AUTOPLAY || !pool.length || paused || waiting) return;
     const plan: [typeof phase, number][] = [["idle", 1200], ["move", 1000], ["click", 300], ["open", 700], ["read", 2200], ["close", 700]];
     const at = plan.findIndex(([p]) => p === phase);
     const t = setTimeout(() => {
@@ -956,21 +980,25 @@ export function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (
               ))}
             </div>
             <div className="mt-4 flex items-center justify-between text-xs text-white/50">
-              <span className="inline-flex items-center gap-1.5"><TrendingUp className="h-3.5 w-3.5 text-[#F0A71F]" /> Open the full profile</span>
+              {/* The invitation, pulsing so it can't be missed. */}
+              <span className="relative inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F] px-3.5 py-1.5 text-[13px] font-semibold text-[#1a1200] shadow-[0_0_24px_rgba(240,167,31,0.45)]" data-testid="hero-open-cta">
+                <span className="absolute inset-0 rounded-full bg-[#F0A71F] opacity-60 motion-safe:animate-ping" aria-hidden="true" />
+                <TrendingUp className="relative h-3.5 w-3.5" /> <span className="relative">Click to see the full profile</span>
+              </span>
               <span className="flex gap-1">{pool.map((_, k) => <span key={k} className={`h-1.5 rounded-full transition-all ${k === i % pool.length ? "w-5 bg-[#F0A71F]" : "w-1.5 bg-white/25"}`} />)}</span>
             </div>
           </div>
         </button>
 
-        {/* the profile, the real panel, rising over the card */}
-        <DemoRail c={c} open={open} reading={phase === "read"} />
+        {/* the profile, the real panel, rising over the card (auto-play only) */}
+        {AUTOPLAY && <DemoRail c={c} open={open} reading={phase === "read"} />}
       </div>
 
-      {/* the cursor */}
-      <div aria-hidden className="pointer-events-none absolute z-10 transition-all duration-1000 ease-[cubic-bezier(.4,0,.2,1)]" style={{ left: cursorOn ? "54%" : "96%", top: cursorOn ? "40%" : "104%", opacity: cursorOn ? 1 : 0 }}>
+      {/* the cursor (auto-play only) */}
+      {AUTOPLAY && <div aria-hidden className="pointer-events-none absolute z-10 transition-all duration-1000 ease-[cubic-bezier(.4,0,.2,1)]" style={{ left: cursorOn ? "54%" : "96%", top: cursorOn ? "40%" : "104%", opacity: cursorOn ? 1 : 0 }}>
         {phase === "click" && <span className="absolute -left-3 -top-3 h-8 w-8 rounded-full bg-[#F0A71F]/60" style={{ animation: "mv-click .5s ease-out forwards" }} />}
         <svg width="26" height="26" viewBox="0 0 24 24" className="drop-shadow-[0_4px_8px_rgba(0,0,0,0.5)]"><path d="M4 2l15 8.2-6.4 1.6 3.9 7.3-2.9 1.5-3.9-7.3L4 18z" fill="white" stroke="#0b1733" strokeWidth="1.3" strokeLinejoin="round" /></svg>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -1123,9 +1151,9 @@ function ResultsList({ rows, total, saved, isMember, isAdmin, onOpen, onSave, on
                       <span className="min-w-0">
                         <span className="flex items-center gap-1.5">
                           <span className="truncate font-medium group-hover:text-[#053877] dark:group-hover:text-[#8fb5e8]">{c.name}</span>
-                          {c.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-[#F0A71F]" aria-label="Verified on MilitaryVoices" />}
+                          {c.verified ? <BadgeCheck className="h-4 w-4 shrink-0 text-[#F0A71F]" aria-label="Verified on MilitaryVoices" /> : c.platformVerified ? <BadgeCheck className="h-4 w-4 shrink-0 text-[#2563eb]" aria-label="Verified on the platform" /> : null}
                         </span>
-                        <span className="block max-w-[16rem] truncate text-xs text-muted-foreground">{c.verified ? c.verified.show : c.handle ? `@${c.handle}` : ""}{c.branch ? ` · ${c.branch}` : ""}</span>
+                        <span className="block max-w-[16rem] truncate text-xs text-muted-foreground">{c.verified ? c.verified.show : c.handle ? `@${c.handle}` : ""}{c.branch ? ` · ${c.branch}` : c.category ? ` · ${c.category}` : ""}</span>
                       </span>
                     </button>
                   </td>

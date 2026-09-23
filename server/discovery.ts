@@ -172,6 +172,10 @@ export interface CreatorCard {
   rawPicture?: string;
   /** Their other networks, where we know them. */
   channels?: string[];
+  /** The platform's own blue check (not our gold one). */
+  platformVerified?: boolean;
+  /** The platform's category for the account, e.g. "Shopping & Retail". */
+  category?: string;
   /** The list columns, from an analytics read we already hold. */
   extra?: RowExtra | null;
 }
@@ -210,6 +214,49 @@ function rowExtra(platform: string, raw: any): RowExtra | null {
     collabs: sponsors.slice(0, 3),
     collabCount: sponsors.length,
   };
+}
+
+/** Their other networks, read off the links in their bio. */
+const CHANNEL_HOSTS: [string, RegExp][] = [
+  ["youtube", /(^|\.)(youtube\.com|youtu\.be)$/i],
+  ["tiktok", /(^|\.)tiktok\.com$/i],
+  ["x", /(^|\.)(x\.com|twitter\.com)$/i],
+  ["instagram", /(^|\.)instagram\.com$/i],
+  ["facebook", /(^|\.)(facebook\.com|fb\.com)$/i],
+  ["linkedin", /(^|\.)linkedin\.com$/i],
+  ["twitch", /(^|\.)twitch\.tv$/i],
+];
+function channelsFromLinks(links: unknown, own: string): string[] {
+  const out = new Set<string>();
+  for (const l of Array.isArray(links) ? links : []) {
+    let host = "";
+    try { host = new URL(String(l).startsWith("http") ? String(l) : `https://${l}`).hostname; } catch { continue; }
+    for (const [name, re] of CHANNEL_HOSTS) if (re.test(host) && name !== own) out.add(name);
+  }
+  return Array.from(out);
+}
+
+/**
+ * The cheap columns, for every row of a page: other channels, the platform's
+ * blue check and its category, from the raw read (0.03 credits a creator,
+ * kept a week — a repeat search costs nothing). The search itself returns
+ * only a name, a picture, followers and engagement; growth, audience country
+ * and niches need the full read and stay with it.
+ */
+async function withBasics<T extends CreatorCard>(rows: T[]): Promise<T[]> {
+  return Promise.all(
+    rows.map(async (r) => {
+      if (!r.platform || !r.handle || r.verified) return r;
+      try {
+        const acct = await rawAccount(r.platform, r.handle);
+        if (!acct) return r;
+        const channels = Array.from(new Set([...(r.channels ?? []), ...channelsFromLinks(acct.links_in_bio, r.platform)]));
+        return { ...r, channels, platformVerified: Boolean(acct.is_verified), category: String(acct.category ?? "") || undefined };
+      } catch {
+        return r;
+      }
+    }),
+  );
 }
 
 /** Fill the list columns for whichever rows we already hold analytics for. */
@@ -708,7 +755,7 @@ export function registerDiscoveryRoutes(app: Express): void {
         keepPictures(accounts);
         return { total: num(r?.total) ?? 0, accounts, understood: r?.nlp_search ?? null, applied: r?.applied_filters ?? null };
       });
-      found.accounts = await withExtras(found.accounts.map(({ rawPicture: _r, ...c }: CreatorCard) => c));
+      found.accounts = await withExtras(await withBasics(found.accounts.map(({ rawPicture: _r, ...c }: CreatorCard) => c)));
 
       // Ours first, on the first page, when the words match.
       let verified: CreatorCard[] = [];
