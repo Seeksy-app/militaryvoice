@@ -890,6 +890,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // A co-host with no show of their own gets the co-host dashboard as their
   // dashboard. One who is also on the lineup gets it as a door in the nav.
   const cohostOnly = !!data && !loadingProfile && !!cohost?.isCohost && data.mySignups.length === 0 && !crew?.isCrew;
+  const onTeamForGreenRoom = Boolean(crew?.isCrew || cohost?.isCohost);
   const crewMode = !!data && !loadingProfile && !hasProfile && !!crew?.isCrew;
   const inSetup = !!data && !loadingProfile && !hasProfile && !crewMode;
 
@@ -1271,8 +1272,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     end: slotEnd(data.event.startAtUtc, data.event.slotMinutes, data.mySignups[0].slotIndex),
                   }
                 : null;
-              const greenRoomHref = data.mySignups.length > 0
-                ? data.event.isFeatured === false && data.event.slug ? `/event/${data.event.slug}/studio` : "/studio"
+              // The team and the co-hosts get the door too, slot or not —
+              // Riccoh hosts the day without a booking of his own.
+              const greenRoomHref = data.mySignups.length > 0 || onTeamForGreenRoom
+                ? data.event.isFeatured === false && data.event.slug ? `/event/${data.event.slug}/studio` : "/green-room"
                 : null;
               const blocks = cohostBoard?.blocks ?? [];
               const cohost = blocks.length
@@ -1419,6 +1422,20 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                                 <StudioIcon className="h-6 w-6 rounded-md" tone="green" /> Green room
                               </a>
                             )}
+                            <Link href="/watch" className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground hover:border-[#053877]/40" data-testid="link-on-the-day-watch">
+                              <PlayCircle className="h-4 w-4" /> Watch page
+                            </Link>
+                          </div>
+                        </>
+                      ) : greenRoomHref ? (
+                        <>
+                          <p className="text-sm text-foreground/85">
+                            You're on the team for the day, so the green room is open to you any time — check your camera, and the producer brings you on stage.
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <a href={greenRoomHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-white px-3.5 py-2 text-sm font-medium text-foreground hover:bg-emerald-50 dark:bg-card" data-testid="link-on-the-day-green-room">
+                              <StudioIcon className="h-6 w-6 rounded-md" tone="green" /> Green room
+                            </a>
                             <Link href="/watch" className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground hover:border-[#053877]/40" data-testid="link-on-the-day-watch">
                               <PlayCircle className="h-4 w-4" /> Watch page
                             </Link>
