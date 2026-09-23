@@ -239,7 +239,7 @@ function fitBox(fit: string | undefined): CSSProperties {
   return { width: "min(100%, calc(100cqh * 16 / 9))", aspectRatio: "16 / 9" };
 }
 
-function Tile({ tile, muted, namePos = "bottom", fit }: { tile: StageTile; muted: boolean; namePos?: "bottom" | "top" | "none"; fit?: string }) {
+function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = false }: { tile: StageTile; muted: boolean; namePos?: "bottom" | "top" | "none"; fit?: string; contain?: boolean; flat?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -316,8 +316,8 @@ function Tile({ tile, muted, namePos = "bottom", fit }: { tile: StageTile; muted
     // by side at one size. The box sizes off the cell, not off the video.
     <div className="relative flex min-h-0 min-w-0 items-center justify-center [container-type:size]">
     <div
-      className={`relative overflow-hidden rounded-2xl bg-[#04102b] ${
-        tile.speaking ? "ring-4 ring-[#F0A71F]" : "ring-1 ring-white/10"
+      className={`relative overflow-hidden bg-[#04102b] ${flat ? "" : "rounded-xl"} ${
+        tile.speaking ? "ring-4 ring-inset ring-[#F0A71F]" : flat ? "" : "ring-1 ring-white/10"
       }`}
       style={fitBox(fit)}
     >
@@ -332,7 +332,7 @@ function Tile({ tile, muted, namePos = "bottom", fit }: { tile: StageTile; muted
         muted
         onLoadedMetadata={(e) => setPortrait(e.currentTarget.videoHeight > e.currentTarget.videoWidth)}
         onResize={(e) => setPortrait(e.currentTarget.videoHeight > e.currentTarget.videoWidth)}
-        className={`h-full w-full ${portrait ? "object-contain" : "object-cover object-[50%_30%]"} ${tile.keyed ? "invisible absolute" : ""}`}
+        className={`h-full w-full ${portrait || contain ? "object-contain" : "object-cover object-[50%_30%]"} ${tile.keyed ? "invisible absolute" : ""}`}
       />
       {tile.keyed && <canvas ref={canvasRef} className="h-full w-full object-contain" />}
       <audio ref={audioRef} autoPlay muted={muted} />
@@ -380,72 +380,87 @@ function Tile({ tile, muted, namePos = "bottom", fit }: { tile: StageTile; muted
 }
 
 /**
- * How the people on stage share the frame. Guests first and hosts last, so
- * the host sits on the right (or in the inset) and the guest is the main
- * picture. Whoever a layout leaves out of view is still heard: their tile
- * renders hidden for the sound.
+ * How the people on stage share the frame — Restream's six. Guests first and
+ * hosts last, so the guest is the main picture and the host sits on the
+ * right or in the inset. Anyone a layout has no room for is still heard:
+ * their tile renders out of sight for the sound.
  */
-function StageLayout({ tiles: raw, layout, fit, muted, banner }: { tiles: StageTile[]; layout?: string; fit?: string; muted: boolean; banner: boolean }) {
+function StageLayout({ tiles: raw, layout, muted, banner }: { tiles: StageTile[]; layout?: string; fit?: string; muted: boolean; banner: boolean }) {
   const tiles = [...raw].sort((a, b) => Number(!!a.host) - Number(!!b.host) || a.identity.localeCompare(b.identity));
   const n = tiles.length;
   // Under a scene's lower third the tags move to the top; alone on stage the
   // lower third already names them, so theirs steps aside.
-  const name = (_i: number): "bottom" | "top" | "none" => (!banner ? "bottom" : n > 1 ? "top" : "none");
+  const tag: "bottom" | "top" | "none" = !banner ? "bottom" : n > 1 ? "top" : "none";
   const [main, ...rest] = tiles;
-  const heard = (list: StageTile[]) =>
-    list.length > 0 && (
-      <div className="hidden" aria-hidden="true">
-        {list.map((t) => <Tile key={t.identity} tile={t} muted={muted} namePos="none" fit={fit} />)}
-      </div>
-    );
+  const box = (style: CSSProperties, t: StageTile, opts: { contain?: boolean; flat?: boolean; small?: boolean } = {}) => (
+    <div key={t.identity} className="absolute grid" style={style}>
+      <Tile tile={t} muted={muted} namePos={opts.small ? "bottom" : tag} fit="full" contain={opts.contain} flat={opts.flat} />
+    </div>
+  );
+  const column = (list: StageTile[], left: number, width: number, top: number, bottom: number, gap: number) => {
+    const h = (100 - top - bottom - gap * (list.length - 1)) / Math.max(1, list.length);
+    return list.map((t, i) => box({ left: `${left}%`, width: `${width}%`, top: `${top + i * (h + gap)}%`, height: `${h}%` }, t, { small: true }));
+  };
+  const L = layout || "contain";
 
-  if (n > 1 && layout === "solo") {
-    return (
-      <div className="relative grid h-full w-full p-3">
-        <Tile key={main.identity} tile={main} muted={muted} namePos={banner ? "none" : "bottom"} fit={fit} />
-        {heard(rest)}
-      </div>
-    );
+  // One person: they fill the frame whatever the layout, as Restream does.
+  if (n === 1) {
+    const flat = L === "cover" || L === "pip";
+    return <div className="relative h-full w-full">{box(flat ? { inset: 0 } : { left: "1.5%", right: "1.5%", top: "2.5%", bottom: "2.5%" }, main, { flat, contain: L === "contain" })}</div>;
   }
-  if (n > 1 && layout === "pip") {
-    const inset = rest.slice(0, 2);
+
+  if (L === "showtime") {
+    // The guest large on the left; the next person overlapping from the right.
+    const [second, ...others] = rest;
     return (
       <div className="relative h-full w-full">
-        <div className="absolute inset-0 grid p-3">
-          <Tile key={main.identity} tile={main} muted={muted} namePos={name(0)} fit={fit} />
-        </div>
-        <div className="absolute bottom-5 right-5 flex w-[26%] flex-col gap-2">
-          {inset.map((t) => (
-            <div key={t.identity} className="grid aspect-video">
-              <Tile tile={t} muted={muted} namePos="bottom" fit="full" />
-            </div>
-          ))}
-        </div>
-        {heard(rest.slice(2))}
+        {box({ left: "1.2%", top: "2.2%", width: "62%", height: "95.6%" }, main)}
+        {box({ left: "58%", top: "27%", width: "30%", height: "43%", zIndex: 1 }, second, { small: true })}
+        {others.length > 0 && column(others, 90, 8.8, 20, 20, 2)}
       </div>
     );
   }
-  if (n > 1 && layout === "focus") {
+  if (L === "cover") {
+    // Edge to edge: every camera fills its share of the frame, no gaps.
     return (
-      <div className="relative flex h-full w-full gap-3 p-3">
-        <div className="grid min-w-0 flex-[2]">
-          <Tile key={main.identity} tile={main} muted={muted} namePos={name(0)} fit={fit} />
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-3">
-          {rest.map((t, i) => (
-            <div key={t.identity} className="grid min-h-0 flex-1">
-              <Tile tile={t} muted={muted} namePos={name(i + 1)} fit={fit} />
-            </div>
-          ))}
-        </div>
+      <div className={`relative grid h-full w-full ${n <= 2 ? "grid-cols-2" : n <= 4 ? "grid-cols-2 grid-rows-2" : "grid-cols-3 grid-rows-2"}`}>
+        {tiles.map((t) => <div key={t.identity} className="relative grid min-h-0"><Tile tile={t} muted={muted} namePos={tag} fit="full" flat /></div>)}
       </div>
     );
   }
+  if (L === "sidebar") {
+    // The guest across three quarters; everyone else stacked in a tall column.
+    return (
+      <div className="relative h-full w-full">
+        {box({ left: "1.2%", top: "2.2%", width: "72%", height: "95.6%" }, main)}
+        {column(rest, 74.5, 24.3, 2.2, 2.2, 1.5)}
+      </div>
+    );
+  }
+  if (L === "pip") {
+    // The guest full frame; the others small in the bottom-right corner.
+    const inset = rest.slice(0, 3);
+    return (
+      <div className="relative h-full w-full">
+        {box({ inset: 0 }, main, { flat: true })}
+        {inset.map((t, i) => box({ right: `${1.5 + i * 14}%`, bottom: "2.5%", width: "12.5%", aspectRatio: "4 / 3", zIndex: 1 }, t, { small: true }))}
+        {rest.length > 3 && <div className="hidden">{rest.slice(3).map((t) => <Tile key={t.identity} tile={t} muted={muted} namePos="none" />)}</div>}
+      </div>
+    );
+  }
+  if (L === "thumbnails") {
+    // The guest in a big 16:9 box; the others as thumbnails down the right.
+    return (
+      <div className="relative h-full w-full">
+        {box({ left: "1.2%", top: "10.5%", width: "76%", height: "79%" }, main)}
+        {column(rest, 79.5, 16, rest.length === 1 ? 41 : 25, rest.length === 1 ? 41 : 25, 2)}
+      </div>
+    );
+  }
+  // Contain: side by side, each camera whole inside a 16:9 box, the background around them.
   return (
-    <div className={`relative grid h-full w-full gap-3 p-3 ${gridFor(n)}`}>
-      {tiles.map((t, i) => (
-        <Tile key={t.identity} tile={t} muted={muted} namePos={name(i)} fit={fit} />
-      ))}
+    <div className={`relative grid h-full w-full gap-3 p-4 ${gridFor(n)}`}>
+      {tiles.map((t) => <Tile key={t.identity} tile={t} muted={muted} namePos={tag} fit="wide" contain />)}
     </div>
   );
 }

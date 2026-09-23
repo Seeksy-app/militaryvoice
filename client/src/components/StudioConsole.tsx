@@ -26,6 +26,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useProducerRoom, type ProducerFeed } from "@/hooks/use-producer-room";
 import { Destinations } from "@/components/Destinations";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StageGrid, youtubeId, clockText, type StageTile } from "@/components/StageView";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
 import { SceneRail, type SceneSpec } from "@/components/SceneRail";
@@ -308,66 +309,59 @@ function GreenRoomStrip({
 }
 
 /**
- * The layouts under the programme, as Restream has them: how the people on
- * stage share the frame, and what shape each camera takes. One press, on air.
+ * The layouts under the programme, as Restream has them — the same six, in
+ * the same order, on the same keys (Shift+1 to Shift+6). One press, on air.
  */
-function LayoutBar({
-  layout,
-  fit,
-  onLayout,
-  onFit,
-}: {
-  layout: string;
-  fit: string;
-  onLayout: (v: string) => void;
-  onFit: (v: string) => void;
-}) {
-  const cell = "rounded-[2px] bg-current";
-  const LAYOUTS: { key: string; label: string; icon: React.ReactNode }[] = [
-    { key: "grid", label: "Side by side", icon: <span className="flex h-full w-full items-center gap-[3px] p-[3px]"><span className={`h-[70%] flex-1 ${cell}`} /><span className={`h-[70%] flex-1 ${cell}`} /></span> },
-    { key: "focus", label: "Focus — one big, the rest beside", icon: <span className="flex h-full w-full gap-[3px] p-[3px]"><span className={`flex-[2] ${cell}`} /><span className="flex flex-1 flex-col gap-[3px]"><span className={`flex-1 ${cell}`} /><span className={`flex-1 ${cell}`} /></span></span> },
-    { key: "pip", label: "Picture in picture", icon: <span className="relative block h-full w-full p-[3px]"><span className={`block h-full w-full ${cell} opacity-70`} /><span className={`absolute bottom-[5px] right-[5px] h-[36%] w-[34%] ${cell} ring-2 ring-[#0b1433]`} /></span> },
-    { key: "solo", label: "Solo — the guest alone (everyone still heard)", icon: <span className="flex h-full w-full p-[3px]"><span className={`flex-1 ${cell}`} /></span> },
-  ];
-  const FITS = [
-    { key: "full", label: "Full", hint: "Each camera fills its space" },
-    { key: "wide", label: "Wide", hint: "16:9 boxes, background around them" },
-    { key: "square", label: "Square", hint: "Square boxes, background around them" },
-  ];
+const LAYOUTS: { key: string; label: string; icon: React.ReactNode }[] = [
+  { key: "showtime", label: "Showtime", icon: <span className="relative block h-full w-full"><span className="absolute left-[8%] top-[14%] h-[72%] w-[56%] rounded-[2px] bg-current" /><span className="absolute left-[52%] top-[30%] h-[44%] w-[34%] rounded-[2px] bg-current ring-2 ring-[#1b2140]" /></span> },
+  { key: "contain", label: "Contain", icon: <span className="flex h-full w-full items-center gap-[3px] px-[8%]"><span className="h-[40%] flex-1 rounded-[2px] bg-current" /><span className="h-[40%] flex-1 rounded-[2px] bg-current" /></span> },
+  { key: "cover", label: "Cover", icon: <span className="flex h-full w-full gap-[3px] px-[8%] py-[14%]"><span className="flex-1 rounded-[2px] bg-current" /><span className="flex-1 rounded-[2px] bg-current" /></span> },
+  { key: "sidebar", label: "Sidebar", icon: <span className="flex h-full w-full gap-[3px] px-[8%] py-[14%]"><span className="flex-[3] rounded-[2px] bg-current" /><span className="flex-1 rounded-[2px] bg-current" /></span> },
+  { key: "pip", label: "Picture-in-Picture", icon: <span className="relative block h-full w-full px-[8%] py-[14%]"><span className="block h-full w-full rounded-[2px] bg-current" /><span className="absolute bottom-[10%] right-[5%] h-[22%] w-[18%] rounded-[1px] bg-current ring-2 ring-[#1b2140]" /></span> },
+  { key: "thumbnails", label: "Thumbnails", icon: <span className="flex h-full w-full items-center gap-[3px] px-[8%] py-[14%]"><span className="h-full flex-[5] rounded-[2px] bg-current" /><span className="h-[22%] flex-1 rounded-[1px] bg-current" /></span> },
+];
+
+function LayoutBar({ layout, onLayout }: { layout: string; onLayout: (v: string) => void }) {
+  // Shift+1…6, as in Restream. e.code, because Shift turns the key into "!".
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
+      const m = /^Digit([1-6])$/.exec(e.code);
+      if (!m) return;
+      e.preventDefault();
+      onLayout(LAYOUTS[Number(m[1]) - 1].key);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onLayout]);
+
   return (
-    <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-white/10 bg-[#050b24] px-3 py-2" data-testid="layout-bar">
-      {LAYOUTS.map((l) => (
-        <button
-          key={l.key}
-          type="button"
-          title={l.label}
-          aria-label={l.label}
-          onClick={() => onLayout(l.key)}
-          className={`h-9 w-14 rounded-md border-2 transition-colors ${
-            layout === l.key ? "border-[#3B82F6] bg-white/10 text-white" : "border-transparent bg-white/5 text-white/45 hover:text-white/80"
-          }`}
-          data-testid={`button-layout-${l.key}`}
-        >
-          {l.icon}
-        </button>
+    <div className="flex shrink-0 items-center justify-center gap-2 bg-black px-3 pb-3 pt-1" data-testid="layout-bar">
+      {LAYOUTS.map((l, i) => (
+        <Tooltip key={l.key}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label={`${l.label} (Shift ${i + 1})`}
+              onClick={() => onLayout(l.key)}
+              className={`h-10 w-[4.5rem] rounded-md border-2 bg-[#1b2140] transition-colors ${
+                layout === l.key ? "border-[#3B82F6] text-white/80" : "border-transparent text-white/30 hover:text-white/60"
+              }`}
+              data-testid={`button-layout-${l.key}`}
+            >
+              {l.icon}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-center">
+            <span className="block text-xs font-semibold">{l.label}</span>
+            <span className="mt-0.5 block text-[11px] opacity-70">
+              Press <kbd className="rounded bg-black/20 px-1 font-semibold">SHIFT</kbd> <kbd className="rounded bg-black/20 px-1 font-semibold">{i + 1}</kbd>
+            </span>
+          </TooltipContent>
+        </Tooltip>
       ))}
-      <span className="mx-1 h-6 w-px bg-white/15" aria-hidden="true" />
-      <div className="flex rounded-full bg-white/5 p-0.5">
-        {FITS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            title={f.hint}
-            onClick={() => onFit(f.key)}
-            className={`rounded-full px-3 py-1 text-[11px] font-semibold transition-colors ${
-              fit === f.key ? "bg-white text-[#050b24]" : "text-white/55 hover:text-white"
-            }`}
-            data-testid={`button-tile-fit-${f.key}`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -813,6 +807,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     },
     onError: (e: Error) => toast({ title: "Couldn't update the studio", description: e.message, variant: "destructive" }),
   });
+
+  // Stable, so the Shift+1…6 listener isn't torn down on every poll.
+  const patchRef = useRef<(v: Record<string, unknown>) => void>(() => {});
+  patchRef.current = (v) => patchStudio.mutate(v);
+  const setLayout = useMemo(() => (v: string) => patchRef.current({ stageLayout: v }), []);
 
   const setState = useMutation({
     mutationFn: async ({ id, state }: { id: number; state: string }) =>
@@ -2011,12 +2010,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               ) : null}
             </div>
             </div>
-            <LayoutBar
-              layout={studio?.stageLayout || "grid"}
-              fit={studio?.tileFit || "wide"}
-              onLayout={(v) => patchStudio.mutate({ stageLayout: v })}
-              onFit={(v) => patchStudio.mutate({ tileFit: v })}
-            />
+            <LayoutBar layout={studio?.stageLayout || "contain"} onLayout={setLayout} />
             </div>
 
             {/* The graphics rail. It takes its width out of the stage rather
