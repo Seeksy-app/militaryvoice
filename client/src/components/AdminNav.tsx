@@ -13,7 +13,7 @@ import {
   CalendarDays,
   DoorOpen,
   PanelLeftClose,
-  PanelLeftOpen, Film,} from "lucide-react";
+  PanelLeftOpen, Film, Compass } from "lucide-react";
 
 // The admin's nav, down the left.
 //
@@ -76,6 +76,7 @@ export const TOP_GROUPS: { title: string; items: AdminSection[] }[] = [
     items: [
       { key: "events", label: "Events", icon: CalendarDays },
       { key: "rooms", label: "Rooms", icon: DoorOpen },
+      { key: "discovery", label: "Discovery", icon: Compass },
       // Contacts live in the event's CRM now — one CRM, not one per level.
       { key: "team", label: "Team", icon: Contact },
     ],

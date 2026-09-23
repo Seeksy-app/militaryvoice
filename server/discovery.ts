@@ -208,7 +208,17 @@ async function verifiedCreators(): Promise<(CreatorCard & { match: string })[]> 
 
 async function memberFor(email: string) {
   const [m] = await db.select().from(discoveryMembers).where(eq(discoveryMembers.email, email));
-  return m;
+  if (m) return m;
+  // Everyone already on MilitaryVoice has Discovery: their account gets it the
+  // first time they come, as a podcaster, with nothing to fill in.
+  const profile = email ? await storage.getProfileByEmail(email) : undefined;
+  if (!profile) return undefined;
+  const [row] = await db
+    .insert(discoveryMembers)
+    .values({ email, role: "podcaster", orgName: profile.podcastName?.trim() || "", source: "existing-account", createdAt: new Date().toISOString() })
+    .onConflictDoNothing()
+    .returning();
+  return row ?? (await db.select().from(discoveryMembers).where(eq(discoveryMembers.email, email)))[0];
 }
 async function requireMember(req: Request): Promise<{ email: string; member: NonNullable<Awaited<ReturnType<typeof memberFor>>> }> {
   // Admins always have Discovery: by their admin session, or the admin key.
@@ -216,7 +226,7 @@ async function requireMember(req: Request): Promise<{ email: string; member: Non
   const adminKey = String(req.get("x-admin-password") ?? "");
   if (adminEmail || (adminKey && adminKey === (await storage.getFeaturedEvent()).adminPassword)) {
     const e = (adminEmail || "admin@militaryvoice.ai").toLowerCase();
-    return { email: e, member: (await memberFor(e)) ?? { id: 0, email: e, role: "admin", orgName: "MilitaryVoice", createdAt: "" } };
+    return { email: e, member: (await memberFor(e)) ?? { id: 0, email: e, role: "admin", orgName: "MilitaryVoice", source: "admin", createdAt: "" } };
   }
   const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
   if (!email) throw new HttpError(401, "Create your free account to search.");

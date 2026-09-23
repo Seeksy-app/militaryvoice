@@ -5334,6 +5334,17 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   <TabsContent value="rooms" className="mt-2 lg:mt-0">
                     <RoomsPanel onOpen={openRoom} />
                   </TabsContent>
+                  <TabsContent value="discovery" className="mt-2 flex flex-col gap-6 lg:mt-0">
+                    <DiscoveryStats />
+                    {/* The brand's view, live: the same page a brand gets, with your admin access. */}
+                    <div className="overflow-hidden rounded-2xl border border-border">
+                      <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
+                        <span>What a brand sees at militaryvoice.ai/discover</span>
+                        <a href="/discover?src=admin" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">Open full screen</a>
+                      </div>
+                      <iframe src="/discover?src=admin" title="Discovery, as a brand sees it" className="h-[1100px] w-full bg-background" data-testid="admin-discovery-frame" />
+                    </div>
+                  </TabsContent>
                   <TabsContent value="crm" className="mt-2 lg:mt-0">
                     <CrmPanel />
                   </TabsContent>

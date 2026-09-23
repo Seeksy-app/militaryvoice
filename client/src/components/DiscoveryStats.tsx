@@ -3,7 +3,7 @@ import { Compass, ExternalLink } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { adminGet } from "@/lib/adminApi";
 
-const LABELS: Record<string, string> = { "sponsor-page": "Sponsor page", home: "Homepage", "studio-slide": "Studio slide", "on-air": "On air", "watch-page": "Watch page", direct: "Direct" };
+const LABELS: Record<string, string> = { "sponsor-page": "Sponsor page", home: "Homepage", "studio-slide": "Studio slide", "on-air": "On air", "watch-page": "Watch page", "existing-account": "Existing podcaster", admin: "Admin", direct: "Direct" };
 
 /** Discovery, promoted at the event: where visitors and new accounts came from. */
 export function DiscoveryStats() {
