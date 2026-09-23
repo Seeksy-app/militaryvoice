@@ -1,6 +1,7 @@
 // The magazine: every page, in order, with placeholders where the truth is
 // not in yet.
 //
+//   npx tsx scripts/magazine-drafts.ts             # draft the show pages (cached)
 //   npx tsx scripts/magazine.ts                    # build it
 //   npx tsx scripts/magazine.ts --open             # build it and open the PDF
 //
@@ -22,6 +23,8 @@ import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
 import postgres from "postgres";
+import QRCode from "qrcode";
+import type { Draft } from "./magazine-drafts";
 
 const run = promisify(execFile);
 const OUT = path.resolve("media/magazine");
@@ -32,16 +35,25 @@ const TRIM = { w: 8.375, h: 10.875 };
 const BLEED = 0.125;
 const SHEET = { w: TRIM.w + BLEED * 2, h: TRIM.h + BLEED * 2 };
 
+// The name on every page. The company was Military Voice until 23 September
+// 2026; the book is the first thing printed under the new one, so it says it
+// in full on the cover and in short in every folio.
+const BRAND = "MilitaryVoices";
+const DOMAIN = "militaryvoices.ai";
+const FOLIO = `${BRAND}.ai · Issue One`;
+
 type Page =
   | { kind: "cover" }
   | { kind: "editorial"; slug: "riccoh" }
   | { kind: "contents" }
+  | { kind: "schedule" }
   | { kind: "profile"; i: number }
   | { kind: "ad"; position: string; note: string }
   | { kind: "sponsors" }
   | { kind: "blank" };
 
 interface Show {
+  email: string;
   podcastName: string;
   hostName: string;
   branch: string;
@@ -52,7 +64,13 @@ interface Show {
   slotIndex: number;
   rss: string;
   youtube: string;
+  draft?: Draft;
+  qr: string; // inline SVG
+  listenUrl: string;
 }
+
+interface Sponsor { name: string; logo: string; tier: string }
+interface EventInfo { name: string; startAtUtc: string; durationHours: number; slotMinutes: number }
 
 /**
  * Make a stored image path absolute.
@@ -63,12 +81,12 @@ interface Show {
  * the filesystem and every one of those pages printed with an empty frame —
  * silently, because a background-image that 404s draws nothing at all.
  */
-const SITE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
+const SITE = process.env.PUBLIC_BASE_URL || `https://www.${DOMAIN}`;
 
 // Art that lives with the book rather than in the database: the event's own
-// logo, and the one photograph of Riccoh worth printing. Referenced off disk
-// because the renderer runs here — which also sidesteps the upload that dies
-// on this network.
+// logo, the brand's waveform, and the one photograph of Riccoh worth
+// printing. Referenced off disk because the renderer runs here — which also
+// sidesteps the upload that dies on this network.
 const ASSET = (name: string) => `file://${path.resolve(OUT, "assets", name)}`;
 const abs = (u: string) => (!u ? "" : /^https?:\/\//i.test(u) ? u : `${SITE}${u.startsWith("/") ? "" : "/"}${u}`);
 
@@ -76,18 +94,83 @@ const esc = (v: string) =>
   String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 /**
+ * Straight quotes to curly ones. The drafts and the feeds they came from are
+ * typed on keyboards; a printed page with inch marks for quotation marks looks
+ * like a web page that got printed by accident.
+ */
+function curly(v: string): string {
+  return String(v ?? "")
+    .replace(/(^|[\s(\[{—–-])"/g, "$1“").replace(/"/g, "”")
+    .replace(/(^|[\s(\[{—–“-])'/g, "$1‘").replace(/'/g, "’")
+    .replace(/\s--\s/g, " — ").replace(/\.\.\./g, "…");
+}
+/** Escape and set: every word a reader sees from the drafts goes through here. */
+const t = (v: string) => esc(curly(v));
+
+/**
+ * Names as the form received them, tidied only where the tidying is not a
+ * matter of taste: a name typed all in lower case gets its capitals, and the
+ * "Life- The" of a hurried hyphen becomes the dash it meant to be. Anything
+ * with deliberate capitals ("#StillServing", "VET S.O.S.") is left alone.
+ */
+const SMALL = new Set(["a", "an", "and", "the", "of", "in", "on", "at", "to", "for", "with", "or"]);
+function tidyName(v: string): string {
+  let out = String(v ?? "").trim().replace(/(\w)- (\w)/g, "$1 — $2");
+  if (out && out === out.toLowerCase()) {
+    const words = out.split(" ");
+    out = words
+      .map((w, i) => (i > 0 && words[i - 1] !== "—" && SMALL.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+      .join(" ");
+  }
+  return out;
+}
+
+/** "Army · Retired" is a form's answer; a magazine says "Army, retired". */
+function serviceLine(s: Show): string {
+  const branch = /not applicable/i.test(s.branch) ? "" : s.branch;
+  const status = s.serviceStatus.toLowerCase();
+  if (!branch && !status) return "";
+  if (!branch) return s.serviceStatus;
+  return status ? `${branch}, ${status}` : branch;
+}
+
+/**
  * The picture for a page, best first.
  *
  * A print original if somebody sent one, then the feed's cover art — which is
  * 1400–3000px because Apple insists — and only then the 720px web crop, which
  * prints at two and a half inches and is there to prove the layout rather than
- * to be printed.
+ * to be printed. The feed art comes either from the profile, where the site
+ * saved it, or from the feed the drafts were written from, which reaches the
+ * shows whose profile never got that far.
  */
 function bestImage(s: Show): { url: string; warn: string } {
   if (s.printPhoto) return { url: abs(s.printPhoto), warn: "" };
-  if (s.artwork) return { url: abs(s.artwork), warn: "show artwork — no photograph of the host yet" };
-  if (s.photo) return { url: abs(s.photo), warn: "720px — too small to print" };
-  return { url: "", warn: "no image at all" };
+  if (s.artwork) return { url: abs(s.artwork), warn: "Show artwork — no photograph of the host yet" };
+  if (s.draft?.artwork) return { url: s.draft.artwork, warn: "Feed artwork — no photograph of the host yet" };
+  if (s.photo) return { url: abs(s.photo), warn: "720px web photo — too small to print" };
+  return { url: "", warn: "No image at all" };
+}
+
+/**
+ * The proof marks across the top of a page, in the margin above the live area.
+ *
+ * Drawn to look like a proofreader's stamp — outlined, magenta, in the slug —
+ * so nobody reading the PDF on a screen takes an unapproved page for a
+ * finished one, and so it is plainly something to take off rather than part
+ * of the design. Build with --final and they go.
+ */
+const FINAL = process.argv.includes("--final");
+function proofMarks(...marks: { text: string; kind?: "draft" | "note" }[]): string {
+  const shown = marks.filter((m) => m.text);
+  if (FINAL || !shown.length) return "";
+  return `<div class="proof">${shown
+    .map((m) => `<span class="proof-${m.kind ?? "note"}">${esc(m.text)}</span>`)
+    .join("")}</div>`;
+}
+
+function folio(mile: string, n: number | string): string {
+  return `<div class="folio"><span class="mile">${esc(mile)}</span><span>${FOLIO}</span><span>${n}</span></div>`;
 }
 
 /**
@@ -101,15 +184,18 @@ function bestImage(s: Show): { url: string; warn: string } {
  *
  * With a bigger file of Riccoh this becomes a full-bleed cover in one line.
  */
-function coverPage(_hero: Show | undefined): string {
+function coverPage(showCount: number): string {
   return `<section class="page cover">
   <div class="cover-field"></div>
   <div class="live" style="display:flex;flex-direction:column">
-    <div class="kicker" style="color:var(--amber)">National Military Podcast Day · October 2026</div>
-    <div class="masthead" style="margin-top:12pt">Military<br>Voice<span class="dot">.</span></div>
+    <div class="cover-top">
+      <img class="cover-wave" src="${ASSET("logo-wave.png")}" alt="">
+      <div class="kicker" style="color:var(--amber)">National Military Podcast Day · 5 October 2026</div>
+    </div>
+    <div class="masthead" style="margin-top:12pt">Military<br>Voices<span class="dot">.ai</span></div>
     <div class="rule-amber" style="margin-top:14pt"></div>
     <div class="coverline" style="margin-top:10pt;max-width:4.3in">
-      Thirty-two shows. Twenty-six point two miles.<br>One day on the air.
+      ${esc(numberWord(showCount))} shows. Twenty-six point two miles.<br>One day on the air.
     </div>
 
     <div class="cover-art">
@@ -120,17 +206,27 @@ function coverPage(_hero: Show | undefined): string {
     <div style="margin-top:auto;max-width:4.8in">
       <div class="coverline" style="border-top:.75pt solid rgba(255,255,255,.28);padding-top:11pt">
         <b>Riccoh Player</b> hosts sixteen hours of it<br>
-        <span class="ph" style="color:rgba(255,255,255,.45)">[SECOND COVER LINE]</span>
+        <span style="color:rgba(255,255,255,.72)">Inside: a page for every show on the line-up</span>
       </div>
-      <div class="kicker" style="margin-top:13pt;opacity:.6">Issue One · militaryvoice.ai</div>
+      <div class="kicker" style="margin-top:13pt;opacity:.6">Issue One · www.${DOMAIN}</div>
     </div>
   </div>${crops()}
 </section>`;
 }
 
-function riccohPage(r: Show | undefined): string {
+const WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve",
+  "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty"];
+function numberWord(n: number): string {
+  if (n < 20) return WORDS[n];
+  if (n < 60) return TENS[Math.floor(n / 10)] + (n % 10 ? `-${WORDS[n % 10].toLowerCase()}` : "");
+  return String(n);
+}
+
+function riccohPage(r: Show | undefined, pageNo: number): string {
   const img = ASSET("riccoh-emmy.jpg");
   return `<section class="page">
+  ${proofMarks({ text: "Editorial — to be written by hand", kind: "draft" })}
   ${img ? `<div class="portrait" style="background-image:url('${esc(img)}')"></div>` : ""}
   <div class="live" style="width:3.5in">
     <span class="badge">The host</span>
@@ -146,51 +242,95 @@ function riccohPage(r: Show | undefined): string {
       reads, so it is the one page worth writing by hand rather than drafting.]</p>
     </div>
   </div>
-  <div class="folio"><span class="mile">The host</span><span>Military Voice · Issue One</span><span>2</span></div>
+  <div class="folio-narrow">${folio("The host", pageNo)}</div>
   ${crops()}
 </section>`;
 }
 
-function contentsPage(shows: Show[]): string {
-  const rows = shows
-    .map((s, i) => `<div class="toc-row"><span class="toc-n">${i + 1}</span>
-      <span class="toc-name">${esc(s.podcastName)}</span>
-      <span class="toc-host">${esc(s.hostName)}</span>
-      <span class="toc-p">${5 + i + Math.floor(i / 4)}</span></div>`)
+function contentsPage(rows: { name: string; host: string; page: number }[], pageNo: number, schedulePage: number): string {
+  const html = rows
+    .map((r, i) => `<div class="toc-row"><span class="toc-n">${i + 1}</span>
+      <span class="toc-text"><span class="toc-name">${esc(r.name)}</span><span class="toc-host">${esc(r.host)}</span></span>
+      <span class="toc-p">${r.page}</span></div>`)
     .join("");
   return `<section class="page">
-  <div class="live">
-    <div class="kicker" style="color:var(--amber)">Issue One</div>
-    <div class="showname" style="margin-top:8pt;font-size:32pt">Contents</div>
-    <div style="margin-top:16pt;column-count:2;column-gap:22pt">${rows}</div>
+  <div class="live" style="display:flex;flex-direction:column">
+    <div class="kicker" style="color:var(--amber)">Issue One · October 2026</div>
+    <div class="showname" style="margin-top:8pt;font-size:36pt">Contents</div>
+    <div class="toc-intro">Every show on the line-up for National Military Podcast Day, in the order
+      they go on the air on Monday 5 October — each with a page of its own. The running order,
+      with times, is on page ${schedulePage}.</div>
+    <div class="toc">${html}</div>
+    <div class="toc-foot">
+      <img src="${ASSET("logo-wave.png")}" alt="" style="height:18pt">
+      <span>Published by ${BRAND}.ai</span>
+    </div>
   </div>
-  <div class="folio"><span class="mile">Contents</span><span>Military Voice · Issue One</span><span>3</span></div>
+  ${folio("Contents", pageNo)}
   ${crops()}
 </section>`;
+}
+
+/** Feed hosts as a reader would say them: "anchor.fm", "coldwarconversations.com". */
+const hostOf = (u: string) => {
+  try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; }
+};
+
+/** "Fri, 18 Sep 2026 23:00:00 -0000" → "18 September 2026". */
+function niceDate(d: string): string {
+  const t = Date.parse(d);
+  if (!Number.isFinite(t)) return "";
+  return new Date(t).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 }
 
 /**
  * A show's page.
  *
- * The picture is contained, not bled. Two thirds of these are cover artwork
- * rather than a photograph, and a logo enlarged to four and a half inches and
- * run off three edges is a badge magnified past its purpose — it stops being a
- * mark and becomes wallpaper. Artwork gets a square, which is the shape it was
+ * The picture is contained, not bled. Most of these are cover artwork rather
+ * than a photograph, and a logo enlarged to four and a half inches and run off
+ * three edges is a badge magnified past its purpose — it stops being a mark
+ * and becomes wallpaper. Artwork gets a square, which is the shape it was
  * drawn in; a photograph of a person gets a portrait. The page is then mostly
  * type and paper, which is what a magazine is.
+ *
+ * The words are the draft from magazine-drafts.ts, written from the show's own
+ * feed. Where there is no draft there was no feed to write it from, and the
+ * page says so in a placeholder rather than making something up.
  */
 function profilePage(s: Show, pageNo: number): string {
   const { url, warn } = bestImage(s);
-  const who = [s.branch, s.serviceStatus].filter(Boolean).join(" · ");
+  const d = s.draft?.status === "draft" ? s.draft : undefined;
   const square = !s.printPhoto; // artwork and web crops are square; a print photo is not
+  const service = serviceLine(s);
+
+  const body = d
+    ? d.sections
+        .map((sec, i) => `<h3 class="xhead">${t(sec.heading)}</h3>${sec.body
+          .map((p, j) => `<p${i === 0 && j === 0 ? ' class="lede"' : ""}>${t(p)}</p>`)
+          .join("")}`)
+        .join("")
+    : `<p class="ph ph-body">[PROFILE — no podcast feed we could read is on file for this show
+      (${esc(s.rss || s.youtube || "no links at all")}). It needs a feed, or a few lines from
+      ${esc(s.hostName)}, before it can be drafted.]</p>`;
+
+  const latest = d?.latestEpisode;
+    // Hosts, not URLs, and only the first two: the credit is that it came from
+  // their own feed, and a line of tracking-laden links is noise at 6pt.
+  const sources = d ? [...new Set(d.sources.map(hostOf).filter((h) => h && h.length <= 34))].slice(0, 2) : [];
+
   return `<section class="page profile">
-  ${warn ? `<div class="flag-tag">${esc(warn)}</div>` : ""}
+  ${proofMarks(
+    { text: d ? "Draft — awaiting approval" : "No draft — no source", kind: "draft" },
+    { text: warn },
+    { text: d?.thin ? "Thin source" : "" },
+  )}
   <div class="live">
     <div class="p-head">
       <div class="p-head-text">
-        ${who ? `<span class="badge">${esc(who)}</span>` : ""}
-        <div class="showname" style="margin-top:12pt">${esc(s.podcastName)}</div>
-        <div class="hostline" style="margin-top:8pt">${esc(s.hostName)}</div>
+        ${d ? `<div class="p-show">${esc(s.podcastName)}</div>` : ""}
+        <div class="showname p-headline">${d ? t(d.headline) : esc(s.podcastName)}</div>
+        <div class="hostline" style="margin-top:9pt">${esc(s.hostName)}${service ? `<span class="svc"> · ${esc(service)}</span>` : ""}</div>
+        ${d?.standfirst ? `<p class="standfirst">${t(d.standfirst)}</p>` : ""}
       </div>
       ${
         url
@@ -199,27 +339,71 @@ function profilePage(s: Show, pageNo: number): string {
       }
     </div>
 
-    <div class="pull" style="margin-top:14pt;max-width:4.9in">
-      <span class="ph">[PULL QUOTE — lifted from a transcript]</span>
-    </div>
+    ${
+      d?.pullQuote
+        ? `<blockquote class="pull p-pull">“${t(d.pullQuote.text.replace(/^["“]|["”]$/g, ""))}”<cite>From ${t(d.pullQuote.from)}</cite></blockquote>`
+        : d ? "" : `<div class="pull p-pull"><span class="ph">[PULL QUOTE — only from the show's own words]</span></div>`
+    }
 
-    <div class="p-body">
-      <p class="ph">[PROFILE — drafted from this host's own feed and recent
-      episodes, with sources, then approved by them before it prints. Two
-      columns of roughly a hundred and ninety words each sits comfortably at
-      this measure, which is where a page stops looking like a slide and starts
-      reading like a magazine.]</p>
-    </div>
+    <div class="p-body">${body}</div>
 
     <div class="p-foot">
-      <div class="qr">QR</div>
-      <div class="listen" style="flex:1">Listen<br>
-        <b style="font-size:9pt;text-transform:none">${esc(s.rss ? s.rss.replace(/^https?:\/\//, "").slice(0, 40) : "[feed]")}</b><br>
-        <b style="font-size:9pt;text-transform:none">${esc(s.youtube ? s.youtube.replace(/^https?:\/\//, "").slice(0, 40) : "[youtube]")}</b>
+      ${
+        latest
+          ? `<div class="latest">
+        <div class="latest-k">Latest episode${latest.date ? ` · ${esc(niceDate(latest.date))}` : ""}</div>
+        <div class="latest-t">${t(latest.title)}</div>
+        <div class="latest-s">${t(latest.summary)}</div>
+        ${d?.tags?.length ? `<div class="tags">${d.tags.slice(0, 5).map((x) => `<span>${esc(x)}</span>`).join("")}</div>` : ""}
+      </div>`
+          : `<div class="latest"><div class="latest-k">Latest episode</div><div class="latest-s ph">[no episodes on file]</div></div>`
+      }
+      <div class="listen-block">
+        <div class="qr">${s.qr}</div>
+        <div class="listen">
+          Scan to listen<br>
+          <b>${esc(DOMAIN)}</b><br>
+          <span class="listen-note">The show's page on the running order, with every place to hear it</span>
+        </div>
       </div>
     </div>
+    ${sources.length ? `<div class="sources">Drafted from the show's own feed and episodes: ${sources.map(esc).join(" · ")}</div>` : ""}
   </div>
-  <div class="folio"><span class="mile">${s.slotIndex >= 0 ? `Slot ${s.slotIndex + 1}` : ""}</span><span>Military Voice · Issue One</span><span>${pageNo}</span></div>
+  ${folio(s.slotIndex >= 0 ? `Slot ${s.slotIndex + 1}` : "", pageNo)}
+  ${crops()}
+</section>`;
+}
+
+/**
+ * The running order: every show, with its time, on one page.
+ *
+ * The one page of the book somebody will tear out and stick on a wall on the
+ * day, so it is set as a timetable rather than as prose — Eastern time, which
+ * is what the whole event runs on, with the page each show is on beside it.
+ */
+function runningOrderPage(ev: EventInfo, shows: Show[], pageFor: Map<Show, number>, pageNo: number): string {
+  const slots = Math.floor((ev.durationHours * 60) / ev.slotMinutes);
+  const at = (i: number) =>
+    new Date(Date.parse(ev.startAtUtc) + i * ev.slotMinutes * 60000)
+      .toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
+      .replace(" AM", " am").replace(" PM", " pm");
+  const outside = shows.filter((s) => s.slotIndex >= slots);
+  const rows = shows
+    .map((s) => `<div class="ro-row${s.slotIndex >= slots ? " ro-out" : ""}">
+      <span class="ro-t">${at(s.slotIndex)}</span>
+      <span class="ro-name">${esc(s.podcastName)}<span class="ro-host">${esc(s.hostName)}</span></span>
+      <span class="ro-p">${pageFor.get(s) ?? ""}</span></div>`)
+    .join("");
+  return `<section class="page">
+  ${proofMarks(outside.length ? { text: `${outside.map((s) => s.podcastName).join(", ")}: slot outside the ${ev.durationHours}-hour day — check` } : { text: "" })}
+  <div class="live" style="display:flex;flex-direction:column">
+    <div class="kicker" style="color:var(--amber)">Monday 5 October 2026 · All times Eastern</div>
+    <div class="showname" style="margin-top:8pt;font-size:36pt">The running order</div>
+    <div class="toc-intro">${esc(numberWord(shows.length))} shows, one after another, ${ev.slotMinutes} minutes apiece —
+      live at www.${DOMAIN}/watch from ${at(0)} until the last one signs off.</div>
+    <div class="ro">${rows}</div>
+  </div>
+  ${folio("Running order", pageNo)}
   ${crops()}
 </section>`;
 }
@@ -236,29 +420,47 @@ function adPage(position: string, note: string): string {
       <span class="n">0.375 in</span> &nbsp;safety margin — keep type inside it<br>
       PDF/X-1a or PDF/X-4 · CMYK · images 300 dpi · fonts embedded
     </div>
+    <div class="ad-spec" style="margin-top:22pt;font-size:8pt">To book this page: hello@${DOMAIN}</div>
   </div>
   <div class="safe-line"></div>${crops()}
 </section>`;
 }
 
-function sponsorsPage(): string {
-  return `<section class="page">
-  <div class="live">
+/**
+ * The sponsor wall, from the sponsors table.
+ *
+ * On navy, because two of the four logos are white-on-transparent and vanish
+ * on paper. The files on the site are web logos, a hundred and forty pixels
+ * wide in places — fine for proving the page, not for printing it, and the
+ * page says so until vector files arrive.
+ */
+function sponsorsPage(sponsors: Sponsor[], pageNo: number): string {
+  const tiles = sponsors
+    .map((sp) => `<div class="sp-tile"><img src="${esc(abs(sp.logo))}" alt="${esc(sp.name)}"><span>${esc(sp.name)}</span></div>`)
+    .join("");
+  return `<section class="page sponsors">
+  ${proofMarks({ text: "Web logos — vector files needed for print" })}
+  <div class="live" style="display:flex;flex-direction:column">
     <div class="kicker" style="color:var(--amber)">With thanks</div>
-    <div class="showname" style="margin-top:8pt;font-size:30pt">The people who<br>paid for the day</div>
-    <div class="body" style="margin-top:22pt;max-width:4.6in">
-      <p class="ph">[SPONSOR WALL — title sponsor large, then live stream,
-      supporting and show sponsors. Logos supplied as vector where possible.]</p>
+    <div class="showname" style="margin-top:8pt;font-size:30pt;color:#fff">The people who<br>paid for the day</div>
+    <div class="body" style="margin-top:14pt;max-width:4.6in;color:rgba(255,255,255,.78)">
+      <p>Sixteen hours of military and veteran podcasting, live and in one place. These are
+      the companies whose support put it on the air.</p>
     </div>
+    <div class="sp-grid">${tiles || `<p class="ph">[SPONSOR WALL]</p>`}</div>
+    <div class="sp-cta">Sponsor the next one: <b>hello@${DOMAIN}</b></div>
   </div>
-  <div class="folio"><span class="mile">Thanks</span><span>Military Voice · Issue One</span><span></span></div>
+  ${folio("Thanks", pageNo)}
   ${crops()}
 </section>`;
 }
 
 function blankPage(): string {
-  return `<section class="page"><div class="live" style="display:flex;align-items:flex-end;justify-content:center">
-    <span class="ph" style="font-size:8pt">[intentionally blank — pads the signature to a multiple of four]</span>
+  return `<section class="page">
+  ${proofMarks({ text: "Pads the signature to a multiple of four — sell it, or leave it for notes" })}
+  <div class="live notes-page">
+    <div class="kicker" style="color:var(--amber)">Notes</div>
+    <div class="notes-lines"></div>
   </div>${crops()}</section>`;
 }
 
@@ -267,40 +469,81 @@ function crops(): string {
   <i class="crop bl-v"></i><i class="crop bl-h"></i><i class="crop br-v"></i><i class="crop br-h"></i>`;
 }
 
+/**
+ * A QR code as inline SVG, so it prints as sharp as the type around it.
+ *
+ * It points at the show's own card on the running order (/agenda?slot=N, the
+ * same link podcasters already share), which opens their profile and every
+ * link they gave us — one address that outlives whichever app the reader
+ * uses. Error correction at M: enough to survive a scuffed page, small enough
+ * to stay readable at an inch.
+ */
+async function qrFor(url: string): Promise<string> {
+  return QRCode.toString(url, {
+    type: "svg", errorCorrectionLevel: "M", margin: 0,
+    color: { dark: "#000741", light: "#0000" },
+  });
+}
+
 async function main() {
   const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1, onnotice: () => {} });
   const rows = await sql<any[]>`
-    SELECT DISTINCT ON (s.email) s.podcast_name, s.host_name, s.branch, s.service_status,
+    SELECT DISTINCT ON (s.email) s.email, s.podcast_name, s.host_name, s.branch, s.service_status,
            s.photo_url, s.slot_index, coalesce(p.artwork_print_url,'') AS artwork,
            coalesce(p.photo_original_url,'') AS print_photo,
-           coalesce(p.rss_url,'') AS rss, coalesce(p.youtube_url,'') AS youtube
+           coalesce(nullif(p.rss_url,''), s.rss_url, '') AS rss,
+           coalesce(nullif(p.youtube_url,''), s.youtube_url, '') AS youtube
     FROM signups s LEFT JOIN podcaster_profiles p ON p.email = s.email
     WHERE s.event_id = 1 AND s.status <> 'cancelled'
     ORDER BY s.email, s.slot_index`;
+  const [evRow] = await sql<any[]>`
+    SELECT name, start_at_utc, duration_hours, slot_minutes FROM events WHERE id = 1`;
+  const sponsorRows = await sql<any[]>`
+    SELECT name, logo_url, tier FROM sponsors
+    WHERE active AND event_id IN (0, 1) AND logo_url <> ''
+    ORDER BY CASE tier WHEN 'presenting' THEN 0 WHEN 'official' THEN 1 ELSE 2 END, sort_order, id`;
   await sql.end();
 
-  const shows: Show[] = rows
-    .map((r) => ({
-      podcastName: r.podcast_name, hostName: r.host_name, branch: r.branch,
-      serviceStatus: r.service_status, photo: r.photo_url, artwork: r.artwork,
-      printPhoto: r.print_photo, slotIndex: r.slot_index, rss: r.rss, youtube: r.youtube,
-    }))
-    .sort((a, b) => a.slotIndex - b.slotIndex);
+  const drafts: Record<string, Draft> = JSON.parse(
+    await fs.readFile(path.join(OUT, "drafts.json"), "utf8").catch(() => "{}"),
+  );
 
+  const shows: Show[] = await Promise.all(
+    rows.map(async (r) => {
+      const email = String(r.email).trim().toLowerCase();
+      const listenUrl = `${SITE}/agenda?slot=${r.slot_index}`;
+      return {
+        email, podcastName: tidyName(r.podcast_name), hostName: tidyName(r.host_name), branch: r.branch,
+        serviceStatus: r.service_status, photo: r.photo_url, artwork: r.artwork,
+        printPhoto: r.print_photo, slotIndex: r.slot_index, rss: r.rss, youtube: r.youtube,
+        draft: drafts[email], listenUrl, qr: await qrFor(listenUrl),
+      };
+    }),
+  );
+  shows.sort((a, b) => a.slotIndex - b.slotIndex);
+  const ev: EventInfo = {
+    name: evRow.name, startAtUtc: evRow.start_at_utc, durationHours: evRow.duration_hours, slotMinutes: evRow.slot_minutes,
+  };
+  const sponsors: Sponsor[] = sponsorRows.map((r) => ({ name: r.name, logo: r.logo_url, tier: r.tier }));
+
+  // Riccoh's opening slot is the editorial on page 2, written by hand; giving
+  // it a drafted show page as well would print him twice.
   const riccoh = shows.find((s) => /riccoh/i.test(s.hostName));
+  const profiled = shows.filter((s) => s !== riccoh);
 
   // The order of the book. Covers are C1–C4 and are sold by those names.
   const pages: Page[] = [
     { kind: "cover" },
     { kind: "editorial", slug: "riccoh" },
     { kind: "contents" },
-    { kind: "ad", position: "C2 facing — full page", note: "Premium. The first ad anybody sees." },
+    { kind: "ad", position: "Front of book — full page", note: "Premium. The first ad anybody sees, facing the running order." },
+    { kind: "schedule" },
   ];
-  shows.forEach((_, i) => {
+  profiled.forEach((_, i) => {
     pages.push({ kind: "profile", i });
     // An ad every four shows: often enough to sell, rare enough that the book
     // still reads as a magazine rather than a catalogue.
-    if ((i + 1) % 4 === 0 && i + 1 < shows.length) {
+    if ((i + 1) % 4 === 0 && i + 1 < profiled.length) {
       pages.push({ kind: "ad", position: "Full page, run of book", note: `After show ${i + 1}` });
     }
   });
@@ -309,19 +552,37 @@ async function main() {
   pages.push({ kind: "ad", position: "C4 — outside back cover", note: "The most expensive page in the book." });
 
   // Saddle stitch: a sheet is four pages whether you filled them or not.
-  while (pages.length % 4 !== 0) pages.splice(pages.length - 2, 0, { kind: "blank" });
+  // The spare pages go to advertising, halfway between the regular ads so no
+  // two land together — three blank pages at the back of a first issue read
+  // as a book that ran out of things to say. Blanks only if the gaps run out.
+  for (const after of [2, 10, 18, 26, 6, 14, 22]) {
+    if (pages.length % 4 === 0) break;
+    const at = pages.findIndex((p) => p.kind === "profile" && p.i === after - 1);
+    if (at < 0 || after >= profiled.length) continue;
+    pages.splice(at + 1, 0, { kind: "ad", position: "Full page, run of book", note: `After show ${after}` });
+  }
+  while (pages.length % 4 !== 0) pages.splice(pages.length - 3, 0, { kind: "blank" });
 
-  let folio = 0;
+  // Page numbers from where things actually landed, not from arithmetic that
+  // silently goes wrong the day an ad moves.
+  const pageOf = new Map<number, number>();
+  pages.forEach((p, n) => p.kind === "profile" && pageOf.set(p.i, n + 1));
+  const pageForShow = new Map<Show, number>(profiled.map((s, i) => [s, pageOf.get(i)!]));
+  if (riccoh) pageForShow.set(riccoh, 2);
+  const toc = shows.map((s) => ({ name: s.podcastName, host: s.hostName, page: pageForShow.get(s)! }));
+  const schedulePage = pages.findIndex((p) => p.kind === "schedule") + 1;
+
   const html = pages
-    .map((p) => {
-      folio++;
+    .map((p, n) => {
+      const no = n + 1;
       switch (p.kind) {
-        case "cover": return coverPage(riccoh);
-        case "editorial": return riccohPage(riccoh);
-        case "contents": return contentsPage(shows);
-        case "profile": return profilePage(shows[p.i], folio);
+        case "cover": return coverPage(shows.length);
+        case "editorial": return riccohPage(riccoh, no);
+        case "contents": return contentsPage(toc, no, schedulePage);
+        case "schedule": return runningOrderPage(ev, shows, pageForShow, no);
+        case "profile": return profilePage(profiled[p.i], no);
         case "ad": return adPage(p.position, p.note);
-        case "sponsors": return sponsorsPage();
+        case "sponsors": return sponsorsPage(sponsors, no);
         case "blank": return blankPage();
       }
     })
@@ -329,10 +590,42 @@ async function main() {
 
   const css = await fs.readFile(path.resolve("scripts/magazine.css"), "utf8");
   const doc = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-<title>Military Voice — Issue One</title>
+<title>${BRAND}.ai — Issue One</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,600;9..144,900&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-<style>${css}</style></head><body>${html}</body></html>`;
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,900;1,9..144,300;1,9..144,400&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>${css}</style></head><body>${html}
+<script>
+// Copyfitting, done the way a sub-editor would: a page that runs long is set a
+// little tighter, one step at a time, and a page that runs short is set a
+// little looser so it doesn't end in an inch of bare paper. Anything still too
+// long after the last step is marked on the proof rather than left for a
+// reader to find. Runs once the fonts are in, because before that every
+// measurement is of Georgia.
+document.fonts.ready.then(() => {
+  const PX_PER_IN = 96;
+  for (const live of document.querySelectorAll(".profile .live")) {
+    const page = live.closest(".page");
+    const foot = live.querySelector(".p-foot"), body = live.querySelector(".p-body");
+    const over = () => live.scrollHeight > live.clientHeight + 1 ||
+      body.getBoundingClientRect().bottom > foot.getBoundingClientRect().top - 8;
+    const gap = () => foot.getBoundingClientRect().top - body.getBoundingClientRect().bottom;
+    if (!over() && gap() > 0.9 * PX_PER_IN) {
+      page.classList.add("fit-loose");
+      if (over()) page.classList.remove("fit-loose");
+    }
+    for (const step of ["fit-1", "fit-2", "fit-3"]) {
+      if (!over()) break;
+      page.classList.add(step);
+    }
+    if (over()) {
+      page.dataset.overflow = "1";
+      const m = document.createElement("div");
+      m.className = "overflow-mark"; m.textContent = "OVERFLOW — cut the copy";
+      page.appendChild(m);
+    }
+  }
+});
+</script></body></html>`;
 
   await fs.mkdir(OUT, { recursive: true });
   const htmlPath = path.join(OUT, "issue-one.html");
@@ -345,13 +638,16 @@ async function main() {
   ]).catch(() => {});
 
   const counts = pages.reduce<Record<string, number>>((a, p) => ({ ...a, [p.kind]: (a[p.kind] ?? 0) + 1 }), {});
-  const noPrint = shows.filter((s) => !s.printPhoto).length;
-  const noImage = shows.filter((s) => !s.printPhoto && !s.artwork).length;
+  const noPrint = profiled.filter((s) => !s.printPhoto).length;
+  const noImage = profiled.filter((s) => !bestImage(s).url).length;
+  const drafted = profiled.filter((s) => s.draft?.status === "draft");
 
   console.log(`${pages.length} pages (${pages.length / 4} sheets)`);
   for (const [k, v] of Object.entries(counts)) console.log(`   ${String(v).padStart(3)}  ${k}`);
-  console.log(`\n${shows.length - noPrint} of ${shows.length} shows have a print-quality photograph.`);
-  console.log(`${noPrint - noImage} fall back to feed artwork. ${noImage} have nothing printable.`);
+  console.log(`\n${drafted.length} of ${profiled.length} show pages carry a draft; the rest are placeholders:`);
+  for (const s of profiled.filter((s) => s.draft?.status !== "draft")) console.log(`   – ${s.podcastName} (${s.hostName})`);
+  console.log(`\n${profiled.length - noPrint} of ${profiled.length} shows have a print-quality photograph.`);
+  console.log(`${noPrint - noImage} fall back to artwork or a web photo. ${noImage} have nothing printable.`);
   console.log(`\n${pdfPath}`);
   if (process.argv.includes("--open")) await run("open", [pdfPath]).catch(() => {});
 }

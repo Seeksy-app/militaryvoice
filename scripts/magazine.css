@@ -105,7 +105,7 @@
     background: var(--blue); color: #fff;
     font-size: 7.5pt; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
   }
-  .showname {
+  .showname { text-wrap: balance;
     font-family: Fraunces, Georgia, serif; font-weight: 900;
     font-size: 40pt; line-height: .95; letter-spacing: -.02em; color: var(--navy);
   }
@@ -229,3 +229,129 @@
   font-size: 6.5pt; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
   border-bottom-left-radius: 3pt; z-index: 5;
 }
+
+/* ---- proof marks --------------------------------------------------------- */
+/* In the slug above the live area, outlined in proofing magenta: a note on a
+   proof, obviously meant to come off, never mistakable for the design. Only
+   the --final build leaves them out. */
+.proof {
+  position: absolute; left: calc(var(--bleed) + var(--safe)); right: calc(var(--bleed) + var(--safe));
+  top: calc(var(--bleed) + 0.1in); display: flex; gap: 6pt; flex-wrap: wrap; z-index: 6;
+  font-size: 6.2pt; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+}
+.proof span { padding: 2pt 6pt; border-radius: 2pt; line-height: 1.2; }
+.proof-draft { color: #d6006e; border: .75pt dashed #d6006e; background: rgba(214,0,110,.05); }
+.proof-note { color: #8a8f9c; border: .75pt dashed #c3c6cf; }
+
+/* ---- cover, rebranded ---------------------------------------------------- */
+.cover-top { display: flex; align-items: center; gap: 10pt; }
+.cover-wave { height: 16pt; width: auto; }
+/* The ".ai" is part of the name now, so it is set with the masthead but
+   lower case and in the amber the full stop used to carry alone. */
+.masthead .dot { text-transform: none; font-size: .62em; letter-spacing: -.01em; margin-left: .02em; }
+
+/* ---- contents ------------------------------------------------------------ */
+.toc-intro { margin-top: 10pt; max-width: 4.6in; font-family: Fraunces, Georgia, serif; font-weight: 300;
+  font-size: 12pt; line-height: 1.45; color: #3b4150; }
+.toc { margin-top: 20pt; column-count: 2; column-gap: 26pt; column-rule: .4pt solid #e2ded4; }
+.toc-row { padding: 4.2pt 0; align-items: center; }
+.toc-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.toc-name { font-size: 9pt; }
+.toc-host { font-size: 7.2pt; margin-top: 1pt; }
+.toc-n { font-size: 10pt; width: 16pt; }
+.toc-p { font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: 9.5pt; color: var(--navy); }
+.toc-foot { margin-top: auto; display: flex; align-items: center; gap: 9pt; padding-bottom: 26pt;
+  font-size: 7.5pt; letter-spacing: .14em; text-transform: uppercase; color: #8a8f9c; }
+
+/* ---- a show's page, with words in it -------------------------------------- */
+.p-show { font-size: 8.5pt; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; color: var(--amber);
+  line-height: 1.35; }
+.profile .showname.p-headline { margin-top: 8pt; font-size: 29pt; line-height: 1.0; letter-spacing: -.018em; }
+.hostline .svc { font-weight: 400; color: #5b6272; }
+.standfirst { margin: 12pt 0 0; font-family: Fraunces, Georgia, serif; font-weight: 300; font-size: 12.5pt;
+  line-height: 1.42; color: #2a2e38; }
+
+.p-pull { margin: 20pt 0 0; max-width: 5.6in; font-size: 15pt; }
+.p-pull cite { display: block; margin-top: 6pt; font-family: Inter, sans-serif; font-style: normal;
+  font-size: 7pt; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #8a8f9c; }
+
+.p-body { margin-top: 20pt; font-size: 9.8pt; line-height: 1.6; hyphens: auto; -webkit-hyphens: auto;
+  text-align: justify; text-justify: inter-word; orphans: 3; widows: 3; }
+.p-body p { margin: 0; text-indent: 1.2em; }
+.p-body p.lede, .p-body .xhead + p { text-indent: 0; }
+.p-body .xhead { margin: 11pt 0 4pt; font-size: 7.6pt; font-weight: 700; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--blue); break-after: avoid; text-align: left; }
+.p-body .xhead:first-child { margin-top: 0; }
+.p-body p.lede::first-letter {
+  float: left; font-family: Fraunces, Georgia, serif; font-weight: 900; color: var(--navy);
+  font-size: 39pt; line-height: .8; padding: 3pt 4pt 0 0;
+}
+
+.p-foot { gap: 20pt; align-items: stretch; border-top: .75pt solid #d8d5cd; padding-top: 12pt; margin-top: auto; }
+.latest { flex: 1; min-width: 0; }
+.latest-k { font-size: 7pt; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--amber); }
+.latest-t { margin-top: 4pt; font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: 11pt;
+  line-height: 1.25; color: var(--navy); }
+.latest-s { margin-top: 4pt; font-size: 8.4pt; line-height: 1.5; color: #4a5060; }
+.listen-block { flex: none; width: 2.35in; display: flex; gap: 10pt; align-items: flex-start; }
+.listen-block .qr { width: .95in; height: .95in; border: 0; border-radius: 0; flex: none; display: block; }
+.listen-block .qr svg { width: 100%; height: 100%; display: block; }
+.listen-block .listen { border-top: 0; padding-top: 0; font-size: 7pt; line-height: 1.5; }
+.listen-block .listen b { font-size: 8.5pt; text-transform: none; }
+.tags { margin-top: 7pt; display: flex; flex-wrap: wrap; gap: 3pt; }
+.tags span { font-size: 6.4pt; letter-spacing: .06em; text-transform: lowercase; color: var(--blue);
+  border: .6pt solid #c9d3e3; border-radius: 999px; padding: 1pt 5pt; }
+.sources { margin-top: 8pt; font-size: 6.4pt; letter-spacing: .04em; color: #9aa0ad; }
+
+/* ---- sponsors ------------------------------------------------------------ */
+.sponsors { background: var(--navy); color: #fff; }
+.sponsors .folio { color: rgba(255,255,255,.5); }
+.sp-grid { margin-top: 34pt; display: grid; grid-template-columns: 1fr 1fr; gap: 14pt; }
+.sp-tile { height: 2.1in; border: .75pt solid rgba(255,255,255,.16); border-radius: 4pt;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10pt;
+  background: rgba(255,255,255,.03); }
+.sp-tile img { max-width: 72%; max-height: 1in; object-fit: contain; }
+.sp-tile span { font-size: 7pt; letter-spacing: .16em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+.sp-cta { margin-top: auto; padding-bottom: 30pt; font-size: 9pt; color: rgba(255,255,255,.7); }
+.sp-cta b { color: var(--amber); font-weight: 600; }
+
+/* ---- the pad page ---------------------------------------------------------- */
+.notes-page { display: flex; flex-direction: column; }
+.notes-lines { flex: 1; margin-top: 14pt; margin-bottom: 30pt;
+  background: repeating-linear-gradient(180deg, transparent 0, transparent 25pt, #e2ded4 25pt, #e2ded4 25.5pt); }
+
+.listen-note { display: block; margin-top: 3pt; font-size: 6.6pt; letter-spacing: .02em; text-transform: none;
+  line-height: 1.4; color: #8a8f9c; }
+.latest .tags { margin-top: 7pt; }
+.ph-body { column-span: all; text-align: left; text-indent: 0 !important; max-width: 4.8in; }
+/* Riccoh's photograph runs off the right edge, so his folio stays on the paper. */
+.folio-narrow .folio { right: auto; width: 3.5in; }
+.overflow-mark { position: absolute; left: 0; right: 0; bottom: 0; z-index: 9; background: #ED1C24; color: #fff;
+  font: 700 9pt Inter, sans-serif; letter-spacing: .1em; padding: 4pt 10pt; text-align: center; }
+
+/* ---- copyfitting steps, applied by the script at the foot of the book ---- */
+.fit-loose .p-body { font-size: 10.4pt; line-height: 1.66; margin-top: 26pt; }
+.fit-loose .p-pull { margin-top: 26pt; font-size: 16.5pt; }
+.fit-loose .standfirst { font-size: 13.5pt; }
+.fit-1 .p-body { font-size: 9.4pt; line-height: 1.55; margin-top: 16pt; }
+.fit-1 .p-pull { font-size: 13.5pt; margin-top: 14pt; }
+.fit-1 .standfirst { font-size: 11.5pt; margin-top: 9pt; }
+.fit-2 .p-art.is-square { width: 1.9in; height: 1.9in; }
+.fit-2 .p-head { min-height: 1.9in; }
+.fit-2 .p-foot { padding-top: 9pt; }
+.fit-2 .latest-s { font-size: 8pt; }
+.fit-3 .p-body { font-size: 9pt; line-height: 1.5; }
+.fit-3 .latest .tags { display: none; }
+.fit-3 .p-pull cite { display: none; }
+.standfirst, .latest-t, .p-pull, .toc-intro { text-wrap: pretty; }
+
+/* ---- the running order --------------------------------------------------- */
+.ro { margin-top: 18pt; column-count: 2; column-gap: 26pt; column-rule: .4pt solid #e2ded4; }
+.ro-row { display: flex; align-items: baseline; gap: 8pt; padding: 4pt 0; border-bottom: .4pt solid #e2ded4;
+  break-inside: avoid; }
+.ro-t { width: 44pt; flex: none; font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: 9.5pt;
+  color: var(--navy); font-variant-numeric: tabular-nums; }
+.ro-name { flex: 1; min-width: 0; font-size: 8.6pt; font-weight: 600; color: var(--navy); line-height: 1.25; }
+.ro-host { display: block; font-size: 7.2pt; font-weight: 400; color: #8a8f9c; margin-top: 1pt; }
+.ro-p { width: 16pt; text-align: right; font-size: 7.5pt; color: #8a8f9c; }
+.ro-out .ro-t { color: #d6006e; }
