@@ -21,6 +21,10 @@ const apply = args.includes("--apply");
 const test = args.includes("--test");
 const preview = args.includes("--preview");
 const dir = args[args.indexOf("--shots") + 1];
+// --only <signupId> limits the run to one podcaster; --to <email> sends a test
+// there instead of to the owner.
+const only = args.includes("--only") ? Number(args[args.indexOf("--only") + 1]) : null;
+const testTo = args.includes("--to") ? args[args.indexOf("--to") + 1] : "andrew@podlogix.co";
 if (!dir || dir.startsWith("--")) throw new Error("--shots <dir> is required");
 const BASE = "https://www.militaryvoices.ai";
 const API = process.env.API_BASE || BASE;
@@ -34,6 +38,7 @@ await sql.end();
 interface Row { signupId: number; email: string; first: string; show: string; image: string }
 const rows: Row[] = [];
 for (const s of signups) {
+  if (only != null && s.id !== only) continue;
   const file = path.join(dir, `${s.id}.jpg`);
   const buf = await fs.readFile(file).catch(() => null);
   if (!buf) continue;
@@ -95,7 +100,7 @@ if (!test && !apply) {
 }
 
 // A test goes to the owner, never to a podcaster.
-const targets = test ? [{ ...rows[0], email: "andrew@podlogix.co" }] : rows;
+const targets = test ? [{ ...rows[0], email: testTo }] : rows;
 for (const r of targets) {
   const res = await fetch(`${API}/api/admin/emails/send-one`, {
     method: "POST",
