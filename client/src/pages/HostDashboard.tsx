@@ -63,6 +63,8 @@ import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
+import { IntentPicker } from "@/components/IntentPicker";
+import { isPodcaster } from "@shared/schema";
 import { StudioIcon } from "@/components/GreenRoomButton";
 import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
 import { CohostDashboard, type CohostInfo } from "@/components/CohostDashboard";
@@ -525,6 +527,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const screen: Screen = (tab && SLUG_SCREEN.get(tab.toLowerCase())) || "dashboard";
   const [profileDirty, setProfileDirty] = useState(false);
   const [remindEventSetup, setRemindEventSetup] = useState(false);
+  // What a new account said it came for, before the profile exists to hold it.
+  const [interests, setInterests] = useState<string>(() => {
+    try { return localStorage.getItem("mv_interests") ?? ""; } catch { return ""; }
+  });
   // Which locked door was opened, so the Pro page scrolls to it.
   const [proFeature, setProFeature] = useState<string | undefined>(() => {
     const h = typeof window === "undefined" ? "" : window.location.hash.replace(/^#/, "");
@@ -952,7 +958,15 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                {crewMode ? "Crew" : cohostOnly || screen === "cohost" ? "Co-host" : inSetup ? "Set up your show" : "Podcaster Dashboard"}
+                {crewMode
+                  ? "Crew"
+                  : cohostOnly || screen === "cohost"
+                    ? "Co-host"
+                    : inSetup
+                      ? !pending && !profile?.interests && !interests
+                        ? "Welcome"
+                        : pending || isPodcaster(profile?.interests || interests) ? "Set up your show" : "Set up your profile"
+                      : "Your dashboard"}
               </h1>
               {data && (
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -1019,15 +1033,27 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
               }}
             />
           </section>
+        ) : inSetup && !pending && !profile?.interests && !interests ? (
+          // A new account, not arriving through a time on the schedule: ask
+          // what they came for before asking about a show they may not have.
+          <IntentPicker
+            onDone={(picked) => {
+              const v = picked.join(",");
+              setInterests(v);
+              try { localStorage.setItem("mv_interests", v); } catch { /* private window */ }
+            }}
+          />
         ) : inSetup || screen === "editProfile" ? (
           <section className="mt-6">
             {inSetup && (
               <p className="mb-6 max-w-2xl text-sm text-muted-foreground">
-                Tell us about your show once. Your card on the public lineup is built from these details, and they
-                move with you if you switch to a different time.
+                {pending || isPodcaster(profile?.interests || interests)
+                  ? "Tell us about you and your show once. Your directory card is built from these details, and it goes with you to every event you join."
+                  : "Tell us about you once. Your directory card is built from these details — it's how organizers find you and invite you."}
               </p>
             )}
             <ProfileForm
+              interests={profile?.interests || interests || (pending ? "events" : "")}
               email={data.email}
               variant={inSetup ? "setup" : "profile"}
               profile={hasProfile ? (profile ?? null) : null}
@@ -1059,7 +1085,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   return;
                 }
                 setProfileDirty(false);
-                if (inSetup && next === "events") {
+                try { localStorage.removeItem("mv_interests"); } catch { /* fine */ }
+                const want = profile?.interests || interests;
+                if (inSetup && want && !/\bevents\b/.test(want)) {
+                  // Land where they said they were going.
+                  if (/\bgrow\b/.test(want)) setScreen("integrations");
+                  else if (/\bdiscover\b/.test(want)) navigate("/discover");
+                  else setScreen("dashboard");
+                } else if (inSetup && next === "events") {
                   setScreen("events");
                 } else if (inSetup) {
                   // They chose to stop here, but a profile alone gets nobody

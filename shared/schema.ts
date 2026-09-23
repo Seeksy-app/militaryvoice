@@ -128,7 +128,10 @@ export const insertSignupSchema = createInsertSchema(signups)
   .omit({ id: true, createdAt: true, status: true })
   .extend({
     eventId: z.number().int().min(1),
-    podcastName: z.string().min(1, "Podcast or show name is required"),
+    // Required for podcasters only — see the refinement below. Somebody here
+    // for Discovery or to run an event may not have a show.
+    podcastName: z.string().trim().max(160),
+    interests: z.string().trim().max(200).default(""),
     hostName: z.string().min(1, "Your name is required"),
     email: z.string().email("Enter a valid email"),
     numPeople: z.number().int().min(1).max(2),
@@ -238,6 +241,10 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
   email: text("email").notNull().unique(),
   podcastName: text("podcast_name").notNull().default(""),
   hostName: text("host_name").notNull().default(""),
+  /** What they came for, picked on the way in: events, grow, discover, host
+   *  (comma-separated). Empty for everyone who signed up before it was asked —
+   *  they came for the Marathon, so they count as podcasters. */
+  interests: text("interests").notNull().default(""),
   phone: text("phone").notNull().default(""),
   numPeople: integer("num_people").notNull().default(1),
   hasVideoIntro: boolean("has_video_intro").notNull().default(false),
@@ -433,8 +440,20 @@ export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
 
 // Refined version used for validation. Kept separate because a schema with a
 // refinement can no longer be `.extend()`ed.
+/** The four reasons someone opens an account, asked on the way in. */
+export const INTERESTS = ["events", "grow", "discover", "host"] as const;
+export type Interest = (typeof INTERESTS)[number];
+/** A podcaster: here to get booked or to grow a show — or signed up before we asked. */
+export function isPodcaster(interests: string | null | undefined): boolean {
+  const v = (interests ?? "").trim();
+  return !v || /\b(events|grow)\b/.test(v);
+}
+
 export const insertProfileSchema = profileFieldsSchema
   .superRefine((v, ctx) => {
+    if (isPodcaster(v.interests) && !v.podcastName) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["podcastName"], message: "Podcast or show name is required" });
+    }
     // A pre-recorded slot is only bookable once we can actually get the file.
     if (v.showFormat === "prerecorded" && !v.recordingUrl) {
       ctx.addIssue({

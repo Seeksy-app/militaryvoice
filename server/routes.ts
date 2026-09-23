@@ -6663,6 +6663,7 @@ export function registerRoutes(app: Express): void {
     const raw = {
       podcastName: body.podcastName ?? "",
       hostName: body.hostName ?? "",
+      interests: String(body.interests ?? "").split(",").map((v) => v.trim()).filter((v) => ["events", "grow", "discover", "host"].includes(v)).join(","),
       phone: body.phone ?? "",
       numPeople: Number(body.numPeople) || 1,
       hasVideoIntro: body.hasVideoIntro === "true",

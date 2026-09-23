@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiUpload, apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { SocialTiles } from "@/components/SocialTiles";
 import { SocialIconRow, parseSocialAccounts } from "@/components/SocialIcons";
-import { insertProfileSchema, SERVICE_BRANCHES, SERVICE_STATUSES, RECORDING_MODES, STREAM_PLATFORMS, type ProfileRow, type SocialAccount } from "@shared/schema";
+import { insertProfileSchema, isPodcaster, SERVICE_BRANCHES, SERVICE_STATUSES, RECORDING_MODES, STREAM_PLATFORMS, type ProfileRow, type SocialAccount } from "@shared/schema";
 import { PhotoCropDialog } from "@/components/PhotoCropDialog";
 import { formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
 import { isLiveOnlyBlock, LIVE_ONLY_LABEL } from "@shared/slots";
@@ -97,6 +97,8 @@ interface Props {
    * only ever about the person.
    */
   variant?: "setup" | "profile";
+  /** What they said they're here for, on the way in (comma-separated). */
+  interests?: string;
 }
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -149,8 +151,12 @@ function SectionCard({
   );
 }
 
-export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, variant = "setup", onDirtyChange }: Props) {
+export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, variant = "setup", onDirtyChange, interests: interestsProp }: Props) {
   const { toast } = useToast();
+  // Show questions only for people with a show. Anyone who came through a
+  // time on the schedule is booking one, whatever they ticked.
+  const interestList = profile?.interests || interestsProp || "";
+  const podcaster = !!pendingSlot || isPodcaster(interestList);
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -231,6 +237,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
     defaultValues: {
       podcastName: profile?.podcastName ?? "",
       hostName: profile?.hostName ?? "",
+      interests: profile?.interests || interestsProp || "",
       phone: profile?.phone ?? "",
       numPeople: profile?.numPeople ?? 1,
       hasVideoIntro: profile?.hasVideoIntro ?? false,
@@ -365,6 +372,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
       }
       const formData = new FormData();
       formData.append("podcastName", values.podcastName);
+      formData.append("interests", values.interests ?? "");
       formData.append("hostName", values.hostName);
       formData.append("phone", values.phone ?? "");
       formData.append("numPeople", String(values.numPeople));
@@ -474,7 +482,9 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
               step={variant === "setup" ? 1 : undefined}
               icon={User}
               title="About you"
-              description="Who's behind the mic. Your photo goes on the public lineup; contact details stay with the production team."
+              description={podcaster
+                ? "Who's behind the mic. Your photo goes on your directory card and any lineup you join; contact details stay with our team."
+                : "Who you are. Your photo goes on your directory card; contact details stay with our team."}
             >
               {/* Photo */}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-5">
@@ -651,14 +661,15 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                 person, so Profile Settings does not carry them — they live in
                 Event settings. First-time setup still asks, because you cannot
                 book a slot without them and we are not making that two trips. */}
-            {variant === "setup" && (
+            {podcaster && (
               <>
             <SectionCard
+              plain={variant === "profile"}
               id="section-show"
-              step={2}
+              step={variant === "setup" ? 2 : undefined}
               icon={Mic2}
               title="Your show"
-              description="What listeners see on the lineup."
+              description="On your directory card, and on any lineup you join."
             >
               <FormField
                 control={form.control}
@@ -678,152 +689,16 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
 
             </SectionCard>
 
-            <SectionCard
-              step={3}
-              icon={Radio}
-              title="How your slot runs"
-              description={
-                liveOnlySlot
-                  ? `The time you picked is between ${LIVE_ONLY_LABEL}, and daytime slots are broadcast live.`
-                  : "Broadcast live in your time block, or hand us an episode you've already recorded."
-              }
-            >
-              <FormField
-                control={form.control}
-                name="showFormat"
-                render={({ field }) => (
-                  <FormItem className="space-y-0">
-                    <FormControl>
-                      <RadioGroup value={field.value} onValueChange={field.onChange} className="grid gap-3 sm:grid-cols-2">
-                        {[
-                          {
-                            v: "live",
-                            icon: Radio,
-                            title: "Go live",
-                            body: "You broadcast in real time during your window, from your own studio.",
-                          },
-                          {
-                            v: "prerecorded",
-                            icon: PlayCircle,
-                            title: "Play a recorded episode",
-                            body: "Already have it in the can? Send us the file and we'll roll it in your slot.",
-                          },
-                        ].map(({ v, icon: Icon, title, body }) => {
-                          const locked = liveOnlySlot && v === "prerecorded";
-                          return (
-                            <FormItem key={v} className="space-y-0">
-                              <FormLabel
-                                className={`flex h-full flex-col gap-2 rounded-xl border-2 p-4 font-normal transition-colors ${
-                                  field.value === v ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"
-                                } ${locked ? "cursor-not-allowed border-dashed bg-muted/30 opacity-60 hover:bg-muted/30" : "cursor-pointer"}`}
-                                data-testid={`radio-format-${v}`}
-                              >
-                                <span className="flex items-center justify-between">
-                                  <Icon className={`h-5 w-5 ${field.value === v ? "text-primary" : "text-muted-foreground"}`} />
-                                  <FormControl>
-                                    <RadioGroupItem value={v} disabled={locked} />
-                                  </FormControl>
-                                </span>
-                                <span className="text-sm font-semibold text-card-foreground">{title}</span>
-                                <span className="text-xs leading-relaxed text-muted-foreground">
-                                  {locked ? "Not available in a daytime slot — pick an evening or overnight time instead." : body}
-                                </span>
-                              </FormLabel>
-                            </FormItem>
-                          );
-                        })}
-                      </RadioGroup>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {isPrerecorded && (
-                <div className="flex flex-col gap-5 rounded-xl border border-primary/20 bg-primary/5 p-4">
-                  <FormField
-                    control={form.control}
-                    name="recordingUrl"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-1.5">
-                          <FileVideo className="h-4 w-4 text-primary" /> Link to your episode <span className="text-destructive">*</span>
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="youtube.com/watch?v=… or a Drive / Dropbox link"
-                            inputMode="url"
-                            {...field}
-                            data-testid="input-recording-url"
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Paste an unlisted YouTube or Vimeo link, or a Google Drive, Dropbox, or WeTransfer link to the video
-                          or audio file. Make sure sharing is set so anyone with the link can view it. We'll download it and
-                          check the audio before your slot.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="introStyle"
-                    render={({ field }) => (
-                      <FormItem className="space-y-0">
-                        <FormLabel className="mb-2 block">How should we open your slot?</FormLabel>
-                        <FormControl>
-                          <RadioGroup value={field.value} onValueChange={field.onChange} className="grid gap-2 sm:grid-cols-2">
-                            {[
-                              {
-                                v: "virtual",
-                                icon: Film,
-                                title: "Live virtual intro first",
-                                body: "You join on camera for a short hello, then we roll the episode.",
-                              },
-                              {
-                                v: "straight",
-                                icon: PlayCircle,
-                                title: "Just play the episode",
-                                body: "Straight into the recording. Nothing needed from you on the day.",
-                              },
-                            ].map(({ v, icon: Icon, title, body }) => (
-                              <FormItem key={v} className="space-y-0">
-                                <FormLabel
-                                  className={`flex h-full cursor-pointer items-start gap-3 rounded-lg border bg-background p-3 font-normal transition-colors ${
-                                    field.value === v ? "border-primary ring-1 ring-primary/30" : "border-border hover:bg-muted/50"
-                                  }`}
-                                  data-testid={`radio-intro-${v}`}
-                                >
-                                  <FormControl>
-                                    <RadioGroupItem value={v} className="mt-0.5" />
-                                  </FormControl>
-                                  <span>
-                                    <span className="flex items-center gap-1.5 text-sm font-medium text-card-foreground">
-                                      <Icon className="h-3.5 w-3.5 text-primary" /> {title}
-                                    </span>
-                                    <span className="mt-0.5 block text-xs text-muted-foreground">{body}</span>
-                                  </span>
-                                </FormLabel>
-                              </FormItem>
-                            ))}
-                          </RadioGroup>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              )}
-            </SectionCard>
+            {/* "How your slot runs" moved to the event: live or recorded
+                is a choice about one slot, not about the person, and it's
+                asked in Event settings when they take a time. */}
               </>
             )}
 
             {/* Only Profile settings carries this now: everything left in it is
                 about how the person normally works, which has no bearing on
                 getting booked. During setup the card was rendering empty. */}
-            {variant === "profile" && (
+            {variant === "profile" && podcaster && (
             <SectionCard
               plain
               icon={Clapperboard}
@@ -912,9 +787,10 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
             </SectionCard>
             )}
 
+            {podcaster && (
             <SectionCard
               plain={variant === "profile"}
-              step={variant === "setup" ? 4 : undefined}
+              step={variant === "setup" ? 3 : undefined}
               icon={Headphones}
               title="Where people can listen"
               description="Both optional — add whichever you have, or skip this and come back later."
@@ -957,13 +833,16 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                 />
               </div>
             </SectionCard>
+            )}
 
             <SectionCard
               plain={variant === "profile"}
-              step={variant === "setup" ? 5 : undefined}
+              step={variant === "setup" ? (podcaster ? 4 : 2) : undefined}
               icon={Globe}
-              title="Connect your social media"
-              description="So listeners can find and follow you after your slot. Everything here shows on your public card."
+              title="Social media"
+              description={podcaster
+                ? "So listeners can find and follow you. Everything here shows on your directory card."
+                : "So people can find and follow you. Everything here shows on your directory card."}
             >
               <FormField
                 control={form.control}
@@ -1029,8 +908,9 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
 
             <div className="rounded-2xl border border-border bg-card p-4" data-testid="card-profile-preview">
               <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
-                <Sparkles className="h-3.5 w-3.5 text-primary" /> How you'll appear
+                <Sparkles className="h-3.5 w-3.5 text-primary" /> Your directory card
               </div>
+              <p className="-mt-1.5 mb-3 text-xs text-muted-foreground">How you appear in the MilitaryVoices directory, where event organizers find you and invite you.</p>
               <div className="flex flex-col items-center rounded-2xl border border-border bg-background p-5 text-center">
                 {shownPhoto ? (
                   <img src={shownPhoto} alt="" className="h-20 w-20 rounded-full object-cover ring-4 ring-primary/10" />
@@ -1039,24 +919,35 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                     <Mic2 className="h-7 w-7" />
                   </div>
                 )}
-                <div className="mt-3 line-clamp-2 text-sm font-semibold leading-tight">
-                  {watchPodcast?.trim() || <span className="text-muted-foreground">Your show name</span>}
-                </div>
-                <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {watchHost?.trim() || "Host name"}
-                </div>
-                <div className="mt-2 tabular-nums text-xs text-primary">
-                  {pendingSlot
-                    ? `${formatDateInZone(pendingSlot.start, pendingSlot.zone)} · ${formatTimeInZone(pendingSlot.start, pendingSlot.zone)}`
-                    : "Time coming soon"}
-                </div>
+                {podcaster ? (
+                  <>
+                    <div className="mt-3 line-clamp-2 text-sm font-semibold leading-tight">
+                      {watchPodcast?.trim() || <span className="text-muted-foreground">Your show name</span>}
+                    </div>
+                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {watchHost?.trim() || "Your name"}
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-3 line-clamp-2 text-sm font-semibold leading-tight">
+                    {watchHost?.trim() || <span className="text-muted-foreground">Your name</span>}
+                  </div>
+                )}
+                {/* A time only when they came through one — the card is theirs
+                    whether or not an event is on the calendar. */}
+                {pendingSlot && (
+                  <div className="mt-2 tabular-nums text-xs text-primary">
+                    {`${formatDateInZone(pendingSlot.start, pendingSlot.zone)} · ${formatTimeInZone(pendingSlot.start, pendingSlot.zone)}`}
+                  </div>
+                )}
                 <SocialIconRow accounts={connectedAccounts} size="md" variant="filled" className="mt-3 justify-center" />
               </div>
               <ul className="mt-4 space-y-2 text-xs">
                 {[
                   ["Photo", photoDone],
-                  ["Show and host name", basicsDone],
-                  ["Somewhere to listen (optional)", !!watchRss?.trim() || !!watchYouTube?.trim()],
+                  ...(podcaster
+                    ? [["Show and host name", basicsDone], ["Somewhere to listen (optional)", !!watchRss?.trim() || !!watchYouTube?.trim()]]
+                    : [["Your name", !!watchHost?.trim()]]),
                 ].map(([label, done]) => (
                   <li key={label as string} className="flex items-center gap-2">
                     <span
@@ -1077,11 +968,19 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                 <div className="mb-2 flex items-center gap-1.5 font-semibold uppercase tracking-wide">
                   <Radio className="h-3.5 w-3.5 text-primary" /> What happens next
                 </div>
-                <ol className="list-decimal space-y-1 pl-4">
-                  <li>{pendingSlot ? "Your slot is confirmed the moment you save." : "Pick an open slot from your dashboard."}</li>
-                  <li>Connect your social accounts so listeners can follow you.</li>
-                  <li>We email show-day details and your on-air window.</li>
-                </ol>
+                {podcaster ? (
+                  <ol className="list-decimal space-y-1 pl-4">
+                    <li>{pendingSlot ? "Your slot is confirmed the moment you save." : "Pick an event and a time from Event settings."}</li>
+                    <li>Connect your social accounts so listeners can follow you.</li>
+                    <li>We email show-day details and your on-air window.</li>
+                  </ol>
+                ) : (
+                  <ol className="list-decimal space-y-1 pl-4">
+                    <li>Your directory card goes live when you save.</li>
+                    <li>{/discover/.test(interestList) ? "Discovery opens straight after, ready to search." : "Your dashboard opens with everything in one place."}</li>
+                    <li>Connect your social accounts any time to see your audience.</li>
+                  </ol>
+                )}
               </div>
             )}
           </aside>
@@ -1112,7 +1011,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
               {/* Saving the profile is only half of getting on air, so setup's
                   primary action carries on to the event rather than leaving
                   someone on a dashboard with nothing obvious to do next. */}
-              {isSetup && !pendingSlot && (
+              {isSetup && !pendingSlot && podcaster && (
                 <Button
                   type="button"
                   variant="outline"
@@ -1148,9 +1047,13 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                   <>
                     <Users className="h-4 w-4" /> Save &amp; claim my slot
                   </>
-                ) : isSetup ? (
+                ) : isSetup && podcaster ? (
                   <>
                     <Save className="h-4 w-4" /> Save &amp; continue to Event settings
+                  </>
+                ) : isSetup ? (
+                  <>
+                    <Save className="h-4 w-4" /> Save &amp; continue
                   </>
                 ) : (
                   <>
