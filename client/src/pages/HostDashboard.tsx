@@ -27,7 +27,12 @@ import {
   ChevronRight,
   ArrowRight,
   PlayCircle,
+  BarChart3,
+  Compass,
+  Film,
+  Megaphone,
 } from "lucide-react";
+import { PlatformIcon, formatFollowers } from "@/components/SocialIcons";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,13 +57,12 @@ import { useToast } from "@/hooks/use-toast";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
 import { ShowMaterials } from "@/components/ShowMaterials";
-import { CohostSlots } from "@/components/CohostSlots";
 import { EventSettings } from "@/components/EventSettings";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { ContactsScreen } from "@/components/ContactsScreen";
-import { CommandCenter, QuickDoors, TodoStrip } from "@/components/CommandCenter";
+import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
 import { StudioIcon } from "@/components/GreenRoomButton";
 import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
 import { CohostDashboard, type CohostInfo } from "@/components/CohostDashboard";
@@ -1299,175 +1303,119 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                           <ArrowRight className="ml-auto h-4 w-4" />
                         </button>
                       )}
-                      <QuickDoors
-                        greenRoomHref={greenRoomHref}
-                        slotLabel={mySlot ? `${formatDateInZone(mySlot.start, zone)} · ${formatTimeInZone(mySlot.start, zone)}` : null}
-                        shareUrl={data.mySignups[0] ? `${window.location.origin}/s/${data.mySignups[0].id}` : null}
-                        agendaHref="/agenda"
-                        onGo={(sc) => goTo(sc)}
-                      />
+                      {/* Four doors that are about the account, not any one
+                          event: the event lives in its own card below. */}
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="general-doors">
+                        {[
+                          { key: "analytics", label: "Social analytics", icon: BarChart3, go: () => goTo("integrations") },
+                          { key: "discovery", label: "Discovery", icon: Compass, href: "/discover" },
+                          { key: "recordings", label: "Recordings & clips", icon: Film, go: () => goTo("recordings") },
+                          { key: "promotion", label: "Promote your show", icon: Megaphone, go: () => goTo("promotion") },
+                        ].map((d) => {
+                          const cls = "flex items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]";
+                          const inner = (<><d.icon className="h-4 w-4 shrink-0 text-[#053877]" /> <span className="truncate">{d.label}</span></>);
+                          return d.href ? (
+                            <Link key={d.key} href={d.href} className={cls} data-testid={`door-${d.key}`}>{inner}</Link>
+                          ) : (
+                            <button key={d.key} type="button" onClick={d.go} className={`${cls} text-left`} data-testid={`door-${d.key}`}>{inner}</button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-                  {/* Three cards across, not one long strip: the slot, what is
-                      left to do, and what happens on the day. */}
+                  {/* Three cards: your events (the Marathon is one of them),
+                      your audience, and what's left to do. The co-host hours
+                      live on the event's own page, with the event. */}
                   <div className="mt-6 grid gap-4 lg:grid-cols-3">
-                    <div className="h-full rounded-2xl border border-border bg-card p-5" data-testid="section-your-slot">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your slot</p>
-                      {data.mySignups.length === 0 ? (
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] px-4 py-3">
-                          {/* A time belongs to an event and needs a show
-                              attached to it, so the way in is the event, not a
-                              list of times floating on the dashboard. */}
-                          <p className="text-sm text-muted-foreground">
-                            No time yet. Join an event and set your show up, then pick when you're on air.
-                          </p>
-                          <Button
-                            size="sm"
-                            className="gap-1.5 rounded-full"
-                            onClick={() => setScreen("events")}
-                            data-testid="button-jump-to-events"
-                          >
-                            <CalendarDays className="h-3.5 w-3.5" /> Event settings
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-2">
-                          {data.mySignups.map((s) => {
-                            const st = slotStart(data.event.startAtUtc, data.event.slotMinutes, s.slotIndex);
-                            const en = slotEnd(data.event.startAtUtc, data.event.slotMinutes, s.slotIndex);
-                            return (
-                              <div
-                                key={s.id}
-                                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3"
-                                data-testid={`card-host-signup-${s.id}`}
-                              >
-                                <div className="min-w-0">
-                                  <div className="tabular-nums text-base font-semibold text-card-foreground">
-                                    {formatDateInZone(st, zone)} · {formatTimeInZone(st, zone)}–{formatTimeInZone(en, zone)}
-                                  </div>
-                                  <div className="text-xs text-foreground/80">
-                                    {zoneLabel(zone)} · {data.event.name.trim()}
-                                  </div>
-                                </div>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="gap-1.5 rounded-full text-destructive hover:text-destructive"
-                                      data-testid={`button-edit-slot-${s.id}`}
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" /> Remove me from this slot
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Remove you from this slot?</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        {formatDateInZone(st, zone)}, {formatTimeInZone(st, zone)}–{formatTimeInZone(en, zone)} goes back on
-                                        the open schedule for anyone to claim. You can pick a different time right after. Fans who asked
-                                        for a reminder on this slot won't be notified.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Keep my slot</AlertDialogCancel>
-                                      <AlertDialogAction
-                                        className="gap-1.5 bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                        onClick={() => release.mutate(s.id)}
-                                        data-testid={`button-release-slot-${s.id}`}
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" /> Remove me
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                    <TodoStrip
-                      todos={(() => {
-                const t: { key: string; label: string; screen: "editProfile" | "promotion" | "integrations" | "events"; optional?: boolean }[] = [];
-                const show = hostEvents?.find((e) => e.slotIndex != null)?.show ?? hostEvents?.[0]?.show ?? null;
-                if (!show?.showName) t.push({ key: "show", label: "Set up your show", screen: "events" });
-                if (show?.showFormat === "prerecorded" && !show.recordingUrl) t.push({ key: "file", label: "Send us your recorded episode", screen: "events" });
-                if (!profile?.photoOriginalUrl) t.push({ key: "headshot", label: "Add a print-quality headshot", screen: "editProfile" });
-                if ((social?.accounts?.length ?? 0) === 0) t.push({ key: "accounts", label: "Connect your social accounts", screen: "integrations" });
-                if ((hostAssets?.length ?? 0) === 0 && !profile?.mediaAnswered) t.push({ key: "materials", label: "Upload an intro, outro or images", screen: "events" });
-                if (!youtube?.connected) t.push({ key: "youtube", label: "Send your slot to your own YouTube", screen: "integrations", optional: true });
-                return t;
-              })()}
-                      onGo={(sc) => goTo(sc)}
-                      eventStartUtc={data.event.startAtUtc}
-                      eventName={data.event.name.trim()}
-                    />
-                    <div className="h-full rounded-2xl border border-border bg-card p-5" data-testid="section-on-the-day">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">On the day</p>
-                      {mySlot ? (
-                        <>
-                          <p className="text-sm text-foreground/85">
-                            Come to the green room by <span className="font-semibold text-foreground tabular-nums">{formatTimeInZone(new Date(mySlot.start.getTime() - 15 * 60000), zone)}</span>, fifteen minutes before you're on. Alex brings you to the stage when it's your turn.
+                    <div className="h-full rounded-2xl border border-border bg-card p-5" data-testid="section-your-events">
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your events</p>
+                        <button type="button" onClick={() => goTo("events")} className="text-xs font-medium text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="link-all-events">All events</button>
+                      </div>
+                      {mySlot || greenRoomHref ? (
+                        <div className="rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] p-3.5">
+                          <p className="font-semibold text-foreground">{data.event.name.trim()}</p>
+                          <p className="mt-0.5 text-sm tabular-nums text-foreground/80">
+                            {mySlot
+                              ? `${formatDateInZone(mySlot.start, zone)} · ${formatTimeInZone(mySlot.start, zone)}–${formatTimeInZone(mySlot.end, zone)}`
+                              : "On the team for the day"}
                           </p>
                           <div className="mt-3 flex flex-wrap gap-2">
                             {greenRoomHref && (
-                              <a href={greenRoomHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-white px-3.5 py-2 text-sm font-medium text-foreground hover:bg-emerald-50 dark:bg-card" data-testid="link-on-the-day-green-room">
-                                <StudioIcon className="h-6 w-6 rounded-md" tone="green" /> Green room
+                              <a href={greenRoomHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-white px-3 py-1.5 text-sm font-medium text-foreground hover:bg-emerald-50 dark:bg-card" data-testid="link-on-the-day-green-room">
+                                <StudioIcon className="h-5 w-5 rounded-md" tone="green" /> Green room
                               </a>
                             )}
-                            <Link href="/watch" className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground hover:border-[#053877]/40" data-testid="link-on-the-day-watch">
-                              <PlayCircle className="h-4 w-4" /> Watch page
-                            </Link>
+                            <button type="button" onClick={() => goTo("events")} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:border-[#053877]/40" data-testid="button-event-details">
+                              Event details <ArrowRight className="h-3.5 w-3.5" />
+                            </button>
                           </div>
-                        </>
-                      ) : greenRoomHref ? (
-                        <>
-                          <p className="text-sm text-foreground/85">
-                            You're on the team for the day, so the green room is open to you any time — check your camera, and the producer brings you on stage.
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <a href={greenRoomHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-white px-3.5 py-2 text-sm font-medium text-foreground hover:bg-emerald-50 dark:bg-card" data-testid="link-on-the-day-green-room">
-                              <StudioIcon className="h-6 w-6 rounded-md" tone="green" /> Green room
-                            </a>
-                            <Link href="/watch" className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-2 text-sm font-medium text-foreground hover:border-[#053877]/40" data-testid="link-on-the-day-watch">
-                              <PlayCircle className="h-4 w-4" /> Watch page
-                            </Link>
-                          </div>
-                        </>
+                        </div>
                       ) : (
-                        <p className="text-sm text-foreground/85">Pick your slot and your green room link and call time appear here.</p>
+                        <div className="rounded-xl border border-dashed border-border p-4">
+                          <p className="text-sm text-muted-foreground">No events yet. When there's one you'd like to be part of, it's here.</p>
+                          <Button size="sm" variant="outline" className="mt-3 gap-1.5 rounded-full" onClick={() => goTo("events")} data-testid="button-jump-to-events">
+                            <CalendarDays className="h-3.5 w-3.5" /> See events
+                          </Button>
+                        </div>
                       )}
                     </div>
+
+                    <div className="h-full rounded-2xl border border-border bg-card p-5" data-testid="section-your-audience">
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your audience</p>
+                        <button type="button" onClick={() => goTo("integrations")} className="text-xs font-medium text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="link-analytics">Analytics</button>
+                      </div>
+                      {(() => {
+                        const accts = social?.accounts ?? [];
+                        const total = accts.reduce((n, a) => n + (a.followers ?? 0), 0);
+                        if (accts.length === 0) {
+                          return (
+                            <div className="rounded-xl border border-dashed border-border p-4">
+                              <p className="text-sm text-muted-foreground">Connect the accounts you post from to see your followers in one place.</p>
+                              <Button size="sm" variant="outline" className="mt-3 gap-1.5 rounded-full" onClick={() => goTo("integrations")} data-testid="button-connect-accounts-card">
+                                <Link2 className="h-3.5 w-3.5" /> Connect accounts
+                              </Button>
+                            </div>
+                          );
+                        }
+                        return (
+                          <>
+                            <p className="text-3xl font-bold tabular-nums tracking-tight text-[#053877] dark:text-[#8ab4f8]">{formatFollowers(total)}</p>
+                            <p className="text-sm text-foreground/80">followers across {accts.length} account{accts.length === 1 ? "" : "s"}</p>
+                            <div className="mt-3 flex flex-col gap-1.5">
+                              {[...accts].sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0)).slice(0, 3).map((a) => (
+                                <div key={`${a.platform}-${a.username}`} className="flex items-center gap-2 text-sm">
+                                  <PlatformIcon platform={a.platform} className="h-4 w-4" />
+                                  <span className="min-w-0 flex-1 truncate text-foreground">{a.displayName || a.username}</span>
+                                  <span className="tabular-nums text-foreground/70">{a.followers != null ? formatFollowers(a.followers) : "–"}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+
+                    <TodoStrip
+                      title="Next steps"
+                      todos={(() => {
+                const t: { key: string; label: string; screen: "editProfile" | "promotion" | "integrations" | "events"; optional?: boolean }[] = [];
+                const show = hostEvents?.find((e) => e.slotIndex != null)?.show ?? hostEvents?.[0]?.show ?? null;
+                if (data.mySignups.length > 0 && !show?.showName) t.push({ key: "show", label: "Set up your show", screen: "events" });
+                if (show?.showFormat === "prerecorded" && !show.recordingUrl) t.push({ key: "file", label: "Send us your recorded episode", screen: "events" });
+                if (!profile?.photoOriginalUrl) t.push({ key: "headshot", label: "Add a print-quality headshot", screen: "editProfile" });
+                if ((social?.accounts?.length ?? 0) === 0) t.push({ key: "accounts", label: "Connect your social accounts", screen: "integrations" });
+                if (data.mySignups.length > 0 && (hostAssets?.length ?? 0) === 0 && !profile?.mediaAnswered) t.push({ key: "materials", label: "Upload an intro, outro or images", screen: "events" });
+                if (data.mySignups.length > 0 && !youtube?.connected) t.push({ key: "youtube", label: "Send your slot to your own YouTube", screen: "integrations", optional: true });
+                return t;
+              })()}
+                      onGo={(sc) => goTo(sc)}
+                    />
                   </div>
                 </>
               );
             })()}
-
-            {/* ------------------------------------------------ profile header */}
-            <section className="mt-4" data-testid="card-profile-header">
-              <div className="overflow-hidden rounded-2xl border border-border bg-card">
-                <div className="p-5 sm:p-6">
-                  <div className="min-w-0">
-
-                    {/* The website / YouTube / RSS pills lived here, but
-                        "where people can listen" is a Profile settings thing
-                        now and they made the card read as a link dump. */}
-
-
-                    {/* Only somebody on the lineup can co-host: the hour is
-                        between shows, and you need a show to be between. */}
-                    {data.mySignups.length > 0 && (
-                      <div data-testid="section-cohost">
-                        <CohostSlots eventId={data.event.id} zone={zone} />
-                      </div>
-                    )}
-
-                  </div>
-                </div>
-              </div>
-            </section>
-
 
 
           </>

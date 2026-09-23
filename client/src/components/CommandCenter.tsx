@@ -141,11 +141,14 @@ export function TodoStrip({
   onGo,
   eventStartUtc,
   eventName,
+  title = "Before the day",
 }: {
   todos: { key: string; label: string; screen: Screen; optional?: boolean }[];
   onGo: (screen: Screen) => void;
   eventStartUtc?: string;
   eventName?: string;
+  /** The heading over the list. */
+  title?: string;
 }) {
   const required = todos.filter((t) => !t.optional);
   // The countdown lives with the list of what is left, where it means
@@ -159,11 +162,11 @@ export function TodoStrip({
       )}
       {required.length === 0 ? (
         <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-          <Check className="h-4 w-4" /> You're all set — nothing left to do before the day.
+          <Check className="h-4 w-4" /> You're all set — nothing left to do.
         </p>
       ) : (
         <p className="text-sm font-semibold text-foreground">
-          Before the day <span className="ml-1.5 font-normal text-foreground/80">· {required.length} to do</span>
+          {title} <span className="ml-1.5 font-normal text-foreground/80">· {required.length} to do</span>
         </p>
       )}
       {todos.length > 0 && (

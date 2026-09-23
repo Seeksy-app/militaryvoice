@@ -22,6 +22,7 @@ import { isLiveOnlyBlock } from "@shared/slots";
 import type { PublicEvent } from "@shared/schema";
 import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2, Megaphone, Rocket } from "lucide-react";
 import { GreenRoomButton } from "@/components/GreenRoomButton";
+import { CohostSlots } from "@/components/CohostSlots";
 
 // Choose an event, then set up the show you're bringing to it. Everything
 // about one event lives behind its own card, so a podcaster in two events
@@ -339,6 +340,14 @@ export function EventSettings({
             disabled={!open.show?.showName}
             showFormat={openShow?.showFormat ?? open.show?.showFormat}
           />
+        </div>
+      )}
+
+      {/* Co-host hours belong to the event, so they sit on its page: only for
+          somebody on its lineup, because an hour at the desk is between shows. */}
+      {open.slotIndex != null && (
+        <div className="mt-4 rounded-2xl border border-border bg-card p-5" data-testid="section-cohost">
+          <CohostSlots eventId={open.event.id} zone={zone} />
         </div>
       )}
 
