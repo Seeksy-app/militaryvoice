@@ -207,7 +207,9 @@ export default function Discover() {
     if (over?.mode) setMode(over.mode);
     setShowFilters(false);
     setTab("search");
-    if (!isMember) { setSubmitted(next); setGate(true); return; }
+    // A visitor gets a real answer — the top five — before being asked for an
+    // account. Looking up one exact account is a member's tool.
+    if (!isMember && m === "username") { setSubmitted(next); setGate(true); return; }
     if (m === "username") return void lookupUser(next.q, next.platform);
     if (m === "keywords" && !next.q.trim() && !filters.keywordsInBio?.trim()) return toast({ title: "Type a word to look for", description: "For example: army wife, milso, veteran owned." });
     setSubmitted(next);
@@ -237,7 +239,7 @@ export default function Discover() {
   // Ten at a time; "Load more" adds the next ten under them.
   const search = useInfiniteQuery<SearchResult>({
     queryKey: ["/api/discover/search", submitted],
-    enabled: isMember && !!submitted && submitted.mode !== "username",
+    enabled: !!submitted && submitted.mode !== "username" && (isMember || !meLoading),
     initialPageParam: 0,
     getNextPageParam: (last) => (last.total > (last.page + 1) * last.pageSize && last.page < 40 ? last.page + 1 : undefined),
     queryFn: async ({ pageParam }) => {
@@ -479,11 +481,11 @@ export default function Discover() {
                   <p className="mt-1 text-sm text-muted-foreground">Try fewer words, another platform, or a wider audience size.</p>
                 </div>
               ) : (
-                <ResultsList rows={results} total={r?.total} saved={saved} isMember={isMember} isAdmin={!!me?.isAdmin} onOpen={openIn([...(r?.verified ?? []), ...results])} onSave={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} />
+                <ResultsList rows={results} total={r?.total} saved={saved} isMember={isMember} isAdmin={!!me?.isAdmin} onOpen={openIn([...(r?.verified ?? []), ...results])} onSave={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} lockAfter={isMember ? undefined : 5} onLocked={() => setGate(true)} />
               )}
               {search.hasNextPage && (
                 <div className="mt-6 flex flex-col items-center gap-1">
-                  <Button variant="outline" className="h-11 gap-2 rounded-full px-6" onClick={() => void search.fetchNextPage()} disabled={search.isFetchingNextPage} data-testid="discover-more">
+                  <Button variant="outline" className="h-11 gap-2 rounded-full px-6" onClick={() => (isMember ? void search.fetchNextPage() : setGate(true))} disabled={search.isFetchingNextPage} data-testid="discover-more">
                     {search.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Load 10 more
                   </Button>
                   <span className="text-xs text-muted-foreground">Showing {results.length} of {r!.total.toLocaleString()}</span>
@@ -1069,9 +1071,11 @@ function Spark({ points }: { points: { monthsAgo: number; pct: number }[] }) {
   return <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden><path d={d} fill="none" stroke={up ? "#16a34a" : "#dc2626"} strokeOpacity=".7" strokeWidth="1.5" strokeLinejoin="round" /></svg>;
 }
 
-function ResultsList({ rows, total, saved, isMember, isAdmin, onOpen, onSave, onSaveMany, onFilled }: {
+function ResultsList({ rows, total, saved, isMember, isAdmin, onOpen, onSave, onSaveMany, onFilled, lockAfter, onLocked }: {
   rows: Card[]; total?: number; saved: Set<string>; isMember: boolean; isAdmin?: boolean;
   onOpen: (c: Card) => void; onSave: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; onFilled?: (rows: Card[]) => void;
+  /** A visitor sees this many in full; the rest are greyed and ask for an account. */
+  lockAfter?: number; onLocked?: () => void;
 }) {
   const { toast } = useToast();
   const keyOf = (c: Card) => `${c.platform}:${c.handle.toLowerCase()}:${c.name}`;
@@ -1111,10 +1115,10 @@ function ResultsList({ rows, total, saved, isMember, isAdmin, onOpen, onSave, on
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
       {isAdmin && missing.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-border bg-[#F0A71F]/[0.07] px-4 py-2.5 text-sm">
-          <span className="text-muted-foreground">Growth, audience country, niches and collaborations come with a creator's full read.</span>
-          <Button size="sm" variant="outline" disabled={filling} onClick={() => void fill()} className="ml-auto h-8 gap-1.5 rounded-lg" data-testid="results-fill">
-            {filling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Fill in {missing.length} · about {Math.round(missing.length * 0.8 * 10) / 10} credits
+        <div className="flex flex-wrap items-center gap-3 border-b border-border bg-[#053877]/[0.05] px-4 py-2.5 text-sm dark:bg-white/[0.04]">
+          <span className="text-muted-foreground">Growth, audience country and niches fill in with each creator's full profile.</span>
+          <Button size="sm" variant="outline" disabled={filling} onClick={() => void fill()} className="ml-auto h-8 gap-1.5 rounded-lg" data-testid="results-fill" title={`About ${Math.round(missing.length * 0.8 * 10) / 10} credits`}>
+            {filling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Fill in {missing.length} {missing.length === 1 ? "profile" : "profiles"}
           </Button>
         </div>
       )}
@@ -1142,12 +1146,19 @@ function ResultsList({ rows, total, saved, isMember, isAdmin, onOpen, onSave, on
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {rows.map((c) => {
+            {rows.map((c, i) => {
               const k = keyOf(c);
               const x = ex(c);
               const isSaved = saved.has(`${c.platform}:${c.handle.toLowerCase()}`);
+              const locked = lockAfter != null && i >= lockAfter;
               return (
-                <tr key={k} className={`group transition-colors hover:bg-muted/40 ${picked.has(k) ? "bg-[#053877]/[0.04]" : ""}`} data-testid={`result-${c.handle || c.name}`}>
+                <tr
+                  key={k}
+                  onClickCapture={locked ? (e) => { e.preventDefault(); e.stopPropagation(); onLocked?.(); } : undefined}
+                  className={`group transition-colors ${locked ? "cursor-pointer select-none opacity-35 blur-[2px] grayscale" : "hover:bg-muted/40"} ${picked.has(k) ? "bg-[#053877]/[0.04]" : ""}`}
+                  aria-hidden={locked || undefined}
+                  data-testid={`result-${c.handle || c.name}`}
+                >
                   <td className="px-4 py-3 align-middle">{isMember && <input type="checkbox" checked={picked.has(k)} onChange={() => toggle(k)} className="h-4 w-4 rounded border-border accent-[#053877]" aria-label={`Select ${c.name}`} />}</td>
                   <td className="py-3 pr-3">
                     <button type="button" onClick={() => onOpen(c)} className="flex min-w-0 items-center gap-3 text-left">
@@ -1210,6 +1221,15 @@ function ResultsList({ rows, total, saved, isMember, isAdmin, onOpen, onSave, on
           </tbody>
         </table>
       </div>
+      {lockAfter != null && rows.length > lockAfter && (
+        <div className="flex flex-col items-center gap-2 border-t border-border bg-gradient-to-b from-card to-[#053877]/[0.04] px-6 py-7 text-center" data-testid="results-locked">
+          <p className="text-balance text-lg font-semibold text-foreground">See all {(total ?? rows.length).toLocaleString()} creators, and every profile in full</p>
+          <p className="text-balance text-sm text-muted-foreground">Free, and it takes a minute. Save lists, share profiles, and search as much as you like.</p>
+          <Button onClick={onLocked} className="mt-2 h-11 rounded-full bg-[#2563eb] px-6 font-semibold text-white hover:bg-[#1d4ed8]" data-testid="results-unlock">
+            Create a free account to continue
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1258,7 +1278,7 @@ function Welcome({ verified, isMember, isAdmin, signedIn, onOpenVerified, onSave
                 : "Search every network, see who's real, save shortlists, and reveal contacts. No card, no password: your email and a code."}
             </p>
             <Button onClick={onJoin} className="mt-5 h-11 gap-2 rounded-full bg-[#053877] px-6 font-semibold text-white hover:bg-[#0a4a99]" data-testid="discover-join-cta">
-              {signedIn ? "Add Discovery" : "Create your free account"} <ChevronRight className="h-4 w-4" />
+              {signedIn ? "Add Discovery" : "Create a free account to continue"} <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
           <ul className="grid gap-3 text-sm">
@@ -1797,7 +1817,7 @@ function JoinDialog({ open, me, onClose, onDone, defaultRole, source }: { open: 
         <div className="px-6 pb-2 pt-6" style={{ background: NAVY }}>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">MilitaryVoices Discovery</p>
           <DialogTitle className="mt-2 text-2xl font-semibold text-white">
-            {step === "about" ? (me?.isPodcaster ? "Add Discovery to your account" : "One last thing") : "Create your free account"}
+            {step === "about" ? (me?.isPodcaster ? "Add Discovery to your account" : "One last thing") : "Create a free account to continue"}
           </DialogTitle>
           <DialogDescription className="pb-4 text-white/70">
             {step === "email" ? "Your email and a 6-digit code. No password, no card." : step === "code" ? `We sent a code to ${email}.` : "So we can tailor your searches."}

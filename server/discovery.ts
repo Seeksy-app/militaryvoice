@@ -712,7 +712,17 @@ export function registerDiscoveryRoutes(app: Express): void {
   /** The search: our verified creators that match, then the index. */
   app.post("/api/discover/search", (req, res) =>
     send(res, async () => {
-      await requireMember(req);
+      // No account yet: a taste. The first page only, the top five shown in
+      // full (the rest arrive greyed out behind "Create a free account"), and a
+      // few fresh searches a day per visitor — a repeat of any search is free
+      // from the cache, so the cap only bites on new questions.
+      let preview = false;
+      try {
+        await requireMember(req);
+      } catch {
+        preview = true;
+        if ((Number(req.body?.page) || 0) > 0) throw new HttpError(403, "Create a free account to see more.");
+      }
       const platform = asPlatform(req.body?.platform);
       const q = String(req.body?.q ?? "").trim().slice(0, 200);
       // One branch or several ("Army,Navy"): a search for any of them.
@@ -749,13 +759,27 @@ export function registerDiscoveryRoutes(app: Express): void {
 
       // A week: the same search by anyone this week costs nothing. Pictures
       // are kept by us, so an old answer never shows a broken face.
+      if (preview) {
+        const known = await db.select().from(discoveryCache).where(eq(discoveryCache.key, `search:${hash(body)}`));
+        if (!known.length) {
+          const ip = (String(req.headers["x-forwarded-for"] || "").split(",")[0] || req.ip || "?").trim();
+          const key = `preview:${ip}:${new Date().toISOString().slice(0, 10)}`;
+          const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, key));
+          const used = row ? Number(row.payload) || 0 : 0;
+          if (used >= 5) throw new HttpError(403, "Create a free account to keep searching.");
+          await db.insert(discoveryCache).values({ key, payload: String(used + 1), createdAt: new Date().toISOString() })
+            .onConflictDoUpdate({ target: discoveryCache.key, set: { payload: String(used + 1) } });
+        }
+      }
       const found = await cached(`search:${hash(body)}`, 7 * DAY, async () => {
         const r = await ic("/discovery/", body);
         const accounts = (r?.accounts ?? []).map((a: any) => toCard(platform, a));
         keepPictures(accounts);
         return { total: num(r?.total) ?? 0, accounts, understood: r?.nlp_search ?? null, applied: r?.applied_filters ?? null };
       });
-      found.accounts = await withExtras(await withBasics(found.accounts.map(({ rawPicture: _r, ...c }: CreatorCard) => c)));
+      const plain = found.accounts.map(({ rawPicture: _r, ...c }: CreatorCard) => c);
+      // A visitor's greyed rows don't get the extra read: they can't see it.
+      found.accounts = await withExtras(preview ? [...(await withBasics(plain.slice(0, 5))), ...plain.slice(5)] : await withBasics(plain));
 
       // Ours first, on the first page, when the words match.
       let verified: CreatorCard[] = [];
@@ -771,7 +795,7 @@ export function registerDiscoveryRoutes(app: Express): void {
         verified = await withExtras(verified);
       }
       if (mode === "keywords") verified = [];
-      return { brief: mode === "keywords" ? `bio mentions ${(filters.keywords_in_bio as string[]).join(" or ")}` : brief, mode, platform, page, pageSize: PAGE_SIZE, total: found.total, results: found.accounts, verified, understood: found.understood };
+      return { brief: mode === "keywords" ? `bio mentions ${(filters.keywords_in_bio as string[]).join(" or ")}` : brief, mode, platform, page, pageSize: PAGE_SIZE, total: found.total, results: found.accounts, verified, understood: found.understood, preview };
     }),
   );
 
