@@ -4057,6 +4057,24 @@ export function registerRoutes(app: Express): void {
     res.status(r.status).json(r.body);
   });
 
+  /** Crew in the green room bring a guest on or take them off, same rules as the console. */
+  app.post("/api/host/studio/participants/:id/state", requireHostSession, async (req, res) => {
+    const state = String(req.body?.state ?? "");
+    if (!["Green room", "On stage"].includes(state)) return res.status(400).json({ message: "Unknown state" });
+    const target = await storage.getStudioParticipantById(Number(req.params.id));
+    const studio = target ? await storage.getStudioById(target.studioId) : null;
+    if (!target || !studio) return res.status(404).json({ message: "Not found" });
+    if (!(await isCrew(req, studio.eventId))) return res.status(403).json({ message: "Only the crew can move people on stage." });
+    if (state === "On stage") {
+      const onStage = (await storage.listStudioParticipants(studio.id)).filter((p) => p.state === "On stage" && p.id !== target.id);
+      if (onStage.length >= studio.maxOnStage) return res.status(409).json({ message: `The stage is full at ${studio.maxOnStage}. Take someone off first.` });
+    }
+    const row = await storage.setParticipantState(target.id, state);
+    if (!row) return res.status(404).json({ message: "Not found" });
+    await syncParticipantState(roomName(row.studioId), `p-${row.id}`, state, { displayTitle: row.displayTitle ?? "" });
+    res.json(row);
+  });
+
   /** Crew in the green room take scenes with the same call, checked against the crew list. */
   app.post("/api/host/scenes/:id/apply", requireHostSession, async (req, res) => {
     const scene = await storage.getScene(Number(req.params.id));

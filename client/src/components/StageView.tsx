@@ -588,7 +588,10 @@ export function StageGrid({
   // pushed, and room metadata only changes when someone touches the studio.
   const standby = pickStandby(meta);
   const countdownEnds = meta.countdownEndsAtUtc ? Date.parse(meta.countdownEndsAtUtc) : NaN;
-  const banner = (meta.bannerTitle ?? "").trim();
+  // A name bar only names someone who is there. Over the empty holding card
+  // it announced a person who was not on stage.
+  const nobodyOn = tiles.length === 0 && !(meta.stageMediaPlaying && meta.stageMediaUrl);
+  const banner = nobodyOn ? "" : (meta.bannerTitle ?? "").trim();
   const ticker = (meta.tickerText ?? "").trim();
 
   const body =

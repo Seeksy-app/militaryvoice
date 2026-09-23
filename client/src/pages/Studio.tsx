@@ -37,6 +37,7 @@ import {
   MessageSquare,
   Wifi,
   Clock,
+  ArrowUp,
 } from "lucide-react";
 
 export interface SetupCheck {
@@ -239,7 +240,7 @@ function RunningOrder({ slug, studioId, searchable = false, canTake = false }: {
 }
 
 /** Attaches a subscribed LiveKit track to a real media element. */
-function PeerTile({ peer, muted = false, fill = false, keyed = false }: { peer: RoomPeer; muted?: boolean; fill?: boolean; keyed?: boolean }) {
+function PeerTile({ peer, muted = false, fill = false, keyed = false, onBring }: { peer: RoomPeer; muted?: boolean; fill?: boolean; keyed?: boolean; onBring?: () => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -331,6 +332,17 @@ function PeerTile({ peer, muted = false, fill = false, keyed = false }: { peer: 
         />
       )}
       <audio ref={audioRef} autoPlay muted={muted} />
+      {/* Crew only: the host in the green room brings a guest straight on. */}
+      {onBring && (
+        <button
+          type="button"
+          onClick={onBring}
+          className="absolute right-1.5 top-1.5 z-10 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2.5 py-1 text-[11px] font-bold text-white shadow-lg transition-colors hover:bg-emerald-400"
+          data-testid={`button-bring-on-${peer.identity}`}
+        >
+          <ArrowUp className="h-3 w-3" /> Bring on stage
+        </button>
+      )}
       {/* Their initials rather than a crossed-out camera icon. Four tiles all
           showing the same grey icon tell you nothing about who is in the room;
           the names are underneath but the eye goes to the picture. */}
@@ -654,6 +666,13 @@ export default function Studio({ slug }: { slug?: string }) {
   // second picture of them among the guests was the same person twice. They
   // are still heard: their tiles render out of sight for the sound.
   const hostPeers = peers.filter((p) => p.isHost && p.state !== "On stage" && !isViewer(p) && !p.self);
+  const bringOn = async (participantId: number) => {
+    try {
+      await apiRequest("POST", `/api/host/studio/participants/${participantId}/state`, { state: "On stage" });
+    } catch (e) {
+      toast({ title: "Couldn't bring them on", description: (e as Error).message, variant: "destructive" });
+    }
+  };
   const greenRoomPeers = peers
     .filter((p) => p.state !== "On stage" && !isViewer(p) && !isCohost(p) && !isCohostEar(p) && !p.self && !p.isHost);
   const cohost = peers.find((p) => isCohost(p) && !isViewer(p));
@@ -1324,7 +1343,12 @@ export default function Studio({ slug }: { slug?: string }) {
                   </div>
                   <div className="grid max-h-[22rem] grid-cols-2 gap-2 overflow-y-auto pr-1">
                     {greenRoomPeers.map((p) => (
-                      <PeerTile key={p.identity} peer={p} muted={consoleHere} />
+                      <PeerTile
+                        key={p.identity}
+                        peer={p}
+                        muted={consoleHere}
+                        onBring={state?.isCrew && /^p-\d+$/.test(p.identity) ? () => bringOn(Number(p.identity.slice(2))) : undefined}
+                      />
                     ))}
                   </div>
                   <p className="mt-2 text-[11px] text-white/40">

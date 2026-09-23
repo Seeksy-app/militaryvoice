@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
 import { LOGO_CORNERS, type StudioRow } from "@shared/schema";
-import { Captions, Image as ImageIcon, Layers, ScrollText, Upload, X, Check, Plus, Pencil, Trash2 } from "lucide-react";
+import { Captions, Image as ImageIcon, Layers, ScrollText, Upload, X, Check, Plus, Pencil, Trash2, PanelRightOpen, PanelRightClose } from "lucide-react";
 
 // The graphics rail, down the right-hand side of the stage.
 //
@@ -106,6 +106,39 @@ export function StudioRail({
 }: Props) {
   const [open, setOpen] = useState<RailPanel | null>(null);
   const logoFileRef = useRef<HTMLInputElement | null>(null);
+  // Folded away by default: on the day everything is preset, and the stage
+  // wants the width. Remembered per browser for whoever does use it.
+  const [shown, setShown] = useState(() => {
+    try { return localStorage.getItem("mv-graphics-rail") === "1"; } catch { return false; }
+  });
+  const toggleShown = (v: boolean) => {
+    setShown(v);
+    if (!v) setOpen(null);
+    try { localStorage.setItem("mv-graphics-rail", v ? "1" : "0"); } catch { /* private window */ }
+  };
+  const anyLive = Boolean(
+    (studio?.bannerVisible && studio?.bannerTitle) || (studio?.tickerVisible && studio?.tickerText) ||
+    (studio?.backgroundVisible && studio?.backgroundUrl) || (studio?.logoVisible && studio?.logoUrl) || studio?.stageMediaPlaying,
+  );
+
+  if (!shown) {
+    return (
+      <nav className="flex w-10 shrink-0 flex-col items-center border-l border-white/20 bg-[#000741] py-3" aria-label="Graphics">
+        <Hint label="Show the graphics tools — lower third, ticker, background, logo, media" side="left">
+          <button
+            type="button"
+            onClick={() => toggleShown(true)}
+            className="relative rounded-lg p-2 text-white/55 transition-colors hover:bg-white/10 hover:text-white"
+            aria-label="Show the graphics tools"
+            data-testid="button-rail-expand"
+          >
+            <PanelRightOpen className="h-4 w-4" />
+            {anyLive && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#ED1C24]" aria-hidden="true" />}
+          </button>
+        </Hint>
+      </nav>
+    );
+  }
 
   return (
     <>
@@ -181,6 +214,16 @@ export function StudioRail({
         className="flex w-[5.5rem] shrink-0 flex-col items-center gap-1 border-l border-white/20 bg-[#000741] py-3"
         aria-label="Graphics"
       >
+        <button
+          type="button"
+          onClick={() => toggleShown(false)}
+          className="mb-1 rounded-lg p-1.5 text-white/45 transition-colors hover:bg-white/10 hover:text-white"
+          title="Fold the graphics tools away"
+          aria-label="Fold the graphics tools away"
+          data-testid="button-rail-collapse"
+        >
+          <PanelRightClose className="h-4 w-4" />
+        </button>
         {TABS.map(({ key, icon: Icon, label }) => {
           const live =
             (key === "banner" && studio?.bannerVisible && studio?.bannerTitle) ||

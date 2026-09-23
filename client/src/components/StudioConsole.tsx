@@ -209,7 +209,7 @@ function GreenRoomStrip({
   stageFull: boolean;
   maxOnStage: number;
   roomConnected: boolean;
-  onStage: (id: number) => void;
+  onStage: (id: number, state: "On stage" | "Green room") => void;
 }) {
   // Empty is the normal state for most of a show, so it says so in a tooltip
   // rather than spending a pill on it.
@@ -228,7 +228,7 @@ function GreenRoomStrip({
     <span className="flex items-center gap-1.5" data-testid="green-room-strip">
       <span
         className="flex h-8 items-center gap-1 pl-1 text-[12px] font-bold tabular-nums text-white/55"
-        title={`${people.length} waiting in the green room`}
+        title={`${people.length} guest${people.length === 1 ? "" : "s"} · ${people.filter((p) => p.state === "On stage").length} on stage`}
       >
         <Users className="h-4 w-4" /> {people.length}
       </span>
@@ -249,15 +249,15 @@ function GreenRoomStrip({
             : !p.camReady && !p.micReady
               ? "camera not on yet"
               : "";
-          const ready = p.camReady && p.micReady && !trouble;
+          const on = p.state === "On stage";
           return (
             <Popover key={p.id}>
               <PopoverTrigger asChild>
                 <button
                   type="button"
-                  title={trouble ? `${name} — ${trouble}` : `${name} — ready`}
+                  title={`${name} — ${on ? "on stage" : "off stage"}${trouble ? ` · ${trouble}` : ""}`}
                   className={`relative h-8 w-8 shrink-0 overflow-hidden rounded-full ring-2 transition-transform hover:scale-105 ${
-                    ready ? "ring-emerald-400" : "ring-[#F0A71F]"
+                    on ? "ring-emerald-400" : "ring-[#ED1C24]"
                   }`}
                   data-testid={`green-room-avatar-${p.id}`}
                 >
@@ -269,18 +269,30 @@ function GreenRoomStrip({
                 <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                   {p.camReady ? <Video className="h-3 w-3 text-emerald-600" /> : <VideoOff className="h-3 w-3 text-destructive" />}
                   {p.micReady ? <Mic className="h-3 w-3 text-emerald-600" /> : <MicOff className="h-3 w-3 text-destructive" />}
-                  {trouble || "Ready to come on"}
+                  {on ? "On stage" : trouble || "Off stage · ready to come on"}
                 </p>
-                <Button
-                  size="sm"
-                  className="mt-3 w-full gap-1.5 rounded-full"
-                  disabled={stageFull}
-                  title={stageFull ? `Stage is full at ${maxOnStage}` : undefined}
-                  onClick={() => onStage(p.id)}
-                  data-testid={`button-live-up-${p.id}`}
-                >
-                  <ArrowUp className="h-3 w-3" /> Bring on stage
-                </Button>
+                {on ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-3 w-full gap-1.5 rounded-full"
+                    onClick={() => onStage(p.id, "Green room")}
+                    data-testid={`button-live-down-${p.id}`}
+                  >
+                    <ArrowDown className="h-3 w-3" /> Take off stage
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="mt-3 w-full gap-1.5 rounded-full"
+                    disabled={stageFull}
+                    title={stageFull ? `Stage is full at ${maxOnStage}` : undefined}
+                    onClick={() => onStage(p.id, "On stage")}
+                    data-testid={`button-live-up-${p.id}`}
+                  >
+                    <ArrowUp className="h-3 w-3" /> Bring on stage
+                  </Button>
+                )}
               </PopoverContent>
             </Popover>
           );
@@ -291,8 +303,8 @@ function GreenRoomStrip({
 }
 
 /**
- * The hosts and co-hosts, on the right of the bar: a face each, lit red while
- * they are on stage and dimmed while they are off (during a guest's segment or
+ * The hosts and co-hosts, on the right of the bar: a face each, ringed green
+ * while they are on stage and red while they are off (during a guest's segment or
  * a sponsor video). Off means back in the green room, still connected, not on
  * the programme; one tap brings them back.
  */
@@ -320,11 +332,11 @@ function HostSeats({
               <button
                 type="button"
                 title={`${name}${p.displayTitle ? ` · ${p.displayTitle}` : ""} — ${on ? "on stage" : "off stage"}`}
-                className={`relative h-9 w-9 shrink-0 overflow-hidden rounded-full ring-2 transition hover:scale-105 ${on ? "ring-[#ED1C24]" : "opacity-60 ring-white/30"}`}
+                className={`relative h-9 w-9 shrink-0 overflow-hidden rounded-full ring-2 transition hover:scale-105 ${on ? "ring-emerald-400" : "ring-[#ED1C24]"}`}
                 data-testid={`host-seat-${p.id}`}
               >
                 <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()} fill />
-                {on && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-[#ED1C24] ring-2 ring-[#000741]" />}
+                {on && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-[#000741]" />}
               </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-60 p-3">
@@ -609,11 +621,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   const paused = Boolean(studio?.fallbackPlaying) && stageMuted;
   const present = (data?.participants ?? []).filter((p) => p.present);
   const onStage = present.filter((p) => p.state === "On stage");
-  // Hosts and co-hosts are not waiting to come on — they run the show. They
-  // sit on the right of the bar, on stage or off, and the strip on the left is
-  // only the people waiting their turn.
-  const greenRoom = present.filter((p) => p.state !== "On stage" && !p.isHost);
+  // The bar always shows everyone in the room, on stage or off — green ring
+  // on stage, red off. Hosts and co-hosts sit on the right (they run the
+  // show); guests on the left.
   const hostSeats = present.filter((p) => p.isHost);
+  const guests = present.filter((p) => !p.isHost);
   /**
    * The producer's own participant row.
    *
@@ -1350,12 +1362,12 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               )}
               <span className="mx-1 h-6 w-px bg-white/15" aria-hidden="true" />
               <GreenRoomStrip
-                people={greenRoom}
+                people={guests}
                 feeds={feeds}
                 stageFull={stageFull}
                 maxOnStage={studio?.maxOnStage ?? 5}
                 roomConnected={roomStatus === "connected"}
-                onStage={(id) => setState.mutate({ id, state: "On stage" })}
+                onStage={(id, state) => setState.mutate({ id, state })}
               />
             </div>
           )}
