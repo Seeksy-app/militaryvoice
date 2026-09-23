@@ -309,7 +309,7 @@ function HostSeats({
 }) {
   if (hosts.length === 0) return null;
   return (
-    <span className="ml-1 flex items-center gap-1.5 border-l border-white/15 pl-3" data-testid="host-seats">
+    <span className="mr-1 flex items-center gap-1.5 border-r border-white/15 pr-3" data-testid="host-seats">
       <span className="hidden text-[10px] font-bold uppercase tracking-[0.14em] text-white/45 xl:block">{hosts.length > 1 ? "Hosts" : "Host"}</span>
       {hosts.map((p) => {
         const name = p.displayName || "Host";
@@ -1406,6 +1406,12 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               </Button>
             )}
 
+            <HostSeats
+              hosts={hostSeats}
+              feeds={feeds}
+              stageFull={stageFull}
+              onState={(id, state) => setState.mutate({ id, state })}
+            />
             {timeLeft && (
               <div
                 className={`flex h-9 items-center gap-2 rounded-full px-3 text-xs font-semibold tabular-nums ${
@@ -1732,12 +1738,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
 
             {/* Who is at this desk: with Michael watching from a second
                 machine, the bar says which seat this one is. */}
-            <HostSeats
-              hosts={hostSeats}
-              feeds={feeds}
-              stageFull={stageFull}
-              onState={(id, state) => setState.mutate({ id, state })}
-            />
             {me0 && !hostSeats.some((h) => h.displayName.trim().toLowerCase() === me0.displayName.trim().toLowerCase()) && (
               <span className="ml-1 flex items-center gap-2 border-l border-white/15 pl-3" title={`${me0.displayName}${me0.title ? ` · ${me0.title}` : ""}`} data-testid="studio-manager">
                 {me0.photoUrl ? (

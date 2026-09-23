@@ -276,6 +276,7 @@ async function ensureSchema() {
   await sql`ALTER TABLE studios ADD COLUMN IF NOT EXISTS stage_media_kind TEXT NOT NULL DEFAULT 'video'`;
   await sql`ALTER TABLE studios ADD COLUMN IF NOT EXISTS stage_media_label TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE studios ADD COLUMN IF NOT EXISTS stage_media_playing BOOLEAN NOT NULL DEFAULT false`;
+  await sql`ALTER TABLE studios ADD COLUMN IF NOT EXISTS tile_fit TEXT NOT NULL DEFAULT 'wide'`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS scenes (

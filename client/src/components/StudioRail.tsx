@@ -587,10 +587,40 @@ function BackgroundPanel({
   // The wheel fires on every drag, so the stage follows once it settles.
   const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const fit = studio?.tileFit || "wide";
+
   return (
     <div className="flex flex-col gap-3">
+      {/* How each camera sits on stage. Full fills its space; Wide and
+          Square leave the background showing around every face. */}
+      <div>
+        <Label className={CAP}>Camera shape</Label>
+        <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+          {([
+            { key: "full", label: "Full", box: "h-6 w-9" },
+            { key: "wide", label: "Wide", box: "h-[18px] w-8" },
+            { key: "square", label: "Square", box: "h-6 w-6" },
+          ] as const).map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              onClick={() => patch({ tileFit: o.key })}
+              className={`flex h-16 flex-col items-center justify-center gap-1.5 rounded-md border text-[11px] font-medium transition-colors ${
+                fit === o.key ? "border-[#F0A71F] bg-[#F0A71F]/15 text-white" : "border-white/25 text-white/60 hover:bg-white/10"
+              }`}
+              data-testid={`button-tile-fit-${o.key}`}
+            >
+              <span className="flex h-7 w-10 items-center justify-center rounded-sm bg-white/10">
+                <span className={`${o.box} rounded-[3px] ${fit === o.key ? "bg-[#F0A71F]" : "bg-white/50"}`} />
+              </span>
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <label className="flex items-center justify-between rounded-lg bg-white/5 px-2.5 py-1.5">
-        <span className="text-xs font-medium text-white/75">{studio?.backgroundVisible && current ? "On air" : "Off"}</span>
+        <span className="text-xs font-medium text-white/75">{studio?.backgroundVisible && current ? "Background on air" : "Background off"}</span>
         {/* Turning it on with nothing chosen used to do nothing at all; now
             it puts up the navy, and you change it from there. */}
         <Switch

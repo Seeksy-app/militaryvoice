@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   Room,
   RoomEvent,
@@ -34,6 +34,8 @@ export interface RoomMeta {
   currentSceneId?: number;
   /** Behind the cameras. Blank when it's switched off, so the player never decides. */
   backgroundUrl?: string;
+  /** full · wide (16:9) · square — the shape each camera takes on stage. */
+  tileFit?: string;
   /** The lower third that is on air. Blank when it's off. */
   bannerTitle?: string;
   bannerSubtitle?: string;
@@ -219,7 +221,14 @@ function gridFor(n: number): string {
   return "grid-cols-3";
 }
 
-function Tile({ tile, muted, nameBar = true }: { tile: StageTile; muted: boolean; nameBar?: boolean }) {
+/** The box a camera sits in, sized off its cell (a size container). */
+function fitBox(fit: string | undefined): CSSProperties {
+  if (fit === "full") return { width: "100%", height: "100%" };
+  if (fit === "square") return { width: "min(100%, 100cqh)", aspectRatio: "1 / 1" };
+  return { width: "min(100%, calc(100cqh * 16 / 9))", aspectRatio: "16 / 9" };
+}
+
+function Tile({ tile, muted, nameBar = true, fit }: { tile: StageTile; muted: boolean; nameBar?: boolean; fit?: string }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -291,15 +300,15 @@ function Tile({ tile, muted, nameBar = true }: { tile: StageTile; muted: boolean
   }, [tile.audio]);
 
   return (
-    // Every face gets the same 16:9 box, as big as its cell allows, so a
-    // laptop's 4:3 camera and a webcam's 16:9 sit side by side at one size.
-    // The box sizes off the cell (a size container), not off the video.
+    // Every face gets the same box — filling the cell, 16:9 or square, as the
+    // studio is set — so a laptop's 4:3 camera and a webcam's 16:9 sit side
+    // by side at one size. The box sizes off the cell, not off the video.
     <div className="relative flex min-h-0 min-w-0 items-center justify-center [container-type:size]">
     <div
       className={`relative overflow-hidden rounded-2xl bg-[#04102b] ${
         tile.speaking ? "ring-4 ring-[#F0A71F]" : "ring-1 ring-white/10"
       }`}
-      style={{ width: "min(100%, calc(100cqh * 16 / 9))", aspectRatio: "16 / 9" }}
+      style={fitBox(fit)}
     >
       {/* Cover, weighted to the top third where the face is: a 4:3 camera
           loses a sliver of desk and ceiling, not the top of anyone's head.
@@ -640,7 +649,7 @@ export function StageGrid({
         <BackgroundLayer url={meta.backgroundUrl ?? ""} />
         <div className={`relative grid h-full w-full gap-3 p-3 ${gridFor(tiles.length)}`}>
           {tiles.map((t) => (
-            <Tile key={t.identity} tile={t} muted={muted} nameBar={!banner} />
+            <Tile key={t.identity} tile={t} muted={muted} nameBar={!banner} fit={meta.tileFit} />
           ))}
         </div>
         <Captions caption={caption} lifted={Boolean(ticker)} />

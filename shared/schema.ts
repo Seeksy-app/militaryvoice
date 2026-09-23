@@ -924,6 +924,9 @@ export const PARTICIPANT_STATES = ["Green room", "On stage", "Off stage"] as con
 export type ParticipantRole = (typeof PARTICIPANT_ROLES)[number];
 export type ParticipantState = (typeof PARTICIPANT_STATES)[number];
 
+export const TILE_FITS = ["full", "wide", "square"] as const;
+export type TileFit = (typeof TILE_FITS)[number];
+
 export const studios = pgTable("studios", {
   id: serial("id").primaryKey(),
   eventId: integer("event_id").notNull(),
@@ -967,6 +970,8 @@ export const studios = pgTable("studios", {
   // and the break clock cover it entirely, which is correct.
   backgroundUrl: text("background_url").notNull().default(""),
   backgroundVisible: boolean("background_visible").notNull().default(false),
+  /** How each camera sits in its space: filling it, a 16:9 box, or a square, with the background around. */
+  tileFit: text("tile_fit").notNull().default("wide"),
   // The lower third that is on air *right now*. Usually put there by taking a
   // scene, which carries its own; the ad-lib box in the rail writes here too,
   // for the thing nobody planned for.
@@ -1519,6 +1524,7 @@ export const studioUpdateSchema = z.object({
   logoVisible: z.boolean().optional(),
   backgroundUrl: z.string().trim().max(600).optional(),
   backgroundVisible: z.boolean().optional(),
+  tileFit: z.enum(TILE_FITS).optional(),
   bannerTitle: z.string().trim().max(80).optional(),
   bannerSubtitle: z.string().trim().max(120).optional(),
   bannerVisible: z.boolean().optional(),
