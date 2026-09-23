@@ -56,5 +56,18 @@
       "path": "/api/cron/follow-ups",
       "schedule": "30 * * * *"
     }
+  ],
+  "redirects": [
+    {
+      "source": "/((?!api/|s/|og/|go/).*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "(www\\.)?militaryvoice\\.ai"
+        }
+      ],
+      "destination": "https://www.militaryvoices.ai/$1",
+      "permanent": true
+    }
   ]
 }

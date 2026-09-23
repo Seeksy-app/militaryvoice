@@ -23,7 +23,7 @@ export const CARD_SIZES = {
 export type CardSize = keyof typeof CARD_SIZES;
 
 const DEFAULT_EYEBROW = "LIVE ON NATIONAL MILITARY PODCAST DAY";
-const DEFAULT_FOOTER = "The Podcast Marathon · militaryvoice.ai";
+const DEFAULT_FOOTER = "The Podcast Marathon · militaryvoices.ai";
 
 /** Trim to fit the card without wrapping — the card has one line for each. */
 function fit(v: string, max: number): string {

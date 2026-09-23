@@ -103,7 +103,7 @@ ${s.podcastName}${s.hostName ? ` — with ${s.hostName}` : ""} is on at ${airLab
 
 26.2 miles of military and veteran stories, back to back, free to watch. Who's tuning in for this one?
 
-Register to watch → militaryvoice.ai/watch`;
+Register to watch → militaryvoices.ai/watch`;
   }
 
   /**
@@ -123,7 +123,7 @@ ${shows.map((s) => `• ${s.podcastName}`).join("\n")}
 
 Every one of them is free to watch, and so is the whole day.
 
-Register → militaryvoice.ai/watch`;
+Register → militaryvoices.ai/watch`;
 
   const sizes = [
     { key: "square", label: "Square 1080", hint: "Instagram, LinkedIn, Facebook" },

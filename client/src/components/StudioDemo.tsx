@@ -187,7 +187,7 @@ export function StudioDemo() {
           <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
         </span>
         <span className="truncate font-mono text-[12px] text-white/40">
-          militaryvoice.ai/studio — Main studio
+          militaryvoices.ai/studio — Main studio
         </span>
         <span className="ml-auto flex items-center gap-2.5">
           <span className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[#ED1C24] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-white">

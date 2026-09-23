@@ -33,7 +33,7 @@ FOR PODCASTERS
 - Materials: upload an intro, outro, mid-roll, images or slides from the dashboard so the production team can plan transitions. Say in Event settings if you'd like an interviewer paired with you.
 - RSS feed: optional but recommended — it lets listeners play your episodes from your card and follow you after. Found in your hosting platform's settings (Buzzsprout, Spotify for Creators, Libsyn, Transistor, Podbean...).
 - Connected social accounts show on your card with avatar and follower count. Podcasters can also tick ready-made posts in "Your posting plan" and we post them from their own accounts on schedule; nothing is ever posted without them ticking it.
-- Share your slot: every podcaster has a share link (militaryvoice.ai/s/<number>) that unfurls with their artwork and time.
+- Share your slot: every podcaster has a share link (militaryvoices.ai/s/<number>) that unfurls with their artwork and time.
 - Podcaster guide: /prepare. Dashboard: /host/dashboard.
 
 FOR LISTENERS

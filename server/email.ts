@@ -9,7 +9,7 @@ const RESEND_BASE = process.env.CUSTOM_CRED_API_RESEND_COM_URL || "https://api.r
 const RESEND_PROXY_TOKEN = process.env.CUSTOM_CRED_API_RESEND_COM_TOKEN;
 
 const FROM_ADDRESS = "MilitaryVoice.ai <hello@militaryvoice.ai>";
-const SITE = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "");
+const SITE = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 
 /** Header images live in /public/email; one per mood so emails can rotate. */
 export const EMAIL_BANNERS = {

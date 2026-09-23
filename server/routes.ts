@@ -705,7 +705,7 @@ export function registerRoutes(app: Express): void {
       return;
     }
 
-    const origin = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "");
+    const origin = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
     const blockStart = new Date(
       new Date(featured.startAtUtc).getTime() + signup.slotIndex * featured.slotMinutes * 60000,
     );
@@ -746,7 +746,7 @@ export function registerRoutes(app: Express): void {
     const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
     const tz = signup.timezone || "America/New_York";
     // A cron run has no request to read a host from.
-    const origin = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "");
+    const origin = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
     const show = await storage.getEventShow(signup.email, event.id).catch(() => undefined);
 
     const outstanding: string[] = [];
@@ -1382,7 +1382,7 @@ export function registerRoutes(app: Express): void {
         photoUrl: photo,
         eyebrow: "IN THE SPOTLIGHT",
         subline: signup.hostName ? `Hosted by ${signup.hostName}` : undefined,
-        footer: "Free to watch · register at militaryvoice.ai",
+        footer: "Free to watch · register at militaryvoices.ai",
       },
       size,
     );
@@ -1392,7 +1392,7 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Posting plan: six designed posts we publish from their accounts ------
-  const PUBLIC_ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "");
+  const PUBLIC_ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
   const CAMPAIGN_PLATFORMS = ["instagram", "tiktok", "x", "linkedin", "facebook", "threads"];
 
   async function campaignContext(signupId: number): Promise<(CampaignContext & { onAirStart: Date }) | null> {
@@ -1776,7 +1776,7 @@ export function registerRoutes(app: Express): void {
       const feedRes = await fetch(resolved, {
         signal: controller.signal,
         redirect: "follow",
-        headers: { "User-Agent": "MilitaryVoice.ai/1.0 (+https://www.militaryvoice.ai)" },
+        headers: { "User-Agent": "MilitaryVoice.ai/1.0 (+https://www.militaryvoices.ai)" },
       });
       clearTimeout(timer);
       if (feedRes.ok) {
@@ -2330,8 +2330,17 @@ export function registerRoutes(app: Express): void {
   // ---- A podcaster's own YouTube ------------------------------------------------
   //      Connect once, and at their slot we open a broadcast on their channel
   //      rather than asking them to find a stream key.
+  //
+  //      Google has the old militaryvoice.ai callback on file, and adding the new
+  //      domain to the consent screen mid-review would restart verification. So
+  //      on either of our domains the callback Google sees stays the old one,
+  //      and that callback hands straight on to the site's own domain, where
+  //      the podcaster's session cookie lives and is checked as before.
+  const YOUTUBE_CALLBACK = `${(process.env.YOUTUBE_CALLBACK_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "")}/api/youtube/callback`;
   function youtubeRedirect(req: Request): string {
-    return `${req.protocol}://${req.get("host")}/api/youtube/callback`;
+    const host = req.get("host") ?? "";
+    // Local and preview runs keep their own callback.
+    return /militaryvoices?\.ai$/.test(host) ? YOUTUBE_CALLBACK : `${req.protocol}://${host}/api/youtube/callback`;
   }
 
   /** A live access token, refreshed if the cached one has aged out. */
@@ -2439,6 +2448,12 @@ export function registerRoutes(app: Express): void {
   });
 
   app.get("/api/youtube/callback", async (req, res) => {
+    // Arrived on the old domain: pass Google's answer on to the site's domain.
+    const siteHost = new URL(PUBLIC_ORIGIN).host;
+    if (req.get("host") !== siteHost && /militaryvoices?\.ai$/.test(req.get("host") ?? "")) {
+      res.redirect(`${PUBLIC_ORIGIN}${req.originalUrl}`);
+      return;
+    }
     const code = typeof req.query.code === "string" ? req.query.code : "";
     const state = typeof req.query.state === "string" ? req.query.state : "";
     const decoded = state ? Buffer.from(state, "base64url").toString("utf8").toLowerCase().trim() : "";
@@ -7233,7 +7248,7 @@ export function registerRoutes(app: Express): void {
       `<html><body style="font-family:system-ui,sans-serif;text-align:center;padding:64px 20px;color:#0b1220">` +
         `<h2 style="margin:0 0 10px">Got it — we'll ask again on ${when}.</h2>` +
         `<p style="color:#6b7280;margin:0">Nothing else to do. If you'd rather deal with it now, ` +
-        `<a href="${process.env.PUBLIC_ORIGIN || "https://www.militaryvoice.ai"}/host/dashboard/profile" style="color:#053877">open your profile</a>.</p>` +
+        `<a href="${process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai"}/host/dashboard/profile" style="color:#053877">open your profile</a>.</p>` +
         `</body></html>`,
     );
   });
@@ -7940,7 +7955,7 @@ The ${eventName} team`;
     const show = signup.podcastName.trim() || signup.hostName.trim();
     return `On the lineup: ${show} with ${who}. ${when} on The Podcast Marathon, 26.2 miles of military and veteran stories, live and back to back for National Military Podcast Day.
 
-Watch at militaryvoice.ai/agenda
+Watch at militaryvoices.ai/agenda
 
 #NationalMilitaryPodcastDay #ThePodcastMarathon`;
   }

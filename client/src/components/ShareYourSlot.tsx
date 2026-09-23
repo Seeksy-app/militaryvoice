@@ -58,7 +58,7 @@ export function ShareYourSlot({
   podcastName: string;
   whenLabel: string;
 }) {
-  const origin = typeof window === "undefined" ? "https://www.militaryvoice.ai" : window.location.origin;
+  const origin = typeof window === "undefined" ? "https://www.militaryvoices.ai" : window.location.origin;
   const url = `${origin}/s/${signupId}`;
 
   const caption =
@@ -147,7 +147,7 @@ export function ShareYourSlot({
                 loading="lazy"
               />
               <span className="flex items-center justify-between gap-2 bg-card px-3 py-2 text-xs text-muted-foreground">
-                militaryvoice.ai
+                militaryvoices.ai
                 <ExternalLink className="h-3 w-3" />
               </span>
             </a>

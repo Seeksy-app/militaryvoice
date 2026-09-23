@@ -258,7 +258,7 @@ export function RiccohPosts({ event }: { event: PublicEvent }) {
   const dateLong = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: zone }).format(start);
   const dateShort = new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", timeZone: zone }).format(start);
   const slots = Math.max(1, Math.floor((event.durationHours * 60) / event.slotMinutes));
-  const url = typeof window !== "undefined" ? window.location.origin : "https://militaryvoice.ai";
+  const url = typeof window !== "undefined" ? window.location.origin : "https://www.militaryvoices.ai";
 
   const posts = useMemo(() => buildPosts(dateLong, dateShort, slots, url), [dateLong, dateShort, slots, url]);
 

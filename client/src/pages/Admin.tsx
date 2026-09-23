@@ -1809,7 +1809,7 @@ function RoomsPanel({ onOpen }: { onOpen: (id: number) => void }) {
     queryFn: () => adminGet<PublicEvent[]>("/api/admin/events"),
   });
   const [name, setName] = useState("");
-  const origin = typeof window === "undefined" ? "https://www.militaryvoice.ai" : window.location.origin;
+  const origin = typeof window === "undefined" ? "https://www.militaryvoices.ai" : window.location.origin;
   // Rooms only. Event studios live inside their event.
   const rooms = (studios ?? []).filter((st) => !st.isPrimary);
 
@@ -5339,7 +5339,7 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                     {/* The brand's view, live: the same page a brand gets, with your admin access. */}
                     <div className="overflow-hidden rounded-2xl border border-border">
                       <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-                        <span>What a brand sees at militaryvoice.ai/discover</span>
+                        <span>What a brand sees at militaryvoices.ai/discover</span>
                         <a href="/discover?src=admin" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">Open full screen</a>
                       </div>
                       <iframe src="/discover?src=admin" title="Discovery, as a brand sees it" className="h-[1100px] w-full bg-background" data-testid="admin-discovery-frame" />

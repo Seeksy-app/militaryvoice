@@ -79,7 +79,7 @@ export function cardInput(kind: CampaignKind, c: CampaignContext): CardInput {
     hostName: c.signup.hostName,
     whenLabel: c.whenLabel,
     photoUrl: c.signup.photoUrl || undefined,
-    footer: `${c.event.name} · militaryvoice.ai`,
+    footer: `${c.event.name} · militaryvoices.ai`,
   };
   switch (kind) {
     case "join":
@@ -92,7 +92,7 @@ export function cardInput(kind: CampaignKind, c: CampaignContext): CardInput {
         eyebrow: occasion(c),
         podcastName: `What is ${occasion(c)}?`,
         subline: `${c.event.name} — 26.2 miles of stories`,
-        whenLabel: `${c.eventDateLabel} · militaryvoice.ai`,
+        whenLabel: `${c.eventDateLabel} · militaryvoices.ai`,
       };
     case "twoweeks":
       return { ...base, eyebrow: "Two weeks to go", subline: `with ${c.signup.hostName} · ${occasion(c)}` };
