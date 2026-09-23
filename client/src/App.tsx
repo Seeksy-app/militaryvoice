@@ -98,6 +98,9 @@ function AppRouter() {
       <Route path="/watch">{() => <Watch />}</Route>
       <Route path="/event/:slug/watch">{(params) => <Watch slug={params.slug} />}</Route>
       <Route path="/studio">{() => <Studio />}</Route>
+      {/* The name people actually say. Same page. */}
+      <Route path="/green-room">{() => <Studio />}</Route>
+      <Route path="/greenroom">{() => <Studio />}</Route>
       <Route path="/event/:slug/studio">{(params) => <Studio slug={params.slug} />}</Route>
       <Route path="/admin">{() => <Admin />}</Route>
       <Route path="/admin/:tab">{(p) => <Admin tab={p.tab} />}</Route>
