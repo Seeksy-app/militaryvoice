@@ -506,6 +506,8 @@ export function registerDiscoveryRoutes(app: Express): void {
         member: member ? { role: member.role, orgName: member.orgName, since: member.createdAt } : null,
         reveals: member ? { used: await revealsThisMonth(email), allowance: FREE_REVEALS_PER_MONTH } : null,
         lookups: member && member.role !== "admin" ? { used: await lookupsThisMonth(email), allowance: ENRICH_PER_MONTH } : null,
+        // Signed in to the admin too: they can spend credits on filling a page.
+        isAdmin: !!adminEmail,
       };
     }),
   );
@@ -733,14 +735,22 @@ export function registerDiscoveryRoutes(app: Express): void {
       const platform = asPlatform(req.query.platform);
       const handle = String(req.query.handle ?? "").replace(/^@/, "").trim().slice(0, 100);
       if (!handle) throw new HttpError(400, "Which creator?");
-      const [full, account] = await Promise.all([
+      const [fullOrErr, account] = await Promise.all([
         cached(`analytics:${platform}:${handle.toLowerCase()}`, 30 * DAY, async () => {
           const r = await ic("/creators/enrich/handle/analytics/", { handle, platform, include_lookalikes: false });
           return normalizeAnalytics(platform, handle, r);
-        }),
+        }).catch((e: unknown) => e as Error),
         // The account and its latest posts: cheap, and it fills the recent-posts section.
         rawAccount(platform, handle).catch(() => null),
       ]);
+      // The full read can fail on the index's side (big accounts time out there).
+      // Show what the account read gives — who they are, their posts, how often
+      // they post — and say the audience is still to come, rather than a dead end.
+      if (fullOrErr instanceof Error) {
+        if (!account) throw fullOrErr;
+        return { partial: fullOrErr.message, fetchedAt: new Date().toISOString(), profile: buildProfile(platform, handle, {}, account, new Date().toISOString()) };
+      }
+      const full = fullOrErr;
       // The raw answers stay in the cache for correcting the readers; admins can see them.
       const { raw, ...rest } = full;
       const profile = buildProfile(platform, handle, raw, account, full.fetchedAt);
@@ -1009,8 +1019,8 @@ export function registerDiscoveryRoutes(app: Express): void {
   //      0.8 credits a creator the first time, nothing after. Admin only: it spends.
   app.post("/api/admin/discover/fill", (req, res) =>
     send(res, async () => {
-      const { member } = await requireMember(req);
-      if (member.role !== "admin") throw new HttpError(403, "Only an admin can spend credits on this.");
+      const adminKey = String(req.get("x-admin-password") ?? "");
+      if (!getAdminEmail(req) && !(adminKey && adminKey === (await storage.getFeaturedEvent()).adminPassword)) throw new HttpError(403, "Only an admin can spend credits on this.");
       const rows = (Array.isArray(req.body?.rows) ? req.body.rows : []).slice(0, 12)
         .map((r: any) => ({ platform: asPlatform(r?.platform), handle: String(r?.handle ?? "").replace(/^@/, "").trim().slice(0, 100) }))
         .filter((r: { handle: string }) => r.handle);

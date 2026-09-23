@@ -42,7 +42,7 @@ type RowExtra = {
   country: { name: string; code: string; pct: number } | null;
   niches: { name: string; pct: number }[]; collabs: string[]; collabCount: number;
 };
-type Me = { signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number } | null; lookups?: { used: number; allowance: number } | null };
+type Me = { signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number } | null; lookups?: { used: number; allowance: number } | null; isAdmin?: boolean };
 type SearchResult = { brief: string; mode?: string; total: number; page: number; pageSize: number; results: Card[]; verified: Card[]; understood?: { notes?: string[]; from_nlp?: Record<string, unknown> } | null };
 type Analytics = {
   incomeMin: number | null; incomeMax: number | null; likesMedian: number | null; commentsMedian: number | null;
@@ -58,6 +58,8 @@ type Analytics = {
   };
   fetchedAt: string;
   profile?: Profile;
+  /** Set when the full read failed and this is the account read alone. */
+  partial?: string;
 };
 type List = { id: number; name: string; createdAt: string; items: { id: number; platform: string; handle: string; snapshot: Card; createdAt: string }[] };
 
@@ -426,7 +428,7 @@ export default function Discover() {
           <Lists lists={lists.data ?? []} onOpen={(c) => openIn((lists.data ?? []).flatMap((l) => l.items.map((i) => i.snapshot)))(c)} />
           </>
         ) : !submitted || !isMember || submitted.mode === "username" ? (
-          <Welcome verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} onJoin={() => setGate(true)} loading={meLoading} />
+          <Welcome isAdmin={!!me?.isAdmin} verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} onJoin={() => setGate(true)} loading={meLoading} />
         ) : (
           <>
             {/* what ran */}
@@ -474,7 +476,7 @@ export default function Discover() {
                   <p className="mt-1 text-sm text-muted-foreground">Try fewer words, another platform, or a wider audience size.</p>
                 </div>
               ) : (
-                <ResultsList rows={results} total={r?.total} saved={saved} isMember={isMember} isAdmin={me?.member?.role === "admin"} onOpen={openIn([...(r?.verified ?? []), ...results])} onSave={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} />
+                <ResultsList rows={results} total={r?.total} saved={saved} isMember={isMember} isAdmin={!!me?.isAdmin} onOpen={openIn([...(r?.verified ?? []), ...results])} onSave={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} />
               )}
               {search.hasNextPage && (
                 <div className="mt-6 flex flex-col items-center gap-1">
@@ -644,7 +646,7 @@ function HeroB({ raised, door, setDoor, bar, tries, onEnrich, verified, onOpen }
 
       </div>
 
-      <div className="mx-auto grid w-full max-w-[88rem] items-center gap-12 px-4 pb-16 pt-14 sm:px-6 sm:pt-20 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:pb-24 lg:pt-24">
+      <div className="mx-auto grid w-full max-w-[88rem] items-center gap-12 px-4 pb-16 pt-14 sm:px-6 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:pb-24 lg:pt-20">
         <div className="min-w-0">
           <p className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/30 bg-[#F0A71F]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">
             <Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery
@@ -905,14 +907,14 @@ function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card
   const asCard = (): Card => ({ platform: c.platform, handle: c.handle, name: c.name, picture: c.picture, followers: c.followers, engagement: c.engagement, branch: c.branch, quality: c.credibility });
 
   return (
-    <div className="relative mx-auto w-full max-w-[29rem] select-none" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+    <div className="group/tilt relative mx-auto w-full max-w-[36rem] select-none [perspective:1600px]" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
       <style>{`@keyframes mv-click{0%{transform:scale(.4);opacity:.9}100%{transform:scale(2.2);opacity:0}}`}</style>
       {/* the next one, waiting behind */}
       {pool.length > 1 && <div aria-hidden className="absolute inset-x-6 top-0 h-full overflow-hidden rounded-[28px] border border-white/10 bg-[#0b1733] opacity-50 shadow-2xl" style={{ transform: "translateY(-18px) scale(0.94)" }}>
         <img src={src(next.picture)} alt="" className="h-2/3 w-full object-cover opacity-60" />
       </div>}
 
-      <div className={`relative overflow-hidden rounded-[28px] border border-white/15 bg-[#0b1733] text-left shadow-[0_40px_80px_-20px_rgba(0,0,0,0.7)] transition-transform duration-200 ${phase === "click" ? "scale-[0.985]" : ""}`}>
+      <div className={`relative overflow-hidden rounded-[28px] border border-white/15 bg-[#0b1733] text-left shadow-[0_50px_100px_-24px_rgba(0,0,0,0.75)] transition-transform duration-700 ease-out [transform:rotateY(-9deg)_rotateX(4deg)_rotateZ(1deg)] group-hover/tilt:[transform:rotateY(0deg)_rotateX(0deg)_rotateZ(0deg)] ${phase === "click" ? "scale-[0.985]" : ""}`}>
         <button key={c.handle} type="button" onClick={() => onOpen(asCard())} className="block w-full text-left animate-in fade-in-0 duration-500" data-testid="hero-preview">
           <div className="relative aspect-[4/3] w-full overflow-hidden">
             <img src={src(c.picture)} alt="" className="h-full w-full object-cover" />
@@ -1180,7 +1182,7 @@ function ResultsSkeleton() {
 // Before a search: our creators, and what Discovery is
 // ===========================================================================
 
-function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified, onSaveMany, saved, spotlight, onJoin, loading }: { verified: Card[]; isMember: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; saved: Set<string>; spotlight?: boolean; onJoin: () => void; loading: boolean }) {
+function Welcome({ verified, isMember, isAdmin, signedIn, onOpenVerified, onSaveVerified, onSaveMany, saved, spotlight, onJoin, loading }: { verified: Card[]; isMember: boolean; isAdmin?: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; saved: Set<string>; spotlight?: boolean; onJoin: () => void; loading: boolean }) {
   return (
     <div className="flex flex-col gap-12">
       <section>
@@ -1191,7 +1193,7 @@ function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified,
           <p className="text-sm text-muted-foreground">Creators we know personally. Every one checked by our team.</p>
         </div>
         <div className={`mt-5 rounded-2xl transition-all duration-500 ${spotlight ? "ring-4 ring-[#F0A71F]/50 shadow-[0_0_48px_rgba(240,167,31,0.35)]" : ""}`}>
-          {verified.length === 0 ? <ResultsSkeleton /> : <ResultsList rows={verified} saved={saved} isMember={isMember} onOpen={onOpenVerified} onSave={onSaveVerified} onSaveMany={onSaveMany} />}
+          {verified.length === 0 ? <ResultsSkeleton /> : <ResultsList rows={verified} saved={saved} isMember={isMember} isAdmin={isAdmin} onOpen={onOpenVerified} onSave={onSaveVerified} onSaveMany={onSaveMany} />}
         </div>
       </section>
       {!isMember && !loading && (
@@ -1541,6 +1543,11 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
               {allowance && <span className="text-xs text-muted-foreground">{Math.max(0, allowance.allowance - allowance.used)} of {allowance.allowance} left this month</span>}
             </div>
           ) : null}
+          {a.data?.partial && (
+            <p className="mt-4 rounded-lg border border-[#F0A71F]/40 bg-[#F0A71F]/10 px-3 py-2 text-sm text-[#8a5a00]">
+              The index couldn't read this creator's audience just now, so this is their account and recent posts. Open them again later for the audience, growth and brand history.
+            </p>
+          )}
           {contact && (
             <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 text-sm">
               {contact.email && <a href={`mailto:${contact.email}`} className="inline-flex items-center gap-1.5 font-medium text-[#2563eb] hover:underline"><Mail className="h-4 w-4" /> {contact.email}</a>}

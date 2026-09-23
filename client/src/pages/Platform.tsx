@@ -46,8 +46,8 @@ const PILLARS = [
     icon: Compass,
     kicker: "Discovery",
     title: "Find the right voices for it",
-    body: "Search over 300 million creator profiles for veterans, service members and military spouses. Every profile shows the audience behind the follower count: how much of it is real, where it lives, what it cares about, and which brands have already paid for it.",
-    points: ["Over 300 million creator profiles", "Audience quality, real reach and brand history", "Email and phone where creators publish them"],
+    body: "Search over 300 million creator profiles for veterans, service members and military spouses. Every profile shows the audience behind the follower count: how much of it is real, where it lives, what it cares about, and which brands have already worked with them.",
+    points: ["Over 300 million creator profiles", "Audience quality, real reach and growth", "Brand collaborations: who paid them, when, and the posts", "Email and phone where creators publish them"],
   },
   {
     icon: BadgeCheck,
@@ -332,7 +332,7 @@ export default function Platform() {
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#b36b00]">Discovery</div>
             <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">The military voices worth working with, measured</h2>
             <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-              Brands find creators to sponsor, shows find guests, events find speakers. Search in plain English, by the words in a bio, or by name, and open anyone to see the audience behind the number.
+              Brands find creators to sponsor, shows find guests, events find speakers. Search in plain English, by the words in a bio, or by name, and open anyone to see the audience behind the number and every brand they've already worked with: the paid partnerships with dates, the sponsored posts themselves, the brands they mention, and the brands their audience follows.
             </p>
             <Link href="/discover">
               <Button size="lg" className="mt-7 gap-2 rounded-full bg-[#053877] px-7 font-medium text-white hover:bg-[#0a4a99]">
@@ -344,7 +344,7 @@ export default function Platform() {
             {[
               ["300M+", "creator profiles searched"],
               ["9", "sections of audience data on every profile"],
-              ["Real reach", "how much of a following is real people"],
+              ["Brand history", "paid partnerships, sponsored posts and the brands their audience follows"],
               ["Verified", "voices checked by our team, reached through us"],
             ].map(([v, l]) => (
               <div key={l} className="bg-card p-6">
