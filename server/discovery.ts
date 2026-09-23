@@ -461,7 +461,7 @@ export function registerDiscoveryRoutes(app: Express): void {
     } catch {
       return res.status(400).end();
     }
-    const okHost = /(^|\.)(cdninstagram\.com|fbcdn\.net|ytimg\.com|ggpht\.com|googleusercontent\.com|tiktokcdn(-us)?\.com|tiktokcdn\.com|ibyteimg\.com|twimg\.com|jtvnw\.net|influencers\.club|amazonaws\.com|cloudfront\.net|imgix\.net)$/i.test(url.hostname);
+    const okHost = /(^|\.)(cdninstagram\.com|fbcdn\.net|ytimg\.com|ggpht\.com|googleusercontent\.com|tiktokcdn(-us)?\.com|tiktokcdn\.com|ibyteimg\.com|twimg\.com|jtvnw\.net|influencers\.club|amazonaws\.com|cloudfront\.net|imgix\.net|influencersclub\.workers\.dev)$/i.test(url.hostname);
     if (url.protocol !== "https:" || !okHost) return res.status(404).end();
     try {
       const r = await fetch(url, { headers: { "user-agent": "Mozilla/5.0" } });
@@ -487,57 +487,57 @@ export function registerDiscoveryRoutes(app: Express): void {
 function normalizeAnalytics(platform: string, handle: string, r: any) {
   const res0 = r?.result ?? r ?? {};
   const p = res0[platform] ?? res0;
-  const growthRaw = pick(p, "creator_follower_growth", "follower_growth");
-  const growth: { label: string; value: number }[] = [];
-  if (growthRaw && typeof growthRaw === "object") {
-    for (const [k, v] of Object.entries(growthRaw)) {
-      const n = num(typeof v === "object" ? (v as any)?.value ?? (v as any)?.percentage : v);
-      if (n != null) growth.push({ label: k.replace(/_/g, " "), value: n });
-    }
-  }
-  const sponsorsRaw = pick(p, "past_sponsors", "brands_found") ?? [];
-  const sponsors = (Array.isArray(sponsorsRaw) ? sponsorsRaw : Object.entries(sponsorsRaw).map(([k, v]) => ({ brand: k, ...(typeof v === "object" ? (v as object) : { posts: v }) })))
-    .map((s: any) => ({
-      brand: String(s?.brand ?? s?.brand_handle ?? s?.username ?? s?.name ?? s ?? ""),
-      posts: num(s?.posts ?? s?.post_count ?? s?.count),
-      lastSeen: String(s?.last_seen ?? s?.last_seen_at ?? ""),
-    }))
-    .filter((s: any) => s.brand)
-    .slice(0, 12);
-  const hashtagsRaw = pick(p, "hashtags") ?? [];
-  const hashtags = (Array.isArray(hashtagsRaw) ? hashtagsRaw : Object.keys(hashtagsRaw))
-    .map((h: any) => String(typeof h === "object" ? h?.name ?? h?.hashtag ?? "" : h))
-    .filter(Boolean)
+  const weighted = (arr: any, n: number, nameKey = "name") =>
+    (Array.isArray(arr) ? arr : [])
+      .map((x: any) => ({ name: String(x?.[nameKey] ?? x?.code ?? ""), pct: Math.round((num(x?.weight) ?? 0) * 1000) / 10 }))
+      .filter((x: { name: string; pct: number }) => x.name && x.pct > 0)
+      .slice(0, n);
+  // Follower growth: "12_months_ago: -3.4" and so on, oldest first.
+  const g = pick(p, "creator_follower_growth") ?? {};
+  const growth = Object.entries(g)
+    .map(([k, v]) => ({ monthsAgo: Number(String(k).match(/\d+/)?.[0] ?? 0), pct: num(v) }))
+    .filter((x) => x.monthsAgo && x.pct != null)
+    .sort((a, b) => b.monthsAgo - a.monthsAgo) as { monthsAgo: number; pct: number }[];
+  const aud = pick(p, "audience.audience_followers.data") ?? {};
+  const types = Object.fromEntries((Array.isArray(aud.audience_types) ? aud.audience_types : []).map((t: any) => [String(t?.code), Math.round((num(t?.weight) ?? 0) * 1000) / 10]));
+  const genders = Object.fromEntries((Array.isArray(aud.audience_genders) ? aud.audience_genders : []).map((t: any) => [String(t?.code).toLowerCase(), Math.round((num(t?.weight) ?? 0) * 1000) / 10]));
+  const hashtags = (Array.isArray(p.hashtags_count) ? p.hashtags_count.map((h: any) => String(h?.name ?? "")) : Array.isArray(p.hashtags) ? p.hashtags.map(String) : [])
+    .filter((h: string) => h && h.length > 1)
     .slice(0, 16);
-  const income = pick(p, "income");
-  const incomeMin = num(pick(income ?? {}, "min", "income_min", "low"));
-  const incomeMax = num(pick(income ?? {}, "max", "income_max", "high"));
-  const name = String(pick(p, "full_name", "fullname", "name", "title") ?? handle);
-  const bio = String(pick(p, "biography", "bio", "description") ?? "");
-  const perPost = pick(p, "engagement_per_post", "recent_posts_engagement", "posts_engagement");
+  const unique = (xs: any[]) => Array.from(new Set(xs.map((x) => String(x)).filter(Boolean)));
   return {
     platform,
     handle,
-    name,
-    picture: img(String(pick(p, "picture", "profile_picture", "avatar") ?? "")),
-    bio,
-    branch: branchOf(`${name} ${handle} ${bio}`),
-    followers: num(pick(p, "followers", "follower_count", "subscribers")),
-    engagement: num(pick(p, "engagement_percent", "engagement_rate")),
-    likesMedian: num(pick(p, "likes_median", "avg_likes")),
-    commentsMedian: num(pick(p, "comments_median", "avg_comments")),
-    postingPerMonth: num(pick(p, "posting_frequency_recent_months", "posting_frequency")),
-    niche: String(pick(p, "niche_sub_class", "niche_class", "category") ?? ""),
-    location: String(pick(p, "location", "country", "locations.0") ?? ""),
-    incomeMin,
-    incomeMax,
+    incomeMin: num(pick(p, "income.min")),
+    incomeMax: num(pick(p, "income.max")),
+    likesMedian: num(pick(p, "likes_median")),
+    commentsMedian: num(pick(p, "comments_median")),
+    reelsPercent: num(pick(p, "reels_percentage_last_12_posts")),
+    reelsMedianViews: num(pick(p, "reels.median_view_count", "reels.avg_view_count")),
     growth,
-    engagementPerPost: Array.isArray(perPost) ? perPost.map((x: any) => num(typeof x === "object" ? x?.engagement ?? x?.value : x)).filter((x: any) => x != null).slice(0, 12) : [],
     hashtags,
-    pastSponsors: sponsors,
-    sponsoredPosts: Array.isArray(pick(p, "sponsored_posts")) ? (pick(p, "sponsored_posts") as any[]).length : null,
+    brandsMentioned: unique(Array.isArray(p.brands_found) ? p.brands_found : []).slice(0, 12),
+    collaborators: unique((Array.isArray(p.tagged) ? p.tagged : []).map((t: any) => t?.username).filter((u: string) => u && u.toLowerCase() !== handle.toLowerCase())).slice(0, 10),
+    pastSponsors: (Array.isArray(p.past_sponsors) ? p.past_sponsors : []).map((s: any) => ({ brand: String(s?.brand_handle ?? s?.brand ?? s?.username ?? ""), posts: num(s?.post_count ?? s?.posts), lastSeen: String(s?.last_seen ?? "") })).filter((s: any) => s.brand).slice(0, 12),
     promotesAffiliates: pick(p, "promotes_affiliate_links") ?? null,
     hasMerch: pick(p, "has_merch") ?? null,
+    audience: {
+      credibility: num(aud.audience_credibility) != null ? Math.round((num(aud.audience_credibility) as number) * 100) : null,
+      credibilityClass: String(aud.credibility_class ?? ""),
+      realPct: types.real ?? null,
+      suspiciousPct: types.suspicious ?? null,
+      massFollowersPct: types.mass_followers ?? null,
+      influencersPct: types.influencers ?? null,
+      femalePct: genders.female ?? null,
+      malePct: genders.male ?? null,
+      ages: weighted(aud.audience_ages, 6, "code"),
+      countries: weighted(aud.audience_geo?.countries, 5),
+      states: weighted(aud.audience_geo?.states, 5),
+      cities: weighted(aud.audience_geo?.cities, 5),
+      languages: weighted(aud.audience_languages, 3),
+      interests: weighted(aud.audience_interests, 8),
+      brandAffinity: weighted(aud.audience_brand_affinity, 10),
+    },
     fetchedAt: new Date().toISOString(),
     raw: res0,
   };

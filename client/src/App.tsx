@@ -17,6 +17,7 @@ import Landing from "@/pages/Landing";
 import Faq from "@/pages/Faq";
 import HelpYoutube from "@/pages/HelpYoutube";
 import HelpIndex from "@/pages/HelpIndex";
+import Discover from "@/pages/Discover";
 import Prepare from "@/pages/Prepare";
 import Platform from "@/pages/Platform";
 import Headshot from "@/pages/Headshot";
@@ -75,6 +76,7 @@ function AppRouter() {
       <Route path="/agenda">{() => <Agenda />}</Route>
       <Route path="/faq">{() => <Faq />}</Route>
       <Route path="/help">{() => <HelpIndex />}</Route>
+      <Route path="/discover">{() => <Discover />}</Route>
       <Route path="/help/youtube">{() => <HelpYoutube />}</Route>
       {/* Registered on the Google OAuth consent screen — these URLs are
           load-bearing for verification, so don't rename them. */}

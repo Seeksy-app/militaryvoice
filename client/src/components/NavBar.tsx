@@ -31,6 +31,7 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/#podcasters", label: "Podcasters", anchor: true },
   { href: "/#listeners", label: "Listeners", anchor: true },
   { href: "/agenda", label: "Agenda" },
+  { href: "/discover", label: "Discovery" },
   { href: "/faq", label: "FAQ" },
   { href: "/platform", label: "About Us" },
 ];

@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2 } from "lucide-react";
+import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass } from "lucide-react";
 import { Link } from "wouter";
 
 export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "recordings" | "contacts" | "pro" | "cohost";
@@ -81,7 +81,10 @@ export function HostNav({
     },
     {
       title: "Help",
-      items: [{ key: "dashboard", label: "Help", hint: "Search the help, or ask Alex", icon: LifeBuoy, href: "/help" }],
+      items: [
+        { key: "dashboard", label: "Discovery", hint: "Find guests, creators and speakers", icon: Compass, href: "/discover" },
+        { key: "dashboard", label: "Help", hint: "Search the help, or ask Alex", icon: LifeBuoy, href: "/help" },
+      ],
     },
   ];
 
