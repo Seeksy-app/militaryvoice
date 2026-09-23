@@ -82,8 +82,15 @@ async function ic(path: string, body: unknown): Promise<any> {
 
 /** Admin-only: a raw call, to read real response shapes. */
 export async function probeIc(path: string, body: unknown): Promise<unknown> {
-  if (!["/discovery/", "/creators/enrich/handle/analytics/", "/discovery/creators/similar/"].includes(path)) throw new HttpError(400, "Not a probe path.");
+  if (path === "/accounts/credits/") return credits();
+  if (!["/discovery/", "/creators/enrich/handle/analytics/", "/discovery/creators/similar/", "/creators/enrich/handle/raw/", "/creators/enrich/email/"].includes(path)) throw new HttpError(400, "Not a probe path.");
   return ic(path, body);
+}
+
+/** What's left on the account. Free to ask. */
+export async function credits(): Promise<unknown> {
+  const res = await fetch(`${BASE}/accounts/credits/`, { headers: { authorization: `Bearer ${key()}` } });
+  return res.json().catch(() => ({ status: res.status }));
 }
 
 /** Read the first present value from a list of dotted paths. */
@@ -268,7 +275,7 @@ async function verifiedCreators(): Promise<(CreatorCard & { match: string })[]> 
 async function memberFor(email: string) {
   const [m] = await db.select().from(discoveryMembers).where(eq(discoveryMembers.email, email));
   if (m) return m;
-  // Everyone already on MilitaryVoice has Discovery: their account gets it the
+  // Everyone already on MilitaryVoices has Discovery: their account gets it the
   // first time they come, as a podcaster, with nothing to fill in.
   const profile = email ? await storage.getProfileByEmail(email) : undefined;
   if (!profile) return undefined;
@@ -285,7 +292,7 @@ async function requireMember(req: Request): Promise<{ email: string; member: Non
   const adminKey = String(req.get("x-admin-password") ?? "");
   if (adminEmail || (adminKey && adminKey === (await storage.getFeaturedEvent()).adminPassword)) {
     const e = (adminEmail || "admin@militaryvoice.ai").toLowerCase();
-    return { email: e, member: (await memberFor(e)) ?? { id: 0, email: e, role: "admin", orgName: "MilitaryVoice", source: "admin", createdAt: "" } };
+    return { email: e, member: (await memberFor(e)) ?? { id: 0, email: e, role: "admin", orgName: "MilitaryVoices", source: "admin", createdAt: "" } };
   }
   const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
   if (!email) throw new HttpError(401, "Create your free account to search.");
@@ -327,7 +334,7 @@ export function registerDiscoveryRoutes(app: Express): void {
       const adminEmail = (getAdminEmail(req) ?? "").toLowerCase();
       const email = ((getSessionEmail(req) ?? "") || adminEmail).trim().toLowerCase();
       if (!email) return { signedIn: false };
-      const member = (await memberFor(email)) ?? (adminEmail ? { role: "admin", orgName: "MilitaryVoice", createdAt: "" } : undefined);
+      const member = (await memberFor(email)) ?? (adminEmail ? { role: "admin", orgName: "MilitaryVoices", createdAt: "" } : undefined);
       const profile = await storage.getProfileByEmail(email);
       return {
         signedIn: true,
@@ -474,7 +481,7 @@ export function registerDiscoveryRoutes(app: Express): void {
     }),
   );
 
-  /** Our own lineup: verified MilitaryVoice creators. Public and free. */
+  /** Our own lineup: verified MilitaryVoices creators. Public and free. */
   app.get("/api/discover/verified", (_req, res) =>
     send(res, async () => {
       res.set("Cache-Control", "public, max-age=300");
