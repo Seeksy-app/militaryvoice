@@ -102,7 +102,7 @@ export function StudioJoin({
     <div className="min-h-screen bg-[#04102b] text-white">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-5 py-6">
         <LogoLockupOnDark className="h-9 w-auto self-start" />
-        <div className="grid flex-1 items-center gap-10 py-8 lg:grid-cols-[1fr_minmax(0,34rem)]">
+        <div className="grid flex-1 content-center items-center gap-8 py-6 lg:grid-cols-[1fr_minmax(0,34rem)] lg:gap-10 lg:py-8">
           {/* Who asked you here, and to what. */}
           <div className="text-center lg:text-left">
             {inviter && (

@@ -833,8 +833,14 @@ export default function Studio({ slug }: { slug?: string }) {
     // checked — "no slot" without saying whose is how somebody who holds one
     // under a different sign-in concludes the page is broken.
     const start = new Date(slot.startsAtUtc);
-    const when = `${formatTimeInZone(start, zone)}`;
     const mins = Math.round((start.getTime() - now) / 60000);
+    // Days out, the day matters more than the hour count: "298 hours" is a
+    // number nobody can picture.
+    const sameDay = new Date(now).toDateString() === start.toDateString();
+    const when = sameDay
+      ? formatTimeInZone(start, zone)
+      : `${new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", timeZone: zone }).format(start)}, ${formatTimeInZone(start, zone)}`;
+    if (mins > 48 * 60) return `${when} · in ${Math.round(mins / 1440)} days`;
     if (mins > 90) return `${when} · in ${Math.round(mins / 60)} hours`;
     if (mins > 1) return `${when} · in ${mins} minutes`;
     if (mins > -5) return `${when} · you're up now`;
