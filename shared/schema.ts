@@ -1770,3 +1770,54 @@ export const socialPosts = pgTable("social_posts", {
   createdAt: text("created_at").notNull(),
 }, (t) => [index("social_posts_event_idx").on(t.eventId), index("social_posts_signup_idx").on(t.signupId)]);
 export type SocialPostRow = typeof socialPosts.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Discovery: the Mil/Vet creator search for brands, podcasters and events
+// ---------------------------------------------------------------------------
+
+/** Who has Discovery on their account, and what they came for. */
+export const discoveryMembers = pgTable("discovery_members", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  role: text("role").notNull().default("other"), // brand | podcaster | event | agency | other
+  orgName: text("org_name").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});
+export type DiscoveryMemberRow = typeof discoveryMembers.$inferSelect;
+
+/** A paid answer kept so nobody pays for it twice: search pages, analytics, contacts, similar. */
+export const discoveryCache = pgTable("discovery_cache", {
+  key: text("key").primaryKey(),
+  payload: text("payload").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+/** A saved list of creators, per member. */
+export const discoveryLists = pgTable("discovery_lists", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  name: text("name").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("discovery_lists_email_idx").on(t.email)]);
+export type DiscoveryListRow = typeof discoveryLists.$inferSelect;
+
+export const discoveryListItems = pgTable("discovery_list_items", {
+  id: serial("id").primaryKey(),
+  listId: integer("list_id").notNull(),
+  platform: text("platform").notNull(),
+  handle: text("handle").notNull(),
+  /** The card as it was when saved: name, picture, followers, engagement. */
+  snapshot: text("snapshot").notNull().default("{}"),
+  note: text("note").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("discovery_list_items_list_idx").on(t.listId)]);
+export type DiscoveryListItemRow = typeof discoveryListItems.$inferSelect;
+
+/** A contact revealed by a member: the allowance is counted from these. */
+export const discoveryReveals = pgTable("discovery_reveals", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  platform: text("platform").notNull(),
+  handle: text("handle").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("discovery_reveals_email_idx").on(t.email)]);

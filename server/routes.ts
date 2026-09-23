@@ -50,6 +50,7 @@ import {
 } from "../shared/schema.js";
 import { isLiveOnlySlot, LIVE_ONLY_LABEL } from "../shared/slots.js";
 import { showClock } from "../shared/showClock.js";
+import { registerDiscoveryRoutes, probeIc } from "./discovery.js";
 import { isConfigured as isInfluencersConfigured, credits, enrichHandle } from "./influencers.js";
 import { deriveSocialAccounts } from "../shared/socialLinks.js";
 import { buildAudienceSnapshot, readAudienceSnapshot, saveAudienceSnapshot, AUDIENCE_WINDOW_DAYS } from "./audience.js";
@@ -653,6 +654,7 @@ async function broadcastBannerTitle(): Promise<string> {
 }
 
 export function registerRoutes(app: Express): void {
+  registerDiscoveryRoutes(app);
   // ---- Public: events list (for "Choose Your Event") -------------------------
   app.get("/api/events", async (_req, res) => {
     publicCache(res, 60);
@@ -4897,6 +4899,14 @@ export function registerRoutes(app: Express): void {
       };
     }).sort((a, b) => b.total - a.total);
     res.json({ rates: R, shows, total: shows.reduce((n, s) => n + s.total, 0) });
+  });
+
+  app.post("/api/admin/discover/probe", requireAdmin, async (req, res) => {
+    try {
+      res.json(await probeIc(String(req.body?.path ?? ""), req.body?.body ?? {}));
+    } catch (err: any) {
+      res.status(err?.status ?? 500).json({ message: err?.message });
+    }
   });
 
   app.post("/api/admin/recordings/:id/reclip", requireAdmin, async (req, res) => {
