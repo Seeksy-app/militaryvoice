@@ -3,7 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import {
   Search, Sparkles, BadgeCheck, Bookmark, BookmarkCheck, Users, Mail, Phone, Globe, ShieldCheck,
   Mic2, Megaphone, CalendarDays, X, Loader2, ExternalLink, Plus, Trash2, Download, ChevronRight, Lock, MapPin, Heart, Hash, Handshake, Info,
-  SlidersHorizontal, AtSign, Type as TypeIcon, Wand2, TrendingUp,
+  SlidersHorizontal, AtSign, Type as TypeIcon, Wand2, TrendingUp, Instagram, Youtube, Twitter, Twitch, Music2, Share2,
 } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
@@ -173,7 +174,11 @@ export default function Discover() {
     }
   });
   const [tab, setTab] = useState<"search" | "enrich" | "lists">("search");
-  const [open, setOpen] = useState<Card | null>(null);
+  const [open, setOpenRaw] = useState<Card | null>(null);
+  // The list a creator was opened from, for back and next in the panel.
+  const [openFrom, setOpenFrom] = useState<Card[]>([]);
+  const openIn = (from: Card[]) => (c: Card | null) => { setOpenFrom(from); setOpenRaw(c); };
+  const setOpen = (c: Card | null) => { setOpenFrom([]); setOpenRaw(c); };
   const [gate, setGate] = useState(false);
   const d = DOORS.find((x) => x.key === door)!;
 
@@ -274,6 +279,23 @@ export default function Discover() {
     queryClient.invalidateQueries({ queryKey: ["/api/discover/lists"] });
   };
 
+  // Many at once from the results: into the first list (made if there isn't one).
+  const saveMany = async (cards: Card[]) => {
+    let id = lists.data?.[0]?.id;
+    if (!id) id = (await (await apiRequest("POST", "/api/discover/lists", { name: "Shortlist" })).json()).id;
+    for (const card of cards) await apiRequest("POST", `/api/discover/lists/${id}/items`, { card }).catch(() => null);
+    queryClient.invalidateQueries({ queryKey: ["/api/discover/lists"] });
+    toast({ title: `Saved ${cards.length} to your list` });
+  };
+
+  // A shared profile link: /discover?creator=instagram:handle opens it.
+  useEffect(() => {
+    if (!isMember) return;
+    const raw = new URLSearchParams(window.location.search).get("creator") ?? "";
+    const [pf, h] = raw.split(":");
+    if (pf && h && PLATFORMS.some((x) => x.v === pf)) setOpen({ platform: pf, handle: h, name: h, picture: "", followers: null, engagement: null, branch: "" });
+  }, [isMember]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const r = search.data?.pages[0];
   const results = useMemo(() => {
     const seen = new Set<string>();
@@ -316,7 +338,7 @@ export default function Discover() {
         return heroVariant === "a" ? (
           <HeroA raised={menuOpen} door={door} setDoor={setDoor} bar={bar} tries={tries} onEnrich={toEnrich} allowance={isMember ? me?.reveals ?? null : null} />
         ) : (
-          <HeroB raised={menuOpen} door={door} setDoor={setDoor} bar={bar} tries={tries} onEnrich={toEnrich} verified={verified} onOpen={setOpen} />
+          <HeroB raised={menuOpen} door={door} setDoor={setDoor} bar={bar} tries={tries} onEnrich={toEnrich} verified={verified} onOpen={openIn(verified)} />
         );
       })()}
 
@@ -386,15 +408,15 @@ export default function Discover() {
             onUsed={() => queryClient.invalidateQueries({ queryKey: ["/api/discover/me"] })}
           />
         ) : tab === "lists" && isMember ? (
-          <Lists lists={lists.data ?? []} onOpen={setOpen} />
+          <Lists lists={lists.data ?? []} onOpen={(c) => openIn((lists.data ?? []).flatMap((l) => l.items.map((i) => i.snapshot)))(c)} />
         ) : !submitted || !isMember || submitted.mode === "username" ? (
-          <Welcome verified={verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={setOpen} onSaveVerified={(c) => saveTo.mutate({ card: c })} onJoin={() => setGate(true)} loading={meLoading} />
+          <Welcome verified={verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onJoin={() => setGate(true)} loading={meLoading} />
         ) : (
           <>
             {/* what ran */}
             <div className="flex flex-wrap items-baseline justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-2xl font-bold tracking-tight" style={HEADLINE}>
+                <h2 className="text-xl font-semibold tracking-tight">
                   {search.isLoading ? "Searching…" : r ? `${r.total.toLocaleString()} creators on ${platformLabel(submitted.platform)}` : "Search"}
                 </h2>
                 {r && <p className="mt-1 text-sm text-muted-foreground">{r.mode === "keywords" ? <>Creators whose <span className="font-medium text-foreground">{r.brief}</span></> : <>We searched for <span className="font-medium text-foreground">"{r.brief}"</span></>}</p>}
@@ -418,27 +440,23 @@ export default function Discover() {
             {/* ours first */}
             {!!r?.verified?.length && (
               <section className="mt-8">
-                <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.14em] text-[#8a5a00]"><BadgeCheck className="h-4 w-4" /> Verified on MilitaryVoices</h3>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {r.verified.map((c) => <CreatorCard key={`v-${c.name}`} c={c} saved={false} onOpen={() => setOpen(c)} />)}
+                <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#8a5a00]"><BadgeCheck className="h-4 w-4" /> Verified on MilitaryVoices</h3>
+                <div className="mt-3">
+                  <ResultsList rows={r.verified} saved={saved} isMember={isMember} onOpen={openIn([...r.verified, ...results])} onSave={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} />
                 </div>
               </section>
             )}
 
             <section className="mt-8">
               {search.isLoading ? (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-44 rounded-2xl" />)}</div>
+                <ResultsSkeleton />
               ) : results.length === 0 && r ? (
                 <div className="rounded-2xl border border-dashed border-border p-10 text-center">
                   <p className="text-lg font-semibold" style={HEADLINE}>Nobody matched that.</p>
                   <p className="mt-1 text-sm text-muted-foreground">Try fewer words, another platform, or a wider audience size.</p>
                 </div>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {results.map((c) => (
-                    <CreatorCard key={`${c.platform}:${c.handle}`} c={c} saved={saved.has(`${c.platform}:${c.handle.toLowerCase()}`)} onOpen={() => setOpen(c)} onSave={() => saveTo.mutate({ card: c })} />
-                  ))}
-                </div>
+                <ResultsList rows={results} total={r?.total} saved={saved} isMember={isMember} onOpen={openIn([...(r?.verified ?? []), ...results])} onSave={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} />
               )}
               {search.hasNextPage && (
                 <div className="mt-6 flex flex-col items-center gap-1">
@@ -453,7 +471,7 @@ export default function Discover() {
         )}
       </main>
 
-      <ProfileDrawer card={open} onOpenCreator={setOpen} onClose={() => setOpen(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
+      <ProfileDrawer card={open} siblings={openFrom} allowance={me?.reveals} onOpenCreator={setOpenRaw} onClose={() => setOpenRaw(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
       <JoinDialog
         open={gate}
         me={me}
@@ -720,6 +738,96 @@ function PreviewStack({ verified, onOpen }: { verified: Card[]; onOpen: (c: Card
 }
 
 // ===========================================================================
+// Results as a list: scan down, compare across, select many
+// ===========================================================================
+
+function PlatformIcon({ platform, className = "h-4 w-4" }: { platform: string; className?: string }) {
+  const I = PLATFORM_ICON[platform] ?? Globe;
+  const color = platform === "instagram" ? "text-[#d62976]" : platform === "youtube" ? "text-[#ff0000]" : platform === "twitch" ? "text-[#9146ff]" : "text-foreground";
+  return <I className={`${className} ${color}`} />;
+}
+
+function ResultsList({ rows, total, saved, isMember, onOpen, onSave, onSaveMany }: {
+  rows: Card[]; total?: number; saved: Set<string>; isMember: boolean;
+  onOpen: (c: Card) => void; onSave: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>;
+}) {
+  const keyOf = (c: Card) => `${c.platform}:${c.handle.toLowerCase()}:${c.name}`;
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const all = rows.length > 0 && rows.every((c) => picked.has(keyOf(c)));
+  const toggle = (k: string) => setPicked((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex items-center gap-3 border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
+        {isMember && <input type="checkbox" checked={all} onChange={() => setPicked(all ? new Set() : new Set(rows.map(keyOf)))} className="h-4 w-4 rounded border-border accent-[#053877]" aria-label="Select all on page" />}
+        <span className="flex-1">{picked.size ? `${picked.size} selected` : `Select all on page (${rows.length}${total && total > rows.length ? ` of ${total.toLocaleString()}` : ""})`}</span>
+        {picked.size > 0 && (
+          <Button size="sm" disabled={busy} onClick={async () => { setBusy(true); try { await onSaveMany(rows.filter((c) => picked.has(keyOf(c)))); setPicked(new Set()); } finally { setBusy(false); } }} className="h-7 gap-1.5 rounded-lg bg-[#2563eb] text-xs normal-case tracking-normal text-white hover:bg-[#1d4ed8]" data-testid="results-save-selected">
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} Add {picked.size} to list
+          </Button>
+        )}
+        <span className="hidden w-24 text-right sm:block">Followers</span>
+        <span className="hidden w-24 text-right sm:block">Engagement</span>
+        <span className="hidden w-20 text-right md:block">Quality</span>
+        <span className="w-8" />
+      </div>
+      <ul className="divide-y divide-border">
+        {rows.map((c) => {
+          const k = keyOf(c);
+          const isSaved = saved.has(`${c.platform}:${c.handle.toLowerCase()}`);
+          return (
+            <li key={k} className={`group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 ${picked.has(k) ? "bg-[#053877]/[0.04]" : ""}`} data-testid={`result-${c.handle || c.name}`}>
+              {isMember && <input type="checkbox" checked={picked.has(k)} onChange={() => toggle(k)} className="h-4 w-4 rounded border-border accent-[#053877]" aria-label={`Select ${c.name}`} />}
+              <button type="button" onClick={() => onOpen(c)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                <Avatar src={c.picture} name={c.name} size={44} ring={!!c.verified} />
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate font-medium group-hover:text-[#053877] dark:group-hover:text-[#8fb5e8]">{c.name}</span>
+                    {c.verified && <BadgeCheck className="h-4 w-4 shrink-0 text-[#F0A71F]" aria-label="Verified on MilitaryVoices" />}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {c.verified ? c.verified.show : c.handle ? `@${c.handle}` : ""}
+                    {c.branch ? ` · ${c.branch}` : ""}
+                  </span>
+                </span>
+              </button>
+              <span className="hidden w-24 items-center justify-end gap-1.5 text-sm font-medium tabular-nums sm:flex">
+                {c.platform && <PlatformIcon platform={c.platform} className="h-3.5 w-3.5" />} {c.followers != null ? compact(c.followers) : "–"}
+              </span>
+              <span className="hidden w-24 text-right text-sm tabular-nums text-muted-foreground sm:block">{c.engagement != null ? pct(c.engagement, 2) : "–"}</span>
+              <span className="hidden w-20 text-right text-sm tabular-nums text-muted-foreground md:block">{c.quality != null ? `${c.quality}/100` : "–"}</span>
+              <span className="flex w-8 justify-end">
+                {isMember && (
+                  <button type="button" onClick={() => onSave(c)} disabled={isSaved} className={`rounded-lg p-1.5 ${isSaved ? "text-[#b36b00]" : "text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover:opacity-100"}`} title={isSaved ? "Saved" : "Save"} aria-label="Save">
+                    {isSaved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
+                  </button>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function ResultsSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="border-b border-border bg-muted/40 px-4 py-3"><Skeleton className="h-3 w-40" /></div>
+      {Array.from({ length: 8 }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0">
+          <Skeleton className="h-11 w-11 rounded-full" />
+          <div className="flex-1"><Skeleton className="h-3.5 w-44" /><Skeleton className="mt-2 h-3 w-28" /></div>
+          <Skeleton className="hidden h-3.5 w-16 sm:block" />
+          <Skeleton className="hidden h-3.5 w-14 sm:block" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ===========================================================================
 // Before a search: our creators, and what Discovery is
 // ===========================================================================
 
@@ -760,8 +868,8 @@ function Welcome({ verified, isMember, signedIn, onOpenVerified, onSaveVerified,
 
       <section>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-2xl font-bold tracking-tight" style={HEADLINE}>
-            <BadgeCheck className="h-6 w-6 text-[#F0A71F]" /> Verified on MilitaryVoices
+          <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+            <BadgeCheck className="h-5 w-5 text-[#F0A71F]" /> Verified on MilitaryVoices
           </h2>
           <p className="text-sm text-muted-foreground">Creators we know personally. Every one checked by our team.</p>
         </div>
@@ -919,14 +1027,24 @@ function RequestButton({ kind, card, isMember, onJoin }: { kind: "email" | "phon
   );
 }
 
-function ProfileDrawer({ card, onClose, onOpenCreator, isMember, onJoin, lists, onSave, saved }: { card: Card | null; onClose: () => void; onOpenCreator: (c: Card) => void; isMember: boolean; onJoin: () => void; lists: List[]; onSave: (c: Card, listId?: number) => void; saved: boolean }) {
+const PLATFORM_ICON: Record<string, typeof Instagram> = { instagram: Instagram, youtube: Youtube, tiktok: Music2, twitter: Twitter, twitch: Twitch };
+
+/**
+ * A creator, opened: a panel over the results, so the list stays in view. The
+ * contents run down the left the whole height; the reading column carries a
+ * toolbar that follows you (back, next, add to list, share, close), who they
+ * are, and then the nine sections.
+ */
+function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoin, lists, onSave, saved, allowance }: {
+  card: Card | null; siblings: Card[]; onClose: () => void; onOpenCreator: (c: Card) => void; isMember: boolean; onJoin: () => void;
+  lists: List[]; onSave: (c: Card, listId?: number) => void; saved: boolean; allowance: { used: number; allowance: number } | null | undefined;
+}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [view, setView] = useState<"overview" | "audience" | "content" | "similar">("overview");
   const [wantSimilar, setWantSimilar] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const [contact, setContact] = useState<null | { email: string | null; phone: string | null; website: string | null; location: string | null }>(null);
-  useEffect(() => { setView("overview"); setContact(null); setWantSimilar(false); scroller.current?.scrollTo({ top: 0 }); }, [card?.handle, card?.name]);
+  useEffect(() => { setContact(null); setWantSimilar(false); scroller.current?.scrollTo({ top: 0 }); }, [card?.handle, card?.name]);
   const canAnalyze = !!card && !!card.handle && !!card.platform && isMember && ["instagram", "youtube", "tiktok", "twitter", "twitch"].includes(card.platform);
   const a = useQuery<Analytics>({
     queryKey: ["/api/discover/creator", card?.platform, card?.handle],
@@ -942,7 +1060,7 @@ function ProfileDrawer({ card, onClose, onOpenCreator, isMember, onJoin, lists, 
   });
   const similar = useQuery<Card[]>({
     queryKey: ["/api/discover/similar", card?.platform, card?.handle],
-    enabled: canAnalyze && (view === "similar" || wantSimilar),
+    enabled: canAnalyze && wantSimilar,
     queryFn: async () => {
       const res = await fetch(`/api/discover/similar?platform=${card!.platform}&handle=${encodeURIComponent(card!.handle)}`, { credentials: "include" });
       const j = await res.json();
@@ -967,236 +1085,175 @@ function ProfileDrawer({ card, onClose, onOpenCreator, isMember, onJoin, lists, 
     onError: (e: Error) => toast({ title: "Couldn't get the contact", description: e.message, variant: "destructive" }),
   });
 
-  const data = a.data;
-  const aud = data?.audience;
-  const quality = aud?.credibility == null ? null : aud.credibility >= 80 ? "good" : aud.credibility >= 60 ? "warn" : "bad";
-  const us = aud?.countries.find((x) => x.name === "United States")?.pct ?? null;
+  // Back and next through the list it was opened from; the arrow keys too.
+  const at = card ? siblings.findIndex((c) => c.platform === card.platform && c.handle.toLowerCase() === card.handle.toLowerCase() && c.name === card.name) : -1;
+  const go = (d: number) => { const n = siblings[at + d]; if (n) onOpenCreator(n); };
+  useEffect(() => {
+    if (!card) return;
+    const key = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest("input,textarea,select")) return;
+      if (e.key === "ArrowRight") go(1);
+      if (e.key === "ArrowLeft") go(-1);
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const share = async () => {
+    if (!card) return;
+    const url = `${window.location.origin}/discover?creator=${encodeURIComponent(`${card.platform}:${card.handle}`)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Link copied", description: "Anyone with a Discovery account can open this profile." });
+    } catch {
+      toast({ title: "Copy this link", description: url });
+    }
+  };
+
+  const profile = a.data?.profile;
+  const id = profile?.identity;
+  const PIcon = card ? PLATFORM_ICON[card.platform] ?? Globe : Globe;
+  const niches = profile ? Array.from(new Set([...(profile.content.categories ?? []), ...(profile.content.niches ?? [])])).slice(0, 4) : [];
+
+  const toolbar = card && (
+    <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur sm:px-6">
+      {siblings.length > 1 && at >= 0 && (
+        <div className="flex items-center gap-1.5 text-sm">
+          <button type="button" onClick={() => go(-1)} disabled={at <= 0} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-40" aria-label="Previous creator" data-testid="drawer-prev"><ChevronRight className="h-4 w-4 rotate-180" /></button>
+          <span className="min-w-[4.5rem] text-center tabular-nums text-muted-foreground"><span className="font-medium text-foreground">{at + 1}</span> of {siblings.length}</span>
+          <button type="button" onClick={() => go(1)} disabled={at >= siblings.length - 1} className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground disabled:opacity-40" aria-label="Next creator" data-testid="drawer-next"><ChevronRight className="h-4 w-4" /></button>
+          <span className="mx-1.5 h-6 w-px bg-border" />
+        </div>
+      )}
+      {card.handle && (
+        <a href={profileUrl(card)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-[#053877]/30 bg-[#053877]/[0.04] px-2.5 py-1.5 text-sm font-medium hover:border-[#053877]/50">
+          <PIcon className="h-4 w-4" /> {compact(id?.followers ?? card.followers)}
+        </a>
+      )}
+      <div className="ml-auto flex items-center gap-1.5">
+        {isMember && (card.handle || card.verified) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" disabled={saved} className="h-8 gap-1.5 rounded-lg bg-[#2563eb] font-medium text-white hover:bg-[#1d4ed8]" data-testid="drawer-save">
+                {saved ? <BookmarkCheck className="h-4 w-4" /> : <Plus className="h-4 w-4" />} {saved ? "Saved" : "Add to list"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              {lists.length ? lists.map((l) => <DropdownMenuItem key={l.id} onClick={() => onSave(card, l.id)}>{l.name}</DropdownMenuItem>) : <DropdownMenuItem onClick={() => onSave(card)}>Shortlist</DropdownMenuItem>}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        {!isMember && <Button size="sm" onClick={onJoin} className="h-8 rounded-lg bg-[#2563eb] font-medium text-white hover:bg-[#1d4ed8]">Create free account</Button>}
+        {card.handle && <Button size="sm" variant="ghost" onClick={() => void share()} className="h-8 gap-1.5 rounded-lg bg-muted/70 font-medium" data-testid="drawer-share"><Share2 className="h-4 w-4" /> Share</Button>}
+        <button type="button" onClick={onClose} className="ml-1 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close" data-testid="drawer-close"><X className="h-4 w-4" /></button>
+      </div>
+    </div>
+  );
+
+  const header = card && (
+    <div className="border-b-8 border-muted/60 bg-card px-5 py-6 sm:px-8">
+      <div className="flex items-start gap-5">
+        <Avatar src={id?.picture || card.picture} name={card.name} size={84} ring={!!card.verified} />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <h2 className="text-2xl font-semibold tracking-tight">{id?.name || card.name}</h2>
+            {card.verified ? <BadgeCheck className="h-5 w-5 text-[#F0A71F]" aria-label="Verified on MilitaryVoices" /> : id?.verified ? <BadgeCheck className="h-5 w-5 text-[#2563eb]" aria-label="Verified account" /> : null}
+            {card.handle && <a href={profileUrl(card)} target="_blank" rel="noreferrer" className="text-sm text-[#2563eb] underline-offset-2 hover:underline">@{card.handle}</a>}
+          </div>
+          {id?.bio && <p className="mt-1.5 line-clamp-2 max-w-3xl text-sm text-muted-foreground">{id.bio}</p>}
+          <p className="mt-2 text-sm">
+            <span className="font-semibold tabular-nums">{compact(id?.followers ?? card.followers)}</span> <span className="text-muted-foreground">followers</span>
+            {(profile?.signals.engagementRate ?? card.engagement) != null && (
+              <> <span className="mx-1.5 text-muted-foreground/50">·</span><span className="font-semibold tabular-nums">{pct(profile?.signals.engagementRate ?? card.engagement, 2)}</span> <span className="text-muted-foreground">engagement</span></>
+            )}
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            {id?.country && <span className="inline-flex items-center gap-1 text-muted-foreground"><MapPin className="h-3.5 w-3.5" /> {id.country}</span>}
+            {card.branch && <span className="rounded-md bg-[#053877]/[0.07] px-2 py-0.5 text-xs font-medium text-[#053877] dark:text-[#8fb5e8]">{card.branch}</span>}
+            {card.verified && <span className="inline-flex items-center gap-1 rounded-md border border-[#F0A71F]/50 bg-[#F0A71F]/10 px-2 py-0.5 text-xs font-medium text-[#8a5a00]"><BadgeCheck className="h-3.5 w-3.5" /> Verified on MilitaryVoices · {card.verified.show}</span>}
+            {card.verified?.serviceStatus && <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">{card.verified.serviceStatus}</span>}
+          </div>
+          {niches.length > 0 && (
+            <div className="mt-3">
+              <div className="mb-1.5 text-xs text-muted-foreground">Creator niche</div>
+              <div className="flex flex-wrap gap-1.5">{niches.map((n) => <span key={n} className="rounded-md border border-[#2563eb]/25 bg-[#2563eb]/[0.05] px-2.5 py-1 text-xs font-medium capitalize text-[#1e3a8a] dark:text-[#bfdbfe]">{n}</span>)}</div>
+            </div>
+          )}
+          {/* contact: our creators through us; everyone else from the index */}
+          {card.verified ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Contact through MilitaryVoices, with their say-so:</span>
+              <RequestButton kind="email" card={card} isMember={isMember} onJoin={onJoin} />
+              <RequestButton kind="phone" card={card} isMember={isMember} onJoin={onJoin} />
+            </div>
+          ) : isMember && card.handle && !contact ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+              <Button size="sm" variant="outline" onClick={() => reveal.mutate()} disabled={reveal.isPending} className="h-8 gap-1.5 rounded-lg" data-testid="drawer-reveal">
+                {reveal.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Reveal contact
+              </Button>
+              {allowance && <span className="text-xs text-muted-foreground">{Math.max(0, allowance.allowance - allowance.used)} of {allowance.allowance} left this month</span>}
+            </div>
+          ) : null}
+          {contact && (
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 text-sm">
+              {contact.email && <a href={`mailto:${contact.email}`} className="inline-flex items-center gap-1.5 font-medium text-[#2563eb] hover:underline"><Mail className="h-4 w-4" /> {contact.email}</a>}
+              {contact.phone && <a href={`tel:${contact.phone}`} className="inline-flex items-center gap-1.5"><Phone className="h-4 w-4 text-muted-foreground" /> {contact.phone}</a>}
+              {contact.website && <a href={String(contact.website).startsWith("http") ? contact.website : `https://${contact.website}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5"><Globe className="h-4 w-4 text-muted-foreground" /> {contact.website}</a>}
+              {!contact.email && !contact.phone && !contact.website && <span className="text-muted-foreground">No public contact on file.</span>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const placeholder = !card ? null : card.verified && !card.handle ? (
+    <p className="p-8 text-sm text-muted-foreground">No public social account on file for audience data yet.</p>
+  ) : !isMember ? (
+    <div className="p-8">
+      <div className="rounded-2xl border border-dashed border-border bg-card p-8 text-center">
+        <Lock className="mx-auto h-6 w-6 text-muted-foreground" />
+        <p className="mt-2 font-medium">Audience quality, demographics, growth and brand history</p>
+        <p className="mt-1 text-sm text-muted-foreground">Nine sections on every creator, free with a Discovery account.</p>
+        <Button onClick={onJoin} className="mt-4 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">Create your free account</Button>
+      </div>
+    </div>
+  ) : a.isError ? (
+    <p className="m-8 rounded-xl bg-destructive/5 p-4 text-sm text-destructive">{(a.error as Error).message}</p>
+  ) : (
+    <div className="flex flex-col gap-2 p-5 sm:p-8">
+      <p className="text-sm text-muted-foreground">Reading their audience, growth, posts and brand history…</p>
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-4">{Array.from({ length: 8 }, (_, i) => <div key={i} className="bg-card p-4"><Skeleton className="h-3 w-20" /><Skeleton className="mt-3 h-6 w-16" /></div>)}</div>
+      <Skeleton className="mt-6 h-40 rounded-2xl" />
+    </div>
+  );
 
   return (
     <Sheet open={!!card} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent ref={scroller} side="right" className="w-full overflow-y-auto p-0 sm:max-w-3xl lg:max-w-6xl">
+      <SheetContent ref={scroller} side="right" className="w-full overflow-y-auto bg-background p-0 sm:max-w-3xl lg:max-w-[min(76rem,92vw)] [&>button.absolute]:hidden">
         {card && (
           <>
             <SheetTitle className="sr-only">{card.name}</SheetTitle>
-            {/* header */}
-            <div className="relative overflow-hidden px-6 pb-5 pt-8 text-white" style={{ background: NAVY }}>
-              <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full opacity-20 blur-3xl" style={{ background: GOLD }} />
-              <div className="relative flex items-start gap-4">
-                <Avatar src={card.picture} name={card.name} size={80} ring />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <h2 className="truncate text-2xl font-bold tracking-tight" style={HEADLINE}>{card.name}</h2>
-                    {card.verified && <BadgeCheck className="h-5 w-5 shrink-0 text-[#F0A71F]" />}
-                  </div>
-                  {card.handle && (
-                    <a href={profileUrl(card)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm text-white/70 hover:text-white">
-                      @{card.handle} on {platformLabel(card.platform)} <ExternalLink className="h-3.5 w-3.5" />
-                    </a>
-                  )}
-                  {card.verified && <p className="mt-1 text-sm text-white/80">{card.verified.show} · Verified on MilitaryVoices</p>}
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {card.branch && <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-semibold text-white">{card.branch}</span>}
-                    {card.verified?.serviceStatus && <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs text-white/80">{card.verified.serviceStatus}</span>}
-                  </div>
-                </div>
-              </div>
-              <div className="relative mt-5 grid grid-cols-3 gap-2">
-                {[["Followers", compact(card.followers)], ["Engagement", card.engagement != null ? pct(card.engagement, 2) : "–"], ["Audience quality", aud?.credibility != null ? `${aud.credibility}/100` : card.quality != null ? `${card.quality}/100` : isMember ? (a.isLoading ? "…" : "–") : "🔒"]].map(([l, v]) => (
-                  <div key={l} className="rounded-xl bg-white/[0.07] p-3">
-                    <div className="text-[11px] uppercase tracking-wide text-white/60">{l}</div>
-                    <div className="mt-0.5 text-xl font-bold tabular-nums">{v}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="relative mt-4 flex flex-wrap gap-2">
-                {isMember && (card.handle || card.verified) && (
-                  <Button size="sm" onClick={() => onSave(card, lists[0]?.id)} disabled={saved} className="gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="drawer-save">
-                    {saved ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />} {saved ? "Saved" : "Save"}
-                  </Button>
-                )}
-                {isMember && card.handle && !card.verified && !contact && (
-                  <Button size="sm" variant="outline" onClick={() => reveal.mutate()} disabled={reveal.isPending} className="gap-1.5 rounded-full border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white" data-testid="drawer-reveal">
-                    {reveal.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Reveal contact
-                  </Button>
-                )}
-                              </div>
-              {contact && (
-                <div className="relative mt-4 grid gap-1.5 rounded-xl bg-white p-3 text-sm text-foreground">
-                  {contact.email && <a href={`mailto:${contact.email}`} className="flex items-center gap-2 font-medium text-[#053877] hover:underline"><Mail className="h-4 w-4" /> {contact.email}</a>}
-                  {contact.phone && <a href={`tel:${contact.phone}`} className="flex items-center gap-2"><Phone className="h-4 w-4 text-muted-foreground" /> {contact.phone}</a>}
-                  {contact.website && <a href={String(contact.website).startsWith("http") ? contact.website : `https://${contact.website}`} target="_blank" rel="noreferrer" className="flex items-center gap-2"><Globe className="h-4 w-4 text-muted-foreground" /> {contact.website}</a>}
-                  {!contact.email && !contact.phone && !contact.website && <span className="text-muted-foreground">No public contact on file.</span>}
-                </div>
-              )}
-            </div>
-
-            {/* body */}
-            {card.verified && (
-              <div className="border-b border-border p-6 text-sm">
-                <p className="text-muted-foreground">
-                  {card.verified.host} hosts <span className="font-semibold text-foreground">{card.verified.show}</span>. Verified by our team: we know them, and we can introduce you.</p>
-                {/* Contacts for our own podcasters go through us: they asked us, not the world. */}
-                <div className="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border">
-                  {([["email", Mail, "Email"], ["phone", Phone, "Phone"]] as const).map(([kind, Icon, label]) => (
-                    <div key={kind} className="flex items-center gap-3 px-4 py-3">
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                      <span className="flex-1">
-                        <span className="block font-medium">{label}</span>
-                        <span className="block text-xs text-muted-foreground">Shared through MilitaryVoices, with their say-so</span>
-                      </span>
-                      <RequestButton kind={kind} card={card} isMember={isMember} onJoin={onJoin} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {card.verified && !card.handle ? (
-              <p className="p-6 text-sm text-muted-foreground">No public social account on file for audience data yet.</p>
-            ) : !isMember ? (
-              <div className="p-6">
-                <div className="rounded-2xl border border-dashed border-border p-6 text-center">
-                  <Lock className="mx-auto h-6 w-6 text-muted-foreground" />
-                  <p className="mt-2 font-semibold">Audience quality, demographics and brand history</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Free with a Discovery account.</p>
-                  <Button onClick={onJoin} className="mt-4 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">Create your free account</Button>
-                </div>
-              </div>
-            ) : a.data?.profile ? (
-              <CreatorProfileSections
-                profile={a.data.profile}
-                cardEngagement={card.engagement}
-                scrollRoot={scroller}
-                onOpenCreator={(p: ProfilePerson) => onOpenCreator({ platform: p.platform, handle: p.handle, name: p.name, picture: p.picture, followers: p.followers, engagement: null, branch: "" })}
-                similar={
-                  !wantSimilar ? (
-                    <Button variant="outline" className="self-start rounded-full" onClick={() => setWantSimilar(true)} data-testid="find-similar">Search for more creators like this</Button>
-                  ) : similar.isLoading ? (
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-36 rounded-2xl" />)}</div>
-                  ) : similar.isError ? (
-                    <p className="text-sm text-destructive">{(similar.error as Error).message}</p>
-                  ) : (
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{(similar.data ?? []).map((c) => <CreatorCard key={c.handle} c={c} saved={false} onOpen={() => onOpenCreator(c)} />)}</div>
-                  )
-                }
-              />
-            ) : a.isLoading ? (
-              <div className="p-6">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
-                <p className="mt-4 text-sm text-muted-foreground">Reading their audience, growth, posts and brand history…</p>
-              </div>
-            ) : (
-              <div className="p-6">
-                <div className="flex gap-1 rounded-full bg-muted p-1 text-sm">
-                  {(["overview", "audience", "content", "similar"] as const).map((v) => (
-                    <button key={v} type="button" onClick={() => setView(v)} className={`flex-1 rounded-full px-3 py-1.5 font-medium capitalize ${view === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`} data-testid={`drawer-${v}`}>{v}</button>
-                  ))}
-                </div>
-                {a.isLoading ? (
-                  <div className="mt-5 grid gap-3">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
-                ) : a.isError ? (
-                  <p className="mt-5 rounded-xl bg-destructive/5 p-4 text-sm text-destructive">{(a.error as Error).message}</p>
-                ) : data && aud ? (
-                  <div className="mt-5">
-                    {view === "overview" && (
-                      <div className="flex flex-col gap-5">
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                          <Stat label="Real followers" value={pct(aud.realPct, 0)} sub={aud.suspiciousPct != null ? `${pct(aud.suspiciousPct, 0)} suspicious` : undefined} tone={aud.realPct == null ? undefined : aud.realPct >= 60 ? "good" : aud.realPct >= 40 ? "warn" : "bad"} />
-                          <Stat label="US audience" value={pct(us, 0)} sub={aud.countries[0] && aud.countries[0].name !== "United States" ? `Top: ${aud.countries[0].name}` : undefined} tone={us == null ? undefined : us >= 60 ? "good" : us >= 35 ? "warn" : "bad"} />
-                          <Stat label="Audience" value={aud.femalePct != null ? `${aud.femalePct.toFixed(0)}% women` : "–"} sub={aud.ages[0] ? `Mostly ${[...aud.ages].sort((x, y) => y.pct - x.pct)[0].name}` : undefined} />
-                          <Stat label="Est. income" value={data.incomeMin != null ? `$${compact(data.incomeMin)}–$${compact(data.incomeMax)}` : "–"} sub="last 90 days" />
-                          <Stat label="Median likes" value={compact(data.likesMedian)} sub={data.commentsMedian != null ? `${compact(data.commentsMedian)} comments` : undefined} />
-                          <Stat label="Reels views" value={compact(data.reelsMedianViews)} sub={data.reelsPercent != null ? `${data.reelsPercent.toFixed(0)}% of posts are reels` : undefined} />
-                        </div>
-                        {quality && (
-                          <div className={`flex items-start gap-3 rounded-xl p-4 text-sm ${quality === "good" ? "bg-emerald-500/10" : quality === "warn" ? "bg-[#F0A71F]/15" : "bg-destructive/10"}`}>
-                            <ShieldCheck className={`mt-0.5 h-5 w-5 shrink-0 ${quality === "good" ? "text-emerald-600" : quality === "warn" ? "text-[#8a5a00]" : "text-destructive"}`} />
-                            <span>
-                              <span className="font-semibold">Audience quality {aud.credibility}/100.</span>{" "}
-                              {quality === "good" ? "Most of this audience is real people who engage." : quality === "warn" ? "A fair share of mass-following and inactive accounts. Worth a look at recent posts." : "A lot of this audience is mass-following or suspicious accounts. Reach will be lower than the follower count says."}
-                            </span>
-                          </div>
-                        )}
-                        <div className="rounded-xl border border-border p-4">
-                          <h4 className="text-sm font-semibold">Follower growth</h4>
-                          <div className="mt-2"><Growth points={data.growth} /></div>
-                        </div>
-                        {aud.interests.length > 0 && (
-                          <div className="rounded-xl border border-border p-4">
-                            <h4 className="flex items-center gap-1.5 text-sm font-semibold"><Heart className="h-4 w-4 text-[#b36b00]" /> What their audience is into</h4>
-                            <div className="mt-3"><Bars items={aud.interests.slice(0, 6)} color={GOLD} /></div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {view === "audience" && (
-                      <div className="grid gap-5 sm:grid-cols-2">
-                        {[["Countries", aud.countries], ["States", aud.states], ["Cities", aud.cities], ["Ages", aud.ages], ["Languages", aud.languages], ["Brands they love", aud.brandAffinity]].map(([t, items]) =>
-                          (items as { name: string; pct: number }[]).length ? (
-                            <div key={t as string} className="rounded-xl border border-border p-4">
-                              <h4 className="text-sm font-semibold">{t as string}</h4>
-                              <div className="mt-3"><Bars items={(items as { name: string; pct: number }[]).slice(0, 6)} /></div>
-                            </div>
-                          ) : null,
-                        )}
-                        {aud.femalePct != null && (
-                          <div className="rounded-xl border border-border p-4 sm:col-span-2">
-                            <h4 className="text-sm font-semibold">Gender</h4>
-                            <div className="mt-3 flex h-3 overflow-hidden rounded-full">
-                              <span style={{ width: `${aud.femalePct}%`, background: GOLD }} />
-                              <span style={{ width: `${aud.malePct ?? 100 - aud.femalePct}%`, background: "#053877" }} />
-                            </div>
-                            <div className="mt-2 flex justify-between text-xs text-muted-foreground"><span>{aud.femalePct.toFixed(0)}% women</span><span>{(aud.malePct ?? 100 - aud.femalePct).toFixed(0)}% men</span></div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {view === "content" && (
-                      <div className="flex flex-col gap-5">
-                        {data.hashtags.length > 0 && (
-                          <div>
-                            <h4 className="flex items-center gap-1.5 text-sm font-semibold"><Hash className="h-4 w-4" /> Hashtags they use</h4>
-                            <div className="mt-2 flex flex-wrap gap-1.5">{data.hashtags.map((h) => <span key={h} className="rounded-full border border-border px-2.5 py-1 text-xs">#{h}</span>)}</div>
-                          </div>
-                        )}
-                        <div>
-                          <h4 className="flex items-center gap-1.5 text-sm font-semibold"><Handshake className="h-4 w-4" /> Brands they've worked with or mentioned</h4>
-                          {data.pastSponsors.length + data.brandsMentioned.length === 0 ? (
-                            <p className="mt-2 text-sm text-muted-foreground">None found in recent posts. A fresh partner for your brand.</p>
-                          ) : (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {data.pastSponsors.map((s) => <span key={s.brand} className="rounded-full bg-[#053877] px-2.5 py-1 text-xs font-semibold text-white">@{s.brand}{s.posts ? ` · ${s.posts}` : ""}</span>)}
-                              {data.brandsMentioned.map((b) => <a key={b} href={`https://instagram.com/${b}`} target="_blank" rel="noreferrer" className="rounded-full bg-[#053877]/10 px-2.5 py-1 text-xs font-semibold text-[#053877] hover:underline">@{b}</a>)}
-                            </div>
-                          )}
-                        </div>
-                        {data.collaborators.length > 0 && (
-                          <div>
-                            <h4 className="flex items-center gap-1.5 text-sm font-semibold"><Users className="h-4 w-4" /> Who they collaborate with</h4>
-                            <div className="mt-2 flex flex-wrap gap-1.5">{data.collaborators.map((u) => <a key={u} href={`https://instagram.com/${u}`} target="_blank" rel="noreferrer" className="rounded-full border border-border px-2.5 py-1 text-xs hover:border-[#053877]/40">@{u}</a>)}</div>
-                          </div>
-                        )}
-                        <div className="grid grid-cols-2 gap-2">
-                          <Stat label="Affiliate links" value={data.promotesAffiliates == null ? "–" : data.promotesAffiliates ? "Yes" : "No"} />
-                          <Stat label="Sells merch" value={data.hasMerch == null ? "–" : data.hasMerch ? "Yes" : "No"} />
-                        </div>
-                      </div>
-                    )}
-                    {view === "similar" && (
-                      similar.isLoading ? (
-                        <div className="grid gap-3 sm:grid-cols-2">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-36 rounded-2xl" />)}</div>
-                      ) : similar.isError ? (
-                        <p className="text-sm text-destructive">{(similar.error as Error).message}</p>
-                      ) : (
-                        <div className="grid gap-3 sm:grid-cols-2">{(similar.data ?? []).map((c) => <CreatorCard key={c.handle} c={c} saved={false} onOpen={() => { window.open(profileUrl(c), "_blank"); }} />)}</div>
-                      )
-                    )}
-                    <p className="mt-6 text-[11px] text-muted-foreground">Updated {new Date(data.fetchedAt).toLocaleDateString()}. Estimates from public data.</p>
-                  </div>
+            <CreatorProfileSections
+              profile={profile}
+              toolbar={toolbar}
+              header={header}
+              placeholder={placeholder}
+              cardEngagement={card.engagement}
+              scrollRoot={scroller}
+              onOpenCreator={(p: ProfilePerson) => onOpenCreator({ platform: p.platform, handle: p.handle, name: p.name, picture: p.picture, followers: p.followers, engagement: null, branch: "" })}
+              similar={
+                !wantSimilar ? (
+                  <Button variant="outline" className="self-start rounded-full" onClick={() => setWantSimilar(true)} data-testid="find-similar">Search for more creators like this</Button>
+                ) : similar.isLoading ? (
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-36 rounded-2xl" />)}</div>
+                ) : similar.isError ? (
+                  <p className="text-sm text-destructive">{(similar.error as Error).message}</p>
                 ) : (
-                  <p className="mt-5 text-sm text-muted-foreground">No analytics for this platform yet.</p>
-                )}
-              </div>
-            )}
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{(similar.data ?? []).map((c) => <CreatorCard key={c.handle} c={c} saved={false} onOpen={() => onOpenCreator(c)} />)}</div>
+                )
+              }
+            />
           </>
         )}
       </SheetContent>
