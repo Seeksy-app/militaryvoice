@@ -147,12 +147,19 @@ async function uploadFile(file: string, contentType: string): Promise<string> {
     { name },
   );
   const body = await fs.readFile(file);
-  const res = await fetch(signed.uploadUrl, {
-    method: "PUT",
-    headers: { "content-type": contentType },
-    body: new Uint8Array(body),
-  });
-  if (!res.ok) throw new Error(`upload failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
+  // Three tries: one dropped connection shouldn't throw away a whole job's renders.
+  let res: Response | null = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      res = await fetch(signed.uploadUrl, { method: "PUT", headers: { "content-type": contentType }, body: new Uint8Array(body) });
+      if (res.ok || res.status < 500) break;
+    } catch (err) {
+      if (attempt === 3) throw err;
+    }
+    console.warn(`   upload of ${name} didn't go through — trying again (${attempt}/3)`);
+    await new Promise((z) => setTimeout(z, 3000 * attempt));
+  }
+  if (!res || !res.ok) throw new Error(`upload failed: ${res?.status} ${res ? (await res.text()).slice(0, 200) : ""}`);
   console.log(`   uploaded ${name} (${(body.length / 1048576).toFixed(1)}MB)`);
   return signed.publicUrl;
 }
@@ -1127,13 +1134,29 @@ async function handle(job: Job): Promise<void> {
       if (!measured.stack && process.env.ANTHROPIC_API_KEY) {
         // One camera, or a produced show cutting between cameras: find who's
         // speaking in each shot.
-        const shots = await shotsIn(source, m);
+        // Cuts, and inside a long shot a look every eight seconds — a camera
+        // that zooms or pans moves the speaker without any cut to find.
+        const shots = (await shotsIn(source, m)).flatMap((sh) => {
+          const n = Math.max(1, Math.round((sh.to - sh.from) / 8));
+          const step = (sh.to - sh.from) / n;
+          return Array.from({ length: n }, (_, i) => ({ from: sh.from + i * step, to: i === n - 1 ? sh.to : sh.from + (i + 1) * step }));
+        }).slice(0, 12);
         const said = (from: number, to: number) =>
           within.filter((l) => l.endSec > m.startSec + from && l.startSec < m.startSec + to).map((l) => l.text).join(" ") || within.map((l) => l.text).join(" ");
         focusShots = [];
         for (const sh of shots) {
           focusShots.push({ ...sh, focus: await speakerFocus(source, m, said(sh.from, sh.to), measured.whole, dir, m.startSec + (sh.from + sh.to) / 2) });
         }
+        // Neighbours that frame the same person in the same place are one
+        // shot: no reframe where nothing moved.
+        const same = (a: Box | null, b: Box | null) =>
+          !!a && !!b && Math.abs(a.x + a.w / 2 - (b.x + b.w / 2)) < measured.whole!.w * 0.08 && Math.abs(a.y + a.h / 2 - (b.y + b.h / 2)) < measured.whole!.h * 0.1 && Math.abs(a.w - b.w) < a.w * 0.35;
+        focusShots = focusShots.reduce<typeof focusShots>((acc, sh) => {
+          const last = acc[acc.length - 1];
+          if (last && same(last.focus, sh.focus)) last.to = sh.to;
+          else acc.push({ ...sh });
+          return acc;
+        }, []);
         if (focusShots.length === 1) { focus = focusShots[0].focus; focusShots = null; }
         console.log(`[${job.recordingId}]   speaker focus: ${shots.length} shot(s), ${[focus, ...(focusShots ?? []).map((x) => x.focus)].filter(Boolean).length} framed`);
       }
