@@ -80,22 +80,11 @@
       "permanent": true
     },
     {
-      "source": "/(.*)",
-      "has": [
-        {
-          "type": "host",
-          "value": "www\\.militarycreatoreconomy\\.com"
-        }
-      ],
-      "destination": "https://militarycreatoreconomy.com/$1",
-      "permanent": true
-    },
-    {
       "source": "/((?!robots\\.txt$|sitemap\\.xml$).+)",
       "has": [
         {
           "type": "host",
-          "value": "militarycreatoreconomy\\.com"
+          "value": "(www\\.)?militarycreatoreconomy\\.com"
         }
       ],
       "destination": "https://www.militaryvoices.ai/$1",

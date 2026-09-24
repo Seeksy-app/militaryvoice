@@ -13,7 +13,8 @@ import { storage } from "./storage.js";
 import { readSample, type SamplePayload } from "./discovery.js";
 
 export const MCE_HOST = /^(www\.)?militarycreatoreconomy\.com$/i;
-const ORIGIN = "https://militarycreatoreconomy.com";
+// www is the address: Vercel sends the bare domain there.
+const ORIGIN = "https://www.militarycreatoreconomy.com";
 const MV = "https://www.militaryvoices.ai";
 
 export interface MceCreator {
