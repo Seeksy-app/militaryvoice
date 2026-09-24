@@ -790,7 +790,7 @@ export default function Landing({ slug }: Props) {
 
       {/* ---------------------------------------------------------- LINEUP */}
       <section id="lineup" className="scroll-mt-16 border-b border-border">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+        <div className="mx-auto max-w-[1500px] px-4 py-16 sm:px-6 lg:px-10">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">The lineup</div>
@@ -825,7 +825,7 @@ export default function Landing({ slug }: Props) {
               </Link>
             </div>
           ) : (
-            <div className="mt-8 grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-8 grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {/* The agenda's own card, so the two never drift apart. */}
               {lineup.slice(0, LINEUP_CARDS).map(({ signup, start: onAirStart, end: onAirEnd, blockStart, blockEnd }, i) => (
                 <motion.div
