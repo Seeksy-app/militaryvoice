@@ -53,6 +53,7 @@ import { Transform } from "node:stream";
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import { textPath, fitSize, textWidth } from "../server/textPath.js";
+import { cutList, snapToAudio, keepRanges, trimGraph, envelope, type Word } from "./refine.js";
 
 const API_BASE = (process.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "");
 const AGENT_TOKEN = process.env.AGENT_TOKEN || "";
@@ -641,6 +642,15 @@ export function transcriptCovers(lines: Line[], durationSec: number): boolean {
  * Deepgram keeps the live captions: that is a streaming job with an official
  * LiveKit plugin already wired, and a different problem from reading a file.
  */
+/** Word timings from the last Scribe read of each file. */
+const scribeWordsFor = new Map<string, Word[]>();
+
+/** Word timings for a file: from the Scribe read the job already made, or a fresh one. */
+export async function wordsFor(file: string, dir: string): Promise<Word[]> {
+  if (!scribeWordsFor.has(file)) await transcribeWithScribe(file, dir);
+  return scribeWordsFor.get(file) ?? [];
+}
+
 export async function transcribeWithScribe(file: string, dir: string): Promise<Line[]> {
   const key = (process.env.ELEVENLABS_API_KEY || "").trim();
   if (!key) throw new Error("ELEVENLABS_API_KEY is not set.");
@@ -671,6 +681,8 @@ export async function transcribeWithScribe(file: string, dir: string): Promise<L
   const body = (await res.json()) as {
     words?: { text: string; start: number; end: number; type: string; speaker_id?: string }[];
   };
+  // Kept per word for cleaning the episode, which cuts inside lines.
+  scribeWordsFor.set(file, (body.words ?? []).map((w) => ({ text: w.text, start: w.start, end: w.end, type: w.type })));
 
   // Scribe answers per word; the picker and the .srt both want spoken lines.
   // Broken on a speaker change, on sentence-ending punctuation, or on a pause
@@ -1000,6 +1012,73 @@ export function sane(moments: Moment[], durationSec: number): Moment[] {
 // One job
 // ---------------------------------------------------------------------------
 
+/** PUT a big file with curl (streams from disk; Node would hold it all in memory). */
+async function uploadBig(file: string, contentType: string): Promise<string> {
+  const signed = await api<{ uploadUrl: string; storageKey: string }>("POST", "/api/agent/clean-files/upload-url", { name: path.basename(file) });
+  await run("curl", ["-s", "-f", "--retry", "5", "--retry-all-errors", "--retry-delay", "3", "-X", "PUT", signed.uploadUrl, "-H", `content-type: ${contentType}`, "--data-binary", `@${file}`]);
+  return signed.storageKey;
+}
+
+/**
+ * The whole episode with the ums, false starts and dead air taken out — the
+ * podcast (MP3) and the video (720p MP4). Cuts come from the word timings and
+ * are placed on the audio itself (see agent/refine.ts: the timings alone run
+ * late). Runs after the clips and never fails the job: a podcaster who gets
+ * their clips and no clean episode has lost nothing they had.
+ */
+async function cleanEpisode(job: Job, source: string, dir: string): Promise<void> {
+  if ((process.env.CLEAN_EPISODE ?? "1") === "0") return;
+  const report = (b: Record<string, unknown>) => api("POST", `/api/agent/clip-jobs/${job.recordingId}/clean`, b).catch(() => {});
+  try {
+    await report({ status: "running" });
+    console.log(`[${job.recordingId}] cleaning the episode…`);
+    const words = await wordsFor(source, dir);
+    if (!words.length) throw new Error("no word timings to clean with");
+    const pcmFile = path.join(dir, "clean.pcm");
+    await ffmpeg(["-i", source, "-vn", "-ac", "1", "-ar", "16000", "-f", "s16le", pcmFile]);
+    const env = envelope(await fs.readFile(pcmFile));
+    await fs.rm(pcmFile, { force: true });
+    const duration = env.length * 0.01;
+    const cuts = snapToAudio(cutList(words), env);
+    const keeps = keepRanges(cuts, duration);
+    const removed = cuts.reduce((t, c) => t + (c.end - c.start), 0);
+    const count = (why: string) => cuts.filter((c) => c.why === why).length;
+    console.log(`[${job.recordingId}]   ${count("filler")} fillers, ${count("false-start")} false starts, ${count("silence")} pauses — ${Math.round(removed)}s off`);
+    if (keeps.length < 2) {
+      await report({ status: "done", fillers: 0, falseStarts: 0, pauses: 0, removedSec: 0, durationSec: duration });
+      return;
+    }
+
+    // Audio: one pass, only the sound.
+    const audioGraph = path.join(dir, "clean-audio.txt");
+    await fs.writeFile(audioGraph, keeps.map((k, i) => `[0:a]atrim=start=${k.start.toFixed(3)}:end=${k.end.toFixed(3)},asetpts=PTS-STARTPTS[a${i}]`).join(";") + ";" + keeps.map((_, i) => `[a${i}]`).join("") + `concat=n=${keeps.length}:v=0:a=1[a]`);
+    const mp3 = path.join(dir, `${job.recordingId}-clean.mp3`);
+    await ffmpeg(["-i", source, "-filter_complex_script", audioGraph, "-map", "[a]", "-c:a", "libmp3lame", "-b:a", "192k", mp3]);
+    const audioKey = await uploadBig(mp3, "audio/mpeg");
+    await fs.rm(mp3, { force: true });
+    console.log(`[${job.recordingId}]   clean audio uploaded`);
+    await report({ status: "running", audioKey, fillers: count("filler"), falseStarts: count("false-start"), pauses: count("silence"), removedSec: Math.round(removed), durationSec: Math.round(duration) });
+
+    // Video, 720p — the heavy part, and optional.
+    let videoKey: string | undefined;
+    const hasVideo = /Video:/.test(await run("ffprobe", ["-hide_banner", "-i", source]).catch((e: Error) => e.message));
+    if ((process.env.CLEAN_VIDEO ?? "1") !== "0" && hasVideo && duration <= 2 * 3600) {
+      const graph = path.join(dir, "clean-video.txt");
+      await fs.writeFile(graph, trimGraph(keeps).replace("concat=n=", "concat=n=").replace(/\[v\]\[a\]$/, "[vc][a];[vc]scale=-2:720[v]"));
+      const mp4 = path.join(dir, `${job.recordingId}-clean.mp4`);
+      await ffmpeg(["-i", source, "-filter_complex_script", graph, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", mp4]);
+      videoKey = await uploadBig(mp4, "video/mp4");
+      await fs.rm(mp4, { force: true });
+      console.log(`[${job.recordingId}]   clean video uploaded`);
+    }
+    await report({ status: "done", audioKey, videoKey, fillers: count("filler"), falseStarts: count("false-start"), pauses: count("silence"), removedSec: Math.round(removed), durationSec: Math.round(duration) });
+    console.log(`[${job.recordingId}] clean episode done`);
+  } catch (err) {
+    console.warn(`[${job.recordingId}] clean episode failed: ${(err as Error).message}`);
+    await report({ status: "failed", error: (err as Error).message });
+  }
+}
+
 /**
  * Tell the site where this job has got to. The podcaster's processing screen
  * reads it, and each report also keeps the claim fresh. Never fatal: a job that
@@ -1231,6 +1310,11 @@ async function handle(job: Job): Promise<void> {
 
     await api("POST", `/api/agent/clip-jobs/${job.recordingId}/done`, { clips: out });
     console.log(`[${job.recordingId}] done — ${out.length} clips`);
+
+    // The clips are out; the clean episode follows. It's no longer this
+    // job's claim — a shutdown now mustn't requeue clips that are finished.
+    holding = null;
+    await cleanEpisode(job, source, dir);
   } finally {
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }

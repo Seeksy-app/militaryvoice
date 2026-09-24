@@ -43,6 +43,7 @@ import {
   clipResultSchema,
   CLIP_STAGES,
   type ClipProgress,
+  type CleanResult,
   transcriptBatchSchema,
   lowerThirdInputSchema,
   sceneInputSchema,
@@ -5139,6 +5140,58 @@ export function registerRoutes(app: Express): void {
       await storage.setClipProgress(rec.id, JSON.stringify({ ...prev, stage: "done", pct: 100, finished: saved.length, at: new Date().toISOString() }));
     } catch { /* progress is decoration */ }
     res.json({ saved: saved.length });
+  });
+
+  /**
+   * The cleaned episode. Full episodes are hundreds of MB — too big for the
+   * asset bucket the clips use — so they go to R2, private, and are handed
+   * out as fresh signed links.
+   */
+  app.post("/api/agent/clean-files/upload-url", requireAgent, async (req, res) => {
+    const safe = String(req.body?.name ?? "clean.mp4").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-90);
+    const key = `clean/${Date.now()}-${crypto.randomBytes(5).toString("hex")}-${safe}`;
+    try {
+      res.json({ uploadUrl: signedRecordingUpload(key, 6 * 3600), storageKey: key });
+    } catch (err) {
+      console.error("Could not sign a clean-episode upload:", err);
+      res.status(502).json({ message: "Couldn't start the upload." });
+    }
+  });
+
+  app.post("/api/agent/clip-jobs/:id/clean", requireAgent, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec) return res.status(404).json({ message: "No such recording." });
+    const b = req.body ?? {};
+    const status = ["running", "done", "failed"].includes(b.status) ? b.status : null;
+    if (!status) return res.status(400).json({ message: "Unknown status." });
+    const key = (v: unknown) => (typeof v === "string" && /^clean\/[\w.-]+$/.test(v) ? v : undefined);
+    const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
+    const out: CleanResult = {
+      status,
+      audioKey: key(b.audioKey),
+      videoKey: key(b.videoKey),
+      fillers: n(b.fillers),
+      falseStarts: n(b.falseStarts),
+      pauses: n(b.pauses),
+      removedSec: n(b.removedSec),
+      durationSec: n(b.durationSec),
+      error: b.error ? String(b.error).slice(0, 300) : undefined,
+      at: new Date().toISOString(),
+    };
+    await storage.setClean(rec.id, JSON.stringify(out));
+    res.json({ ok: true });
+  });
+
+  /** A podcaster's cleaned episode: audio or video, as a fresh private link. */
+  app.get("/api/host/recordings/:id/clean/:kind", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "Not found" });
+    let c: CleanResult | null = null;
+    try { c = rec.clean ? JSON.parse(rec.clean) : null; } catch { c = null; }
+    const k = req.params.kind === "audio" ? c?.audioKey : req.params.kind === "video" ? c?.videoKey : undefined;
+    if (!k) return res.status(404).json({ message: "Not ready yet." });
+    res.redirect(302, await signedRecordingUrl(k, 3600));
   });
 
   /** Where a running job has got to: the processing screen reads it, and it keeps the claim alive. */

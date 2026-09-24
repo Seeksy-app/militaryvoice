@@ -3,8 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import type { ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload } from "lucide-react";
+import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
+import { Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -16,6 +16,61 @@ type RowState = "done" | "active" | "waiting" | "soon" | "failed";
 
 const stamp = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 const minutes = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)}` : `${Math.round((sec / 60) * 10) / 10}`);
+
+function cleanOf(r: Rec | undefined): CleanResult | null {
+  if (!r?.clean) return null;
+  try {
+    return JSON.parse(r.clean) as CleanResult;
+  } catch {
+    return null;
+  }
+}
+
+const mmss = (sec: number) => (sec >= 60 ? `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s` : `${Math.round(sec)}s`);
+
+/** The episode with the ums, false starts and dead air out — audio and video downloads. */
+function CleanCard({ rec, clean }: { rec: Rec; clean: CleanResult }) {
+  const bits = [
+    clean.fillers ? `${clean.fillers} fillers` : "",
+    clean.falseStarts ? `${clean.falseStarts} false starts` : "",
+    clean.pauses ? `${clean.pauses} long pauses` : "",
+  ].filter(Boolean);
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-4" data-testid="post-clean">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"><Wand2 className="h-5 w-5" /></span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">Clean episode</p>
+          <p className="text-xs text-muted-foreground">
+            {clean.status === "failed"
+              ? "Couldn't clean this one. The clips are unaffected."
+              : bits.length
+                ? `${bits.join(", ")} taken out${clean.removedSec ? ` — ${mmss(clean.removedSec)} shorter` : ""}.`
+                : clean.status === "running"
+                  ? "Taking out the ums, false starts and long pauses…"
+                  : "Nothing needed taking out."}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {clean.audioKey ? (
+          <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-full">
+            <a href={`/api/host/recordings/${rec.id}/clean/audio`} data-testid="post-clean-audio"><Headphones className="h-4 w-4" /> Clean audio (MP3)</a>
+          </Button>
+        ) : clean.status === "running" ? (
+          <Button variant="outline" size="sm" disabled className="gap-1.5 rounded-full"><Loader2 className="h-4 w-4 animate-spin" /> Audio</Button>
+        ) : null}
+        {clean.videoKey ? (
+          <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-full">
+            <a href={`/api/host/recordings/${rec.id}/clean/video`} data-testid="post-clean-video"><Video className="h-4 w-4" /> Clean video (MP4)</a>
+          </Button>
+        ) : clean.status === "running" ? (
+          <Button variant="outline" size="sm" disabled className="gap-1.5 rounded-full"><Loader2 className="h-4 w-4 animate-spin" /> Video</Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 function progressOf(r: Rec | undefined): ClipProgress | null {
   if (!r?.clipProgress) return null;
@@ -207,7 +262,7 @@ export function PostStudio() {
     queryKey: ["/api/host/recordings"],
     queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(),
     // Live while anything is moving; still otherwise.
-    refetchInterval: (q) => ((q.state.data as Rec[] | undefined)?.some((r) => r.clipStatus === "queued" || r.clipStatus === "running") ? 3000 : false),
+    refetchInterval: (q) => ((q.state.data as Rec[] | undefined)?.some((r) => r.clipStatus === "queued" || r.clipStatus === "running" || cleanOf(r)?.status === "running") ? 4000 : false),
   });
   const moving = (recs.data ?? []).some((r) => r.clipStatus === "queued" || r.clipStatus === "running");
   const clips = useQuery<ClipRow[]>({
@@ -219,6 +274,7 @@ export function PostStudio() {
   const list = useMemo(() => (recs.data ?? []).filter((r) => r.status === "Ready").sort((a, b) => b.id - a.id), [recs.data]);
   const rec = list.find((r) => r.id === selected) ?? list[0];
   const p = progressOf(rec);
+  const clean = cleanOf(rec);
   const mine = useMemo(() => (clips.data ?? []).filter((c) => c.recordingId === rec?.id).sort((a, b) => a.startSec - b.startSec), [clips.data, rec?.id]);
 
   useEffect(() => setPreview(null), [rec?.id]);
@@ -385,7 +441,12 @@ export function PostStudio() {
             <PipelineRow icon={Sparkles} title="Pick the moments" detail={pickedN ? `${pickedN} that stand on their own` : undefined} state={state("moments")} />
             <PipelineRow icon={Crop} title="Cut in three shapes" detail={p?.stage === "render" ? p.detail : readyN ? "16:9 · 9:16 · 1:1 + captions" : undefined} state={state("render")} />
             <PipelineRow icon={Send} title="Ready to post" detail={done ? "In your dashboard" : undefined} state={done ? "done" : state("upload") === "done" ? "active" : "waiting"} />
-            <PipelineRow icon={Wand2} title="Remove fillers and dead air" state="soon" />
+            <PipelineRow
+              icon={Wand2}
+              title="Clean episode"
+              detail={clean?.status === "done" ? (clean.removedSec ? `${mmss(clean.removedSec)} of ums and dead air out` : "Nothing to take out") : clean?.status === "running" ? "Taking out ums and dead air" : "Ums, false starts and dead air out"}
+              state={clean?.status === "done" ? "done" : clean?.status === "running" ? "active" : clean?.status === "failed" ? "failed" : "waiting"}
+            />
           </ul>
         </div>
       </div>
@@ -399,6 +460,8 @@ export function PostStudio() {
           </div>
         ))}
       </div>
+
+      {clean && <CleanCard rec={rec} clean={clean} />}
 
       {/* Clips, filling in */}
       {(mine.length > 0 || moments.length > 0) && (

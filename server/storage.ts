@@ -221,6 +221,7 @@ async function ensureSchema() {
   await sql`CREATE INDEX IF NOT EXISTS show_assets_email_idx ON show_assets (email)`;
   await sql`ALTER TABLE show_assets ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS clip_progress TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS clean TEXT NOT NULL DEFAULT ''`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS run_of_show (
@@ -786,6 +787,7 @@ export interface IStorage {
   getRecording(id: number): Promise<RecordingRow | undefined>;
   setClipStatus(recordingId: number, status: ClipStatus, error?: string): Promise<RecordingRow | undefined>;
   setClipProgress(recordingId: number, progress: string): Promise<void>;
+  setClean(recordingId: number, clean: string): Promise<void>;
   createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow>;
   claimClipJob(): Promise<RecordingRow | undefined>;
   appendTranscript(studioId: number, eventId: number, lines: { speaker: string; text: string; startMs: number; endMs: number }[]): Promise<number>;
@@ -1874,6 +1876,11 @@ class DatabaseStorage implements IStorage {
   }
 
   // ---- Clipping ------------------------------------------------------------
+  async setClean(recordingId: number, clean: string): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ clean }).where(eq(recordings.id, recordingId));
+  }
+
   /** Also a heartbeat: a worker that is still reporting has not died, so its claim stays fresh. */
   async setClipProgress(recordingId: number, progress: string): Promise<void> {
     await ready();

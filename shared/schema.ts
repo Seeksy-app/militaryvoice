@@ -1142,10 +1142,26 @@ export const recordings = pgTable("recordings", {
   clipClaimedAt: text("clip_claimed_at").notNull().default(""),
   /** Where a running clip job has got to, as the worker reports it (JSON, see ClipProgress). */
   clipProgress: text("clip_progress").notNull().default(""),
+  /** The cleaned episode (fillers, false starts and dead air out), JSON — see CleanResult. */
+  clean: text("clean").notNull().default(""),
 });
 export type RecordingRow = typeof recordings.$inferSelect;
 
 export const CLIP_STATUSES = ["none", "queued", "running", "done", "failed"] as const;
+
+/** The cleaned-up episode the clipper makes after the clips. */
+export interface CleanResult {
+  status: "running" | "done" | "failed";
+  audioKey?: string;
+  videoKey?: string;
+  fillers?: number;
+  falseStarts?: number;
+  pauses?: number;
+  removedSec?: number;
+  durationSec?: number;
+  error?: string;
+  at: string;
+}
 
 /** The clipper's own stages, reported as it reaches each one. */
 export const CLIP_STAGES = ["download", "transcript", "moments", "render", "upload", "done"] as const;
