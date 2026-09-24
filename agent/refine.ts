@@ -170,6 +170,130 @@ export function trimGraph(keeps: { start: number; end: number }[]): string {
   return parts.join(";");
 }
 
+// ---------------------------------------------------------------------------
+// Snapping cuts to the sound
+// ---------------------------------------------------------------------------
+// What was wrong, measured (24 Sep 2026, a real segment, 79 words after a
+// pause): Scribe's word boundaries are not where the sound is. Starts come
+// back a median 0.11s late, ends anywhere from on time to half a second off,
+// and not by a constant — so no offset fixes it. It is not the mp3 (a
+// lossless copy gets identical times). A cut made at the reported span starts
+// after the "um" has begun, leaves its first half, and takes the right amount
+// of time from the wrong place.
+//
+// So the transcript only says *which* sound to remove and roughly where. The
+// cut itself is placed on the audio: find the burst of voice that is the
+// filler, and cut from the quiet before it to the quiet after it. A filler
+// whose burst can't be found is left in — cutting blind is how you clip the
+// next word.
+
+/** Loudness per 10ms frame, from 16kHz mono PCM (signed 16-bit, little-endian). */
+export function envelope(pcm: Buffer, sampleRate = 16000, frameSec = 0.01): number[] {
+  const F = Math.round(sampleRate * frameSec);
+  const n = Math.floor(pcm.length / 2);
+  const out: number[] = [];
+  for (let i = 0; i + F <= n; i += F) {
+    let sum = 0;
+    for (let k = 0; k < F; k++) {
+      const v = pcm.readInt16LE((i + k) * 2);
+      sum += v * v;
+    }
+    out.push(Math.sqrt(sum / F));
+  }
+  return out;
+}
+
+const FRAME = 0.01;
+const pctile = (xs: number[], p: number) => {
+  const q = [...xs].sort((a, b) => a - b);
+  return q[Math.min(q.length - 1, Math.max(0, Math.floor(p * (q.length - 1))))] ?? 0;
+};
+
+/** Voiced runs in [a, b) frames: at least 40ms above the line, gaps under 40ms bridged. */
+function runs(env: number[], a: number, b: number, line: number): { on: number; off: number; energy: number }[] {
+  const out: { on: number; off: number; energy: number }[] = [];
+  let cur: { on: number; off: number; energy: number } | null = null;
+  let quiet = 0;
+  for (let k = Math.max(0, a); k < Math.min(env.length, b); k++) {
+    if (env[k] > line) {
+      if (!cur) cur = { on: k, off: k + 1, energy: 0 };
+      cur.off = k + 1;
+      cur.energy += env[k];
+      quiet = 0;
+    } else if (cur) {
+      quiet++;
+      if (quiet > 4) {
+        if (cur.off - cur.on >= 4) out.push(cur);
+        cur = null;
+        quiet = 0;
+      }
+    }
+  }
+  if (cur && cur.off - cur.on >= 4) out.push(cur);
+  return out;
+}
+
+/** The quietest frame in [a, b). */
+function valley(env: number[], a: number, b: number): number {
+  let best = Math.max(0, a);
+  for (let k = Math.max(0, a); k < Math.min(env.length, b); k++) if (env[k] < env[best]) best = k;
+  return best;
+}
+
+/**
+ * Move each cut onto the sound. Fillers and false starts are re-found in the
+ * audio; long silences are measured from the audio rather than the gap
+ * between reported words. Cuts that can't be placed are dropped.
+ */
+export function snapToAudio(cuts: Span[], env: number[], opts: RefineOptions = {}): Span[] {
+  const maxGap = opts.maxGapSec ?? 0.9;
+  const keepGap = opts.keepGapSec ?? 0.35;
+  const f = (t: number) => Math.round(t / FRAME);
+  const out: Span[] = [];
+  for (const c of cuts) {
+    // The room's own level around this spot: the quiet 20% and the loud 5%.
+    const w0 = f(c.start - 1.5), w1 = f(c.end + 1.5);
+    const local = env.slice(Math.max(0, w0), Math.min(env.length, w1));
+    if (local.length < 20) continue;
+    const floor = pctile(local, 0.2);
+    const loud = pctile(local, 0.95);
+    const line = floor + 0.2 * (loud - floor);
+
+    if (c.why === "silence") {
+      // The longest stretch under the line between the two words, measured.
+      let bestA = -1, bestB = -1, runA = -1;
+      for (let k = f(c.start - 0.35); k <= f(c.end + 0.35); k++) {
+        const low = (env[k] ?? 0) <= line;
+        if (low && runA < 0) runA = k;
+        if ((!low || k === f(c.end + 0.35)) && runA >= 0) {
+          if (k - runA > bestB - bestA) { bestA = runA; bestB = k; }
+          runA = -1;
+        }
+      }
+      const gap = (bestB - bestA) * FRAME;
+      if (bestA < 0 || gap <= maxGap) continue;
+      const s = bestA * FRAME + keepGap / 2;
+      const e = bestB * FRAME - keepGap / 2;
+      if (e - s >= 0.08) out.push({ ...c, start: s, end: e });
+      continue;
+    }
+
+    // A filler or false start: the burst nearest where Scribe put it, allowing
+    // for Scribe running late.
+    const want = [c.start - 0.12, c.end - 0.05];
+    const candidates = runs(env, f(c.start - 0.35), f(c.end + 0.15), line)
+      .map((r) => ({ ...r, overlap: Math.min(r.off * FRAME, want[1]) - Math.max(r.on * FRAME, want[0]) }))
+      .filter((r) => r.overlap > 0.02 && (r.off - r.on) * FRAME <= 1.2);
+    if (!candidates.length) continue;
+    const burst = candidates.sort((a, b) => b.overlap - a.overlap)[0];
+    // Out through the quiet either side — a splice in silence is inaudible.
+    const s = valley(env, burst.on - 12, burst.on + 1);
+    const e = valley(env, burst.off - 1, burst.off + 12) + 1;
+    if ((e - s) * FRAME >= 0.08) out.push({ ...c, start: s * FRAME, end: e * FRAME });
+  }
+  return merge(out);
+}
+
 /** A line a person can read: what came out, and how much shorter it is. */
 export function summarise(cuts: Span[], duration: number): string {
   const n = (why: Span["why"]) => cuts.filter((c) => c.why === why).length;

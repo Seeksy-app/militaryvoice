@@ -5304,7 +5304,7 @@ export function registerRoutes(app: Express): void {
    * Vercel overrides the list; POST_FOR_ALL=1 opens it up.
    */
   const postTesters = () =>
-    new Set((process.env.POST_TESTERS || "andrew@smartloads.io").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
+    new Set((process.env.POST_TESTERS || "marineocsblog@gmail.com").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
   async function canPost(email: string): Promise<boolean> {
     if (process.env.POST_FOR_ALL === "1") return true;
     const e = email.trim().toLowerCase();
@@ -8637,7 +8637,10 @@ Watch at militaryvoices.ai/agenda
     for (const e of listed) {
       if (out.has(e)) continue;
       const sg = signups.find((x) => x.email.trim().toLowerCase() === e && x.status !== "cancelled");
-      out.set(e, { email: e, label: sg ? `${sg.podcastName.trim()} · Podcaster` : `${e} · Crew`, kind: "crew" });
+      // A test seat may have no live booking; its profile still names it.
+      const prof = sg ? null : (await storage.listAllProfiles()).find((p) => p.email.trim().toLowerCase() === e);
+      const name = sg?.podcastName.trim() || prof?.podcastName.trim() || "";
+      out.set(e, { email: e, label: name ? `${name} · Podcaster` : `${e} · Crew`, kind: "crew" });
     }
     return Array.from(out.values());
   }
