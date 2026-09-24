@@ -5359,20 +5359,28 @@ export function registerRoutes(app: Express): void {
   });
 
   /**
-   * Postify is in testing: only these accounts (and admins) see it or
-   * can start a job, until it's switched on for everyone. POST_TESTERS on
-   * Vercel overrides the list; POST_FOR_ALL=1 opens it up.
+   * Postify is open to every podcaster as a beta: one episode each (an upload,
+   * or "Make clips" on one of their recordings), up to an hour long. The event's
+   * own slot recordings are clipped anyway and don't count. Testers and admins
+   * have no limit. POSTIFY_BETA_EPISODES / POSTIFY_BETA_MAX_MIN adjust it.
    */
   const postTesters = () =>
     new Set((process.env.POST_TESTERS || "marineocsblog@gmail.com,riccoh.player@drphil.tv").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
-  async function canPost(email: string): Promise<boolean> {
-    if (process.env.POST_FOR_ALL === "1") return true;
+  const BETA_EPISODES = () => Number(process.env.POSTIFY_BETA_EPISODES || 1);
+  const BETA_MAX_SEC = () => Number(process.env.POSTIFY_BETA_MAX_MIN || 60) * 60;
+  async function postifyAllowance(email: string) {
     const e = email.trim().toLowerCase();
-    return postTesters().has(e) || (await storage.isAdminEmail(e));
+    const unlimited = postTesters().has(e) || (await storage.isAdminEmail(e));
+    const used = (await storage.listRecordingsByEmail(e)).filter((r) => r.postifyBeta).length;
+    return { unlimited, used, limit: BETA_EPISODES(), maxMinutes: Math.round(BETA_MAX_SEC() / 60), left: unlimited ? Infinity : Math.max(0, BETA_EPISODES() - used) };
+  }
+  async function canPost(_email: string): Promise<boolean> {
+    return true;
   }
   app.get("/api/host/features", requireHostSession, async (req, res) => {
     noStore(res);
-    res.json({ post: await canPost(getSessionEmail(req) ?? "") });
+    const a = await postifyAllowance(getSessionEmail(req) ?? "");
+    res.json({ post: true, beta: { unlimited: a.unlimited, used: a.used, limit: a.limit, left: a.unlimited ? null : a.left, maxMinutes: a.maxMinutes } });
   });
 
   /**
@@ -5387,6 +5395,11 @@ export function registerRoutes(app: Express): void {
     if (!/^show-assets\/[\w.-]+$/.test(storageKey)) return res.status(400).json({ message: "That upload didn't come through." });
     const durationSec = Math.max(0, Number(req.body?.durationSec) || 0);
     if (durationSec > 3 * 3600) return res.status(400).json({ message: "Episodes up to three hours, please." });
+    const allowance = await postifyAllowance(email);
+    if (!allowance.unlimited) {
+      if (allowance.left <= 0) return res.status(403).json({ message: "Your free beta episode is used. Tell us you'd like more and we'll be in touch." });
+      if (durationSec > BETA_MAX_SEC()) return res.status(400).json({ message: `The beta takes episodes up to ${allowance.maxMinutes} minutes.` });
+    }
     // A few in flight at once is plenty; this spends real money per minute.
     const mine = await storage.listRecordingsByEmail(email);
     if (mine.filter((r) => r.clipStatus === "queued" || r.clipStatus === "running").length >= 3) {
@@ -5408,6 +5421,14 @@ export function registerRoutes(app: Express): void {
     if (rec.status !== "Ready") return res.status(409).json({ message: "That recording is still being saved." });
     if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.json({ ok: true, already: true });
     if (rec.clipStatus === "done") return res.status(409).json({ message: "Clips are already made for this one." });
+    if (!rec.postifyBeta) {
+      const allowance = await postifyAllowance(email);
+      if (!allowance.unlimited) {
+        if (allowance.left <= 0) return res.status(403).json({ message: "Your free beta episode is used. Tell us you'd like more and we'll be in touch." });
+        if (rec.durationSec > BETA_MAX_SEC()) return res.status(400).json({ message: `The beta takes episodes up to ${allowance.maxMinutes} minutes.` });
+      }
+      await storage.markPostifyBeta(rec.id);
+    }
     await storage.setClipStatus(rec.id, "queued", "");
     res.json({ ok: true });
   });
@@ -7191,7 +7212,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/host/pro-interest", requireHostSession, async (req, res) => {
     const email = ((req as any).hostEmail as string).toLowerCase().trim();
     const feature = String(req.body?.feature ?? "").trim();
-    if (!["campaigns", "crm", "studio"].includes(feature)) return res.status(400).json({ message: "Which feature?" });
+    if (!["campaigns", "crm", "studio", "postify"].includes(feature)) return res.status(400).json({ message: "Which feature?" });
     const profile = await storage.getProfileByEmail(email);
     const notes = `Pro interest: ${feature}`;
     const already = (await storage.listPlatformInterest()).some((r) => r.email.toLowerCase() === email && r.notes === notes);

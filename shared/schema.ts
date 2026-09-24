@@ -1144,6 +1144,8 @@ export const recordings = pgTable("recordings", {
   clipProgress: text("clip_progress").notNull().default(""),
   /** The cleaned episode (fillers, false starts and dead air out), JSON — see CleanResult. */
   clean: text("clean").notNull().default(""),
+  /** Started by the podcaster through Postify, so it counts against their beta allowance. */
+  postifyBeta: boolean("postify_beta").notNull().default(false),
 });
 export type RecordingRow = typeof recordings.$inferSelect;
 

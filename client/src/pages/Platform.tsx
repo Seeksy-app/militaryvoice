@@ -442,7 +442,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
                 ["Live transcript", "Written while it aired; no second pass."],
                 ["Moments picked by AI", "Each one starts on a thought and stands alone."],
                 ["Three shapes", "16:9, 9:16 and 1:1, plus a caption file."],
-                ["Fillers and dead air out*", "The ums, false starts and long pauses, trimmed."],
+                ["A clean episode", "The ums, false starts and long pauses taken out, as audio and video."],
               ].map(([t, b]) => (
                 <li key={t} className="flex gap-3">
                   <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />

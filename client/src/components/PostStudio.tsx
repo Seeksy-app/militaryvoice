@@ -192,8 +192,36 @@ function putWithProgress(url: string, file: File, onProgress: (pct: number) => v
   });
 }
 
+interface Beta { unlimited: boolean; used: number; limit: number; left: number | null; maxMinutes: number }
+
+/** Once the free beta episode is used: say so, and let them ask for more. */
+function WantMore() {
+  const { toast } = useToast();
+  const [asked, setAsked] = useState(false);
+  return asked ? (
+    <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400"><Check className="h-4 w-4" /> You're on the list</span>
+  ) : (
+    <Button
+      variant="outline"
+      className="gap-2 rounded-full"
+      onClick={async () => {
+        try {
+          await apiRequest("POST", "/api/host/pro-interest", { feature: "postify" });
+          setAsked(true);
+          toast({ title: "Noted — you're on the list", description: "We'll tell you first when more episodes open up." });
+        } catch {
+          toast({ title: "That didn't go through", description: "Try again in a moment.", variant: "destructive" });
+        }
+      }}
+      data-testid="post-want-more"
+    >
+      <Sparkles className="h-4 w-4" /> Want more? Tell us
+    </Button>
+  );
+}
+
 /** Upload an episode and get clips back: it's filed as a recording and queued. */
-function UploadEpisode({ onQueued, variant = "button" }: { onQueued: (id: number) => void; variant?: "button" | "card" }) {
+function UploadEpisode({ onQueued, variant = "button", beta }: { onQueued: (id: number) => void; variant?: "button" | "card"; beta?: Beta }) {
   const { toast } = useToast();
   const input = useRef<HTMLInputElement>(null);
   const [pct, setPct] = useState<number | null>(null);
@@ -209,6 +237,10 @@ function UploadEpisode({ onQueued, variant = "button" }: { onQueued: (id: number
     try {
       setPct(0);
       const durationSec = await durationOf(file);
+      if (beta && !beta.unlimited && durationSec > beta.maxMinutes * 60) {
+        toast({ title: `The beta takes episodes up to ${beta.maxMinutes} minutes`, description: "Export a shorter cut and try again.", variant: "destructive" });
+        return;
+      }
       const { uploadUrl, storageKey } = (await (await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name })).json()) as { uploadUrl: string; storageKey: string };
       await putWithProgress(uploadUrl, file, setPct);
       const { id } = (await (await apiRequest("POST", "/api/host/uploads/clip", { storageKey, fileName: file.name, durationSec, sizeBytes: file.size })).json()) as { id: number };
@@ -233,7 +265,7 @@ function UploadEpisode({ onQueued, variant = "button" }: { onQueued: (id: number
         <Button onClick={() => input.current?.click()} disabled={pct !== null} className="mt-4 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-upload">
           {pct === null ? <Upload className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />} {label}
         </Button>
-        <p className="mt-2 text-xs text-muted-foreground">MP4 or MOV, up to 2GB.</p>
+        <p className="mt-2 text-xs text-muted-foreground">MP4 or MOV, up to 2GB{beta && !beta.unlimited ? ` and ${beta.maxMinutes} minutes · 1 free episode in the beta` : ""}.</p>
       </div>
     );
   }
@@ -253,7 +285,7 @@ export function PostStudio() {
   const [selected, setSelected] = useState<number | null>(null);
   const [preview, setPreview] = useState<{ kind: "clip"; url: string } | { kind: "recording"; url: string } | null>(null);
 
-  const features = useQuery<{ post: boolean }>({
+  const features = useQuery<{ post: boolean; beta?: Beta }>({
     queryKey: ["/api/host/features"],
     queryFn: async () => (await apiRequest("GET", "/api/host/features")).json(),
     staleTime: 5 * 60_000,
@@ -286,11 +318,22 @@ export function PostStudio() {
 
   const start = useMutation({
     mutationFn: async (id: number) => (await apiRequest("POST", `/api/host/recordings/${id}/clip`)).json(),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
+      void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
+    },
     onError: (e: Error) => toast({ title: "Couldn't start that", description: e.message, variant: "destructive" }),
   });
 
+  const beta = features.data?.beta;
+  const outOfBeta = Boolean(beta && !beta.unlimited && (beta.left ?? 1) <= 0);
+  const betaBadge = beta && !beta.unlimited ? (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F]/15 px-2.5 py-1 text-xs font-semibold text-[#8a5a00] dark:text-[#F0A71F]" data-testid="post-beta">
+      Beta · {outOfBeta ? "free episode used" : `${beta.left} free episode${beta.left === 1 ? "" : "s"}`}
+    </span>
+  ) : null;
   const queued = (id: number) => {
+    void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
     setSelected(id);
     void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
   };
@@ -303,8 +346,8 @@ export function PostStudio() {
     return (
       <section className="mt-6" data-testid="post-studio">
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Postify</p>
-        <h2 className="mb-4 mt-1 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips</h2>
-        <UploadEpisode variant="card" onQueued={queued} />
+        <h2 className="mb-4 mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
+        {outOfBeta ? <WantMore /> : <UploadEpisode variant="card" onQueued={queued} beta={beta} />}
       </section>
     );
   }
@@ -352,9 +395,9 @@ export function PostStudio() {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Postify</p>
-          <h2 className="mt-1 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips</h2>
+          <h2 className="mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
         </div>
-        <UploadEpisode onQueued={queued} />
+        {outOfBeta ? <WantMore /> : <UploadEpisode onQueued={queued} beta={beta} />}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,17rem)]">
@@ -423,6 +466,8 @@ export function PostStudio() {
               <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400"><Check className="h-4 w-4" /> Ready</span>
             ) : running ? (
               <Button disabled className="gap-2 rounded-full"><Loader2 className="h-4 w-4 animate-spin" /> {pct}%</Button>
+            ) : outOfBeta && !rec.postifyBeta ? (
+              <WantMore />
             ) : (
               <Button onClick={() => start.mutate(rec.id)} disabled={start.isPending} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-start">
                 <Scissors className="h-4 w-4" /> {failed ? "Try again" : "Make clips"}

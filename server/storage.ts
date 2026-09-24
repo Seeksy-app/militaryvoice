@@ -222,6 +222,7 @@ async function ensureSchema() {
   await sql`ALTER TABLE show_assets ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS clip_progress TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS clean TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS postify_beta BOOLEAN NOT NULL DEFAULT false`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS run_of_show (
@@ -789,6 +790,7 @@ export interface IStorage {
   setClipProgress(recordingId: number, progress: string): Promise<void>;
   setClean(recordingId: number, clean: string): Promise<void>;
   claimCleanJob(): Promise<RecordingRow | undefined>;
+  markPostifyBeta(recordingId: number): Promise<void>;
   createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow>;
   claimClipJob(): Promise<RecordingRow | undefined>;
   appendTranscript(studioId: number, eventId: number, lines: { speaker: string; text: string; startMs: number; endMs: number }[]): Promise<number>;
@@ -1802,6 +1804,11 @@ class DatabaseStorage implements IStorage {
    * any studio session — finished, and queued for the clipper — so everything
    * downstream (progress, clips, downloads) works the same.
    */
+  async markPostifyBeta(recordingId: number): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ postifyBeta: true }).where(eq(recordings.id, recordingId));
+  }
+
   async createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow> {
     await ready();
     const now = new Date().toISOString();
@@ -1821,6 +1828,7 @@ class DatabaseStorage implements IStorage {
         startedAt: now,
         endedAt: now,
         clipStatus: "queued",
+        postifyBeta: true,
       })
       .returning();
     return row;

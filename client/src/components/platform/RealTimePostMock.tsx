@@ -2,15 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useInView, useReducedMotion } from "framer-motion";
 import { Square, FileText, Sparkles, Crop, Send, Check, Scissors } from "lucide-react";
 import { PlatformIcon } from "@/components/SocialIcons";
-import { LoopVideo, SoonPill, VCAST } from "./stockVideo";
+import { LoopVideo, VCAST } from "./stockVideo";
 
 // Postify, drawn: one segment going from the moment the recording
 // stops to clips ready to post, in five steps that play on their own and can
 // be clicked. It follows what the clipper actually does (agent/clipper.ts):
 // the transcript was written live by the captioner, Claude picks moments that
 // stand up cold, and each is rendered at 16:9, 9:16 and 1:1 with the words
-// burned in. Filler removal (agent/refine.ts) is built but not switched on, so
-// that line carries the Coming soon pill.
+// burned in, and the clean episode takes the fillers out (agent/refine.ts).
 
 const GUEST = VCAST.ray;
 const STEP_MS = 3400;
@@ -121,7 +120,7 @@ function Stage({ step }: { step: number }) {
                 ))}
               </div>
               <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 2 }} className="mt-auto flex flex-wrap items-center gap-1.5 pt-3 text-[10px] text-white/55">
-                <Scissors className="h-3 w-3 text-[#ED1C24]" /> Filler words marked for the cut <SoonPill />
+                <Scissors className="h-3 w-3 text-[#ED1C24]" /> Filler words cut from the clean episode
               </motion.p>
             </div>
           </motion.div>
