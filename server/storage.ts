@@ -786,6 +786,7 @@ export interface IStorage {
   getRecording(id: number): Promise<RecordingRow | undefined>;
   setClipStatus(recordingId: number, status: ClipStatus, error?: string): Promise<RecordingRow | undefined>;
   setClipProgress(recordingId: number, progress: string): Promise<void>;
+  createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow>;
   claimClipJob(): Promise<RecordingRow | undefined>;
   appendTranscript(studioId: number, eventId: number, lines: { speaker: string; text: string; startMs: number; endMs: number }[]): Promise<number>;
   transcriptBetween(studioId: number, startMs: number, endMs: number): Promise<TranscriptLineRow[]>;
@@ -1788,6 +1789,35 @@ class DatabaseStorage implements IStorage {
         // path back to us, but not always — and the file is there either way.
         url: v.filepath,
         startedAt: new Date().toISOString(),
+      })
+      .returning();
+    return row;
+  }
+
+  /**
+   * An episode a podcaster uploaded to be clipped. It becomes a recording like
+   * any studio session — finished, and queued for the clipper — so everything
+   * downstream (progress, clips, downloads) works the same.
+   */
+  async createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow> {
+    await ready();
+    const now = new Date().toISOString();
+    const [row] = await db
+      .insert(recordings)
+      .values({
+        eventId: 0,
+        studioId: 0,
+        signupId: null,
+        email: v.email.trim().toLowerCase(),
+        title: v.title,
+        egressId: `UPLOAD_${Date.now()}`,
+        status: "Ready",
+        url: v.storageKey,
+        durationSec: Math.round(v.durationSec),
+        sizeBytes: String(v.sizeBytes),
+        startedAt: now,
+        endedAt: now,
+        clipStatus: "queued",
       })
       .returning();
     return row;

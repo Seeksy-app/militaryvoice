@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send } from "lucide-react";
+import { Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload } from "lucide-react";
 
 // Real-time post: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -113,6 +113,85 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
   );
 }
 
+/** How long a video runs, read in the browser before it's sent. */
+function durationOf(file: File): Promise<number> {
+  return new Promise((resolve) => {
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.onloadedmetadata = () => { URL.revokeObjectURL(v.src); resolve(Number.isFinite(v.duration) ? v.duration : 0); };
+    v.onerror = () => resolve(0);
+    v.src = URL.createObjectURL(file);
+  });
+}
+
+/** PUT with progress — fetch can't report upload progress, and an episode is hundreds of MB. */
+function putWithProgress(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("content-type", file.type || "video/mp4");
+    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
+    xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`Upload refused (${xhr.status})`)));
+    xhr.onerror = () => reject(new Error("The upload was interrupted. Check your connection and try again."));
+    xhr.send(file);
+  });
+}
+
+/** Upload an episode and get clips back: it's filed as a recording and queued. */
+function UploadEpisode({ onQueued, variant = "button" }: { onQueued: (id: number) => void; variant?: "button" | "card" }) {
+  const { toast } = useToast();
+  const input = useRef<HTMLInputElement>(null);
+  const [pct, setPct] = useState<number | null>(null);
+  async function go(file: File) {
+    if (!file.type.startsWith("video/") && !/\.(mp4|mov|m4v|webm)$/i.test(file.name)) {
+      toast({ title: "That isn't a video", description: "Upload an MP4, MOV or WebM of your episode.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 2 * 1024 ** 3) {
+      toast({ title: "That file is over 2GB", description: "Export a smaller copy (1080p is plenty) and try again.", variant: "destructive" });
+      return;
+    }
+    try {
+      setPct(0);
+      const durationSec = await durationOf(file);
+      const { uploadUrl, storageKey } = (await (await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name })).json()) as { uploadUrl: string; storageKey: string };
+      await putWithProgress(uploadUrl, file, setPct);
+      const { id } = (await (await apiRequest("POST", "/api/host/uploads/clip", { storageKey, fileName: file.name, durationSec, sizeBytes: file.size })).json()) as { id: number };
+      toast({ title: "Got it — clipping now", description: "Watch it go below. You can leave this page; the clips will be here." });
+      onQueued(id);
+    } catch (e) {
+      toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setPct(null);
+      if (input.current) input.current.value = "";
+    }
+  }
+  const picker = <input ref={input} type="file" accept="video/*" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} data-testid="post-upload-input" />;
+  const label = pct === null ? "Upload an episode" : pct < 100 ? `Uploading… ${pct}%` : "Queuing…";
+  if (variant === "card") {
+    return (
+      <div className="rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] p-8 text-center">
+        {picker}
+        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Upload className="h-6 w-6" /></span>
+        <p className="mt-3 text-lg font-semibold text-foreground">Turn an episode into clips</p>
+        <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">Upload a video episode. We transcribe it, pick the moments that stand on their own, and cut each one vertical, square and wide with captions.</p>
+        <Button onClick={() => input.current?.click()} disabled={pct !== null} className="mt-4 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-upload">
+          {pct === null ? <Upload className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />} {label}
+        </Button>
+        <p className="mt-2 text-xs text-muted-foreground">MP4 or MOV, up to 2GB.</p>
+      </div>
+    );
+  }
+  return (
+    <>
+      {picker}
+      <Button variant="outline" onClick={() => input.current?.click()} disabled={pct !== null} className="gap-2 rounded-full" data-testid="post-upload">
+        {pct === null ? <Upload className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />} {label}
+      </Button>
+    </>
+  );
+}
+
 export function PostStudio() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -150,7 +229,21 @@ export function PostStudio() {
     onError: (e: Error) => toast({ title: "Couldn't start that", description: e.message, variant: "destructive" }),
   });
 
-  if (!rec) return null;
+  const queued = (id: number) => {
+    setSelected(id);
+    void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
+  };
+
+  if (!rec) {
+    if (recs.isLoading) return null;
+    return (
+      <section className="mt-6" data-testid="post-studio">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Real-time post</p>
+        <h2 className="mb-4 mt-1 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips</h2>
+        <UploadEpisode variant="card" onQueued={queued} />
+      </section>
+    );
+  }
 
   const at = p ? ORDER.indexOf(p.stage) : -1;
   const done = rec.clipStatus === "done";
@@ -197,6 +290,7 @@ export function PostStudio() {
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Real-time post</p>
           <h2 className="mt-1 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips</h2>
         </div>
+        <UploadEpisode onQueued={queued} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,17rem)]">

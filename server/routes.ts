@@ -5298,6 +5298,27 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  /**
+   * Upload an episode and get clips back. The file has already gone straight
+   * to storage (/api/host/assets/upload-url); this files it as a recording and
+   * queues it, so it shows up in Real-time post like a studio session.
+   */
+  app.post("/api/host/uploads/clip", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const storageKey = String(req.body?.storageKey ?? "");
+    if (!/^show-assets\/[\w.-]+$/.test(storageKey)) return res.status(400).json({ message: "That upload didn't come through." });
+    const durationSec = Math.max(0, Number(req.body?.durationSec) || 0);
+    if (durationSec > 3 * 3600) return res.status(400).json({ message: "Episodes up to three hours, please." });
+    // A few in flight at once is plenty; this spends real money per minute.
+    const mine = await storage.listRecordingsByEmail(email);
+    if (mine.filter((r) => r.clipStatus === "queued" || r.clipStatus === "running").length >= 3) {
+      return res.status(429).json({ message: "You have three episodes being clipped already. Try again when one finishes." });
+    }
+    const title = String(req.body?.title ?? "").trim().slice(0, 140) || String(req.body?.fileName ?? "Episode").replace(/\.[a-z0-9]+$/i, "").slice(0, 140);
+    const rec = await storage.createUploadedRecording({ email, title, storageKey, durationSec, sizeBytes: Number(req.body?.sizeBytes) || 0 });
+    res.status(201).json({ id: rec.id });
+  });
+
   /** The podcaster's own "Make clips": queue one of their finished recordings that hasn't been clipped (or failed). */
   registerCreatomate(app, requireAdmin, requireAgent);
 
