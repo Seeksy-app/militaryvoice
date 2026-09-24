@@ -48,6 +48,12 @@ import {
   Presentation,
   MessageSquareText,
   Clock3,
+  LayoutGrid,
+  Move,
+  UserPlus,
+  IdCard,
+  Palette,
+  Film,
 } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
 
@@ -255,6 +261,16 @@ const reveal = {
   transition: { duration: 0.55 },
 } as const;
 
+/** Under the studio console: what the layouts sit inside. */
+const STUDIO_FEATURES = [
+  { icon: LayoutGrid, title: "Change the layout live", body: "Showtime, Sidebar, Picture-in-Picture and three more. Press one, or Shift+1 to 6, mid-show." },
+  { icon: Move, title: "Drag to rearrange", body: "Drop a guest onto the big frame and they swap places with whoever was there." },
+  { icon: UserPlus, title: "Bring guests on", body: "Everyone backstage sits along the top, green on stage and red off. One click brings them up." },
+  { icon: IdCard, title: "Names on screen", body: "The name and title each guest typed in the green room sit on their own frame." },
+  { icon: Palette, title: "Your colours", body: "Pick a brand colour, type any hex, or upload your own background." },
+  { icon: Film, title: "Video with people in shot", body: "Roll a clip or sponsor reel with the speakers still beside it; the next scene starts when it ends." },
+] as const;
+
 export default function Platform() {
   return (
     <div className="min-h-screen overflow-x-clip bg-background">
@@ -443,15 +459,21 @@ export default function Platform() {
           </div>
           {/* The console, drawn live, stepping through the layouts. */}
           <div className="mt-16">
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] lg:items-end lg:gap-14">
-              <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Six layouts, one press</h3>
-              <p className="text-[15px] leading-relaxed text-white/70">
-                Showtime, Contain, Cover, Sidebar, Picture-in-Picture, Thumbnails. The console below steps through them on its own; press any layout to hold it.
-              </p>
-            </div>
+            <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Six layouts, one press</h3>
             <motion.div {...reveal} className="mt-8">
               <StudioConsoleMock />
             </motion.div>
+            <ul className="mt-10 grid gap-x-8 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">
+              {STUDIO_FEATURES.map(({ icon: Icon, title, body }) => (
+                <li key={title} className="flex gap-3.5">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[#F0A71F]"><Icon className="h-5 w-5" /></span>
+                  <span>
+                    <span className="block font-semibold text-white">{title}</span>
+                    <span className="mt-1 block text-sm leading-relaxed text-white/70">{body}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </section>
