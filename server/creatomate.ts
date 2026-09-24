@@ -72,7 +72,7 @@ function source(shape: Shape, videoUrl: string, start: number, length: number, t
 // percentages of its parent, so no unit guessing.
 
 export interface Box { w: number; h: number; x: number; y: number }
-export interface Geo { srcW: number; srcH: number; whole: Box | null; left: Box | null; right: Box | null; stack: boolean; focus?: Box | null }
+export interface Geo { srcW: number; srcH: number; whole: Box | null; left: Box | null; right: Box | null; stack: boolean; focus?: Box | null; focusShots?: { from: number; to: number; focus: Box | null }[] | null }
 
 /** Grow a speaker box to a panel's shape, with room around them, kept inside the picture (same rule as the clipper). */
 function frameAround(focus: Box, within: Box, aspect: number): Box {
@@ -90,7 +90,7 @@ function frameAround(focus: Box, within: Box, aspect: number): Box {
 const pct = (n: number) => `${Math.round(n * 10000) / 100}%`;
 
 /** A panel showing one rectangle of the source, scaled to cover the panel and clipped to it. */
-function panel(videoUrl: string, start: number, length: number, geo: Geo, tile: Box, box: { x: number; y: number; w: number; h: number }, canvas: [number, number], track: number) {
+function panel(videoUrl: string, start: number, length: number, geo: Geo, tile: Box, box: { x: number; y: number; w: number; h: number }, canvas: [number, number], track: number, at?: { time: number }) {
   const [W, H] = canvas;
   const PW = box.w * W, PH = box.h * H;
   const s = Math.max(PW / tile.w, PH / tile.h);
@@ -100,6 +100,7 @@ function panel(videoUrl: string, start: number, length: number, geo: Geo, tile: 
   return {
     type: "composition",
     track,
+    ...(at ? { time: at.time, duration: length } : {}),
     x: pct(box.x + box.w / 2),
     y: pct(box.y + box.h / 2),
     width: pct(box.w),
@@ -125,6 +126,15 @@ export function combinedSource(o: {
     const h = (1 - band) / 2;
     els.push(panel(o.videoUrl, o.start, o.length, o.geo, o.geo.left, { x: 0, y: band, w: 1, h }, [W, H], 2));
     els.push(panel(o.videoUrl, o.start, o.length, o.geo, o.geo.right, { x: 0, y: band + h, w: 1, h }, [W, H], 3));
+  } else if (banded && o.geo.focusShots?.length) {
+    // A show that cuts between cameras: reframe on the speaker at every cut.
+    const area = { x: 0, y: band, w: 1, h: 1 - band };
+    const aspect = (area.w * W) / (area.h * H);
+    for (const sh of o.geo.focusShots) {
+      const tile = sh.focus ? frameAround(sh.focus, whole, aspect) : frameAround({ x: whole.x + whole.w / 2 - 1, y: whole.y + whole.h * 0.3, w: 2, h: 2 }, whole, aspect);
+      const tileFit = sh.focus ? tile : { ...tile, h: whole.h, y: whole.y, w: Math.min(whole.w, whole.h * aspect), x: whole.x + (whole.w - Math.min(whole.w, whole.h * aspect)) / 2 };
+      els.push(panel(o.videoUrl, o.start + sh.from, sh.to - sh.from, o.geo, tileFit, area, [W, H], 2, { time: sh.from }));
+    }
   } else if (banded && o.geo.focus) {
     // One camera on a room: the speaker fills the frame.
     const area = { x: 0, y: band, w: 1, h: 1 - band };

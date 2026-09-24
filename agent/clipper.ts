@@ -385,12 +385,12 @@ export async function frameGeometry(source: string, atSec: number) {
 
 type Box = { w: number; h: number; x: number; y: number };
 
-export async function speakerFocus(source: string, m: Moment, words: string, whole: Box | null, dir: string): Promise<Box | null> {
+export async function speakerFocus(source: string, m: Moment, words: string, whole: Box | null, dir: string, atSec?: number): Promise<Box | null> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key || !whole) return null;
   try {
-    const at = m.startSec + (m.endSec - m.startSec) / 2;
-    const frame = path.join(dir, `focus-${m.startSec}.jpg`);
+    const at = atSec ?? m.startSec + (m.endSec - m.startSec) / 2;
+    const frame = path.join(dir, `focus-${Math.round(at * 10)}.jpg`);
     await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", String(at), "-i", source, "-frames:v", "1",
       "-vf", `crop=${even(whole.w)}:${even(whole.h)}:${whole.x}:${whole.y},scale=1280:-2`, frame]);
     const img = (await fs.readFile(frame)).toString("base64");
@@ -431,6 +431,33 @@ export async function speakerFocus(source: string, m: Moment, words: string, who
     console.warn(`speaker focus skipped: ${(err as Error).message}`);
     return null;
   }
+}
+
+/**
+ * The camera cuts inside a moment, as offsets from its start. A produced show
+ * switches angles every few seconds, and one crop for the whole moment frames
+ * an empty chair the moment the camera moves. Shots under a second and a half
+ * fold into the one before — a flash cut isn't worth reframing for.
+ */
+export async function shotsIn(source: string, m: Moment): Promise<{ from: number; to: number }[]> {
+  const len = m.endSec - m.startSec;
+  let cuts: number[] = [];
+  try {
+    const out = await run("ffmpeg", ["-hide_banner", "-ss", String(m.startSec), "-t", String(len), "-i", source, "-vf", "scale=320:-2,select='gt(scene,0.32)',showinfo", "-an", "-f", "null", "-"]);
+    cuts = [...out.matchAll(/pts_time:([\d.]+)/g)].map((x) => Number(x[1])).filter((t) => t > 0.5 && t < len - 0.5);
+  } catch {
+    cuts = [];
+  }
+  const edges = [0, ...cuts, len];
+  const shots: { from: number; to: number }[] = [];
+  for (let i = 0; i < edges.length - 1; i++) {
+    const from = edges[i], to = edges[i + 1];
+    if (shots.length && to - from < 1.5) shots[shots.length - 1].to = to;
+    else shots.push({ from, to });
+  }
+  // A first shot under 1.5s merges forward instead.
+  if (shots.length > 1 && shots[0].to - shots[0].from < 1.5) { shots[1].from = 0; shots.shift(); }
+  return shots.slice(0, 12);
 }
 
 const focusOf = (g: unknown): Box | null => ((g as { focus?: Box | null } | undefined)?.focus ?? null);
@@ -1095,9 +1122,23 @@ async function handle(job: Job): Promise<void> {
       // call is cheaper than getting the framing wrong for the rest of it.
       console.log(`[${job.recordingId}] rendering ${i + 1}/${moments.length} — ${m.title}`);
       const measured = await frameGeometry(source, m.startSec);
-      const focus = !measured.stack ? await speakerFocus(source, m, within.map((l) => l.text).join(" "), measured.whole, dir) : null;
-      if (focus) console.log(`[${job.recordingId}]   speaker focus: ${JSON.stringify(focus)}`);
-      const geo = { ...measured, focus };
+      let focus: Box | null = null;
+      let focusShots: { from: number; to: number; focus: Box | null }[] | null = null;
+      if (!measured.stack && process.env.ANTHROPIC_API_KEY) {
+        // One camera, or a produced show cutting between cameras: find who's
+        // speaking in each shot.
+        const shots = await shotsIn(source, m);
+        const said = (from: number, to: number) =>
+          within.filter((l) => l.endSec > m.startSec + from && l.startSec < m.startSec + to).map((l) => l.text).join(" ") || within.map((l) => l.text).join(" ");
+        focusShots = [];
+        for (const sh of shots) {
+          focusShots.push({ ...sh, focus: await speakerFocus(source, m, said(sh.from, sh.to), measured.whole, dir, m.startSec + (sh.from + sh.to) / 2) });
+        }
+        if (focusShots.length === 1) { focus = focusShots[0].focus; focusShots = null; }
+        console.log(`[${job.recordingId}]   speaker focus: ${shots.length} shot(s), ${[focus, ...(focusShots ?? []).map((x) => x.focus)].filter(Boolean).length} framed`);
+      }
+      // ffmpeg frames a single speaker; only Creatomate follows a camera that cuts.
+      const geo = { ...measured, focus, focusShots };
 
       // The same words go into all three, drawn per shape because the type is
       // sized against the canvas it lands on.
