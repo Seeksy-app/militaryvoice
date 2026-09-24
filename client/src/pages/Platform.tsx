@@ -4,6 +4,7 @@ import { NavBar } from "@/components/NavBar";
 import { HeroBackdrop, HeroCard } from "@/components/platform/LiveEventMock";
 import { PillarArt } from "@/components/platform/PillarArt";
 import { StudioConsoleMock } from "@/components/platform/StudioConsoleMock";
+import { RealTimePostMock } from "@/components/platform/RealTimePostMock";
 import { ReadyToJoinMock, WaitingRoomMock } from "@/components/platform/GreenRoomMock";
 import { DiscoverySearchMock, CreatorProfileMock } from "@/components/platform/DiscoveryMock";
 import { SoonPill } from "@/components/platform/stockVideo";
@@ -422,6 +423,40 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
               ))}
             </ul>
           </div>
+        </div>
+      </section>
+
+      {/* ---------------------------------------------------- real-time post */}
+      <section id="real-time-post" className="border-b border-border bg-background">
+        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:py-24">
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end lg:gap-16">
+            <div>
+              <Kicker>Real-time post</Kicker>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Post-production, in real time</h2>
+              <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+                The recording stops and the clips are already on their way. Every word was transcribed live while the show went out, so there is no upload and no queue: AI reads the segment, picks the moments that stand on their own, and cuts each one in the shapes the networks take, captions burned in.
+              </p>
+            </div>
+            <ul className="grid gap-3 text-sm sm:grid-cols-2">
+              {[
+                ["Live transcript", "Written while it aired; no second pass."],
+                ["Moments picked by AI", "Each one starts on a thought and stands alone."],
+                ["Three shapes", "16:9, 9:16 and 1:1, plus a caption file."],
+                ["Fillers and dead air out*", "The ums, false starts and long pauses, trimmed."],
+              ].map(([t, b]) => (
+                <li key={t} className="flex gap-3">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
+                  <span>
+                    <span className="flex flex-wrap items-center gap-2 font-medium text-foreground">{t.replace(/\*$/, "")}{t.endsWith("*") && <SoonPill tone="light" />}</span>
+                    <span className="text-muted-foreground">{b}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <motion.div {...reveal} className="mt-12">
+            <RealTimePostMock />
+          </motion.div>
         </div>
       </section>
 
