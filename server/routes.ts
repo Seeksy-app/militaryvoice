@@ -5299,12 +5299,30 @@ export function registerRoutes(app: Express): void {
   });
 
   /**
+   * Real-time post is in testing: only these accounts (and admins) see it or
+   * can start a job, until it's switched on for everyone. POST_TESTERS on
+   * Vercel overrides the list; POST_FOR_ALL=1 opens it up.
+   */
+  const postTesters = () =>
+    new Set((process.env.POST_TESTERS || "andrew@smartloads.io").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
+  async function canPost(email: string): Promise<boolean> {
+    if (process.env.POST_FOR_ALL === "1") return true;
+    const e = email.trim().toLowerCase();
+    return postTesters().has(e) || (await storage.isAdminEmail(e));
+  }
+  app.get("/api/host/features", requireHostSession, async (req, res) => {
+    noStore(res);
+    res.json({ post: await canPost(getSessionEmail(req) ?? "") });
+  });
+
+  /**
    * Upload an episode and get clips back. The file has already gone straight
    * to storage (/api/host/assets/upload-url); this files it as a recording and
    * queues it, so it shows up in Real-time post like a studio session.
    */
   app.post("/api/host/uploads/clip", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    if (!(await canPost(email))) return res.status(403).json({ message: "This isn't switched on for your account yet." });
     const storageKey = String(req.body?.storageKey ?? "");
     if (!/^show-assets\/[\w.-]+$/.test(storageKey)) return res.status(400).json({ message: "That upload didn't come through." });
     const durationSec = Math.max(0, Number(req.body?.durationSec) || 0);
@@ -5324,6 +5342,7 @@ export function registerRoutes(app: Express): void {
 
   app.post("/api/host/recordings/:id/clip", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    if (!(await canPost(email))) return res.status(403).json({ message: "This isn't switched on for your account yet." });
     const rec = await storage.getRecording(Number(req.params.id));
     if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
     if (rec.status !== "Ready") return res.status(409).json({ message: "That recording is still being saved." });

@@ -198,6 +198,11 @@ export function PostStudio() {
   const [selected, setSelected] = useState<number | null>(null);
   const [preview, setPreview] = useState<{ kind: "clip"; url: string } | { kind: "recording"; url: string } | null>(null);
 
+  const features = useQuery<{ post: boolean }>({
+    queryKey: ["/api/host/features"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/features")).json(),
+    staleTime: 5 * 60_000,
+  });
   const recs = useQuery<Rec[]>({
     queryKey: ["/api/host/recordings"],
     queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(),
@@ -233,6 +238,9 @@ export function PostStudio() {
     setSelected(id);
     void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
   };
+
+  // In testing: only for the accounts the server says.
+  if (!features.data?.post) return null;
 
   if (!rec) {
     if (recs.isLoading) return null;
