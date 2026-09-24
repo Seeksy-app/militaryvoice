@@ -30,7 +30,7 @@ function scrollToAnchor(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
 const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/#podcasters", label: "Podcasters", anchor: true },
   { href: "/#listeners", label: "Listeners", anchor: true },
-  { href: "/agenda", label: "Agenda" },
+  { href: "/events", label: "Events" },
   { href: "/discover", label: "Discovery" },
   { href: "/directory", label: "Directory" },
   { href: "/faq", label: "FAQ" },
@@ -43,7 +43,7 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
  */
 const DISCOVERY_LINKS: { href: string; label: string; anchor?: boolean }[] = [
   // One platform now: the way back to the events sits beside the tools.
-  { href: "/", label: "Events" },
+  { href: "/events", label: "Events" },
   { href: "/discover", label: "Discovery" },
   { href: "/directory", label: "Directory" },
   { href: "/platform", label: "About MilitaryVoices" },
