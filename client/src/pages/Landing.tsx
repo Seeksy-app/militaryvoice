@@ -17,6 +17,7 @@ import { useCountdown } from "@/hooks/use-countdown";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, PublicSignup, PublicPodcaster, PublicSponsor, SocialPlatform } from "@shared/schema";
 import { mileMarkers } from "@shared/mileMarkers";
+import { deriveSocialAccounts } from "@shared/socialLinks";
 import { MileMarker } from "@/components/MileMarker";
 import {
   detectLocalTimeZone,
@@ -158,6 +159,9 @@ const CO_HOSTS = [
   },
 ];
 
+/** Lineup cards on the home page; the rest are one click away on the agenda. */
+const LINEUP_CARDS = 11;
+
 export default function Landing({ slug }: Props) {
   const { data: liveEvent } = useQuery<PublicEvent>({
     queryKey: ["/api/event", slug ?? "featured"],
@@ -238,7 +242,10 @@ export default function Landing({ slug }: Props) {
   // held bonus slot, so counting rows said "30 shows confirmed" when there
   // were twenty-seven — an overstatement on the most public number we print.
   const markers = useMemo(() => mileMarkers(lineup.map((l) => ({ signup: l.signup }))), [lineup]);
-  const showCount = useMemo(() => markers.filter((m) => m.kind === "mile").length, [markers]);
+  // Counting mile markers capped it at 26 while thirty shows were booked;
+  // the honest number is every booking that is a show, i.e. all but the
+  // opening and closing ceremonies.
+  const showCount = useMemo(() => booked.filter((s) => !/ceremon/i.test(s.podcastName ?? "")).length, [booked]);
 
   const spotlight = useMemo<SpotlightItem[]>(() => {
     if (lineup.length > 0) return lineup.map(({ signup, start }) => spotlightFromSignup(signup, start));
@@ -809,67 +816,66 @@ export default function Landing({ slug }: Props) {
               </Link>
             </div>
           ) : (
-            <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {lineup.slice(0, 12).map(({ signup, start: onAirStart, end: onAirEnd }, i) => (
+            <div className="mt-8 grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {/* The same card as the agenda: navy time bar with the mile
+                  marker, the sponsor ribbon, then the face and the show. */}
+              {lineup.slice(0, LINEUP_CARDS).map(({ signup, start: onAirStart, end: onAirEnd }, i) => (
                 <motion.div
                   key={signup.id}
                   initial={{ opacity: 0, y: 16 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-40px" }}
                   transition={{ duration: 0.45, delay: Math.min(i, 6) * 0.06 }}
-                  className="group flex flex-col items-center overflow-hidden rounded-2xl border border-border bg-card p-5 text-center transition-shadow hover:border-primary/40 hover:shadow-md"
+                  className="flex h-full flex-col overflow-hidden rounded-2xl border-2 border-primary/15 bg-card shadow-md transition-shadow hover:shadow-lg"
                   data-testid={`card-lineup-${signup.id}`}
                 >
-                  {signup.sponsor && (
-                    <div className="-mx-5 -mt-5 mb-4 w-[calc(100%+2.5rem)]">
-                      <SponsorRibbon sponsor={signup.sponsor} source="home" size="sm" testId={`lineup-sponsor-${signup.id}`} />
-                    </div>
-                  )}
-                  {markers[i] && markers[i].kind !== "open" && (
-                    <div className="mb-2 self-start">
-                      <MileMarker marker={markers[i]} size={40} />
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2.5 bg-[#053877] px-3 py-2 text-white">
+                    {markers[i] && markers[i].kind !== "open" && <MileMarker marker={markers[i]} size={42} className="shrink-0" />}
+                    <span className="text-sm font-bold tabular-nums">
+                      {formatTimeInZone(onAirStart, zone)}
+                      <span className="text-white/60"> – {formatTimeInZone(onAirEnd, zone)}</span>
+                    </span>
+                  </div>
+
+                  {signup.sponsor && <SponsorRibbon sponsor={signup.sponsor} source="home" testId={`lineup-sponsor-${signup.id}`} />}
+
                   {/* The socials below are real links, so only this part is the
                       button — an anchor inside a button is invalid markup. */}
                   <button
                     type="button"
                     onClick={() => setSelectedPodcaster({ signup, start: onAirStart, end: onAirEnd })}
-                    className="flex w-full flex-col items-center rounded-xl text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    className="flex items-start gap-3 p-4 text-left transition-colors hover:bg-muted/40"
                     aria-label={`About ${signup.podcastName}`}
                     data-testid={`button-lineup-profile-${signup.id}`}
                   >
                     {signup.photoUrl ? (
-                      <img
-                        src={resolveUploadUrl(signup.photoUrl)}
-                        alt={signup.hostName}
-                        className="h-20 w-20 rounded-full object-cover ring-4 ring-primary/10 transition-all group-hover:ring-primary/30"
-                      />
+                      <img src={resolveUploadUrl(signup.photoUrl)} alt={signup.hostName} className="h-16 w-16 shrink-0 rounded-full object-cover ring-4 ring-[#F0A71F]/40" />
                     ) : (
-                      <div className="flex h-20 w-20 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                        <Mic2 className="h-7 w-7" />
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground ring-4 ring-[#F0A71F]/40">
+                        <Mic2 className="h-6 w-6" />
                       </div>
                     )}
-                    <div className="mt-3 line-clamp-2 text-sm font-semibold leading-tight group-hover:text-primary">
-                      {signup.podcastName}
-                    </div>
-                    <div className="mt-0.5 truncate text-xs text-muted-foreground">{signup.hostName}</div>
-                    <div className="mt-2 tabular-nums text-xs text-primary">
-                      {formatDateInZone(onAirStart, zone)} · {formatTimeInZone(onAirStart, zone)}
-                    </div>
-                    <span className="mt-2 text-[12px] font-medium text-muted-foreground group-hover:text-primary">
-                      View profile
+                    <span className="min-w-0">
+                      <span className="line-clamp-2 block font-semibold leading-tight text-card-foreground">{signup.podcastName}</span>
+                      <span className="block truncate text-sm text-muted-foreground">
+                        with {signup.hostName}{signup.coHost ? ` & ${signup.coHost.hostName}` : ""}
+                      </span>
+                      <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary">
+                        View profile <ArrowRight className="h-3 w-3" />
+                      </span>
                     </span>
                   </button>
-                  <SocialIconRow accounts={parseSocialAccounts(signup.socialAccounts)} variant="filled" className="mt-3 justify-center" />
+                  <div className="mt-auto px-4 pb-4">
+                    <SocialIconRow accounts={deriveSocialAccounts(parseSocialAccounts(signup.socialAccounts), signup.socialLinks, signup.youtubeUrl)} />
+                  </div>
                 </motion.div>
               ))}
-              {lineup.length > 12 && (
+              {lineup.length > LINEUP_CARDS && (
                 <Link
                   href={agendaHref}
-                  className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card p-5 text-center text-sm font-medium text-primary hover-elevate"
+                  className="flex min-h-40 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-primary/20 bg-card p-5 text-center text-sm font-medium text-primary hover-elevate"
                 >
-                  +{lineup.length - 12} more on the agenda <ArrowRight className="mt-1 h-4 w-4" />
+                  +{lineup.length - LINEUP_CARDS} more on the agenda <ArrowRight className="mt-1 h-4 w-4" />
                 </Link>
               )}
             </div>
