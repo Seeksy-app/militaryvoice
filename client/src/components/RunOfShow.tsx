@@ -231,6 +231,10 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
     const m = new Map<string, ShowAssetRow[]>();
     for (const a of assets ?? []) {
       const k = a.email.toLowerCase();
+      // The house address owns the whole media library (reels, clips, help
+      // videos) and is also the email on Riccoh's ceremonies, so matching by
+      // email hung the entire library off his rows. Those files aren't his.
+      if (k === "hello@militaryvoice.ai" || k === "hello@militaryvoices.ai") continue;
       m.set(k, [...(m.get(k) ?? []), a]);
     }
     return m;
