@@ -52,6 +52,7 @@ import {
 import { isLiveOnlySlot, LIVE_ONLY_LABEL } from "../shared/slots.js";
 import { showClock } from "../shared/showClock.js";
 import { registerDiscoveryRoutes, probeIc } from "./discovery.js";
+import { registerMce } from "./mce.js";
 import { isConfigured as isInfluencersConfigured, credits, enrichHandle } from "./influencers.js";
 import { deriveSocialAccounts } from "../shared/socialLinks.js";
 import { buildAudienceSnapshot, readAudienceSnapshot, saveAudienceSnapshot, AUDIENCE_WINDOW_DAYS } from "./audience.js";
@@ -655,6 +656,8 @@ async function broadcastBannerTitle(): Promise<string> {
 }
 
 export function registerRoutes(app: Express): void {
+  // militarycreatoreconomy.com: its own page, robots and sitemap, before anything else.
+  registerMce(app);
   registerDiscoveryRoutes(app);
   // ---- Public: events list (for "Choose Your Event") -------------------------
   app.get("/api/events", async (_req, res) => {

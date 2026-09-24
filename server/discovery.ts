@@ -139,9 +139,9 @@ const hash = (v: unknown) => crypto.createHash("sha1").update(JSON.stringify(v))
 export const SAMPLE_QUERY = "Military spouse lifestyle creators";
 const SAMPLE_PLATFORM = "instagram";
 const SAMPLE_KEY = "sample:v1";
-interface SamplePayload { q: string; platform: string; total: number; understood: unknown; results: (CreatorCard & { extra: RowExtra | null })[]; builtAt: string }
+export interface SamplePayload { q: string; platform: string; total: number; understood: unknown; results: (CreatorCard & { extra: RowExtra | null })[]; builtAt: string }
 let sampleMemo: { at: number; value: SamplePayload | null } | null = null;
-async function readSample(): Promise<SamplePayload | null> {
+export async function readSample(): Promise<SamplePayload | null> {
   if (sampleMemo && Date.now() - sampleMemo.at < 5 * 60_000) return sampleMemo.value;
   const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, SAMPLE_KEY));
   const value = row ? (JSON.parse(row.payload) as SamplePayload) : null;

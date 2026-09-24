@@ -7,6 +7,16 @@
   ],
   "rewrites": [
     {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "(www\\.)?militarycreatoreconomy\\.com"
+        }
+      ],
+      "destination": "/api"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api"
     },
@@ -68,6 +78,28 @@
       ],
       "destination": "https://www.militaryvoices.ai/$1",
       "permanent": true
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "www\\.militarycreatoreconomy\\.com"
+        }
+      ],
+      "destination": "https://militarycreatoreconomy.com/$1",
+      "permanent": true
+    },
+    {
+      "source": "/((?!robots\\.txt$|sitemap\\.xml$).+)",
+      "has": [
+        {
+          "type": "host",
+          "value": "militarycreatoreconomy\\.com"
+        }
+      ],
+      "destination": "https://www.militaryvoices.ai/$1",
+      "permanent": false
     }
   ]
 }
