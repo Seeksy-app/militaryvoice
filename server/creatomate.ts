@@ -11,7 +11,9 @@ import { storage } from "./storage.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 
 const API = "https://api.creatomate.com/v1/renders";
-const key = () => (process.env.CREATOMATE_API_KEY || "").trim();
+// Accepts the obvious spellings, since the key is typed into Vercel by hand.
+const key = () =>
+  (process.env.CREATOMATE_API_KEY || process.env.CREATOMATE_KEY || process.env.CREATOMATE_API || process.env.CREATOMATE || "").trim();
 
 type Shape = "vertical" | "square" | "wide";
 const SIZE: Record<Shape, [number, number]> = { vertical: [1080, 1920], square: [1080, 1080], wide: [1920, 1080] };
@@ -85,6 +87,11 @@ export function registerCreatomate(app: Express, requireAdmin: any): void {
       out.push({ shape, status: r.status, result: j });
     }
     res.json({ clip: { id: clip.id, title: clip.title, startSec: clip.startSec, endSec: clip.endSec, verticalUrl: clip.verticalUrl, squareUrl: clip.squareUrl, url: clip.url }, renders: out });
+  });
+
+  /** Which Creatomate-looking settings this deployment can see — names only, never values. */
+  app.get("/api/admin/creatomate/env", requireAdmin, (_req, res) => {
+    res.json({ names: Object.keys(process.env).filter((k) => /creat/i.test(k)), usable: Boolean(key()), env: process.env.VERCEL_ENV ?? "" });
   });
 
   /** Where a test render has got to. */
