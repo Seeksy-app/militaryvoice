@@ -345,7 +345,7 @@ export function PostStudio() {
     if (recs.isLoading) return null;
     return (
       <section className="mt-6" data-testid="post-studio">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Postify</p>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Pōstify</p>
         <h2 className="mb-4 mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
         {outOfBeta ? <WantMore /> : <UploadEpisode variant="card" onQueued={queued} beta={beta} />}
       </section>
@@ -394,7 +394,7 @@ export function PostStudio() {
     <section className="mt-6" data-testid="post-studio">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Postify</p>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Pōstify</p>
           <h2 className="mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
         </div>
         {outOfBeta ? <WantMore /> : <UploadEpisode onQueued={queued} beta={beta} />}
