@@ -502,7 +502,8 @@ export function registerMce(app: Express): void {
       res.type("application/xml").send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${ORIGIN}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url></urlset>\n`);
       return;
     }
-    if (req.path !== "/" && req.path !== "/mce") return next();
+    // "/" arrives here as /api/mce, rewritten by middleware.ts.
+    if (req.path !== "/" && req.path !== "/api/mce") return next();
     try {
       await sendPage(res);
     } catch (err) {

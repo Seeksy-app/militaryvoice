@@ -7,16 +7,6 @@
   ],
   "rewrites": [
     {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "(www\\.)?militarycreatoreconomy\\.com"
-        }
-      ],
-      "destination": "/api"
-    },
-    {
       "source": "/api/(.*)",
       "destination": "/api"
     },
