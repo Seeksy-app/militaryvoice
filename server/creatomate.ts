@@ -62,6 +62,96 @@ function source(shape: Shape, videoUrl: string, start: number, length: number, t
   };
 }
 
+// ---------------------------------------------------------------------------
+// The combined version: our layout, Creatomate's rendering and captions.
+// ---------------------------------------------------------------------------
+// The clipper still decides the framing — where the picture really is inside
+// the file, and whether it's two people side by side (then each gets their own
+// full-width panel, stacked). Creatomate draws that, adds our title band, and
+// writes word-by-word captions from the audio. Everything is placed in
+// percentages of its parent, so no unit guessing.
+
+export interface Box { w: number; h: number; x: number; y: number }
+export interface Geo { srcW: number; srcH: number; whole: Box | null; left: Box | null; right: Box | null; stack: boolean }
+
+const pct = (n: number) => `${Math.round(n * 10000) / 100}%`;
+
+/** A panel showing one rectangle of the source, scaled to cover the panel and clipped to it. */
+function panel(videoUrl: string, start: number, length: number, geo: Geo, tile: Box, box: { x: number; y: number; w: number; h: number }, canvas: [number, number], track: number) {
+  const [W, H] = canvas;
+  const PW = box.w * W, PH = box.h * H;
+  const s = Math.max(PW / tile.w, PH / tile.h);
+  const vw = geo.srcW * s, vh = geo.srcH * s;
+  const cx = PW / 2 + (geo.srcW / 2 - (tile.x + tile.w / 2)) * s;
+  const cy = PH / 2 + (geo.srcH / 2 - (tile.y + tile.h / 2)) * s;
+  return {
+    type: "composition",
+    track,
+    x: pct(box.x + box.w / 2),
+    y: pct(box.y + box.h / 2),
+    width: pct(box.w),
+    height: pct(box.h),
+    clip: true,
+    elements: [
+      { type: "video", source: videoUrl, trim_start: start, trim_duration: length, volume: "0%", x: pct(cx / PW), y: pct(cy / PH), width: pct(vw / PW), height: pct(vh / PH), fit: "fill" },
+    ],
+  };
+}
+
+export function combinedSource(o: {
+  shape: Shape; videoUrl: string; start: number; length: number; title: string; show: string; geo: Geo; captionColor?: string;
+}) {
+  const [W, H] = SIZE[o.shape];
+  const banded = o.shape !== "wide";
+  const band = banded ? 220 / H : 0;
+  const els: Record<string, unknown>[] = [];
+  const whole = o.geo.whole ?? { x: 0, y: 0, w: o.geo.srcW, h: o.geo.srcH };
+  // The sound, once, and the thing the captions listen to.
+  els.push({ name: "Voice", type: "audio", source: o.videoUrl, trim_start: o.start, trim_duration: o.length, track: 1 });
+  if (banded && o.geo.stack && o.geo.left && o.geo.right) {
+    const h = (1 - band) / 2;
+    els.push(panel(o.videoUrl, o.start, o.length, o.geo, o.geo.left, { x: 0, y: band, w: 1, h }, [W, H], 2));
+    els.push(panel(o.videoUrl, o.start, o.length, o.geo, o.geo.right, { x: 0, y: band + h, w: 1, h }, [W, H], 3));
+  } else {
+    // One picture: the real picture (not the file's letterbox) over a blurred
+    // copy of itself, whole — a room of people keeps all its people.
+    const area = { x: 0, y: band, w: 1, h: 1 - band };
+    const blurred = panel(o.videoUrl, o.start, o.length, o.geo, whole, area, [W, H], 2);
+    blurred.elements = blurred.elements.map((v) => ({ ...v, blur_radius: 30 }));
+    els.push(blurred);
+    const fitW = area.w * W, fitH = area.h * H;
+    const s = Math.min(fitW / whole.w, fitH / whole.h);
+    const bw = (whole.w * s) / W, bh = (whole.h * s) / H;
+    els.push(panel(o.videoUrl, o.start, o.length, o.geo, whole, { x: (1 - bw) / 2, y: band + (area.h - bh) / 2, w: bw, h: bh }, [W, H], 3));
+  }
+  if (banded) {
+    els.push({ type: "shape", track: 4, x: "50%", y: pct(band / 2), width: "100%", height: pct(band), fill_color: "#000741", path: "M 0 0 L 100 0 L 100 100 L 0 100 Z" });
+    els.push({ type: "text", track: 5, text: o.title, x: "50%", y: pct(band * 0.4), width: "92%", height: pct(band * 0.5), x_alignment: "50%", y_alignment: "50%", font_family: "Montserrat", font_weight: "800", fill_color: "#ffffff", font_size_maximum: "6.2 vmin", font_size_minimum: "3 vmin" });
+    els.push({ type: "text", track: 6, text: o.show.toUpperCase(), x: "50%", y: pct(band * 0.8), width: "92%", height: pct(band * 0.22), x_alignment: "50%", y_alignment: "50%", font_family: "Montserrat", font_weight: "700", letter_spacing: "8%", fill_color: "#F0A71F", font_size_maximum: "3 vmin", font_size_minimum: "2 vmin" });
+  }
+  els.push({
+    type: "text",
+    track: 7,
+    transcript_source: "Voice",
+    transcript_effect: "highlight",
+    transcript_maximum_length: 22,
+    transcript_color: o.captionColor ?? "#F0A71F",
+    x: "50%",
+    y: o.shape === "wide" ? "84%" : o.shape === "square" ? "86%" : "82%",
+    width: "86%",
+    height: "14%",
+    x_alignment: "50%",
+    y_alignment: "50%",
+    fill_color: "#ffffff",
+    stroke_color: "#000000",
+    stroke_width: "1.1 vmin",
+    font_family: "Montserrat",
+    font_weight: "800",
+    font_size: o.shape === "wide" ? "5.4 vmin" : "6.6 vmin",
+  });
+  return { output_format: "mp4", width: W, height: H, frame_rate: 30, duration: o.length, elements: els };
+}
+
 export function registerCreatomate(app: Express, requireAdmin: any): void {
   /** Render one existing clip through Creatomate in all three shapes. Returns the render ids. */
   app.post("/api/admin/creatomate/test", requireAdmin, async (req, res) => {
@@ -94,6 +184,20 @@ export function registerCreatomate(app: Express, requireAdmin: any): void {
   /** Which Creatomate-looking settings this deployment can see — names only, never values. */
   app.get("/api/admin/creatomate/env", requireAdmin, (_req, res) => {
     res.json({ names: Object.keys(process.env).filter((k) => /creat/i.test(k)), usable: Boolean(key()), env: process.env.VERCEL_ENV ?? "" });
+  });
+
+  /** The combined version: our framing (geo, measured by the clipper), Creatomate's render and captions. */
+  app.post("/api/admin/creatomate/combined", requireAdmin, async (req, res) => {
+    if (!key()) return res.status(503).json({ message: "The Creatomate key isn't set." });
+    const b = req.body ?? {};
+    const shapes: Shape[] = Array.isArray(b.shapes) ? b.shapes.filter((x: string) => x in SIZE) : ["vertical", "square", "wide"];
+    const out: Record<string, unknown>[] = [];
+    for (const shape of shapes) {
+      const src = combinedSource({ shape, videoUrl: String(b.videoUrl), start: Number(b.start), length: Number(b.length), title: String(b.title ?? ""), show: String(b.show ?? ""), geo: b.geo as Geo });
+      const r = await fetch(API, { method: "POST", headers: { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" }, body: JSON.stringify({ source: src }) });
+      out.push({ shape, status: r.status, result: await r.json().catch(() => null) });
+    }
+    res.json({ renders: out });
   });
 
   /** Where a test render has got to. */
