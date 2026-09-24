@@ -276,7 +276,7 @@ export default function Platform() {
               <Sparkles className="h-3.5 w-3.5" /> About MilitaryVoices
             </div>
             <h1 className="text-[2.4rem] font-semibold leading-[1.04] tracking-[-0.02em] sm:text-5xl xl:text-[3.3rem]" style={HEADLINE_FONT}>
-              Stage a live, <span className="whitespace-nowrap">multi‑speaker</span> event
+              Stage a live or virtual, <span className="whitespace-nowrap">multi‑speaker</span> event
               <span className="block text-[#F0A71F]">without running it yourself.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-white/75 lg:mx-0">
