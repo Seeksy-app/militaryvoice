@@ -18,14 +18,14 @@ const key = () =>
 type Shape = "vertical" | "square" | "wide";
 const SIZE: Record<Shape, [number, number]> = { vertical: [1080, 1920], square: [1080, 1080], wide: [1920, 1080] };
 
-function source(shape: Shape, videoUrl: string, start: number, length: number, title: string, show: string) {
-  const [w, h] = SIZE[shape];
+function source(shape: Shape, videoUrl: string, start: number, length: number, title: string, show: string, scale = 1) {
+  const [w, h] = SIZE[shape].map((n) => Math.round((n * scale) / 2) * 2) as [number, number];
   const banded = shape !== "wide";
   return {
     output_format: "mp4",
     width: w,
     height: h,
-    frame_rate: 30,
+    frame_rate: scale < 1 ? 25 : 30,
     duration: length,
     elements: [
       // The picture over a blurred copy of itself — never cropped, like our clipper.
@@ -74,14 +74,16 @@ export function registerCreatomate(app: Express, requireAdmin: any): void {
     const videoUrl = /^https?:\/\//i.test(rec.url) ? rec.url : await signedRecordingUrl(rec.url, 6 * 3600);
     const signup = rec.signupId ? await storage.getSignupById(rec.signupId) : undefined;
     const show = signup?.podcastName || rec.title || "MilitaryVoices";
-    const length = clip.endSec - clip.startSec;
+    // A cheap draft while trying it out: smaller frame, a few seconds.
+    const scale = Math.min(1, Math.max(0.3, Number(req.body?.scale) || 1));
+    const length = Math.min(clip.endSec - clip.startSec, Number(req.body?.maxSeconds) || Infinity);
     const shapes: Shape[] = Array.isArray(req.body?.shapes) ? req.body.shapes.filter((s: string) => s in SIZE) : ["vertical", "square", "wide"];
     const out: Record<string, unknown>[] = [];
     for (const shape of shapes) {
       const r = await fetch(API, {
         method: "POST",
         headers: { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ source: source(shape, videoUrl, clip.startSec, length, clip.title, show) }),
+        body: JSON.stringify({ source: source(shape, videoUrl, clip.startSec, length, clip.title, show, scale) }),
       });
       const j = await r.json().catch(() => null);
       out.push({ shape, status: r.status, result: j });
