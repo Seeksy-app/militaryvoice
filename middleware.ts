@@ -16,8 +16,8 @@ const ORIGIN = "https://www.militaryvoices.ai";
 const SHARE: Record<string, { title: string; description: string; image: string; alt: string }> = {
   "/podcast-one-pitch": {
     title: "26.2 miles of military podcasts — National Military Podcast Day, October 5",
-    description: "Thirty-two military and veteran shows, back to back, in one broadcast day, hosted by Emmy winner Riccoh Player (USMC, Retired). Segments from $250.",
-    image: `${ORIGIN}/og-podcast-one-pitch.jpg?v=2`,
+    description: "Thirty-two military and veteran shows, back to back, in one broadcast day, hosted by Emmy winner Riccoh Player (USMC, Retired).",
+    image: `${ORIGIN}/og-podcast-one-pitch.jpg?v=3`,
     alt: "26.2 miles of military podcasts: 32 shows, 234,000+ combined following, hosted by Riccoh Player",
   },
 };

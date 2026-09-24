@@ -156,7 +156,7 @@ function PitchHero() {
           </dl>
         </div>
 
-        <div className="mt-12 flex flex-col gap-6 border-t border-white/15 pt-8 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-12 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             <img src="/riccoh-player.jpg" alt="" aria-hidden className="h-14 w-14 rounded-full object-cover object-[50%_15%] ring-2 ring-[#F0A71F] lg:hidden" />
             <p className="text-base leading-snug text-white/75">
@@ -166,7 +166,6 @@ function PitchHero() {
             </p>
           </div>
           <div className="flex flex-col items-stretch gap-2 sm:items-end">
-            <p className="text-sm text-white/80 sm:text-right">Segments from <span className="font-bold text-[#F0A71F]">$250</span></p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link href="/agenda">
                 <Button size="lg" variant="outline" className="h-12 w-full rounded-full bg-transparent px-6 text-base text-white [border-color:rgba(255,255,255,0.45)] hover:bg-white/10 hover:text-white sm:w-auto">
