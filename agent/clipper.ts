@@ -902,23 +902,34 @@ If the segment genuinely has fewer than ${WANTED} moments that stand alone, retu
 Transcript:
 ${transcriptText(lines)}`;
 
-  const res = await client.messages.create({
-    model: "claude-opus-5",
-    max_tokens: 4000,
-    thinking: { type: "adaptive" },
-    tools: [PICK_TOOL],
-    tool_choice: { type: "tool", name: "pick_moments" },
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const use = res.content.find((c) => c.type === "tool_use");
-  if (!use || use.type !== "tool_use") return densestStretches(lines);
-  // The list sometimes comes back as a JSON string rather than an array.
-  let raw: unknown = (use.input as { moments?: unknown }).moments ?? [];
-  if (typeof raw === "string") {
-    try { raw = JSON.parse(raw); } catch { raw = []; }
+  // Room to think over a long transcript. At 4,000 the thinking on a
+  // half-hour episode used the budget up and the list came back cut off —
+  // empty — so a whole episode got no clips. Twice before giving up.
+  let raw: unknown = [];
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const res = await client.messages.create({
+      model: "claude-opus-5",
+      max_tokens: 16000,
+      thinking: { type: "adaptive" },
+      tools: [PICK_TOOL],
+      tool_choice: { type: "tool", name: "pick_moments" },
+      messages: [{ role: "user", content: prompt }],
+    });
+    const use = res.content.find((c) => c.type === "tool_use");
+    if (!use || use.type !== "tool_use") {
+      console.warn(`   no pick came back (stop: ${res.stop_reason})${attempt === 1 ? " — asking again" : ""}`);
+      continue;
+    }
+    // The list sometimes comes back as a JSON string rather than an array.
+    raw = (use.input as { moments?: unknown }).moments ?? [];
+    if (typeof raw === "string") {
+      try { raw = JSON.parse(raw); } catch { raw = []; }
+    }
+    if (!Array.isArray(raw)) raw = [];
+    if ((raw as unknown[]).length) break;
+    console.warn(`   the pick came back empty (stop: ${res.stop_reason})${attempt === 1 ? " — asking again" : ""}`);
   }
-  if (!Array.isArray(raw)) raw = [];
+  if (!(raw as unknown[]).length) return densestStretches(lines);
   const moments = (raw as Moment[]).map((m) => ({
     title: String(m.title ?? "").slice(0, 120),
     caption: String(m.caption ?? "").slice(0, 400),
