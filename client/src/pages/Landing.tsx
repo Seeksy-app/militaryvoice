@@ -19,6 +19,7 @@ import type { PublicEvent, PublicSignup, PublicPodcaster, PublicSponsor, SocialP
 import { mileMarkers } from "@shared/mileMarkers";
 import { deriveSocialAccounts } from "@shared/socialLinks";
 import { MileMarker } from "@/components/MileMarker";
+import { AgendaCard } from "@/components/AgendaCard";
 import {
   detectLocalTimeZone,
   slotStart,
@@ -228,7 +229,7 @@ export default function Landing({ slug }: Props) {
           bufferMinutes: event.bufferMinutes,
           bufferPosition: event.bufferPosition,
         });
-        return { signup: s, start: onAir.start, end: onAir.end };
+        return { signup: s, start: onAir.start, end: onAir.end, blockStart, blockEnd: new Date(blockStart.getTime() + event.slotMinutes * 60000) };
       });
   }, [booked, event]);
 
@@ -268,6 +269,12 @@ export default function Landing({ slug }: Props) {
   // Small podcaster cards under the event card: up to MINI_CARDS at a time,
   // rotating through pages every 7s once there are more than fit.
   const [miniPage, setMiniPage] = useState(0);
+  // For the cards' LIVE / ON AIR / AIRED badge.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
   const miniPages = Math.max(1, Math.ceil(spotlight.length / MINI_CARDS));
   useEffect(() => {
     if (miniPages < 2) {
@@ -819,57 +826,29 @@ export default function Landing({ slug }: Props) {
             </div>
           ) : (
             <div className="mt-8 grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {/* The same card as the agenda: navy time bar with the mile
-                  marker, the sponsor ribbon, then the face and the show. */}
-              {lineup.slice(0, LINEUP_CARDS).map(({ signup, start: onAirStart, end: onAirEnd }, i) => (
+              {/* The agenda's own card, so the two never drift apart. */}
+              {lineup.slice(0, LINEUP_CARDS).map(({ signup, start: onAirStart, end: onAirEnd, blockStart, blockEnd }, i) => (
                 <motion.div
                   key={signup.id}
                   initial={{ opacity: 0, y: 16 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-40px" }}
                   transition={{ duration: 0.45, delay: Math.min(i, 6) * 0.06 }}
-                  className="flex h-full flex-col overflow-hidden rounded-2xl border-2 border-primary/15 bg-card shadow-md transition-shadow hover:shadow-lg"
+                  className="h-full"
                   data-testid={`card-lineup-${signup.id}`}
                 >
-                  <div className="flex items-center gap-2.5 bg-[#053877] px-3 py-2 text-white">
-                    {markers[i] && markers[i].kind !== "open" && <MileMarker marker={markers[i]} size={42} className="shrink-0" />}
-                    <span className="text-sm font-bold tabular-nums">
-                      {formatTimeInZone(onAirStart, zone)}
-                      <span className="text-white/60"> – {formatTimeInZone(onAirEnd, zone)}</span>
-                    </span>
-                  </div>
-
-                  {signup.sponsor && <SponsorRibbon sponsor={signup.sponsor} source="home" testId={`lineup-sponsor-${signup.id}`} />}
-
-                  {/* The socials below are real links, so only this part is the
-                      button — an anchor inside a button is invalid markup. */}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPodcaster({ signup, start: onAirStart, end: onAirEnd })}
-                    className="flex items-start gap-3 p-4 text-left transition-colors hover:bg-muted/40"
-                    aria-label={`About ${signup.podcastName}`}
-                    data-testid={`button-lineup-profile-${signup.id}`}
-                  >
-                    {signup.photoUrl ? (
-                      <img src={resolveUploadUrl(signup.photoUrl)} alt={signup.hostName} className="h-16 w-16 shrink-0 rounded-full object-cover ring-4 ring-[#F0A71F]/40" />
-                    ) : (
-                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground ring-4 ring-[#F0A71F]/40">
-                        <Mic2 className="h-6 w-6" />
-                      </div>
-                    )}
-                    <span className="min-w-0">
-                      <span className="line-clamp-2 block font-semibold leading-tight text-card-foreground">{signup.podcastName}</span>
-                      <span className="block truncate text-sm text-muted-foreground">
-                        with {signup.hostName}{signup.coHost ? ` & ${signup.coHost.hostName}` : ""}
-                      </span>
-                      <span className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary">
-                        View profile <ArrowRight className="h-3 w-3" />
-                      </span>
-                    </span>
-                  </button>
-                  <div className="mt-auto px-4 pb-4">
-                    <SocialIconRow accounts={deriveSocialAccounts(parseSocialAccounts(signup.socialAccounts), signup.socialLinks, signup.youtubeUrl)} />
-                  </div>
+                  <AgendaCard
+                    signup={signup}
+                    index={signup.slotIndex}
+                    marker={markers[i]}
+                    start={blockStart}
+                    end={blockEnd}
+                    onAir={{ start: onAirStart, end: onAirEnd }}
+                    zone={zone}
+                    now={now}
+                    shareText={`I'm tuning in to ${signup.hostName} on ${signup.podcastName} — ${formatDateInZone(onAirStart, zone)}, ${formatTimeInZone(onAirStart, zone)}, during the MilitaryVoices.ai Podcast Marathon! ${typeof window !== "undefined" ? window.location.origin + agendaHref : ""}`}
+                    onSelect={(sg) => setSelectedPodcaster({ signup: sg, start: onAirStart, end: onAirEnd })}
+                  />
                 </motion.div>
               ))}
               {lineup.length > LINEUP_CARDS && (
