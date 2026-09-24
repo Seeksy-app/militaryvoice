@@ -5299,7 +5299,7 @@ export function registerRoutes(app: Express): void {
   });
 
   /** The podcaster's own "Make clips": queue one of their finished recordings that hasn't been clipped (or failed). */
-  registerCreatomate(app, requireAdmin);
+  registerCreatomate(app, requireAdmin, requireAgent);
 
   app.post("/api/host/recordings/:id/clip", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();

@@ -862,6 +862,55 @@ export function sane(moments: Moment[], durationSec: number): Moment[] {
  * reads it, and each report also keeps the claim fresh. Never fatal: a job that
  * can't report still finishes.
  */
+/**
+ * Render one moment's three shapes with Creatomate (through our API, which
+ * holds the key): our framing, our title band, its word-by-word captions. The
+ * finished files come back here and go up to our own storage like any render,
+ * so nothing depends on Creatomate keeping them. Returns null when Creatomate
+ * isn't set up or fails, and the caller renders with ffmpeg instead.
+ */
+async function renderWithCreatomate(
+  job: Job,
+  m: Moment,
+  source: string,
+  geo: Awaited<ReturnType<typeof frameGeometry>>,
+  files: { wide: string; vertical: string; square: string },
+): Promise<boolean> {
+  if ((process.env.CLIP_RENDERER || "").toLowerCase() === "ffmpeg") return false;
+  try {
+    const probe = await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", source]);
+    const [srcW, srcH] = probe.trim().split(",").map(Number);
+    const { renders } = await api<{ renders: { shape: "wide" | "vertical" | "square"; id: string }[] }>("POST", "/api/agent/clip-renders", {
+      videoUrl: job.downloadUrl,
+      start: m.startSec,
+      length: m.endSec - m.startSec,
+      title: m.title,
+      show: job.show,
+      geo: { srcW, srcH, ...geo },
+    });
+    const pending = new Map(renders.map((r) => [r.id, r.shape]));
+    const deadline = Date.now() + 15 * 60_000;
+    while (pending.size && Date.now() < deadline) {
+      await new Promise((z) => setTimeout(z, 5000));
+      for (const [id, shape] of [...pending]) {
+        const s = await api<{ status: string; url: string; error: string }>("GET", `/api/agent/clip-renders/${id}`);
+        if (s.status === "failed") throw new Error(`Creatomate ${shape}: ${s.error || "failed"}`);
+        if (s.status === "succeeded" && s.url) {
+          const got = await fetch(s.url);
+          if (!got.ok) throw new Error(`couldn't fetch the ${shape} render: ${got.status}`);
+          await fs.writeFile(files[shape], new Uint8Array(await got.arrayBuffer()));
+          pending.delete(id);
+        }
+      }
+    }
+    if (pending.size) throw new Error("Creatomate took longer than 15 minutes");
+    return true;
+  } catch (err) {
+    console.warn(`[${job.recordingId}] Creatomate didn't render this one (${(err as Error).message}) — using ffmpeg`);
+    return false;
+  }
+}
+
 function progress(id: number, p: Record<string, unknown>): void {
   api("POST", `/api/agent/clip-jobs/${id}/progress`, p).catch(() => {});
 }
@@ -975,12 +1024,16 @@ async function handle(job: Job): Promise<void> {
       await fs.mkdir(capDir, { recursive: true });
       const step = (k: number, shape: string) =>
         progress(job.recordingId, { stage: "render", pct: ((i * 4 + k) / (moments.length * 4)) * 100, detail: `Clip ${i + 1} of ${moments.length} · ${shape}` });
-      step(0, "wide");
-      await render(source, wide, m, "wide", undefined, geo, within, capDir);
-      step(1, "vertical");
-      await render(source, vertical, m, "vertical", { file: bandFile, height: 220 }, geo, within, capDir);
-      step(2, "square");
-      await render(source, square, m, "square", { file: bandFile, height: 220 }, geo, within, capDir);
+      step(0, "all three shapes");
+      const viaCreatomate = await renderWithCreatomate(job, m, source, geo, { wide, vertical, square });
+      if (!viaCreatomate) {
+        step(0, "wide");
+        await render(source, wide, m, "wide", undefined, geo, within, capDir);
+        step(1, "vertical");
+        await render(source, vertical, m, "vertical", { file: bandFile, height: 220 }, geo, within, capDir);
+        step(2, "square");
+        await render(source, square, m, "square", { file: bandFile, height: 220 }, geo, within, capDir);
+      }
       step(3, "uploading");
 
       out.push({

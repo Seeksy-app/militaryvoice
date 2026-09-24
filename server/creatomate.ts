@@ -152,7 +152,37 @@ export function combinedSource(o: {
   return { output_format: "mp4", width: W, height: H, frame_rate: 30, duration: o.length, elements: els };
 }
 
-export function registerCreatomate(app: Express, requireAdmin: any): void {
+export function registerCreatomate(app: Express, requireAdmin: any, requireAgent?: any): void {
+  if (requireAgent) {
+    /**
+     * The clipper's renderer. It sends one moment with the framing it measured;
+     * we hold the key, start the three renders and hand back their ids. 503
+     * when there's no key, which the worker reads as "render it yourself".
+     */
+    app.post("/api/agent/clip-renders", requireAgent, async (req, res) => {
+      if (!key()) return res.status(503).json({ message: "No Creatomate key." });
+      const b = req.body ?? {};
+      const shapes: Shape[] = Array.isArray(b.shapes) ? b.shapes.filter((x: string) => x in SIZE) : ["vertical", "square", "wide"];
+      const out: { shape: Shape; id: string }[] = [];
+      for (const shape of shapes) {
+        const src = combinedSource({ shape, videoUrl: String(b.videoUrl), start: Number(b.start), length: Number(b.length), title: String(b.title ?? ""), show: String(b.show ?? ""), geo: b.geo as Geo });
+        const r = await fetch(API, { method: "POST", headers: { Authorization: `Bearer ${key()}`, "Content-Type": "application/json" }, body: JSON.stringify({ source: src }) });
+        const j = await r.json().catch(() => null);
+        const id = Array.isArray(j) ? j[0]?.id : null;
+        if (!r.ok || !id) return res.status(502).json({ message: `Creatomate refused the ${shape} render: ${JSON.stringify(j).slice(0, 200)}` });
+        out.push({ shape, id });
+      }
+      res.json({ renders: out });
+    });
+
+    app.get("/api/agent/clip-renders/:id", requireAgent, async (req, res) => {
+      if (!key()) return res.status(503).json({ message: "No Creatomate key." });
+      const r = await fetch(`${API}/${encodeURIComponent(String(req.params.id))}`, { headers: { Authorization: `Bearer ${key()}` } });
+      const j = (await r.json().catch(() => null)) as { status?: string; url?: string; error_message?: string } | null;
+      res.status(r.ok ? 200 : r.status).json({ status: j?.status ?? "unknown", url: j?.url ?? "", error: j?.error_message ?? "" });
+    });
+  }
+
   /** Render one existing clip through Creatomate in all three shapes. Returns the render ids. */
   app.post("/api/admin/creatomate/test", requireAdmin, async (req, res) => {
     if (!key()) return res.status(503).json({ message: "CREATOMATE_API_KEY isn't set." });
