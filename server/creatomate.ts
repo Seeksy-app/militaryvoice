@@ -72,7 +72,20 @@ function source(shape: Shape, videoUrl: string, start: number, length: number, t
 // percentages of its parent, so no unit guessing.
 
 export interface Box { w: number; h: number; x: number; y: number }
-export interface Geo { srcW: number; srcH: number; whole: Box | null; left: Box | null; right: Box | null; stack: boolean }
+export interface Geo { srcW: number; srcH: number; whole: Box | null; left: Box | null; right: Box | null; stack: boolean; focus?: Box | null }
+
+/** Grow a speaker box to a panel's shape, with room around them, kept inside the picture (same rule as the clipper). */
+function frameAround(focus: Box, within: Box, aspect: number): Box {
+  let w = Math.max(focus.w * 1.9, focus.h * 1.9 * aspect);
+  let h = w / aspect;
+  if (w > within.w) { w = within.w; h = w / aspect; }
+  if (h > within.h) { h = within.h; w = h * aspect; }
+  const cx = focus.x + focus.w / 2;
+  const cy = focus.y + focus.h * 0.62;
+  const x = Math.min(Math.max(within.x, cx - w / 2), within.x + within.w - w);
+  const y = Math.min(Math.max(within.y, cy - h / 2), within.y + within.h - h);
+  return { x, y, w, h };
+}
 
 const pct = (n: number) => `${Math.round(n * 10000) / 100}%`;
 
@@ -112,6 +125,11 @@ export function combinedSource(o: {
     const h = (1 - band) / 2;
     els.push(panel(o.videoUrl, o.start, o.length, o.geo, o.geo.left, { x: 0, y: band, w: 1, h }, [W, H], 2));
     els.push(panel(o.videoUrl, o.start, o.length, o.geo, o.geo.right, { x: 0, y: band + h, w: 1, h }, [W, H], 3));
+  } else if (banded && o.geo.focus) {
+    // One camera on a room: the speaker fills the frame.
+    const area = { x: 0, y: band, w: 1, h: 1 - band };
+    const tile = frameAround(o.geo.focus, whole, (area.w * W) / (area.h * H));
+    els.push(panel(o.videoUrl, o.start, o.length, o.geo, tile, area, [W, H], 2));
   } else {
     // One picture: the real picture (not the file's letterbox) over a blurred
     // copy of itself, whole — a room of people keeps all its people.

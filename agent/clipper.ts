@@ -374,6 +374,80 @@ export async function frameGeometry(source: string, atSec: number) {
   return { whole, left, right, stack };
 }
 
+// ---------------------------------------------------------------------------
+// Speaker focus
+// ---------------------------------------------------------------------------
+// One camera on a room — a round table, a stage — makes a vertical clip a
+// strip of tiny people. Two panels side by side are handled by stacking; this
+// is for everything else. The model looks at a frame from the middle of the
+// moment with what is being said, and points at the person saying it. The
+// vertical and square cuts then frame them instead of the room.
+
+type Box = { w: number; h: number; x: number; y: number };
+
+export async function speakerFocus(source: string, m: Moment, words: string, whole: Box | null, dir: string): Promise<Box | null> {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key || !whole) return null;
+  try {
+    const at = m.startSec + (m.endSec - m.startSec) / 2;
+    const frame = path.join(dir, `focus-${m.startSec}.jpg`);
+    await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", String(at), "-i", source, "-frames:v", "1",
+      "-vf", `crop=${even(whole.w)}:${even(whole.h)}:${whole.x}:${whole.y},scale=1280:-2`, frame]);
+    const img = (await fs.readFile(frame)).toString("base64");
+    const client = new Anthropic({ apiKey: key });
+    const res = await client.messages.create({
+      model: "claude-opus-5",
+      max_tokens: 1000,
+      tools: [{
+        name: "speaker_box",
+        description: "Where the person speaking in this moment is, as fractions of the image (0 to 1).",
+        input_schema: {
+          type: "object" as const,
+          properties: {
+            found: { type: "boolean", description: "False if you can't tell who is speaking or nobody is visible." },
+            x: { type: "number", description: "Left edge of a box around the speaker's head and shoulders, 0-1." },
+            y: { type: "number", description: "Top edge, 0-1." },
+            w: { type: "number", description: "Width, 0-1." },
+            h: { type: "number", description: "Height, 0-1." },
+          },
+          required: ["found"],
+        },
+      }],
+      tool_choice: { type: "tool", name: "speaker_box" },
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: img } },
+          { type: "text", text: `This frame is from the middle of a clip. What is being said in the clip:\n\n"${words.slice(0, 1500)}"\n\nDraw a box around the head and shoulders of the person most likely speaking — look for an open mouth, who others are facing, a microphone. If it's one person on camera, box them. If you genuinely can't tell, say found: false.` },
+        ],
+      }],
+    });
+    const use = res.content.find((c) => c.type === "tool_use");
+    const b = use && use.type === "tool_use" ? (use.input as { found?: boolean; x?: number; y?: number; w?: number; h?: number }) : null;
+    if (!b?.found || ![b.x, b.y, b.w, b.h].every((v) => typeof v === "number" && v >= 0 && v <= 1) || (b.w ?? 0) < 0.02 || (b.h ?? 0) < 0.02) return null;
+    // Back to source pixels.
+    return { x: Math.round(whole.x + b.x! * whole.w), y: Math.round(whole.y + b.y! * whole.h), w: Math.round(b.w! * whole.w), h: Math.round(b.h! * whole.h) };
+  } catch (err) {
+    console.warn(`speaker focus skipped: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+const focusOf = (g: unknown): Box | null => ((g as { focus?: Box | null } | undefined)?.focus ?? null);
+
+/** Grow a speaker box to a panel's shape, with room around them, kept inside the picture. */
+export function frameAround(focus: Box, within: Box, aspect: number): Box {
+  let w = Math.max(focus.w * 1.9, focus.h * 1.9 * aspect);
+  let h = w / aspect;
+  if (w > within.w) { w = within.w; h = w / aspect; }
+  if (h > within.h) { h = within.h; w = h * aspect; }
+  const cx = focus.x + focus.w / 2;
+  const cy = focus.y + focus.h * 0.62; // head a little above centre
+  const x = Math.min(Math.max(within.x, cx - w / 2), within.x + within.w - w);
+  const y = Math.min(Math.max(within.y, cy - h / 2), within.y + within.h - h);
+  return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
+}
+
 /** Cut one moment into one shape. */
 export async function render(
   source: string,
@@ -422,6 +496,10 @@ export async function render(
       `[rr]${box(geo.right)}[bot]`,
       `[top][bot]vstack=inputs=2[stage]`,
     );
+  } else if (focusOf(geo) && r) {
+    // One camera on a room: frame the speaker, not the whole table.
+    const f = frameAround(focusOf(geo)!, r, W / videoH);
+    chain.push(`[0:v]crop=${even(f.w)}:${even(f.h)}:${f.x}:${f.y},scale=${W}:${videoH},setsar=1[stage]`);
   } else {
     // One camera: fill the frame and let the sides go. A single speaker sits
     // in the middle of their own shot, so the edges are wall.
@@ -1016,7 +1094,10 @@ async function handle(job: Job): Promise<void> {
       // mid-episode — a solo intro becoming a two-shot — and one cropdetect
       // call is cheaper than getting the framing wrong for the rest of it.
       console.log(`[${job.recordingId}] rendering ${i + 1}/${moments.length} — ${m.title}`);
-      const geo = await frameGeometry(source, m.startSec);
+      const measured = await frameGeometry(source, m.startSec);
+      const focus = !measured.stack ? await speakerFocus(source, m, within.map((l) => l.text).join(" "), measured.whole, dir) : null;
+      if (focus) console.log(`[${job.recordingId}]   speaker focus: ${JSON.stringify(focus)}`);
+      const geo = { ...measured, focus };
 
       // The same words go into all three, drawn per shape because the type is
       // sized against the canvas it lands on.
