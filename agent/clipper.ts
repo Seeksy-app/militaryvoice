@@ -108,6 +108,8 @@ interface Job {
   show: string;
   host: string;
   transcript: Line[];
+  /** Only (re)make the clean episode; the clips are already done. */
+  cleanOnly?: boolean;
 }
 
 interface Moment {
@@ -1137,7 +1139,29 @@ function progress(id: number, p: Record<string, unknown>): void {
   api("POST", `/api/agent/clip-jobs/${id}/progress`, p).catch(() => {});
 }
 
+/** A clean-episode-only job: fetch the recording and make the clean episode. */
+async function handleClean(job: Job): Promise<void> {
+  // The clips are done: a shutdown or a failure here must never requeue or
+  // fail them. The clean episode reports its own outcome.
+  holding = null;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `clean-${job.recordingId}-`));
+  try {
+    console.log(`[${job.recordingId}] clean episode only — ${job.show}`);
+    const source = path.join(dir, "segment.mp4");
+    const res = await fetch(job.downloadUrl);
+    if (!res.ok || !res.body) throw new Error(`couldn't download the recording: ${res.status}`);
+    await pipeline(Readable.fromWeb(res.body as never), createWriteStream(source));
+    await cleanEpisode(job, source, dir);
+  } catch (err) {
+    console.warn(`[${job.recordingId}] clean episode failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/clip-jobs/${job.recordingId}/clean`, { status: "failed", error: (err as Error).message }).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function handle(job: Job): Promise<void> {
+  if (job.cleanOnly) return handleClean(job);
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `clip-${job.recordingId}-`));
   try {
     console.log(`[${job.recordingId}] ${job.show} — ${Math.round(job.durationSec)}s`);

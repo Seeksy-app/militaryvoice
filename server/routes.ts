@@ -4996,7 +4996,13 @@ export function registerRoutes(app: Express): void {
    * database or storage credentials of its own.
    */
   app.post("/api/agent/clip-jobs/claim", requireAgent, async (_req, res) => {
-    const rec = await storage.claimClipJob();
+    let rec = await storage.claimClipJob();
+    // Nothing to clip: maybe a clean episode to (re)make on its own.
+    let cleanOnly = false;
+    if (!rec) {
+      rec = await storage.claimCleanJob();
+      cleanOnly = Boolean(rec);
+    }
     if (!rec) {
       res.json({ job: null });
       return;
@@ -5045,6 +5051,7 @@ export function registerRoutes(app: Express): void {
         show: signup?.podcastName ?? rec.title,
         host: signup?.hostName ?? "",
         transcript: lines,
+        cleanOnly,
       },
     });
   });
@@ -5402,6 +5409,16 @@ export function registerRoutes(app: Express): void {
     if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.json({ ok: true, already: true });
     if (rec.clipStatus === "done") return res.status(409).json({ message: "Clips are already made for this one." });
     await storage.setClipStatus(rec.id, "queued", "");
+    res.json({ ok: true });
+  });
+
+  /** Make the clean episode again, without touching the clips. */
+  app.post("/api/admin/recordings/:id/reclean", requireAdmin, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.status !== "Ready" || rec.clipStatus !== "done") return res.status(409).json({ message: "Clip it first." });
+    let prev: Record<string, unknown> = {};
+    try { prev = rec.clean ? JSON.parse(rec.clean) : {}; } catch { prev = {}; }
+    await storage.setClean(rec.id, JSON.stringify({ ...prev, status: "queued", at: new Date().toISOString() }));
     res.json({ ok: true });
   });
 

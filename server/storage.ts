@@ -788,6 +788,7 @@ export interface IStorage {
   setClipStatus(recordingId: number, status: ClipStatus, error?: string): Promise<RecordingRow | undefined>;
   setClipProgress(recordingId: number, progress: string): Promise<void>;
   setClean(recordingId: number, clean: string): Promise<void>;
+  claimCleanJob(): Promise<RecordingRow | undefined>;
   createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow>;
   claimClipJob(): Promise<RecordingRow | undefined>;
   appendTranscript(studioId: number, eventId: number, lines: { speaker: string; text: string; startMs: number; endMs: number }[]): Promise<number>;
@@ -1934,6 +1935,32 @@ class DatabaseStorage implements IStorage {
           WHERE status = 'Ready'
             AND (clip_status = 'queued'
                  OR (clip_status = 'running' AND clip_claimed_at < ${stale}))
+          ORDER BY id
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED
+        )`,
+      )
+      .returning();
+    return row;
+  }
+
+  /**
+   * A clean-episode-only job: the clips are done, and the clean episode is
+   * queued again or its worker died mid-way (no report for an hour).
+   */
+  async claimCleanJob(): Promise<RecordingRow | undefined> {
+    await ready();
+    const stale = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+    const [row] = await db
+      .update(recordings)
+      .set({ clean: sqlExpr`(jsonb_set(${recordings.clean}::jsonb, '{status}', '"running"') || jsonb_build_object('at', ${now}::text))::text` as any })
+      .where(
+        sqlExpr`${recordings.id} = (
+          SELECT id FROM recordings
+          WHERE status = 'Ready' AND clip_status = 'done' AND clean <> ''
+            AND (clean::jsonb->>'status' = 'queued'
+                 OR (clean::jsonb->>'status' = 'running' AND clean::jsonb->>'at' < ${stale}))
           ORDER BY id
           LIMIT 1
           FOR UPDATE SKIP LOCKED
