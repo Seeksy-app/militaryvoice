@@ -220,6 +220,7 @@ async function ensureSchema() {
   `;
   await sql`CREATE INDEX IF NOT EXISTS show_assets_email_idx ON show_assets (email)`;
   await sql`ALTER TABLE show_assets ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS clip_progress TEXT NOT NULL DEFAULT ''`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS run_of_show (
@@ -784,6 +785,7 @@ export interface IStorage {
   listRecordings(eventId?: number): Promise<RecordingRow[]>;
   getRecording(id: number): Promise<RecordingRow | undefined>;
   setClipStatus(recordingId: number, status: ClipStatus, error?: string): Promise<RecordingRow | undefined>;
+  setClipProgress(recordingId: number, progress: string): Promise<void>;
   claimClipJob(): Promise<RecordingRow | undefined>;
   appendTranscript(studioId: number, eventId: number, lines: { speaker: string; text: string; startMs: number; endMs: number }[]): Promise<number>;
   transcriptBetween(studioId: number, startMs: number, endMs: number): Promise<TranscriptLineRow[]>;
@@ -1842,6 +1844,12 @@ class DatabaseStorage implements IStorage {
   }
 
   // ---- Clipping ------------------------------------------------------------
+  /** Also a heartbeat: a worker that is still reporting has not died, so its claim stays fresh. */
+  async setClipProgress(recordingId: number, progress: string): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ clipProgress: progress, clipClaimedAt: new Date().toISOString() }).where(eq(recordings.id, recordingId));
+  }
+
   async setClipStatus(recordingId: number, status: ClipStatus, error = ""): Promise<RecordingRow | undefined> {
     await ready();
     const [row] = await db
@@ -1882,7 +1890,7 @@ class DatabaseStorage implements IStorage {
     const stale = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     const [row] = await db
       .update(recordings)
-      .set({ clipStatus: "running", clipClaimedAt: new Date().toISOString() })
+      .set({ clipStatus: "running", clipClaimedAt: new Date().toISOString(), clipProgress: "" })
       .where(
         sqlExpr`${recordings.id} = (
           SELECT id FROM recordings

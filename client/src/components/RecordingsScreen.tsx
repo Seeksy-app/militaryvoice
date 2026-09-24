@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MyRecordings } from "@/components/MyRecordings";
 import { MyClips } from "@/components/MyClips";
+import { PostStudio } from "@/components/PostStudio";
 import { apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, RecordingRow } from "@shared/schema";
 import { Disc, Scissors } from "lucide-react";
@@ -35,7 +36,8 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
 
   return (
     <section className="mt-6">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+      <PostStudio />
+      <h2 className="mb-3 mt-10 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
         <Disc className="h-4 w-4" /> Your recordings
       </h2>
       <p className="mb-4 max-w-2xl text-sm text-muted-foreground">

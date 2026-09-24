@@ -857,6 +857,15 @@ export function sane(moments: Moment[], durationSec: number): Moment[] {
 // One job
 // ---------------------------------------------------------------------------
 
+/**
+ * Tell the site where this job has got to. The podcaster's processing screen
+ * reads it, and each report also keeps the claim fresh. Never fatal: a job that
+ * can't report still finishes.
+ */
+function progress(id: number, p: Record<string, unknown>): void {
+  api("POST", `/api/agent/clip-jobs/${id}/progress`, p).catch(() => {});
+}
+
 async function handle(job: Job): Promise<void> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `clip-${job.recordingId}-`));
   try {
@@ -883,16 +892,20 @@ async function handle(job: Job): Promise<void> {
           const rate = mb / ((Date.now() - started) / 1000);
           const of = total ? ` of ${(total / 1048576).toFixed(0)}MB` : "";
           console.log(`[${job.recordingId}]   downloaded ${mb.toFixed(0)}MB${of} · ${rate.toFixed(1)}MB/s`);
+          if (total) progress(job.recordingId, { stage: "download", pct: (got / total) * 100 });
         }
         cb(null, chunk);
       },
     });
     console.log(`[${job.recordingId}] downloading ${total ? (total / 1048576).toFixed(0) + "MB" : "the recording"}…`);
+    progress(job.recordingId, { stage: "download", pct: 0, detail: total ? `${(total / 1048576).toFixed(0)}MB` : "" });
     await pipeline(Readable.fromWeb(res.body as never), meter, createWriteStream(source));
     console.log(`[${job.recordingId}] downloaded in ${Math.round((Date.now() - started) / 1000)}s`);
 
     let lines = job.transcript;
-    if (transcriptCovers(lines, job.durationSec)) {
+    const live = transcriptCovers(lines, job.durationSec);
+    progress(job.recordingId, { stage: "transcript", pct: live ? 100 : 10, transcriptSource: live ? "live" : "reading it now" });
+    if (live) {
       console.log(`[${job.recordingId}] using the live transcript (${lines.length} lines)`);
     } else if (process.env.ELEVENLABS_API_KEY) {
       console.log(`[${job.recordingId}] no live transcript — reading it with Scribe`);
@@ -916,6 +929,8 @@ async function handle(job: Job): Promise<void> {
     }
     if (lines.length === 0) throw new Error("no transcript, so nothing to choose from");
     console.log(`[${job.recordingId}] ${lines.length} lines of transcript`);
+    const words = lines.reduce((n, l) => n + l.text.split(/\s+/).filter(Boolean).length, 0);
+    progress(job.recordingId, { stage: "moments", pct: 0, words, transcriptSource: live ? "live" : "transcribed after" });
 
     // The longest remaining silence in the job: one Opus call over the whole
     // transcript. Three separate runs have been killed during a quiet stretch
@@ -924,6 +939,7 @@ async function handle(job: Job): Promise<void> {
     console.log(`[${job.recordingId}] choosing moments…`);
     const moments = await pickMoments(job, lines);
     console.log(`[${job.recordingId}] picked ${moments.length}`);
+    progress(job.recordingId, { stage: "render", pct: 0, moments: moments.map((m) => ({ title: m.title, startSec: m.startSec, endSec: m.endSec })), finished: 0 });
     if (moments.length === 0) {
       console.log(`[${job.recordingId}] nothing stood alone — no clips`);
       await api("POST", `/api/agent/clip-jobs/${job.recordingId}/done`, { clips: [] });
@@ -957,9 +973,15 @@ async function handle(job: Job): Promise<void> {
       // sized against the canvas it lands on.
       const capDir = path.join(dir, stem);
       await fs.mkdir(capDir, { recursive: true });
+      const step = (k: number, shape: string) =>
+        progress(job.recordingId, { stage: "render", pct: ((i * 4 + k) / (moments.length * 4)) * 100, detail: `Clip ${i + 1} of ${moments.length} · ${shape}` });
+      step(0, "wide");
       await render(source, wide, m, "wide", undefined, geo, within, capDir);
+      step(1, "vertical");
       await render(source, vertical, m, "vertical", { file: bandFile, height: 220 }, geo, within, capDir);
+      step(2, "square");
       await render(source, square, m, "square", { file: bandFile, height: 220 }, geo, within, capDir);
+      step(3, "uploading");
 
       out.push({
         title: m.title,
@@ -974,7 +996,9 @@ async function handle(job: Job): Promise<void> {
         subtitlesUrl: await uploadFile(subs, "text/plain"),
       });
       console.log(`[${job.recordingId}] ${i + 1}/${moments.length} — ${m.title}`);
+      progress(job.recordingId, { stage: "render", pct: ((i + 1) / moments.length) * 100, finished: i + 1, detail: `${i + 1} of ${moments.length} ready` });
     }
+    progress(job.recordingId, { stage: "upload", pct: 100 });
 
     await api("POST", `/api/agent/clip-jobs/${job.recordingId}/done`, { clips: out });
     console.log(`[${job.recordingId}] done — ${out.length} clips`);

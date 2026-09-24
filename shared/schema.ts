@@ -1140,10 +1140,29 @@ export const recordings = pgTable("recordings", {
   clipStatus: text("clip_status").notNull().default("none"),
   clipError: text("clip_error").notNull().default(""),
   clipClaimedAt: text("clip_claimed_at").notNull().default(""),
+  /** Where a running clip job has got to, as the worker reports it (JSON, see ClipProgress). */
+  clipProgress: text("clip_progress").notNull().default(""),
 });
 export type RecordingRow = typeof recordings.$inferSelect;
 
 export const CLIP_STATUSES = ["none", "queued", "running", "done", "failed"] as const;
+
+/** The clipper's own stages, reported as it reaches each one. */
+export const CLIP_STAGES = ["download", "transcript", "moments", "render", "upload", "done"] as const;
+export type ClipStage = (typeof CLIP_STAGES)[number];
+export interface ClipProgress {
+  stage: ClipStage;
+  /** 0-100 within the stage, when the stage can say. */
+  pct?: number;
+  /** One line for people: "using the live transcript", "clip 2 of 4 · vertical". */
+  detail?: string;
+  words?: number;
+  transcriptSource?: string;
+  moments?: { title: string; startSec: number; endSec: number }[];
+  /** Clips fully rendered and uploaded so far. */
+  finished?: number;
+  at: string;
+}
 export type ClipStatus = (typeof CLIP_STATUSES)[number];
 
 /**

@@ -41,6 +41,8 @@ import {
   type SponsorTier,
   insertEventShowSchema,
   clipResultSchema,
+  CLIP_STAGES,
+  type ClipProgress,
   transcriptBatchSchema,
   lowerThirdInputSchema,
   sceneInputSchema,
@@ -5131,7 +5133,39 @@ export function registerRoutes(app: Express): void {
       }));
     const saved = await storage.replaceClips(rec.id, rows);
     await storage.setClipStatus(rec.id, "done", "");
+    try {
+      const prev = rec.clipProgress ? JSON.parse(rec.clipProgress) : {};
+      await storage.setClipProgress(rec.id, JSON.stringify({ ...prev, stage: "done", pct: 100, finished: saved.length, at: new Date().toISOString() }));
+    } catch { /* progress is decoration */ }
     res.json({ saved: saved.length });
+  });
+
+  /** Where a running job has got to: the processing screen reads it, and it keeps the claim alive. */
+  app.post("/api/agent/clip-jobs/:id/progress", requireAgent, async (req, res) => {
+    const id = Number(req.params.id);
+    const b = req.body ?? {};
+    const stage = CLIP_STAGES.includes(b.stage) ? b.stage : null;
+    if (!stage) return res.status(400).json({ message: "Unknown stage." });
+    const p: ClipProgress = {
+      stage,
+      pct: Number.isFinite(Number(b.pct)) ? Math.max(0, Math.min(100, Math.round(Number(b.pct)))) : undefined,
+      detail: b.detail ? String(b.detail).slice(0, 200) : undefined,
+      words: Number.isFinite(Number(b.words)) ? Number(b.words) : undefined,
+      transcriptSource: b.transcriptSource ? String(b.transcriptSource).slice(0, 40) : undefined,
+      moments: Array.isArray(b.moments)
+        ? b.moments.slice(0, 12).map((m: any) => ({ title: String(m?.title ?? "").slice(0, 120), startSec: Number(m?.startSec) || 0, endSec: Number(m?.endSec) || 0 }))
+        : undefined,
+      finished: Number.isFinite(Number(b.finished)) ? Number(b.finished) : undefined,
+      at: new Date().toISOString(),
+    };
+    // Carry forward what earlier stages learned, so the screen never forgets the transcript once it's rendering.
+    const rec = await storage.getRecording(id);
+    if (!rec) return res.status(404).json({ message: "No such recording." });
+    let prev: Partial<ClipProgress> = {};
+    try { prev = rec.clipProgress ? JSON.parse(rec.clipProgress) : {}; } catch { /* start fresh */ }
+    const merged = { ...prev, ...Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)) };
+    await storage.setClipProgress(id, JSON.stringify(merged));
+    res.json({ ok: true });
   });
 
   app.post("/api/agent/clip-jobs/:id/failed", requireAgent, async (req, res) => {
@@ -5261,6 +5295,18 @@ export function registerRoutes(app: Express): void {
     } catch (err: any) {
       res.status(err?.status ?? 500).json({ message: err?.message });
     }
+  });
+
+  /** The podcaster's own "Make clips": queue one of their finished recordings that hasn't been clipped (or failed). */
+  app.post("/api/host/recordings/:id/clip", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
+    if (rec.status !== "Ready") return res.status(409).json({ message: "That recording is still being saved." });
+    if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.json({ ok: true, already: true });
+    if (rec.clipStatus === "done") return res.status(409).json({ message: "Clips are already made for this one." });
+    await storage.setClipStatus(rec.id, "queued", "");
+    res.json({ ok: true });
   });
 
   app.post("/api/admin/recordings/:id/reclip", requireAdmin, async (req, res) => {
