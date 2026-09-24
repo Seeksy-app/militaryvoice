@@ -129,6 +129,31 @@ async function cached<T>(k: string, maxAgeMs: number, make: () => Promise<T>): P
 }
 const hash = (v: unknown) => crypto.createHash("sha1").update(JSON.stringify(v)).digest("hex").slice(0, 20);
 
+// ---------------------------------------------------------------------------
+// The sample search
+// ---------------------------------------------------------------------------
+// What every visitor sees before they search: one real search, bought once
+// with every column filled (growth, audience country, niches) and kept for
+// good under its own key, so showing it never costs a credit. Rebuilt only
+// by an admin (POST /api/admin/discover/sample).
+export const SAMPLE_QUERY = "Military spouse lifestyle creators";
+const SAMPLE_PLATFORM = "instagram";
+const SAMPLE_KEY = "sample:v1";
+interface SamplePayload { q: string; platform: string; total: number; understood: unknown; results: (CreatorCard & { extra: RowExtra | null })[]; builtAt: string }
+let sampleMemo: { at: number; value: SamplePayload | null } | null = null;
+async function readSample(): Promise<SamplePayload | null> {
+  if (sampleMemo && Date.now() - sampleMemo.at < 5 * 60_000) return sampleMemo.value;
+  const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, SAMPLE_KEY));
+  const value = row ? (JSON.parse(row.payload) as SamplePayload) : null;
+  sampleMemo = { at: Date.now(), value };
+  return value;
+}
+/** A creator in the sample: their profile opens for anyone and its analytics never expire. */
+async function inSample(platform: string, handle: string): Promise<boolean> {
+  const s = await readSample();
+  return !!s?.results.some((r) => r.platform === platform && r.handle.toLowerCase() === handle.toLowerCase());
+}
+
 /**
  * The account as the platform shows it, with its latest posts — Influencers
  * Club's "raw" read, 0.03 credits. Shared by the profile and by Enrich, and
@@ -811,7 +836,7 @@ export function registerDiscoveryRoutes(app: Express): void {
       try {
         await requireMember(req);
       } catch (err) {
-        const ours = (await verifiedCreators()).some((c) => c.platform === platform && c.handle.toLowerCase() === handle.toLowerCase());
+        const ours = (await verifiedCreators()).some((c) => c.platform === platform && c.handle.toLowerCase() === handle.toLowerCase()) || (await inSample(platform, handle));
         const held = ours && (await db.select().from(discoveryCache).where(eq(discoveryCache.key, `analytics:${platform}:${handle.toLowerCase()}`))).length > 0;
         if (!held) throw err;
       }
@@ -850,10 +875,10 @@ export function registerDiscoveryRoutes(app: Express): void {
   async function loadCreator(platform: Platform, handle: string, req: Request) {
     {
       const [fullOrErr, account] = await Promise.all([
-        cached(`analytics:${platform}:${handle.toLowerCase()}`, 30 * DAY, async () => {
+        (async () => cached(`analytics:${platform}:${handle.toLowerCase()}`, (await inSample(platform, handle)) ? 3650 * DAY : 30 * DAY, async () => {
           const r = await ic("/creators/enrich/handle/analytics/", { handle, platform, include_lookalikes: false });
           return normalizeAnalytics(platform, handle, r);
-        }).catch((e: unknown) => e as Error),
+        }))().catch((e: unknown) => e as Error),
         // The account and its latest posts: cheap, and it fills the recent-posts section.
         rawAccount(platform, handle).catch(() => null),
       ]);
@@ -1126,6 +1151,44 @@ export function registerDiscoveryRoutes(app: Express): void {
         .sort((a, b) => a.rank - b.rank || a.k - b.k)
         .slice(0, 10)
         .map(({ x }) => x);
+    }),
+  );
+
+  app.get("/api/discover/sample", (_req, res) =>
+    send(res, async () => {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=300");
+      const s = await readSample();
+      return s ?? { none: true };
+    }),
+  );
+
+  app.post("/api/admin/discover/sample", (req, res) =>
+    send(res, async () => {
+      const adminKey = String(req.get("x-admin-password") ?? "");
+      if (!getAdminEmail(req) && !(adminKey && adminKey === (await storage.getFeaturedEvent()).adminPassword)) throw new HttpError(403, "Only an admin can spend credits on this.");
+      // The same request the search sends for this question with no filters,
+      // so it shares that search's cache.
+      const body = { platform: SAMPLE_PLATFORM, nlp_search: SAMPLE_QUERY, paging: { limit: PAGE_SIZE, page: 0 }, sort: { sort_by: "relevancy", sort_order: "desc" }, filters: {} };
+      const found = await cached(`search:${hash(body)}`, 7 * DAY, async () => {
+        const r = await ic("/discovery/", body);
+        const accounts = (r?.accounts ?? []).map((a: any) => toCard(SAMPLE_PLATFORM, a));
+        keepPictures(accounts);
+        return { total: num(r?.total) ?? 0, accounts, understood: r?.nlp_search ?? null, applied: r?.applied_filters ?? null };
+      });
+      const plain = (found.accounts as CreatorCard[]).map(({ rawPicture: _r, ...c }) => c).filter((c) => c.handle);
+      // Every row's full read, kept for good.
+      let bought = 0;
+      await Promise.all(plain.map(async (c) => {
+        const k = `analytics:${c.platform}:${c.handle.toLowerCase()}`;
+        if (await isFresh(k, 3650 * DAY)) return;
+        await cached(k, 3650 * DAY, async () => normalizeAnalytics(c.platform, c.handle, await ic("/creators/enrich/handle/analytics/", { handle: c.handle, platform: c.platform, include_lookalikes: false }))).then(() => { bought++; }).catch(() => null);
+      }));
+      const results = await withExtras(await withBasics(plain));
+      const payload: SamplePayload = { q: SAMPLE_QUERY, platform: SAMPLE_PLATFORM, total: found.total, understood: found.understood, results, builtAt: new Date().toISOString() };
+      await db.insert(discoveryCache).values({ key: SAMPLE_KEY, payload: JSON.stringify(payload), createdAt: payload.builtAt })
+        .onConflictDoUpdate({ target: discoveryCache.key, set: { payload: JSON.stringify(payload), createdAt: payload.builtAt } });
+      sampleMemo = null;
+      return { rows: results.length, filled: results.filter((r) => r.extra).length, bought, credits: Math.round((bought * 0.8 + plain.length * 0.03) * 100) / 100 };
     }),
   );
 

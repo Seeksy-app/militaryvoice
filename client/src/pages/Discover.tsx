@@ -45,6 +45,8 @@ type RowExtra = {
   niches: { name: string; pct: number }[]; collabs: string[]; collabCount: number;
 };
 type Me = { signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number } | null; lookups?: { used: number; allowance: number } | null; isAdmin?: boolean };
+/** The saved sample search, every column filled; free to show. */
+type Sample = { q: string; platform: string; total: number; results: Card[]; builtAt: string };
 type SearchResult = { brief: string; mode?: string; total: number; page: number; pageSize: number; results: Card[]; verified: Card[]; understood?: { notes?: string[]; from_nlp?: Record<string, unknown> } | null };
 type Analytics = {
   incomeMin: number | null; incomeMax: number | null; likesMedian: number | null; commentsMedian: number | null;
@@ -181,6 +183,18 @@ export default function Discover() {
   const [ghost, setGhost] = useState("");
   const [spotlight, setSpotlight] = useState(false);
   const [demoHide, setDemoHide] = useState(false);
+  // The saved sample search, and the nudge to try your own once it's been seen.
+  const sampleQ = useQuery<Sample | { none: true }>({ queryKey: ["/api/discover/sample"], queryFn: async () => (await fetch("/api/discover/sample")).json(), staleTime: 30 * 60_000 });
+  const sample = sampleQ.data && !("none" in sampleQ.data) ? sampleQ.data : null;
+  if (typeof window !== "undefined") (window as unknown as { __mvSampleQ?: string }).__mvSampleQ = sample?.q;
+  const sampleKeys = useMemo(() => new Set((sample?.results ?? []).map((c) => `${c.platform}:${c.handle}`.toLowerCase())), [sample]);
+  const [tryOwn, setTryOwn] = useState(false);
+  const [tryOwnDone, setTryOwnDone] = useState(false);
+  useEffect(() => {
+    const show = () => setTryOwn(true);
+    window.addEventListener("mv-demo-search-done", show);
+    return () => window.removeEventListener("mv-demo-search-done", show);
+  }, []);
   const [submitted, setSubmitted] = useState<null | { q: string; platform: string; branch: string; size: number; sort: string; mode: Mode; filters: Filters }>(null);
   const [heroVariant] = useState(() => {
     try {
@@ -211,6 +225,15 @@ export default function Discover() {
     // account. Looking up one exact account is a member's tool.
     if (!isMember && m === "username") { setSubmitted(next); setGate(true); return; }
     if (m === "username") return void lookupUser(next.q, next.platform);
+    if (sample && m === "ai" && next.q.trim().toLowerCase() === sample.q.toLowerCase() && next.platform === sample.platform && !next.branch && next.size === 0 && activeFilters(filters).length === 0) {
+      setSubmitted(null);
+      setTimeout(() => {
+        document.getElementById("discover-sample")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        setSpotlight(true);
+        window.setTimeout(() => { setSpotlight(false); setTryOwn(true); }, 2600);
+      }, 60);
+      return;
+    }
     if (m === "keywords" && !next.q.trim() && !filters.keywordsInBio?.trim()) return toast({ title: "Type a word to look for", description: "For example: army wife, milso, veteran owned." });
     setSubmitted(next);
   };
@@ -337,6 +360,8 @@ export default function Discover() {
             setQ={setQ}
             placeholder={mode === "ai" ? d.placeholder : mode === "keywords" ? "army wife, military spouse, milso" : "@handle, or paste a profile link"}
             ghost={ghost}
+            callout={tryOwn && !tryOwnDone && !submitted && !q && !ghost ? <TryYourOwn onClose={() => setTryOwnDone(true)} /> : null}
+            onFocusQ={() => { if (tryOwn) setTryOwnDone(true); }}
             onSubmit={() => run()}
             busy={userLoading}
             filterCount={activeFilters(filters).length}
@@ -433,7 +458,7 @@ export default function Discover() {
           <Lists lists={lists.data ?? []} onOpen={(c) => openIn((lists.data ?? []).flatMap((l) => l.items.map((i) => i.snapshot)))(c)} />
           </>
         ) : !submitted || submitted.mode === "username" ? (
-          <Welcome isAdmin={!!me?.isAdmin} verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} hidden={demoHide} onJoin={() => setGate(true)} loading={meLoading} />
+          <Welcome sample={sample} onOpenSample={openIn(sample?.results ?? [])} isAdmin={!!me?.isAdmin} verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} hidden={demoHide} onJoin={() => setGate(true)} loading={meLoading} />
         ) : (
           <>
             {/* what ran */}
@@ -496,7 +521,7 @@ export default function Discover() {
         )}
       </main>
 
-      <ProfileDrawer card={open} siblings={openFrom} sharedKey={sharedKey} allowance={me?.reveals} onOpenCreator={setOpenRaw} onClose={() => setOpenRaw(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
+      <ProfileDrawer freeKeys={sampleKeys} card={open} siblings={openFrom} sharedKey={sharedKey} allowance={me?.reveals} onOpenCreator={setOpenRaw} onClose={() => setOpenRaw(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
       <JoinDialog
         open={gate}
         me={me}
@@ -554,8 +579,31 @@ function ModeMenu({ mode, setMode, onOpenChange }: { mode: Mode; setMode: (m: Mo
   );
 }
 
-function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder, onSubmit, busy, filterCount, onFilters, onMenu, ghost }: {
+/** Points at the search box once the sample has been seen. */
+function TryYourOwn({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="absolute left-2 top-[calc(100%+14px)] z-20 w-[min(22rem,calc(100vw-3rem))] animate-in fade-in slide-in-from-top-1 duration-500" role="status" data-testid="discover-try-own">
+      <span aria-hidden className="absolute -top-1.5 left-8 h-3 w-3 rotate-45 rounded-[2px] bg-[#053877]" />
+      <div className="relative flex items-start gap-3 rounded-2xl bg-[#053877] py-3 pl-4 pr-3 text-white shadow-[0_18px_40px_-12px_rgba(5,56,119,0.6)]">
+        <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#F0A71F] opacity-75" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#F0A71F]" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-semibold">Now try your own</span>
+          <span className="block text-sm text-white/80">Describe who you're looking for, in plain English.</span>
+        </span>
+        <button type="button" onClick={onClose} className="rounded-md p-1 text-white/70 hover:bg-white/10 hover:text-white" aria-label="Close"><X className="h-4 w-4" /></button>
+      </div>
+    </div>
+  );
+}
+
+function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder, onSubmit, busy, filterCount, onFilters, onMenu, ghost, callout, onFocusQ }: {
   onMenu?: (open: boolean) => void;
+  /** A pointer under the box, e.g. "Now try your own". */
+  callout?: React.ReactNode;
+  onFocusQ?: () => void;
   /** The demo's typing, shown as if typed; never the real value. */
   ghost?: string;
   platform: string; setPlatform: (p: string) => void; mode: Mode; setMode: (m: Mode) => void; q: string; setQ: (q: string) => void;
@@ -573,7 +621,8 @@ function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder,
         </div>
         <div className="relative flex-1">
           <Lead className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder={!q && ghost ? ghost : placeholder} className={`h-12 border-0 pl-11 text-base shadow-none focus-visible:ring-0 ${!q && ghost ? "placeholder:text-foreground" : ""}`} data-testid="discover-q" />
+          <Input value={q} onFocus={onFocusQ} onChange={(e) => setQ(e.target.value)} placeholder={!q && ghost ? ghost : placeholder} className={`h-12 border-0 pl-11 text-base shadow-none focus-visible:ring-0 ${!q && ghost ? "placeholder:text-foreground" : ""}`} data-testid="discover-q" />
+          {callout}
         </div>
         <div className="flex gap-2">
           {mode !== "username" && (
@@ -741,7 +790,7 @@ function SearchDemo({ enabled, onType, onSpotlight, onHide }: { enabled: boolean
       // Start from the card if it's still on screen, else just above the search.
       const start = card.y > window.scrollY + 60 ? card : { x: q.x + 180, y: q.y - 90 };
       const T = (ms: number, f: () => void) => { timers.push(window.setTimeout(f, ms)); };
-      const text = "Military podcasters";
+      const text = (window as unknown as { __mvSampleQ?: string }).__mvSampleQ || "Military podcasters";
       setPos({ ...start, on: true, click: 0 });
       T(250, () => setPos((p) => ({ ...p, ...q })));
       T(1350, () => setPos((p) => ({ ...p, click: p.click + 1 })));
@@ -1254,9 +1303,26 @@ function ResultsSkeleton() {
 // Before a search: our creators, and what Discovery is
 // ===========================================================================
 
-function Welcome({ verified, isMember, isAdmin, signedIn, onOpenVerified, onSaveVerified, onSaveMany, saved, spotlight, hidden, onJoin, loading }: { verified: Card[]; isMember: boolean; isAdmin?: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; saved: Set<string>; spotlight?: boolean; hidden?: boolean; onJoin: () => void; loading: boolean }) {
+function Welcome({ sample, onOpenSample, verified, isMember, isAdmin, signedIn, onOpenVerified, onSaveVerified, onSaveMany, saved, spotlight, hidden, onJoin, loading }: { sample: Sample | null; onOpenSample: (c: Card) => void; verified: Card[]; isMember: boolean; isAdmin?: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; saved: Set<string>; spotlight?: boolean; hidden?: boolean; onJoin: () => void; loading: boolean }) {
+  // The demo types the sample's question and "presses Search": the sample is
+  // the answer it lights up. Without a sample yet, our verified list is.
+  const answer = (on: boolean) => `rounded-2xl transition-all duration-700 ${on && hidden ? "pointer-events-none translate-y-6 opacity-0" : "translate-y-0 opacity-100"} ${on && spotlight ? "ring-4 ring-[#F0A71F]/50 shadow-[0_0_48px_rgba(240,167,31,0.35)]" : ""}`;
   return (
     <div className="flex flex-col gap-12">
+      {sample && (
+        <section id="discover-sample" className="scroll-mt-24" data-testid="discover-sample">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#b36b00] dark:text-[#F0A71F]">A sample search</p>
+              <h2 className="mt-1 text-xl font-semibold tracking-tight">"{sample.q}"</h2>
+            </div>
+            <p className="text-sm text-muted-foreground">{sample.total.toLocaleString()} creators on {platformLabel(sample.platform)} · the top {sample.results.length}, every column filled in</p>
+          </div>
+          <div className={`mt-5 ${answer(true)}`}>
+            <ResultsList rows={sample.results} total={sample.total} saved={saved} isMember={isMember} onOpen={onOpenSample} onSave={onSaveVerified} onSaveMany={onSaveMany} />
+          </div>
+        </section>
+      )}
       <section>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
@@ -1264,7 +1330,7 @@ function Welcome({ verified, isMember, isAdmin, signedIn, onOpenVerified, onSave
           </h2>
           <p className="text-sm text-muted-foreground">Creators we know personally. Every one checked by our team.</p>
         </div>
-        <div className={`mt-5 rounded-2xl transition-all duration-700 ${hidden ? "pointer-events-none translate-y-6 opacity-0" : "translate-y-0 opacity-100"} ${spotlight ? "ring-4 ring-[#F0A71F]/50 shadow-[0_0_48px_rgba(240,167,31,0.35)]" : ""}`}>
+        <div className={`mt-5 ${answer(!sample)}`}>
           {verified.length === 0 ? <ResultsSkeleton /> : <ResultsList rows={verified} saved={saved} isMember={isMember} isAdmin={isAdmin} onOpen={onOpenVerified} onSave={onSaveVerified} onSaveMany={onSaveMany} />}
         </div>
       </section>
@@ -1456,8 +1522,10 @@ const PLATFORM_ICON: Record<string, typeof Instagram> = { instagram: Instagram, 
  * toolbar that follows you (back, next, add to list, share, close), who they
  * are, and then the nine sections.
  */
-function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoin, lists, onSave, saved, allowance, sharedKey = "" }: {
+function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoin, lists, onSave, saved, allowance, sharedKey = "", freeKeys }: {
   card: Card | null; siblings: Card[]; onClose: () => void; onOpenCreator: (c: Card) => void; isMember: boolean; onJoin: () => void; sharedKey?: string;
+  /** platform:handle profiles anyone may open (the sample search's). */
+  freeKeys?: Set<string>;
   lists: List[]; onSave: (c: Card, listId?: number) => void; saved: boolean; allowance: { used: number; allowance: number } | null | undefined;
 }) {
   const { toast } = useToast();
@@ -1466,7 +1534,7 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
   const scroller = useRef<HTMLDivElement>(null);
   const [contact, setContact] = useState<null | { email: string | null; phone: string | null; website: string | null; location: string | null }>(null);
   useEffect(() => { setContact(null); setWantSimilar(false); scroller.current?.scrollTo({ top: 0 }); }, [card?.handle, card?.name]);
-  const viaShare = !!card && sharedKey.toLowerCase() === `${card.platform}:${card.handle}`.toLowerCase();
+  const viaShare = !!card && (sharedKey.toLowerCase() === `${card.platform}:${card.handle}`.toLowerCase() || !!freeKeys?.has(`${card.platform}:${card.handle}`.toLowerCase()));
   const canAnalyze = !!card && !!card.handle && !!card.platform && (isMember || viaShare) && ["instagram", "youtube", "tiktok", "twitter", "twitch"].includes(card.platform);
   const a = useQuery<Analytics>({
     queryKey: ["/api/discover/creator", card?.platform, card?.handle],
