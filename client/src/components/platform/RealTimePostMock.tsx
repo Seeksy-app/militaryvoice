@@ -4,7 +4,7 @@ import { Square, FileText, Sparkles, Crop, Send, Check, Scissors } from "lucide-
 import { PlatformIcon } from "@/components/SocialIcons";
 import { LoopVideo, SoonPill, VCAST } from "./stockVideo";
 
-// "Real-time post", drawn: one segment going from the moment the recording
+// Postify, drawn: one segment going from the moment the recording
 // stops to clips ready to post, in five steps that play on their own and can
 // be clicked. It follows what the clipper actually does (agent/clipper.ts):
 // the transcript was written live by the captioner, Claude picks moments that

@@ -5299,7 +5299,7 @@ export function registerRoutes(app: Express): void {
   });
 
   /**
-   * Real-time post is in testing: only these accounts (and admins) see it or
+   * Postify is in testing: only these accounts (and admins) see it or
    * can start a job, until it's switched on for everyone. POST_TESTERS on
    * Vercel overrides the list; POST_FOR_ALL=1 opens it up.
    */
@@ -5318,7 +5318,7 @@ export function registerRoutes(app: Express): void {
   /**
    * Upload an episode and get clips back. The file has already gone straight
    * to storage (/api/host/assets/upload-url); this files it as a recording and
-   * queues it, so it shows up in Real-time post like a studio session.
+   * queues it, so it shows up in Postify like a studio session.
    */
   app.post("/api/host/uploads/clip", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();

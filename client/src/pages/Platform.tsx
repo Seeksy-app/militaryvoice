@@ -431,7 +431,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
         <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:py-24">
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end lg:gap-16">
             <div>
-              <Kicker>Real-time post</Kicker>
+              <Kicker>Postify</Kicker>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Post-production, in real time</h2>
               <p className="mt-4 text-base leading-relaxed text-muted-foreground">
                 The recording stops and the clips are already on their way. Every word was transcribed live while the show went out, so there is no upload and no queue: AI reads the segment, picks the moments that stand on their own, and cuts each one in the shapes the networks take, captions burned in.

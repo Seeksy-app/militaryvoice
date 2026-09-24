@@ -6,7 +6,7 @@ import { apiRequest } from "@/lib/queryClient";
 import type { ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
 import { Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload } from "lucide-react";
 
-// Real-time post: one recording going from "the segment ended" to clips ready
+// Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
 // the worker reported (recordings.clip_progress) or what it produced (clips) —
 // nothing animates on a timer pretending to work.
@@ -246,7 +246,7 @@ export function PostStudio() {
     if (recs.isLoading) return null;
     return (
       <section className="mt-6" data-testid="post-studio">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Real-time post</p>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Postify</p>
         <h2 className="mb-4 mt-1 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips</h2>
         <UploadEpisode variant="card" onQueued={queued} />
       </section>
@@ -295,7 +295,7 @@ export function PostStudio() {
     <section className="mt-6" data-testid="post-studio">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Real-time post</p>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Postify</p>
           <h2 className="mt-1 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips</h2>
         </div>
         <UploadEpisode onQueued={queued} />
