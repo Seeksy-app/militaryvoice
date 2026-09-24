@@ -90,6 +90,7 @@ function AppRouter() {
       <Route path="/terms">{() => <TermsOfService />}</Route>
       <Route path="/prepare">{() => <Prepare />}</Route>
       <Route path="/platform">{() => <Platform />}</Route>
+      <Route path="/podcast-one-pitch">{() => <Platform pitch />}</Route>
       <Route path="/headshot/:token">{(p) => <Headshot token={p.token} />}</Route>
       <Route path="/watchfloor">{() => <Watchfloor />}</Route>
       <Route path="/studio-platform">{() => <Watchfloor />}</Route>

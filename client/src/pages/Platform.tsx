@@ -39,6 +39,7 @@ import {
   Film,
 } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
+import { useAudienceSnapshot } from "@/components/AudienceReach";
 import { InterestDialog } from "@/components/InterestDialog";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -102,6 +103,89 @@ const AUDIENCES = [
   "Brands looking for military creators to sponsor",
 ];
 
+/**
+ * The sponsor card Riccoh posted, as a hero: the day, the numbers, the host and
+ * the ask. The figures are live (the same audience count the Sponsor page reads),
+ * so the pitch never goes stale.
+ */
+function PitchHero() {
+  const { data: a } = useAudienceSnapshot();
+  const shows = a?.showsTotal ?? 32;
+  const following = a?.followers ? `${Math.floor(a.followers / 1000).toLocaleString("en-US")},000+` : "234,000+";
+  const channels = a?.channels ?? 56;
+  const episodes = a?.catalogue?.episodes ? a.catalogue.episodes.toLocaleString("en-US") : "4,491";
+  const since = a?.catalogue?.sinceYear ?? 2016;
+  const words = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+  const spell = (n: number) => (n <= 10 ? words[n] : n < 100 ? `${["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"][Math.floor(n / 10)]}${n % 10 ? `-${words[n % 10].toLowerCase()}` : ""}` : String(n));
+  return (
+    <section className="relative isolate overflow-hidden bg-[#000741] text-white" data-testid="pitch-hero">
+      <div aria-hidden className="pointer-events-none absolute -right-40 -top-40 -z-10 h-[40rem] w-[40rem] rounded-full bg-[#F0A71F]/10 blur-3xl" />
+      <div aria-hidden className="pointer-events-none absolute -bottom-48 -left-40 -z-10 h-[36rem] w-[36rem] rounded-full bg-[#2563eb]/20 blur-3xl" />
+      {/* Riccoh with the Emmy, fading into the navy behind the words. */}
+      <div className="absolute inset-y-0 right-0 -z-10 hidden w-[44%] lg:block">
+        <img src="/riccoh-player.jpg" alt="Riccoh Player, USMC (Ret.), holding his Emmy" className="h-full w-full object-cover object-[50%_20%]" />
+        <div aria-hidden className="absolute inset-0 bg-[linear-gradient(90deg,#000741_0%,rgba(0,7,65,0.55)_35%,rgba(0,7,65,0)_70%)]" />
+        <div aria-hidden className="absolute inset-0 bg-[linear-gradient(180deg,rgba(0,7,65,0)_60%,#000741_100%)]" />
+      </div>
+      <div className="mx-auto max-w-7xl px-4 pb-16 pt-14 sm:px-6 lg:pb-24 lg:pt-20">
+        <div className="max-w-2xl">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#F0A71F] sm:text-sm">National Military Podcast Day<span className="hidden sm:inline"> · </span><span className="block sm:inline">5 October 2026</span></p>
+          <h1 className="mt-6 text-5xl font-bold leading-[0.95] tracking-tight sm:text-7xl" style={HEADLINE_FONT}>
+            26.2 miles of military podcasts.
+          </h1>
+          <p className="mt-6 max-w-xl text-lg leading-relaxed text-white/85 sm:text-xl">
+            {spell(shows)} shows, back to back, in one broadcast day. Your name on it, from the first show to the last.
+          </p>
+          <div className="mt-10 h-1 w-24 rounded-full bg-[#F0A71F]" aria-hidden />
+          <dl className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-[auto_auto_auto] sm:justify-start sm:gap-x-12">
+            <div className="flex items-baseline gap-3 sm:block">
+              <dt className="sr-only">Shows</dt>
+              <dd className="text-4xl font-bold tabular-nums text-[#F0A71F] lg:text-5xl" style={HEADLINE_FONT}>{shows}</dd>
+              <dd className="text-balance text-sm leading-snug text-white/70 sm:mt-1 sm:max-w-[12rem]">shows on the starting line</dd>
+            </div>
+            <div className="flex items-baseline gap-3 sm:block">
+              <dt className="sr-only">Combined following</dt>
+              <dd className="text-4xl font-bold tabular-nums lg:text-5xl" style={HEADLINE_FONT}>{following}</dd>
+              <dd className="text-balance text-sm leading-snug text-white/70 sm:mt-1 sm:max-w-[12rem]">combined following across {channels} channels</dd>
+            </div>
+            <div className="flex items-baseline gap-3 sm:block">
+              <dt className="sr-only">Episodes</dt>
+              <dd className="text-4xl font-bold tabular-nums lg:text-5xl" style={HEADLINE_FONT}>{episodes}</dd>
+              <dd className="text-balance text-sm leading-snug text-white/70 sm:mt-1 sm:max-w-[12rem]">episodes already published, since {since}</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="mt-12 flex flex-col gap-6 border-t border-white/15 pt-8 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <img src="/riccoh-player.jpg" alt="" aria-hidden className="h-14 w-14 rounded-full object-cover object-[50%_15%] ring-2 ring-[#F0A71F] lg:hidden" />
+            <p className="text-base leading-snug text-white/75">
+              Hosted by Emmy winner
+              <br />
+              <span className="font-semibold text-white">Riccoh Player</span> (USMC, Retired)
+            </p>
+          </div>
+          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+            <p className="text-sm text-white/80 sm:text-right">Segments from <span className="font-bold text-[#F0A71F]">$250</span></p>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link href="/agenda">
+                <Button size="lg" variant="outline" className="h-12 w-full rounded-full border-white/30 bg-transparent px-6 text-base text-white hover:bg-white/10 hover:text-white sm:w-auto">
+                  See the lineup
+                </Button>
+              </Link>
+              <Link href="/sponsor?apply=1">
+                <Button size="lg" className="h-12 w-full gap-2 rounded-full bg-[#F0A71F] px-7 text-base font-semibold text-[#1a1200] hover:bg-[#f5b94a] sm:w-auto" data-testid="pitch-sponsor">
+                  Sponsor a segment <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /** A section's kicker and heading, in one voice across the page. */
 function Kicker({ children, dark = false }: { children: React.ReactNode; dark?: boolean }) {
   return <div className={`text-xs font-semibold uppercase tracking-[0.16em] ${dark ? "text-[#F0A71F]" : "text-[#b36b00] dark:text-[#F0A71F]"}`}>{children}</div>;
@@ -124,11 +208,19 @@ const STUDIO_FEATURES = [
   { icon: Film, title: "Video with people in shot", body: "Roll a clip or sponsor reel with the speakers still beside it; the next scene starts when it ends." },
 ] as const;
 
-export default function Platform() {
+/**
+ * The About page with a sponsor hero, for a pitch sent to a named group
+ * (/podcast-one-pitch). Everything under the hero is the About page as is.
+ */
+export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
   return (
     <div className="min-h-screen overflow-x-clip bg-background">
       <NavBar />
 
+      {pitch ? (
+        <PitchHero />
+      ) : (
+        <>
       {/* ------------------------------------------------------------- hero */}
       <section className="relative isolate overflow-hidden bg-[#030b1f] text-white">
         {/* A room full of people, far back, so the page opens on an event. */}
@@ -185,6 +277,9 @@ export default function Platform() {
           </motion.div>
         </div>
       </section>
+
+        </>
+      )}
 
       {/* ---------------------------------------------------------- discovery */}
       <section id="discovery" className="relative isolate overflow-hidden border-b border-border">
