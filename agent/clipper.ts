@@ -154,7 +154,13 @@ async function uploadFile(file: string, contentType: string): Promise<string> {
       res = await fetch(signed.uploadUrl, { method: "PUT", headers: { "content-type": contentType }, body: new Uint8Array(body) });
       if (res.ok || res.status < 500) break;
     } catch (err) {
-      if (attempt === 3) throw err;
+      // Some machines' Node TLS can't hold a connection to storage that curl
+      // manages fine. Last try goes through curl before giving up.
+      if (attempt === 3) {
+        await run("curl", ["-s", "-f", "--retry", "4", "--retry-all-errors", "--retry-delay", "2", "-X", "PUT", signed.uploadUrl, "-H", `content-type: ${contentType}`, "--data-binary", `@${file}`]);
+        console.log(`   uploaded ${name} via curl (${(body.length / 1048576).toFixed(1)}MB)`);
+        return signed.publicUrl;
+      }
     }
     console.warn(`   upload of ${name} didn't go through — trying again (${attempt}/3)`);
     await new Promise((z) => setTimeout(z, 3000 * attempt));
