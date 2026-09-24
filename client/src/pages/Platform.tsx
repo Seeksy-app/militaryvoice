@@ -323,7 +323,7 @@ export default function Platform() {
         <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:py-24">
           <div className="mx-auto max-w-4xl text-center">
             <Kicker>Discovery</Kicker>
-            <h2 className="mt-2 text-3xl font-semibold leading-[1.1] tracking-tight sm:text-[2.75rem]">Find the military voices worth working with, and see who's really listening</h2>
+            <h2 className="mt-2 text-3xl font-semibold leading-[1.1] tracking-tight sm:text-[2.75rem]">Find the mil/vet voices worth working with, and see who's really listening</h2>
             <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
               Discovery searches over 300 million creator profiles for veterans, service members and military spouses — creators, podcasters, speakers — and opens each one to the audience behind the number and every brand that has already paid them.
             </p>
