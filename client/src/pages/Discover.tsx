@@ -508,7 +508,7 @@ export default function Discover() {
         defaultRole={door}
         source={source}
       />
-      <SiteFooter product="discovery" />
+      <SiteFooter />
     </div>
   );
 }

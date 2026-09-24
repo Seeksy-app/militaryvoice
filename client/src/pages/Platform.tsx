@@ -91,13 +91,6 @@ const PILLARS = [
   },
 ];
 
-const FLOW = [
-  ["Plan", "Tell us the shape: a single session or a hundred across three days. The agenda builds from your lineup."],
-  ["Fill", "Speakers claim their slots. Need more? Discovery finds them, measured, with a way to reach them."],
-  ["Run", "The studio brings each speaker on in turn while Alex keeps the run of show and the files in order."],
-  ["After", "Recordings, clips for every speaker, and the social posts to share them, ready the next morning."],
-] as const;
-
 /** What Discovery does, capability by capability. */
 const DISCOVERY_FEATURES = [
   { icon: Search, title: "300M+ profiles", body: "Instagram, YouTube and TikTok, searched by name, by bio, or by what you describe." },
@@ -519,26 +512,6 @@ export default function Platform() {
         </div>
       </section>
 
-      {/* --------------------------------------------------------- how it goes */}
-      <section className="border-b border-border bg-muted/40">
-        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
-          <Kicker>How it goes</Kicker>
-          <h2 className="mt-2 max-w-2xl text-3xl font-semibold tracking-tight sm:text-4xl">Four steps, and most of them aren't yours</h2>
-          <ol className="mt-12 grid gap-6 md:grid-cols-4">
-            {FLOW.map(([t, b], i) => (
-              <li key={t} className="relative">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full border border-[#F0A71F]/60 bg-background text-sm font-semibold text-[#b36b00] dark:text-[#F0A71F]">{i + 1}</span>
-                  {i < FLOW.length - 1 && <span aria-hidden className="hidden h-px flex-1 bg-gradient-to-r from-[#F0A71F]/60 to-transparent md:block" />}
-                </div>
-                <h3 className="mt-4 text-lg font-semibold">{t}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{b}</p>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
-
       {/* -------------------------------------------------------- proof / who */}
       <section className="border-b border-border">
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:items-center">
@@ -568,30 +541,26 @@ export default function Platform() {
       </section>
 
       {/* ------------------------------------------------------------- close */}
-      <section className="bg-[#F0A71F] text-[#1a1200]">
+      <section className="bg-[#053877] text-white">
         <div className="mx-auto flex max-w-7xl flex-col items-start gap-6 px-4 py-16 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-3xl font-semibold tracking-tight">Got an event coming up?</h2>
-            <p className="mt-2 max-w-xl text-[#1a1200]/80">Tell us the date and roughly what you're planning. We'll show you how it runs on MilitaryVoices, and whether we're the right fit.</p>
+            <p className="mt-2 max-w-xl text-white/80">Tell us the date and roughly what you're planning. We'll show you how it runs on MilitaryVoices, and whether we're the right fit.</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <InterestDialog
               intent="register"
-              trigger={<Button size="lg" className="gap-2 rounded-full bg-[#053877] px-7 text-base font-medium text-white hover:bg-[#0a4a99]"><CalendarClock className="h-4 w-4" /> Plan an event with us</Button>}
+              trigger={<Button size="lg" className="gap-2 rounded-full bg-[#F0A71F] px-7 text-base font-medium text-[#1a1200] hover:bg-[#f5b94a]"><CalendarClock className="h-4 w-4" /> Plan an event with us</Button>}
             />
             <InterestDialog
               intent="beta"
-              trigger={<Button size="lg" variant="outline" className="gap-2 rounded-full border-[#1a1200]/30 bg-transparent px-7 text-base text-[#1a1200] hover:bg-[#1a1200]/10">Join the beta list</Button>}
+              trigger={<Button size="lg" variant="outline" className="gap-2 rounded-full [border-color:rgba(255,255,255,0.45)] bg-transparent px-7 text-base text-white hover:bg-white/10 hover:text-white">Join the beta list</Button>}
             />
           </div>
         </div>
       </section>
 
-      <p className="border-b border-border bg-background px-4 py-4 text-center text-xs text-muted-foreground">
-        Some features shown are on our roadmap.
-      </p>
-
-      <SiteFooter product="discovery" />
+      <SiteFooter note="Some features shown are on our roadmap." />
     </div>
   );
 }

@@ -14,25 +14,44 @@ import { LogoLockupOnDark } from "@/components/Logo";
 
 const NAVY = "#000741";
 
-export function SiteFooter({ slug, product }: { slug?: string; product?: "discovery" }) {
+type FooterLink = { href: string; label: string; external?: boolean };
+
+export function SiteFooter({ slug, note }: { slug?: string; /** A small line above the copyright, e.g. the roadmap note on About. */ note?: string } = {}) {
   const agendaHref = slug ? `/event/${slug}/agenda` : "/agenda";
   const scheduleHref = slug ? `/event/${slug}/schedule` : "/schedule";
 
-  // Discovery is its own product: its footer points at the product, not the event.
-  const links = product === "discovery" ? [
-    { href: "/discover", label: "Discovery" },
-    { href: "/platform", label: "About MilitaryVoices" },
-    { href: "/help", label: "Help" },
-  ] : [
-    { href: "/#podcasters", label: "Podcasters", external: true },
-    { href: "/#listeners", label: "Listeners", external: true },
-    { href: scheduleHref, label: "Schedule" },
-    { href: agendaHref, label: "Agenda" },
-    { href: "/prepare", label: "Podcaster guide" },
-    { href: "/faq", label: "FAQ" },
-    { href: "/watchfloor", label: "Studio" },
-    { href: "/sponsor", label: "Sponsor" },
-    { href: "/host/dashboard", label: "Sign in" },
+  // The whole site, in three columns, on every page.
+  const columns: { title: string; links: FooterLink[] }[] = [
+    {
+      title: "The Podcast Marathon",
+      links: [
+        { href: "/#podcasters", label: "Podcasters", external: true },
+        { href: "/#listeners", label: "Listeners", external: true },
+        { href: scheduleHref, label: "Schedule" },
+        { href: agendaHref, label: "Agenda" },
+        { href: "/prepare", label: "Podcaster guide" },
+        { href: "/sponsor", label: "Sponsors" },
+      ],
+    },
+    {
+      title: "Platform",
+      links: [
+        { href: "/discover", label: "Discovery" },
+        { href: "/directory", label: "Directory" },
+        { href: "/events", label: "Events" },
+        { href: "/watchfloor", label: "Studio" },
+        { href: "/platform", label: "About Us" },
+      ],
+    },
+    {
+      title: "Help",
+      links: [
+        { href: "/faq", label: "FAQ" },
+        { href: "/help", label: "Help centre" },
+        { href: "mailto:hello@militaryvoices.ai", label: "Contact", external: true },
+        { href: "/host/dashboard", label: "Sign in" },
+      ],
+    },
   ];
 
   return (
@@ -42,36 +61,38 @@ export function SiteFooter({ slug, product }: { slug?: string; product?: "discov
           {/* Always the dark-ground lockup: this band is navy in both themes,
               so the theme-swapping one puts near-black letters on navy. */}
           <LogoLockupOnDark className="h-12 w-auto shrink-0 self-start" />
-          <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-white/65">
-            {links.map((l) =>
-              l.external ? (
-                <a key={l.label} href={l.href} className="transition-colors hover:text-white">
-                  {l.label}
-                </a>
-              ) : (
-                <Link key={l.label} href={l.href} className="transition-colors hover:text-white">
-                  {l.label}
-                </Link>
-              ),
-            )}
-          </nav>
+          <div className="grid grid-cols-2 gap-x-10 gap-y-8 sm:grid-cols-3">
+            {columns.map((c) => (
+              <nav key={c.title} aria-label={c.title}>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">{c.title}</p>
+                <ul className="mt-3 flex flex-col gap-2 text-sm text-white/65">
+                  {c.links.map((l) => (
+                    <li key={l.label}>
+                      {l.external ? (
+                        <a href={l.href} className="transition-colors hover:text-white">{l.label}</a>
+                      ) : (
+                        <Link href={l.href} className="transition-colors hover:text-white">{l.label}</Link>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            ))}
+          </div>
         </div>
 
-        <div className="mt-8 flex flex-col gap-3 border-t border-white/15 pt-6 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} MilitaryVoices.ai. All rights reserved.</p>
+        <div className="mt-10 flex flex-col gap-3 border-t border-white/15 pt-6 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p>© {new Date().getFullYear()} MilitaryVoices.ai. All rights reserved.</p>
+            {note && <p className="mt-1 text-white/40">{note}</p>}
+          </div>
           <nav className="flex flex-wrap gap-x-5 gap-y-2">
-            <Link href="/help" className="transition-colors hover:text-white">
-              Help
-            </Link>
             <Link href="/privacy" className="transition-colors hover:text-white">
               Privacy Policy
             </Link>
             <Link href="/terms" className="transition-colors hover:text-white">
               Terms &amp; Conditions
             </Link>
-            <a href="mailto:hello@militaryvoices.ai" className="transition-colors hover:text-white">
-              Contact
-            </a>
           </nav>
         </div>
       </div>
