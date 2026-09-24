@@ -283,43 +283,40 @@ export default function Landing({ slug }: Props) {
   const scheduleHref = slug ? `/event/${slug}/schedule` : "/schedule";
   const openSlotsHref = `${scheduleHref}#schedule`; // lands on the slot grid itself
 
+  // Written for every event to come, not only the Marathon, which is full.
   const steps = [
     {
-      icon: MousePointerClick,
-      title: "Pick an open podcast slot",
-      body: `Choose any open ${event?.slotMinutes ?? 30}-minute block on the schedule, shown in your own time zone. We hold it while you finish.`,
+      icon: CalendarDays,
+      title: "Pick an event",
+      body: "Browse what's coming up on MilitaryVoices, from national days to one-off live broadcasts.",
     },
     {
-      icon: UserCircle2,
-      title: "Drop your email, set up your show",
-      body: "A one-time code signs you in, no password. Then add a photo, your show name, and your RSS feed so listeners can hit play.",
+      icon: MousePointerClick,
+      title: "Choose your slot",
+      body: "Pick an open time, shown in your own time zone. A one-time code signs you in, then add a photo, your show and your feed.",
     },
     {
       icon: Radio,
-      title: "Go live",
-      body: event
-        ? `You're on the air for ${event.onAirMinutes} minutes, with a ${event.bufferMinutes}-minute handoff ${
-            event.bufferPosition === "before" ? "before" : "after"
-          } for the transition to the next show.`
-        : "You get an on-air window plus a short handoff to the next show.",
+      title: "Go live. You're on.",
+      body: "Wait in the green room, and our producer brings you on air when it's your turn. Clips and posts follow.",
     },
   ];
 
   const listenerSteps = [
     {
-      icon: Headphones,
-      title: "Browse the agenda",
-      body: "See who's on and when, in your own time zone. It updates live as podcasters claim their slots.",
+      icon: CalendarDays,
+      title: "Pick your event",
+      body: "See what's coming up, and who's on and when, in your own time zone.",
     },
     {
       icon: BellRing,
-      title: "Tap Remind me on a show",
-      body: "Your name and email, plus a mobile number if you want a text. We send add-to-calendar links for Google, Outlook, and Apple.",
+      title: "Follow your favourite creators",
+      body: "Tap Remind me on a show. We send add-to-calendar links for Google, Outlook and Apple, and a text if you want one.",
     },
     {
       icon: Radio,
       title: "Tune in live",
-      body: "We nudge you before the show starts. Every card also links to the podcaster's channels so you can follow them after.",
+      body: "We nudge you before they go live. Every show links to the creator's channels so you can keep following after.",
     },
   ];
 
@@ -748,16 +745,16 @@ export default function Landing({ slug }: Props) {
                 Your story. Your slot. About two minutes to sign up.
               </h2>
               <p className="mt-4 text-lg leading-relaxed text-white/80">
-                Celebrate National Military Podcast Day on October 5. Bring a guest or share your story solo—choose a
-                time and tell us about your show. One slot per show.
+                Choose from our upcoming events. Bring a guest or share your story solo: pick a time and tell us about
+                your show.
               </p>
-              <Link href={openSlotsHref}>
+              <Link href="/events">
                 <Button
                   size="lg"
                   className="mt-6 gap-2 rounded-full bg-[#F0A71F] px-6 font-semibold text-[#1a1200] hover:bg-[#f5b944]"
                   data-testid="button-landing-claim-2"
                 >
-                  See open slots <ArrowRight className="h-4 w-4" />
+                  See upcoming events <ArrowRight className="h-4 w-4" />
                 </Button>
               </Link>
             </Reveal>
@@ -791,8 +788,13 @@ export default function Landing({ slug }: Props) {
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">The lineup</div>
               <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
-                {showCount === 0 ? "The lineup is filling up." : `${showCount} show${showCount === 1 ? "" : "s"} confirmed so far`}
+                {lineupFull
+                  ? "The lineup is full. We couldn't be prouder."
+                  : showCount === 0
+                    ? "The lineup is filling up."
+                    : `${showCount} show${showCount === 1 ? "" : "s"} confirmed so far`}
               </h2>
+              {lineupFull && <p className="mt-1.5 text-muted-foreground">{showCount} shows confirmed.</p>}
             </div>
             <Link href={agendaHref}>
               <Button variant="outline" className="gap-1.5 rounded-full" data-testid="button-landing-agenda">
@@ -886,11 +888,11 @@ export default function Landing({ slug }: Props) {
       {/* ------------------------------------------------------- LISTENERS */}
       <section id="listeners" className={`relative scroll-mt-16 overflow-hidden ${NAVY}`}>
         <img
-          src="/listeners-bg.jpg"
+          src="/platform/events/e0.jpg"
           alt=""
           aria-hidden="true"
           loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover object-[48%_30%] opacity-90"
+          className="absolute inset-0 h-full w-full object-cover object-[70%_40%] opacity-90"
         />
         <div
           aria-hidden="true"
@@ -901,21 +903,21 @@ export default function Landing({ slug }: Props) {
             <Reveal>
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">For listeners</div>
               <h2 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT}>
-                Follow along, pick your shows, get a nudge before they{" "}
+                Pick your event. Follow your creators. Get a nudge before they{" "}
                 <span className="whitespace-nowrap">go live.</span>
               </h2>
               <p className="mt-4 text-lg leading-relaxed text-white/80">
-                Nothing to claim and nothing to install. The agenda fills in as podcasters book their times, and every
-                show has a one-tap reminder that emails you before it starts.
+                Nothing to claim and nothing to install. Every event has an agenda in your time zone, and every show a
+                one-tap reminder.
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
-                <Link href={agendaHref}>
+                <Link href="/events">
                   <Button
                     size="lg"
                     className="gap-2 rounded-full bg-[#F0A71F] px-6 font-semibold text-[#1a1200] hover:bg-[#f5b944]"
                     data-testid="button-landing-listen"
                   >
-                    <Headphones className="h-4 w-4" /> Browse the agenda <ArrowRight className="h-4 w-4" />
+                    <Headphones className="h-4 w-4" /> Browse events <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
                 <Link href="/faq#listeners">
@@ -953,33 +955,9 @@ export default function Landing({ slug }: Props) {
 
       <DiscoveryPromo src="home" />
 
-      {/* ------------------------------------------------------- FINAL CTA */}
-      <section className="bg-[#F0A71F] text-[#1a1200]">
-        <div className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-4 py-14 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
-              {lineupFull ? "The lineup is full, and we couldn't be prouder." : "Ready to put your show on the board?"}
-            </h2>
-            <p className="mt-2 text-[#1a1200]/75">
-              {lineupFull ? `All ${slotCount} slots claimed. ` : openCount > 0 ? `${openCount} slots open. ` : ""}
-              {countdown.phase === "upcoming" ? countdown.label + "." : ""}
-            </p>
-          </div>
-          <Link href={lineupFull ? "/watch" : openSlotsHref}>
-            <Button
-              size="lg"
-              className="gap-2 rounded-full bg-[#053877] px-7 text-base font-semibold text-white hover:bg-[#0a4a99]"
-              data-testid="button-landing-claim-3"
-            >
-              <Mic2 className="h-4 w-4" /> {lineupFull ? "Watch live, free" : "Pick your slot"}
-            </Button>
-          </Link>
-        </div>
-      </section>
-
       {/* -------------------------------------------------------- SPONSORS */}
       {(sponsors ?? []).length > 0 && (
-        <section className="overflow-hidden bg-[#000741] py-16" data-testid="section-sponsors">
+        <section className="overflow-hidden bg-[#053877] py-16" data-testid="section-sponsors">
           {presentingSponsors.length > 0 && (
             <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
               <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#F0A71F]">Presented by</div>
@@ -1010,8 +988,8 @@ export default function Landing({ slug }: Props) {
                 </div>
               </div>
               <div className="relative mt-8">
-                <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#000741] to-transparent" />
-                <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#000741] to-transparent" />
+                <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#053877] to-transparent" />
+                <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#053877] to-transparent" />
                 <div
                   className="flex w-max items-center gap-14 px-8 [animation:mvmarquee_var(--mv-marquee-s)_linear_infinite] hover:[animation-play-state:paused]"
                   style={{ ["--mv-marquee-s" as string]: `${Math.max(18, friendSponsors.length * 6)}s` }}
