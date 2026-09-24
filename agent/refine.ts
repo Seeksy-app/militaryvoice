@@ -1,24 +1,14 @@
 // The tightened cut of a segment: ums out, false starts out, dead air shortened.
 //
-// ⚠️ NOT WIRED IN. The cut list is right and the render is right, and the two
-// do not meet: cutting the exact span Scribe reports for a filler does not
-// remove that filler. Proven down to a single cut — trim 26.36-26.80 out of a
-// segment whose transcript puts "Um," at 26.36, and the output still says
-// "Right? Um, I wanted to do more". The right *amount* of time comes out, from
-// the wrong places, which is the worst shape this could take because the
-// duration looks correct.
+// Timing: FIXED 24 Sep 2026 (snapToAudio, below). Scribe's word boundaries
+// run late by ~0.1s and not by a constant, so cuts made at the reported
+// spans left half of each "um" in. Cuts are now placed on the audio itself.
+// Measured on a real 3-minute segment, re-transcribed after refining:
+//   cut at Scribe's times  → 7 of 12 fillers still audible
+//   snapped to the audio   → 1 of 12, and 99.1% of real words intact
 //
-// Three explanations tested and rejected: a double input-seek in the test
-// harness (same result from one file), select's timeline drift (trim/concat is
-// absolute and behaves identically), and a container start-time offset (all
-// streams start at zero). What is left, and what to measure next, is the
-// mapping itself — Scribe times the 16kHz mp3 it is sent, and something
-// between that and the video's timeline is shifted. The way to find it is a
-// known marker: a file with a click at a measured position, transcribed, and
-// the reported time compared with the real one.
-//
-// Do not enable this until that number is known. Half-removed fillers in a
-// podcaster's "refined" episode is worse than no refined episode.
+// Still not wired into a job: nothing produces a refined episode yet. Use
+// cutList → snapToAudio → keepRanges → trimGraph.
 //
 // This exists because Scribe hands us the two hardest parts for free. Fillers
 // arrive as ordinary words with start and end times, and a false start comes
