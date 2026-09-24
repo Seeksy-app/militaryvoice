@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ProCrmDemo } from "@/components/ProCrmDemo";
+import { StudioConsoleMock } from "@/components/platform/StudioConsoleMock";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -28,7 +29,6 @@ const FEATURES = [
     key: "studio",
     title: "Your own studio",
     icon: MonitorPlay,
-    image: "/pro/studio-real.jpg",
     lead: "The studio that runs the marathon, on any day you like.",
     points: ["Green room, scenes and a producer — for your show, on your schedule", "Stream to your YouTube; record in the cloud; clips cut for you", "Guests join from a link. No software."],
   },
@@ -90,15 +90,16 @@ export function ProScreen({ feature }: { feature?: string }) {
       </div>
 
       {/* The CRM and campaigns are the real thing with sample data, tabbed
-          through like the admin's. The studio still shows a picture. */}
+          through like the admin's. The studio is the About page's console,
+          stepping through its six layouts. */}
       {f.key === "crm" || f.key === "campaigns" ? (
         <div className="mt-6">
           <ProCrmDemo initialTab={f.key === "campaigns" ? "campaigns" : "contacts"} />
         </div>
       ) : (
-        <div className="relative mt-6 overflow-hidden rounded-2xl border border-border bg-muted/40 shadow-sm">
-          <img src={f.image} alt={`${f.title} — the real thing`} className="block w-full" />
-          <span className="absolute left-3 top-3 rounded-full bg-[#04102b]/85 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">Preview</span>
+        <div className="mt-6">
+          <StudioConsoleMock />
+          <p className="mt-3 text-sm text-muted-foreground">Six layouts, one press: Showtime, Contain, Cover, Sidebar, Picture-in-Picture, Thumbnails.</p>
         </div>
       )}
 

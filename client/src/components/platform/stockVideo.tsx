@@ -8,11 +8,6 @@ import type { StageTile } from "@/components/StageView";
 
 const V = "/platform/video";
 
-export const CLIPS = {
-  keynote: { src: `${V}/keynote.mp4`, poster: `${V}/keynote.jpg` },
-  stage2: { src: `${V}/stage-2.mp4`, poster: `${V}/stage-2.jpg` },
-} as const;
-
 /** Stills for the studio's scene rail: real people and a real (fictional-brand) sponsor spot. */
 export const SCENE_STILLS = {
   conference: `${V}/scene-conference.jpg`,

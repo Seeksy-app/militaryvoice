@@ -382,35 +382,8 @@ export default function Platform() {
               ))}
             </ul>
           </div>
-          {/* The real thing, in a browser frame. */}
-          <motion.figure {...reveal} className="mt-12">
-            <div className="overflow-hidden rounded-2xl bg-[#0b1433] shadow-[0_60px_120px_-40px_rgba(0,0,0,0.9)] ring-1 ring-white/15">
-              <div className="flex items-center gap-3 border-b border-white/10 bg-[#0e1a3d] px-4 py-2.5">
-                <span className="flex gap-1.5" aria-hidden>
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
-                </span>
-                <span className="mx-auto hidden max-w-xs flex-1 truncate rounded-md bg-white/10 px-3 py-1 text-center text-xs text-white/60 sm:block">militaryvoices.ai/studio</span>
-                <span className="hidden w-[46px] sm:block" aria-hidden />
-              </div>
-              <img
-                src="/platform/studio-real.jpg"
-                width={1800}
-                height={956}
-                loading="lazy"
-                alt="The MilitaryVoices studio console: the scene rail of shows on the left, the Discovery promo on stage in rehearsal, the six layout buttons underneath, and graphics tools on the right."
-                className="block h-auto w-full"
-              />
-            </div>
-            <figcaption className="mt-4 flex flex-col items-center justify-center gap-2 text-center text-sm text-white/60 sm:flex-row">
-              <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#F0A71F]/15 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">The real studio</span>
-              A rehearsal before going live.
-            </figcaption>
-          </motion.figure>
-
-          {/* Secondary: the same console, drawn live, to try the layouts. */}
-          <div className="mt-20">
+          {/* The console, drawn live, stepping through the layouts. */}
+          <div className="mt-16">
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] lg:items-end lg:gap-14">
               <h3 className="text-2xl font-semibold tracking-tight sm:text-3xl">Six layouts, one press</h3>
               <p className="text-[15px] leading-relaxed text-white/70">
