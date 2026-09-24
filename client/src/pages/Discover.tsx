@@ -190,11 +190,6 @@ export default function Discover() {
   const sampleKeys = useMemo(() => new Set((sample?.results ?? []).map((c) => `${c.platform}:${c.handle}`.toLowerCase())), [sample]);
   const [tryOwn, setTryOwn] = useState(false);
   const [tryOwnDone, setTryOwnDone] = useState(false);
-  useEffect(() => {
-    const show = () => setTryOwn(true);
-    window.addEventListener("mv-demo-search-done", show);
-    return () => window.removeEventListener("mv-demo-search-done", show);
-  }, []);
   const [submitted, setSubmitted] = useState<null | { q: string; platform: string; branch: string; size: number; sort: string; mode: Mode; filters: Filters }>(null);
   const [heroVariant] = useState(() => {
     try {
@@ -209,6 +204,41 @@ export default function Discover() {
   const [openFrom, setOpenFrom] = useState<Card[]>([]);
   const openIn = (from: Card[]) => (c: Card | null) => { setOpenFrom(from); setOpenRaw(c); };
   const setOpen = (c: Card | null) => { setOpenFrom([]); setOpenRaw(c); };
+
+  // The end of the demo: when it played through and there's a sample, the
+  // first creator's profile slides out for a moment and back — the depth
+  // behind every row — and then "Now try your own". Touching anything in the
+  // meantime keeps the profile open for them.
+  // If they took over the profile, the nudge waits until they close it.
+  const [tryOwnPending, setTryOwnPending] = useState(false);
+  useEffect(() => {
+    if (tryOwnPending && !open) { setTryOwnPending(false); const t = window.setTimeout(() => setTryOwn(true), 500); return () => clearTimeout(t); }
+  }, [tryOwnPending, open]);
+  const sampleRef = useRef<Sample | null>(null);
+  sampleRef.current = sample;
+  useEffect(() => {
+    const timers: number[] = [];
+    let touched = false;
+    const touch = () => { touched = true; };
+    const onDone = (e: Event) => {
+      const first = sampleRef.current?.results[0];
+      if ((e as CustomEvent).detail !== "played" || !first) { setTryOwn(true); return; }
+      touched = false;
+      window.addEventListener("pointerdown", touch, { once: true });
+      window.addEventListener("wheel", touch, { once: true });
+      setOpenFrom(sampleRef.current!.results);
+      setOpenRaw(first);
+      timers.push(window.setTimeout(() => {
+        window.removeEventListener("pointerdown", touch);
+        window.removeEventListener("wheel", touch);
+        if (touched) { setTryOwnPending(true); return; }
+        setOpenRaw(null);
+        timers.push(window.setTimeout(() => setTryOwn(true), 700));
+      }, 3200));
+    };
+    window.addEventListener("mv-demo-search-done", onDone);
+    return () => { window.removeEventListener("mv-demo-search-done", onDone); timers.forEach(clearTimeout); window.removeEventListener("pointerdown", touch); window.removeEventListener("wheel", touch); };
+  }, []);
   const [gate, setGate] = useState(false);
   const d = DOORS.find((x) => x.key === door)!;
 
@@ -750,7 +780,7 @@ function SearchDemo({ enabled, onType, onSpotlight, onHide }: { enabled: boolean
   live.current = enabled;
   useEffect(() => {
     let timers: number[] = [];
-    const done = () => window.dispatchEvent(new Event("mv-demo-search-done"));
+    const done = (played = false) => window.dispatchEvent(new CustomEvent("mv-demo-search-done", { detail: played ? "played" : "" }));
     const stop = () => {
       timers.forEach(clearTimeout);
       timers = [];
@@ -800,7 +830,7 @@ function SearchDemo({ enabled, onType, onSpotlight, onHide }: { enabled: boolean
       T(end + 1350, () => setPos((p) => ({ ...p, click: p.click + 1 })));
       T(end + 1450, () => { onHide(false); onSpotlight(true); });
       T(end + 2300, () => { setPos((p) => ({ ...p, on: false })); onType(""); });
-      T(end + 4600, () => { onSpotlight(false); done(); });
+      T(end + 4600, () => { onSpotlight(false); done(true); });
     };
     const touched = (e: Event) => { if ((e.target as HTMLElement)?.getAttribute?.("data-testid") === "discover-q" && timers.length) stop(); };
     window.addEventListener("mv-demo-search", run);
