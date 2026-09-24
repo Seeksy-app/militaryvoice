@@ -13,7 +13,7 @@ import { signedRecordingUrl } from "./recordingStorage.js";
 const API = "https://api.creatomate.com/v1/renders";
 // Accepts the obvious spellings, since the key is typed into Vercel by hand.
 const key = () =>
-  (process.env.CREATOMATE_API_KEY || process.env.CREATOMATE_KEY || process.env.CREATOMATE_API || process.env.CREATOMATE || "").trim();
+  (process.env.CREATOMATE_API_KEY || process.env.CREATOMTE_API_KEY || process.env.CREATOMATE_KEY || process.env.CREATOMATE_API || process.env.CREATOMATE || "").trim();
 
 type Shape = "vertical" | "square" | "wide";
 const SIZE: Record<Shape, [number, number]> = { vertical: [1080, 1920], square: [1080, 1080], wide: [1920, 1080] };
