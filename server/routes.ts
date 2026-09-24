@@ -5357,7 +5357,7 @@ export function registerRoutes(app: Express): void {
    * Vercel overrides the list; POST_FOR_ALL=1 opens it up.
    */
   const postTesters = () =>
-    new Set((process.env.POST_TESTERS || "marineocsblog@gmail.com").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
+    new Set((process.env.POST_TESTERS || "marineocsblog@gmail.com,riccoh.player@drphil.tv").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
   async function canPost(email: string): Promise<boolean> {
     if (process.env.POST_FOR_ALL === "1") return true;
     const e = email.trim().toLowerCase();
