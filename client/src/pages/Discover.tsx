@@ -591,7 +591,7 @@ function TryYourOwn({ onClose }: { onClose: () => void }) {
         </span>
         <span className="min-w-0 flex-1">
           <span className="block font-semibold">Now try your own</span>
-          <span className="block text-sm text-white/80">Describe who you're looking for, in plain English.</span>
+          <span className="block text-sm text-white/80">Describe who you're looking for.</span>
         </span>
         <button type="button" onClick={onClose} className="rounded-md p-1 text-white/70 hover:bg-white/10 hover:text-white" aria-label="Close"><X className="h-4 w-4" /></button>
       </div>
@@ -805,26 +805,27 @@ function SearchDemo({ enabled, onType, onSpotlight, onHide }: { enabled: boolean
     const touched = (e: Event) => { if ((e.target as HTMLElement)?.getAttribute?.("data-testid") === "discover-q" && timers.length) stop(); };
     window.addEventListener("mv-demo-search", run);
     document.addEventListener("focusin", touched);
-    // Once, the first time the search is scrolled into view: it types
-    // "Military podcasters", presses Search, and the answer appears.
-    let io: IntersectionObserver | null = null;
-    let tries = 0;
-    const watch = () => {
+    // Once, the first time the visitor scrolls with the search fully in view:
+    // it types the sample's question, presses Search, and the answer appears.
+    // A scroll listener, not an IntersectionObserver: on a tall screen the
+    // search is already in view at load, so an observer never fires again.
+    let fired = false;
+    const check = () => {
+      if (fired || window.scrollY <= 120) return;
       const form = document.querySelector('[data-testid="discover-search-form"]');
-      if (!form) { if (tries++ < 20) timers.push(window.setTimeout(watch, 500)); return; }
-      io = new IntersectionObserver((entries) => {
-        if (entries.some((en) => en.isIntersecting && en.intersectionRatio >= 0.9) && window.scrollY > 120) {
-          io?.disconnect();
-          window.dispatchEvent(new CustomEvent("mv-demo-search", { detail: "in-view" }));
-        }
-      }, { threshold: [0.9] });
-      io.observe(form);
+      if (!form) return;
+      const r = form.getBoundingClientRect();
+      if (r.top >= 0 && r.bottom <= window.innerHeight) {
+        fired = true;
+        window.removeEventListener("scroll", check);
+        window.dispatchEvent(new CustomEvent("mv-demo-search", { detail: "in-view" }));
+      }
     };
-    watch();
+    window.addEventListener("scroll", check, { passive: true });
     return () => {
       window.removeEventListener("mv-demo-search", run);
       document.removeEventListener("focusin", touched);
-      io?.disconnect();
+      window.removeEventListener("scroll", check);
       timers.forEach(clearTimeout);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
