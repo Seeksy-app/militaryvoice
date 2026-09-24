@@ -497,6 +497,11 @@ export function ShowMaterials({
                 <p className="mt-1 text-xs text-muted-foreground">
                   Full episodes are fine — up to 2GB, straight to us.
                 </p>
+                {/* A YouTube link can't be played as a file on air, and the
+                    owner can always get their own upload back from Studio. */}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Only on YouTube? Open YouTube Studio → Content, click ⋮ next to the video, choose Download, then upload that file here.
+                </p>
               </div>
             </div>
 
