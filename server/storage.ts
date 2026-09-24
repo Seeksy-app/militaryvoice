@@ -219,6 +219,7 @@ async function ensureSchema() {
     );
   `;
   await sql`CREATE INDEX IF NOT EXISTS show_assets_email_idx ON show_assets (email)`;
+  await sql`ALTER TABLE show_assets ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS run_of_show (
@@ -698,10 +699,11 @@ export interface IStorage {
   updateInbound(id: number, patch: Partial<InboundEmailRow>): Promise<void>;
   findInboundByResendId(resendId: string): Promise<InboundEmailRow | null>;
   listAllAssets(): Promise<ShowAssetRow[]>;
-  createAsset(a: Omit<ShowAssetRow, "id" | "createdAt">): Promise<ShowAssetRow>;
+  createAsset(a: Omit<ShowAssetRow, "id" | "createdAt" | "sortOrder"> & { sortOrder?: number }): Promise<ShowAssetRow>;
   getAsset(id: number): Promise<ShowAssetRow | undefined>;
   setAssetFileUrl(id: number, fileUrl: string): Promise<void>;
   deleteAsset(id: number, email?: string): Promise<boolean>;
+  setAssetOrder(ids: number[]): Promise<void>;
   listRunOfShow(eventId: number): Promise<RunItemRow[]>;
   mergeRunOfShow(eventId: number, generated: GeneratedRunItem[]): Promise<RunItemRow[]>;
   createRunItem(eventId: number, item: RunItemInput, sortIndex: number): Promise<RunItemRow>;
@@ -1188,7 +1190,7 @@ class DatabaseStorage implements IStorage {
     return db.select().from(showAssets).orderBy(asc(showAssets.id));
   }
 
-  async createAsset(a: Omit<ShowAssetRow, "id" | "createdAt">): Promise<ShowAssetRow> {
+  async createAsset(a: Omit<ShowAssetRow, "id" | "createdAt" | "sortOrder"> & { sortOrder?: number }): Promise<ShowAssetRow> {
     await ready();
     const [row] = await db
       .insert(showAssets)
@@ -1207,6 +1209,12 @@ class DatabaseStorage implements IStorage {
   async setAssetFileUrl(id: number, fileUrl: string): Promise<void> {
     await ready();
     await db.update(showAssets).set({ fileUrl }).where(eq(showAssets.id, id));
+  }
+
+  /** The studio's media list order: each id takes its position, 1-based. */
+  async setAssetOrder(ids: number[]): Promise<void> {
+    await ready();
+    for (let i = 0; i < ids.length; i++) await db.update(showAssets).set({ sortOrder: i + 1 }).where(eq(showAssets.id, ids[i]));
   }
 
   /** `email` scopes the delete so a podcaster can only remove their own. */

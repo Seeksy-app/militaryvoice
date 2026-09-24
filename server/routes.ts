@@ -3740,6 +3740,8 @@ export function registerRoutes(app: Express): void {
         // Playable by everyone who needs to (the watch page, the recorder):
         // a public file, a link, or house media in R2 behind /api/studio/media.
         .filter((a) => a.fileUrl || a.linkUrl || (a.email === HOUSE_EMAIL && a.storageKey.startsWith("studio/")))
+        // The producer's order first (dragged in the studio), then newest.
+        .sort((x, y) => (x.sortOrder || 1e9) - (y.sortOrder || 1e9) || y.id - x.id)
         .map((a) => {
           const url = a.fileUrl || a.linkUrl || `/api/studio/media/${a.id}`;
           const sg = byEmail.get(a.email.toLowerCase().trim());
@@ -4390,6 +4392,18 @@ export function registerRoutes(app: Express): void {
   });
 
   /** Put something on the stage, or take it off. */
+  app.post("/api/admin/media/order", requireAdmin, async (req, res) => {
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter((n: number) => Number.isInteger(n) && n > 0).slice(0, 1000);
+    await storage.setAssetOrder(ids);
+    res.json({ ok: true });
+  });
+
+  app.delete("/api/admin/media/:id", requireAdmin, async (req, res) => {
+    const ok = await storage.deleteAsset(Number(req.params.id));
+    if (!ok) return res.status(404).json({ message: "That file is already gone." });
+    res.json({ ok: true });
+  });
+
   app.post("/api/admin/studio/media", requireAdmin, async (req, res) => {
     const { studio } = await adminStudio(req);
     const action = String(req.body?.action ?? "");
@@ -4397,7 +4411,13 @@ export function registerRoutes(app: Express): void {
       action === "stop"
         ? { stageMediaPlaying: false }
         : {
-            stageMediaUrl: String(req.body?.url ?? "").trim().slice(0, 600),
+            // The library's own files come as paths (/api/studio/media/12);
+            // the recorder and the watch page load them from elsewhere, so
+            // they need the whole address.
+            stageMediaUrl: (() => {
+              const u = String(req.body?.url ?? "").trim().slice(0, 600);
+              return u.startsWith("/") && !u.startsWith("//") ? `https://${req.get("host")}${u}` : u;
+            })(),
             stageMediaKind: req.body?.kind === "image" ? "image" : "video",
             stageMediaLabel: String(req.body?.label ?? "").trim().slice(0, 120),
             stageMediaPlaying: true,

@@ -816,6 +816,8 @@ export const showAssets = pgTable("show_assets", {
   linkUrl: text("link_url").notNull().default(""),
   fileName: text("file_name").notNull().default(""),
   sizeBytes: integer("size_bytes").notNull().default(0),
+  /** Where it sits in the studio's media list; the producer drags to change it. 0 = unsorted. */
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: text("created_at").notNull(),
 });
 export type ShowAssetRow = typeof showAssets.$inferSelect;

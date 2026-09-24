@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Film, Image as ImageIcon, Play, Square, Search } from "lucide-react";
+import { Film, Image as ImageIcon, Play, Square, Search, Trash2, GripVertical } from "lucide-react";
 
 // Everything the producer can put on the stage: the intros, outros, sponsor
 // reels and slides the podcasters uploaded for their own slots, plus anything
@@ -49,6 +49,35 @@ export function MediaLibrary({ adminGet, adminSend, studioId, playingUrl, isPlay
     },
     onError: (e: Error) => toast({ title: "Couldn't put that on the stage", description: e.message, variant: "destructive" }),
   });
+
+  // Delete, and drag to reorder. Reordering needs the whole list in view, so
+  // it is off while a search or a kind filter narrows it.
+  const remove = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await adminSend("DELETE", `/api/admin/media/${id}`);
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.message ?? "Couldn't delete that.");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/media"] });
+      onChanged();
+    },
+    onError: (e: Error) => toast({ title: "Couldn't delete that", description: e.message, variant: "destructive" }),
+  });
+  const [dragId, setDragId] = useState<number | null>(null);
+  const [overId, setOverId] = useState<number | null>(null);
+  const canDrag = !q.trim() && !only;
+  const moveTo = (from: number, to: number) => {
+    const list = [...(data ?? [])];
+    const a = list.findIndex((m) => m.id === from);
+    const b = list.findIndex((m) => m.id === to);
+    if (a < 0 || b < 0 || a === b) return;
+    const [moved] = list.splice(a, 1);
+    list.splice(b, 0, moved);
+    queryClient.setQueryData(["/api/admin/media"], list);
+    void adminSend("POST", "/api/admin/media/order", { ids: list.map((m) => m.id) }).catch(() =>
+      toast({ title: "Couldn't save the new order", variant: "destructive" }),
+    );
+  };
 
   const items = useMemo(() => {
     const all = (data ?? []).filter((m) => (only ? m.kind === only : true));
@@ -99,14 +128,21 @@ export function MediaLibrary({ adminGet, adminSend, studioId, playingUrl, isPlay
             return (
               <div
                 key={m.id}
-                className={`flex items-center gap-3 rounded-xl border p-3 ${
-                  live ? "border-[#ED1C24]/50 bg-[#ED1C24]/5" : "border-border bg-background"
-                }`}
+                draggable={canDrag}
+                onDragStart={(e) => { setDragId(m.id); e.dataTransfer.effectAllowed = "move"; }}
+                onDragOver={(e) => { if (dragId != null) { e.preventDefault(); setOverId(m.id); } }}
+                onDragLeave={() => setOverId((o) => (o === m.id ? null : o))}
+                onDrop={(e) => { e.preventDefault(); if (dragId != null) moveTo(dragId, m.id); setDragId(null); setOverId(null); }}
+                onDragEnd={() => { setDragId(null); setOverId(null); }}
+                className={`flex items-center gap-2.5 rounded-xl border p-2.5 transition-colors ${
+                  live ? "border-[#ED1C24]/50 bg-[#ED1C24]/5" : overId === m.id && dragId !== m.id ? "border-[#053877] bg-[#053877]/[0.06]" : "border-border bg-background"
+                } ${dragId === m.id ? "opacity-40" : ""}`}
                 data-testid={`media-${m.id}`}
               >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#053877] text-white">
-                  {m.kind === "image" ? <ImageIcon className="h-4 w-4" /> : <Film className="h-4 w-4" />}
-                </div>
+                {canDrag && (
+                  <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing" aria-label="Drag to reorder" />
+                )}
+                <Thumb item={m} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold">{m.label}</div>
                   <div className="truncate text-xs text-muted-foreground">
@@ -126,6 +162,17 @@ export function MediaLibrary({ adminGet, adminSend, studioId, playingUrl, isPlay
                   {live ? <Square className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                   {live ? "Stop" : "On stage"}
                 </Button>
+                <button
+                  type="button"
+                  className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                  disabled={live || remove.isPending}
+                  title={live ? "Take it off the stage first" : "Delete from the library"}
+                  aria-label={`Delete ${m.label}`}
+                  onClick={() => { if (window.confirm(`Delete "${m.label}" from the media library? This can't be undone.`)) remove.mutate(m.id); }}
+                  data-testid={`button-media-delete-${m.id}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
             );
           })
@@ -158,6 +205,32 @@ export function MediaLibrary({ adminGet, adminSend, studioId, playingUrl, isPlay
           Play
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** A small picture of the file: the image itself, or a video's opening frame. */
+function Thumb({ item }: { item: MediaItem }) {
+  const [broken, setBroken] = useState(false);
+  const box = "relative h-12 w-20 shrink-0 overflow-hidden rounded-lg bg-[#053877] text-white";
+  if (broken) {
+    return (
+      <div className={`${box} flex items-center justify-center`}>
+        {item.kind === "image" ? <ImageIcon className="h-4 w-4" /> : <Film className="h-4 w-4" />}
+      </div>
+    );
+  }
+  return (
+    <div className={box}>
+      {item.kind === "image" ? (
+        <img src={item.url} alt="" loading="lazy" onError={() => setBroken(true)} className="h-full w-full object-cover" />
+      ) : (
+        <>
+          {/* #t=1 asks for the frame a second in, past any fade from black. */}
+          <video src={`${item.url}#t=1`} preload="metadata" muted playsInline onError={() => setBroken(true)} className="h-full w-full object-cover" />
+          <span className="absolute bottom-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded bg-black/60"><Play className="h-2.5 w-2.5 fill-white" /></span>
+        </>
+      )}
     </div>
   );
 }
