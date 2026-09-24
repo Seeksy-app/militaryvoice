@@ -534,6 +534,48 @@ function PeopleColumn({ tiles: raw, muted, order }: { tiles: StageTile[]; muted:
   );
 }
 
+/**
+ * YouTube's player, told to talk back. With enablejsapi=1 the embed posts its
+ * state to the page once we say we're listening, so a YouTube clip can end a
+ * scene the way a file's own "ended" does — before, the page never heard, and
+ * the stage sat on YouTube's end screen until someone pressed the next scene.
+ * (No script tag needed: this is the same message channel the IFrame API uses.)
+ */
+function YouTubeFrame({ id, title, muted, loop, onEnded }: { id: string; title: string; muted: boolean; loop: boolean; onEnded?: () => void }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const ended = useRef(onEnded);
+  ended.current = onEnded;
+  useEffect(() => {
+    if (loop) return;
+    let fired = false;
+    const hello = () => ref.current?.contentWindow?.postMessage(JSON.stringify({ event: "listening", id: 1, channel: "widget" }), "https://www.youtube.com");
+    // The player may not be ready on the first hello; say it a few times.
+    const t = window.setInterval(hello, 1000);
+    const on = (e: MessageEvent) => {
+      if (e.source !== ref.current?.contentWindow || !/(^|\.)youtube(-nocookie)?\.com$/.test(new URL(e.origin).hostname)) return;
+      let d: { event?: string; info?: unknown } | null = null;
+      try { d = typeof e.data === "string" ? JSON.parse(e.data) : e.data; } catch { return; }
+      if (!d) return;
+      window.clearInterval(t); // it heard us
+      const state = d.event === "onStateChange" ? d.info : d.event === "infoDelivery" ? (d.info as { playerState?: number } | null)?.playerState : undefined;
+      if (state === 0 && !fired) { fired = true; ended.current?.(); }
+    };
+    window.addEventListener("message", on);
+    return () => { window.clearInterval(t); window.removeEventListener("message", on); };
+  }, [id, loop]);
+  const origin = typeof window !== "undefined" ? `&origin=${encodeURIComponent(window.location.origin)}` : "";
+  return (
+    <iframe
+      ref={ref}
+      title={title}
+      src={`https://www.youtube.com/embed/${id}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1&enablejsapi=1${origin}${loop ? `&loop=1&playlist=${id}` : ""}`}
+      allow="autoplay; encrypted-media; picture-in-picture"
+      allowFullScreen
+      className="h-full w-full border-0"
+    />
+  );
+}
+
 /** A clip, a slide or a sponsor card, filling the frame. */
 function FullFrameMedia({
   url,
@@ -550,7 +592,7 @@ function FullFrameMedia({
   /** Standby holds the frame for hours, so its clip runs on repeat. A show's
       own episode does not — it ends when it ends. */
   loop?: boolean;
-  /** The clip reached its end (files only — a YouTube frame doesn't say). */
+  /** The clip reached its end — a file's own event, or YouTube's player saying so. */
   onEnded?: () => void;
 }) {
   const yt = youtubeId(url);
@@ -559,15 +601,7 @@ function FullFrameMedia({
       {kind === "image" ? (
         <img src={url} alt={label ?? ""} className="h-full w-full object-contain" />
       ) : yt ? (
-        <iframe
-          title={label || "On stage"}
-          src={`https://www.youtube.com/embed/${yt}?autoplay=1&mute=${muted ? 1 : 0}&controls=0&modestbranding=1&rel=0&playsinline=1${
-            loop ? `&loop=1&playlist=${yt}` : ""
-          }`}
-          allow="autoplay; encrypted-media; picture-in-picture"
-          allowFullScreen
-          className="h-full w-full border-0"
-        />
+        <YouTubeFrame id={yt} title={label || "On stage"} muted={muted} loop={loop} onEnded={onEnded} />
       ) : (
         <video src={url} autoPlay playsInline loop={loop} muted={muted} onEnded={onEnded} className="h-full w-full object-contain" />
       )}
