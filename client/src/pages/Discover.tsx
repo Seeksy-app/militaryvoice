@@ -830,7 +830,8 @@ function SearchDemo({ enabled, onType, onSpotlight, onHide }: { enabled: boolean
       T(end + 1350, () => setPos((p) => ({ ...p, click: p.click + 1 })));
       T(end + 1450, () => { onHide(false); onSpotlight(true); });
       T(end + 2300, () => { setPos((p) => ({ ...p, on: false })); onType(""); });
-      T(end + 4600, () => { onSpotlight(false); done(true); });
+      // A beat after the answer lights up, hand over to the profile.
+      T(end + 2500, () => { onSpotlight(false); done(true); });
     };
     const touched = (e: Event) => { if ((e.target as HTMLElement)?.getAttribute?.("data-testid") === "discover-q" && timers.length) stop(); };
     window.addEventListener("mv-demo-search", run);
@@ -1756,7 +1757,7 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
 
   return (
     <Sheet open={!!card} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent ref={scroller} side="right" className="w-full overflow-y-auto bg-background p-0 sm:max-w-3xl lg:max-w-[min(76rem,92vw)] [&>button.absolute]:hidden">
+      <SheetContent ref={scroller} side="right" className="w-full overflow-y-auto bg-background p-0 data-[state=closed]:duration-200 data-[state=open]:duration-300 sm:max-w-3xl lg:max-w-[min(76rem,92vw)] [&>button.absolute]:hidden">
         {card && (
           <>
             <SheetTitle className="sr-only">{card.name}</SheetTitle>
