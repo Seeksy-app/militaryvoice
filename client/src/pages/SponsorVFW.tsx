@@ -387,12 +387,12 @@ export default function SponsorVFW() {
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <SponsorDialog
             eyebrow="Partner sponsorship"
-            title="Leave your details and Riccoh will follow up."
+            title="Choose your sponsorship."
             showNotes={false}
-            description="Your name, title and the best way to reach you is all we need. Riccoh Player — who hosts the day — will be in touch shortly to talk it through."
-            sentTitle="Thanks — Riccoh will be in touch"
-            sentDescription="Your details are with him now. Expect to hear back shortly."
-            footNote="Goes straight to Riccoh. No list, no spam."
+            description="Pick a package and tell us who you are. A member of our sponsor team will follow up to collect your creative — your logo, a line to read on air, any links — so you're ready for race day."
+            sentTitle="Thanks — our sponsor team will be in touch"
+            sentDescription="Your details are with the team now."
+            footNote="Goes straight to our sponsor team. No list, no spam."
           >
             <Button size="lg" className="gap-2 rounded-full bg-[#053877] px-7 text-base font-semibold text-white hover:bg-[#0a4a99]">
               Start the conversation <ArrowRight className="h-4 w-4" />

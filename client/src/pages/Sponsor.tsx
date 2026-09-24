@@ -107,14 +107,21 @@ export default function Sponsor() {
       )
     : "October 5, 2026";
 
+  // /sponsor?apply=1 opens the form on arrival (for a link sent to a prospect);
+  // &package=<id> picks the package too.
+  const apply = useMemo(() => {
+    const p = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    return { open: p.get("apply") === "1", pkg: Number(p.get("package")) || 0 };
+  }, []);
+
   const dialogCopy = {
     eyebrow: "Sponsorship",
-    title: "Leave your details and Riccoh will follow up.",
+    title: "Choose your sponsorship.",
     description:
-      "Your name, title and the best way to reach you is all we need. Riccoh Player — who hosts the day — will be in touch shortly to talk it through.",
-    sentTitle: "Thanks — Riccoh will be in touch",
-    sentDescription: "Your details are with him now. Expect to hear back shortly.",
-    footNote: "Goes straight to Riccoh. No list, no spam.",
+      "Pick a package and tell us who you are. A member of our sponsor team will follow up to collect your creative — your logo, a line to read on air, any links — so you're ready for race day.",
+    sentTitle: "Thanks — our sponsor team will be in touch",
+    sentDescription: "Your details are with the team now.",
+    footNote: "Goes straight to our sponsor team. No list, no spam.",
     showNotes: false,
   } as const;
 
@@ -347,7 +354,7 @@ export default function Sponsor() {
                     Your name on the whole day, from the first show to the last.
                   </p>
                   <div className="mt-7">
-                    <SponsorDialog {...dialogCopy}>
+                    <SponsorDialog {...dialogCopy} defaultOpen={apply.open} defaultPackageId={apply.pkg}>
                       <Button
                         className="w-full rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#ffb92e] sm:w-auto sm:px-8"
                         data-testid="button-tier-partner"

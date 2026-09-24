@@ -388,8 +388,8 @@ export async function sendSponsorThanksEmail(input: {
     input.checkoutUrl && input.packageName
       ? `<p style="margin:20px 0 0;color:#374151;font-size:15px;line-height:1.65;">You asked about <strong>${escapeHtml(input.packageName)}</strong>. When you're ready, this is the link:</p>
          <p style="margin:16px 0 0;"><a href="${escapeHtml(input.checkoutUrl)}" style="display:inline-block;background:#F0A71F;color:#1a1200;font-weight:700;font-size:15px;text-decoration:none;padding:13px 26px;border-radius:999px;">Complete your sponsorship</a></p>
-         <p style="margin:12px 0 0;color:#9ca3af;font-size:12px;">No rush — the link stays good, and Riccoh will be in touch either way.</p>`
-      : `<p style="margin:20px 0 0;color:#374151;font-size:15px;line-height:1.65;">Riccoh will be in touch shortly to walk you through the packages and find the one that fits.</p>`;
+         <p style="margin:12px 0 0;color:#9ca3af;font-size:12px;">No rush — the link stays good, and our sponsor team will be in touch about your creative either way.</p>`
+      : `<p style="margin:20px 0 0;color:#374151;font-size:15px;line-height:1.65;">A member of our sponsor team will be in touch shortly to walk you through the packages and find the one that fits.</p>`;
 
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
@@ -402,7 +402,7 @@ export async function sendSponsorThanksEmail(input: {
   const text = `Thanks, ${first} — we've got it.\n\n${
     input.checkoutUrl && input.packageName
       ? `You asked about ${input.packageName}. When you're ready:\n${input.checkoutUrl}\n`
-      : "Riccoh will be in touch shortly to walk you through the packages.\n"
+      : "A member of our sponsor team will be in touch shortly to walk you through the packages.\n"
   }\nReply to this email and it reaches us directly.\n`;
   return sendEmail({ to: input.to, subject: "Thanks for your interest in sponsoring", html, text });
 }

@@ -38,6 +38,10 @@ interface Props {
   footNote?: string;
   /** Some pitches only need who they are and how to reach them. */
   showNotes?: boolean;
+  /** Open as soon as the page loads — for a link sent straight to a prospect. */
+  defaultOpen?: boolean;
+  /** Pre-select a package by id. */
+  defaultPackageId?: number;
 }
 
 /** "Sponsors" nav item: a short form that reaches the admin team by email. */
@@ -50,16 +54,18 @@ export function SponsorDialog({
   sentDescription = "The team gets your note by email right away.",
   footNote = "We'll reply by email. No list, no spam.",
   showNotes = true,
+  defaultOpen = false,
+  defaultPackageId = 0,
 }: Props) {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [message, setMessage] = useState("");
-  const [packageId, setPackageId] = useState(0);
+  const [packageId, setPackageId] = useState(defaultPackageId);
   const [sent, setSent] = useState(false);
   const [paid, setPaid] = useState<{ url: string; label: string } | null>(null);
 
@@ -140,7 +146,7 @@ export function SponsorDialog({
               <p className="text-base font-semibold">We've got it — thanks.</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {paid.label ? <>You picked <span className="font-medium text-foreground">{paid.label}</span>. </> : null}
-                Riccoh will be in touch either way. If you'd rather lock it in now:
+                Our sponsor team will be in touch about your creative. If you'd like to lock it in now:
               </p>
             </div>
             <Button asChild size="lg" className="w-full gap-2 rounded-full">
@@ -195,21 +201,6 @@ export function SponsorDialog({
                     </button>
                   );
                 })}
-                {/* Not an absence of an answer — an answer. Somebody who wants
-                    to talk it through should be able to say so without
-                    guessing at a number first. */}
-                <button
-                  type="button"
-                  onClick={() => setPackageId(0)}
-                  aria-pressed={packageId === 0}
-                  className={`rounded-xl border border-dashed p-3 text-left text-sm transition-colors ${
-                    packageId === 0 ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:border-primary/40"
-                  }`}
-                  data-testid="button-sponsor-package-none"
-                >
-                  <span className="font-medium">Not sure yet</span>
-                  <p className="mt-0.5 text-xs leading-snug text-muted-foreground">Talk me through the options.</p>
-                </button>
               </div>
             </div>
           )}
