@@ -317,6 +317,65 @@ export default function Platform() {
         </div>
       </section>
 
+      {/* ---------------------------------------------------------- discovery */}
+      <section id="discovery" className="relative isolate overflow-hidden border-b border-border">
+        <div aria-hidden className="pointer-events-none absolute -right-40 top-10 -z-10 h-[30rem] w-[30rem] rounded-full bg-[#F0A71F]/10 blur-3xl" />
+        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:py-24">
+          <div className="mx-auto max-w-4xl text-center">
+            <Kicker>Discovery</Kicker>
+            <h2 className="mt-2 text-3xl font-semibold leading-[1.1] tracking-tight sm:text-[2.75rem]">Find the military voices worth working with, and see who's really listening</h2>
+            <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+              Discovery searches over 300 million creator profiles for veterans, service members and military spouses — creators, podcasters, speakers — and opens each one to the audience behind the number and every brand that has already paid them.
+            </p>
+            <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
+              <Link href="/discover">
+                <Button size="lg" className="h-12 w-full gap-2 rounded-full bg-[#053877] px-7 text-base font-medium text-white hover:bg-[#0a4a99] sm:w-auto" data-testid="button-open-discovery">
+                  <Compass className="h-4 w-4" /> Explore Discovery <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          {/* The product, with one profile opened over the results. */}
+          <motion.div {...reveal} className="relative mx-auto mt-14 max-w-6xl lg:pr-[17rem] xl:pr-[18.5rem]">
+            <DiscoverySearchMock />
+            <div className="mx-auto mt-5 max-w-sm lg:absolute lg:right-0 lg:top-36 lg:mt-0 lg:w-80 xl:w-[21rem]">
+              <CreatorProfileMock />
+            </div>
+          </motion.div>
+          <p className="mt-4 text-center text-xs text-muted-foreground lg:mt-20">Sample profiles and figures, for illustration.</p>
+
+          {/* What it does */}
+          <div className="mt-16 grid grid-cols-2 gap-x-5 gap-y-9 sm:mt-20 sm:gap-x-8 sm:gap-y-10 lg:grid-cols-4">
+            {DISCOVERY_FEATURES.map(({ icon: Icon, title, body }, i) => (
+              <motion.div key={title} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.4, delay: (i % 4) * 0.06 }}>
+                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${title === "Verified military" ? "bg-[#F0A71F] text-[#1a1200]" : "bg-[#053877]/10 text-[#053877] dark:bg-white/10 dark:text-[#8fb5e8]"}`}><Icon className="h-5 w-5" /></span>
+                <h3 className="mt-4 font-semibold">{title}</h3>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground sm:text-sm">{body}</p>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Who it's for */}
+          <div className="mt-20 grid gap-5 md:grid-cols-3">
+            {DISCOVERY_FOR.map(({ icon: Icon, who, body, ask }) => (
+              <Link key={who} href="/discover" className="group flex h-full flex-col rounded-3xl border border-border bg-card p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
+                  <span className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Icon className="h-5 w-5" /></span>
+                    <span className="text-lg font-semibold">{who}</span>
+                  </span>
+                  <p className="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground">{body}</p>
+                  <span className="mt-5 flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2.5 text-sm">
+                    <Wand2 className="h-4 w-4 shrink-0 text-[#b36b00] dark:text-[#F0A71F]" />
+                    <span className="min-w-0 flex-1 italic leading-snug text-foreground/80">"{ask}"</span>
+                    <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ------------------------------------------------------ four pillars */}
       <section className="border-b border-border">
         <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
@@ -435,65 +494,6 @@ export default function Platform() {
               </div>
             </div>
           </motion.div>
-        </div>
-      </section>
-
-      {/* ---------------------------------------------------------- discovery */}
-      <section id="discovery" className="relative isolate overflow-hidden border-b border-border">
-        <div aria-hidden className="pointer-events-none absolute -right-40 top-10 -z-10 h-[30rem] w-[30rem] rounded-full bg-[#F0A71F]/10 blur-3xl" />
-        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:py-24">
-          <div className="mx-auto max-w-4xl text-center">
-            <Kicker>Discovery</Kicker>
-            <h2 className="mt-2 text-3xl font-semibold leading-[1.1] tracking-tight sm:text-[2.75rem]">Find the military voices worth working with, and see who's really listening</h2>
-            <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Discovery searches over 300 million creator profiles for veterans, service members and military spouses — creators, podcasters, speakers — and opens each one to the audience behind the number and every brand that has already paid them.
-            </p>
-            <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
-              <Link href="/discover">
-                <Button size="lg" className="h-12 w-full gap-2 rounded-full bg-[#053877] px-7 text-base font-medium text-white hover:bg-[#0a4a99] sm:w-auto" data-testid="button-open-discovery">
-                  <Compass className="h-4 w-4" /> Explore Discovery <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
-            </div>
-          </div>
-
-          {/* The product, with one profile opened over the results. */}
-          <motion.div {...reveal} className="relative mx-auto mt-14 max-w-6xl lg:pr-[17rem] xl:pr-[18.5rem]">
-            <DiscoverySearchMock />
-            <div className="mx-auto mt-5 max-w-sm lg:absolute lg:right-0 lg:top-36 lg:mt-0 lg:w-80 xl:w-[21rem]">
-              <CreatorProfileMock />
-            </div>
-          </motion.div>
-          <p className="mt-4 text-center text-xs text-muted-foreground lg:mt-20">Sample profiles and figures, for illustration.</p>
-
-          {/* What it does */}
-          <div className="mt-16 grid grid-cols-2 gap-x-5 gap-y-9 sm:mt-20 sm:gap-x-8 sm:gap-y-10 lg:grid-cols-4">
-            {DISCOVERY_FEATURES.map(({ icon: Icon, title, body }, i) => (
-              <motion.div key={title} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.4, delay: (i % 4) * 0.06 }}>
-                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${title === "Verified military" ? "bg-[#F0A71F] text-[#1a1200]" : "bg-[#053877]/10 text-[#053877] dark:bg-white/10 dark:text-[#8fb5e8]"}`}><Icon className="h-5 w-5" /></span>
-                <h3 className="mt-4 font-semibold">{title}</h3>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground sm:text-sm">{body}</p>
-              </motion.div>
-            ))}
-          </div>
-
-          {/* Who it's for */}
-          <div className="mt-20 grid gap-5 md:grid-cols-3">
-            {DISCOVERY_FOR.map(({ icon: Icon, who, body, ask }) => (
-              <Link key={who} href="/discover" className="group flex h-full flex-col rounded-3xl border border-border bg-card p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
-                  <span className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Icon className="h-5 w-5" /></span>
-                    <span className="text-lg font-semibold">{who}</span>
-                  </span>
-                  <p className="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground">{body}</p>
-                  <span className="mt-5 flex items-center gap-2 rounded-xl bg-muted/60 px-3 py-2.5 text-sm">
-                    <Wand2 className="h-4 w-4 shrink-0 text-[#b36b00] dark:text-[#F0A71F]" />
-                    <span className="min-w-0 flex-1 italic leading-snug text-foreground/80">"{ask}"</span>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                  </span>
-              </Link>
-            ))}
-          </div>
         </div>
       </section>
 
