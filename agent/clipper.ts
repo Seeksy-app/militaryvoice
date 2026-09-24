@@ -962,11 +962,19 @@ export function sane(moments: Moment[], durationSec: number): Moment[] {
   for (const m of moments.sort((a, b) => a.startSec - b.startSec)) {
     const start = Math.max(0, m.startSec);
     const end = Math.min(durationSec || m.endSec, m.endSec);
-    const len = end - start;
-    if (!Number.isFinite(len) || len < MIN_SEC || len > MAX_SEC + 15) continue;
-    if (kept.some((k) => start < k.endSec && end > k.startSec)) continue;
+    let len = end - start;
+    let stop = end;
+    // Too long is trimmed, not thrown away: a good moment that runs over is
+    // still a better clip than none, and asked for one the model tends long.
+    if (Number.isFinite(len) && len > MAX_SEC + 15) {
+      console.warn(`   "${m.title}" ran ${Math.round(len)}s — trimmed to ${MAX_SEC}s`);
+      stop = start + MAX_SEC;
+      len = MAX_SEC;
+    }
+    if (!Number.isFinite(len) || len < MIN_SEC) { console.warn(`   dropped "${m.title}": ${Math.round(len)}s`); continue; }
+    if (kept.some((k) => start < k.endSec && stop > k.startSec)) { console.warn(`   dropped "${m.title}": overlaps`); continue; }
     if (!m.title.trim()) continue;
-    kept.push({ ...m, startSec: start, endSec: end });
+    kept.push({ ...m, startSec: start, endSec: stop });
   }
   return kept.slice(0, WANTED);
 }
