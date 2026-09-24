@@ -907,7 +907,13 @@ ${transcriptText(lines)}`;
 
   const use = res.content.find((c) => c.type === "tool_use");
   if (!use || use.type !== "tool_use") return densestStretches(lines);
-  const moments = ((use.input as { moments?: Moment[] }).moments ?? []).map((m) => ({
+  // The list sometimes comes back as a JSON string rather than an array.
+  let raw: unknown = (use.input as { moments?: unknown }).moments ?? [];
+  if (typeof raw === "string") {
+    try { raw = JSON.parse(raw); } catch { raw = []; }
+  }
+  if (!Array.isArray(raw)) raw = [];
+  const moments = (raw as Moment[]).map((m) => ({
     title: String(m.title ?? "").slice(0, 120),
     caption: String(m.caption ?? "").slice(0, 400),
     reason: String(m.reason ?? "").slice(0, 400),
