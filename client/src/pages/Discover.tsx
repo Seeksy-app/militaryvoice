@@ -829,9 +829,26 @@ function SearchDemo({ enabled, onType, onSpotlight, onHide }: { enabled: boolean
       T(end + 350, () => setPos((p) => ({ ...p, ...go })));
       T(end + 1350, () => setPos((p) => ({ ...p, click: p.click + 1 })));
       T(end + 1450, () => { onHide(false); onSpotlight(true); });
-      T(end + 2300, () => { setPos((p) => ({ ...p, on: false })); onType(""); });
-      // A beat after the answer lights up, hand over to the profile.
-      T(end + 2500, () => { onSpotlight(false); done(true); });
+      // Then the cursor goes to the first creator in the answer and clicks
+      // her, and her profile opens — the visitor sees how to get the depth.
+      T(end + 1750, () => {
+        const row = document.querySelector('[data-testid="discover-sample"] tbody tr button');
+        if (!row) {
+          T(550, () => { setPos((p) => ({ ...p, on: false })); onType(""); });
+          T(750, () => { onSpotlight(false); done(true); });
+          return;
+        }
+        const r0 = row.getBoundingClientRect();
+        const below = r0.bottom + 40 - window.innerHeight;
+        if (below > 0) window.scrollBy({ top: below, behavior: "smooth" });
+        T(below > 0 ? 450 : 0, () => {
+          const who = at('[data-testid="discover-sample"] tbody tr button', 0.3, 0.5);
+          if (who) setPos((p) => ({ ...p, ...who }));
+        });
+        const land = (below > 0 ? 450 : 0) + 1050;
+        T(land, () => setPos((p) => ({ ...p, click: p.click + 1 })));
+        T(land + 180, () => { setPos((p) => ({ ...p, on: false })); onType(""); onSpotlight(false); done(true); });
+      });
     };
     const touched = (e: Event) => { if ((e.target as HTMLElement)?.getAttribute?.("data-testid") === "discover-q" && timers.length) stop(); };
     window.addEventListener("mv-demo-search", run);
