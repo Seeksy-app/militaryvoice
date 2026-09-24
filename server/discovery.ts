@@ -145,7 +145,8 @@ async function readSample(): Promise<SamplePayload | null> {
   if (sampleMemo && Date.now() - sampleMemo.at < 5 * 60_000) return sampleMemo.value;
   const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, SAMPLE_KEY));
   const value = row ? (JSON.parse(row.payload) as SamplePayload) : null;
-  sampleMemo = { at: Date.now(), value };
+  // Only a real answer is remembered: an empty one would hide a fresh build.
+  if (value) sampleMemo = { at: Date.now(), value };
   return value;
 }
 /** A creator in the sample: their profile opens for anyone and its analytics never expire. */
