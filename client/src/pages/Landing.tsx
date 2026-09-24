@@ -106,7 +106,7 @@ function longDate(d: Date, zone: string): string {
 /**
  * Sponsor logos arrive in every polarity and aspect ratio — white-on-transparent
  * wordmarks next to square colour badges. A fixed box with object-contain gives
- * them comparable optical weight, and the navy band behind keeps white marks
+ * them comparable optical weight, and a navy tile behind each keeps white marks
  * legible in either theme.
  */
 function SponsorLogo({ sponsor, className }: { sponsor: PublicSponsor; className: string }) {
@@ -120,7 +120,7 @@ function SponsorLogo({ sponsor, className }: { sponsor: PublicSponsor; className
     />
   );
   return (
-    <div className={`flex shrink-0 items-center justify-center ${className}`}>
+    <div className={`flex shrink-0 items-center justify-center rounded-2xl bg-[#000741] px-6 py-4 shadow-[0_10px_30px_-12px_rgba(0,7,65,0.45)] ring-1 ring-[#000741]/10 ${className}`}>
       {sponsor.url ? (
         <a href={sponsor.url} target="_blank" rel="noopener noreferrer" className="flex h-full w-full items-center justify-center" aria-label={sponsor.name}>
           {img}
@@ -957,7 +957,7 @@ export default function Landing({ slug }: Props) {
 
       {/* -------------------------------------------------------- SPONSORS */}
       {(sponsors ?? []).length > 0 && (
-        <section className="overflow-hidden bg-[#053877] py-16" data-testid="section-sponsors">
+        <section className="overflow-hidden border-t border-[#000741]/10 bg-[#eef2fa] py-16" data-testid="section-sponsors">
           {presentingSponsors.length > 0 && (
             <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
               <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#F0A71F]">Presented by</div>
@@ -971,7 +971,7 @@ export default function Landing({ slug }: Props) {
 
           {officialSponsors.length > 0 && (
             <div className={`mx-auto max-w-6xl px-4 text-center sm:px-6 ${presentingSponsors.length > 0 ? "mt-16" : ""}`}>
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-white/55">Official sponsors</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#053877]/70">Official sponsors</div>
               <div className="mt-7 flex flex-wrap items-center justify-center gap-x-14 gap-y-9">
                 {officialSponsors.map((sp) => (
                   <SponsorLogo key={sp.id} sponsor={sp} className="h-16 w-[190px] sm:h-[72px] sm:w-[220px]" />
@@ -982,20 +982,18 @@ export default function Landing({ slug }: Props) {
 
           {friendSponsors.length > 0 && (
             <>
-              <div className={`mx-auto max-w-6xl px-4 text-center sm:px-6 ${paidSponsors.length > 0 ? "mt-16 border-t border-white/10 pt-14" : ""}`}>
-                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-white/55">
-                  Friends of the <span className="text-[#F0A71F]">Marathon</span>
+              <div className={`mx-auto max-w-6xl px-4 text-center sm:px-6 ${paidSponsors.length > 0 ? "mt-16 border-t border-[#000741]/10 pt-14" : ""}`}>
+                <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#053877]/70">
+                  Friends of the <span className="text-[#b36b00]">Marathon</span>
                 </div>
               </div>
-              <div className="relative mt-8">
-                <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 w-24 bg-gradient-to-r from-[#053877] to-transparent" />
-                <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 w-24 bg-gradient-to-l from-[#053877] to-transparent" />
+              <div className="relative mt-8 [mask-image:linear-gradient(90deg,transparent,#000_7rem,#000_calc(100%-7rem),transparent)]">
                 <div
-                  className="flex w-max items-center gap-14 px-8 [animation:mvmarquee_var(--mv-marquee-s)_linear_infinite] hover:[animation-play-state:paused]"
+                  className="flex w-max items-center gap-6 px-8 py-3 [animation:mvmarquee_var(--mv-marquee-s)_linear_infinite] hover:[animation-play-state:paused]"
                   style={{ ["--mv-marquee-s" as string]: `${Math.max(18, friendSponsors.length * 6)}s` }}
                 >
                   {[...friendSponsors, ...friendSponsors].map((sp, i) => (
-                    <SponsorLogo key={`${sp.id}-${i}`} sponsor={sp} className="h-16 w-[190px] sm:h-[72px] sm:w-[220px]" />
+                    <SponsorLogo key={`${sp.id}-${i}`} sponsor={sp} className="h-24 w-[230px] sm:h-28 sm:w-[260px]" />
                   ))}
                 </div>
                 <style>{`@keyframes mvmarquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
@@ -1005,7 +1003,7 @@ export default function Landing({ slug }: Props) {
 
           <div className="mt-12 text-center">
             <SponsorDialog>
-              <button type="button" className="text-sm font-medium text-[#F0A71F] underline-offset-4 hover:underline" data-testid="button-become-sponsor">
+              <button type="button" className="rounded-full bg-[#053877] px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0a4a99]" data-testid="button-become-sponsor">
                 Become a sponsor
               </button>
             </SponsorDialog>
