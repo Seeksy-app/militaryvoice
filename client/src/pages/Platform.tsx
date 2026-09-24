@@ -129,7 +129,7 @@ function PitchHero() {
       </div>
       <div className="mx-auto max-w-7xl px-4 pb-16 pt-14 sm:px-6 lg:pb-24 lg:pt-20">
         <div className="max-w-2xl">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#F0A71F] sm:text-sm">National Military Podcast Day<span className="hidden sm:inline"> · </span><span className="block sm:inline">5 October 2026</span></p>
+          <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#F0A71F] sm:whitespace-nowrap sm:text-base sm:tracking-[0.16em] lg:text-lg">National Military Podcast Day<span className="hidden sm:inline"> · </span><span className="block sm:inline">5 October 2026</span></p>
           <h1 className="mt-6 text-5xl font-bold leading-[0.95] tracking-tight sm:text-7xl" style={HEADLINE_FONT}>
             26.2 miles of military podcasts.
           </h1>
@@ -169,7 +169,7 @@ function PitchHero() {
             <p className="text-sm text-white/80 sm:text-right">Segments from <span className="font-bold text-[#F0A71F]">$250</span></p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link href="/agenda">
-                <Button size="lg" variant="outline" className="h-12 w-full rounded-full border-white/30 bg-transparent px-6 text-base text-white hover:bg-white/10 hover:text-white sm:w-auto">
+                <Button size="lg" variant="outline" className="h-12 w-full rounded-full bg-transparent px-6 text-base text-white [border-color:rgba(255,255,255,0.45)] hover:bg-white/10 hover:text-white sm:w-auto">
                   See the lineup
                 </Button>
               </Link>
@@ -472,7 +472,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-20 sm:px-6 lg:grid-cols-2 lg:items-center">
           <div className="relative overflow-hidden rounded-3xl">
             <img src="/platform-hero.jpg" alt="An audience watching a speaker on stage" loading="lazy" className="aspect-[4/3] w-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#030b1f]/85 via-transparent to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#030b1f]/90 via-[#030b1f]/35 to-transparent" />
             <div className="absolute inset-x-6 bottom-6 text-white">
               <Kicker dark>We run our own</Kicker>
               <p className="mt-1.5 text-lg font-medium">Our own events run on the platform, in public.</p>
