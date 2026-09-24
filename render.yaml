@@ -7,7 +7,8 @@ services:
     runtime: docker
     dockerfilePath: ./agent/Dockerfile
     dockerContext: .
-    plan: starter
+    # Standard (2GB): Starter's 512MB ran out on a full episode (24 Sep 2026).
+    plan: standard
     branch: main
     autoDeploy: true
     buildFilter:
