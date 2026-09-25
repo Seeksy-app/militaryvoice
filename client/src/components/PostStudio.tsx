@@ -4,11 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { TOKEN_PACKS } from "@shared/tokens";
+import { PLANS, OVERAGE_CAP_CHOICES, episodeCredits, cents, type PlanKey } from "@shared/tokens";
 import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, type ClipFormat, type ClipOptions } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { startTokenCheckout } from "@/lib/tokens";
+import { startPlanCheckout, openBillingPortal } from "@/lib/tokens";
 import { PostDialog } from "@/components/PostDialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -315,59 +315,105 @@ function ClipChoices({ opts, onChange }: { opts: ClipOptions; onChange: (o: Clip
   );
 }
 
-/** The token packs, bought straight from Pōstify through Stripe Checkout. */
-function TokensDialog({ open, onOpenChange, beta }: { open: boolean; onOpenChange: (v: boolean) => void; beta?: Beta }) {
+/**
+ * Plans — or, on a plan, what's left this month, the limit on extra credits,
+ * and Stripe's billing page. Opened from the credits chip, "Generate more",
+ * and wherever an episode can't start for want of credits.
+ */
+function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenChange: (v: boolean) => void; beta?: Beta; plan?: Plan | null }) {
   const { toast } = useToast();
+  const qc = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
-  const buy = async (key: string) => {
-    setBusy(key);
+  const go = async (what: string, fn: () => Promise<void>) => {
+    setBusy(what);
     try {
-      await startTokenCheckout(key);
+      await fn();
     } catch (e) {
-      toast({ title: "Checkout didn't open", description: (e as Error).message, variant: "destructive" });
+      toast({ title: "That didn't open", description: (e as Error).message, variant: "destructive" });
       setBusy(null);
     }
   };
+  const cap = useMutation({
+    mutationFn: async (capCents: number) => (await apiRequest("POST", "/api/host/plan/cap", { capCents })).json(),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/host/features"] }),
+    onError: (e: Error) => toast({ title: "Couldn't change the limit", description: e.message, variant: "destructive" }),
+  });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00]">Beta pricing</p>
-          <DialogTitle className="text-2xl">More episodes with tokens</DialogTitle>
-          <DialogDescription>
-            An episode is {beta?.episodeTokens ?? 5} tokens: its clips, cut three ways with captions, and its clean episode.
-            {beta && beta.tokens > 0 ? ` You have ${beta.tokens}.` : ""}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {TOKEN_PACKS.map((p) => {
-            const popular = "popular" in p && p.popular;
-            return (
-              <button
-                key={p.key}
-                type="button"
-                disabled={busy !== null}
-                onClick={() => void buy(p.key)}
-                className={`rounded-xl border p-3 text-center transition-colors hover:border-[#053877] hover:bg-[#053877]/[0.06] disabled:opacity-60 ${popular ? "border-[#053877] bg-[#053877]/[0.04]" : "border-border"}`}
-                data-testid={`buy-${p.key}`}
-              >
-                <p className="text-xs font-semibold text-muted-foreground">{p.tokens} tokens</p>
-                <p className="mt-1 text-2xl font-bold text-foreground">{busy === p.key ? <Loader2 className="mx-auto h-7 w-7 animate-spin" /> : `$${p.price}`}</p>
-                <p className="text-[11px] text-muted-foreground">${(p.price / p.tokens).toFixed(2)} each</p>
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-center text-xs text-muted-foreground">
-          Secure checkout by Stripe. <a href="/pricing" className="underline underline-offset-2 hover:text-foreground">What a token buys</a>
-        </p>
+      <DialogContent className="sm:max-w-2xl">
+        {plan ? (
+          <>
+            <DialogHeader>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00]">Your plan</p>
+              <DialogTitle className="text-2xl">{plan.name}</DialogTitle>
+              <DialogDescription>
+                {plan.credits} credits a month{plan.periodEnd ? ` · next credits ${new Date(plan.periodEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}.
+                {plan.status === "past_due" ? " Your last payment didn't go through — update your card under Manage billing." : ""}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-border p-3">
+                <p className="text-xs text-muted-foreground">Credits left</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{beta?.tokens ?? 0}</p>
+              </div>
+              <div className="rounded-xl border border-border p-3">
+                <p className="text-xs text-muted-foreground">Extra credits this month</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{cents(plan.extraCents)} <span className="text-sm font-medium text-muted-foreground">of {cents(plan.capCents)}</span></p>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">Your limit on extra credits a month</p>
+              <p className="text-xs text-muted-foreground">When your credits run out, extras are {cents(plan.overageCents)} each and go on your next bill — never past this.</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {OVERAGE_CAP_CHOICES.map((c) => (
+                  <button key={c} type="button" disabled={cap.isPending} onClick={() => cap.mutate(c)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${plan.capCents === c ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:border-[#053877]/40"}`} data-testid={`plan-cap-${c}`}>
+                    {c === 0 ? "No extras" : cents(c)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Button variant="outline" onClick={() => void go("portal", openBillingPortal)} disabled={busy !== null} className="w-full gap-2 rounded-full" data-testid="plan-portal">
+              {busy === "portal" && <Loader2 className="h-4 w-4 animate-spin" />} Manage billing: card, plan, invoices, cancel
+            </Button>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00]">Beta pricing</p>
+              <DialogTitle className="text-2xl">Pick a plan</DialogTitle>
+              <DialogDescription>Credits every month. If you run out, extra credits go on your next bill — up to a limit you set. Cancel any time.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {Object.values(PLANS).map((p) => {
+                const popular = "popular" in p && p.popular;
+                return (
+                  <div key={p.key} className={`flex flex-col rounded-2xl border p-4 ${popular ? "border-[#053877] bg-[#053877]/[0.04]" : "border-border"}`}>
+                    <p className="text-sm font-semibold text-muted-foreground">{p.name}</p>
+                    <p className="mt-1 text-3xl font-bold text-foreground">{cents(p.cents)}<span className="text-sm font-medium text-muted-foreground"> /month</span></p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{p.credits} credits a month</p>
+                    <p className="mt-1 flex-1 text-xs text-muted-foreground">{p.blurb} Extra credits {cents(p.overageCents)} each.</p>
+                    <Button onClick={() => void go(p.key, () => startPlanCheckout(p.key))} disabled={busy !== null} className={`mt-3 gap-2 rounded-full ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} variant={popular ? "default" : "outline"} data-testid={`plan-${p.key}`}>
+                      {busy === p.key && <Loader2 className="h-4 w-4 animate-spin" />} Choose {p.name}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              <li><span className="font-semibold text-foreground">Classic captions:</span> 1 credit a clip, every shape included.</li>
+              <li><span className="font-semibold text-foreground">Animated captions:</span> 1 credit per shape, per clip.</li>
+              <li><span className="font-semibold text-foreground">The clean episode:</span> 1 credit. Your first episode is free.</li>
+            </ul>
+            <p className="text-center text-xs text-muted-foreground">Secure checkout by Stripe. <a href="/pricing" className="underline underline-offset-2 hover:text-foreground">All the details</a></p>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
-/** The last card in the clips: more episodes, with the token pricing. */
-function GenerateMore({ beta }: { beta?: Beta }) {
+/** The last card in the clips: more episodes, with the plans. */
+function GenerateMore({ beta, plan }: { beta?: Beta; plan?: Plan | null }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -381,7 +427,7 @@ function GenerateMore({ beta }: { beta?: Beta }) {
         <span className="text-base font-semibold text-foreground">Generate more</span>
         <span className="max-w-[14rem] text-sm text-muted-foreground">Clips and a clean episode from your next one.</span>
       </button>
-      <TokensDialog open={open} onOpenChange={setOpen} beta={beta} />
+      <PlanDialog open={open} onOpenChange={setOpen} beta={beta} plan={plan} />
     </>
   );
 }
@@ -560,10 +606,11 @@ export function putWithProgress(url: string, file: File, onProgress: (pct: numbe
   });
 }
 
-interface Beta { unlimited: boolean; used: number; limit: number; left: number | null; maxMinutes: number; tokens: number; episodeTokens: number; payments: boolean }
+interface Beta { unlimited: boolean; used: number; limit: number; left: number | null; maxMinutes: number; tokens: number; payments: boolean }
+interface Plan { key: PlanKey; name: string; credits: number; overageCents: number; capCents: number; extraCents: number; periodEnd: string; status: string }
 
-/** Always in Pōstify's header: how many tokens are left, and a way to get more. */
-function TokenBalance({ beta }: { beta?: Beta }) {
+/** Always in Pōstify's header: credits left (and the plan), and the way to more. */
+function CreditBalance({ beta, plan }: { beta?: Beta; plan?: Plan | null }) {
   const [open, setOpen] = useState(false);
   if (!beta) return null;
   return (
@@ -572,27 +619,26 @@ function TokenBalance({ beta }: { beta?: Beta }) {
         type="button"
         onClick={() => setOpen(true)}
         className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/50 bg-[#F0A71F]/10 py-1.5 pl-3 pr-1.5 text-sm font-semibold text-foreground transition-colors hover:bg-[#F0A71F]/20"
-        title={`An episode is ${beta.episodeTokens} tokens`}
         data-testid="post-token-balance"
       >
         <Coins className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" />
-        <span className="tabular-nums">{beta.tokens} token{beta.tokens === 1 ? "" : "s"}</span>
-        <span className="rounded-full bg-[#053877] px-2.5 py-0.5 text-xs font-semibold text-white">Get more</span>
+        <span className="tabular-nums">{beta.tokens} credit{beta.tokens === 1 ? "" : "s"}</span>
+        <span className="rounded-full bg-[#053877] px-2.5 py-0.5 text-xs font-semibold text-white">{plan ? plan.name : "Get more"}</span>
       </button>
-      <TokensDialog open={open} onOpenChange={setOpen} beta={beta} />
+      <PlanDialog open={open} onOpenChange={setOpen} beta={beta} plan={plan} />
     </>
   );
 }
 
-/** Out of free episodes and tokens: buy some. */
-function GetTokens({ beta }: { beta?: Beta }) {
+/** Can't start for want of credits and no plan: pick one. */
+function ChoosePlan({ beta, plan }: { beta?: Beta; plan?: Plan | null }) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <Button onClick={() => setOpen(true)} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-get-tokens">
-        <Sparkles className="h-4 w-4" /> Get tokens
+        <Sparkles className="h-4 w-4" /> Choose a plan
       </Button>
-      <TokensDialog open={open} onOpenChange={setOpen} beta={beta} />
+      <PlanDialog open={open} onOpenChange={setOpen} beta={beta} plan={plan} />
     </>
   );
 }
@@ -607,7 +653,7 @@ export function PostStudio() {
   });
   const [preview, setPreview] = useState<{ kind: "clip"; url: string } | { kind: "recording"; url: string } | null>(null);
 
-  const features = useQuery<{ post: boolean; beta?: Beta }>({
+  const features = useQuery<{ post: boolean; beta?: Beta; plan?: Plan | null }>({
     queryKey: ["/api/host/features"],
     queryFn: async () => (await apiRequest("GET", "/api/host/features")).json(),
     staleTime: 5 * 60_000,
@@ -656,22 +702,23 @@ export function PostStudio() {
   });
 
   const beta = features.data?.beta;
+  const plan = features.data?.plan ?? null;
   const freeLeft = Boolean(beta && (beta.unlimited || (beta.left ?? 1) > 0));
-  const payWithTokens = Boolean(beta && !freeLeft && beta.tokens >= beta.episodeTokens);
-  const outOfBeta = Boolean(beta && !freeLeft && !payWithTokens);
+  // What this episode will cost with the shapes and captions picked.
+  const cost = episodeCredits(opts);
   const betaBadge = beta && !beta.unlimited ? (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F]/15 px-2.5 py-1 text-xs font-semibold text-[#8a5a00] dark:text-[#F0A71F]" data-testid="post-beta">
       Beta{freeLeft ? ` · ${beta.left} free episode${beta.left === 1 ? "" : "s"}` : ""}
     </span>
   ) : null;
 
-  const [justPaid, setJustPaid] = useState<{ tokens: number; balance: number } | null>(null);
+  const [justPaid, setJustPaid] = useState<{ title: string; balance: number } | null>(null);
   // Stays until closed: a toast was gone before anyone could read it.
   const paidBanner = justPaid ? (
     <div className="mb-4 flex items-center gap-3 rounded-2xl border border-emerald-400/60 bg-emerald-50 px-4 py-3 text-sm dark:bg-emerald-950/30" role="status" data-testid="post-paid">
       <Check className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
       <p className="flex-1 text-foreground">
-        <span className="font-semibold">Payment received — {justPaid.tokens} tokens added.</span> You have {justPaid.balance} now; an episode is {beta?.episodeTokens ?? 5}.
+        <span className="font-semibold">{justPaid.title}</span> You have {justPaid.balance} credits.
       </p>
       <button type="button" onClick={() => setJustPaid(null)} aria-label="Close" className="rounded-full p-1 text-muted-foreground hover:bg-black/5 hover:text-foreground"><X className="h-4 w-4" /></button>
     </div>
@@ -681,16 +728,19 @@ export function PostStudio() {
   useEffect(() => {
     const url = new URL(window.location.href);
     const paid = url.searchParams.get("paid");
-    if (!paid) return;
+    const subscribed = url.searchParams.get("subscribed");
+    if (!paid && !subscribed) return;
     url.searchParams.delete("paid");
+    url.searchParams.delete("subscribed");
     window.history.replaceState(null, "", url.pathname + url.search);
-    apiRequest("POST", "/api/host/tokens/confirm", { sessionId: paid })
-      .then((r) => r.json())
-      .then((d: { tokens: number; balance: number }) => {
+    (subscribed
+      ? apiRequest("POST", "/api/host/plan/confirm", { sessionId: subscribed }).then((r) => r.json()).then((d: { plan: string; credits: number; balance: number }) => ({ title: `Welcome to ${d.plan} — ${d.credits} credits added.`, balance: d.balance }))
+      : apiRequest("POST", "/api/host/tokens/confirm", { sessionId: paid }).then((r) => r.json()).then((d: { tokens: number; balance: number }) => ({ title: `Payment received — ${d.tokens} credits added.`, balance: d.balance })))
+      .then((d) => {
         setJustPaid(d);
         void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
       })
-      .catch((e: Error) => toast({ title: "Payment received, tokens pending", description: e.message, variant: "destructive" }));
+      .catch((e: Error) => toast({ title: "Paid — your credits are on their way", description: e.message, variant: "destructive" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -707,7 +757,7 @@ export function PostStudio() {
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Pōstify</p>
             <h2 className="mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
           </div>
-          <TokenBalance beta={beta} />
+          <CreditBalance beta={beta} plan={plan} />
         </div>
         {/* Episodes go into the Library; Pōstify works on what's there. */}
         <div className="rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] p-8 text-center">
@@ -764,7 +814,7 @@ export function PostStudio() {
           <h2 className="mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <TokenBalance beta={beta} />
+          <CreditBalance beta={beta} plan={plan} />
           <Button asChild variant="outline" className="gap-2 rounded-full" data-testid="post-go-library">
             <a href="/host/dashboard/library"><Upload className="h-4 w-4" /> Add an episode</a>
           </Button>
@@ -827,15 +877,23 @@ export function PostStudio() {
                 <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F0A71F] text-[#1a1200] shadow-lg shadow-[#F0A71F]/20"><Wand2 className="h-7 w-7" /></span>
                 <p className="text-xl font-bold sm:text-2xl">Ready for Pōstify</p>
                 <ClipChoices opts={opts} onChange={setOpts} />
-                {outOfBeta && !rec.postifyBeta ? (
-                  <GetTokens beta={beta} />
+                {!(beta?.unlimited || rec.postifyBeta || freeLeft || (beta?.tokens ?? 0) >= cost || plan) ? (
+                  <ChoosePlan beta={beta} plan={plan} />
                 ) : (
                   <Button onClick={() => start.mutate(rec.id)} disabled={start.isPending} className="h-11 gap-2 rounded-full bg-[#F0A71F] px-6 text-base font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="post-start-hero">
                     {start.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />} Start Pōstify
                   </Button>
                 )}
                 <p className="text-xs text-white/55">
-                  {beta?.unlimited || rec.postifyBeta ? "Included" : freeLeft ? "Free · your beta episode" : payWithTokens ? `${beta?.episodeTokens} tokens · you have ${beta?.tokens}` : `An episode is ${beta?.episodeTokens ?? 5} tokens`}
+                  {beta?.unlimited || rec.postifyBeta
+                    ? "Included"
+                    : freeLeft
+                      ? "Free · your beta episode"
+                      : (beta?.tokens ?? 0) >= cost
+                        ? `Uses ${cost} credits · you have ${beta?.tokens}`
+                        : plan
+                          ? `Uses ${cost} credits: ${beta?.tokens ?? 0} left + ${cost - (beta?.tokens ?? 0)} extra at ${cents(plan.overageCents)}`
+                          : `This one is ${cost} credits`}
 
                 </p>
               </div>
@@ -911,7 +969,7 @@ export function PostStudio() {
             {done
               ? [
                   ...mine.map((c) => <ClipCard key={c.id} c={c} onPreview={() => setPreview({ kind: "clip", url: c.verticalUrl || c.url })} />),
-                  <GenerateMore key="more" beta={beta} />,
+                  <GenerateMore key="more" beta={beta} plan={plan} />,
                 ]
               : moments.map((m, i) => {
                   const ready = i < readyN;

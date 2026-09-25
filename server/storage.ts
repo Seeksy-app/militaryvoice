@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, hostPosts, type HostPostRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, type PostifySubscriptionRow, hostPosts, type HostPostRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -794,7 +794,12 @@ export interface IStorage {
   markPostifyBeta(recordingId: number): Promise<void>;
   tokenBalance(email: string): Promise<number>;
   /** False when that ref has already been recorded (so nothing changed). */
-  addTokens(v: { email: string; delta: number; reason: string; ref: string }): Promise<boolean>;
+  addTokens(v: { email: string; delta: number; reason: string; ref: string; overage?: number; overageCents?: number }): Promise<boolean>;
+  /** Extra credits billed since a date (this plan period). */
+  overageCentsSince(email: string, sinceIso: string): Promise<number>;
+  getSubscription(email: string): Promise<PostifySubscriptionRow | undefined>;
+  getSubscriptionById(subscriptionId: string): Promise<PostifySubscriptionRow | undefined>;
+  upsertSubscription(v: Partial<PostifySubscriptionRow> & { email: string }): Promise<PostifySubscriptionRow>;
   saveCleanCopy(source: RecordingRow, videoKey: string, durationSec: number): Promise<RecordingRow>;
   createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number; free: boolean; queue?: boolean }): Promise<RecordingRow>;
   hasTokenRef(ref: string): Promise<boolean>;
@@ -1862,11 +1867,45 @@ class DatabaseStorage implements IStorage {
     return Number(row?.n ?? 0);
   }
 
-  async addTokens(v: { email: string; delta: number; reason: string; ref: string }): Promise<boolean> {
+  async overageCentsSince(email: string, sinceIso: string): Promise<number> {
+    await ready();
+    const [row] = await db
+      .select({ n: sqlExpr<number>`coalesce(sum(${postifyTokens.overageCents}), 0)::int` })
+      .from(postifyTokens)
+      .where(and(eq(postifyTokens.email, email.trim().toLowerCase()), sqlExpr`${postifyTokens.createdAt} >= ${sinceIso}`));
+    return Number(row?.n ?? 0);
+  }
+
+  async getSubscription(email: string): Promise<PostifySubscriptionRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(postifySubscriptions).where(eq(postifySubscriptions.email, email.trim().toLowerCase()));
+    return row;
+  }
+
+  async getSubscriptionById(subscriptionId: string): Promise<PostifySubscriptionRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(postifySubscriptions).where(eq(postifySubscriptions.subscriptionId, subscriptionId));
+    return row;
+  }
+
+  async upsertSubscription(v: Partial<PostifySubscriptionRow> & { email: string }): Promise<PostifySubscriptionRow> {
+    await ready();
+    const email = v.email.trim().toLowerCase();
+    const now = new Date().toISOString();
+    const { id: _id, createdAt: _c, ...rest } = v;
+    const [row] = await db
+      .insert(postifySubscriptions)
+      .values({ plan: "creator", ...rest, email, createdAt: now, updatedAt: now })
+      .onConflictDoUpdate({ target: postifySubscriptions.email, set: { ...rest, email, updatedAt: now } })
+      .returning();
+    return row;
+  }
+
+  async addTokens(v: { email: string; delta: number; reason: string; ref: string; overage?: number; overageCents?: number }): Promise<boolean> {
     await ready();
     const rows = await db
       .insert(postifyTokens)
-      .values({ email: v.email.trim().toLowerCase(), delta: v.delta, reason: v.reason.slice(0, 200), ref: v.ref.slice(0, 200), createdAt: new Date().toISOString() })
+      .values({ email: v.email.trim().toLowerCase(), delta: v.delta, overage: v.overage ?? 0, overageCents: v.overageCents ?? 0, reason: v.reason.slice(0, 200), ref: v.ref.slice(0, 200), createdAt: new Date().toISOString() })
       .onConflictDoNothing()
       .returning({ id: postifyTokens.id });
     return rows.length > 0;

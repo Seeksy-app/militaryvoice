@@ -112,8 +112,8 @@ import { waitUntil } from "@vercel/functions";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
-import { createTokenCheckout, readPaidSession, paidFromWebhook, stripeReady } from "./stripe.js";
-import { EPISODE_TOKENS } from "../shared/tokens.js";
+import { createTokenCheckout, readPaidSession, verifyWebhook, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, type PlanState } from "./stripe.js";
+import { episodeCredits, planOf, PLANS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   publishPhoto,
@@ -5537,20 +5537,52 @@ export function registerRoutes(app: Express): void {
     const unlimited = postTesters().has(e) || (await storage.isAdminEmail(e));
     const used = (await storage.listRecordingsByEmail(e)).filter((r) => r.postifyBeta).length;
     const tokens = await storage.tokenBalance(e);
-    return { unlimited, used, tokens, limit: BETA_EPISODES(), maxMinutes: Math.round(BETA_MAX_SEC() / 60), left: unlimited ? Infinity : Math.max(0, BETA_EPISODES() - used) };
+    const sub = await storage.getSubscription(e);
+    const active = sub && ["active", "trialing"].includes(sub.status) ? sub : undefined;
+    const extraCents = active ? await storage.overageCentsSince(e, active.periodStart || active.createdAt) : 0;
+    return { unlimited, used, tokens, sub: active, extraCents, limit: BETA_EPISODES(), maxMinutes: Math.round(BETA_MAX_SEC() / 60), left: unlimited ? Infinity : Math.max(0, BETA_EPISODES() - used) };
   }
-  const NEED_TOKENS = `Your free beta episode is used. An episode is ${EPISODE_TOKENS} tokens — get some from the Pōstify page.`;
+  const NEED_CREDITS = "Your free beta episode is used. Pick a plan on the Pōstify page to keep going.";
+  const OVER_LIMIT = "That would go past your limit on extra credits this month. Raise it under Plan, or wait for next month's credits.";
   /**
-   * How an episode gets paid for: free (the beta episode), tokens, or not at
-   * all. Tokens are taken when it's queued, once per recording (the ledger ref
-   * is the recording), so "Try again" after a failure costs nothing more.
+   * How an episode gets paid for: free (the beta episode or a tester), from
+   * their credits, with extra credits on a plan (reported to Stripe, billed
+   * at the end of the month, up to the limit they set), or not at all.
+   * Taken when it's queued, once per recording (the ledger ref is the
+   * recording), so "Try again" after a failure costs nothing more.
    */
-  async function payForEpisode(email: string, rec: { id: number; title: string }, allowance: Awaited<ReturnType<typeof postifyAllowance>>): Promise<"free" | "tokens" | "no"> {
+  async function payForEpisode(email: string, rec: { id: number; title: string }, allowance: Awaited<ReturnType<typeof postifyAllowance>>, credits: number): Promise<"free" | "paid" | "no" | "limit"> {
     if (allowance.unlimited || allowance.left > 0) return "free";
-    if (await storage.hasTokenRef(`episode:${rec.id}`)) return "tokens";
-    if (allowance.tokens < EPISODE_TOKENS) return "no";
-    await storage.addTokens({ email, delta: -EPISODE_TOKENS, reason: `Pōstify: ${rec.title || "episode"}`.slice(0, 200), ref: `episode:${rec.id}` });
-    return "tokens";
+    const ref = `episode:${rec.id}`;
+    if (await storage.hasTokenRef(ref)) return "paid";
+    const reason = `Pōstify: ${rec.title || "episode"}`.slice(0, 200);
+    if (allowance.tokens >= credits) {
+      await storage.addTokens({ email, delta: -credits, reason, ref });
+      return "paid";
+    }
+    const sub = allowance.sub;
+    const plan = sub ? planOf(sub.plan) : undefined;
+    if (!sub || !plan || !sub.customerId) return "no";
+    const extra = credits - Math.max(0, allowance.tokens);
+    const extraCents = extra * plan.overageCents;
+    if (allowance.extraCents + extraCents > sub.overageCapCents) return "limit";
+    await reportExtraCredits({ customerId: sub.customerId, credits: extra, identifier: `${ref}:${email}` });
+    await storage.addTokens({ email, delta: -Math.max(0, allowance.tokens), reason, ref, overage: extra, overageCents: extraCents });
+    return "paid";
+  }
+
+  /** Keep our copy of a subscription current, and give the credits for each paid month once. */
+  async function syncPlan(state: PlanState, invoiceId?: string): Promise<void> {
+    const existing = await storage.getSubscription(state.email);
+    await storage.upsertSubscription({
+      email: state.email, plan: state.plan, status: state.status, customerId: state.customerId, subscriptionId: state.subscriptionId,
+      periodStart: state.periodStart, periodEnd: state.periodEnd, overageCapCents: existing?.overageCapCents ?? DEFAULT_OVERAGE_CAP_CENTS,
+    });
+    const inv = invoiceId || state.latestInvoice;
+    const plan = planOf(state.plan);
+    if (inv && plan && ["active", "trialing"].includes(state.status)) {
+      await storage.addTokens({ email: state.email, delta: plan.credits, reason: `${plan.name} plan: ${plan.credits} credits`, ref: `plan:${inv}` });
+    }
   }
   async function canPost(_email: string): Promise<boolean> {
     return true;
@@ -5558,7 +5590,71 @@ export function registerRoutes(app: Express): void {
   app.get("/api/host/features", requireHostSession, async (req, res) => {
     noStore(res);
     const a = await postifyAllowance(getSessionEmail(req) ?? "");
-    res.json({ post: true, beta: { unlimited: a.unlimited, used: a.used, limit: a.limit, left: a.unlimited ? null : a.left, maxMinutes: a.maxMinutes, tokens: a.tokens, episodeTokens: EPISODE_TOKENS, payments: stripeReady() } });
+    const plan = a.sub ? planOf(a.sub.plan) : undefined;
+    res.json({
+      post: true,
+      beta: { unlimited: a.unlimited, used: a.used, limit: a.limit, left: a.unlimited ? null : a.left, maxMinutes: a.maxMinutes, tokens: a.tokens, payments: stripeReady() },
+      plan: a.sub && plan ? { key: plan.key, name: plan.name, credits: plan.credits, overageCents: plan.overageCents, capCents: a.sub.overageCapCents, extraCents: a.extraCents, periodEnd: a.sub.periodEnd, status: a.sub.status } : null,
+    });
+  });
+
+  // ---- Pōstify plans: Stripe subscriptions -------------------------------------
+
+  const originOf = (req: any) => (process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+
+  app.post("/api/host/plan/checkout", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    if (!stripeReady()) return res.status(503).json({ message: "Payments aren't switched on yet. Try again soon." });
+    const key = String(req.body?.plan ?? "");
+    if (!planOf(key)) return res.status(400).json({ message: "Which plan?" });
+    const sub = await storage.getSubscription(email);
+    if (sub && ["active", "trialing", "past_due"].includes(sub.status)) return res.status(409).json({ message: "You already have a plan. Change it under Manage billing." });
+    try {
+      res.json({ url: await createPlanCheckout({ email, plan: key as PlanKey, origin: originOf(req), customerId: sub?.customerId || undefined }) });
+    } catch (err: any) {
+      console.error("Plan checkout failed:", err?.message);
+      res.status(502).json({ message: "Checkout didn't open. Try again in a moment." });
+    }
+  });
+
+  /** Back from Stripe: read the subscription from Stripe itself, and give the first month's credits (once). */
+  app.post("/api/host/plan/confirm", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    try {
+      const state = await readPlanSession(String(req.body?.sessionId ?? ""));
+      if (!state || state.email !== email) return res.status(404).json({ message: "We couldn't find that subscription." });
+      await syncPlan(state);
+      const plan = planOf(state.plan)!;
+      res.json({ plan: plan.name, credits: plan.credits, balance: await storage.tokenBalance(email) });
+    } catch (err: any) {
+      console.error("Plan confirm failed:", err?.message);
+      res.status(502).json({ message: "We couldn't check that just now. Refresh in a moment." });
+    }
+  });
+
+  /** Their limit on extra credits a month. */
+  app.post("/api/host/plan/cap", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const capCents = Number(req.body?.capCents);
+    if (!(OVERAGE_CAP_CHOICES as readonly number[]).includes(capCents)) return res.status(400).json({ message: "Pick one of the limits." });
+    const sub = await storage.getSubscription(email);
+    if (!sub) return res.status(404).json({ message: "No plan yet." });
+    await storage.upsertSubscription({ email, overageCapCents: capCents });
+    res.json({ capCents });
+  });
+
+  /** Stripe's billing page: card, plan, invoices, cancel. */
+  app.post("/api/host/plan/portal", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const sub = await storage.getSubscription(email);
+    if (!sub?.customerId) return res.status(404).json({ message: "No plan yet." });
+    try {
+      res.json({ url: await billingPortal(sub.customerId, `${originOf(req)}/host/dashboard/postify`) });
+    } catch (err: any) {
+      console.error("Billing portal failed:", err?.message);
+      res.status(502).json({ message: "The billing page didn't open. Try again in a moment." });
+    }
   });
 
   // ---- Pōstify tokens: Stripe Checkout ---------------------------------------
@@ -5590,11 +5686,37 @@ export function registerRoutes(app: Express): void {
     }
   });
 
-  /** For someone who pays and closes the tab before coming back. */
+  /**
+   * Stripe tells us: a one-off purchase (someone who closed the tab before
+   * coming back), a plan's month paid (its credits), and a plan changed or
+   * cancelled. Every credit grant has a ref, so a repeat is a no-op.
+   */
   app.post("/api/webhooks/stripe", async (req, res) => {
-    const paid = paidFromWebhook((req as any).rawBody as Buffer | undefined, req.get("stripe-signature") ?? "");
-    if (paid === "bad-signature") return res.status(401).json({ message: "Unsigned." });
-    if (paid) await storage.addTokens({ email: paid.email, delta: paid.tokens, reason: `Bought ${paid.tokens} tokens`, ref: `stripe:${paid.sessionId}` });
+    const event = verifyWebhook((req as any).rawBody as Buffer | undefined, req.get("stripe-signature") ?? "");
+    if (!event) return res.status(401).json({ message: "Unsigned." });
+    try {
+      const paid = paidFromEvent(event);
+      if (paid) await storage.addTokens({ email: paid.email, delta: paid.tokens, reason: `Bought ${paid.tokens} credits`, ref: `stripe:${paid.sessionId}` });
+      const obj = event.data?.object;
+      if (event.type === "invoice.paid" && obj?.subscription && ["subscription_create", "subscription_cycle", "subscription_update"].includes(obj.billing_reason)) {
+        const state = await readSubscription(String(obj.subscription));
+        if (state) await syncPlan(state, String(obj.id));
+      }
+      if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted" || event.type === "customer.subscription.created") {
+        const state = planStateFrom(obj);
+        if (state) {
+          const existing = await storage.getSubscription(state.email);
+          await storage.upsertSubscription({
+            email: state.email, plan: state.plan, status: state.status, customerId: state.customerId, subscriptionId: state.subscriptionId,
+            periodStart: state.periodStart, periodEnd: state.periodEnd, overageCapCents: existing?.overageCapCents ?? DEFAULT_OVERAGE_CAP_CENTS,
+          });
+        }
+      }
+    } catch (err: any) {
+      // Stripe retries a non-2xx; worth it, since this is where credits come from.
+      console.error("Stripe webhook failed:", err?.message);
+      return res.status(500).json({ message: "Try again." });
+    }
     res.json({ received: true });
   });
 
@@ -5611,10 +5733,7 @@ export function registerRoutes(app: Express): void {
     const durationSec = Math.max(0, Number(req.body?.durationSec) || 0);
     if (durationSec > 3 * 3600) return res.status(400).json({ message: "Episodes up to three hours, please." });
     const allowance = await postifyAllowance(email);
-    if (!allowance.unlimited) {
-      if (allowance.left <= 0 && allowance.tokens < EPISODE_TOKENS) return res.status(402).json({ message: NEED_TOKENS });
-      if (durationSec > BETA_MAX_SEC()) return res.status(400).json({ message: `The beta takes episodes up to ${allowance.maxMinutes} minutes.` });
-    }
+    if (!allowance.unlimited && durationSec > BETA_MAX_SEC()) return res.status(400).json({ message: `The beta takes episodes up to ${allowance.maxMinutes} minutes.` });
     // A few in flight at once is plenty; this spends real money per minute.
     const mine = await storage.listRecordingsByEmail(email);
     if (mine.filter((r) => r.clipStatus === "queued" || r.clipStatus === "running").length >= 3) {
@@ -5623,7 +5742,14 @@ export function registerRoutes(app: Express): void {
     const title = String(req.body?.title ?? "").trim().slice(0, 140) || String(req.body?.fileName ?? "Episode").replace(/\.[a-z0-9]+$/i, "").slice(0, 140);
     const free = allowance.unlimited || allowance.left > 0;
     const rec = await storage.createUploadedRecording({ email, title, storageKey, durationSec, sizeBytes: Number(req.body?.sizeBytes) || 0, free });
-    if (!free) await payForEpisode(email, rec, allowance);
+    if (!free) {
+      const paid = await payForEpisode(email, rec, allowance, episodeCredits(parseClipOptions(req.body?.options)));
+      if (paid === "no" || paid === "limit") {
+        // Kept in the Library, just not clipped: they can start it once they have credits.
+        await storage.setClipStatus(rec.id, "none", "");
+        return res.status(402).json({ message: paid === "limit" ? OVER_LIMIT : NEED_CREDITS, id: rec.id });
+      }
+    }
     res.status(201).json({ id: rec.id });
   });
 
@@ -5652,14 +5778,22 @@ export function registerRoutes(app: Express): void {
     if (rec.status !== "Ready") return res.status(409).json({ message: "That recording is still being saved." });
     if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.json({ ok: true, already: true });
     if (rec.clipStatus === "done") return res.status(409).json({ message: "Clips are already made for this one." });
+    const options = parseClipOptions(req.body?.options ?? rec.clipOptions);
     if (!rec.postifyBeta) {
       const allowance = await postifyAllowance(email);
       if (!allowance.unlimited && rec.durationSec > BETA_MAX_SEC()) return res.status(400).json({ message: `The beta takes episodes up to ${allowance.maxMinutes} minutes.` });
-      const paid = await payForEpisode(email, rec, allowance);
-      if (paid === "no") return res.status(402).json({ message: NEED_TOKENS });
+      let paid;
+      try {
+        paid = await payForEpisode(email, rec, allowance, episodeCredits(options));
+      } catch (err: any) {
+        console.error("Charging an episode failed:", err?.message);
+        return res.status(502).json({ message: "We couldn't record the extra credits with Stripe just now. Try again in a moment." });
+      }
+      if (paid === "no") return res.status(402).json({ message: NEED_CREDITS });
+      if (paid === "limit") return res.status(402).json({ message: OVER_LIMIT });
       if (paid === "free") await storage.markPostifyBeta(rec.id);
     }
-    if (req.body?.options) await storage.setClipOptions(rec.id, JSON.stringify(parseClipOptions(req.body.options)));
+    await storage.setClipOptions(rec.id, JSON.stringify(options));
     await storage.setClipStatus(rec.id, "queued", "");
     res.json({ ok: true });
   });

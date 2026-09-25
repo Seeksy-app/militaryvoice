@@ -1878,11 +1878,32 @@ export const postifyTokens = pgTable("postify_tokens", {
   id: serial("id").primaryKey(),
   email: text("email").notNull(),
   delta: integer("delta").notNull(),
+  /** Credits this spend went past their balance, billed to their plan as extras. */
+  overage: integer("overage").notNull().default(0),
+  overageCents: integer("overage_cents").notNull().default(0),
   reason: text("reason").notNull().default(""),
   ref: text("ref").notNull(),
   createdAt: text("created_at").notNull(),
 }, (t) => [uniqueIndex("postify_tokens_ref_idx").on(t.ref), index("postify_tokens_email_idx").on(t.email)]);
 export type PostifyTokenRow = typeof postifyTokens.$inferSelect;
+
+/** A podcaster's Pōstify plan, mirrored from Stripe (the webhook and the return page keep it current). */
+export const postifySubscriptions = pgTable("postify_subscriptions", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  plan: text("plan").notNull(),
+  /** Stripe's status: active, trialing, past_due, canceled, … */
+  status: text("status").notNull().default("active"),
+  customerId: text("customer_id").notNull().default(""),
+  subscriptionId: text("subscription_id").notNull().default(""),
+  periodStart: text("period_start").notNull().default(""),
+  periodEnd: text("period_end").notNull().default(""),
+  /** Their limit on extra credits a month, in cents. */
+  overageCapCents: integer("overage_cap_cents").notNull().default(2000),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [uniqueIndex("postify_subscriptions_email_idx").on(t.email)]);
+export type PostifySubscriptionRow = typeof postifySubscriptions.$inferSelect;
 
 export const sponsorClicks = pgTable("sponsor_clicks", {
   id: serial("id").primaryKey(),
