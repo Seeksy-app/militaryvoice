@@ -8,7 +8,7 @@ import { startTokenCheckout } from "@/lib/tokens";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy } from "lucide-react";
+import { Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -332,6 +332,28 @@ function putWithProgress(url: string, file: File, onProgress: (pct: number) => v
 
 interface Beta { unlimited: boolean; used: number; limit: number; left: number | null; maxMinutes: number; tokens: number; episodeTokens: number; payments: boolean }
 
+/** Always in Pōstify's header: how many tokens are left, and a way to get more. */
+function TokenBalance({ beta }: { beta?: Beta }) {
+  const [open, setOpen] = useState(false);
+  if (!beta) return null;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/50 bg-[#F0A71F]/10 py-1.5 pl-3 pr-1.5 text-sm font-semibold text-foreground transition-colors hover:bg-[#F0A71F]/20"
+        title={`An episode is ${beta.episodeTokens} tokens`}
+        data-testid="post-token-balance"
+      >
+        <Coins className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" />
+        <span className="tabular-nums">{beta.tokens} token{beta.tokens === 1 ? "" : "s"}</span>
+        <span className="rounded-full bg-[#053877] px-2.5 py-0.5 text-xs font-semibold text-white">Get more</span>
+      </button>
+      <TokensDialog open={open} onOpenChange={setOpen} beta={beta} />
+    </>
+  );
+}
+
 /** Out of free episodes and tokens: buy some. */
 function GetTokens({ beta }: { beta?: Beta }) {
   const [open, setOpen] = useState(false);
@@ -463,8 +485,20 @@ export function PostStudio() {
   const outOfBeta = Boolean(beta && !freeLeft && !payWithTokens);
   const betaBadge = beta && !beta.unlimited ? (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F]/15 px-2.5 py-1 text-xs font-semibold text-[#8a5a00] dark:text-[#F0A71F]" data-testid="post-beta">
-      Beta · {freeLeft ? `${beta.left} free episode${beta.left === 1 ? "" : "s"}` : beta.tokens > 0 ? `${beta.tokens} token${beta.tokens === 1 ? "" : "s"}` : "free episode used"}
+      Beta{freeLeft ? ` · ${beta.left} free episode${beta.left === 1 ? "" : "s"}` : ""}
     </span>
+  ) : null;
+
+  const [justPaid, setJustPaid] = useState<{ tokens: number; balance: number } | null>(null);
+  // Stays until closed: a toast was gone before anyone could read it.
+  const paidBanner = justPaid ? (
+    <div className="mb-4 flex items-center gap-3 rounded-2xl border border-emerald-400/60 bg-emerald-50 px-4 py-3 text-sm dark:bg-emerald-950/30" role="status" data-testid="post-paid">
+      <Check className="h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+      <p className="flex-1 text-foreground">
+        <span className="font-semibold">Payment received — {justPaid.tokens} tokens added.</span> You have {justPaid.balance} now; an episode is {beta?.episodeTokens ?? 5}.
+      </p>
+      <button type="button" onClick={() => setJustPaid(null)} aria-label="Close" className="rounded-full p-1 text-muted-foreground hover:bg-black/5 hover:text-foreground"><X className="h-4 w-4" /></button>
+    </div>
   ) : null;
 
   // Back from Stripe Checkout: credit the tokens (the server reads the payment from Stripe).
@@ -477,7 +511,7 @@ export function PostStudio() {
     apiRequest("POST", "/api/host/tokens/confirm", { sessionId: paid })
       .then((r) => r.json())
       .then((d: { tokens: number; balance: number }) => {
-        toast({ title: `${d.tokens} tokens added`, description: `You have ${d.balance}. An episode is ${beta?.episodeTokens ?? 5}.` });
+        setJustPaid(d);
         void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
       })
       .catch((e: Error) => toast({ title: "Payment received, tokens pending", description: e.message, variant: "destructive" }));
@@ -496,8 +530,14 @@ export function PostStudio() {
     if (recs.isLoading) return null;
     return (
       <section className="mt-6" data-testid="post-studio">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Pōstify</p>
-        <h2 className="mb-4 mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
+        {paidBanner}
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Pōstify</p>
+            <h2 className="mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
+          </div>
+          <TokenBalance beta={beta} />
+        </div>
         {outOfBeta ? <GetTokens beta={beta} /> : <UploadEpisode variant="card" onQueued={queued} beta={beta} />}
       </section>
     );
@@ -547,12 +587,16 @@ export function PostStudio() {
 
   return (
     <section className="mt-6" data-testid="post-studio">
+      {paidBanner}
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Pōstify</p>
           <h2 className="mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
         </div>
-        {outOfBeta ? <GetTokens beta={beta} /> : <UploadEpisode onQueued={queued} beta={beta} />}
+        <div className="flex flex-wrap items-center gap-2">
+          <TokenBalance beta={beta} />
+          {!outOfBeta && <UploadEpisode onQueued={queued} beta={beta} />}
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,17rem)]">
