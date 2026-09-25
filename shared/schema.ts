@@ -1833,6 +1833,22 @@ export type SponsorLeadRow = typeof sponsorLeads.$inferSelect;
  * an email. The sponsor asked how many people clicked; this is the answer,
  * with where they clicked from so the answer has shape.
  */
+/**
+ * Pōstify tokens, as a ledger: a purchase is a positive row, an episode spent
+ * is a negative one, and the balance is the sum. `ref` makes each one happen
+ * once — a Stripe session id can arrive by the webhook and by the return page
+ * and still only credit once; an episode is only ever charged once.
+ */
+export const postifyTokens = pgTable("postify_tokens", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  delta: integer("delta").notNull(),
+  reason: text("reason").notNull().default(""),
+  ref: text("ref").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (t) => [uniqueIndex("postify_tokens_ref_idx").on(t.ref), index("postify_tokens_email_idx").on(t.email)]);
+export type PostifyTokenRow = typeof postifyTokens.$inferSelect;
+
 export const sponsorClicks = pgTable("sponsor_clicks", {
   id: serial("id").primaryKey(),
   sponsorId: integer("sponsor_id").notNull(),

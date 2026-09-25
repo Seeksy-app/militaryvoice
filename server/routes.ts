@@ -111,6 +111,8 @@ import { waitUntil } from "@vercel/functions";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
+import { createTokenCheckout, readPaidSession, paidFromWebhook, stripeReady } from "./stripe.js";
+import { EPISODE_TOKENS } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   publishPhoto,
@@ -5384,7 +5386,21 @@ export function registerRoutes(app: Express): void {
     const e = email.trim().toLowerCase();
     const unlimited = postTesters().has(e) || (await storage.isAdminEmail(e));
     const used = (await storage.listRecordingsByEmail(e)).filter((r) => r.postifyBeta).length;
-    return { unlimited, used, limit: BETA_EPISODES(), maxMinutes: Math.round(BETA_MAX_SEC() / 60), left: unlimited ? Infinity : Math.max(0, BETA_EPISODES() - used) };
+    const tokens = await storage.tokenBalance(e);
+    return { unlimited, used, tokens, limit: BETA_EPISODES(), maxMinutes: Math.round(BETA_MAX_SEC() / 60), left: unlimited ? Infinity : Math.max(0, BETA_EPISODES() - used) };
+  }
+  const NEED_TOKENS = `Your free beta episode is used. An episode is ${EPISODE_TOKENS} tokens — get some from the Pōstify page.`;
+  /**
+   * How an episode gets paid for: free (the beta episode), tokens, or not at
+   * all. Tokens are taken when it's queued, once per recording (the ledger ref
+   * is the recording), so "Try again" after a failure costs nothing more.
+   */
+  async function payForEpisode(email: string, rec: { id: number; title: string }, allowance: Awaited<ReturnType<typeof postifyAllowance>>): Promise<"free" | "tokens" | "no"> {
+    if (allowance.unlimited || allowance.left > 0) return "free";
+    if (await storage.hasTokenRef(`episode:${rec.id}`)) return "tokens";
+    if (allowance.tokens < EPISODE_TOKENS) return "no";
+    await storage.addTokens({ email, delta: -EPISODE_TOKENS, reason: `Pōstify: ${rec.title || "episode"}`.slice(0, 200), ref: `episode:${rec.id}` });
+    return "tokens";
   }
   async function canPost(_email: string): Promise<boolean> {
     return true;
@@ -5392,7 +5408,44 @@ export function registerRoutes(app: Express): void {
   app.get("/api/host/features", requireHostSession, async (req, res) => {
     noStore(res);
     const a = await postifyAllowance(getSessionEmail(req) ?? "");
-    res.json({ post: true, beta: { unlimited: a.unlimited, used: a.used, limit: a.limit, left: a.unlimited ? null : a.left, maxMinutes: a.maxMinutes } });
+    res.json({ post: true, beta: { unlimited: a.unlimited, used: a.used, limit: a.limit, left: a.unlimited ? null : a.left, maxMinutes: a.maxMinutes, tokens: a.tokens, episodeTokens: EPISODE_TOKENS, payments: stripeReady() } });
+  });
+
+  // ---- Pōstify tokens: Stripe Checkout ---------------------------------------
+
+  app.post("/api/host/tokens/checkout", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    if (!stripeReady()) return res.status(503).json({ message: "Payments aren't switched on yet. Try again soon." });
+    const origin = (process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+    try {
+      res.json({ url: await createTokenCheckout({ email, pack: String(req.body?.pack ?? ""), origin }) });
+    } catch (err: any) {
+      console.error("Stripe checkout failed:", err?.message);
+      res.status(502).json({ message: "Checkout didn't open. Try again in a moment." });
+    }
+  });
+
+  /** Back from Stripe: read the session from Stripe itself and credit it (once). */
+  app.post("/api/host/tokens/confirm", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    try {
+      const paid = await readPaidSession(String(req.body?.sessionId ?? ""));
+      if (!paid || paid.email !== email) return res.status(404).json({ message: "We couldn't find that payment." });
+      const credited = await storage.addTokens({ email, delta: paid.tokens, reason: `Bought ${paid.tokens} tokens`, ref: `stripe:${paid.sessionId}` });
+      res.json({ credited, tokens: paid.tokens, balance: await storage.tokenBalance(email) });
+    } catch (err: any) {
+      console.error("Stripe confirm failed:", err?.message);
+      res.status(502).json({ message: "We couldn't check that payment just now. Refresh in a moment." });
+    }
+  });
+
+  /** For someone who pays and closes the tab before coming back. */
+  app.post("/api/webhooks/stripe", async (req, res) => {
+    const paid = paidFromWebhook((req as any).rawBody as Buffer | undefined, req.get("stripe-signature") ?? "");
+    if (paid === "bad-signature") return res.status(401).json({ message: "Unsigned." });
+    if (paid) await storage.addTokens({ email: paid.email, delta: paid.tokens, reason: `Bought ${paid.tokens} tokens`, ref: `stripe:${paid.sessionId}` });
+    res.json({ received: true });
   });
 
   /**
@@ -5409,7 +5462,7 @@ export function registerRoutes(app: Express): void {
     if (durationSec > 3 * 3600) return res.status(400).json({ message: "Episodes up to three hours, please." });
     const allowance = await postifyAllowance(email);
     if (!allowance.unlimited) {
-      if (allowance.left <= 0) return res.status(403).json({ message: "Your free beta episode is used. Tell us you'd like more and we'll be in touch." });
+      if (allowance.left <= 0 && allowance.tokens < EPISODE_TOKENS) return res.status(402).json({ message: NEED_TOKENS });
       if (durationSec > BETA_MAX_SEC()) return res.status(400).json({ message: `The beta takes episodes up to ${allowance.maxMinutes} minutes.` });
     }
     // A few in flight at once is plenty; this spends real money per minute.
@@ -5418,7 +5471,9 @@ export function registerRoutes(app: Express): void {
       return res.status(429).json({ message: "You have three episodes being clipped already. Try again when one finishes." });
     }
     const title = String(req.body?.title ?? "").trim().slice(0, 140) || String(req.body?.fileName ?? "Episode").replace(/\.[a-z0-9]+$/i, "").slice(0, 140);
-    const rec = await storage.createUploadedRecording({ email, title, storageKey, durationSec, sizeBytes: Number(req.body?.sizeBytes) || 0 });
+    const free = allowance.unlimited || allowance.left > 0;
+    const rec = await storage.createUploadedRecording({ email, title, storageKey, durationSec, sizeBytes: Number(req.body?.sizeBytes) || 0, free });
+    if (!free) await payForEpisode(email, rec, allowance);
     res.status(201).json({ id: rec.id });
   });
 
@@ -5435,11 +5490,10 @@ export function registerRoutes(app: Express): void {
     if (rec.clipStatus === "done") return res.status(409).json({ message: "Clips are already made for this one." });
     if (!rec.postifyBeta) {
       const allowance = await postifyAllowance(email);
-      if (!allowance.unlimited) {
-        if (allowance.left <= 0) return res.status(403).json({ message: "Your free beta episode is used. Tell us you'd like more and we'll be in touch." });
-        if (rec.durationSec > BETA_MAX_SEC()) return res.status(400).json({ message: `The beta takes episodes up to ${allowance.maxMinutes} minutes.` });
-      }
-      await storage.markPostifyBeta(rec.id);
+      if (!allowance.unlimited && rec.durationSec > BETA_MAX_SEC()) return res.status(400).json({ message: `The beta takes episodes up to ${allowance.maxMinutes} minutes.` });
+      const paid = await payForEpisode(email, rec, allowance);
+      if (paid === "no") return res.status(402).json({ message: NEED_TOKENS });
+      if (paid === "free") await storage.markPostifyBeta(rec.id);
     }
     await storage.setClipStatus(rec.id, "queued", "");
     res.json({ ok: true });

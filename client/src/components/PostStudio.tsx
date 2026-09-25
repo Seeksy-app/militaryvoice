@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { TOKEN_PACKS } from "@/pages/Pricing";
+import { TOKEN_PACKS } from "@shared/tokens";
+import { startTokenCheckout } from "@/lib/tokens";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
@@ -168,8 +169,59 @@ function PipelineRow({ icon: Icon, title, detail, state }: { icon: typeof Check;
   );
 }
 
-/** The last card in the clips: more from this episode, with the token pricing. */
-function GenerateMore() {
+/** The token packs, bought straight from Pōstify through Stripe Checkout. */
+function TokensDialog({ open, onOpenChange, beta }: { open: boolean; onOpenChange: (v: boolean) => void; beta?: Beta }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  const buy = async (key: string) => {
+    setBusy(key);
+    try {
+      await startTokenCheckout(key);
+    } catch (e) {
+      toast({ title: "Checkout didn't open", description: (e as Error).message, variant: "destructive" });
+      setBusy(null);
+    }
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00]">Beta pricing</p>
+          <DialogTitle className="text-2xl">More episodes with tokens</DialogTitle>
+          <DialogDescription>
+            An episode is {beta?.episodeTokens ?? 5} tokens: its clips, cut three ways with captions, and its clean episode.
+            {beta && beta.tokens > 0 ? ` You have ${beta.tokens}.` : ""}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {TOKEN_PACKS.map((p) => {
+            const popular = "popular" in p && p.popular;
+            return (
+              <button
+                key={p.key}
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void buy(p.key)}
+                className={`rounded-xl border p-3 text-center transition-colors hover:border-[#053877] hover:bg-[#053877]/[0.06] disabled:opacity-60 ${popular ? "border-[#053877] bg-[#053877]/[0.04]" : "border-border"}`}
+                data-testid={`buy-${p.key}`}
+              >
+                <p className="text-xs font-semibold text-muted-foreground">{p.tokens} tokens</p>
+                <p className="mt-1 text-2xl font-bold text-foreground">{busy === p.key ? <Loader2 className="mx-auto h-7 w-7 animate-spin" /> : `$${p.price}`}</p>
+                <p className="text-[11px] text-muted-foreground">${(p.price / p.tokens).toFixed(2)} each</p>
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-center text-xs text-muted-foreground">
+          Secure checkout by Stripe. <a href="/pricing" className="underline underline-offset-2 hover:text-foreground">What a token buys</a>
+        </p>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** The last card in the clips: more episodes, with the token pricing. */
+function GenerateMore({ beta }: { beta?: Beta }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -181,29 +233,9 @@ function GenerateMore() {
       >
         <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Sparkles className="h-6 w-6" /></span>
         <span className="text-base font-semibold text-foreground">Generate more</span>
-        <span className="max-w-[14rem] text-sm text-muted-foreground">More moments from this episode, or clips from your next one.</span>
+        <span className="max-w-[14rem] text-sm text-muted-foreground">Clips and a clean episode from your next one.</span>
       </button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00]">Beta pricing</p>
-            <DialogTitle className="text-2xl">More clips with tokens</DialogTitle>
-            <DialogDescription>One token is one clip, cut three ways with captions, or one clean episode.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {TOKEN_PACKS.map((p) => (
-              <div key={p.key} className={`rounded-xl border p-3 text-center ${"popular" in p && p.popular ? "border-[#053877] bg-[#053877]/[0.04]" : "border-border"}`}>
-                <p className="text-xs font-semibold text-muted-foreground">{p.tokens} tokens</p>
-                <p className="mt-1 text-2xl font-bold text-foreground">${p.price}</p>
-                <p className="text-[11px] text-muted-foreground">${(p.price / p.tokens).toFixed(2)} each</p>
-              </div>
-            ))}
-          </div>
-          <Button asChild className="mt-2 w-full gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">
-            <a href="/pricing">See pricing and get tokens</a>
-          </Button>
-        </DialogContent>
-      </Dialog>
+      <TokensDialog open={open} onOpenChange={setOpen} beta={beta} />
     </>
   );
 }
@@ -298,31 +330,18 @@ function putWithProgress(url: string, file: File, onProgress: (pct: number) => v
   });
 }
 
-interface Beta { unlimited: boolean; used: number; limit: number; left: number | null; maxMinutes: number }
+interface Beta { unlimited: boolean; used: number; limit: number; left: number | null; maxMinutes: number; tokens: number; episodeTokens: number; payments: boolean }
 
-/** Once the free beta episode is used: say so, and let them ask for more. */
-function WantMore() {
-  const { toast } = useToast();
-  const [asked, setAsked] = useState(false);
-  return asked ? (
-    <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400"><Check className="h-4 w-4" /> You're on the list</span>
-  ) : (
-    <Button
-      variant="outline"
-      className="gap-2 rounded-full"
-      onClick={async () => {
-        try {
-          await apiRequest("POST", "/api/host/pro-interest", { feature: "postify" });
-          setAsked(true);
-          toast({ title: "Noted — you're on the list", description: "We'll tell you first when more episodes open up." });
-        } catch {
-          toast({ title: "That didn't go through", description: "Try again in a moment.", variant: "destructive" });
-        }
-      }}
-      data-testid="post-want-more"
-    >
-      <Sparkles className="h-4 w-4" /> Want more? Tell us
-    </Button>
+/** Out of free episodes and tokens: buy some. */
+function GetTokens({ beta }: { beta?: Beta }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button onClick={() => setOpen(true)} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-get-tokens">
+        <Sparkles className="h-4 w-4" /> Get tokens
+      </Button>
+      <TokensDialog open={open} onOpenChange={setOpen} beta={beta} />
+    </>
   );
 }
 
@@ -371,7 +390,7 @@ function UploadEpisode({ onQueued, variant = "button", beta }: { onQueued: (id: 
         <Button onClick={() => input.current?.click()} disabled={pct !== null} className="mt-4 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-upload">
           {pct === null ? <Upload className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />} {label}
         </Button>
-        <p className="mt-2 text-xs text-muted-foreground">MP4 or MOV, up to 2GB{beta && !beta.unlimited ? ` and ${beta.maxMinutes} minutes · 1 free episode in the beta` : ""}.</p>
+        <p className="mt-2 text-xs text-muted-foreground">MP4 or MOV, up to 2GB{beta && !beta.unlimited ? ` and ${beta.maxMinutes} minutes · ${(beta.left ?? 0) > 0 ? "1 free episode in the beta" : `${beta.episodeTokens} tokens an episode`}` : ""}.</p>
       </div>
     );
   }
@@ -439,12 +458,31 @@ export function PostStudio() {
   });
 
   const beta = features.data?.beta;
-  const outOfBeta = Boolean(beta && !beta.unlimited && (beta.left ?? 1) <= 0);
+  const freeLeft = Boolean(beta && (beta.unlimited || (beta.left ?? 1) > 0));
+  const payWithTokens = Boolean(beta && !freeLeft && beta.tokens >= beta.episodeTokens);
+  const outOfBeta = Boolean(beta && !freeLeft && !payWithTokens);
   const betaBadge = beta && !beta.unlimited ? (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F]/15 px-2.5 py-1 text-xs font-semibold text-[#8a5a00] dark:text-[#F0A71F]" data-testid="post-beta">
-      Beta · {outOfBeta ? "free episode used" : `${beta.left} free episode${beta.left === 1 ? "" : "s"}`}
+      Beta · {freeLeft ? `${beta.left} free episode${beta.left === 1 ? "" : "s"}` : beta.tokens > 0 ? `${beta.tokens} token${beta.tokens === 1 ? "" : "s"}` : "free episode used"}
     </span>
   ) : null;
+
+  // Back from Stripe Checkout: credit the tokens (the server reads the payment from Stripe).
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const paid = url.searchParams.get("paid");
+    if (!paid) return;
+    url.searchParams.delete("paid");
+    window.history.replaceState(null, "", url.pathname + url.search);
+    apiRequest("POST", "/api/host/tokens/confirm", { sessionId: paid })
+      .then((r) => r.json())
+      .then((d: { tokens: number; balance: number }) => {
+        toast({ title: `${d.tokens} tokens added`, description: `You have ${d.balance}. An episode is ${beta?.episodeTokens ?? 5}.` });
+        void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
+      })
+      .catch((e: Error) => toast({ title: "Payment received, tokens pending", description: e.message, variant: "destructive" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const queued = (id: number) => {
     void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
     setSelected(id);
@@ -460,7 +498,7 @@ export function PostStudio() {
       <section className="mt-6" data-testid="post-studio">
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Pōstify</p>
         <h2 className="mb-4 mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
-        {outOfBeta ? <WantMore /> : <UploadEpisode variant="card" onQueued={queued} beta={beta} />}
+        {outOfBeta ? <GetTokens beta={beta} /> : <UploadEpisode variant="card" onQueued={queued} beta={beta} />}
       </section>
     );
   }
@@ -514,7 +552,7 @@ export function PostStudio() {
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Pōstify</p>
           <h2 className="mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
         </div>
-        {outOfBeta ? <WantMore /> : <UploadEpisode onQueued={queued} beta={beta} />}
+        {outOfBeta ? <GetTokens beta={beta} /> : <UploadEpisode onQueued={queued} beta={beta} />}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,17rem)]">
@@ -597,10 +635,10 @@ export function PostStudio() {
             ) : running ? (
               <Button disabled className="gap-2 rounded-full"><Loader2 className="h-4 w-4 animate-spin" /> {pct}%</Button>
             ) : outOfBeta && !rec.postifyBeta ? (
-              <WantMore />
+              <GetTokens beta={beta} />
             ) : (
               <Button onClick={() => start.mutate(rec.id)} disabled={start.isPending} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-start">
-                <Scissors className="h-4 w-4" /> {failed ? "Try again" : "Make clips"}
+                <Scissors className="h-4 w-4" /> {failed ? "Try again" : payWithTokens && !rec.postifyBeta ? `Make clips · ${beta?.episodeTokens} tokens` : "Make clips"}
               </Button>
             )}
           </div>
@@ -657,7 +695,7 @@ export function PostStudio() {
             {done
               ? [
                   ...mine.map((c) => <ClipCard key={c.id} c={c} onPreview={() => setPreview({ kind: "clip", url: c.verticalUrl || c.url })} />),
-                  <GenerateMore key="more" />,
+                  <GenerateMore key="more" beta={beta} />,
                 ]
               : moments.map((m, i) => {
                   const ready = i < readyN;

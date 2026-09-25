@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -791,8 +791,12 @@ export interface IStorage {
   setClean(recordingId: number, clean: string): Promise<void>;
   claimCleanJob(): Promise<RecordingRow | undefined>;
   markPostifyBeta(recordingId: number): Promise<void>;
+  tokenBalance(email: string): Promise<number>;
+  /** False when that ref has already been recorded (so nothing changed). */
+  addTokens(v: { email: string; delta: number; reason: string; ref: string }): Promise<boolean>;
   saveCleanCopy(source: RecordingRow, videoKey: string, durationSec: number): Promise<RecordingRow>;
-  createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow>;
+  createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number; free: boolean }): Promise<RecordingRow>;
+  hasTokenRef(ref: string): Promise<boolean>;
   claimClipJob(): Promise<RecordingRow | undefined>;
   appendTranscript(studioId: number, eventId: number, lines: { speaker: string; text: string; startMs: number; endMs: number }[]): Promise<number>;
   transcriptBetween(studioId: number, startMs: number, endMs: number): Promise<TranscriptLineRow[]>;
@@ -1836,12 +1840,37 @@ class DatabaseStorage implements IStorage {
     return row;
   }
 
+  async hasTokenRef(ref: string): Promise<boolean> {
+    await ready();
+    const [row] = await db.select({ id: postifyTokens.id }).from(postifyTokens).where(eq(postifyTokens.ref, ref)).limit(1);
+    return Boolean(row);
+  }
+
+  async tokenBalance(email: string): Promise<number> {
+    await ready();
+    const [row] = await db
+      .select({ n: sqlExpr<number>`coalesce(sum(${postifyTokens.delta}), 0)::int` })
+      .from(postifyTokens)
+      .where(eq(postifyTokens.email, email.trim().toLowerCase()));
+    return Number(row?.n ?? 0);
+  }
+
+  async addTokens(v: { email: string; delta: number; reason: string; ref: string }): Promise<boolean> {
+    await ready();
+    const rows = await db
+      .insert(postifyTokens)
+      .values({ email: v.email.trim().toLowerCase(), delta: v.delta, reason: v.reason.slice(0, 200), ref: v.ref.slice(0, 200), createdAt: new Date().toISOString() })
+      .onConflictDoNothing()
+      .returning({ id: postifyTokens.id });
+    return rows.length > 0;
+  }
+
   async markPostifyBeta(recordingId: number): Promise<void> {
     await ready();
     await db.update(recordings).set({ postifyBeta: true }).where(eq(recordings.id, recordingId));
   }
 
-  async createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow> {
+  async createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number; free: boolean }): Promise<RecordingRow> {
     await ready();
     const now = new Date().toISOString();
     const [row] = await db
@@ -1860,7 +1889,8 @@ class DatabaseStorage implements IStorage {
         startedAt: now,
         endedAt: now,
         clipStatus: "queued",
-        postifyBeta: true,
+        // Counts as the free beta episode only when it is one; paid ones are on the token ledger.
+        postifyBeta: v.free,
       })
       .returning();
     return row;
