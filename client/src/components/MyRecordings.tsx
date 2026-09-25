@@ -5,8 +5,9 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PostDialog } from "@/components/PostDialog";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 import type { RecordingRow } from "@shared/schema";
-import { Download, Loader2, MoreHorizontal, Play, Share2, Wand2 } from "lucide-react";
+import { Download, Loader2, MoreHorizontal, Play, Share2, Trash2, Wand2 } from "lucide-react";
 
 // A podcaster's own sessions. The studio writes them; nothing here is uploaded
 // by hand. The bucket is private, so every download is a fresh signed link.
@@ -43,6 +44,7 @@ export function MyRecordings({
 }) {
   const [publishing, setPublishing] = useState<RecordingRow | null>(null);
   const [playing, setPlaying] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState<RecordingRow | null>(null);
   const { toast } = useToast();
   const { data: all, isLoading } = useQuery<RecordingRow[]>({
     queryKey: ["/api/host/recordings"],
@@ -129,6 +131,12 @@ export function MyRecordings({
                     <DropdownMenuItem onSelect={() => setPublishing(r)} className="gap-2" data-testid={`button-publish-recording-${r.id}`}>
                       <Share2 className="h-4 w-4" /> Post it
                     </DropdownMenuItem>
+                    {/* Uploads and Pōstify's copies; a studio session is the event's too. */}
+                    {(r.egressId.startsWith("UPLOAD_") || r.egressId.startsWith("CLEAN_")) && (
+                      <DropdownMenuItem onSelect={() => setDeleting(r)} className="gap-2 text-destructive focus:text-destructive" data-testid={`button-delete-recording-${r.id}`}>
+                        <Trash2 className="h-4 w-4" /> Delete
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -138,6 +146,13 @@ export function MyRecordings({
       </ul>
 
       <PostDialog target={publishing ? { kind: "recording", id: publishing.id, title: publishing.title } : null} onClose={() => setPublishing(null)} />
+      <ConfirmDelete
+        open={!!deleting}
+        onOpenChange={(v) => !v && setDeleting(null)}
+        title={`Delete "${deleting?.title || "this recording"}"?`}
+        description={deleting?.egressId.startsWith("CLEAN_") ? "It leaves your Library. The original episode isn't touched." : "The video and any clips made from it are deleted for good."}
+        url={`/api/host/recordings/${deleting?.id}`}
+      />
     </section>
   );
 }

@@ -10,10 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { startPlanCheckout, openBillingPortal } from "@/lib/tokens";
 import { PostDialog } from "@/components/PostDialog";
+import { durationOf, putWithProgress } from "@/lib/upload";
+import { UploadRecording } from "@/components/UploadRecording";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy } from "lucide-react";
+import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -666,6 +669,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const updating = c.editStatus === "queued" || c.editStatus === "running";
   // A clip marked in the Viewer has no files until it's made.
   const making = updating && !c.url && !c.verticalUrl && !c.squareUrl;
@@ -720,6 +724,9 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
           <Pill tip="Post it to your accounts, now or later." onClick={() => setPosting(true)}>
             <Send className="h-3 w-3" /> Post it
           </Pill>
+          <Pill tip="Delete this clip." onClick={() => setDeleting(true)}>
+            <Trash2 className="h-3 w-3" /> Delete
+          </Pill>
           {!updating && (
             <Pill tip="Change the title and the gold line under it. All three shapes are remade." onClick={() => setEditing(true)}>
               <Pencil className="h-3 w-3" /> Edit text
@@ -734,36 +741,13 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
       </div>
     </div>
     <EditTextDialog c={c} open={editing} onOpenChange={setEditing} />
+    <ConfirmDelete open={deleting} onOpenChange={setDeleting} title={`Delete "${c.title}"?`} description="All its shapes go for good. The episode isn't touched." url={`/api/host/clips/${c.id}`} />
     <PostDialog
       target={posting ? { kind: "clip", id: c.id, title: c.title, caption: c.caption, shapes: ([["vertical", c.verticalUrl], ["square", c.squareUrl], ["wide", c.url]] as const).filter(([, u]) => u).map(([s]) => s) } : null}
       onClose={() => setPosting(false)}
     />
     </>
   );
-}
-
-/** How long a video runs, read in the browser before it's sent. */
-export function durationOf(file: File): Promise<number> {
-  return new Promise((resolve) => {
-    const v = document.createElement("video");
-    v.preload = "metadata";
-    v.onloadedmetadata = () => { URL.revokeObjectURL(v.src); resolve(Number.isFinite(v.duration) ? v.duration : 0); };
-    v.onerror = () => resolve(0);
-    v.src = URL.createObjectURL(file);
-  });
-}
-
-/** PUT with progress — fetch can't report upload progress, and an episode is hundreds of MB. */
-export function putWithProgress(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("content-type", file.type || "video/mp4");
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
-    xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`Upload refused (${xhr.status})`)));
-    xhr.onerror = () => reject(new Error("The upload was interrupted. Check your connection and try again."));
-    xhr.send(file);
-  });
 }
 
 interface Beta { unlimited: boolean; used: number; limit: number; left: number | null; maxMinutes: number; tokens: number; payments: boolean }
@@ -834,7 +818,10 @@ export function PostStudio() {
 
   // Saved clean copies are recordings (they live in Recordings), not episodes to post-produce again.
   const list = useMemo(() => (recs.data ?? []).filter((r) => r.status === "Ready" && !r.egressId.startsWith("CLEAN_")).sort((a, b) => b.id - a.id), [recs.data]);
-  const rec = list.find((r) => r.id === selected) ?? list[0];
+  // Opens on what you picked (or came here with), else on anything still
+  // working so its progress shows; otherwise empty, ready for an episode.
+  // -1 = "Add an episode": empty on purpose.
+  const rec = selected === -1 ? undefined : list.find((r) => r.id === selected) ?? list.find((r) => r.clipStatus === "queued" || r.clipStatus === "running");
   const p = progressOf(rec);
   const clean = cleanOf(rec);
   const savedCopy = rec ? (recs.data ?? []).find((r) => r.egressId === `CLEAN_${rec.id}`) ?? null : null;
@@ -911,6 +898,29 @@ export function PostStudio() {
   // In testing: only for the accounts the server says.
   if (!features.data?.post) return null;
 
+  const episodeList = (
+      <div className="rounded-2xl border border-border bg-card p-3">
+        <p className="px-1.5 pb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Pick an episode</p>
+        <ul className="flex max-h-72 flex-col gap-1.5 overflow-y-auto lg:max-h-[22rem]">
+          {list.map((r) => {
+            const on = r.id === rec?.id;
+            const tag = r.clipStatus === "done" ? "Clips ready" : r.clipStatus === "running" ? "Working" : r.clipStatus === "queued" ? "Queued" : r.clipStatus === "failed" ? "Stopped" : "Not clipped";
+            return (
+              <li key={r.id}>
+                <button type="button" onClick={() => setSelected(r.id)} className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.05]" : "border-transparent hover:bg-muted/60"}`}>
+                  <span className="block truncate text-sm font-medium text-foreground">{r.title || "Session"}</span>
+                  <span className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>{stamp(r.durationSec)} · {new Date(r.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                    <span className={r.clipStatus === "done" ? "text-emerald-600 dark:text-emerald-400" : r.clipStatus === "running" ? "text-[#b36b00]" : ""}>{tag}</span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+  );
+
   if (!rec) {
     if (recs.isLoading) return null;
     return (
@@ -923,14 +933,17 @@ export function PostStudio() {
           </div>
           <CreditBalance beta={beta} plan={plan} />
         </div>
-        {/* Episodes go into the Library; Pōstify works on what's there. */}
-        <div className="rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] p-8 text-center">
-          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Upload className="h-6 w-6" /></span>
-          <p className="mt-3 text-lg font-semibold text-foreground">Start with an episode in your Library</p>
-          <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">Upload a video episode there, or record one in the studio. Then pick it here: we transcribe it, find the moments that stand on their own, and cut each one vertical, square and wide with captions.</p>
-          <Button asChild className="mt-4 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-go-library">
-            <a href="/host/dashboard/library"><Upload className="h-4 w-4" /> Add an episode</a>
-          </Button>
+        {/* Empty Viewer: drop an episode in (it's filed in the Library and picked), or pick one. */}
+        <div className={`grid gap-4 ${list.length ? "lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]" : ""}`}>
+          {list.length > 0 && episodeList}
+          <div className="aspect-video min-h-[16rem]" data-testid="post-viewer-empty">
+            <UploadRecording
+              tall
+              title="Drop an episode here, or click to browse"
+              note={`${list.length ? "Or pick one on the left. " : ""}MP4, MOV or WebM, up to 2GB. It's saved to your Library too.`}
+              onDone={(id) => setSelected(id)}
+            />
+          </div>
         </div>
       </section>
     );
@@ -979,34 +992,14 @@ export function PostStudio() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <CreditBalance beta={beta} plan={plan} />
-          <Button asChild variant="outline" className="gap-2 rounded-full" data-testid="post-go-library">
-            <a href="/host/dashboard/library"><Upload className="h-4 w-4" /> Add an episode</a>
+          <Button variant="outline" onClick={() => setSelected(-1)} className="gap-2 rounded-full" data-testid="post-add-episode">
+            <Upload className="h-4 w-4" /> Add an episode
           </Button>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,17rem)]">
-        {/* Recordings */}
-        <div className="rounded-2xl border border-border bg-card p-3">
-          <p className="px-1.5 pb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Pick an episode</p>
-          <ul className="flex max-h-72 flex-col gap-1.5 overflow-y-auto lg:max-h-[22rem]">
-            {list.map((r) => {
-              const on = r.id === rec.id;
-              const tag = r.clipStatus === "done" ? "Clips ready" : r.clipStatus === "running" ? "Working" : r.clipStatus === "queued" ? "Queued" : r.clipStatus === "failed" ? "Stopped" : "Not clipped";
-              return (
-                <li key={r.id}>
-                  <button type="button" onClick={() => setSelected(r.id)} className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.05]" : "border-transparent hover:bg-muted/60"}`}>
-                    <span className="block truncate text-sm font-medium text-foreground">{r.title || "Session"}</span>
-                    <span className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                      <span>{stamp(r.durationSec)} · {new Date(r.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
-                      <span className={r.clipStatus === "done" ? "text-emerald-600 dark:text-emerald-400" : r.clipStatus === "running" ? "text-[#b36b00]" : ""}>{tag}</span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+        {episodeList}
 
         {/* Preview */}
         <div className="flex flex-col gap-3">

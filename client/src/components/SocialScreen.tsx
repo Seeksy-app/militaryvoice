@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { PostDialog, type PostTarget } from "@/components/PostDialog";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import type { ClipRow, HostPostRow, RecordingRow, SocialPlatform } from "@shared/schema";
-import { CalendarClock, Check, Film, Link2, Scissors, Send, Share2 } from "lucide-react";
+import { CalendarClock, Check, Film, Link2, Play, Scissors, Send, Share2, Trash2 } from "lucide-react";
 
 /**
  * Social: one place to post anything in the Library or out of Pōstify to the
@@ -14,7 +15,8 @@ import { CalendarClock, Check, Film, Link2, Scissors, Send, Share2 } from "lucid
  */
 export function SocialScreen() {
   const [target, setTarget] = useState<PostTarget | null>(null);
-  const [tab, setTab] = useState<"clips" | "episodes">("clips");
+  const [playing, setPlaying] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState<ClipRow | null>(null);
 
   const social = useQuery<{ configured: boolean; accounts: { platform: SocialPlatform; username?: string; followers?: number }[] }>({
     queryKey: ["/api/host/social"],
@@ -46,7 +48,7 @@ export function SocialScreen() {
       <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
         <Share2 className="h-4 w-4" /> Social
       </h2>
-      <p className="mb-4 max-w-2xl text-sm text-muted-foreground">Post your clips and episodes to your own accounts, now or on a schedule, and see what's gone out.</p>
+      <p className="mb-4 max-w-2xl text-sm text-muted-foreground">Post your clips to your own accounts, now or on a schedule, and see what's gone out. Whole episodes post from your Library.</p>
 
       {/* Where it goes */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3">
@@ -77,59 +79,47 @@ export function SocialScreen() {
         </div>
       )}
 
-      {/* Ready to post */}
-      <div className="mb-3 flex items-center gap-1.5">
-        {([
-          { k: "clips", label: `Clips (${clipList.length})`, icon: Scissors },
-          { k: "episodes", label: `Episodes (${episodes.length})`, icon: Film },
-        ] as const).map((t) => (
-          <button key={t.k} type="button" onClick={() => setTab(t.k)} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium ${tab === t.k ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card hover:border-[#053877]/40"}`} data-testid={`social-tab-${t.k}`}>
-            <t.icon className="h-3.5 w-3.5" /> {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "clips" ? (
-        clipList.length ? (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5">
-            {clipList.map((c) => {
-              const shapes = ([["vertical", c.verticalUrl], ["square", c.squareUrl], ["wide", c.url]] as const).filter(([, u]) => u).map(([s]) => s);
-              const sent = (posts.data ?? []).filter((p) => p.kind === "clip" && p.refId === c.id).length;
-              return (
-                <div key={c.id} className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-                  <div className="relative aspect-[9/16] bg-black">
-                    <video src={`${c.verticalUrl || c.url}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-                    {sent > 0 && <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white"><Check className="h-3 w-3" /> Posted{sent > 1 ? ` ×${sent}` : ""}</span>}
-                  </div>
-                  <div className="flex flex-1 flex-col gap-2 p-3">
-                    <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{c.title}</p>
-                    <Button size="sm" onClick={() => setTarget({ kind: "clip", id: c.id, title: c.title, caption: c.caption, shapes: [...shapes] })} className="mt-auto gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid={`social-post-clip-${c.id}`}>
+      {/* Ready to post: the clips. Whole episodes are posted from the Library. */}
+      <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><Scissors className="h-4 w-4 text-[#053877]" /> Your clips <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{clipList.length}</span></p>
+      {clipList.length ? (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5">
+          {clipList.map((c) => {
+            const shapes = ([["vertical", c.verticalUrl], ["square", c.squareUrl], ["wide", c.url]] as const).filter(([, u]) => u).map(([s]) => s);
+            const src = c.verticalUrl || c.squareUrl || c.url;
+            const sent = (posts.data ?? []).filter((p) => p.kind === "clip" && p.refId === c.id).length;
+            if (!src) return null; // still being made
+            return (
+              <div key={c.id} className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+                <div className="relative aspect-[9/16] bg-black">
+                  {playing === c.id ? (
+                    <video src={src} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
+                  ) : (
+                    <button type="button" onClick={() => setPlaying(c.id)} className="absolute inset-0" aria-label={`Play ${c.title}`} data-testid={`social-play-${c.id}`}>
+                      <video src={`${src}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                      <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+                        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-[#000741] shadow-lg"><Play className="h-5 w-5 fill-current" /></span>
+                      </span>
+                      {sent > 0 && <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white"><Check className="h-3 w-3" /> Posted{sent > 1 ? ` ×${sent}` : ""}</span>}
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col gap-2 p-3">
+                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{c.title}</p>
+                  <div className="mt-auto flex items-center gap-1.5">
+                    <Button size="sm" onClick={() => setTarget({ kind: "clip", id: c.id, title: c.title, caption: c.caption, shapes: [...shapes] })} className="flex-1 gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid={`social-post-clip-${c.id}`}>
                       <Send className="h-3.5 w-3.5" /> Post it
+                    </Button>
+                    <Button size="icon" variant="ghost" onClick={() => setDeleting(c)} className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:text-destructive" aria-label={`Delete ${c.title}`} data-testid={`social-delete-${c.id}`}>
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <Empty text="No clips yet. Pōstify makes them from any episode in your Library." href="/host/dashboard/postify" cta="Open Pōstify" />
-        )
-      ) : episodes.length ? (
-        <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
-          {episodes.map((r) => (
-            <li key={r.id} className="flex items-center gap-3 px-4 py-3">
-              <div className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-lg bg-[#050d26]">
-                <video src={`/api/host/recordings/${r.id}/video#t=8`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
               </div>
-              <p className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{r.title || "Your session"}</p>
-              <Button size="sm" variant="outline" onClick={() => setTarget({ kind: "recording", id: r.id, title: r.title })} className="gap-1.5 rounded-full" data-testid={`social-post-rec-${r.id}`}>
-                <Send className="h-3.5 w-3.5" /> Post it
-              </Button>
-            </li>
-          ))}
-        </ul>
+            );
+          })}
+        </div>
       ) : (
-        <Empty text="Nothing in your Library yet. Upload an episode there, or record one in the studio." href="/host/dashboard/library" cta="Open your Library" />
+        <Empty text="No clips yet. Pōstify makes them from any episode in your Library." href="/host/dashboard/postify" cta="Open Pōstify" />
       )}
 
       {/* History */}
@@ -143,6 +133,7 @@ export function SocialScreen() {
       )}
 
       <PostDialog target={target} onClose={() => setTarget(null)} />
+      <ConfirmDelete open={!!deleting} onOpenChange={(v) => !v && setDeleting(null)} title={`Delete "${deleting?.title ?? "this clip"}"?`} description="All its shapes go for good. Anything already posted stays on your accounts." url={`/api/host/clips/${deleting?.id}`} />
     </section>
   );
 }

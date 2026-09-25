@@ -5462,6 +5462,34 @@ export function registerRoutes(app: Express): void {
     res.status(201).json(await storage.updateClip(clip.id, { editStatus: "queued", editAt: new Date().toISOString() }));
   });
 
+  /**
+   * Delete from the Library. Uploads and Pōstify's own copies (clean,
+   * edited) only: a studio session is the event's recording too, so it stays.
+   * An upload's file goes with it; a clean copy's file is also the clean
+   * episode Pōstify offers on the original, so only the Library entry goes.
+   */
+  app.delete("/api/host/recordings/:id", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
+    const upload = rec.egressId.startsWith("UPLOAD_");
+    if (!upload && !rec.egressId.startsWith("CLEAN_")) return res.status(403).json({ message: "Studio recordings stay with the event, so they can't be deleted here." });
+    if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.status(409).json({ message: "Pōstify is still working on this one." });
+    await storage.deleteRecordingAndClips(rec.id);
+    if (upload && rec.url && !/^https?:\/\//.test(rec.url)) await deleteRecordingObject(rec.url).catch((err) => console.error("Couldn't delete an upload's file:", err));
+    res.json({ ok: true });
+  });
+
+  /** Delete one clip. */
+  app.delete("/api/host/clips/:id", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const clip = await storage.getClip(Number(req.params.id));
+    if (!clip || clip.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such clip." });
+    if (clip.editStatus === "running") return res.status(409).json({ message: "That clip is being made right now. Try again in a minute." });
+    await storage.deleteClip(clip.id);
+    res.json({ ok: true });
+  });
+
   /** "Edit episode": trim, intro, outro — made by the clipper into a new copy in the Library. */
   app.post("/api/host/recordings/:id/episode-edit", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();

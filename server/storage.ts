@@ -814,6 +814,8 @@ export interface IStorage {
   listClipsByEmail(email: string): Promise<ClipRow[]>;
   getClip(id: number): Promise<ClipRow | undefined>;
   deleteClip(id: number): Promise<void>;
+  /** A recording and the clips cut from it. */
+  deleteRecordingAndClips(id: number): Promise<void>;
   addHostPost(v: Omit<HostPostRow, "id" | "createdAt">): Promise<HostPostRow>;
   listHostPosts(email: string): Promise<HostPostRow[]>;
   updateClip(id: number, patch: Partial<ClipRow>): Promise<ClipRow | undefined>;
@@ -2233,6 +2235,12 @@ class DatabaseStorage implements IStorage {
     const { id: _id, ...rest } = v;
     const [row] = await db.insert(clips).values({ ...rest, createdAt: new Date().toISOString() }).returning();
     return row;
+  }
+
+  async deleteRecordingAndClips(id: number): Promise<void> {
+    await ready();
+    await db.delete(clips).where(eq(clips.recordingId, id));
+    await db.delete(recordings).where(eq(recordings.id, id));
   }
 
   async deleteClip(id: number): Promise<void> {
