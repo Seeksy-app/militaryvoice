@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { TOKEN_PACKS } from "@/pages/Pricing";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
@@ -166,6 +168,46 @@ function PipelineRow({ icon: Icon, title, detail, state }: { icon: typeof Check;
   );
 }
 
+/** The last card in the clips: more from this episode, with the token pricing. */
+function GenerateMore() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex min-h-[18rem] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] p-6 text-center transition-colors hover:border-[#053877]/50 hover:bg-[#053877]/[0.06]"
+        data-testid="post-generate-more"
+      >
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Sparkles className="h-6 w-6" /></span>
+        <span className="text-base font-semibold text-foreground">Generate more</span>
+        <span className="max-w-[14rem] text-sm text-muted-foreground">More moments from this episode, or clips from your next one.</span>
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00]">Beta pricing</p>
+            <DialogTitle className="text-2xl">More clips with tokens</DialogTitle>
+            <DialogDescription>One token is one clip, cut three ways with captions, or one clean episode.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 sm:grid-cols-3">
+            {TOKEN_PACKS.map((p) => (
+              <div key={p.key} className={`rounded-xl border p-3 text-center ${"popular" in p && p.popular ? "border-[#053877] bg-[#053877]/[0.04]" : "border-border"}`}>
+                <p className="text-xs font-semibold text-muted-foreground">{p.tokens} tokens</p>
+                <p className="mt-1 text-2xl font-bold text-foreground">${p.price}</p>
+                <p className="text-[11px] text-muted-foreground">${(p.price / p.tokens).toFixed(2)} each</p>
+              </div>
+            ))}
+          </div>
+          <Button asChild className="mt-2 w-full gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">
+            <a href="/pricing">See pricing and get tokens</a>
+          </Button>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 /** One button on a clip, with a hover note on where it works best. */
 function Pill({ tip, children, ...rest }: { tip: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement> & { onClick?: () => void; as?: "button" }) {
   const cls = "inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] font-medium text-foreground hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]";
@@ -188,7 +230,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
     { href: c.url, label: "Wide", tip: "16:9 — best for YouTube, LinkedIn and X." },
   ].filter((f) => f.href);
   return (
-    <div className="group flex w-44 shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm sm:w-48" data-testid={`post-clip-${c.id}`}>
+    <div className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm" data-testid={`post-clip-${c.id}`}>
       <button type="button" onClick={onPreview} className="relative aspect-[9/16] w-full overflow-hidden bg-black" aria-label={`Preview ${c.title}`}>
         {src && <video src={`${src}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />}
         <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
@@ -611,14 +653,17 @@ export function PostStudio() {
             <Scissors className="h-4 w-4 text-[#053877]" /> {done ? "Your clips" : "Clips being cut"}
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{done ? mine.length : `${readyN} of ${moments.length}`}</span>
           </p>
-          <div className="flex gap-3 overflow-x-auto pb-1">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
             {done
-              ? mine.map((c) => <ClipCard key={c.id} c={c} onPreview={() => setPreview({ kind: "clip", url: c.verticalUrl || c.url })} />)
+              ? [
+                  ...mine.map((c) => <ClipCard key={c.id} c={c} onPreview={() => setPreview({ kind: "clip", url: c.verticalUrl || c.url })} />),
+                  <GenerateMore key="more" />,
+                ]
               : moments.map((m, i) => {
                   const ready = i < readyN;
                   const working = !ready && i === readyN;
                   return (
-                    <div key={i} className={`flex w-44 shrink-0 flex-col overflow-hidden rounded-2xl border sm:w-48 ${ready ? "border-emerald-400/60" : "border-border"}`}>
+                    <div key={i} className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border ${ready ? "border-emerald-400/60" : "border-border"}`}>
                       <div className="relative flex aspect-[3/4] items-center justify-center bg-gradient-to-b from-muted/60 to-muted">
                         <span className="absolute left-2 top-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[11px] text-white">{stamp(m.startSec)}–{stamp(m.endSec)}</span>
                         {ready ? <Check className="h-8 w-8 text-emerald-500" /> : working ? <Loader2 className="h-8 w-8 animate-spin text-[#b36b00]" /> : <Clock3 className="h-7 w-7 text-muted-foreground" />}

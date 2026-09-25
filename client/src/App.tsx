@@ -32,6 +32,7 @@ import { PrivacyPolicy, TermsOfService } from "@/pages/Legal";
 import NationalMilitaryPodcastDay from "@/pages/NationalMilitaryPodcastDay";
 import SponsorVFW from "@/pages/SponsorVFW";
 import Sponsor from "@/pages/Sponsor";
+import Pricing from "@/pages/Pricing";
 
 /**
  * Client-side navigation keeps the old scroll position by default. Every
@@ -110,6 +111,7 @@ function AppRouter() {
       <Route path="/national-military-podcast-day">{() => <NationalMilitaryPodcastDay />}</Route>
       {/* Unlisted: a sponsorship proposal delivered by URL, not linked in nav. */}
       <Route path="/sponsor">{() => <Sponsor />}</Route>
+      <Route path="/pricing">{() => <Pricing />}</Route>
       <Route path="/vfw">{() => <SponsorVFW />}</Route>
       {/* Each screen has its own address, so a tab can be linked, bookmarked
           and reached with the back button. /host/dashboard stays the home

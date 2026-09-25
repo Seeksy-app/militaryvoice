@@ -7224,7 +7224,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/host/pro-interest", requireHostSession, async (req, res) => {
     const email = ((req as any).hostEmail as string).toLowerCase().trim();
     const feature = String(req.body?.feature ?? "").trim();
-    if (!["campaigns", "crm", "studio", "postify"].includes(feature)) return res.status(400).json({ message: "Which feature?" });
+    if (!["campaigns", "crm", "studio", "postify", "tokens-10", "tokens-25", "tokens-60"].includes(feature)) return res.status(400).json({ message: "Which feature?" });
     const profile = await storage.getProfileByEmail(email);
     const notes = `Pro interest: ${feature}`;
     const already = (await storage.listPlatformInterest()).some((r) => r.email.toLowerCase() === email && r.notes === notes);
