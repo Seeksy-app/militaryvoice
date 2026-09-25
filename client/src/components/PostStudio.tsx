@@ -4,11 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PLANS, OVERAGE_CAP_CHOICES, episodeCredits, cents, type PlanKey } from "@shared/tokens";
+import { PLANS, CREDIT_PACKS, OVERAGE_CAP_CHOICES, episodeCredits, cents, type PlanKey } from "@shared/tokens";
 import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, type ClipFormat, type ClipOptions, type EpisodeEdit } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { startPlanCheckout, openBillingPortal } from "@/lib/tokens";
+import { startPlanCheckout, openBillingPortal, startTokenCheckout } from "@/lib/tokens";
 import { PostDialog } from "@/components/PostDialog";
 import { durationOf, putWithProgress } from "@/lib/upload";
 import { UploadRecording } from "@/components/UploadRecording";
@@ -378,6 +378,7 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
             <Button variant="outline" onClick={() => void go("portal", openBillingPortal)} disabled={busy !== null} className="w-full gap-2 rounded-full" data-testid="plan-portal">
               {busy === "portal" && <Loader2 className="h-4 w-4 animate-spin" />} Manage billing: card, invoices, cancel
             </Button>
+            <CreditPacks busy={busy} go={go} label="Need more this month? Top up once" />
           </>
         ) : (
           <>
@@ -402,6 +403,7 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
                 );
               })}
             </div>
+            <CreditPacks busy={busy} go={go} label="Or buy credits once, no plan" />
             <ul className="space-y-1 text-xs text-muted-foreground">
               <li><span className="font-semibold text-foreground">Classic captions:</span> 1 credit a clip, every shape included.</li>
               <li><span className="font-semibold text-foreground">Animated captions:</span> 1 credit per shape, per clip.</li>
@@ -412,6 +414,31 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Credits bought once — for anyone who'd rather not subscribe, or a subscriber topping up. */
+function CreditPacks({ busy, go, label }: { busy: string | null; go: (what: string, fn: () => Promise<void>) => Promise<void>; label: string }) {
+  return (
+    <div>
+      <p className="mb-2 text-sm font-medium text-foreground">{label}</p>
+      <div className="grid grid-cols-3 gap-2">
+        {CREDIT_PACKS.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void go(p.key, () => startTokenCheckout(p.key))}
+            className="rounded-xl border border-border p-2.5 text-center transition-colors hover:border-[#053877] hover:bg-[#053877]/[0.05] disabled:opacity-60"
+            data-testid={`pack-${p.key}`}
+          >
+            <p className="text-xs font-semibold text-muted-foreground">{p.tokens} credits</p>
+            <p className="mt-0.5 text-lg font-bold text-foreground">{busy === p.key ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : `$${p.price}`}</p>
+            <p className="text-[10px] text-muted-foreground">{Math.round((p.price / p.tokens) * 100)}¢ each</p>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1052,7 +1079,6 @@ export function PostStudio() {
             {/* The Viewer: Clips, or the whole Episode (clean or original). */}
             {!running && (
               <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
-                <span className="rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/70 backdrop-blur">Viewer</span>
                 <div className="flex gap-1 rounded-full bg-black/60 p-1 text-xs font-semibold backdrop-blur">
                   {(["clips", "episode"] as const).map((v) => (
                     <button key={v} type="button" onClick={() => { setView(v); setPreview(null); }} className={`rounded-full px-3 py-1 capitalize ${view === v ? "bg-white text-[#000741]" : "text-white/80 hover:text-white"}`} data-testid={`viewer-${v}`}>{v}</button>

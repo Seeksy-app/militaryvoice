@@ -4,7 +4,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { startPlanCheckout, startTokenCheckout } from "@/lib/tokens";
-import { PLANS, TEST_PACK, cents, episodeCredits } from "@shared/tokens";
+import { PLANS, CREDIT_PACKS, TEST_PACK, cents, episodeCredits } from "@shared/tokens";
 import { Check, Coins, Scissors, Wand2, Sparkles, Loader2, Gauge } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -78,6 +78,24 @@ export default function Pricing() {
               </div>
             );
           })}
+        </div>
+
+        {/* No subscription: credits bought once. */}
+        <div className="mx-auto mt-10 max-w-3xl">
+          <p className="text-center text-sm font-semibold text-foreground">Rather not subscribe? Buy credits once.</p>
+          <p className="mt-1 text-center text-xs text-muted-foreground">No plan, nothing monthly. They don't run out during the beta.</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            {CREDIT_PACKS.map((p) => (
+              <div key={p.key} className="flex flex-col items-center rounded-2xl border border-border bg-card p-4 text-center" data-testid={`pack-card-${p.key}`}>
+                <p className="text-sm font-semibold text-muted-foreground">{p.tokens} credits</p>
+                <p className="mt-1 text-2xl font-bold text-foreground" style={HEADLINE_FONT}>${p.price}</p>
+                <p className="text-xs text-muted-foreground">{Math.round((p.price / p.tokens) * 100)}¢ a credit · {p.blurb}</p>
+                <Button variant="outline" onClick={() => void go(p.key, () => startTokenCheckout(p.key))} disabled={busy !== null} className="mt-3 w-full gap-2 rounded-full">
+                  {busy === p.key && <Loader2 className="h-4 w-4 animate-spin" />} Buy {p.tokens}
+                </Button>
+              </div>
+            ))}
+          </div>
         </div>
 
         {testing && (

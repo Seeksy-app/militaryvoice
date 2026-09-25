@@ -5877,7 +5877,7 @@ export function registerRoutes(app: Express): void {
     try {
       const paid = await readPaidSession(String(req.body?.sessionId ?? ""));
       if (!paid || paid.email !== email) return res.status(404).json({ message: "We couldn't find that payment." });
-      const credited = await storage.addTokens({ email, delta: paid.tokens, reason: `Bought ${paid.tokens} tokens`, ref: `stripe:${paid.sessionId}` });
+      const credited = await storage.addTokens({ email, delta: paid.tokens, reason: `Bought ${paid.tokens} credits`, ref: `stripe:${paid.sessionId}` });
       res.json({ credited, tokens: paid.tokens, balance: await storage.tokenBalance(email) });
     } catch (err: any) {
       console.error("Stripe confirm failed:", err?.message);

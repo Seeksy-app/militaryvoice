@@ -32,8 +32,19 @@ export function episodeCredits(o: { formats: readonly string[]; captions: "anima
   return 1 + (o.captions === "classic" ? clips : clips * Math.max(1, o.formats.length));
 }
 
+/**
+ * Credits bought once, no plan. A little dearer per credit than a plan (so a
+ * regular show is better off subscribing), still well over what a credit
+ * costs us. They don't run out while the beta lasts.
+ */
+export const CREDIT_PACKS = [
+  { key: "pack-20", tokens: 20, price: 15, blurb: "An episode or two." },
+  { key: "pack-50", tokens: 50, price: 35, blurb: "A season's highlights.", popular: true },
+  { key: "pack-120", tokens: 120, price: 78, blurb: "For a network, or a backlog." },
+] as const;
+
 /** Not on the page: /pricing?test shows it, for trying a real payment for $1. */
 export const TEST_PACK = { key: "tokens-2", tokens: 2, price: 1, blurb: "Test pack: a real $1 payment." } as const;
-export const tokenPack = (key: string) => (key === TEST_PACK.key ? TEST_PACK : undefined);
+export const tokenPack = (key: string) => [...CREDIT_PACKS, TEST_PACK].find((p) => p.key === key);
 
 export const cents = (n: number) => (n % 100 === 0 ? `$${n / 100}` : `$${(n / 100).toFixed(2)}`);
