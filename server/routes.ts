@@ -5160,7 +5160,8 @@ export function registerRoutes(app: Express): void {
     const safe = String(req.body?.name ?? "clean.mp4").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-90);
     const key = `clean/${Date.now()}-${crypto.randomBytes(5).toString("hex")}-${safe}`;
     try {
-      res.json({ uploadUrl: signedRecordingUpload(key, 6 * 3600), storageKey: key });
+      // readUrl: for a file somebody else fetches next (a clip's source cut, for Creatomate).
+      res.json({ uploadUrl: signedRecordingUpload(key, 6 * 3600), storageKey: key, readUrl: await signedRecordingUrl(key, 6 * 3600) });
     } catch (err) {
       console.error("Could not sign a clean-episode upload:", err);
       res.status(502).json({ message: "Couldn't start the upload." });
