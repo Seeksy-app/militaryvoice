@@ -43,6 +43,7 @@ import {
   clipResultSchema,
   CLIP_STAGES,
   parseClipOptions,
+  toCleanTime,
   type EpisodeEdit,
   type ClipProgress,
   type CleanResult,
@@ -113,6 +114,7 @@ import { waitUntil } from "@vercel/functions";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
+import { draftYoutubeDescription, chaptersFrom } from "./youtubeDraft.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, type PlanState } from "./stripe.js";
 import { episodeCredits, planOf, PLANS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -2811,6 +2813,51 @@ export function registerRoutes(app: Express): void {
     res.redirect(302, await signedRecordingUrl(row.url, 6 * 3600));
   });
 
+  /** YouTube's settings from a Post it body; a thumbnail is one of their uploads, signed for Upload-Post to fetch. */
+  async function youtubeFrom(body: any) {
+    const y = body?.youtube;
+    if (!y || typeof y !== "object") return undefined;
+    const thumbKey = typeof y.thumbnailKey === "string" && /^show-assets\/[\w.-]+$/.test(y.thumbnailKey) ? y.thumbnailKey : "";
+    return {
+      title: String(y.title ?? "").trim().slice(0, 100) || undefined,
+      description: String(y.description ?? "").trim().slice(0, 5000) || undefined,
+      privacyStatus: (["public", "unlisted", "private"].includes(y.privacyStatus) ? y.privacyStatus : "public") as "public" | "unlisted" | "private",
+      tags: Array.isArray(y.tags) ? y.tags.map((t: unknown) => String(t).trim()).filter(Boolean) : undefined,
+      thumbnailUrl: thumbKey ? await signedRecordingUrl(thumbKey, 7 * 24 * 3600) : undefined,
+      madeForKids: y.madeForKids === true,
+      notifySubscribers: y.notifySubscribers !== false,
+    };
+  }
+
+  /**
+   * A YouTube description for a Library video: drafted from the episode's
+   * moments, with chapters at their times in this video — exact on a clean
+   * copy made since the clean episode kept its cut list, scaled before that.
+   * An edited copy (trims, intro) gets the description without chapters.
+   */
+  app.get("/api/host/recordings/:id/youtube-draft", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
+    const m = rec.egressId.match(/^CLEAN_(EDIT_)?(\d+)/);
+    const original = m ? await storage.getRecording(Number(m[2])) : rec;
+    if (!original) return res.status(404).json({ message: "No such recording." });
+    const clips = (await storage.listClips(original.id)).filter((c) => c.source !== "clean");
+    let clean: CleanResult | null = null;
+    try { clean = original.clean ? JSON.parse(original.clean) : null; } catch { clean = null; }
+    const place = (t: number) => (m && !m[1] && clean ? toCleanTime(t, clean) : t);
+    const chapters = m?.[1] ? "" : chaptersFrom(clips.map((c) => ({ title: c.title, at: place(c.startSec) })), rec.durationSec);
+    const show = await showNameFor(original);
+    const description = await draftYoutubeDescription({ show, title: original.title, clips });
+    res.json({
+      title: original.title.slice(0, 100),
+      description: chapters ? `${description}\n\nChapters\n${chapters}` : description,
+      chapters: Boolean(chapters),
+      tags: [show, "military podcast", "veteran podcast"].filter(Boolean),
+    });
+  });
+
   /** "Post later": an ISO time from the body, "past" when it's already gone, or "" for now. */
   function scheduleFrom(body: any): string | "past" {
     const raw = String(body?.scheduledAt ?? "").trim();
@@ -2839,7 +2886,7 @@ export function registerRoutes(app: Express): void {
     const title = String(req.body?.title ?? clip.title).trim() || clip.title;
     const description = String(req.body?.description ?? "").trim();
     try {
-      await publishVideo({ username: profile.uploadPostUsername, platforms, videoUrl, title, description: description || undefined, scheduledDate: when || undefined, timezone: when ? String(req.body?.timezone ?? "") || undefined : undefined });
+      await publishVideo({ username: profile.uploadPostUsername, platforms, videoUrl, title, description: description || undefined, scheduledDate: when || undefined, timezone: when ? String(req.body?.timezone ?? "") || undefined : undefined, youtube: await youtubeFrom(req.body) });
       await storage.addHostPost({ email, kind: "clip", refId: clip.id, shape, title, description, platforms: platforms.join(","), scheduledAt: when || "", status: when ? "scheduled" : "sent", error: "" });
       res.json({ ok: true, scheduled: Boolean(when) });
     } catch (err: any) {
@@ -2888,7 +2935,7 @@ export function registerRoutes(app: Express): void {
       const videoUrl = await signedRecordingUrl(row.url, when ? 7 * 24 * 3600 : 21_600);
       const title = String(req.body?.title ?? row.title ?? "").trim() || row.title || "My session";
       const description = String(req.body?.description ?? "").trim();
-      await publishVideo({ username, platforms, videoUrl, title, description: description || undefined, scheduledDate: when || undefined, timezone: when ? String(req.body?.timezone ?? "") || undefined : undefined });
+      await publishVideo({ username, platforms, videoUrl, title, description: description || undefined, scheduledDate: when || undefined, timezone: when ? String(req.body?.timezone ?? "") || undefined : undefined, youtube: await youtubeFrom(req.body) });
       await storage.addHostPost({ email, kind: "recording", refId: row.id, shape: "", title, description, platforms: platforms.join(","), scheduledAt: when || "", status: when ? "scheduled" : "sent", error: "" });
       res.json({ ok: true, scheduled: Boolean(when) });
     } catch (err: any) {
@@ -5311,6 +5358,7 @@ export function registerRoutes(app: Express): void {
       pauses: n(b.pauses),
       removedSec: n(b.removedSec),
       durationSec: n(b.durationSec),
+      keeps: Array.isArray(b.keeps) ? (b.keeps as unknown[]).filter((k): k is [number, number] => Array.isArray(k) && k.length === 2 && k.every((x) => Number.isFinite(Number(x)))).slice(0, 5000).map(([a, z]) => [Number(a), Number(z)] as [number, number]) : undefined,
       error: b.error ? String(b.error).slice(0, 300) : undefined,
       at: new Date().toISOString(),
     };

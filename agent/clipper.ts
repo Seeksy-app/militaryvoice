@@ -1091,7 +1091,10 @@ async function cleanEpisode(job: Job, source: string, dir: string): Promise<void
       await fs.rm(mp4, { force: true });
       console.log(`[${job.recordingId}]   clean video uploaded`);
     }
-    await report({ status: "done", audioKey, videoKey, fillers: count("filler"), falseStarts: count("false-start"), pauses: count("silence"), removedSec: Math.round(removed), durationSec: Math.round(duration) });
+    // The kept stretches, so times in the original (chapters, clips) can be
+    // placed exactly in the clean one.
+    const kept = keeps.map((k) => [Math.round(k.start * 100) / 100, Math.round(k.end * 100) / 100]);
+    await report({ status: "done", audioKey, videoKey, fillers: count("filler"), falseStarts: count("false-start"), pauses: count("silence"), removedSec: Math.round(removed), durationSec: Math.round(duration), keeps: kept });
     console.log(`[${job.recordingId}] clean episode done`);
   } catch (err) {
     console.warn(`[${job.recordingId}] clean episode failed: ${(err as Error).message}`);

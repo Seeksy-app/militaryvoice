@@ -1165,8 +1165,25 @@ export interface CleanResult {
   pauses?: number;
   removedSec?: number;
   durationSec?: number;
+  /** The stretches of the original kept, [start, end] seconds — to place original times in the clean episode. */
+  keeps?: [number, number][];
   error?: string;
   at: string;
+}
+
+/** Where a moment of the original lands in the clean episode (exact with keeps, else scaled). */
+export function toCleanTime(t: number, c: Pick<CleanResult, "keeps" | "durationSec" | "removedSec">): number {
+  if (c.keeps?.length) {
+    let out = 0;
+    for (const [a, b] of c.keeps) {
+      if (t <= a) break;
+      out += Math.min(t, b) - a;
+      if (t < b) break;
+    }
+    return out;
+  }
+  const d = c.durationSec ?? 0;
+  return d ? t * (Math.max(0, d - (c.removedSec ?? 0)) / d) : t;
 }
 
 /** The clipper's own stages, reported as it reaches each one. */

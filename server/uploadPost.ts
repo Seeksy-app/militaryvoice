@@ -285,6 +285,8 @@ export async function publishVideo(input: {
   /** ISO-8601; Upload-Post holds it and publishes then. */
   scheduledDate?: string;
   timezone?: string;
+  /** YouTube's own settings, used when YouTube is one of the platforms. */
+  youtube?: { title?: string; description?: string; privacyStatus?: "public" | "unlisted" | "private"; tags?: string[]; thumbnailUrl?: string; madeForKids?: boolean; notifySubscribers?: boolean };
 }): Promise<PublishResult> {
   if (!API_KEY) throw new Error("Upload-Post is not configured (UPLOAD_POST_API_KEY missing).");
   if (input.platforms.length === 0) throw new Error("Pick at least one account to post to.");
@@ -296,6 +298,16 @@ export async function publishVideo(input: {
   form.set("title", input.title.slice(0, 300));
   if (input.description) form.set("description", input.description.slice(0, 4000));
   if (input.scheduledDate) form.set("scheduled_date", input.scheduledDate);
+  const yt = input.platforms.includes("youtube") ? input.youtube : undefined;
+  if (yt) {
+    if (yt.title) form.set("youtube_title", yt.title.slice(0, 100));
+    if (yt.description) form.set("youtube_description", yt.description.slice(0, 5000));
+    if (yt.privacyStatus) form.set("privacyStatus", yt.privacyStatus);
+    for (const t of (yt.tags ?? []).slice(0, 30)) form.append("tags[]", t.slice(0, 60));
+    if (yt.thumbnailUrl) form.set("thumbnail_url", yt.thumbnailUrl);
+    form.set("selfDeclaredMadeForKids", yt.madeForKids ? "true" : "false");
+    if (yt.notifySubscribers !== undefined) form.set("youtube_notify_subscribers", yt.notifySubscribers ? "true" : "false");
+  }
   if (input.timezone) form.set("timezone", input.timezone);
   // A full session can take a while to fetch and transcode; don't hold the
   // request open waiting for it.

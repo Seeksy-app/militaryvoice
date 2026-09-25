@@ -10,7 +10,101 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import type { SocialPlatform } from "@shared/schema";
-import { CalendarClock, Loader2, Send } from "lucide-react";
+import { putWithProgress } from "@/lib/upload";
+import { CalendarClock, ImagePlus, Loader2, Send, Sparkles, X } from "lucide-react";
+
+interface YouTubeSettings { title: string; description: string; privacyStatus: "public" | "unlisted" | "private"; tags: string; thumbnailKey: string; thumbnailName: string; madeForKids: boolean; notifySubscribers: boolean }
+
+/**
+ * YouTube's own settings, shown when YouTube is ticked. A whole episode's
+ * description is drafted from what Pōstify knows — what it's about, and
+ * chapters at the moments it found — for them to edit.
+ */
+function YouTubeFields({ target, yt, onChange }: { target: PostTarget; yt: YouTubeSettings; onChange: (y: YouTubeSettings) => void }) {
+  const { toast } = useToast();
+  const [drafting, setDrafting] = useState(false);
+  const [thumbPct, setThumbPct] = useState<number | null>(null);
+  const draft = async () => {
+    if (target.kind !== "recording") return;
+    setDrafting(true);
+    try {
+      const d = (await (await apiRequest("GET", `/api/host/recordings/${target.id}/youtube-draft`)).json()) as { title: string; description: string; tags: string[] };
+      onChange({ ...yt, title: yt.title || d.title, description: d.description, tags: yt.tags || d.tags.join(", ") });
+    } catch (e) {
+      toast({ title: "Couldn't draft that", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setDrafting(false);
+    }
+  };
+  // A whole episode: draft straight away, once.
+  useEffect(() => {
+    if (target.kind === "recording" && !yt.description) void draft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const thumb = async (file: File) => {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return toast({ title: "A JPG, PNG or WebP, please", variant: "destructive" });
+    if (file.size > 2 * 1024 ** 2) return toast({ title: "YouTube takes thumbnails up to 2MB", description: "1280×720 as a JPG is plenty.", variant: "destructive" });
+    try {
+      setThumbPct(0);
+      const { uploadUrl, storageKey } = (await (await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name })).json()) as { uploadUrl: string; storageKey: string };
+      await putWithProgress(uploadUrl, file, setThumbPct);
+      onChange({ ...yt, thumbnailKey: storageKey, thumbnailName: file.name });
+    } catch (e) {
+      toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setThumbPct(null);
+    }
+  };
+  const chip = (on: boolean) => `rounded-full border px-3 py-1 text-xs font-semibold ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:border-[#053877]/40"}`;
+  return (
+    <div className="space-y-3 rounded-xl border border-[#FF0000]/25 bg-[#FF0000]/[0.03] p-3" data-testid="youtube-fields">
+      <p className="flex items-center gap-2 text-sm font-semibold text-foreground"><PlatformIcon platform={"youtube" as SocialPlatform} className="h-4 w-4 text-[#FF0000]" /> YouTube</p>
+      <div>
+        <Label htmlFor="yt-title" className="text-xs">YouTube title</Label>
+        <Input id="yt-title" className="mt-1" value={yt.title} maxLength={100} onChange={(e) => onChange({ ...yt, title: e.target.value })} placeholder="Defaults to the title above" data-testid="yt-title" />
+      </div>
+      <div>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="yt-description" className="text-xs">Description</Label>
+          {target.kind === "recording" && (
+            <button type="button" onClick={() => void draft()} disabled={drafting} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline disabled:opacity-60 dark:text-[#8fb5e8]" data-testid="yt-draft">
+              {drafting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} {yt.description ? "Draft again" : "Draft it for me"}
+            </button>
+          )}
+        </div>
+        <Textarea id="yt-description" className="mt-1 min-h-[140px] font-[inherit]" value={yt.description} onChange={(e) => onChange({ ...yt, description: e.target.value })} maxLength={5000} placeholder={drafting ? "Drafting from the episode…" : "What it's about, who's on it. Chapters (0:00 Welcome…) become clickable on YouTube."} data-testid="yt-description" />
+      </div>
+      <div>
+        <Label htmlFor="yt-tags" className="text-xs">Tags</Label>
+        <Input id="yt-tags" className="mt-1" value={yt.tags} onChange={(e) => onChange({ ...yt, tags: e.target.value })} placeholder="Comma-separated" data-testid="yt-tags" />
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 text-xs font-semibold text-muted-foreground">Visibility</span>
+        {(["public", "unlisted", "private"] as const).map((v) => (
+          <button key={v} type="button" onClick={() => onChange({ ...yt, privacyStatus: v })} className={`${chip(yt.privacyStatus === v)} capitalize`} data-testid={`yt-privacy-${v}`}>{v}</button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mr-1 text-xs font-semibold text-muted-foreground">Thumbnail</span>
+        {yt.thumbnailKey ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs">
+            <ImagePlus className="h-3 w-3" /> {yt.thumbnailName}
+            <button type="button" onClick={() => onChange({ ...yt, thumbnailKey: "", thumbnailName: "" })} aria-label="Remove thumbnail"><X className="h-3 w-3" /></button>
+          </span>
+        ) : (
+          <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-semibold hover:border-[#053877]/40">
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void thumb(e.target.files[0])} />
+            {thumbPct === null ? <ImagePlus className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />} {thumbPct === null ? "Upload (1280×720)" : `${thumbPct}%`}
+          </label>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
+        <label className="flex cursor-pointer items-center gap-2"><Checkbox checked={yt.notifySubscribers} onCheckedChange={(v) => onChange({ ...yt, notifySubscribers: v === true })} /> Notify subscribers</label>
+        <label className="flex cursor-pointer items-center gap-2"><Checkbox checked={yt.madeForKids} onCheckedChange={(v) => onChange({ ...yt, madeForKids: v === true })} /> Made for kids</label>
+      </div>
+    </div>
+  );
+}
 
 /** What's being posted: a whole recording from the Library, or one clip in one shape. */
 export type PostTarget =
@@ -47,6 +141,8 @@ export function PostDialog({ target, onClose }: { target: PostTarget | null; onC
   const [description, setDescription] = useState("");
   const [picked, setPicked] = useState<SocialPlatform[]>([]);
   const [later, setLater] = useState(false);
+  const blankYt: YouTubeSettings = { title: "", description: "", privacyStatus: "public", tags: "", thumbnailKey: "", thumbnailName: "", madeForKids: false, notifySubscribers: true };
+  const [yt, setYt] = useState<YouTubeSettings>(blankYt);
   const [when, setWhen] = useState(inAnHour);
 
   // Fresh each time a different thing is opened.
@@ -58,6 +154,7 @@ export function PostDialog({ target, onClose }: { target: PostTarget | null; onC
     setShape(target.kind === "clip" ? target.shapes[0] ?? "vertical" : "vertical");
     setLater(false);
     setWhen(inAnHour());
+    setYt(blankYt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   useEffect(() => setPicked(platforms), [platforms.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -71,6 +168,9 @@ export function PostDialog({ target, onClose }: { target: PostTarget | null; onC
         description: description.trim(),
         ...(target.kind === "clip" ? { shape } : {}),
         ...(later ? { scheduledAt: new Date(when).toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } : {}),
+        ...(picked.includes("youtube" as SocialPlatform)
+          ? { youtube: { ...yt, title: yt.title.trim() || title.trim(), tags: yt.tags.split(",").map((t) => t.trim()).filter(Boolean) } }
+          : {}),
       };
       return (await apiRequest("POST", `/api/host/${target.kind === "clip" ? "clips" : "recordings"}/${target.id}/publish`, body)).json();
     },
@@ -88,7 +188,7 @@ export function PostDialog({ target, onClose }: { target: PostTarget | null; onC
 
   return (
     <Dialog open={!!target} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Post it</DialogTitle>
           <DialogDescription>To the accounts you tick, under your own name. Nothing goes out until you press the button.</DialogDescription>
@@ -144,6 +244,7 @@ export function PostDialog({ target, onClose }: { target: PostTarget | null; onC
                 ))}
               </div>
             </div>
+            {target && picked.includes("youtube" as SocialPlatform) && <YouTubeFields key={key} target={target} yt={yt} onChange={setYt} />}
             <div>
               <p className="text-sm font-medium">When</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
