@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2 } from "lucide-react";
+import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones } from "lucide-react";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -102,6 +102,7 @@ export function HostNav({
     },
   ];
 
+  const greenRoomItem: Item = { key: "greenroom", label: "Green room", hint: "Into the studio, and what to check first", icon: Headphones };
   const accountItems: Item[] = [
     { key: "editProfile", label: "Profile", hint: "About you", icon: UserRound },
     { key: "integrations", label: "Integrations", hint: "Connected accounts", icon: Link2 },
@@ -125,7 +126,7 @@ export function HostNav({
         </Link>
       );
     }
-    const active = it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "events" && (screen === "promotion" || screen === "greenroom"));
+    const active = it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "events" && (screen === "promotion" || (screen === "greenroom" && !compact)));
     const inert = !!it.locked && !proOpen;
     return (
       <a
@@ -179,7 +180,8 @@ export function HostNav({
       {/* Phone: one scrolling strip. */}
       <nav className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Dashboard sections">
         {/* No account card on a phone: Profile and Integrations join the strip. */}
-        {[...groups.flatMap((g) => g.items), ...accountItems].map((it) => link(it, true))}
+        {/* Right after Events on a phone: the Events tabs are a scroll away there, and on the day this is the door. */}
+        {[...groups.flatMap((g) => g.items).flatMap((it) => (it.key === "events" ? [it, greenRoomItem] : [it])), ...accountItems].map((it) => link(it, true))}
       </nav>
       {/* Desktop: the column. */}
       <nav className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-10rem)]" aria-label="Dashboard sections">
