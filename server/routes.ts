@@ -113,7 +113,7 @@ import { waitUntil } from "@vercel/functions";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
-import { createTokenCheckout, readPaidSession, verifyWebhook, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, type PlanState } from "./stripe.js";
+import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, type PlanState } from "./stripe.js";
 import { episodeCredits, planOf, PLANS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
@@ -5815,8 +5815,14 @@ export function registerRoutes(app: Express): void {
    * cancelled. Every credit grant has a ref, so a repeat is a no-op.
    */
   app.post("/api/webhooks/stripe", async (req, res) => {
-    const event = verifyWebhook((req as any).rawBody as Buffer | undefined, req.get("stripe-signature") ?? "");
-    if (!event) return res.status(401).json({ message: "Unsigned." });
+    const raw = (req as any).rawBody as Buffer | undefined;
+    const event = verifyWebhook(raw, req.get("stripe-signature") ?? "");
+    if (!event) {
+      // Which check failed, so a 401 in Stripe's delivery log says what to fix. Never the secret itself.
+      const why = webhookProblem(raw, req.get("stripe-signature") ?? "");
+      console.error("Stripe webhook refused:", why);
+      return res.status(401).json({ message: `Unsigned: ${why}.` });
+    }
     try {
       const paid = paidFromEvent(event);
       if (paid) await storage.addTokens({ email: paid.email, delta: paid.tokens, reason: `Bought ${paid.tokens} credits`, ref: `stripe:${paid.sessionId}` });

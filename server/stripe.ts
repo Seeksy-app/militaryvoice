@@ -62,6 +62,19 @@ export async function readPaidSession(sessionId: string): Promise<PaidTokens | n
   return paidFrom(await stripe("GET", `/checkout/sessions/${sessionId}`));
 }
 
+/** Why a webhook wasn't accepted, without giving anything away: which check failed. */
+export function webhookProblem(raw: Buffer | undefined, header: string): string {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET || "";
+  if (!secret) return "no STRIPE_WEBHOOK_SECRET on the server";
+  if (!secret.startsWith("whsec_")) return "STRIPE_WEBHOOK_SECRET doesn't look like a signing secret (whsec_…)";
+  if (secret.trim() !== secret) return "STRIPE_WEBHOOK_SECRET has spaces or a line break around it";
+  if (!raw) return "no raw body reached the handler";
+  if (!header) return "no Stripe-Signature header";
+  const t = Number((header.match(/t=(\d+)/) ?? [])[1]);
+  if (!t || Math.abs(Date.now() / 1000 - t) > 600) return "timestamp too old or missing";
+  return "signature doesn't match: the secret is for a different endpoint, or the body was changed";
+}
+
 /** Check Stripe's signature; the event, or null when it isn't genuinely from Stripe. */
 export function verifyWebhook(raw: Buffer | undefined, header: string): any | null {
   const secret = process.env.STRIPE_WEBHOOK_SECRET || "";
