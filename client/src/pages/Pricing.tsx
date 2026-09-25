@@ -4,7 +4,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { startTokenCheckout } from "@/lib/tokens";
-import { TOKEN_PACKS, EPISODE_TOKENS } from "@shared/tokens";
+import { TOKEN_PACKS, TEST_PACK, EPISODE_TOKENS } from "@shared/tokens";
 import { Check, Coins, Scissors, Wand2, Sparkles, Loader2 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -23,6 +23,7 @@ const WHAT_A_TOKEN_BUYS = [
 export default function Pricing() {
   const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
+  const testing = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("test");
 
   async function buy(key: string) {
     setBusy(key);
@@ -71,6 +72,18 @@ export default function Pricing() {
             );
           })}
         </div>
+
+        {testing && (
+          <div className="mx-auto mt-6 flex max-w-md items-center justify-between gap-4 rounded-2xl border border-dashed border-[#F0A71F] bg-[#F0A71F]/10 px-5 py-4">
+            <div>
+              <p className="text-sm font-semibold text-foreground">{TEST_PACK.tokens} tokens · ${TEST_PACK.price}</p>
+              <p className="text-xs text-muted-foreground">{TEST_PACK.blurb}</p>
+            </div>
+            <Button onClick={() => void buy(TEST_PACK.key)} disabled={busy !== null} className="gap-2 rounded-full" data-testid="pack-test">
+              {busy === TEST_PACK.key && <Loader2 className="h-4 w-4 animate-spin" />} Buy test pack
+            </Button>
+          </div>
+        )}
 
         <div className="mt-12 grid gap-6 rounded-3xl border border-border bg-card p-6 sm:p-8 md:grid-cols-3">
           {WHAT_A_TOKEN_BUYS.map(({ icon: Icon, title, body }) => (

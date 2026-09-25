@@ -10,8 +10,9 @@ export const TOKEN_PACKS = [
   { key: "tokens-60", tokens: 60, price: 96, blurb: "For a network, or a busy show." },
 ] as const;
 
-export type TokenPackKey = (typeof TOKEN_PACKS)[number]["key"];
+/** Not on the page: /pricing?test shows it, for trying a real payment for $1. */
+export const TEST_PACK = { key: "tokens-2", tokens: 2, price: 1, blurb: "Test pack: a real $1 payment." } as const;
 
 export const EPISODE_TOKENS = 5;
 
-export const tokenPack = (key: string) => TOKEN_PACKS.find((p) => p.key === key);
+export const tokenPack = (key: string) => [...TOKEN_PACKS, TEST_PACK].find((p) => p.key === key);
