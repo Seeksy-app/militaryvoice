@@ -1,9 +1,9 @@
 import type { ComponentType } from "react";
-import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut } from "lucide-react";
+import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2 } from "lucide-react";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social";
 
 interface Item {
   key: HostScreen;
@@ -56,29 +56,29 @@ export function HostNav({
   proOpen?: boolean;
 }) {
   const groups: { title: string; items: Item[] }[] = [
+    // Most-used first. Promotion lives inside Events (it's about an event);
+    // Profile and Integrations live in the account card at the foot.
     {
       title: "Your show",
       items: [
         { key: "dashboard", label: "Dashboard", hint: "Your card and slot", icon: LayoutDashboard },
-        { key: "editProfile", label: "Profile", hint: "About you", icon: UserRound },
-        { key: "events", label: "Event settings", hint: "Your show and time", icon: CalendarDays, badge: eventsCount || undefined },
+        { key: "events", label: "Events", hint: "Your show, your time, and promoting it", icon: CalendarDays, badge: eventsCount || undefined },
         ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `Your ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} at the desk`, icon: Mic2 }] : []),
       ],
     },
     {
-      title: "Getting an audience",
+      title: "Content",
       items: [
-        { key: "analytics", label: "Your analytics", hint: "What a sponsor sees about you", icon: BarChart3 },
-        { key: "integrations", label: "Integrations", hint: "Connected accounts", icon: Link2 },
-        { key: "promotion", label: "Promotion", hint: "Get people watching", icon: Megaphone },
-        ...(contactsCount > 0 ? [{ key: "contacts" as const, label: "Contacts", hint: `${contactsCount} asked for a reminder`, icon: Users }] : []),
+        { key: "recordings", label: "Library", hint: "Your episodes: studio sessions, uploads and clean episodes", icon: Library },
+        { key: "postify", label: "Pōstify", hint: "Clips and a clean episode, from any episode", icon: Wand2, tag: "Beta" },
+        { key: "social", label: "Social", hint: "Post and schedule to your accounts", icon: Share2 },
       ],
     },
     {
-      title: "Media",
+      title: "Audience",
       items: [
-        { key: "recordings", label: "Recordings", hint: "Your sessions and clips", icon: Film },
-        { key: "postify", label: "Pōstify", hint: "Clips and a clean episode, from any episode", icon: Wand2, tag: "Beta" },
+        { key: "analytics", label: "Your analytics", hint: "What a sponsor sees about you", icon: BarChart3 },
+        ...(contactsCount > 0 ? [{ key: "contacts" as const, label: "Contacts", hint: `${contactsCount} asked for a reminder`, icon: Users }] : []),
       ],
     },
     // Pro is one quiet line until it opens. Three greyed doors with locks were
@@ -102,6 +102,11 @@ export function HostNav({
     },
   ];
 
+  const accountItems: Item[] = [
+    { key: "editProfile", label: "Profile", hint: "About you", icon: UserRound },
+    { key: "integrations", label: "Integrations", hint: "Connected accounts", icon: Link2 },
+  ];
+
   const link = (it: Item, compact: boolean) => {
     const Icon = it.icon;
     if (it.href) {
@@ -120,7 +125,7 @@ export function HostNav({
         </Link>
       );
     }
-    const active = it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key;
+    const active = it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "events" && screen === "promotion");
     const inert = !!it.locked && !proOpen;
     return (
       <a
@@ -173,7 +178,8 @@ export function HostNav({
     <>
       {/* Phone: one scrolling strip. */}
       <nav className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Dashboard sections">
-        {groups.flatMap((g) => g.items).map((it) => link(it, true))}
+        {/* No account card on a phone: Profile and Integrations join the strip. */}
+        {[...groups.flatMap((g) => g.items), ...accountItems].map((it) => link(it, true))}
       </nav>
       {/* Desktop: the column. */}
       <nav className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-10rem)]" aria-label="Dashboard sections">
@@ -181,8 +187,7 @@ export function HostNav({
             as one dark frame with the work in the middle. */}
         <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-5 rounded-2xl bg-[#04102b] p-3 shadow-sm">
           {groups.map((g) => {
-            // With the account card below, Profile lives there in the column (the phone strip keeps it).
-            const items = account ? g.items.filter((it) => it.key !== "editProfile") : g.items;
+            const items = g.items;
             return (
               <div key={g.title} className={g.title === "Help" ? "mt-auto" : undefined}>
                 <p className="mb-1 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">{g.title}</p>
@@ -195,7 +200,7 @@ export function HostNav({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className={`-mt-2 flex w-full items-center gap-2.5 rounded-xl border border-white/10 p-2 text-left transition-colors hover:bg-white/10 ${screen === "editProfile" ? "bg-white/[0.12]" : ""}`}
+                  className={`-mt-2 flex w-full items-center gap-2.5 rounded-xl border border-white/10 p-2 text-left transition-colors hover:bg-white/10 ${screen === "editProfile" || screen === "integrations" ? "bg-white/[0.12]" : ""}`}
                   data-testid="nav-host-account"
                 >
                   {account.photo ? (
@@ -214,8 +219,7 @@ export function HostNav({
                 <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{account.email}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => onGo("editProfile")} className="gap-2" data-testid="account-profile"><UserRound className="h-4 w-4" /> Profile</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onGo("integrations")} className="gap-2"><Link2 className="h-4 w-4" /> Connected accounts</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onGo("events")} className="gap-2"><CalendarDays className="h-4 w-4" /> Event settings</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onGo("integrations")} className="gap-2" data-testid="account-integrations"><Link2 className="h-4 w-4" /> Integrations</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={account.onSignOut} className="gap-2" data-testid="account-signout"><LogOut className="h-4 w-4" /> Sign out</DropdownMenuItem>
               </DropdownMenuContent>

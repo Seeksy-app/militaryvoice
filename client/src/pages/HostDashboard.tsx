@@ -63,6 +63,7 @@ import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { PostStudio } from "@/components/PostStudio";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
+import { SocialScreen } from "@/components/SocialScreen";
 import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
@@ -512,8 +513,32 @@ function AnchoredHeading({ id, icon: Icon, label }: { id: string; icon: typeof R
   );
 }
 
+/** An event's two sides: its details, and promoting it. Promotion is about an event, so it lives here. */
+function EventTabs({ active, onGo }: { active: "events" | "promotion"; onGo: (s: "events" | "promotion") => void }) {
+  return (
+    <div className="mt-6 flex gap-1 border-b border-border" role="tablist" data-testid="event-tabs">
+      {([
+        { k: "events", label: "Details" },
+        { k: "promotion", label: "Promotion" },
+      ] as const).map((t) => (
+        <button
+          key={t.k}
+          type="button"
+          role="tab"
+          aria-selected={active === t.k}
+          onClick={() => onGo(t.k)}
+          className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${active === t.k ? "border-[#F0A71F] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          data-testid={`event-tab-${t.k}`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -521,19 +546,22 @@ const SCREEN_SLUG: Record<Screen, string> = {
   cohost: "cohost",
   analytics: "analytics",
   postify: "postify",
+  social: "social",
   dashboard: "",
   editProfile: "profile",
   events: "events",
   promotion: "promotion",
-  recordings: "recordings",
+  // The Library; /recordings still opens it (older links and emails).
+  recordings: "library",
   integrations: "integrations",
   contacts: "contacts",
   pro: "pro",
   claim: "claim",
 };
-const SLUG_SCREEN = new Map<string, Screen>(
-  (Object.entries(SCREEN_SLUG) as [Screen, string][]).filter(([, v]) => v).map(([k, v]) => [v, k]),
-);
+const SLUG_SCREEN = new Map<string, Screen>([
+  ...(Object.entries(SCREEN_SLUG) as [Screen, string][]).filter(([, v]) => v).map(([k, v]) => [v, k] as [string, Screen]),
+  ["recordings", "recordings"],
+]);
 export function hostScreenPath(screen: Screen): string {
   const slug = SCREEN_SLUG[screen];
   return slug ? `/host/dashboard/${slug}` : "/host/dashboard";
@@ -1221,6 +1249,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           </section>
         ) : screen === "postify" ? (
           <PostStudio />
+        ) : screen === "social" ? (
+          <SocialScreen />
         ) : screen === "analytics" ? (
           <MyAnalytics onConnect={() => goTo("integrations")} />
         ) : screen === "pro" ? (
@@ -1228,8 +1258,13 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         ) : screen === "contacts" ? (
           <ContactsScreen contacts={data?.contacts ?? []} />
         ) : screen === "promotion" ? (
-          <PromotionScreen contacts={data.contacts} />
+          <>
+            <EventTabs active="promotion" onGo={goTo} />
+            <PromotionScreen contacts={data.contacts} />
+          </>
         ) : screen === "events" ? (
+          <>
+          <EventTabs active="events" onGo={goTo} />
           <EventSettings
             onOpenPromotion={() => setScreen("promotion")}
             profilePhotoUrl={profile?.photoUrl}
@@ -1265,6 +1300,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
               </>
             )}
           </EventSettings>
+          </>
         ) : screen === "claim" && selectedSlot ? (
           <section className="mt-8 max-w-xl">
             <button

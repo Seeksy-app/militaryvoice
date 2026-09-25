@@ -8,6 +8,7 @@ import { TOKEN_PACKS } from "@shared/tokens";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { startTokenCheckout } from "@/lib/tokens";
+import { PostDialog } from "@/components/PostDialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
@@ -35,7 +36,7 @@ function cleanOf(r: Rec | undefined): CleanResult | null {
 const mmss = (sec: number) => (sec >= 60 ? `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s` : `${Math.round(sec)}s`);
 
 /** The episode with the ums, false starts and dead air out — audio and video downloads. */
-function CleanCard({ rec, clean, saved, onSaved, onPlay }: { rec: Rec; clean: CleanResult; saved: Rec | null; onSaved: (id: number) => void; onPlay: () => void }) {
+function CleanCard({ rec, clean, saved, onSaved }: { rec: Rec; clean: CleanResult; saved: Rec | null; onSaved: (id: number) => void }) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const bits = [
@@ -49,7 +50,7 @@ function CleanCard({ rec, clean, saved, onSaved, onPlay }: { rec: Rec; clean: Cl
     try {
       const { id } = (await (await apiRequest("POST", `/api/host/recordings/${rec.id}/clean/save`)).json()) as { id: number };
       onSaved(id);
-      toast({ title: "Saved to Recordings", description: "The clean episode sits next to your original. Nothing was replaced." });
+      toast({ title: "In your Library", description: "The clean episode sits next to your original. Nothing was replaced." });
     } catch (e) {
       toast({ title: "Couldn't save that", description: (e as Error).message, variant: "destructive" });
     } finally {
@@ -78,9 +79,6 @@ function CleanCard({ rec, clean, saved, onSaved, onPlay }: { rec: Rec; clean: Cl
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {clean.videoKey && (
-          <Button variant="ghost" size="sm" onClick={onPlay} className="gap-1.5 rounded-full"><Play className="h-4 w-4" /> Watch it</Button>
-        )}
         {clean.audioKey && (
           <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-full">
             <a href={`/api/host/recordings/${rec.id}/clean/audio`} data-testid="post-clean-audio"><Download className="h-4 w-4" /> Download audio</a>
@@ -93,11 +91,11 @@ function CleanCard({ rec, clean, saved, onSaved, onPlay }: { rec: Rec; clean: Cl
         )}
         {clean.videoKey && (saved ? (
           <Button asChild size="sm" variant="outline" className="gap-1.5 rounded-full border-emerald-400/60 text-emerald-700 dark:text-emerald-400">
-            <a href="/host/dashboard/recordings"><Check className="h-4 w-4" /> In Recordings</a>
+            <a href="/host/dashboard/library"><Check className="h-4 w-4" /> In your Library</a>
           </Button>
         ) : (
           <Button size="sm" onClick={() => void save()} disabled={saving} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-clean-save">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Disc className="h-4 w-4" />} Save to Recordings
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Disc className="h-4 w-4" />} Add to Library
           </Button>
         ))}
         {clean.status === "running" && !clean.videoKey && (
@@ -413,6 +411,7 @@ function EditTextDialog({ c, open, onOpenChange }: { c: ClipRow; open: boolean; 
 function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
+  const [posting, setPosting] = useState(false);
   const updating = c.editStatus === "queued" || c.editStatus === "running";
   const src = c.verticalUrl || c.squareUrl || c.url;
   const files = [
@@ -462,6 +461,9 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
           <Pill tip="Play it here." onClick={onPreview}>
             <Play className="h-3 w-3" /> Watch
           </Pill>
+          <Pill tip="Post it to your accounts, now or later." onClick={() => setPosting(true)}>
+            <Send className="h-3 w-3" /> Post it
+          </Pill>
           {!updating && (
             <Pill tip="Change the title and the gold line under it. All three shapes are remade." onClick={() => setEditing(true)}>
               <Pencil className="h-3 w-3" /> Edit text
@@ -476,6 +478,10 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
       </div>
     </div>
     <EditTextDialog c={c} open={editing} onOpenChange={setEditing} />
+    <PostDialog
+      target={posting ? { kind: "clip", id: c.id, title: c.title, caption: c.caption, shapes: ([["vertical", c.verticalUrl], ["square", c.squareUrl], ["wide", c.url]] as const).filter(([, u]) => u).map(([s]) => s) } : null}
+      onClose={() => setPosting(false)}
+    />
     </>
   );
 }
@@ -541,65 +547,6 @@ function GetTokens({ beta }: { beta?: Beta }) {
   );
 }
 
-/** Upload an episode and get clips back: it's filed as a recording and queued. */
-function UploadEpisode({ onQueued, variant = "button", beta }: { onQueued: (id: number) => void; variant?: "button" | "card"; beta?: Beta }) {
-  const { toast } = useToast();
-  const input = useRef<HTMLInputElement>(null);
-  const [pct, setPct] = useState<number | null>(null);
-  async function go(file: File) {
-    if (!file.type.startsWith("video/") && !/\.(mp4|mov|m4v|webm)$/i.test(file.name)) {
-      toast({ title: "That isn't a video", description: "Upload an MP4, MOV or WebM of your episode.", variant: "destructive" });
-      return;
-    }
-    if (file.size > 2 * 1024 ** 3) {
-      toast({ title: "That file is over 2GB", description: "Export a smaller copy (1080p is plenty) and try again.", variant: "destructive" });
-      return;
-    }
-    try {
-      setPct(0);
-      const durationSec = await durationOf(file);
-      if (beta && !beta.unlimited && durationSec > beta.maxMinutes * 60) {
-        toast({ title: `The beta takes episodes up to ${beta.maxMinutes} minutes`, description: "Export a shorter cut and try again.", variant: "destructive" });
-        return;
-      }
-      const { uploadUrl, storageKey } = (await (await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name })).json()) as { uploadUrl: string; storageKey: string };
-      await putWithProgress(uploadUrl, file, setPct);
-      const { id } = (await (await apiRequest("POST", "/api/host/uploads/clip", { storageKey, fileName: file.name, durationSec, sizeBytes: file.size })).json()) as { id: number };
-      toast({ title: "Got it — clipping now", description: "Watch it go below. You can leave this page; the clips will be here." });
-      onQueued(id);
-    } catch (e) {
-      toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });
-    } finally {
-      setPct(null);
-      if (input.current) input.current.value = "";
-    }
-  }
-  const picker = <input ref={input} type="file" accept="video/*" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} data-testid="post-upload-input" />;
-  const label = pct === null ? "Upload an episode" : pct < 100 ? `Uploading… ${pct}%` : "Queuing…";
-  if (variant === "card") {
-    return (
-      <div className="rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] p-8 text-center">
-        {picker}
-        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Upload className="h-6 w-6" /></span>
-        <p className="mt-3 text-lg font-semibold text-foreground">Turn an episode into clips</p>
-        <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">Upload a video episode. We transcribe it, pick the moments that stand on their own, and cut each one vertical, square and wide with captions.</p>
-        <Button onClick={() => input.current?.click()} disabled={pct !== null} className="mt-4 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-upload">
-          {pct === null ? <Upload className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />} {label}
-        </Button>
-        <p className="mt-2 text-xs text-muted-foreground">MP4 or MOV, up to 2GB{beta && !beta.unlimited ? ` and ${beta.maxMinutes} minutes · ${(beta.left ?? 0) > 0 ? "1 free episode in the beta" : `${beta.episodeTokens} tokens an episode`}` : ""}.</p>
-      </div>
-    );
-  }
-  return (
-    <>
-      {picker}
-      <Button variant="outline" onClick={() => input.current?.click()} disabled={pct !== null} className="gap-2 rounded-full" data-testid="post-upload">
-        {pct === null ? <Upload className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />} {label}
-      </Button>
-    </>
-  );
-}
-
 export function PostStudio() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -635,7 +582,6 @@ export function PostStudio() {
   const p = progressOf(rec);
   const clean = cleanOf(rec);
   const savedCopy = rec ? (recs.data ?? []).find((r) => r.egressId === `CLEAN_${rec.id}`) ?? null : null;
-  const cleanVideo = rec && clean?.videoKey ? `/api/host/recordings/${rec.id}/clean/video` : "";
   const mine = useMemo(() => (clips.data ?? []).filter((c) => c.recordingId === rec?.id).sort((a, b) => a.startSec - b.startSec), [clips.data, rec?.id]);
 
   useEffect(() => setPreview(null), [rec?.id]);
@@ -692,11 +638,6 @@ export function PostStudio() {
       .catch((e: Error) => toast({ title: "Payment received, tokens pending", description: e.message, variant: "destructive" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const queued = (id: number) => {
-    void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
-    setSelected(id);
-    void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
-  };
 
   // In testing: only for the accounts the server says.
   if (!features.data?.post) return null;
@@ -713,7 +654,15 @@ export function PostStudio() {
           </div>
           <TokenBalance beta={beta} />
         </div>
-        {outOfBeta ? <GetTokens beta={beta} /> : <UploadEpisode variant="card" onQueued={queued} beta={beta} />}
+        {/* Episodes go into the Library; Pōstify works on what's there. */}
+        <div className="rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] p-8 text-center">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Upload className="h-6 w-6" /></span>
+          <p className="mt-3 text-lg font-semibold text-foreground">Start with an episode in your Library</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">Upload a video episode there, or record one in the studio. Then pick it here: we transcribe it, find the moments that stand on their own, and cut each one vertical, square and wide with captions.</p>
+          <Button asChild className="mt-4 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-go-library">
+            <a href="/host/dashboard/library"><Upload className="h-4 w-4" /> Add an episode</a>
+          </Button>
+        </div>
       </section>
     );
   }
@@ -735,15 +684,6 @@ export function PostStudio() {
   const moments = p?.moments ?? [];
   const pickedN = done ? mine.length : moments.length;
   const readyN = done ? mine.length : p?.finished ?? 0;
-
-  async function showRecording() {
-    try {
-      const { url } = (await (await apiRequest("GET", `/api/host/recordings/${rec!.id}/download`)).json()) as { url: string };
-      setPreview({ kind: "recording", url });
-    } catch (e) {
-      toast({ title: "Couldn't open the recording", description: (e as Error).message, variant: "destructive" });
-    }
-  }
 
   // The times side by side: what was recorded, what the clean episode runs,
   // and what came out of it.
@@ -770,14 +710,16 @@ export function PostStudio() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <TokenBalance beta={beta} />
-          {!outOfBeta && <UploadEpisode onQueued={queued} beta={beta} />}
+          <Button asChild variant="outline" className="gap-2 rounded-full" data-testid="post-go-library">
+            <a href="/host/dashboard/library"><Upload className="h-4 w-4" /> Add an episode</a>
+          </Button>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,17rem)]">
         {/* Recordings */}
         <div className="rounded-2xl border border-border bg-card p-3">
-          <p className="px-1.5 pb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Your recordings</p>
+          <p className="px-1.5 pb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Pick an episode</p>
           <ul className="flex max-h-72 flex-col gap-1.5 overflow-y-auto lg:max-h-[22rem]">
             {list.map((r) => {
               const on = r.id === rec.id;
@@ -800,20 +742,8 @@ export function PostStudio() {
         {/* Preview */}
         <div className="flex flex-col gap-3">
           <div className="relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5">
-            {/* Once there's a clean episode, it's what this window shows — with the original a click away. */}
-            {cleanVideo && (preview === null || preview.kind === "recording" || preview.url === cleanVideo) && (
-              <div className="absolute left-3 top-3 z-10 flex gap-1 rounded-full bg-black/60 p-1 text-xs font-semibold backdrop-blur">
-                {[
-                  { k: "clean", label: "Clean", on: preview === null || preview.url === cleanVideo, go: () => setPreview({ kind: "clip", url: cleanVideo }) },
-                  { k: "original", label: "Original", on: preview?.kind === "recording", go: () => void showRecording() },
-                ].map((b) => (
-                  <button key={b.k} type="button" onClick={b.go} className={`rounded-full px-3 py-1 ${b.on ? "bg-white text-[#000741]" : "text-white/80 hover:text-white"}`} data-testid={`post-view-${b.k}`}>{b.label}</button>
-                ))}
-              </div>
-            )}
-            {!preview && cleanVideo && done ? (
-              <video key={cleanVideo} src={cleanVideo} controls playsInline preload="metadata" className="h-full w-full bg-black object-contain" />
-            ) : preview ? (
+            {/* Clips only: full episodes, clean or original, are watched in the Library. */}
+            {preview ? (
               <video key={preview.url} src={preview.url} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
             ) : running ? (
               <WorkingScene rec={rec} p={p} pct={pct} />
@@ -851,8 +781,7 @@ export function PostStudio() {
                 )}
                 <p className="text-xs text-white/55">
                   {beta?.unlimited || rec.postifyBeta ? "Included" : freeLeft ? "Free · your beta episode" : payWithTokens ? `${beta?.episodeTokens} tokens · you have ${beta?.tokens}` : `An episode is ${beta?.episodeTokens ?? 5} tokens`}
-                  {" · "}
-                  <button type="button" onClick={() => void showRecording()} className="underline underline-offset-2 hover:text-white">Play the recording</button>
+
                 </p>
               </div>
             )}
@@ -913,7 +842,6 @@ export function PostStudio() {
           clean={clean}
           saved={savedCopy}
           onSaved={() => void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] })}
-          onPlay={() => { setPreview({ kind: "clip", url: cleanVideo }); window.scrollTo({ top: 0, behavior: "smooth" }); }}
         />
       )}
 
