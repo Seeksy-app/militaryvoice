@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlatformIcon, platformLabel, parseSocialAccounts } from "@/components/SocialIcons";
 import type { RecordingRow, SocialPlatform } from "@shared/schema";
-import { Disc, Download, Loader2, Share2 } from "lucide-react";
+import { Disc, Download, Loader2, Share2, Wand2 } from "lucide-react";
 
 // A podcaster's own sessions. The studio writes them; nothing here is uploaded
 // by hand. The bucket is private, so every download is a fresh signed link.
@@ -123,6 +123,12 @@ export function MyRecordings({
                   data-testid={`button-download-recording-${r.id}`}
                 >
                   <Download className="h-3.5 w-3.5" /> Download
+                </Button>
+                {/* Clips and the clean episode are made in Pōstify. */}
+                <Button asChild size="sm" variant="outline" className="gap-1.5 rounded-full border-[#F0A71F]/60">
+                  <a href={`/host/dashboard/postify?rec=${r.id}`} data-testid={`button-postify-recording-${r.id}`}>
+                    <Wand2 className="h-3.5 w-3.5 text-[#b36b00]" /> {r.clipStatus === "done" ? "Clips in Pōstify" : "Open in Pōstify"}
+                  </a>
                 </Button>
                 {connected.length > 0 && (
                   <Button

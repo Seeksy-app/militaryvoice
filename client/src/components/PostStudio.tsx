@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { MyClips } from "@/components/MyClips";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
 import { Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video } from "lucide-react";
 
@@ -282,7 +283,11 @@ function UploadEpisode({ onQueued, variant = "button", beta }: { onQueued: (id: 
 export function PostStudio() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [selected, setSelected] = useState<number | null>(null);
+  // ?rec=<id> from a Recordings row opens that recording here.
+  const [selected, setSelected] = useState<number | null>(() => {
+    const v = Number(new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get("rec"));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  });
   const [preview, setPreview] = useState<{ kind: "clip"; url: string } | { kind: "recording"; url: string } | null>(null);
 
   const features = useQuery<{ post: boolean; beta?: Beta }>({
@@ -535,6 +540,15 @@ export function PostStudio() {
                   );
                 })}
           </div>
+        </div>
+      )}
+      {/* Every clip, from every recording and sent-in episode, in one place. */}
+      {(clips.data?.length ?? 0) > 0 && (
+        <div className="mt-10">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+            <Scissors className="h-4 w-4" /> All your clips
+          </h3>
+          <MyClips />
         </div>
       )}
     </section>

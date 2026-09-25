@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MyRecordings } from "@/components/MyRecordings";
-import { MyClips } from "@/components/MyClips";
 import { apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, RecordingRow } from "@shared/schema";
-import { Disc, Scissors } from "lucide-react";
+import { Disc } from "lucide-react";
 
 // Every session this podcaster has recorded, with a filter by event. Sessions
 // belong to an event, so once somebody has been in two the list needs saying
@@ -39,8 +38,8 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
         <Disc className="h-4 w-4" /> Your recordings
       </h2>
       <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
-        Every session the studio recorded for you. Downloads are private links made fresh each time, so they can't
-        be passed around by accident.
+        Every session the studio recorded for you, and every episode you've uploaded. Downloads are private links
+        made fresh each time, so they can't be passed around by accident.
       </p>
 
       {options.length > 1 && (
@@ -71,21 +70,11 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
 
       <MyRecordings socialAccounts={socialAccounts} eventId={eventId} showEmpty />
 
-      {/* The clips sit with the recordings they came from.
-          They were filed under Promotion on the reasoning that a clip is next
-          week's post rather than an archive — which is true of what you do
-          with one, and not true of where you go to look for it. Somebody
-          hunting for their clips looks where their recording is. */}
-      <div className="mt-10">
-        <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-          <Scissors className="h-4 w-4" /> Clips cut for you
-        </h2>
-        <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
-          After your slot the studio reads back what was said and cuts the moments that stand on their own — vertical,
-          square and wide, with the words in a subtitle file. Nothing to request and nothing to edit.
-        </p>
-        <MyClips />
-      </div>
+      {/* Clips and clean episodes live in Pōstify; this page is the recordings. */}
+      <p className="mt-6 text-sm text-muted-foreground">
+        Clips and clean episodes are made in{" "}
+        <a href="/host/dashboard/postify" className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Pōstify →</a>
+      </p>
     </section>
   );
 }
