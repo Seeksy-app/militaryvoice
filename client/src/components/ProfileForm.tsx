@@ -986,20 +986,15 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
           </aside>
         </div>
 
-        {/* sticky action bar */}
-        <div
-          className={`sticky bottom-0 z-10 mt-6 -mx-4 border-t-2 px-4 py-3 shadow-[0_-10px_30px_rgba(0,7,65,0.12)] backdrop-blur sm:mx-0 sm:rounded-2xl sm:border-2 ${
-            dirty ? "border-[#F0A71F] bg-[#fff7e6]/95 dark:bg-[#2a1f05]/95" : "border-border bg-background/95"
-          }`}
-          data-testid="bar-save"
-        >
+        {/* Save sits just under the form. It was a sticky amber bar across the
+            bottom of the window — loud, and in the way of everything below it. */}
+        <div className="mt-4" data-testid="bar-save">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="flex items-center gap-2 text-sm">
               {dirty ? (
                 <>
                   <AlertCircle className="h-4 w-4 text-[#b7791f]" />
-                  <span className="font-medium text-foreground">Unsaved changes.</span>
-                  <span className="text-muted-foreground">Save before you leave this page.</span>
+                  <span className="font-medium text-[#8a5a00] dark:text-[#F0A71F]">Unsaved changes</span>
                 </>
               ) : (
                 <span className="text-xs text-muted-foreground">
@@ -1032,13 +1027,12 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
               )}
               <Button
                 type="button"
-                size="lg"
                 disabled={mutation.isPending}
                 onClick={() => {
                   nextAfterSave.current = pendingSlot ? "dashboard" : "events";
                   void form.handleSubmit(handleSubmit, onInvalid)();
                 }}
-                className="gap-2 rounded-full bg-[#F0A71F] px-6 text-base font-semibold text-[#1a1200] hover:bg-[#f5b944]"
+                className="gap-2 rounded-full bg-[#F0A71F] px-5 font-semibold text-[#1a1200] hover:bg-[#f5b944]"
                 data-testid="button-save-profile"
               >
                 {mutation.isPending ? (

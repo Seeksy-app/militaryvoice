@@ -944,6 +944,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
               <LogoLockupOnDark className="h-9 w-auto" />
             </Link>
             <div className="flex min-w-0 items-center gap-3">
+              {/* Who you are is the way to your profile, as everywhere else. */}
+              <button
+                type="button"
+                onClick={() => goTo("editProfile")}
+                title="Your profile"
+                className="-my-1 -ml-1 flex min-w-0 items-center gap-3 rounded-xl py-1 pl-1 pr-2 text-left transition-colors hover:bg-white/10"
+                data-testid="button-header-profile"
+              >
               {profile?.photoUrl ? (
                 <img
                   src={resolveUploadUrl(profile.photoUrl)}
@@ -962,6 +970,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 <span className="block truncate text-xs text-white/65">{data?.email}</span>
                 {sessionLine && <span className="block truncate text-[11px] text-white/45" data-testid="text-session-until">{sessionLine}</span>}
               </span>
+              </button>
               <SeatSwitcher current={data?.email ?? ""} />
               <Button
                 variant="outline"
@@ -1028,6 +1037,12 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             feature={proFeature}
             proOpen
             cohostHours={cohostHours}
+            account={{
+              name: profile?.podcastName || profile?.hostName || data.email,
+              email: data.email,
+              photo: profile?.photoUrl ? resolveUploadUrl(profile.photoUrl) : "",
+              onSignOut: () => logout.mutate(),
+            }}
           />
         )}
         {/* Top-justified: whatever the screen is, it starts level with the

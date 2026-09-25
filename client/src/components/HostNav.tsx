@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
-import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2 } from "lucide-react";
+import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut } from "lucide-react";
 import { Link } from "wouter";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify";
 
@@ -37,7 +38,10 @@ export function HostNav({
   feature,
   proOpen = false,
   cohostHours = 0,
+  account,
 }: {
+  /** The person, at the foot of the column: where Profile and Sign out live, as in most apps. */
+  account?: { name: string; email: string; photo: string; onSignOut: () => void };
   screen: HostScreen;
   /** Hours they hold at the desk as co-host; the door shows when there are any. */
   cohostHours?: number;
@@ -176,12 +180,47 @@ export function HostNav({
         {/* Navy, the same as the command card beside it, so the page reads
             as one dark frame with the work in the middle. */}
         <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-5 rounded-2xl bg-[#04102b] p-3 shadow-sm">
-          {groups.map((g) => (
-            <div key={g.title} className={g.title === "Help" ? "mt-auto" : undefined}>
-              <p className="mb-1 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">{g.title}</p>
-              <div className="flex flex-col gap-0.5">{g.items.map((it) => link(it, false))}</div>
-            </div>
-          ))}
+          {groups.map((g) => {
+            // With the account card below, Profile lives there in the column (the phone strip keeps it).
+            const items = account ? g.items.filter((it) => it.key !== "editProfile") : g.items;
+            return (
+              <div key={g.title} className={g.title === "Help" ? "mt-auto" : undefined}>
+                <p className="mb-1 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">{g.title}</p>
+                <div className="flex flex-col gap-0.5">{items.map((it) => link(it, false))}</div>
+              </div>
+            );
+          })}
+          {account && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={`-mt-2 flex w-full items-center gap-2.5 rounded-xl border border-white/10 p-2 text-left transition-colors hover:bg-white/10 ${screen === "editProfile" ? "bg-white/[0.12]" : ""}`}
+                  data-testid="nav-host-account"
+                >
+                  {account.photo ? (
+                    <img src={account.photo} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20" />
+                  ) : (
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white">{account.name.trim().charAt(0).toUpperCase()}</span>
+                  )}
+                  <span className="min-w-0 flex-1 leading-tight">
+                    <span className="block truncate text-[13px] font-semibold text-white">{account.name}</span>
+                    <span className="block truncate text-[11px] text-white/50">Account settings</span>
+                  </span>
+                  <ChevronsUpDown className="h-4 w-4 shrink-0 text-white/40" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" className="w-[216px]">
+                <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{account.email}</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => onGo("editProfile")} className="gap-2" data-testid="account-profile"><UserRound className="h-4 w-4" /> Profile</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onGo("integrations")} className="gap-2"><Link2 className="h-4 w-4" /> Connected accounts</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onGo("events")} className="gap-2"><CalendarDays className="h-4 w-4" /> Event settings</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={account.onSignOut} className="gap-2" data-testid="account-signout"><LogOut className="h-4 w-4" /> Sign out</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </nav>
     </>
