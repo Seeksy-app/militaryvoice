@@ -1084,7 +1084,7 @@ async function cleanEpisode(job: Job, source: string, dir: string): Promise<void
       // trim-per-cut graph ran a 61-minute episode at 100% CPU for over an hour.
       await fs.writeFile(graph, selectGraph(keeps));
       const mp4 = path.join(dir, `${job.recordingId}-clean.mp4`);
-      await ffmpeg(["-i", source, "-filter_complex_script", graph, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", mp4]);
+      await ffmpeg(["-i", source, "-filter_complex_script", graph, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", process.env.CLEAN_PRESET || "superfast", "-crf", "23", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", mp4]);
       videoKey = await uploadBig(mp4, "video/mp4");
       await fs.rm(mp4, { force: true });
       console.log(`[${job.recordingId}]   clean video uploaded`);
