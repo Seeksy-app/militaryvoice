@@ -3,7 +3,7 @@ import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, 
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery";
 
 interface Item {
   key: HostScreen;
@@ -78,6 +78,7 @@ export function HostNav({
       title: "Audience",
       items: [
         { key: "analytics", label: "Your analytics", hint: "What a sponsor sees about you", icon: BarChart3 },
+        { key: "discovery", label: "Discovery", hint: "Find military and veteran creators, guests and sponsors", icon: Compass },
         ...(contactsCount > 0 ? [{ key: "contacts" as const, label: "Contacts", hint: `${contactsCount} asked for a reminder`, icon: Users }] : []),
       ],
     },
@@ -96,7 +97,6 @@ export function HostNav({
     {
       title: "Help",
       items: [
-        { key: "dashboard", label: "Discovery", hint: "Find guests, creators and speakers", icon: Compass, href: "/discover" },
         { key: "dashboard", label: "Help", hint: "Search the help, or ask Alex", icon: LifeBuoy, href: "/help" },
       ],
     },

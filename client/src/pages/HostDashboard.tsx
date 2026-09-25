@@ -65,6 +65,7 @@ import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
 import { GreenRoomScreen } from "@/components/GreenRoomScreen";
+import Discover from "@/pages/Discover";
 import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
@@ -540,7 +541,7 @@ function EventTabs({ active, onGo }: { active: "events" | "promotion" | "greenro
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -550,6 +551,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   postify: "postify",
   social: "social",
   greenroom: "green-room",
+  discovery: "discovery",
   dashboard: "",
   editProfile: "profile",
   events: "events",
@@ -1260,6 +1262,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <ProScreen feature={proFeature} />
         ) : screen === "contacts" ? (
           <ContactsScreen contacts={data?.contacts ?? []} />
+        ) : screen === "discovery" ? (
+          <Discover embedded />
         ) : screen === "greenroom" ? (
           <>
             <EventTabs active="greenroom" onGo={goTo} />
@@ -1428,18 +1432,15 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                           // The green room first: the door people come back for on the day.
                           { key: "green-room", label: "Green room", icon: Headphones, go: () => goTo("greenroom"), green: true },
                           { key: "analytics", label: "Your analytics", icon: BarChart3, go: () => goTo("analytics") },
-                          { key: "discovery", label: "Discovery", icon: Compass, href: "/discover" },
+                          { key: "discovery", label: "Discovery", icon: Compass, go: () => goTo("discovery") },
                           { key: "recordings", label: "Library", icon: Film, go: () => goTo("recordings") },
                           { key: "promotion", label: "Promote your show", icon: Megaphone, go: () => goTo("promotion") },
                         ].map((d) => {
                           const green = "green" in d && d.green;
                           const cls = `flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors ${green ? "border-emerald-600/60 bg-emerald-50 hover:bg-emerald-100/70 dark:bg-emerald-950/30" : "border-border bg-card hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]"}`;
                           const inner = (<><d.icon className={`h-4 w-4 shrink-0 ${green ? "text-emerald-700 dark:text-emerald-400" : "text-[#053877]"}`} /> <span className="truncate">{d.label}</span></>);
-                          return d.href ? (
-                            <Link key={d.key} href={d.href} className={cls} data-testid={`door-${d.key}`}>{inner}</Link>
-                          ) : (
-                            <button key={d.key} type="button" onClick={d.go} className={`${cls} text-left`} data-testid={`door-${d.key}`}>{inner}</button>
-                          );
+                          // Every door is a dashboard screen now (Discovery moved in).
+                          return <button key={d.key} type="button" onClick={d.go} className={`${cls} text-left`} data-testid={`door-${d.key}`}>{inner}</button>;
                         })}
                       </div>
                     </div>

@@ -4,6 +4,7 @@ import {
   Search, Sparkles, BadgeCheck, Bookmark, BookmarkCheck, Users, Mail, Phone, Globe, ShieldCheck,
   Mic2, Megaphone, CalendarDays, X, Loader2, ExternalLink, Plus, Trash2, Download, ChevronRight, Lock, MapPin, Heart, Hash, Handshake, Info,
   Check, SlidersHorizontal, AtSign, Type as TypeIcon, Wand2, TrendingUp, Instagram, Youtube, Twitter, Twitch, Music2, Share2, Linkedin, Facebook,
+  Compass,
 } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -44,7 +45,7 @@ type RowExtra = {
   country: { name: string; code: string; pct: number } | null;
   niches: { name: string; pct: number }[]; collabs: string[]; collabCount: number;
 };
-type Me = { signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number } | null; lookups?: { used: number; allowance: number } | null; isAdmin?: boolean };
+type Me = { discoveryPro?: boolean; signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number } | null; lookups?: { used: number; allowance: number } | null; isAdmin?: boolean };
 /** The saved sample search, every column filled; free to show. */
 type Sample = { q: string; platform: string; total: number; results: Card[]; builtAt: string };
 type SearchResult = { brief: string; mode?: string; total: number; page: number; pageSize: number; results: Card[]; verified: Card[]; understood?: { notes?: string[]; from_nlp?: Record<string, unknown> } | null };
@@ -140,7 +141,12 @@ function Avatar({ src, name, size = 56, ring = false }: { src: string; name: str
 // The page
 // ===========================================================================
 
-export default function Discover() {
+/**
+ * Discovery. `embedded`: inside the dashboard (the host nav beside it) —
+ * no site header, marketing hero, demo or footer, just the tool. The public
+ * /discover page is the same component, whole.
+ */
+export default function Discover({ embedded = false }: { embedded?: boolean } = {}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: me, isLoading: meLoading } = useQuery<Me>({ queryKey: ["/api/discover/me"], queryFn: async () => (await apiRequest("GET", "/api/discover/me")).json() });
@@ -390,9 +396,9 @@ export default function Discover() {
   }, [search.data]);
 
   return (
-    <div className="relative min-h-screen bg-background">
-      <SearchDemo enabled={!submitted && tab === "search"} onType={setGhost} onSpotlight={setSpotlight} onHide={setDemoHide} />
-      <NavBar product="discovery" account={isMember ? { label: "Saved", icon: "saved", onClick: () => { setTab("lists"); document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }); } } : { label: me?.signedIn ? "Add Discovery" : "Sign in", onClick: () => setGate(true) }} />
+    <div className={embedded ? "relative" : "relative min-h-screen bg-background"}>
+      {!embedded && <SearchDemo enabled={!submitted && tab === "search"} onType={setGhost} onSpotlight={setSpotlight} onHide={setDemoHide} />}
+      {!embedded && <NavBar product="discovery" account={isMember ? { label: "Saved", icon: "saved", onClick: () => { setTab("lists"); document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }); } } : { label: me?.signedIn ? "Add Discovery" : "Sign in", onClick: () => setGate(true) }} />}
 
       {/* ---------------------------------------------------------------- hero */}
       {(() => {
@@ -428,14 +434,25 @@ export default function Discover() {
         const toEnrich = () => { setTab("enrich"); setTimeout(() => document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }), 50); };
         return (
           <>
-            {heroVariant === "a" ? (
+            {embedded ? (
+              <div className="mt-6 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground"><Compass className="h-4 w-4" /> Discovery {me?.discoveryPro && <span className="rounded-full bg-[#F0A71F]/20 px-2 py-0.5 text-[10px] font-bold tracking-wide text-[#8a5a00]">PRO</span>}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Find military and veteran creators, guests and sponsors, and reach them.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  {me?.reveals && <span data-testid="discover-allowance">{Math.max(0, me.reveals.allowance - me.reveals.used)} of {me.reveals.allowance} contacts left this month</span>}
+                  <button type="button" onClick={toEnrich} className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Look up a list</button>
+                </div>
+              </div>
+            ) : heroVariant === "a" ? (
               <HeroA raised={false} door={door} setDoor={setDoor} bar={null} tries={null} onEnrich={toEnrich} allowance={isMember ? me?.reveals ?? null : null} />
             ) : (
               <HeroB raised={false} door={door} setDoor={setDoor} bar={null} tries={null} onEnrich={toEnrich} verified={verified} onOpen={openIn(verified)} />
             )}
             {/* The search, the suggestions and the filters: one block, straight under the hero. */}
             <section className={`relative bg-background ${menuOpen ? "z-30" : "z-10"}`}>
-              <div className="mx-auto w-full max-w-[88rem] px-4 pb-2 pt-6 sm:px-6">
+              <div className={embedded ? "w-full pb-2 pt-4" : "mx-auto w-full max-w-[88rem] px-4 pb-2 pt-6 sm:px-6"}>
                 {bar}
                 {tries}
                 {tab !== "enrich" && (
@@ -474,7 +491,7 @@ export default function Discover() {
         );
       })()}
 
-      <main id="discover-main" className="mx-auto w-full max-w-[88rem] scroll-mt-16 px-4 py-8 sm:px-6">
+      <main id="discover-main" className={embedded ? "w-full scroll-mt-16 py-6" : "mx-auto w-full max-w-[88rem] scroll-mt-16 px-4 py-8 sm:px-6"}>
         {tab !== "enrich" && showFilters && (
           <div className="mb-8">
             <FiltersPanel value={filters} onChange={setFilters} platform={platform} onClose={() => setShowFilters(false)} onApply={() => run()} />
@@ -579,7 +596,7 @@ export default function Discover() {
         defaultRole={door}
         source={source}
       />
-      <SiteFooter />
+      {!embedded && <SiteFooter />}
     </div>
   );
 }
