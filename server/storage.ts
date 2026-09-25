@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, hostPosts, type HostPostRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -803,6 +803,8 @@ export interface IStorage {
   listClips(recordingId: number): Promise<ClipRow[]>;
   listClipsByEmail(email: string): Promise<ClipRow[]>;
   getClip(id: number): Promise<ClipRow | undefined>;
+  addHostPost(v: Omit<HostPostRow, "id" | "createdAt">): Promise<HostPostRow>;
+  listHostPosts(email: string): Promise<HostPostRow[]>;
   updateClip(id: number, patch: Partial<ClipRow>): Promise<ClipRow | undefined>;
   /** The next "Edit text" remake, or one whose worker went quiet for 15 minutes. */
   claimClipEdit(): Promise<ClipRow | undefined>;
@@ -2110,6 +2112,17 @@ class DatabaseStorage implements IStorage {
       })
       .returning();
     return row;
+  }
+
+  async addHostPost(v: Omit<HostPostRow, "id" | "createdAt">): Promise<HostPostRow> {
+    await ready();
+    const [row] = await db.insert(hostPosts).values({ ...v, email: v.email.trim().toLowerCase(), createdAt: new Date().toISOString() }).returning();
+    return row;
+  }
+
+  async listHostPosts(email: string): Promise<HostPostRow[]> {
+    await ready();
+    return db.select().from(hostPosts).where(eq(hostPosts.email, email.trim().toLowerCase())).orderBy(desc(hostPosts.id)).limit(200);
   }
 
   async getClip(id: number): Promise<ClipRow | undefined> {

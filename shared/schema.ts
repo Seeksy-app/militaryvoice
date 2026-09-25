@@ -1878,6 +1878,30 @@ export type SponsorClickRow = typeof sponsorClicks.$inferSelect;
  * scheduler. status: proposed → scheduled (a job waits at Upload-Post) →
  * posted; or skipped; or failed with the reason.
  */
+/**
+ * What a podcaster has posted (or scheduled) from their Library or Pōstify:
+ * the Social page's history, and "Posts sent" on the Library.
+ */
+export const hostPosts = pgTable("host_posts", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  /** recording | clip */
+  kind: text("kind").notNull(),
+  refId: integer("ref_id").notNull(),
+  /** For a clip: vertical | square | wide. */
+  shape: text("shape").notNull().default(""),
+  title: text("title").notNull().default(""),
+  description: text("description").notNull().default(""),
+  platforms: text("platforms").notNull().default(""),
+  /** Empty when it went out straight away. */
+  scheduledAt: text("scheduled_at").notNull().default(""),
+  /** sent | scheduled | failed */
+  status: text("status").notNull().default("sent"),
+  error: text("error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("host_posts_email_idx").on(t.email)]);
+export type HostPostRow = typeof hostPosts.$inferSelect;
+
 export const socialPosts = pgTable("social_posts", {
   id: serial("id").primaryKey(),
   eventId: integer("event_id").notNull(),

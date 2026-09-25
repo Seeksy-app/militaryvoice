@@ -282,6 +282,9 @@ export async function publishVideo(input: {
   videoUrl: string;
   title: string;
   description?: string;
+  /** ISO-8601; Upload-Post holds it and publishes then. */
+  scheduledDate?: string;
+  timezone?: string;
 }): Promise<PublishResult> {
   if (!API_KEY) throw new Error("Upload-Post is not configured (UPLOAD_POST_API_KEY missing).");
   if (input.platforms.length === 0) throw new Error("Pick at least one account to post to.");
@@ -292,6 +295,8 @@ export async function publishVideo(input: {
   form.set("video", input.videoUrl);
   form.set("title", input.title.slice(0, 300));
   if (input.description) form.set("description", input.description.slice(0, 4000));
+  if (input.scheduledDate) form.set("scheduled_date", input.scheduledDate);
+  if (input.timezone) form.set("timezone", input.timezone);
   // A full session can take a while to fetch and transcode; don't hold the
   // request open waiting for it.
   form.set("async_upload", "true");

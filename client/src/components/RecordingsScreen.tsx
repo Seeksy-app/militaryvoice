@@ -4,8 +4,8 @@ import { useToast } from "@/hooks/use-toast";
 import { durationOf, putWithProgress } from "@/components/PostStudio";
 import { MyRecordings } from "@/components/MyRecordings";
 import { apiRequest } from "@/lib/queryClient";
-import type { PublicEvent, RecordingRow } from "@shared/schema";
-import { Disc, Loader2, Upload } from "lucide-react";
+import type { PublicEvent, RecordingRow, ClipRow, HostPostRow, CleanResult } from "@shared/schema";
+import { Clock3, Film, Library, Loader2, Scissors, Send, Timer, Upload } from "lucide-react";
 
 // Every session this podcaster has recorded, with a filter by event. Sessions
 // belong to an event, so once somebody has been in two the list needs saying
@@ -64,7 +64,7 @@ function UploadRecording() {
         const f = e.dataTransfer.files?.[0];
         if (f && !busy) void go(f);
       }}
-      className={`mb-5 flex items-center gap-4 rounded-2xl border-2 border-dashed px-5 py-5 transition-colors ${
+      className={`flex h-full items-center gap-4 rounded-2xl border-2 border-dashed px-5 py-4 transition-colors ${
         busy ? "cursor-default border-[#053877]/30 bg-[#053877]/[0.03]" : over ? "cursor-copy border-[#053877] bg-[#053877]/[0.06]" : "cursor-pointer border-[#053877]/25 bg-card hover:border-[#053877]/50 hover:bg-[#053877]/[0.03]"
       }`}
       data-testid="recording-upload"
@@ -84,7 +84,7 @@ function UploadRecording() {
       ) : (
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">Drop a video here, or click to browse</p>
-          <p className="text-xs text-muted-foreground">MP4, MOV or WebM, up to 2GB. It's added to your recordings; make clips from it in Pōstify.</p>
+          <p className="text-xs text-muted-foreground">MP4, MOV or WebM, up to 2GB. Then make clips from it in Pōstify.</p>
         </div>
       )}
     </div>
@@ -102,6 +102,29 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
     queryKey: ["/api/host/recordings"],
     queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(),
   });
+  const { data: clips } = useQuery<ClipRow[]>({
+    queryKey: ["/api/host/clips"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/clips")).json(),
+  });
+  const { data: posts } = useQuery<HostPostRow[]>({
+    queryKey: ["/api/host/posts"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/posts")).json(),
+  });
+
+  // The Library at a glance. Everything counted is ours to count: podcast
+  // downloads live with each show's own host, which we aren't connected to.
+  const originals = (recordings ?? []).filter((r) => r.status === "Ready" && !r.egressId.startsWith("CLEAN_"));
+  const hours = originals.reduce((n, r) => n + r.durationSec, 0) / 3600;
+  const saved = (recordings ?? []).reduce((n, r) => {
+    try { return n + (r.clean ? ((JSON.parse(r.clean) as CleanResult).removedSec ?? 0) : 0); } catch { return n; }
+  }, 0);
+  const stats = [
+    { icon: Film, n: String(originals.length), label: originals.length === 1 ? "Episode" : "Episodes" },
+    { icon: Clock3, n: hours >= 1 ? hours.toFixed(1) : `${Math.round(hours * 60)}m`, label: hours >= 1 ? "Hours recorded" : "Recorded" },
+    { icon: Scissors, n: String(clips?.length ?? 0), label: "Clips made" },
+    { icon: Send, n: String(posts?.filter((p) => p.status !== "failed").length ?? 0), label: "Posts sent" },
+    { icon: Timer, n: saved >= 60 ? `${Math.floor(saved / 60)}:${String(Math.round(saved % 60)).padStart(2, "0")}` : `${Math.round(saved)}s`, label: "Time saved" },
+  ];
 
   // Only offer events that actually have something to show, plus whichever is
   // currently selected, so the filter never lists dead ends.
@@ -111,14 +134,22 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
 
   return (
     <section className="mt-6">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-        <Disc className="h-4 w-4" /> Your recordings
+      <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+        <Library className="h-4 w-4" /> Library
       </h2>
       <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
-        Every session the studio recorded for you, and every video you've uploaded. Downloads are private links
-        made fresh each time, so they can't be passed around by accident.
+        Your episodes: every session the studio recorded, every video you've uploaded, and the clean episodes Pōstify makes.
       </p>
-      <UploadRecording />
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+        <div className="col-span-2 sm:col-span-3 lg:col-span-2"><UploadRecording /></div>
+        {stats.map((s) => (
+          <div key={s.label} className="flex flex-col justify-center rounded-2xl border border-border bg-card px-4 py-3" data-testid={`library-stat-${s.label}`}>
+            <s.icon className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" />
+            <p className="mt-1.5 text-2xl font-bold tabular-nums text-foreground">{s.n}</p>
+            <p className="text-xs text-muted-foreground">{s.label}</p>
+          </div>
+        ))}
+      </div>
 
       {options.length > 1 && (
         <div className="mb-4 flex flex-wrap gap-2">

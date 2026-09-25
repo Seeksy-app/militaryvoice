@@ -53,7 +53,7 @@ import { Transform } from "node:stream";
 import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import { textPath, fitSize, textWidth } from "../server/textPath.js";
-import { cutList, snapToAudio, keepRanges, trimGraph, envelope, type Word } from "./refine.js";
+import { cutList, snapToAudio, keepRanges, selectGraph, envelope, type Word } from "./refine.js";
 
 const API_BASE = (process.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "");
 const AGENT_TOKEN = process.env.AGENT_TOKEN || "";
@@ -110,6 +110,8 @@ interface Job {
   transcript: Line[];
   /** Only (re)make the clean episode; the clips are already done. */
   cleanOnly?: boolean;
+  /** "Edit text": remake one clip's three shapes with a new title and subtitle. */
+  clipEdit?: { clipId: number; title: string; subtitle: string; startSec: number; endSec: number };
 }
 
 interface Moment {
@@ -203,11 +205,15 @@ const ffmpeg = (args: string[]) => run("ffmpeg", ["-hide_banner", "-loglevel", "
 export async function titleBand(text: string, width: number, height: number, sub: string): Promise<Buffer> {
   const pad = Math.round(width * 0.06);
   const size = fitSize(text, "bold", Math.round(height * 0.3), Math.round(height * 0.14), width - pad * 2);
-  const subSize = Math.round(size * 0.42);
+  // The show line shrinks to fit, then shortens: an episode title ("Devil Dawg
+  // Double Dare Ep 5 with Genius Network Founder, Joe Polish") ran off both
+  // edges at a fixed size.
+  const subText = sub.length > 52 ? `${sub.slice(0, 50).trimEnd()}…` : sub;
+  const subSize = fitSize(subText, "regular", Math.round(size * 0.42), Math.round(height * 0.07), (width - pad * 2) / 1.12);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
     <rect width="${width}" height="${height}" fill="#000741"/>
     ${textPath(text, { x: width / 2, y: height * 0.52, size, weight: "bold", fill: "#ffffff", anchor: "middle" })}
-    ${sub ? textPath(sub, { x: width / 2, y: height * 0.8, size: subSize, weight: "regular", fill: "#F0A71F", anchor: "middle", letterSpacing: subSize * 0.08 }) : ""}
+    ${subText ? textPath(subText, { x: width / 2, y: height * 0.8, size: subSize, weight: "regular", fill: "#F0A71F", anchor: "middle", letterSpacing: subSize * 0.08 }) : ""}
   </svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
@@ -1066,7 +1072,9 @@ async function cleanEpisode(job: Job, source: string, dir: string): Promise<void
     const hasVideo = /Video:/.test(await run("ffprobe", ["-hide_banner", "-i", source]).catch((e: Error) => e.message));
     if ((process.env.CLEAN_VIDEO ?? "1") !== "0" && hasVideo && duration <= 2 * 3600) {
       const graph = path.join(dir, "clean-video.txt");
-      await fs.writeFile(graph, trimGraph(keeps).replace("concat=n=", "concat=n=").replace(/\[v\]\[a\]$/, "[vc][a];[vc]scale=-2:720[v]"));
+      // One pass over the episode (selectGraph), not a branch per cut: the
+      // trim-per-cut graph ran a 61-minute episode at 100% CPU for over an hour.
+      await fs.writeFile(graph, selectGraph(keeps));
       const mp4 = path.join(dir, `${job.recordingId}-clean.mp4`);
       await ffmpeg(["-i", source, "-filter_complex_script", graph, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", mp4]);
       videoKey = await uploadBig(mp4, "video/mp4");
@@ -1104,9 +1112,18 @@ async function renderWithCreatomate(
   try {
     const probe = await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", source]);
     const [srcW, srcH] = probe.trim().split(",").map(Number);
+    // Hand Creatomate just this moment, not the episode. Given the whole file
+    // (611MB for an hour) it fetched all of it for each of the three shapes,
+    // and one clip took seven minutes. Cut here (a few seconds), upload
+    // ~20MB, and the moment starts at 0 in it; shot times are already
+    // relative to the moment.
+    const cut = path.join(path.dirname(files.wide), `source-${Math.round(m.startSec)}.mp4`);
+    await run("ffmpeg", ["-y", "-v", "error", "-ss", String(m.startSec), "-i", source, "-t", String(m.endSec - m.startSec), "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", cut]);
+    const signed = await api<{ uploadUrl: string; readUrl: string }>("POST", "/api/agent/clean-files/upload-url", { name: `clip-source-${job.recordingId}-${Math.round(m.startSec)}.mp4` });
+    await run("curl", ["-s", "-f", "--retry", "5", "--retry-all-errors", "--retry-delay", "3", "-X", "PUT", signed.uploadUrl, "-H", "content-type: video/mp4", "--data-binary", `@${cut}`]);
     const { renders } = await api<{ renders: { shape: "wide" | "vertical" | "square"; id: string }[] }>("POST", "/api/agent/clip-renders", {
-      videoUrl: job.downloadUrl,
-      start: m.startSec,
+      videoUrl: signed.readUrl || job.downloadUrl,
+      start: signed.readUrl ? 0 : m.startSec,
       length: m.endSec - m.startSec,
       title: m.title,
       show: job.show,
@@ -1160,7 +1177,84 @@ async function handleClean(job: Job): Promise<void> {
   }
 }
 
+/**
+ * Where to point the camera in each shape. Measured per moment rather than
+ * once per file: a layout can change mid-episode — a solo intro becoming a
+ * two-shot — and one cropdetect call is cheaper than getting it wrong.
+ */
+async function framingFor(job: Job, source: string, m: Moment, within: Line[], dir: string) {
+  const measured = await frameGeometry(source, m.startSec);
+  let focus: Box | null = null;
+  let focusShots: { from: number; to: number; focus: Box | null }[] | null = null;
+  if (!measured.stack && process.env.ANTHROPIC_API_KEY) {
+    // One camera, or a produced show cutting between cameras: find who's
+    // speaking in each shot.
+    // Cuts, and inside a long shot a look every eight seconds — a camera
+    // that zooms or pans moves the speaker without any cut to find.
+    const shots = (await shotsIn(source, m)).flatMap((sh) => {
+      const n = Math.max(1, Math.round((sh.to - sh.from) / 8));
+      const step = (sh.to - sh.from) / n;
+      return Array.from({ length: n }, (_, i) => ({ from: sh.from + i * step, to: i === n - 1 ? sh.to : sh.from + (i + 1) * step }));
+    }).slice(0, 12);
+    const said = (from: number, to: number) =>
+      within.filter((l) => l.endSec > m.startSec + from && l.startSec < m.startSec + to).map((l) => l.text).join(" ") || within.map((l) => l.text).join(" ");
+    focusShots = [];
+    for (const sh of shots) {
+      focusShots.push({ ...sh, focus: await speakerFocus(source, m, said(sh.from, sh.to), measured.whole, dir, m.startSec + (sh.from + sh.to) / 2) });
+    }
+    // Neighbours that frame the same person in the same place are one
+    // shot: no reframe where nothing moved.
+    const same = (a: Box | null, b: Box | null) =>
+      !!a && !!b && Math.abs(a.x + a.w / 2 - (b.x + b.w / 2)) < measured.whole!.w * 0.08 && Math.abs(a.y + a.h / 2 - (b.y + b.h / 2)) < measured.whole!.h * 0.1 && Math.abs(a.w - b.w) < a.w * 0.35;
+    focusShots = focusShots.reduce<typeof focusShots>((acc, sh) => {
+      const last = acc[acc.length - 1];
+      if (last && same(last.focus, sh.focus)) last.to = sh.to;
+      else acc.push({ ...sh });
+      return acc;
+    }, []);
+    if (focusShots.length === 1) { focus = focusShots[0].focus; focusShots = null; }
+    console.log(`[${job.recordingId}]   speaker focus: ${shots.length} shot(s), ${[focus, ...(focusShots ?? []).map((x) => x.focus)].filter(Boolean).length} framed`);
+  }
+  // ffmpeg frames a single speaker; only Creatomate follows a camera that cuts.
+  return { ...measured, focus, focusShots };
+}
+
+/**
+ * "Edit text": the same moment, the same framing, a new title and subtitle.
+ * Only the moment is fetched (ffmpeg reads just that range of the file), and
+ * it goes through Creatomate only — if that fails the clip stays as it was
+ * rather than coming back plainer. Never throws: a failed edit must not
+ * touch the recording's own status.
+ */
+async function handleEdit(job: Job): Promise<void> {
+  const e = job.clipEdit!;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `edit-${e.clipId}-`));
+  const tag = `[clip ${e.clipId}]`;
+  try {
+    console.log(`${tag} new text — "${e.title}" / "${e.subtitle}"`);
+    const len = e.endSec - e.startSec;
+    const cut = path.join(dir, "moment.mp4");
+    await run("ffmpeg", ["-y", "-v", "error", "-ss", String(e.startSec), "-i", job.downloadUrl, "-t", String(len), "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", cut]);
+    const m: Moment = { title: e.title, caption: "", reason: "", startSec: 0, endSec: len };
+    const geo = await framingFor(job, cut, m, [], dir);
+    const files = { wide: path.join(dir, "wide.mp4"), vertical: path.join(dir, "vertical.mp4"), square: path.join(dir, "square.mp4") };
+    if (!(await renderWithCreatomate({ ...job, show: e.subtitle }, m, cut, geo, files))) throw new Error("Creatomate couldn't make it just now");
+    await api("POST", `/api/agent/clip-edits/${e.clipId}/done`, {
+      url: await uploadFile(files.wide, "video/mp4"),
+      verticalUrl: await uploadFile(files.vertical, "video/mp4"),
+      squareUrl: await uploadFile(files.square, "video/mp4"),
+    });
+    console.log(`${tag} updated`);
+  } catch (err) {
+    console.warn(`${tag} edit failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/clip-edits/${e.clipId}/failed`, { error: (err as Error).message }).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function handle(job: Job): Promise<void> {
+  if (job.clipEdit) return handleEdit(job);
   if (job.cleanOnly) return handleClean(job);
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `clip-${job.recordingId}-`));
   try {
@@ -1262,40 +1356,7 @@ async function handle(job: Job): Promise<void> {
       // mid-episode — a solo intro becoming a two-shot — and one cropdetect
       // call is cheaper than getting the framing wrong for the rest of it.
       console.log(`[${job.recordingId}] rendering ${i + 1}/${moments.length} — ${m.title}`);
-      const measured = await frameGeometry(source, m.startSec);
-      let focus: Box | null = null;
-      let focusShots: { from: number; to: number; focus: Box | null }[] | null = null;
-      if (!measured.stack && process.env.ANTHROPIC_API_KEY) {
-        // One camera, or a produced show cutting between cameras: find who's
-        // speaking in each shot.
-        // Cuts, and inside a long shot a look every eight seconds — a camera
-        // that zooms or pans moves the speaker without any cut to find.
-        const shots = (await shotsIn(source, m)).flatMap((sh) => {
-          const n = Math.max(1, Math.round((sh.to - sh.from) / 8));
-          const step = (sh.to - sh.from) / n;
-          return Array.from({ length: n }, (_, i) => ({ from: sh.from + i * step, to: i === n - 1 ? sh.to : sh.from + (i + 1) * step }));
-        }).slice(0, 12);
-        const said = (from: number, to: number) =>
-          within.filter((l) => l.endSec > m.startSec + from && l.startSec < m.startSec + to).map((l) => l.text).join(" ") || within.map((l) => l.text).join(" ");
-        focusShots = [];
-        for (const sh of shots) {
-          focusShots.push({ ...sh, focus: await speakerFocus(source, m, said(sh.from, sh.to), measured.whole, dir, m.startSec + (sh.from + sh.to) / 2) });
-        }
-        // Neighbours that frame the same person in the same place are one
-        // shot: no reframe where nothing moved.
-        const same = (a: Box | null, b: Box | null) =>
-          !!a && !!b && Math.abs(a.x + a.w / 2 - (b.x + b.w / 2)) < measured.whole!.w * 0.08 && Math.abs(a.y + a.h / 2 - (b.y + b.h / 2)) < measured.whole!.h * 0.1 && Math.abs(a.w - b.w) < a.w * 0.35;
-        focusShots = focusShots.reduce<typeof focusShots>((acc, sh) => {
-          const last = acc[acc.length - 1];
-          if (last && same(last.focus, sh.focus)) last.to = sh.to;
-          else acc.push({ ...sh });
-          return acc;
-        }, []);
-        if (focusShots.length === 1) { focus = focusShots[0].focus; focusShots = null; }
-        console.log(`[${job.recordingId}]   speaker focus: ${shots.length} shot(s), ${[focus, ...(focusShots ?? []).map((x) => x.focus)].filter(Boolean).length} framed`);
-      }
-      // ffmpeg frames a single speaker; only Creatomate follows a camera that cuts.
-      const geo = { ...measured, focus, focusShots };
+      const geo = await framingFor(job, source, m, within, dir);
 
       // The same words go into all three, drawn per shape because the type is
       // sized against the canvas it lands on.
@@ -1378,9 +1439,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 
 async function tick(): Promise<boolean> {
-  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim");
+  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit"] });
   if (!job) return false;
-  holding = job.recordingId;
+  // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
+  // the 15-minute reclaim rather than requeuing the whole episode.
+  holding = job.clipEdit ? null : job.recordingId;
   try {
     await handle(job);
     holding = null;

@@ -2809,6 +2809,49 @@ export function registerRoutes(app: Express): void {
     res.redirect(302, await signedRecordingUrl(row.url, 6 * 3600));
   });
 
+  /** "Post later": an ISO time from the body, "past" when it's already gone, or "" for now. */
+  function scheduleFrom(body: any): string | "past" {
+    const raw = String(body?.scheduledAt ?? "").trim();
+    if (!raw) return "";
+    const t = Date.parse(raw);
+    if (!Number.isFinite(t)) return "";
+    if (t < Date.now() + 60_000) return "past";
+    return new Date(t).toISOString();
+  }
+
+  /** One clip, in one shape, to their connected accounts — now or later. */
+  app.post("/api/host/clips/:id/publish", requireHostSession, async (req, res) => {
+    if (!isUploadPostConfigured()) return res.status(503).json({ message: "Posting to socials isn't switched on yet." });
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const clip = await storage.getClip(Number(req.params.id));
+    if (!clip || clip.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "Not found" });
+    const shape = ["vertical", "square", "wide"].includes(req.body?.shape) ? String(req.body.shape) : "vertical";
+    const videoUrl = shape === "square" ? clip.squareUrl : shape === "wide" ? clip.url : clip.verticalUrl;
+    if (!videoUrl) return res.status(409).json({ message: "That shape isn't ready." });
+    const profile = await storage.getProfileByEmail(email);
+    if (!profile?.uploadPostUsername) return res.status(400).json({ message: "Connect your social accounts first." });
+    const platforms = (Array.isArray(req.body?.platforms) ? req.body.platforms : []).map((p: unknown) => String(p).toLowerCase().trim()).filter(Boolean);
+    if (platforms.length === 0) return res.status(400).json({ message: "Pick at least one account to post to." });
+    const when = scheduleFrom(req.body);
+    if (when === "past") return res.status(400).json({ message: "Pick a time in the future." });
+    const title = String(req.body?.title ?? clip.title).trim() || clip.title;
+    const description = String(req.body?.description ?? "").trim();
+    try {
+      await publishVideo({ username: profile.uploadPostUsername, platforms, videoUrl, title, description: description || undefined, scheduledDate: when || undefined, timezone: when ? String(req.body?.timezone ?? "") || undefined : undefined });
+      await storage.addHostPost({ email, kind: "clip", refId: clip.id, shape, title, description, platforms: platforms.join(","), scheduledAt: when || "", status: when ? "scheduled" : "sent", error: "" });
+      res.json({ ok: true, scheduled: Boolean(when) });
+    } catch (err: any) {
+      console.error("Publishing a clip failed:", err);
+      res.status(502).json({ message: err?.message ?? "Couldn't post that right now." });
+    }
+  });
+
+  /** What they've posted and scheduled, newest first. */
+  app.get("/api/host/posts", requireHostSession, async (req, res) => {
+    noStore(res);
+    res.json(await storage.listHostPosts((getSessionEmail(req) ?? "").toLowerCase().trim()));
+  });
+
   /** Send a finished session to the podcaster's own connected accounts. */
   app.post("/api/host/recordings/:id/publish", requireHostSession, async (req, res) => {
     if (!isUploadPostConfigured()) {
@@ -2837,15 +2880,15 @@ export function registerRoutes(app: Express): void {
     try {
       // Six hours: long enough for Upload-Post to fetch a large file, short
       // enough that the link is useless afterwards.
-      const videoUrl = await signedRecordingUrl(row.url, 21_600);
-      await publishVideo({
-        username,
-        platforms,
-        videoUrl,
-        title: String(req.body?.title ?? row.title ?? "").trim() || row.title || "My session",
-        description: String(req.body?.description ?? "").trim() || undefined,
-      });
-      res.json({ ok: true });
+      const when = scheduleFrom(req.body);
+      if (when === "past") return res.status(400).json({ message: "Pick a time in the future." });
+      // Six hours is enough for posting now; a scheduled post is fetched then, so the link has to last.
+      const videoUrl = await signedRecordingUrl(row.url, when ? 7 * 24 * 3600 : 21_600);
+      const title = String(req.body?.title ?? row.title ?? "").trim() || row.title || "My session";
+      const description = String(req.body?.description ?? "").trim();
+      await publishVideo({ username, platforms, videoUrl, title, description: description || undefined, scheduledDate: when || undefined, timezone: when ? String(req.body?.timezone ?? "") || undefined : undefined });
+      await storage.addHostPost({ email, kind: "recording", refId: row.id, shape: "", title, description, platforms: platforms.join(","), scheduledAt: when || "", status: when ? "scheduled" : "sent", error: "" });
+      res.json({ ok: true, scheduled: Boolean(when) });
     } catch (err: any) {
       console.error("Publishing a recording failed:", err);
       res.status(502).json({ message: err?.message ?? "Couldn't post that right now." });
@@ -5237,6 +5280,11 @@ export function registerRoutes(app: Express): void {
       at: new Date().toISOString(),
     };
     await storage.setClean(rec.id, JSON.stringify(out));
+    // The clean episode goes straight into the Library, as its own recording
+    // beside the original (which is never touched). Pōstify is for clips.
+    if (status === "done" && out.videoKey && rec.email) {
+      await storage.saveCleanCopy(rec, out.videoKey, Math.max(0, (out.durationSec ?? rec.durationSec) - (out.removedSec ?? 0))).catch((err) => console.error("Couldn't file the clean episode:", err));
+    }
     res.json({ ok: true });
   });
 

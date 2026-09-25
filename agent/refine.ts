@@ -147,6 +147,33 @@ export function keepRanges(cuts: Span[], duration: number): { start: number; end
  * trim takes absolute source times and each segment is independent, so there
  * is nothing to accumulate.
  */
+/**
+ * The same cut as trimGraph, in one pass: every frame is looked at once and
+ * kept or dropped. trimGraph splits the input into a branch per kept range,
+ * so every frame of the episode goes through every branch — fine for a clip,
+ * but a 61-minute episode with ~350 cuts ran at 100% CPU for over an hour.
+ *
+ * Ranges are snapped to whole video frames (1/fps), and the audio is chopped
+ * into 1/300s pieces (a whole number of them per video frame), so picture and
+ * sound keep exactly the same spans and stay in sync however many cuts there
+ * are. Output is 720p at a constant `fps`.
+ */
+export function selectGraph(keeps: { start: number; end: number }[], fps = 30, height = 720): string {
+  const snap = (t: number) => Math.round(t * fps) / fps;
+  const spans = keeps
+    .map((k) => ({ a: snap(k.start), b: snap(k.end) }))
+    .filter((k) => k.b > k.a);
+  // "t lies in a kept span", tested half a piece early at both ends: a frame
+  // sits exactly on a boundary, and a rounded boundary a hair after it would
+  // otherwise drop it — one frame per span, a quarter-second of drift by the
+  // end of a ten-minute test.
+  const expr = (half: number) => spans.map((k) => `gte(t,${(k.a - half).toFixed(5)})*lt(t,${(k.b - half).toFixed(5)})`).join("+") || "0";
+  return [
+    `[0:v]fps=${fps},select='${expr(0.5 / fps)}',setpts=N/${fps}/TB,scale=-2:${height}[v]`,
+    `[0:a]aresample=48000,asetnsamples=n=160:p=0,aselect='${expr(0.5 / 300)}',asetpts=N/SR/TB[a]`,
+  ].join(";");
+}
+
 export function trimGraph(keeps: { start: number; end: number }[]): string {
   const parts: string[] = [];
   for (const [i, k] of keeps.entries()) {
