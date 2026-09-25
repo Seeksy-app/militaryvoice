@@ -2800,6 +2800,15 @@ export function registerRoutes(app: Express): void {
     res.json({ url: await signedRecordingUrl(row.url) });
   });
 
+  /** The file itself, for a <video> (thumbnails, playing it in the page): a redirect to a fresh signed link. */
+  app.get("/api/host/recordings/:id/video", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const row = await storage.getRecording(Number(req.params.id));
+    if (!row || row.email !== email || row.status !== "Ready" || !row.url) return res.status(404).end();
+    res.redirect(302, await signedRecordingUrl(row.url, 6 * 3600));
+  });
+
   /** Send a finished session to the podcaster's own connected accounts. */
   app.post("/api/host/recordings/:id/publish", requireHostSession, async (req, res) => {
     if (!isUploadPostConfigured()) {

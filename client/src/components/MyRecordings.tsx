@@ -16,7 +16,9 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlatformIcon, platformLabel, parseSocialAccounts } from "@/components/SocialIcons";
 import type { RecordingRow, SocialPlatform } from "@shared/schema";
-import { Disc, Download, Loader2, Share2, Wand2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Download, Loader2, MoreHorizontal, Play, Share2, Wand2 } from "lucide-react";
 
 // A podcaster's own sessions. The studio writes them; nothing here is uploaded
 // by hand. The bucket is private, so every download is a fresh signed link.
@@ -26,6 +28,11 @@ function duration(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return `${m}m ${String(s).padStart(2, "0")}s`;
+}
+
+function clock(sec: number): string {
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.round(sec % 60);
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
 }
 
 function size(bytes: string): string {
@@ -48,6 +55,7 @@ export function MyRecordings({
 }) {
   const connected = parseSocialAccounts(socialAccounts).map((a) => a.platform);
   const [publishing, setPublishing] = useState<RecordingRow | null>(null);
+  const [playing, setPlaying] = useState<number | null>(null);
   const { toast } = useToast();
   const { data: all, isLoading } = useQuery<RecordingRow[]>({
     queryKey: ["/api/host/recordings"],
@@ -79,69 +87,61 @@ export function MyRecordings({
   }
 
   return (
-    <section className="mt-8 rounded-2xl border border-border bg-card p-6">
-      <div className="flex items-center gap-2">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Disc className="h-4.5 w-4.5" />
-        </div>
-        <div>
-          <h2 className="text-base font-semibold text-card-foreground">Your recordings</h2>
-          <p className="text-sm text-muted-foreground">
-            Every session we record for you lands here. Yours to keep and publish wherever you like.
-          </p>
-        </div>
-      </div>
-
-      <ul className="mt-5 flex flex-col gap-2">
+    <section className="mt-2">
+      {/* Thumbnails, each with one menu: the three things you do with a recording. */}
+      <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {data.map((r) => (
-          <li
-            key={r.id}
-            className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-background p-4"
-            data-testid={`recording-${r.id}`}
-          >
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-card-foreground">{r.title || "Your session"}</div>
-              <div className="mt-0.5 tabular-nums text-xs text-muted-foreground">
-                {new Date(r.startedAt).toLocaleString()}
-                {[duration(r.durationSec), size(r.sizeBytes)].filter(Boolean).map((v) => ` · ${v}`)}
-              </div>
+          <li key={r.id} className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm" data-testid={`recording-${r.id}`}>
+            <div className="relative aspect-video bg-[#050d26]">
+              {r.status === "Ready" ? (
+                playing === r.id ? (
+                  <video src={`/api/host/recordings/${r.id}/video`} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
+                ) : (
+                  <button type="button" onClick={() => setPlaying(r.id)} className="absolute inset-0" aria-label={`Play ${r.title || "recording"}`}>
+                    <video src={`/api/host/recordings/${r.id}/video#t=8`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/10 opacity-0 transition-opacity group-hover:opacity-100">
+                      <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-[#000741] shadow-lg"><Play className="h-5 w-5 fill-current" /></span>
+                    </span>
+                    {r.durationSec > 0 && <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">{clock(r.durationSec)}</span>}
+                    {r.clipStatus === "done" && <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[10px] font-bold text-[#1a1200]"><Wand2 className="h-3 w-3" /> Clips ready</span>}
+                  </button>
+                )
+              ) : (
+                <span className="absolute inset-0 flex items-center justify-center gap-1.5 text-xs font-medium text-white/70">
+                  {r.status === "Recording" ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Still recording</> : "Didn't save — tell us and we'll look"}
+                </span>
+              )}
             </div>
-
-            {r.status === "Recording" ? (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Still recording
-              </span>
-            ) : r.status === "Failed" ? (
-              <span className="text-xs font-medium text-destructive">Didn't save — tell us and we'll look</span>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 rounded-full"
-                  onClick={() => void download(r.id)}
-                  data-testid={`button-download-recording-${r.id}`}
-                >
-                  <Download className="h-3.5 w-3.5" /> Download
-                </Button>
-                {/* Clips and the clean episode are made in Pōstify. */}
-                <Button asChild size="sm" variant="outline" className="gap-1.5 rounded-full border-[#F0A71F]/60">
-                  <a href={`/host/dashboard/postify?rec=${r.id}`} data-testid={`button-postify-recording-${r.id}`}>
-                    <Wand2 className="h-3.5 w-3.5 text-[#b36b00]" /> {r.clipStatus === "done" ? "Clips in Pōstify" : "Open in Pōstify"}
-                  </a>
-                </Button>
-                {connected.length > 0 && (
-                  <Button
-                    size="sm"
-                    className="gap-1.5 rounded-full"
-                    onClick={() => setPublishing(r)}
-                    data-testid={`button-publish-recording-${r.id}`}
-                  >
-                    <Share2 className="h-3.5 w-3.5" /> Post it
-                  </Button>
-                )}
+            <div className="flex items-start gap-2 p-3">
+              <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 text-sm font-semibold leading-snug text-card-foreground" title={r.title}>{r.title || "Your session"}</p>
+                <p className="mt-0.5 tabular-nums text-xs text-muted-foreground">
+                  {new Date(r.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                  {size(r.sizeBytes) ? ` · ${size(r.sizeBytes)}` : ""}
+                </p>
               </div>
-            )}
+              {r.status === "Ready" && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full" aria-label="More" data-testid={`menu-recording-${r.id}`}>
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem onSelect={() => void download(r.id)} className="gap-2" data-testid={`button-download-recording-${r.id}`}>
+                      <Download className="h-4 w-4" /> Download
+                    </DropdownMenuItem>
+                    {/* Clips and the clean episode are made in Pōstify. */}
+                    <DropdownMenuItem onSelect={() => { window.location.href = `/host/dashboard/postify?rec=${r.id}`; }} className="gap-2" data-testid={`button-postify-recording-${r.id}`}>
+                      <Wand2 className="h-4 w-4 text-[#b36b00]" /> {r.clipStatus === "done" ? "Clips in Pōstify" : "Pōstify it"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setPublishing(r)} className="gap-2" data-testid={`button-publish-recording-${r.id}`}>
+                      <Share2 className="h-4 w-4" /> Post it
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           </li>
         ))}
       </ul>
@@ -168,6 +168,7 @@ function PublishDialog({
   const { toast } = useToast();
   const [picked, setPicked] = useState<SocialPlatform[]>([]);
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [sending, setSending] = useState(false);
 
   // Reset each time a different recording opens the dialog.
@@ -177,6 +178,7 @@ function PublishDialog({
     setSeen(key);
     setPicked(platforms);
     setTitle(recording.title || "");
+    setDescription("");
   }
 
   async function send() {
@@ -186,6 +188,7 @@ function PublishDialog({
       await apiRequest("POST", `/api/host/recordings/${recording.id}/publish`, {
         platforms: picked,
         title: title.trim(),
+        description: description.trim(),
       });
       toast({
         title: "On its way",
@@ -203,11 +206,18 @@ function PublishDialog({
     <Dialog open={!!recording} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Post your session</DialogTitle>
+          <DialogTitle>Post it</DialogTitle>
           <DialogDescription>
-            This goes out to the accounts you've connected, under your own name. Nothing is posted without you.
+            Goes out now to the accounts you tick, under your own name. Nothing is posted until you press Post.
           </DialogDescription>
         </DialogHeader>
+
+        {platforms.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+            Connect Instagram, YouTube, TikTok, LinkedIn or Facebook first, and they'll show up here.
+            <Button asChild className="mt-3 w-full rounded-full"><a href="/host/dashboard/integrations">Connect your accounts</a></Button>
+          </div>
+        ) : (
 
         <div className="flex flex-col gap-4">
           <div>
@@ -220,6 +230,20 @@ function PublishDialog({
               placeholder="What to call it"
               data-testid="input-publish-title"
             />
+          </div>
+
+          <div>
+            <Label htmlFor="publish-description">What to say</Label>
+            <Textarea
+              id="publish-description"
+              className="mt-1 min-h-[96px]"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="The words that go with it: what it's about, who's on it, a link, #hashtags"
+              maxLength={2200}
+              data-testid="input-publish-description"
+            />
+            <p className="mt-1 text-right text-[11px] tabular-nums text-muted-foreground">{description.length}/2200</p>
           </div>
 
           <div>
@@ -241,13 +265,14 @@ function PublishDialog({
             </div>
           </div>
         </div>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={sending}>
             Cancel
           </Button>
           <Button onClick={() => void send()} disabled={sending || picked.length === 0} data-testid="button-publish-confirm">
-            {sending ? "Sending…" : "Post it"}
+            {sending ? "Sending…" : "Post"}
           </Button>
         </DialogFooter>
       </DialogContent>
