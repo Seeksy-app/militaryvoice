@@ -791,6 +791,7 @@ export interface IStorage {
   setClean(recordingId: number, clean: string): Promise<void>;
   claimCleanJob(): Promise<RecordingRow | undefined>;
   markPostifyBeta(recordingId: number): Promise<void>;
+  saveCleanCopy(source: RecordingRow, videoKey: string, durationSec: number): Promise<RecordingRow>;
   createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow>;
   claimClipJob(): Promise<RecordingRow | undefined>;
   appendTranscript(studioId: number, eventId: number, lines: { speaker: string; text: string; startMs: number; endMs: number }[]): Promise<number>;
@@ -1804,6 +1805,37 @@ class DatabaseStorage implements IStorage {
    * any studio session — finished, and queued for the clipper — so everything
    * downstream (progress, clips, downloads) works the same.
    */
+  /**
+   * The clean episode as a recording of its own, beside the original — never
+   * in place of it. Saved once: a second save returns the first copy.
+   */
+  async saveCleanCopy(source: RecordingRow, videoKey: string, durationSec: number): Promise<RecordingRow> {
+    await ready();
+    const egressId = `CLEAN_${source.id}`;
+    const [existing] = await db.select().from(recordings).where(eq(recordings.egressId, egressId)).limit(1);
+    if (existing) return existing;
+    const now = new Date().toISOString();
+    const [row] = await db
+      .insert(recordings)
+      .values({
+        eventId: source.eventId,
+        studioId: source.studioId,
+        signupId: source.signupId,
+        email: source.email,
+        title: `${source.title || "Episode"} (clean)`.slice(0, 160),
+        egressId,
+        status: "Ready",
+        url: videoKey,
+        durationSec: Math.round(durationSec),
+        sizeBytes: "0",
+        startedAt: now,
+        endedAt: now,
+        clipStatus: "none",
+      })
+      .returning();
+    return row;
+  }
+
   async markPostifyBeta(recordingId: number): Promise<void> {
     await ready();
     await db.update(recordings).set({ postifyBeta: true }).where(eq(recordings.id, recordingId));

@@ -29,44 +29,74 @@ function cleanOf(r: Rec | undefined): CleanResult | null {
 const mmss = (sec: number) => (sec >= 60 ? `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s` : `${Math.round(sec)}s`);
 
 /** The episode with the ums, false starts and dead air out — audio and video downloads. */
-function CleanCard({ rec, clean }: { rec: Rec; clean: CleanResult }) {
+function CleanCard({ rec, clean, saved, onSaved, onPlay }: { rec: Rec; clean: CleanResult; saved: Rec | null; onSaved: (id: number) => void; onPlay: () => void }) {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
   const bits = [
     clean.fillers ? `${clean.fillers} fillers` : "",
     clean.falseStarts ? `${clean.falseStarts} false starts` : "",
     clean.pauses ? `${clean.pauses} long pauses` : "",
   ].filter(Boolean);
+  const ready = clean.status === "done" && Boolean(clean.videoKey || clean.audioKey);
+  const save = async () => {
+    setSaving(true);
+    try {
+      const { id } = (await (await apiRequest("POST", `/api/host/recordings/${rec.id}/clean/save`)).json()) as { id: number };
+      onSaved(id);
+      toast({ title: "Saved to Recordings", description: "The clean episode sits next to your original. Nothing was replaced." });
+    } catch (e) {
+      toast({ title: "Couldn't save that", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-4" data-testid="post-clean">
+    <div className={`mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-4 ${ready ? "border-emerald-400/50 bg-emerald-500/[0.04]" : "border-border bg-card"}`} data-testid="post-clean">
       <div className="flex min-w-0 items-center gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"><Wand2 className="h-5 w-5" /></span>
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${ready ? "bg-emerald-500 text-white" : "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"}`}>
+          {ready ? <Check className="h-5 w-5" /> : clean.status === "running" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Wand2 className="h-5 w-5" />}
+        </span>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">Clean episode</p>
+          <p className="text-sm font-semibold text-foreground">
+            {ready ? `Your clean episode is ready${clean.removedSec ? ` — ${mmss(clean.removedSec)} shorter` : ""}` : clean.status === "failed" ? "Clean episode" : "Cleaning your episode…"}
+          </p>
           <p className="text-xs text-muted-foreground">
             {clean.status === "failed"
               ? "Couldn't clean this one. The clips are unaffected."
               : bits.length
-                ? `${bits.join(", ")} taken out${clean.removedSec ? ` — ${mmss(clean.removedSec)} shorter` : ""}.`
+                ? `${bits.join(", ")} taken out. Your original is untouched.`
                 : clean.status === "running"
                   ? "Taking out the ums, false starts and long pauses…"
                   : "Nothing needed taking out."}
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        {clean.audioKey ? (
+      <div className="flex flex-wrap items-center gap-2">
+        {clean.videoKey && (
+          <Button variant="ghost" size="sm" onClick={onPlay} className="gap-1.5 rounded-full"><Play className="h-4 w-4" /> Watch it</Button>
+        )}
+        {clean.audioKey && (
           <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-full">
-            <a href={`/api/host/recordings/${rec.id}/clean/audio`} data-testid="post-clean-audio"><Headphones className="h-4 w-4" /> Clean audio (MP3)</a>
+            <a href={`/api/host/recordings/${rec.id}/clean/audio`} data-testid="post-clean-audio"><Download className="h-4 w-4" /> Download audio</a>
           </Button>
-        ) : clean.status === "running" ? (
-          <Button variant="outline" size="sm" disabled className="gap-1.5 rounded-full"><Loader2 className="h-4 w-4 animate-spin" /> Audio</Button>
-        ) : null}
-        {clean.videoKey ? (
+        )}
+        {clean.videoKey && (
           <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-full">
-            <a href={`/api/host/recordings/${rec.id}/clean/video`} data-testid="post-clean-video"><Video className="h-4 w-4" /> Clean video (MP4)</a>
+            <a href={`/api/host/recordings/${rec.id}/clean/video`} data-testid="post-clean-video"><Download className="h-4 w-4" /> Download video</a>
           </Button>
-        ) : clean.status === "running" ? (
-          <Button variant="outline" size="sm" disabled className="gap-1.5 rounded-full"><Loader2 className="h-4 w-4 animate-spin" /> Video</Button>
-        ) : null}
+        )}
+        {clean.videoKey && (saved ? (
+          <Button asChild size="sm" variant="outline" className="gap-1.5 rounded-full border-emerald-400/60 text-emerald-700 dark:text-emerald-400">
+            <a href="/host/dashboard/recordings"><Check className="h-4 w-4" /> In Recordings</a>
+          </Button>
+        ) : (
+          <Button size="sm" onClick={() => void save()} disabled={saving} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-clean-save">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Disc className="h-4 w-4" />} Save to Recordings
+          </Button>
+        ))}
+        {clean.status === "running" && !clean.videoKey && (
+          <Button variant="outline" size="sm" disabled className="gap-1.5 rounded-full"><Loader2 className="h-4 w-4 animate-spin" /> {clean.audioKey ? "Video" : "Audio and video"}</Button>
+        )}
       </div>
     </div>
   );
@@ -307,10 +337,13 @@ export function PostStudio() {
     refetchInterval: moving ? 5000 : false,
   });
 
-  const list = useMemo(() => (recs.data ?? []).filter((r) => r.status === "Ready").sort((a, b) => b.id - a.id), [recs.data]);
+  // Saved clean copies are recordings (they live in Recordings), not episodes to post-produce again.
+  const list = useMemo(() => (recs.data ?? []).filter((r) => r.status === "Ready" && !r.egressId.startsWith("CLEAN_")).sort((a, b) => b.id - a.id), [recs.data]);
   const rec = list.find((r) => r.id === selected) ?? list[0];
   const p = progressOf(rec);
   const clean = cleanOf(rec);
+  const savedCopy = rec ? (recs.data ?? []).find((r) => r.egressId === `CLEAN_${rec.id}`) ?? null : null;
+  const cleanVideo = rec && clean?.videoKey ? `/api/host/recordings/${rec.id}/clean/video` : "";
   const mine = useMemo(() => (clips.data ?? []).filter((c) => c.recordingId === rec?.id).sort((a, b) => a.startSec - b.startSec), [clips.data, rec?.id]);
 
   useEffect(() => setPreview(null), [rec?.id]);
@@ -434,7 +467,20 @@ export function PostStudio() {
         {/* Preview */}
         <div className="flex flex-col gap-3">
           <div className="relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5">
-            {preview ? (
+            {/* Once there's a clean episode, it's what this window shows — with the original a click away. */}
+            {cleanVideo && (preview === null || preview.kind === "recording" || preview.url === cleanVideo) && (
+              <div className="absolute left-3 top-3 z-10 flex gap-1 rounded-full bg-black/60 p-1 text-xs font-semibold backdrop-blur">
+                {[
+                  { k: "clean", label: "Clean", on: preview === null || preview.url === cleanVideo, go: () => setPreview({ kind: "clip", url: cleanVideo }) },
+                  { k: "original", label: "Original", on: preview?.kind === "recording", go: () => void showRecording() },
+                ].map((b) => (
+                  <button key={b.k} type="button" onClick={b.go} className={`rounded-full px-3 py-1 ${b.on ? "bg-white text-[#000741]" : "text-white/80 hover:text-white"}`} data-testid={`post-view-${b.k}`}>{b.label}</button>
+                ))}
+              </div>
+            )}
+            {!preview && cleanVideo && done ? (
+              <video key={cleanVideo} src={cleanVideo} controls playsInline preload="metadata" className="h-full w-full bg-black object-contain" />
+            ) : preview ? (
               <video key={preview.url} src={preview.url} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
             ) : running || failed ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center text-white">
@@ -514,7 +560,15 @@ export function PostStudio() {
         ))}
       </div>
 
-      {clean && <CleanCard rec={rec} clean={clean} />}
+      {clean && (
+        <CleanCard
+          rec={rec}
+          clean={clean}
+          saved={savedCopy}
+          onSaved={() => void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] })}
+          onPlay={() => { setPreview({ kind: "clip", url: cleanVideo }); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+        />
+      )}
 
       {/* Clips, filling in */}
       {(mine.length > 0 || moments.length > 0) && (

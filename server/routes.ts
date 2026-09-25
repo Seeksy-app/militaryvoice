@@ -5189,6 +5189,18 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
+  /** Keep the clean episode: saved as its own recording next to the original. */
+  app.post("/api/host/recordings/:id/clean/save", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "Not found" });
+    let c: CleanResult | null = null;
+    try { c = rec.clean ? JSON.parse(rec.clean) : null; } catch { c = null; }
+    if (!c?.videoKey) return res.status(409).json({ message: "The clean video isn't ready yet." });
+    const copy = await storage.saveCleanCopy(rec, c.videoKey, Math.max(0, (c.durationSec ?? rec.durationSec) - (c.removedSec ?? 0)));
+    res.json({ id: copy.id });
+  });
+
   /** A podcaster's cleaned episode: audio or video, as a fresh private link. */
   app.get("/api/host/recordings/:id/clean/:kind", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
