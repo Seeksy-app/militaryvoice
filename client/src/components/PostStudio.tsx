@@ -484,23 +484,48 @@ function BookendPicker({ label, value, onChange }: { label: string; value: { key
  * mark a moment and make it a clip; and edit the episode itself — trim the
  * ends, put an intro and outro on — into a new copy in the Library.
  */
-function EpisodeTools({ rec, source, videoRef, formats, onFormats }: {
+function EpisodeTools({ rec, source, videoRef }: {
   rec: Rec; source: "clean" | "original"; videoRef: React.RefObject<HTMLVideoElement>;
-  formats: ClipFormat[]; onFormats: (f: ClipFormat[]) => void;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const now = () => videoRef.current?.currentTime ?? 0;
   const [tab, setTab] = useState<"clip" | "edit">("clip");
-  // Make a clip
+  // Make a clip. Shapes start unpicked: the button counts what you choose.
   const [mark, setMark] = useState<{ in: number | null; out: number | null }>({ in: null, out: null });
   const [title, setTitle] = useState("");
+  const [formats, setFormats] = useState<ClipFormat[]>([]);
   const len = mark.in !== null && mark.out !== null ? mark.out - mark.in : 0;
+  const reset = () => { setMark({ in: null, out: null }); setTitle(""); setFormats([]); };
+  // Where the player is, for the timeline bar; and stopping a Preview at the end mark.
+  const [pos, setPos] = useState({ t: 0, d: 0 });
+  const stopAt = useRef<number | null>(null);
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const tick = () => {
+      setPos({ t: v.currentTime, d: Number.isFinite(v.duration) ? v.duration : 0 });
+      if (stopAt.current !== null && v.currentTime >= stopAt.current) { v.pause(); stopAt.current = null; }
+    };
+    v.addEventListener("timeupdate", tick);
+    v.addEventListener("loadedmetadata", tick);
+    tick();
+    return () => { v.removeEventListener("timeupdate", tick); v.removeEventListener("loadedmetadata", tick); };
+  }, [videoRef, source, rec.id]);
+  const seek = (t: number) => { if (videoRef.current) videoRef.current.currentTime = t; };
+  const preview = () => {
+    const v = videoRef.current;
+    if (!v || mark.in === null) return;
+    v.currentTime = mark.in;
+    stopAt.current = mark.out;
+    void v.play();
+  };
+  const pct = (t: number) => (pos.d ? `${Math.min(100, Math.max(0, (t / pos.d) * 100))}%` : "0%");
+  const lengthNote = len <= 0 ? "" : len < 5 ? "Too short: at least 5 seconds" : len > 180 ? "Too long: 3 minutes at most" : `${hms(len)} long`;
   const makeClip = useMutation({
     mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/clips`, { startSec: mark.in, endSec: mark.out, title, source: source === "clean" ? "clean" : "", formats })).json(),
     onSuccess: () => {
-      setMark({ in: null, out: null });
-      setTitle("");
+      reset();
       void qc.invalidateQueries({ queryKey: ["/api/host/clips"] });
       void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
       toast({ title: "Making your clip", description: "It appears with your other clips in a minute or two." });
@@ -536,34 +561,54 @@ function EpisodeTools({ rec, source, videoRef, formats, onFormats }: {
       <div className="flex gap-1 border-b border-border px-2">{tabBtn("clip", "Make a clip")}{tabBtn("edit", "Edit episode")}</div>
       {tab === "clip" ? (
         <div className="space-y-3 p-4">
-          <p className="text-xs text-muted-foreground">Play or scrub to the moment, then mark where it starts and ends.</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" size="sm" variant="outline" onClick={() => setMark((m) => ({ in: now(), out: m.out !== null && m.out > now() ? m.out : null }))} className="gap-1.5 rounded-full" data-testid="mark-in">
-              Mark in{mark.in !== null ? ` · ${hms(mark.in)}` : ""}
-            </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => setMark((m) => ({ ...m, out: now() }))} disabled={mark.in === null} className="gap-1.5 rounded-full" data-testid="mark-out">
-              Mark out{mark.out !== null ? ` · ${hms(mark.out)}` : ""}
-            </Button>
-            {len > 0 && <span className={`text-xs font-semibold tabular-nums ${len < 5 || len > 180 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{hms(len)} long</span>}
+          <p className="text-xs text-muted-foreground">Play or scrub the episode above. Pause where the clip should start and press <span className="font-semibold text-foreground">Set start</span>, then do the same for the end.</p>
+          {/* The whole episode as a bar: your selection in gold, where you are as a line. Click to jump. */}
+          <div
+            role="slider"
+            aria-label="Episode timeline"
+            aria-valuemin={0}
+            aria-valuemax={Math.round(pos.d)}
+            aria-valuenow={Math.round(pos.t)}
+            tabIndex={0}
+            onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * pos.d); }}
+            className="relative h-3 cursor-pointer rounded-full bg-muted"
+            data-testid="clip-timeline"
+          >
             {mark.in !== null && (
-              <button type="button" onClick={() => { if (videoRef.current && mark.in !== null) { videoRef.current.currentTime = mark.in; void videoRef.current.play(); } }} className="text-xs text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]">Play from mark</button>
+              <div className="absolute inset-y-0 rounded-full bg-[#F0A71F]" style={{ left: pct(mark.in), width: mark.out !== null ? `calc(${pct(mark.out)} - ${pct(mark.in)})` : "3px" }} />
+            )}
+            <div className="absolute -inset-y-1 w-0.5 rounded bg-[#053877] dark:bg-white" style={{ left: pct(pos.t) }} />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" variant={mark.in === null ? "default" : "outline"} onClick={() => setMark((m) => ({ in: now(), out: m.out !== null && m.out > now() ? m.out : null }))} className={`gap-1.5 rounded-full ${mark.in === null ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} data-testid="mark-in">
+              {mark.in === null ? "Set start" : `Start ${hms(mark.in)}`}
+            </Button>
+            <Button type="button" size="sm" variant={mark.in !== null && mark.out === null ? "default" : "outline"} onClick={() => setMark((m) => ({ ...m, out: now() }))} disabled={mark.in === null} className={`gap-1.5 rounded-full ${mark.in !== null && mark.out === null ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} data-testid="mark-out">
+              {mark.out === null ? "Set end" : `End ${hms(mark.out)}`}
+            </Button>
+            {lengthNote && <span className={`text-xs font-semibold ${len < 5 || len > 180 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{lengthNote}</span>}
+            {mark.in !== null && mark.out !== null && (
+              <Button type="button" size="sm" variant="ghost" onClick={preview} className="gap-1.5 rounded-full" data-testid="mark-preview"><Play className="h-3.5 w-3.5" /> Preview</Button>
+            )}
+            {(mark.in !== null || title || formats.length > 0) && (
+              <button type="button" onClick={reset} className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="mark-reset"><X className="h-3.5 w-3.5" /> Don't save this</button>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={90} placeholder="Title for the clip" className="h-9 min-w-[14rem] flex-1" data-testid="mark-title" />
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1" role="group" aria-label="Shapes">
               {CLIP_FORMATS.map((f) => {
                 const on = formats.includes(f);
                 return (
-                  <button key={f} type="button" onClick={() => (on && formats.length === 1 ? null : onFormats(CLIP_FORMATS.filter((x) => (x === f ? !on : formats.includes(x)))))} className={`rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:border-[#053877]/40"}`}>{f}</button>
+                  <button key={f} type="button" aria-pressed={on} onClick={() => setFormats(CLIP_FORMATS.filter((x) => (x === f ? !on : formats.includes(x))))} className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition-colors ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-background text-foreground hover:border-[#053877]/50"}`} data-testid={`mark-shape-${f}`}>{f}</button>
                 );
               })}
             </div>
-            <Button type="button" onClick={() => makeClip.mutate()} disabled={makeClip.isPending || len < 5 || len > 180 || !title.trim()} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="mark-make">
+            <Button type="button" onClick={() => makeClip.mutate()} disabled={makeClip.isPending || len < 5 || len > 180 || !title.trim() || formats.length === 0} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="mark-make">
               {makeClip.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-4 w-4" />} Make clip · {formats.length} credit{formats.length === 1 ? "" : "s"}
             </Button>
           </div>
-          <p className="text-[11px] text-muted-foreground">Animated captions, from the {source === "clean" ? "clean" : "original"} episode. 5 seconds to 3 minutes.</p>
+          <p className="text-[11px] text-muted-foreground">Pick one or more shapes: 1 credit each. Animated captions, cut from the {source === "clean" ? "clean" : "original"} episode. 5 seconds to 3 minutes.</p>
         </div>
       ) : (
         <div className="space-y-3 p-4">
@@ -1007,6 +1052,7 @@ export function PostStudio() {
             {/* The Viewer: Clips, or the whole Episode (clean or original). */}
             {!running && (
               <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
+                <span className="rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/70 backdrop-blur">Viewer</span>
                 <div className="flex gap-1 rounded-full bg-black/60 p-1 text-xs font-semibold backdrop-blur">
                   {(["clips", "episode"] as const).map((v) => (
                     <button key={v} type="button" onClick={() => { setView(v); setPreview(null); }} className={`rounded-full px-3 py-1 capitalize ${view === v ? "bg-white text-[#000741]" : "text-white/80 hover:text-white"}`} data-testid={`viewer-${v}`}>{v}</button>
@@ -1106,8 +1152,6 @@ export function PostStudio() {
               rec={rec}
               source={clean?.videoKey && epSource === "clean" ? "clean" : "original"}
               videoRef={epRef}
-              formats={opts.formats}
-              onFormats={(f) => setOpts({ ...opts, formats: f })}
             />
           )}
         </div>
