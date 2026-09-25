@@ -349,6 +349,17 @@ function Pill({ tip, children, ...rest }: { tip: string; children: React.ReactNo
   );
 }
 
+/**
+ * A link that downloads rather than opens a tab. The clips are on Supabase's
+ * public storage, a different origin, where the browser ignores `download`;
+ * Supabase's own ?download= makes the file come back as an attachment.
+ */
+function downloadHref(url: string, name: string): string {
+  if (!url || !/\/storage\/v1\/object\/public\//.test(url)) return url;
+  const file = `${name.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "-").slice(0, 60) || "clip"}.${url.split("?")[0].split(".").pop() || "mp4"}`;
+  return `${url}${url.includes("?") ? "&" : "?"}download=${encodeURIComponent(file)}`;
+}
+
 function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
   const { toast } = useToast();
   const src = c.verticalUrl || c.squareUrl || c.url;
@@ -371,7 +382,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
         {c.reason && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground" title={c.reason}>{c.reason}</p>}
         <div className="mt-auto flex flex-wrap gap-1 pt-2.5">
           {files.map((f) => (
-            <Pill key={f.label} tip={f.tip} href={f.href} target="_blank" rel="noopener noreferrer" download>
+            <Pill key={f.label} tip={f.tip} href={downloadHref(f.href, `${c.title} ${f.label.toLowerCase()}`)} download>
               <Download className="h-3 w-3" /> {f.label}
             </Pill>
           ))}
@@ -392,7 +403,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
             <Play className="h-3 w-3" /> Watch
           </Pill>
           {c.subtitlesUrl && (
-            <Pill tip="The words as a subtitle file (.srt), for uploading to YouTube or LinkedIn." href={c.subtitlesUrl} target="_blank" rel="noopener noreferrer" download>
+            <Pill tip="The words as a subtitle file (.srt), for uploading to YouTube or LinkedIn." href={downloadHref(c.subtitlesUrl, `${c.title} subtitles`)} download>
               <Download className="h-3 w-3" /> Subtitles
             </Pill>
           )}
