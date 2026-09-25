@@ -64,6 +64,7 @@ import { PostStudio } from "@/components/PostStudio";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
+import { GreenRoomScreen } from "@/components/GreenRoomScreen";
 import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
@@ -514,12 +515,13 @@ function AnchoredHeading({ id, icon: Icon, label }: { id: string; icon: typeof R
 }
 
 /** An event's two sides: its details, and promoting it. Promotion is about an event, so it lives here. */
-function EventTabs({ active, onGo }: { active: "events" | "promotion"; onGo: (s: "events" | "promotion") => void }) {
+function EventTabs({ active, onGo }: { active: "events" | "promotion" | "greenroom"; onGo: (s: "events" | "promotion" | "greenroom") => void }) {
   return (
     <div className="mt-6 flex gap-1 border-b border-border" role="tablist" data-testid="event-tabs">
       {([
         { k: "events", label: "Details" },
         { k: "promotion", label: "Promotion" },
+        { k: "greenroom", label: "Green room" },
       ] as const).map((t) => (
         <button
           key={t.k}
@@ -538,7 +540,7 @@ function EventTabs({ active, onGo }: { active: "events" | "promotion"; onGo: (s:
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -547,6 +549,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   analytics: "analytics",
   postify: "postify",
   social: "social",
+  greenroom: "green-room",
   dashboard: "",
   editProfile: "profile",
   events: "events",
@@ -1257,6 +1260,11 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <ProScreen feature={proFeature} />
         ) : screen === "contacts" ? (
           <ContactsScreen contacts={data?.contacts ?? []} />
+        ) : screen === "greenroom" ? (
+          <>
+            <EventTabs active="greenroom" onGo={goTo} />
+            <GreenRoomScreen />
+          </>
         ) : screen === "promotion" ? (
           <>
             <EventTabs active="promotion" onGo={goTo} />

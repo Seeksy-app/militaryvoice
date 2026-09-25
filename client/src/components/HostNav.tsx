@@ -3,7 +3,7 @@ import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, 
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social";
 
 interface Item {
   key: HostScreen;
@@ -125,7 +125,7 @@ export function HostNav({
         </Link>
       );
     }
-    const active = it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "events" && screen === "promotion");
+    const active = it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "events" && (screen === "promotion" || screen === "greenroom"));
     const inert = !!it.locked && !proOpen;
     return (
       <a
