@@ -125,6 +125,9 @@ function overall(r: Rec, p: ClipProgress | null): number {
   return Math.round(a + ((b - a) * (p.pct ?? 0)) / 100);
 }
 
+/** The render step's own line ("Clip 2 of 4 · vertical"), not one left over from the download ("611MB"). */
+const renderDetail = (p: ClipProgress | null) => (p?.stage === "render" && p.detail && /\bof\b/.test(p.detail) ? p.detail : "");
+
 function stageLabel(r: Rec, p: ClipProgress | null): string {
   if (r.clipStatus === "queued") return "Waiting for the clipper…";
   if (r.clipStatus === "failed") return "Clipping stopped";
@@ -133,7 +136,7 @@ function stageLabel(r: Rec, p: ClipProgress | null): string {
     case "download": return "Loading the recording…";
     case "transcript": return "Reading the transcript…";
     case "moments": return "Finding the moments…";
-    case "render": return p.detail ? `Cutting · ${p.detail}` : "Cutting the clips…";
+    case "render": return renderDetail(p) ? `Cutting · ${renderDetail(p)}` : "Cutting the clips…";
     case "upload": return "Saving your clips…";
     default: return "Starting…";
   }
@@ -803,7 +806,7 @@ export function PostStudio() {
             <PipelineRow icon={Film} title="Load the recording" detail={p?.stage === "download" && p.pct != null ? `${p.pct}%` : undefined} state={state("download")} />
             <PipelineRow icon={FileText} title="Transcript" detail={p?.words ? `${p.words.toLocaleString("en-US")} words · ${p.transcriptSource === "live" ? "written live" : "transcribed after"}` : p?.transcriptSource === "live" ? "Written live on air" : undefined} state={state("transcript")} />
             <PipelineRow icon={Sparkles} title="Pick the moments" detail={pickedN ? `${pickedN} that stand on their own` : undefined} state={state("moments")} />
-            <PipelineRow icon={Crop} title="Cut in three shapes" detail={p?.stage === "render" ? p.detail : readyN ? "16:9 · 9:16 · 1:1 + captions" : undefined} state={state("render")} />
+            <PipelineRow icon={Crop} title="Cut in three shapes" detail={p?.stage === "render" ? renderDetail(p) || undefined : readyN ? "16:9 · 9:16 · 1:1 + captions" : undefined} state={state("render")} />
             <PipelineRow icon={Send} title="Ready to post" detail={done ? "In your dashboard" : undefined} state={done ? "done" : state("upload") === "done" ? "active" : "waiting"} />
             <PipelineRow
               icon={Wand2}
