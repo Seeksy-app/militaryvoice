@@ -167,7 +167,12 @@ export function selectGraph(keeps: { start: number; end: number }[], fps = 30, h
   // sits exactly on a boundary, and a rounded boundary a hair after it would
   // otherwise drop it — one frame per span, a quarter-second of drift by the
   // end of a ten-minute test.
-  const expr = (half: number) => spans.map((k) => `gte(t,${(k.a - half).toFixed(5)})*lt(t,${(k.b - half).toFixed(5)})`).join("+") || "0";
+  //
+  // Joined as a balanced tree, ((a+b)+(c+d))+…: a flat a+b+c+… of a few
+  // hundred terms is too deep for ffmpeg's expression parser ("Cannot
+  // allocate memory" at ~380 cuts, which a one-hour episode reaches).
+  const tree = (xs: string[]): string => (xs.length <= 1 ? xs[0] ?? "0" : `(${tree(xs.slice(0, xs.length >> 1))}+${tree(xs.slice(xs.length >> 1))})`);
+  const expr = (half: number) => tree(spans.map((k) => `between(t,${(k.a - half).toFixed(5)},${(k.b - half - 1e-4).toFixed(5)})`));
   return [
     `[0:v]fps=${fps},select='${expr(0.5 / fps)}',setpts=N/${fps}/TB,scale=-2:${height}[v]`,
     `[0:a]aresample=48000,asetnsamples=n=160:p=0,aselect='${expr(0.5 / 300)}',asetpts=N/SR/TB[a]`,

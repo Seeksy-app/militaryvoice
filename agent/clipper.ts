@@ -110,9 +110,13 @@ interface Job {
   transcript: Line[];
   /** Only (re)make the clean episode; the clips are already done. */
   cleanOnly?: boolean;
+  /** What the podcaster picked: which shapes, and the caption style. Absent = all three, animated. */
+  options?: { formats: Shape[]; captions: "animated" | "classic" };
   /** "Edit text": remake one clip's three shapes with a new title and subtitle. */
-  clipEdit?: { clipId: number; title: string; subtitle: string; startSec: number; endSec: number };
+  clipEdit?: { clipId: number; title: string; subtitle: string; startSec: number; endSec: number; shapes?: Shape[] };
 }
+
+type Shape = "vertical" | "square" | "wide";
 
 interface Moment {
   title: string;
@@ -414,11 +418,15 @@ export async function speakerFocus(source: string, m: Moment, words: string, who
     const at = atSec ?? m.startSec + (m.endSec - m.startSec) / 2;
     const frame = path.join(dir, `focus-${Math.round(at * 10)}.jpg`);
     await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-ss", String(at), "-i", source, "-frames:v", "1",
-      "-vf", `crop=${even(whole.w)}:${even(whole.h)}:${whole.x}:${whole.y},scale=1280:-2`, frame]);
+      // 768 wide: enough to see who's talking, a third of the image tokens of 1280.
+      "-vf", `crop=${even(whole.w)}:${even(whole.h)}:${whole.x}:${whole.y},scale=768:-2`, frame]);
     const img = (await fs.readFile(frame)).toString("base64");
     const client = new Anthropic({ apiKey: key });
+    // Pointing at who's speaking is a small look, asked ~10 times a clip:
+    // Sonnet does it well at a fraction of Opus's price. Opus stays on
+    // choosing the moments, which is the product.
     const res = await client.messages.create({
-      model: "claude-opus-5",
+      model: process.env.FOCUS_MODEL || "claude-sonnet-5",
       max_tokens: 1000,
       tools: [{
         name: "speaker_box",
@@ -1107,6 +1115,7 @@ async function renderWithCreatomate(
   source: string,
   geo: Awaited<ReturnType<typeof frameGeometry>>,
   files: { wide: string; vertical: string; square: string },
+  shapes: Shape[] = ["vertical", "square", "wide"],
 ): Promise<boolean> {
   if ((process.env.CLIP_RENDERER || "").toLowerCase() === "ffmpeg") return false;
   try {
@@ -1125,6 +1134,7 @@ async function renderWithCreatomate(
       videoUrl: signed.readUrl || job.downloadUrl,
       start: signed.readUrl ? 0 : m.startSec,
       length: m.endSec - m.startSec,
+      shapes,
       title: m.title,
       show: job.show,
       geo: { srcW, srcH, ...geo },
@@ -1182,11 +1192,23 @@ async function handleClean(job: Job): Promise<void> {
  * once per file: a layout can change mid-episode — a solo intro becoming a
  * two-shot — and one cropdetect call is cheaper than getting it wrong.
  */
-async function framingFor(job: Job, source: string, m: Moment, within: Line[], dir: string) {
+/**
+ * How closely to follow the speaker. "shots": per camera cut and every ~8s
+ * (Creatomate can reframe mid-clip). "one": a single look from the middle
+ * (our own renderer frames one speaker). "none": only a wide shape was asked
+ * for, which shows the whole picture — no looks at all.
+ */
+type FocusMode = "shots" | "one" | "none";
+
+async function framingFor(job: Job, source: string, m: Moment, within: Line[], dir: string, mode: FocusMode = "shots") {
   const measured = await frameGeometry(source, m.startSec);
   let focus: Box | null = null;
   let focusShots: { from: number; to: number; focus: Box | null }[] | null = null;
-  if (!measured.stack && process.env.ANTHROPIC_API_KEY) {
+  if (mode === "one" && !measured.stack && process.env.ANTHROPIC_API_KEY) {
+    focus = await speakerFocus(source, m, within.map((l) => l.text).join(" "), measured.whole, dir);
+    return { ...measured, focus, focusShots };
+  }
+  if (mode === "shots" && !measured.stack && process.env.ANTHROPIC_API_KEY) {
     // One camera, or a produced show cutting between cameras: find who's
     // speaking in each shot.
     // Cuts, and inside a long shot a look every eight seconds — a camera
@@ -1236,13 +1258,15 @@ async function handleEdit(job: Job): Promise<void> {
     const cut = path.join(dir, "moment.mp4");
     await run("ffmpeg", ["-y", "-v", "error", "-ss", String(e.startSec), "-i", job.downloadUrl, "-t", String(len), "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", cut]);
     const m: Moment = { title: e.title, caption: "", reason: "", startSec: 0, endSec: len };
-    const geo = await framingFor(job, cut, m, [], dir);
+    const shapes: Shape[] = e.shapes?.length ? e.shapes : ["vertical", "square", "wide"];
+    const tall = shapes.includes("vertical") || shapes.includes("square");
+    const geo = await framingFor(job, cut, m, [], dir, tall ? "shots" : "none");
     const files = { wide: path.join(dir, "wide.mp4"), vertical: path.join(dir, "vertical.mp4"), square: path.join(dir, "square.mp4") };
-    if (!(await renderWithCreatomate({ ...job, show: e.subtitle }, m, cut, geo, files))) throw new Error("Creatomate couldn't make it just now");
+    if (!(await renderWithCreatomate({ ...job, show: e.subtitle }, m, cut, geo, files, shapes))) throw new Error("Creatomate couldn't make it just now");
     await api("POST", `/api/agent/clip-edits/${e.clipId}/done`, {
-      url: await uploadFile(files.wide, "video/mp4"),
-      verticalUrl: await uploadFile(files.vertical, "video/mp4"),
-      squareUrl: await uploadFile(files.square, "video/mp4"),
+      url: shapes.includes("wide") ? await uploadFile(files.wide, "video/mp4") : "",
+      verticalUrl: shapes.includes("vertical") ? await uploadFile(files.vertical, "video/mp4") : "",
+      squareUrl: shapes.includes("square") ? await uploadFile(files.square, "video/mp4") : "",
     });
     console.log(`${tag} updated`);
   } catch (err) {
@@ -1356,7 +1380,10 @@ async function handle(job: Job): Promise<void> {
       // mid-episode — a solo intro becoming a two-shot — and one cropdetect
       // call is cheaper than getting the framing wrong for the rest of it.
       console.log(`[${job.recordingId}] rendering ${i + 1}/${moments.length} — ${m.title}`);
-      const geo = await framingFor(job, source, m, within, dir);
+      const opts = job.options ?? { formats: ["vertical", "square", "wide"] as Shape[], captions: "animated" as const };
+      const want = new Set(opts.formats);
+      const tall = want.has("vertical") || want.has("square");
+      const geo = await framingFor(job, source, m, within, dir, !tall ? "none" : opts.captions === "animated" ? "shots" : "one");
 
       // The same words go into all three, drawn per shape because the type is
       // sized against the canvas it lands on.
@@ -1365,14 +1392,12 @@ async function handle(job: Job): Promise<void> {
       const step = (k: number, shape: string) =>
         progress(job.recordingId, { stage: "render", pct: ((i * 4 + k) / (moments.length * 4)) * 100, detail: `Clip ${i + 1} of ${moments.length} · ${shape}` });
       step(0, "all three shapes");
-      const viaCreatomate = await renderWithCreatomate(job, m, source, geo, { wide, vertical, square });
+      // Only the shapes they asked for; Classic captions are ours, no Creatomate.
+      const viaCreatomate = opts.captions === "animated" && (await renderWithCreatomate(job, m, source, geo, { wide, vertical, square }, [...want]));
       if (!viaCreatomate) {
-        step(0, "wide");
-        await render(source, wide, m, "wide", undefined, geo, within, capDir);
-        step(1, "vertical");
-        await render(source, vertical, m, "vertical", { file: bandFile, height: 220 }, geo, within, capDir);
-        step(2, "square");
-        await render(source, square, m, "square", { file: bandFile, height: 220 }, geo, within, capDir);
+        if (want.has("wide")) { step(0, "wide"); await render(source, wide, m, "wide", undefined, geo, within, capDir); }
+        if (want.has("vertical")) { step(1, "vertical"); await render(source, vertical, m, "vertical", { file: bandFile, height: 220 }, geo, within, capDir); }
+        if (want.has("square")) { step(2, "square"); await render(source, square, m, "square", { file: bandFile, height: 220 }, geo, within, capDir); }
       }
       step(3, "uploading");
 
@@ -1383,9 +1408,9 @@ async function handle(job: Job): Promise<void> {
         startSec: m.startSec,
         endSec: m.endSec,
         transcript: within.map((l) => l.text).join(" ").slice(0, 8000),
-        url: await uploadFile(wide, "video/mp4"),
-        verticalUrl: await uploadFile(vertical, "video/mp4"),
-        squareUrl: await uploadFile(square, "video/mp4"),
+        url: want.has("wide") ? await uploadFile(wide, "video/mp4") : "",
+        verticalUrl: want.has("vertical") ? await uploadFile(vertical, "video/mp4") : "",
+        squareUrl: want.has("square") ? await uploadFile(square, "video/mp4") : "",
         subtitlesUrl: await uploadFile(subs, "text/plain"),
       });
       console.log(`[${job.recordingId}] ${i + 1}/${moments.length} — ${m.title}`);
