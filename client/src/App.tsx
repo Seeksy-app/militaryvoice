@@ -16,6 +16,7 @@ import HostDashboard from "@/pages/HostDashboard";
 import Landing from "@/pages/Landing";
 import Faq from "@/pages/Faq";
 import HelpYoutube from "@/pages/HelpYoutube";
+import HelpZoom from "@/pages/HelpZoom";
 import HelpIndex from "@/pages/HelpIndex";
 import Discover from "@/pages/Discover";
 import Directory from "@/pages/Directory";
@@ -84,6 +85,7 @@ function AppRouter() {
       {/* The address read on air: short to say, and counted as on-air when it lands. */}
       <Route path="/find">{() => { if (typeof window !== "undefined") window.location.replace("/discover?src=on-air"); return null; }}</Route>
       <Route path="/help/youtube">{() => <HelpYoutube />}</Route>
+      <Route path="/help/zoom">{() => <HelpZoom />}</Route>
       {/* Registered on the Google OAuth consent screen — these URLs are
           load-bearing for verification, so don't rename them. */}
       <Route path="/policy">{() => <PrivacyPolicy />}</Route>

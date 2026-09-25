@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -19,6 +20,13 @@ export function ZoomConnect() {
   const qc = useQueryClient();
   const zoom = useQuery<ZoomState>({ queryKey: ["/api/host/zoom"], queryFn: async () => (await apiRequest("GET", "/api/host/zoom")).json() });
   const [picking, setPicking] = useState(false);
+  /** Added from Zoom's Marketplace: finish through Connect Zoom once we know who's here. */
+  const [finish, setFinish] = useState(false);
+  useEffect(() => {
+    if (!finish || !zoom.data) return;
+    setFinish(false);
+    if (zoom.data.configured && !zoom.data.connected) window.location.href = "/api/host/zoom/connect";
+  }, [finish, zoom.data]);
 
   // Back from Zoom's approval page.
   useEffect(() => {
@@ -33,6 +41,7 @@ export function ZoomConnect() {
       expired: { title: "That took too long", description: "Press Connect Zoom again.", variant: "destructive" },
       failed: { title: "Zoom didn't connect", description: "Try again in a moment.", variant: "destructive" },
     };
+    if (z === "finish") return setFinish(true);
     if (said[z]) toast(said[z]);
     if (z === "connected") void qc.invalidateQueries({ queryKey: ["/api/host/zoom"] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -58,6 +67,9 @@ export function ZoomConnect() {
           <p className="text-sm text-muted-foreground">
             {z.connected ? <>Connected as <span className="font-medium text-foreground">{z.zoomEmail || "your Zoom"}</span>. Cloud recordings come into your Library.</> : "Connect Zoom and your cloud recordings come into your Library, ready for Pōstify."}
           </p>
+          <Link href="/help/zoom" className="mt-1 inline-block text-xs font-medium text-primary hover:underline" data-testid="zoom-help-link">
+            How it works →
+          </Link>
         </div>
         {z.connected ? (
           <div className="flex items-center gap-2">

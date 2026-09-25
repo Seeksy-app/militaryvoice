@@ -8,7 +8,7 @@ import { NavBar } from "@/components/NavBar";
 // also the only reason to write them.
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
-const UPDATED = "13 September 2026";
+const UPDATED = "25 September 2026";
 const CONTACT = "hello@militaryvoices.ai";
 
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
@@ -41,9 +41,9 @@ function Shell({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-function Section({ heading, children }: { heading: string; children: React.ReactNode }) {
+function Section({ heading, children, id }: { heading: string; children: React.ReactNode; id?: string }) {
   return (
-    <section>
+    <section id={id} className="scroll-mt-24">
       <h2 className="text-lg font-semibold tracking-tight" style={HEADLINE_FONT}>
         {heading}
       </h2>
@@ -119,6 +119,45 @@ export function PrivacyPolicy() {
         </p>
       </Section>
 
+      <Section heading="If you connect your Zoom account" id="zoom">
+        <p>
+          Connecting is optional and exists for one purpose: so the Zoom cloud recordings you choose come into your
+          Library, where Pōstify can make clips and a clean episode from them. You connect from Integrations in your
+          dashboard, through our Zoom app, MilitaryVoices.
+        </p>
+        <p>
+          <strong className="text-foreground">What we access.</strong> When you connect, we read your Zoom user ID,
+          account ID and email address, once. After that we read the list of your cloud recordings and the files in
+          them. We use that only to show your recent recordings when you press Import past recordings, and to download
+          the video of a recording you pick, or of each new one while automatic import is on. Zoom also tells us when a
+          new cloud recording is ready and when you remove the app. We do not read your meetings, chats, contacts or
+          calendar.
+        </p>
+        <p>
+          <strong className="text-foreground">What we store, and how.</strong> Your Zoom access and refresh tokens,
+          your Zoom user ID, account ID and email address, and your automatic-import setting. They are kept in our
+          database, encrypted at rest, and never sent to a browser. The videos you import are copied to private storage
+          (Cloudflare R2), with each meeting's topic, date, length and size so your Library can show them.
+        </p>
+        <p>
+          <strong className="text-foreground">What we never do.</strong> We never change, delete or share anything in
+          your Zoom account. We never sell your Zoom data, never use it for advertising, and never share it with anyone
+          beyond the services listed below that run MilitaryVoices.ai for us.
+        </p>
+        <p>
+          <strong className="text-foreground">How long we keep it.</strong> The connection is kept only while Zoom is
+          connected. Press Disconnect on the Zoom card in Integrations, or remove MilitaryVoices in the Zoom App
+          Marketplace (Manage → Added Apps → Remove), and we delete the tokens, your Zoom IDs and your Zoom email
+          address at once. Disconnecting also asks Zoom to revoke our access. Videos you imported stay in your Library
+          until you delete them there (⋯ → Delete), which deletes our copy, or until you ask us to delete your account.
+          Your recordings in Zoom are never touched.
+        </p>
+        <p>
+          Step-by-step instructions for adding, using and removing the app are at{" "}
+          <Link href="/help/zoom" className="text-primary hover:underline">militaryvoices.ai/help/zoom</Link>.
+        </p>
+      </Section>
+
       <Section heading="If you link your social accounts">
         <p>
           Linking the accounts you post from does two things: they show as follow buttons on your card in the public
@@ -180,6 +219,27 @@ export function PrivacyPolicy() {
         <p>
           Ask us at {CONTACT} and we will delete your account, your bookings, your uploads and your recordings. We will
           confirm when it is done.
+        </p>
+      </Section>
+
+      <Section heading="Your rights over your data" id="your-rights">
+        <p>Wherever you live, you can ask us to:</p>
+        <ul className="list-disc space-y-1.5 pl-5">
+          <li><strong className="text-foreground">see it</strong> — a copy of what we hold about you;</li>
+          <li><strong className="text-foreground">correct it</strong> — fix anything that is wrong;</li>
+          <li><strong className="text-foreground">delete it</strong> — your account and everything in it;</li>
+          <li><strong className="text-foreground">export it</strong> — your details and recordings in a format you can take elsewhere;</li>
+          <li><strong className="text-foreground">stop or limit a use of it</strong> — such as your audience figures.</li>
+        </ul>
+        <p>
+          Email {CONTACT} from the address on your account and say what you would like. If you write from another
+          address, we may ask you to confirm it's you first. It's free, and we respond within 30 days. Much of it you
+          can also do yourself: edit your details in your dashboard, delete uploads and imports from your Library, and
+          disconnect YouTube, Zoom or social accounts in Integrations.
+        </p>
+        <p>
+          If you are in the UK, the EU or a US state with its own privacy law, you also have the right to complain to
+          your local data protection authority. We would rather you told us first, so we can put it right.
         </p>
       </Section>
 

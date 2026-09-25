@@ -177,6 +177,11 @@ export function registerZoom(app: Express): void {
 
   app.get("/api/zoom/callback", async (req: Request, res: Response) => {
     const back = (s: string) => res.redirect(302, `/host/dashboard/integrations?zoom=${s}`);
+    // Added from Zoom's Marketplace, so none of our state. Its code isn't
+    // tied to anyone here, so it isn't used: the Integrations page (after
+    // signing in, if need be) starts Connect Zoom, which Zoom, already
+    // approved, passes straight back with our state.
+    if (!req.query.state && !req.query.error) return back("finish");
     const email = readState(String(req.query.state ?? ""));
     const session = (getSessionEmail(req) ?? "").trim().toLowerCase();
     if (!email || (session && session !== email)) return back("expired");
