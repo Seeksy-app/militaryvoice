@@ -1,9 +1,12 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { durationOf, putWithProgress } from "@/components/PostStudio";
 import { MyRecordings } from "@/components/MyRecordings";
 import { apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, RecordingRow } from "@shared/schema";
-import { Disc } from "lucide-react";
+import { Disc, Loader2, Upload } from "lucide-react";
 
 // Every session this podcaster has recorded, with a filter by event. Sessions
 // belong to an event, so once somebody has been in two the list needs saying
@@ -12,6 +15,47 @@ import { Disc } from "lucide-react";
 interface EventEntry {
   event: PublicEvent;
   slotIndex: number | null;
+}
+
+/** Add a video you already have: it's filed as a recording, nothing more (clipping is Pōstify's). */
+function UploadRecording() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const input = useRef<HTMLInputElement>(null);
+  const [pct, setPct] = useState<number | null>(null);
+  async function go(file: File) {
+    if (!file.type.startsWith("video/") && !/\.(mp4|mov|m4v|webm)$/i.test(file.name)) {
+      toast({ title: "That isn't a video", description: "Upload an MP4, MOV or WebM.", variant: "destructive" });
+      return;
+    }
+    if (file.size > 2 * 1024 ** 3) {
+      toast({ title: "That file is over 2GB", description: "Export a smaller copy (1080p is plenty) and try again.", variant: "destructive" });
+      return;
+    }
+    try {
+      setPct(0);
+      const durationSec = await durationOf(file);
+      const { uploadUrl, storageKey } = (await (await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name })).json()) as { uploadUrl: string; storageKey: string };
+      await putWithProgress(uploadUrl, file, setPct);
+      await apiRequest("POST", "/api/host/uploads/recording", { storageKey, fileName: file.name, durationSec, sizeBytes: file.size });
+      await qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
+      toast({ title: "Added to your recordings", description: "Open it in Pōstify to make clips and a clean episode." });
+    } catch (e) {
+      toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setPct(null);
+      if (input.current) input.current.value = "";
+    }
+  }
+  return (
+    <>
+      <input ref={input} type="file" accept="video/*" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} data-testid="recording-upload-input" />
+      <Button onClick={() => input.current?.click()} disabled={pct !== null} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="recording-upload">
+        {pct === null ? <Upload className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />}
+        {pct === null ? "Upload a video" : pct < 100 ? `Uploading… ${pct}%` : "Saving…"}
+      </Button>
+    </>
+  );
 }
 
 export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string | null }) {
@@ -34,13 +78,18 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
 
   return (
     <section className="mt-6">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-        <Disc className="h-4 w-4" /> Your recordings
-      </h2>
-      <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
-        Every session the studio recorded for you, and every episode you've uploaded. Downloads are private links
-        made fresh each time, so they can't be passed around by accident.
-      </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+            <Disc className="h-4 w-4" /> Your recordings
+          </h2>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Every session the studio recorded for you, and every video you've uploaded. Downloads are private links
+            made fresh each time, so they can't be passed around by accident.
+          </p>
+        </div>
+        <UploadRecording />
+      </div>
 
       {options.length > 1 && (
         <div className="mb-4 flex flex-wrap gap-2">

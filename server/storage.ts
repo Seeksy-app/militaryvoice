@@ -795,7 +795,7 @@ export interface IStorage {
   /** False when that ref has already been recorded (so nothing changed). */
   addTokens(v: { email: string; delta: number; reason: string; ref: string }): Promise<boolean>;
   saveCleanCopy(source: RecordingRow, videoKey: string, durationSec: number): Promise<RecordingRow>;
-  createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number; free: boolean }): Promise<RecordingRow>;
+  createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number; free: boolean; queue?: boolean }): Promise<RecordingRow>;
   hasTokenRef(ref: string): Promise<boolean>;
   claimClipJob(): Promise<RecordingRow | undefined>;
   appendTranscript(studioId: number, eventId: number, lines: { speaker: string; text: string; startMs: number; endMs: number }[]): Promise<number>;
@@ -1870,7 +1870,7 @@ class DatabaseStorage implements IStorage {
     await db.update(recordings).set({ postifyBeta: true }).where(eq(recordings.id, recordingId));
   }
 
-  async createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number; free: boolean }): Promise<RecordingRow> {
+  async createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number; free: boolean; queue?: boolean }): Promise<RecordingRow> {
     await ready();
     const now = new Date().toISOString();
     const [row] = await db
@@ -1888,9 +1888,10 @@ class DatabaseStorage implements IStorage {
         sizeBytes: String(v.sizeBytes),
         startedAt: now,
         endedAt: now,
-        clipStatus: "queued",
+        // Uploaded from Recordings: just filed. Pōstify's "Make clips" queues (and pays for) it later.
+        clipStatus: v.queue === false ? "none" : "queued",
         // Counts as the free beta episode only when it is one; paid ones are on the token ledger.
-        postifyBeta: v.free,
+        postifyBeta: v.queue === false ? false : v.free,
       })
       .returning();
     return row;

@@ -5477,6 +5477,20 @@ export function registerRoutes(app: Express): void {
     res.status(201).json({ id: rec.id });
   });
 
+  /**
+   * Upload a video to Recordings: filed, not clipped, and free. It's then an
+   * ordinary recording — download it, post it, or open it in Pōstify.
+   */
+  app.post("/api/host/uploads/recording", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const storageKey = String(req.body?.storageKey ?? "");
+    if (!/^show-assets\/[\w.-]+$/.test(storageKey)) return res.status(400).json({ message: "That upload didn't come through." });
+    const durationSec = Math.max(0, Number(req.body?.durationSec) || 0);
+    const title = String(req.body?.title ?? "").trim().slice(0, 140) || String(req.body?.fileName ?? "Video").replace(/\.[a-z0-9]+$/i, "").slice(0, 140);
+    const rec = await storage.createUploadedRecording({ email, title, storageKey, durationSec, sizeBytes: Number(req.body?.sizeBytes) || 0, free: false, queue: false });
+    res.status(201).json({ id: rec.id });
+  });
+
   /** The podcaster's own "Make clips": queue one of their finished recordings that hasn't been clipped (or failed). */
   registerCreatomate(app, requireAdmin, requireAgent);
 

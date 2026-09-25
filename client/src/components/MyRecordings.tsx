@@ -63,7 +63,7 @@ export function MyRecordings({
     if (!showEmpty) return null;
     return (
       <p className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
-        Nothing here yet. Your session appears once your slot has been on air.
+        Nothing here yet. Studio sessions appear once they've been on air, or upload a video above.
       </p>
     );
   }

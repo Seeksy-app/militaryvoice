@@ -307,7 +307,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
 }
 
 /** How long a video runs, read in the browser before it's sent. */
-function durationOf(file: File): Promise<number> {
+export function durationOf(file: File): Promise<number> {
   return new Promise((resolve) => {
     const v = document.createElement("video");
     v.preload = "metadata";
@@ -318,7 +318,7 @@ function durationOf(file: File): Promise<number> {
 }
 
 /** PUT with progress — fetch can't report upload progress, and an episode is hundreds of MB. */
-function putWithProgress(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
+export function putWithProgress(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
