@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { MyClips } from "@/components/MyClips";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video } from "lucide-react";
+import { Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -166,13 +166,26 @@ function PipelineRow({ icon: Icon, title, detail, state }: { icon: typeof Check;
   );
 }
 
+/** One button on a clip, with a hover note on where it works best. */
+function Pill({ tip, children, ...rest }: { tip: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement> & { onClick?: () => void; as?: "button" }) {
+  const cls = "inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] font-medium text-foreground hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {rest.href ? <a {...rest} className={cls}>{children}</a> : <button type="button" onClick={rest.onClick} className={cls}>{children}</button>}
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[14rem] text-xs">{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
+  const { toast } = useToast();
   const src = c.verticalUrl || c.squareUrl || c.url;
   const files = [
-    { href: c.verticalUrl, label: "9:16" },
-    { href: c.squareUrl, label: "1:1" },
-    { href: c.url, label: "16:9" },
-    { href: c.subtitlesUrl, label: "SRT" },
+    { href: c.verticalUrl, label: "Vertical", tip: "9:16 — best for Instagram Reels, TikTok and YouTube Shorts." },
+    { href: c.squareUrl, label: "Square", tip: "1:1 — best for the Instagram and Facebook feed, and LinkedIn." },
+    { href: c.url, label: "Wide", tip: "16:9 — best for YouTube, LinkedIn and X." },
   ].filter((f) => f.href);
   return (
     <div className="group flex w-44 shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm sm:w-48" data-testid={`post-clip-${c.id}`}>
@@ -188,10 +201,31 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
         {c.reason && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground" title={c.reason}>{c.reason}</p>}
         <div className="mt-auto flex flex-wrap gap-1 pt-2.5">
           {files.map((f) => (
-            <a key={f.label} href={f.href} target="_blank" rel="noopener noreferrer" download className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] font-medium text-foreground hover:border-[#053877]/40">
+            <Pill key={f.label} tip={f.tip} href={f.href} target="_blank" rel="noopener noreferrer" download>
               <Download className="h-3 w-3" /> {f.label}
-            </a>
+            </Pill>
           ))}
+          {c.caption && (
+            <Pill
+              tip="Copies the words to post with it — paste them into Instagram, TikTok or LinkedIn."
+              onClick={() =>
+                navigator.clipboard.writeText(c.caption).then(
+                  () => toast({ title: "Caption copied", description: "Paste it in with the clip." }),
+                  () => toast({ title: "Couldn't copy", description: c.caption }),
+                )
+              }
+            >
+              <Copy className="h-3 w-3" /> Caption
+            </Pill>
+          )}
+          <Pill tip="Play it here." onClick={onPreview}>
+            <Play className="h-3 w-3" /> Watch
+          </Pill>
+          {c.subtitlesUrl && (
+            <Pill tip="The words as a subtitle file (.srt), for uploading to YouTube or LinkedIn." href={c.subtitlesUrl} target="_blank" rel="noopener noreferrer" download>
+              <Download className="h-3 w-3" /> Subtitles
+            </Pill>
+          )}
         </div>
       </div>
     </div>
@@ -597,15 +631,6 @@ export function PostStudio() {
                   );
                 })}
           </div>
-        </div>
-      )}
-      {/* Every clip, from every recording and sent-in episode, in one place. */}
-      {(clips.data?.length ?? 0) > 0 && (
-        <div className="mt-10">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-            <Scissors className="h-4 w-4" /> All your clips
-          </h3>
-          <MyClips />
         </div>
       )}
     </section>
