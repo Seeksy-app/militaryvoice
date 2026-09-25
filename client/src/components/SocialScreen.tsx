@@ -16,6 +16,7 @@ import { CalendarClock, Check, Film, Link2, Play, Scissors, Send, Share2, Trash2
 export function SocialScreen() {
   const [target, setTarget] = useState<PostTarget | null>(null);
   const [playing, setPlaying] = useState<number | null>(null);
+  const [tab, setTab] = useState<"clips" | "scheduled" | "posted">("clips");
   const [deleting, setDeleting] = useState<ClipRow | null>(null);
 
   const social = useQuery<{ configured: boolean; accounts: { platform: SocialPlatform; username?: string; followers?: number }[] }>({
@@ -69,19 +70,36 @@ export function SocialScreen() {
         </Button>
       </div>
 
-      {/* Scheduled */}
-      {upcoming.length > 0 && (
-        <div className="mb-6">
-          <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><CalendarClock className="h-4 w-4 text-[#b36b00]" /> Scheduled</p>
+      {/* Three views, not one long page: what you can post, what's waiting, what's gone out. */}
+      <div className="mb-4 flex gap-1 border-b border-border" role="tablist">
+        {([
+          { k: "clips", label: "Clips", n: clipList.length, icon: Scissors },
+          { k: "scheduled", label: "Scheduled", n: upcoming.length, icon: CalendarClock },
+          { k: "posted", label: "Posted", n: done.length, icon: Send },
+        ] as const).map((t) => (
+          <button key={t.k} type="button" role="tab" aria-selected={tab === t.k} onClick={() => setTab(t.k)} className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-semibold ${tab === t.k ? "border-[#F0A71F] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`social-tab-${t.k}`}>
+            <t.icon className="h-4 w-4" /> {t.label} <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{t.n}</span>
+          </button>
+        ))}
+      </div>
+
+      {tab === "scheduled" ? (
+        upcoming.length ? (
           <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
             {upcoming.map((p) => <PostRow key={p.id} p={p} title={titleOf(p)} line={`Goes out ${when(p.scheduledAt)}`} />)}
           </ul>
-        </div>
-      )}
-
-      {/* Ready to post: the clips. Whole episodes are posted from the Library. */}
-      <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground"><Scissors className="h-4 w-4 text-[#053877]" /> Your clips <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{clipList.length}</span></p>
-      {clipList.length ? (
+        ) : (
+          <p className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">Nothing scheduled. Choose "Later" when you post a clip.</p>
+        )
+      ) : tab === "posted" ? (
+        done.length ? (
+          <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
+            {done.map((p) => <PostRow key={p.id} p={p} title={titleOf(p)} line={p.status === "failed" ? `Didn't go out: ${p.error || "try again"}` : `Sent ${when(p.scheduledAt || p.createdAt)}`} />)}
+          </ul>
+        ) : (
+          <p className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">Nothing posted yet. What you post shows here, with where it went.</p>
+        )
+      ) : clipList.length ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5">
           {clipList.map((c) => {
             const shapes = ([["vertical", c.verticalUrl], ["square", c.squareUrl], ["wide", c.url]] as const).filter(([, u]) => u).map(([s]) => s);
@@ -120,16 +138,6 @@ export function SocialScreen() {
         </div>
       ) : (
         <Empty text="No clips yet. Pōstify makes them from any episode in your Library." href="/host/dashboard/postify" cta="Open Pōstify" />
-      )}
-
-      {/* History */}
-      {done.length > 0 && (
-        <div className="mt-8">
-          <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground"><Send className="h-4 w-4 text-[#053877]" /> Posted</p>
-          <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
-            {done.map((p) => <PostRow key={p.id} p={p} title={titleOf(p)} line={p.status === "failed" ? `Didn't go out: ${p.error || "try again"}` : `Sent ${when(p.scheduledAt || p.createdAt)}`} />)}
-          </ul>
-        </div>
       )}
 
       <PostDialog target={target} onClose={() => setTarget(null)} />
