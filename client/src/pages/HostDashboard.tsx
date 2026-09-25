@@ -31,7 +31,9 @@ import {
   Compass,
   Film,
   Megaphone,
+  Users,
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PlatformIcon, formatFollowers } from "@/components/SocialIcons";
 import {
   AlertDialog,
@@ -208,20 +210,37 @@ function SeatSwitcher({ current }: { current: string }) {
       <a href="/admin" className={viewingAs ? "rounded-full bg-[#F0A71F] px-3 py-1 text-[11px] font-bold text-[#1a1200] hover:brightness-105" : "rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-foreground hover:border-[#053877]/40"} data-testid="seat-admin">
         {viewingAs ? "← Back to admin" : "Admin"}
       </a>
-      {others.map((s) => (
-        <button
-          key={s.email}
-          type="button"
-          onClick={async () => {
-            await apiRequest("POST", "/api/admin/view-as", { email: s.email });
-            window.location.href = "/host/dashboard";
-          }}
-          className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-foreground hover:border-[#053877]/40"
-          data-testid={`seat-${s.email}`}
-        >
-          {s.label}
-        </button>
-      ))}
+      {/* One menu, not a pill per account: the list grows (crew, testers, paying test accounts). */}
+      {others.length > 0 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-foreground hover:border-[#053877]/40" data-testid="seat-menu">
+              <Users className="h-3.5 w-3.5" /> View as <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-72">
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Switch to another account</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {others.map((s) => {
+              const [name, role] = s.label.split(" · ");
+              return (
+                <DropdownMenuItem
+                  key={s.email}
+                  onSelect={async () => {
+                    await apiRequest("POST", "/api/admin/view-as", { email: s.email });
+                    window.location.href = "/host/dashboard";
+                  }}
+                  className="flex flex-col items-start gap-0.5 py-2"
+                  data-testid={`seat-${s.email}`}
+                >
+                  <span className="text-sm font-semibold text-foreground">{name}</span>
+                  <span className="text-xs text-muted-foreground">{role ? `${role} · ` : ""}{s.email}</span>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   );
 }
