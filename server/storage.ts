@@ -802,9 +802,13 @@ export interface IStorage {
   transcriptBetween(studioId: number, startMs: number, endMs: number): Promise<TranscriptLineRow[]>;
   listClips(recordingId: number): Promise<ClipRow[]>;
   listClipsByEmail(email: string): Promise<ClipRow[]>;
+  getClip(id: number): Promise<ClipRow | undefined>;
+  updateClip(id: number, patch: Partial<ClipRow>): Promise<ClipRow | undefined>;
+  /** The next "Edit text" remake, or one whose worker went quiet for 15 minutes. */
+  claimClipEdit(): Promise<ClipRow | undefined>;
   listSocialMetrics(): Promise<SocialMetricRow[]>;
   upsertSocialMetric(v: Omit<SocialMetricRow, "id">): Promise<SocialMetricRow>;
-  replaceClips(recordingId: number, rows: Omit<ClipRow, "id" | "createdAt" | "recordingId">[]): Promise<ClipRow[]>;
+  replaceClips(recordingId: number, rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt">[]): Promise<ClipRow[]>;
   listDestinations(eventId: number): Promise<DestinationRow[]>;
   getDestination(id: number): Promise<DestinationRow | undefined>;
   createDestination(eventId: number, ownerEmail: string, v: DestinationInput): Promise<DestinationRow>;
@@ -2108,6 +2112,39 @@ class DatabaseStorage implements IStorage {
     return row;
   }
 
+  async getClip(id: number): Promise<ClipRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(clips).where(eq(clips.id, id));
+    return row;
+  }
+
+  async updateClip(id: number, patch: Partial<ClipRow>): Promise<ClipRow | undefined> {
+    await ready();
+    const { id: _id, ...rest } = patch;
+    const [row] = await db.update(clips).set(rest).where(eq(clips.id, id)).returning();
+    return row;
+  }
+
+  async claimClipEdit(): Promise<ClipRow | undefined> {
+    await ready();
+    const stale = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+    const [row] = await db
+      .update(clips)
+      .set({ editStatus: "running", editAt: now })
+      .where(
+        sqlExpr`${clips.id} = (
+          SELECT id FROM clips
+          WHERE edit_status = 'queued' OR (edit_status = 'running' AND edit_at < ${stale})
+          ORDER BY edit_at
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED
+        )`,
+      )
+      .returning();
+    return row;
+  }
+
   async listClipsByEmail(email: string): Promise<ClipRow[]> {
     await ready();
     return db
@@ -2120,7 +2157,7 @@ class DatabaseStorage implements IStorage {
   /** A re-run replaces what was there, so a retried job can't double the list. */
   async replaceClips(
     recordingId: number,
-    rows: Omit<ClipRow, "id" | "createdAt" | "recordingId">[],
+    rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt">[],
   ): Promise<ClipRow[]> {
     await ready();
     await db.delete(clips).where(eq(clips.recordingId, recordingId));

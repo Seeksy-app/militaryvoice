@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TOKEN_PACKS } from "@shared/tokens";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { startTokenCheckout } from "@/lib/tokens";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy } from "lucide-react";
+import { Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -360,8 +362,58 @@ function downloadHref(url: string, name: string): string {
   return `${url}${url.includes("?") ? "&" : "?"}download=${encodeURIComponent(file)}`;
 }
 
+/** "Edit text": the title and the gold line under it, remade in all three shapes. */
+function EditTextDialog({ c, open, onOpenChange }: { c: ClipRow; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [title, setTitle] = useState(c.title);
+  const [subtitle, setSubtitle] = useState(c.subtitle);
+  useEffect(() => {
+    if (open) { setTitle(c.title); setSubtitle(c.subtitle); }
+  }, [open, c.title, c.subtitle]);
+  const save = useMutation({
+    mutationFn: async () => (await apiRequest("POST", `/api/host/clips/${c.id}/text`, { title, subtitle })).json(),
+    onSuccess: () => {
+      onOpenChange(false);
+      void qc.invalidateQueries({ queryKey: ["/api/host/clips"] });
+      toast({ title: "Updating the clip", description: "All three shapes, with the new words. About a minute." });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't update that", description: e.message, variant: "destructive" }),
+  });
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit text</DialogTitle>
+          <DialogDescription>The words in the band at the top of the clip. We remake the vertical, square and wide versions with them, which takes about a minute.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor={`clip-title-${c.id}`}>Title</Label>
+            <Input id={`clip-title-${c.id}`} className="mt-1" value={title} maxLength={90} onChange={(e) => setTitle(e.target.value)} data-testid="input-clip-title" />
+            <p className="mt-1 text-[11px] text-muted-foreground">Short reads best: six words or so.</p>
+          </div>
+          <div>
+            <Label htmlFor={`clip-sub-${c.id}`}>Subtitle</Label>
+            <Input id={`clip-sub-${c.id}`} className="mt-1" value={subtitle} maxLength={70} onChange={(e) => setSubtitle(e.target.value)} placeholder="Your show · the guest" data-testid="input-clip-subtitle" />
+            <p className="mt-1 text-[11px] text-muted-foreground">The smaller gold line under the title, in capitals. Your show and the guest works well.</p>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={() => save.mutate()} disabled={save.isPending || !title.trim()} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="button-clip-text-save">
+            {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Update clip
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
   const { toast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const updating = c.editStatus === "queued" || c.editStatus === "running";
   const src = c.verticalUrl || c.squareUrl || c.url;
   const files = [
     { href: c.verticalUrl, label: "Vertical", tip: "9:16 — best for Instagram Reels, TikTok and YouTube Shorts." },
@@ -369,16 +421,24 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
     { href: c.url, label: "Wide", tip: "16:9 — best for YouTube, LinkedIn and X." },
   ].filter((f) => f.href);
   return (
+    <>
     <div className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm" data-testid={`post-clip-${c.id}`}>
       <button type="button" onClick={onPreview} className="relative aspect-[9/16] w-full overflow-hidden bg-black" aria-label={`Preview ${c.title}`}>
         {src && <video src={`${src}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />}
         <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-[#000741] shadow-lg"><Play className="h-5 w-5 fill-current" /></span>
         </span>
+        {updating && (
+          <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#000741]/75 text-white backdrop-blur-[2px]">
+            <Loader2 className="h-6 w-6 animate-spin text-[#F0A71F]" />
+            <span className="text-xs font-semibold">Updating the text…</span>
+          </span>
+        )}
       </button>
       <div className="flex flex-1 flex-col p-3">
         <p className="mb-1 inline-flex items-center gap-1 text-[11px] font-medium tabular-nums text-muted-foreground"><Clock3 className="h-3 w-3" /> {stamp(c.startSec)}–{stamp(c.endSec)}</p>
-        <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{c.title}</p>
+        <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{updating && c.editTitle ? c.editTitle : c.title}</p>
+        {c.editStatus === "failed" && <p className="mt-1 text-xs text-destructive">Couldn't update the text. Try again.</p>}
         {c.reason && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground" title={c.reason}>{c.reason}</p>}
         <div className="mt-auto flex flex-wrap gap-1 pt-2.5">
           {files.map((f) => (
@@ -402,6 +462,11 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
           <Pill tip="Play it here." onClick={onPreview}>
             <Play className="h-3 w-3" /> Watch
           </Pill>
+          {!updating && (
+            <Pill tip="Change the title and the gold line under it. All three shapes are remade." onClick={() => setEditing(true)}>
+              <Pencil className="h-3 w-3" /> Edit text
+            </Pill>
+          )}
           {c.subtitlesUrl && (
             <Pill tip="The words as a subtitle file (.srt), for uploading to YouTube or LinkedIn." href={downloadHref(c.subtitlesUrl, `${c.title} subtitles`)} download>
               <Download className="h-3 w-3" /> Subtitles
@@ -410,6 +475,8 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
         </div>
       </div>
     </div>
+    <EditTextDialog c={c} open={editing} onOpenChange={setEditing} />
+    </>
   );
 }
 
@@ -558,7 +625,8 @@ export function PostStudio() {
   const clips = useQuery<ClipRow[]>({
     queryKey: ["/api/host/clips"],
     queryFn: async () => (await apiRequest("GET", "/api/host/clips")).json(),
-    refetchInterval: moving ? 5000 : false,
+    // Live while clips are being cut, or while any is being remade with new text.
+    refetchInterval: (q) => (moving || (q.state.data as ClipRow[] | undefined)?.some((c) => c.editStatus === "queued" || c.editStatus === "running") ? 5000 : false),
   });
 
   // Saved clean copies are recordings (they live in Recordings), not episodes to post-produce again.

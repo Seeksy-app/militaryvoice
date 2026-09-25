@@ -5006,7 +5006,45 @@ export function registerRoutes(app: Express): void {
    * file and the transcript we already captured live — so it never needs
    * database or storage credentials of its own.
    */
-  app.post("/api/agent/clip-jobs/claim", requireAgent, async (_req, res) => {
+  /**
+   * The gold line under a clip's title: the show's name. It used to fall back
+   * to the recording's title, and an uploaded episode's title ("Devil Dawg
+   * Double Dare Ep 5 with Genius Network Founder, Joe Polish") ran off the band.
+   */
+  async function showNameFor(rec: { signupId: number | null; email: string; title: string }): Promise<string> {
+    const signup = rec.signupId ? await storage.getSignupById(rec.signupId) : undefined;
+    if (signup?.podcastName?.trim()) return signup.podcastName.trim();
+    const profile = rec.email ? await storage.getProfileByEmail(rec.email) : undefined;
+    return profile?.podcastName?.trim() || rec.title;
+  }
+
+  app.post("/api/agent/clip-jobs/claim", requireAgent, async (req, res) => {
+    // "Edit text" first: a minute's work someone is watching the screen for.
+    // Only to a worker that says it can: an older one would read the job as
+    // "clip this whole recording" and remake every clip in it.
+    const canEdit = Array.isArray(req.body?.can) && req.body.can.includes("edit");
+    const edit = canEdit ? await storage.claimClipEdit() : undefined;
+    if (edit) {
+      const rec = await storage.getRecording(edit.recordingId);
+      const url = rec?.url ? (/^https?:\/\//i.test(rec.url) ? rec.url : await signedRecordingUrl(rec.url, 7200).catch(() => "")) : "";
+      if (!rec || !url) {
+        await storage.updateClip(edit.id, { editStatus: "failed", editError: "The recording couldn't be opened." });
+      } else {
+        res.json({
+          job: {
+            recordingId: rec.id,
+            title: rec.title,
+            durationSec: rec.durationSec,
+            downloadUrl: url,
+            show: edit.editSubtitle,
+            host: "",
+            transcript: [],
+            clipEdit: { clipId: edit.id, title: edit.editTitle, subtitle: edit.editSubtitle, startSec: edit.startSec, endSec: edit.endSec },
+          },
+        });
+        return;
+      }
+    }
     let rec = await storage.claimClipJob();
     // Nothing to clip: maybe a clean episode to (re)make on its own.
     let cleanOnly = false;
@@ -5052,15 +5090,14 @@ export function registerRoutes(app: Express): void {
         }))
       : [];
 
-    const signup = rec.signupId ? await storage.getSignupById(rec.signupId) : undefined;
     res.json({
       job: {
         recordingId: rec.id,
         title: rec.title,
         durationSec: rec.durationSec,
         downloadUrl,
-        show: signup?.podcastName ?? rec.title,
-        host: signup?.hostName ?? "",
+        show: await showNameFor(rec),
+        host: (rec.signupId ? (await storage.getSignupById(rec.signupId))?.hostName : "") ?? "",
         transcript: lines,
         cleanOnly,
       },
@@ -5132,6 +5169,7 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
+    const show = await showNameFor(rec);
     const rows = parsed.data
       .filter((c) => c.endSec > c.startSec)
       .map((c) => ({
@@ -5150,6 +5188,7 @@ export function registerRoutes(app: Express): void {
         subtitlesUrl: c.subtitlesUrl,
         sourceAssetId: 0,
         cutAssetId: 0,
+        subtitle: show,
       }));
     const saved = await storage.replaceClips(rec.id, rows);
     await storage.setClipStatus(rec.id, "done", "");
@@ -5276,7 +5315,54 @@ export function registerRoutes(app: Express): void {
   app.get("/api/host/clips", requireHostSession, async (req, res) => {
     noStore(res);
     const email = (req as any).hostEmail as string;
-    res.json(await storage.listClipsByEmail(email));
+    const rows = await storage.listClipsByEmail(email);
+    // Clips made before the subtitle was stored: say what their band shows.
+    const shows = new Map<number, string>();
+    for (const c of rows) {
+      if (c.subtitle || shows.has(c.recordingId)) continue;
+      const rec = await storage.getRecording(c.recordingId);
+      shows.set(c.recordingId, rec ? await showNameFor(rec) : "");
+    }
+    res.json(rows.map((c) => (c.subtitle ? c : { ...c, subtitle: shows.get(c.recordingId) ?? "" })));
+  });
+
+  /** "Edit text": a new title and subtitle for one clip. The clipper remakes its three shapes. */
+  app.post("/api/host/clips/:id/text", requireHostSession, async (req, res) => {
+    const email = ((req as any).hostEmail as string).trim().toLowerCase();
+    const clip = await storage.getClip(Number(req.params.id));
+    if (!clip || clip.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such clip." });
+    if (clip.editStatus === "queued" || clip.editStatus === "running") return res.status(409).json({ message: "That clip is already being updated." });
+    const title = String(req.body?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 90);
+    const subtitle = String(req.body?.subtitle ?? "").replace(/\s+/g, " ").trim().slice(0, 70);
+    if (!title) return res.status(400).json({ message: "A clip needs a title." });
+    const row = await storage.updateClip(clip.id, { editTitle: title, editSubtitle: subtitle, editStatus: "queued", editError: "", editAt: new Date().toISOString() });
+    res.json(row);
+  });
+
+  /** The clipper has remade a clip with its new text: swap the files and the words in together. */
+  app.post("/api/agent/clip-edits/:id/done", requireAgent, async (req, res) => {
+    const clip = await storage.getClip(Number(req.params.id));
+    if (!clip) return res.status(404).json({ message: "No such clip." });
+    const b = req.body ?? {};
+    const ok = (u: unknown) => typeof u === "string" && /^https?:\/\//.test(u);
+    if (!ok(b.url) || !ok(b.verticalUrl) || !ok(b.squareUrl)) return res.status(400).json({ message: "Three files, please." });
+    await storage.updateClip(clip.id, {
+      title: clip.editTitle || clip.title,
+      subtitle: clip.editSubtitle,
+      url: b.url,
+      verticalUrl: b.verticalUrl,
+      squareUrl: b.squareUrl,
+      editStatus: "",
+      editError: "",
+    });
+    res.json({ ok: true });
+  });
+
+  app.post("/api/agent/clip-edits/:id/failed", requireAgent, async (req, res) => {
+    const clip = await storage.getClip(Number(req.params.id));
+    if (!clip) return res.status(404).json({ message: "No such clip." });
+    await storage.updateClip(clip.id, { editStatus: "failed", editError: String(req.body?.error ?? "").slice(0, 300) });
+    res.json({ ok: true });
   });
 
   app.get("/api/admin/recordings/:id/clips", requireAdmin, async (req, res) => {

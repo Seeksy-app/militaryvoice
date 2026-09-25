@@ -1243,6 +1243,19 @@ export const clips = pgTable(
     /** For clips cut from a sent-in episode: the library file it came from, and its broadcast cut. */
     sourceAssetId: integer("source_asset_id").notNull().default(0),
     cutAssetId: integer("cut_asset_id").notNull().default(0),
+    /** The smaller gold line under the title in the band (the show, the guest). */
+    subtitle: text("subtitle").notNull().default(""),
+    /**
+     * "Edit text": the new title and subtitle wait here while the clipper
+     * remakes the three shapes, and replace the live ones only once they're
+     * done — a failed remake leaves the clip as it was.
+     */
+    editTitle: text("edit_title").notNull().default(""),
+    editSubtitle: text("edit_subtitle").notNull().default(""),
+    /** "" | queued | running | failed */
+    editStatus: text("edit_status").notNull().default(""),
+    editError: text("edit_error").notNull().default(""),
+    editAt: text("edit_at").notNull().default(""),
     createdAt: text("created_at").notNull(),
   },
   (t) => ({
