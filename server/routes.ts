@@ -5379,7 +5379,7 @@ export function registerRoutes(app: Express): void {
    * have no limit. POSTIFY_BETA_EPISODES / POSTIFY_BETA_MAX_MIN adjust it.
    */
   const postTesters = () =>
-    new Set((process.env.POST_TESTERS || "marineocsblog@gmail.com,riccoh.player@drphil.tv").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
+    new Set((process.env.POST_TESTERS || "marineocsblog@gmail.com").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
   const BETA_EPISODES = () => Number(process.env.POSTIFY_BETA_EPISODES || 1);
   const BETA_MAX_SEC = () => Number(process.env.POSTIFY_BETA_MAX_MIN || 60) * 60;
   async function postifyAllowance(email: string) {
@@ -8799,14 +8799,16 @@ Watch at militaryvoices.ai/agenda
       const name = sg?.podcastName.trim() || prof?.podcastName.trim() || "";
       out.set(e, { email: e, label: name ? `${name} · Podcaster` : `${e} · Crew`, kind: "crew" });
     }
-    // Pōstify's test accounts (POST_TESTERS), so the admin can see and buy
-    // tokens as them without asking the person for a sign-in code.
+    // Pōstify's test accounts (POST_TESTERS) and the paying ones we test with
+    // (POST_VIEW_AS: Riccoh's Devil Dawg, since 25 Sep a normal podcaster with
+    // one free episode then tokens), so the admin can see and buy as them.
     const profiles = await storage.listAllProfiles();
-    for (const e of Array.from(postTesters())) {
+    const paying = (process.env.POST_VIEW_AS || "riccoh.player@drphil.tv").split(",").map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@"));
+    for (const e of [...Array.from(postTesters()), ...paying]) {
       if (out.has(e)) continue;
       const prof = profiles.find((p) => p.email.trim().toLowerCase() === e);
       const name = prof?.podcastName.trim() || prof?.hostName.trim() || e;
-      out.set(e, { email: e, label: `${name} · Pōstify test`, kind: "crew" });
+      out.set(e, { email: e, label: `${name} · ${postTesters().has(e) ? "Pōstify tester" : "Pōstify, paying"}`, kind: "crew" });
     }
     return Array.from(out.values());
   }
