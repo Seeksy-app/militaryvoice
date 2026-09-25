@@ -327,6 +327,7 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
   const { toast } = useToast();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
+  const [yearly, setYearly] = useState(false);
   const go = async (what: string, fn: () => Promise<void>) => {
     setBusy(what);
     try {
@@ -348,23 +349,23 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
           <>
             <DialogHeader>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00]">Your plan</p>
-              <DialogTitle className="text-2xl">{plan.name}</DialogTitle>
+              <DialogTitle className="text-2xl">{plan.name}{plan.interval === "year" ? " · yearly" : ""}</DialogTitle>
               <DialogDescription>
-                {plan.credits} credits a month{plan.periodEnd ? ` · next credits ${new Date(plan.periodEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}.
+                {plan.interval === "year" ? `${plan.credits * 12} credits a year` : `${plan.credits} credits a month`}{plan.periodEnd ? ` · next credits ${new Date(plan.periodEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}.
                 {plan.status === "past_due" ? " Your last payment didn't go through — update your card under Manage billing." : ""}
               </DialogDescription>
             </DialogHeader>
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid gap-3 ${plan.interval === "year" ? "grid-cols-1" : "grid-cols-2"}`}>
               <div className="rounded-xl border border-border p-3">
                 <p className="text-xs text-muted-foreground">Credits left</p>
                 <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{beta?.tokens ?? 0}</p>
               </div>
-              <div className="rounded-xl border border-border p-3">
+              {plan.interval !== "year" && <div className="rounded-xl border border-border p-3">
                 <p className="text-xs text-muted-foreground">Extra credits this month</p>
                 <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{cents(plan.extraCents)} <span className="text-sm font-medium text-muted-foreground">of {cents(plan.capCents)}</span></p>
-              </div>
+              </div>}
             </div>
-            <div>
+            {plan.interval !== "year" && <div>
               <p className="text-sm font-medium text-foreground">Your limit on extra credits a month</p>
               <p className="text-xs text-muted-foreground">When your credits run out, extras are {cents(plan.overageCents)} each and go on your next bill — never past this.</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -374,7 +375,7 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
                   </button>
                 ))}
               </div>
-            </div>
+            </div>}
             <Button variant="outline" onClick={() => void go("portal", openBillingPortal)} disabled={busy !== null} className="w-full gap-2 rounded-full" data-testid="plan-portal">
               {busy === "portal" && <Loader2 className="h-4 w-4 animate-spin" />} Manage billing: card, invoices, cancel
             </Button>
@@ -387,16 +388,22 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
               <DialogTitle className="text-2xl">Pick a plan</DialogTitle>
               <DialogDescription>Credits every month. If you run out, extra credits go on your next bill — up to a limit you set. Cancel any time.</DialogDescription>
             </DialogHeader>
+            <div className="flex justify-center">
+              <div className="inline-flex rounded-full border border-border p-0.5 text-xs font-semibold">
+                <button type="button" onClick={() => setYearly(false)} className={`rounded-full px-3 py-1 ${!yearly ? "bg-[#053877] text-white" : "text-muted-foreground"}`}>Monthly</button>
+                <button type="button" onClick={() => setYearly(true)} className={`rounded-full px-3 py-1 ${yearly ? "bg-[#053877] text-white" : "text-muted-foreground"}`}>Yearly · 2 months free</button>
+              </div>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {Object.values(PLANS).map((p) => {
                 const popular = "popular" in p && p.popular;
                 return (
                   <div key={p.key} className={`flex flex-col rounded-2xl border p-4 ${popular ? "border-[#053877] bg-[#053877]/[0.04]" : "border-border"}`}>
                     <p className="text-sm font-semibold text-muted-foreground">{p.name}</p>
-                    <p className="mt-1 text-3xl font-bold text-foreground">{cents(p.cents)}<span className="text-sm font-medium text-muted-foreground"> /month</span></p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">{p.credits} credits a month</p>
-                    <p className="mt-1 flex-1 text-xs text-muted-foreground">{p.blurb} Extra credits {cents(p.overageCents)} each.</p>
-                    <Button onClick={() => void go(p.key, () => startPlanCheckout(p.key))} disabled={busy !== null} className={`mt-3 gap-2 rounded-full ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} variant={popular ? "default" : "outline"} data-testid={`plan-${p.key}`}>
+                    <p className="mt-1 text-3xl font-bold text-foreground">{cents(yearly ? Math.round(p.yearCents / 12) : p.cents)}<span className="text-sm font-medium text-muted-foreground"> /month</span></p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{yearly ? `${(p.credits * 12).toLocaleString()} credits a year, at once` : `${p.credits} credits a month`}</p>
+                    <p className="mt-1 flex-1 text-xs text-muted-foreground">{p.blurb} {yearly ? `${cents(p.yearCents)} billed yearly.` : `Extra credits ${cents(p.overageCents)} each.`}</p>
+                    <Button onClick={() => void go(p.key, () => startPlanCheckout(p.key, yearly ? "year" : "month"))} disabled={busy !== null} className={`mt-3 gap-2 rounded-full ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} variant={popular ? "default" : "outline"} data-testid={`plan-${p.key}`}>
                       {busy === p.key && <Loader2 className="h-4 w-4 animate-spin" />} Choose {p.name}
                     </Button>
                   </div>
@@ -823,7 +830,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
 }
 
 interface Beta { unlimited: boolean; used: number; limit: number; left: number | null; maxMinutes: number; tokens: number; payments: boolean }
-interface Plan { key: PlanKey; name: string; credits: number; overageCents: number; capCents: number; extraCents: number; periodEnd: string; status: string }
+interface Plan { key: PlanKey; name: string; interval?: "month" | "year"; credits: number; overageCents: number; capCents: number; extraCents: number; periodEnd: string; status: string }
 
 /** Always in Pōstify's header: credits left (and the plan), and the way to more. */
 function CreditBalance({ beta, plan }: { beta?: Beta; plan?: Plan | null }) {

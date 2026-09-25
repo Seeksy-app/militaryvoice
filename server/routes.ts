@@ -5761,7 +5761,8 @@ export function registerRoutes(app: Express): void {
     }
     const sub = allowance.sub;
     const plan = sub ? planOf(sub.plan) : undefined;
-    if (!sub || !plan || !sub.customerId) return "no";
+    // Extras are monthly-only (Stripe bills the meter with a monthly plan); yearly tops up with packs.
+    if (!sub || !plan || !sub.customerId || sub.interval === "year") return "no";
     const extra = credits - Math.max(0, allowance.tokens);
     const extraCents = extra * plan.overageCents;
     if (allowance.extraCents + extraCents > sub.overageCapCents) return "limit";
@@ -5774,13 +5775,15 @@ export function registerRoutes(app: Express): void {
   async function syncPlan(state: PlanState, invoiceId?: string): Promise<void> {
     const existing = await storage.getSubscription(state.email);
     await storage.upsertSubscription({
-      email: state.email, plan: state.plan, status: state.status, customerId: state.customerId, subscriptionId: state.subscriptionId,
+      email: state.email, plan: state.plan, interval: state.interval, status: state.status, customerId: state.customerId, subscriptionId: state.subscriptionId,
       periodStart: state.periodStart, periodEnd: state.periodEnd, overageCapCents: existing?.overageCapCents ?? DEFAULT_OVERAGE_CAP_CENTS,
     });
     const inv = invoiceId || state.latestInvoice;
     const plan = planOf(state.plan);
     if (inv && plan && ["active", "trialing"].includes(state.status)) {
-      await storage.addTokens({ email: state.email, delta: plan.credits, reason: `${plan.name} plan: ${plan.credits} credits`, ref: `plan:${inv}` });
+      // A yearly plan's year of credits comes the day it's paid.
+      const credits = plan.credits * (state.interval === "year" ? 12 : 1);
+      await storage.addTokens({ email: state.email, delta: credits, reason: `${plan.name} ${state.interval === "year" ? "yearly" : "monthly"}: ${credits} credits`, ref: `plan:${inv}` });
     }
   }
   async function canPost(_email: string): Promise<boolean> {
@@ -5793,7 +5796,7 @@ export function registerRoutes(app: Express): void {
     res.json({
       post: true,
       beta: { unlimited: a.unlimited, used: a.used, limit: a.limit, left: a.unlimited ? null : a.left, maxMinutes: a.maxMinutes, tokens: a.tokens, payments: stripeReady() },
-      plan: a.sub && plan ? { key: plan.key, name: plan.name, credits: plan.credits, overageCents: plan.overageCents, capCents: a.sub.overageCapCents, extraCents: a.extraCents, periodEnd: a.sub.periodEnd, status: a.sub.status } : null,
+      plan: a.sub && plan ? { key: plan.key, name: plan.name, interval: a.sub.interval, credits: plan.credits, overageCents: plan.overageCents, capCents: a.sub.overageCapCents, extraCents: a.extraCents, periodEnd: a.sub.periodEnd, status: a.sub.status } : null,
     });
   });
 
@@ -5809,7 +5812,7 @@ export function registerRoutes(app: Express): void {
     const sub = await storage.getSubscription(email);
     if (sub && ["active", "trialing", "past_due"].includes(sub.status)) return res.status(409).json({ message: "You already have a plan. Change it under Manage billing." });
     try {
-      res.json({ url: await createPlanCheckout({ email, plan: key as PlanKey, origin: originOf(req), customerId: sub?.customerId || undefined }) });
+      res.json({ url: await createPlanCheckout({ email, plan: key as PlanKey, interval: req.body?.interval === "year" ? "year" : "month", origin: originOf(req), customerId: sub?.customerId || undefined }) });
     } catch (err: any) {
       console.error("Plan checkout failed:", err?.message);
       res.status(502).json({ message: "Checkout didn't open. Try again in a moment." });
@@ -5825,7 +5828,7 @@ export function registerRoutes(app: Express): void {
       if (!state || state.email !== email) return res.status(404).json({ message: "We couldn't find that subscription." });
       await syncPlan(state);
       const plan = planOf(state.plan)!;
-      res.json({ plan: plan.name, credits: plan.credits, balance: await storage.tokenBalance(email) });
+      res.json({ plan: `${plan.name}${state.interval === "year" ? " (yearly)" : ""}`, credits: plan.credits * (state.interval === "year" ? 12 : 1), balance: await storage.tokenBalance(email) });
     } catch (err: any) {
       console.error("Plan confirm failed:", err?.message);
       res.status(502).json({ message: "We couldn't check that just now. Refresh in a moment." });
@@ -5912,7 +5915,7 @@ export function registerRoutes(app: Express): void {
         if (state) {
           const existing = await storage.getSubscription(state.email);
           await storage.upsertSubscription({
-            email: state.email, plan: state.plan, status: state.status, customerId: state.customerId, subscriptionId: state.subscriptionId,
+            email: state.email, plan: state.plan, interval: state.interval, status: state.status, customerId: state.customerId, subscriptionId: state.subscriptionId,
             periodStart: state.periodStart, periodEnd: state.periodEnd, overageCapCents: existing?.overageCapCents ?? DEFAULT_OVERAGE_CAP_CENTS,
           });
         }

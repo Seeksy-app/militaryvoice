@@ -18,9 +18,9 @@ export async function startTokenCheckout(pack: string): Promise<void> {
 }
 
 /** Off to Stripe Checkout for a monthly plan. */
-export async function startPlanCheckout(plan: string): Promise<void> {
+export async function startPlanCheckout(plan: string, interval: "month" | "year" = "month"): Promise<void> {
   try {
-    const { url } = await (await apiRequest("POST", "/api/host/plan/checkout", { plan })).json();
+    const { url } = await (await apiRequest("POST", "/api/host/plan/checkout", { plan, interval })).json();
     window.location.href = url;
   } catch (e) {
     if ((e as { status?: number }).status === 401) {

@@ -1943,6 +1943,8 @@ export const postifySubscriptions = pgTable("postify_subscriptions", {
   periodEnd: text("period_end").notNull().default(""),
   /** Their limit on extra credits a month, in cents. */
   overageCapCents: integer("overage_cap_cents").notNull().default(2000),
+  /** month | year */
+  interval: text("interval").notNull().default("month"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (t) => [uniqueIndex("postify_subscriptions_email_idx").on(t.email)]);

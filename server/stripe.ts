@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { tokenPack, PLANS, planOf, type PlanKey } from "../shared/tokens.js";
+import { tokenPack, PLANS, planOf, type PlanKey, type PlanInterval } from "../shared/tokens.js";
 
 /**
  * Stripe Checkout for Pōstify tokens, over Stripe's REST API (no SDK: three
@@ -132,7 +132,7 @@ function ensureBilling(): Promise<Record<string, string>> {
       customer_mapping: { type: "by_id", event_payload_key: "stripe_customer_id" },
       value_settings: { event_payload_key: "value" },
     }));
-    const keys = Object.keys(PLANS).flatMap((k) => [`postify_${k}_monthly`, `postify_${k}_extra`]);
+    const keys = Object.keys(PLANS).flatMap((k) => [`postify_${k}_monthly`, `postify_${k}_extra`, `postify_${k}_yearly`]);
     const found = await stripe("GET", `/prices?limit=20&${keys.map((k) => `lookup_keys[]=${k}`).join("&")}`);
     const ids: Record<string, string> = Object.fromEntries((found.data ?? []).map((p: any) => [p.lookup_key, p.id]));
     for (const plan of Object.values(PLANS)) {
@@ -140,6 +140,13 @@ function ensureBilling(): Promise<Record<string, string>> {
         const p = await stripe("POST", "/prices", flat({
           lookup_key: `postify_${plan.key}_monthly`, currency: "usd", unit_amount: plan.cents,
           recurring: { interval: "month" }, product_data: { name: `Pōstify ${plan.name} · ${plan.credits} credits a month` },
+        }));
+        ids[p.lookup_key] = p.id;
+      }
+      if (!ids[`postify_${plan.key}_yearly`]) {
+        const p = await stripe("POST", "/prices", flat({
+          lookup_key: `postify_${plan.key}_yearly`, currency: "usd", unit_amount: plan.yearCents,
+          recurring: { interval: "year" }, product_data: { name: `Pōstify ${plan.name} · yearly · ${plan.credits * 12} credits` },
         }));
         ids[p.lookup_key] = p.id;
       }
@@ -156,24 +163,28 @@ function ensureBilling(): Promise<Record<string, string>> {
   return billing;
 }
 
-export async function createPlanCheckout(v: { email: string; plan: PlanKey; origin: string; customerId?: string }): Promise<string> {
+export async function createPlanCheckout(v: { email: string; plan: PlanKey; interval?: PlanInterval; origin: string; customerId?: string }): Promise<string> {
   const plan = planOf(v.plan);
   if (!plan) throw new Error("Which plan?");
+  const interval: PlanInterval = v.interval === "year" ? "year" : "month";
   const ids = await ensureBilling();
+  const meta = { kind: "postify_plan", email: v.email, plan: plan.key, interval };
   const s = await stripe("POST", "/checkout/sessions", flat({
     mode: "subscription",
     ...(v.customerId ? { customer: v.customerId } : { customer_email: v.email }),
     client_reference_id: v.email,
-    line_items: [{ price: ids[`postify_${plan.key}_monthly`], quantity: 1 }, { price: ids[`postify_${plan.key}_extra`] }],
-    metadata: { kind: "postify_plan", email: v.email, plan: plan.key },
-    subscription_data: { metadata: { kind: "postify_plan", email: v.email, plan: plan.key } },
+    line_items: interval === "year"
+      ? [{ price: ids[`postify_${plan.key}_yearly`], quantity: 1 }]
+      : [{ price: ids[`postify_${plan.key}_monthly`], quantity: 1 }, { price: ids[`postify_${plan.key}_extra`] }],
+    metadata: meta,
+    subscription_data: { metadata: meta },
     success_url: `${v.origin}/host/dashboard/postify?subscribed={CHECKOUT_SESSION_ID}`,
     cancel_url: `${v.origin}/pricing`,
   }));
   return String(s.url);
 }
 
-export interface PlanState { email: string; plan: PlanKey; status: string; customerId: string; subscriptionId: string; periodStart: string; periodEnd: string; latestInvoice: string }
+export interface PlanState { email: string; plan: PlanKey; interval: PlanInterval; status: string; customerId: string; subscriptionId: string; periodStart: string; periodEnd: string; latestInvoice: string }
 
 /** A subscription as we keep it, from Stripe's own record. */
 export async function readSubscription(subscriptionId: string): Promise<PlanState | null> {
@@ -189,7 +200,7 @@ export function planStateFrom(sub: any): PlanState | null {
   const iso = (t: unknown) => (Number(t) ? new Date(Number(t) * 1000).toISOString() : "");
   const item = sub.items?.data?.[0];
   return {
-    email, plan: plan.key, status: String(sub.status),
+    email, plan: plan.key, interval: sub.metadata?.interval === "year" ? "year" : "month", status: String(sub.status),
     customerId: String(sub.customer), subscriptionId: String(sub.id),
     periodStart: iso(sub.current_period_start ?? item?.current_period_start),
     periodEnd: iso(sub.current_period_end ?? item?.current_period_end),

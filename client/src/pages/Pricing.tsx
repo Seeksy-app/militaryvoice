@@ -26,9 +26,58 @@ const EXAMPLES = [
   { label: "4 clips, Animated, every shape", credits: episodeCredits({ formats: ["vertical", "square", "wide"], captions: "animated" }) },
 ];
 
+/**
+ * Against OpusClip, per episode — the unit a podcaster thinks in. Their
+ * credit is a minute of video processed (a 60-minute episode is 60 credits);
+ * ours pays for what's made. Their prices as listed on opus.pro, dated below:
+ * check them again before changing anything here.
+ */
+const COMPARE: { row: string; cells: [string, string, string, string]; note?: string }[] = [
+  { row: "Monthly price", cells: ["$15", "$29", "$19.95", "$49"] },
+  { row: "A weekly 60-minute show (4 episodes a month)", cells: ["Not enough: 150 minutes is 2½ episodes", "Covered", "About $23.55 (a few extra credits)", "Covered, room for 10"], note: "Pōstify: 4 clips an episode, vertical and square, animated captions." },
+  { row: "Clips per episode", cells: ["As many as it finds", "As many as it finds", "4 picked, plus any you mark", "4 picked, plus any you mark"] },
+  { row: "The whole episode cleaned (ums, false starts, dead air out) as MP3 and MP4", cells: ["Not listed", "Not listed", "Included", "Included"] },
+  { row: "Post and schedule to your own accounts", cells: ["Auto-post", "Included", "Included", "Included"] },
+  { row: "Your first episode free", cells: ["—", "—", "Yes", "Yes"] },
+];
+
+function Comparison() {
+  return (
+    <section className="mt-12" data-testid="pricing-compare">
+      <h2 className="text-center text-2xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>What a weekly show pays</h2>
+      <p className="mx-auto mt-1 max-w-2xl text-center text-sm text-muted-foreground">OpusClip charges by the minute of video; Pōstify by what it makes. So here's the same month, per episode.</p>
+      <div className="mt-5 overflow-x-auto rounded-3xl border border-border bg-card">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className="border-b border-border text-left">
+              <th className="p-4 font-semibold text-muted-foreground" />
+              <th className="p-4 font-semibold text-muted-foreground">OpusClip Starter</th>
+              <th className="p-4 font-semibold text-muted-foreground">OpusClip Pro</th>
+              <th className="bg-[#053877]/[0.05] p-4 font-bold text-foreground">Pōstify Creator</th>
+              <th className="bg-[#053877]/[0.05] p-4 font-bold text-foreground">Pōstify Pro</th>
+            </tr>
+          </thead>
+          <tbody>
+            {COMPARE.map((r) => (
+              <tr key={r.row} className="border-b border-border last:border-0 align-top">
+                <td className="p-4 font-medium text-foreground">{r.row}{r.note && <span className="mt-1 block text-xs font-normal text-muted-foreground">{r.note}</span>}</td>
+                {r.cells.map((c, i) => (
+                  <td key={i} className={`p-4 ${i >= 2 ? "bg-[#053877]/[0.05] font-semibold text-foreground" : "text-muted-foreground"}`}>{c}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-2 text-center text-[11px] text-muted-foreground">OpusClip prices and plans as listed on opus.pro/pricing on 25 September 2026 (monthly billing). OpusClip is a trademark of its owner.</p>
+    </section>
+  );
+}
+
 export default function Pricing() {
   const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
+  const [yearly, setYearly] = useState(false);
   const testing = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("test");
 
   async function go(key: string, fn: () => Promise<void>) {
@@ -55,6 +104,14 @@ export default function Pricing() {
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-12 sm:px-6">
+        <div className="mb-8 flex justify-center">
+          <div className="inline-flex rounded-full border border-border bg-card p-1 text-sm font-semibold" role="tablist" aria-label="Billing">
+            <button type="button" role="tab" aria-selected={!yearly} onClick={() => setYearly(false)} className={`rounded-full px-4 py-1.5 ${!yearly ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid="billing-monthly">Monthly</button>
+            <button type="button" role="tab" aria-selected={yearly} onClick={() => setYearly(true)} className={`rounded-full px-4 py-1.5 ${yearly ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid="billing-yearly">
+              Yearly <span className={yearly ? "text-[#F0A71F]" : "text-emerald-600"}>2 months free</span>
+            </button>
+          </div>
+        </div>
         <div className="mx-auto grid max-w-3xl gap-5 md:grid-cols-2">
           {Object.values(PLANS).map((p) => {
             const popular = "popular" in p && p.popular;
@@ -62,18 +119,28 @@ export default function Pricing() {
               <div key={p.key} className={`relative flex flex-col rounded-3xl border bg-card p-6 shadow-sm ${popular ? "border-[#053877] ring-2 ring-[#053877]/15" : "border-border"}`} data-testid={`plan-card-${p.key}`}>
                 {popular && <span className="absolute -top-3 left-6 rounded-full bg-[#053877] px-3 py-1 text-xs font-semibold text-white">Best value</span>}
                 <p className="flex items-center gap-2 text-sm font-semibold text-muted-foreground"><Coins className="h-4 w-4 text-[#F0A71F]" /> {p.name}</p>
-                <p className="mt-3 text-4xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>{cents(p.cents)}<span className="text-base font-medium text-muted-foreground"> /month</span></p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{p.credits} credits a month</p>
+                {yearly ? (
+                  <>
+                    <p className="mt-3 text-4xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>{cents(Math.round(p.yearCents / 12))}<span className="text-base font-medium text-muted-foreground"> /month</span></p>
+                    <p className="text-xs text-muted-foreground"><span className="line-through">{cents(p.cents * 12)}</span> {cents(p.yearCents)} billed yearly</p>
+                    <p className="mt-2 text-sm font-semibold text-foreground">{(p.credits * 12).toLocaleString()} credits a year, all at once</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-3 text-4xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>{cents(p.cents)}<span className="text-base font-medium text-muted-foreground"> /month</span></p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{p.credits} credits a month</p>
+                  </>
+                )}
                 <p className="mt-3 flex-1 text-sm text-foreground/80">{p.blurb}</p>
-                <p className="mt-3 text-xs text-muted-foreground">Extra credits {cents(p.overageCents)} each, up to your limit.</p>
+                <p className="mt-3 text-xs text-muted-foreground">{yearly ? "Top up with a credit pack any time." : `Extra credits ${cents(p.overageCents)} each, up to your limit.`}</p>
                 <Button
-                  onClick={() => void go(p.key, () => startPlanCheckout(p.key))}
+                  onClick={() => void go(p.key, () => startPlanCheckout(p.key, yearly ? "year" : "month"))}
                   disabled={busy !== null}
                   className={`mt-5 w-full gap-2 rounded-full ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`}
                   variant={popular ? "default" : "outline"}
                 >
                   {busy === p.key && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Choose {p.name}
+                  Choose {p.name}{yearly ? " yearly" : ""}
                 </Button>
               </div>
             );
@@ -119,6 +186,8 @@ export default function Pricing() {
             </div>
           ))}
         </div>
+
+        <Comparison />
 
         <div className="mt-8 grid gap-6 md:grid-cols-2">
           <div className="rounded-3xl border border-border bg-card p-6">

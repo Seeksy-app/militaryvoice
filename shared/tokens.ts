@@ -9,9 +9,15 @@
  * credit costs us at most ~50¢, and the plans sell them at 50–66¢.
  */
 export const PLANS = {
-  creator: { key: "creator", name: "Creator", cents: 1995, credits: 30, overageCents: 60, blurb: "About 3 animated episodes a month, or 6 with Classic captions." },
-  pro: { key: "pro", name: "Pro", cents: 4900, credits: 90, overageCents: 50, blurb: "About 10 animated episodes a month, or 18 with Classic captions.", popular: true },
+  creator: { key: "creator", name: "Creator", cents: 1995, yearCents: 19900, credits: 30, overageCents: 60, blurb: "About 3 animated episodes a month, or 6 with Classic captions." },
+  pro: { key: "pro", name: "Pro", cents: 4900, yearCents: 49000, credits: 90, overageCents: 50, blurb: "About 10 animated episodes a month, or 18 with Classic captions.", popular: true },
 } as const;
+/**
+ * Yearly: two months free, and the year's credits (12 months' worth) the day
+ * it's paid. No automatic extras — Stripe can't bill a monthly meter on a
+ * yearly subscription — so a yearly plan tops up with credit packs.
+ */
+export type PlanInterval = "month" | "year";
 export type PlanKey = keyof typeof PLANS;
 export const planOf = (key: string) => (key in PLANS ? PLANS[key as PlanKey] : undefined);
 
