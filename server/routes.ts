@@ -8799,6 +8799,15 @@ Watch at militaryvoices.ai/agenda
       const name = sg?.podcastName.trim() || prof?.podcastName.trim() || "";
       out.set(e, { email: e, label: name ? `${name} · Podcaster` : `${e} · Crew`, kind: "crew" });
     }
+    // Pōstify's test accounts (POST_TESTERS), so the admin can see and buy
+    // tokens as them without asking the person for a sign-in code.
+    const profiles = await storage.listAllProfiles();
+    for (const e of Array.from(postTesters())) {
+      if (out.has(e)) continue;
+      const prof = profiles.find((p) => p.email.trim().toLowerCase() === e);
+      const name = prof?.podcastName.trim() || prof?.hostName.trim() || e;
+      out.set(e, { email: e, label: `${name} · Pōstify test`, kind: "crew" });
+    }
     return Array.from(out.values());
   }
 
