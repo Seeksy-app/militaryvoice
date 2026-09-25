@@ -190,7 +190,7 @@ export function HostNav({
             const items = g.items;
             return (
               <div key={g.title} className={g.title === "Help" ? "mt-auto" : undefined}>
-                <p className="mb-1 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">{g.title}</p>
+                <p className="mb-1.5 px-3 text-xs font-extrabold uppercase tracking-[0.14em] text-white">{g.title}</p>
                 <div className="flex flex-col gap-0.5">{items.map((it) => link(it, false))}</div>
               </div>
             );
