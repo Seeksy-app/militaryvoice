@@ -50,6 +50,16 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { and, eq, ne, or, asc, desc, isNull, inArray, lte, lt, sql as sqlExpr } from "drizzle-orm";
 import { ensureSchema as syncSchemaFromDefinitions, schemaFingerprint } from "./schemaSync.js";
+import { seal, unseal } from "./secretBox.js";
+
+/** Zoom tokens are sealed in the database and opened on the way out. */
+const openZoom = (r: ZoomConnectionRow): ZoomConnectionRow => ({ ...r, accessToken: unseal(r.accessToken), refreshToken: unseal(r.refreshToken) });
+function sealZoom<T extends { accessToken?: string; refreshToken?: string }>(v: T): T {
+  const out = { ...v };
+  if (out.accessToken !== undefined) out.accessToken = seal(out.accessToken);
+  if (out.refreshToken !== undefined) out.refreshToken = seal(out.refreshToken);
+  return out;
+}
 
 // Resolve the Postgres connection string lazily (not at module load) so a
 // missing/bad value surfaces as a normal caught error on first request—
@@ -1992,29 +2002,30 @@ class DatabaseStorage implements IStorage {
   async getZoom(email: string): Promise<ZoomConnectionRow | undefined> {
     await ready();
     const [row] = await db.select().from(zoomConnections).where(eq(zoomConnections.email, email.trim().toLowerCase()));
-    return row;
+    return row && openZoom(row);
   }
 
   async getZoomsByUserId(zoomUserId: string): Promise<ZoomConnectionRow[]> {
     await ready();
-    return db.select().from(zoomConnections).where(eq(zoomConnections.zoomUserId, zoomUserId));
+    return (await db.select().from(zoomConnections).where(eq(zoomConnections.zoomUserId, zoomUserId))).map(openZoom);
   }
 
   async upsertZoom(v: Omit<ZoomConnectionRow, "id" | "createdAt" | "updatedAt" | "autoImport"> & { autoImport?: boolean }): Promise<ZoomConnectionRow> {
     await ready();
     const email = v.email.trim().toLowerCase();
     const now = new Date().toISOString();
+    const sealed = sealZoom(v);
     const [row] = await db
       .insert(zoomConnections)
-      .values({ ...v, email, createdAt: now, updatedAt: now })
-      .onConflictDoUpdate({ target: zoomConnections.email, set: { ...v, email, updatedAt: now } })
+      .values({ ...sealed, email, createdAt: now, updatedAt: now })
+      .onConflictDoUpdate({ target: zoomConnections.email, set: { ...sealed, email, updatedAt: now } })
       .returning();
-    return row;
+    return openZoom(row);
   }
 
   async updateZoom(email: string, patch: Partial<ZoomConnectionRow>): Promise<void> {
     await ready();
-    const { id: _id, email: _e, ...rest } = patch;
+    const { id: _id, email: _e, ...rest } = sealZoom(patch);
     await db.update(zoomConnections).set({ ...rest, updatedAt: new Date().toISOString() }).where(eq(zoomConnections.email, email.trim().toLowerCase()));
   }
 
