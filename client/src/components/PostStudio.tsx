@@ -16,7 +16,6 @@ type Rec = RecordingRow;
 type RowState = "done" | "active" | "waiting" | "soon" | "failed";
 
 const stamp = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
-const minutes = (sec: number) => (sec >= 60 ? `${Math.round(sec / 60)}` : `${Math.round((sec / 60) * 10) / 10}`);
 
 function cleanOf(r: Rec | undefined): CleanResult | null {
   if (!r?.clean) return null;
@@ -374,8 +373,6 @@ export function PostStudio() {
   const moments = p?.moments ?? [];
   const pickedN = done ? mine.length : moments.length;
   const readyN = done ? mine.length : p?.finished ?? 0;
-  const tookMs = done && p?.at && rec.endedAt ? Date.parse(p.at) - Date.parse(rec.endedAt) : NaN;
-  const took = Number.isFinite(tookMs) && tookMs > 0 ? (tookMs < 3600000 ? `${Math.max(1, Math.round(tookMs / 60000))} min` : `${Math.round(tookMs / 3600000)} h`) : "–";
 
   async function showRecording() {
     try {
@@ -386,13 +383,19 @@ export function PostStudio() {
     }
   }
 
+  // The times side by side: what was recorded, what the clean episode runs,
+  // and what came out of it.
+  const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
+  const recorded = clean?.durationSec || rec.durationSec;
+  const removed = clean?.status === "done" || clean?.removedSec ? clean?.removedSec ?? 0 : null;
+  const outCount = (clean?.fillers ?? 0) + (clean?.falseStarts ?? 0);
   const stats = [
-    { n: minutes(rec.durationSec), label: "Minutes recorded", color: "text-[#053877] dark:text-[#8fb5e8]" },
+    { n: clock(recorded), label: "Recorded", color: "text-[#053877] dark:text-[#8fb5e8]" },
+    { n: removed != null ? clock(Math.max(0, recorded - removed)) : "–", label: "Clean episode", color: "text-emerald-600 dark:text-emerald-400" },
+    { n: removed != null ? `−${clock(removed)}` : "–", label: "Taken out", color: "text-[#b36b00] dark:text-[#F0A71F]" },
+    { n: clean?.fillers != null ? String(outCount) : "–", label: "Ums and false starts", color: "text-[#ED1C24]" },
     { n: p?.words ? p.words.toLocaleString("en-US") : "–", label: "Words transcribed", color: "text-[#053877] dark:text-[#8fb5e8]" },
-    { n: pickedN ? String(pickedN) : "–", label: "Moments picked", color: "text-[#b36b00] dark:text-[#F0A71F]" },
-    { n: readyN ? String(readyN) : "–", label: "Clips ready", color: "text-emerald-600 dark:text-emerald-400" },
-    { n: readyN ? String(readyN * 4) : "–", label: "Files made", color: "text-violet-600 dark:text-violet-400" },
-    { n: took, label: "After the segment", color: "text-foreground" },
+    { n: readyN ? String(readyN) : "–", label: "Clips ready", color: "text-violet-600 dark:text-violet-400" },
   ];
 
   return (
