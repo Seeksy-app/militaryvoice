@@ -801,6 +801,10 @@ export interface IStorage {
   getSubscriptionById(subscriptionId: string): Promise<PostifySubscriptionRow | undefined>;
   upsertSubscription(v: Partial<PostifySubscriptionRow> & { email: string }): Promise<PostifySubscriptionRow>;
   saveCleanCopy(source: RecordingRow, videoKey: string, durationSec: number): Promise<RecordingRow>;
+  saveEditedCopy(source: RecordingRow, videoKey: string, durationSec: number): Promise<RecordingRow>;
+  setEpisodeEdit(recordingId: number, json: string): Promise<void>;
+  /** The next "Edit episode" to make, or one whose worker went quiet for an hour. */
+  claimEpisodeEdit(): Promise<RecordingRow | undefined>;
   createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number; free: boolean; queue?: boolean }): Promise<RecordingRow>;
   hasTokenRef(ref: string): Promise<boolean>;
   claimClipJob(): Promise<RecordingRow | undefined>;
@@ -809,6 +813,7 @@ export interface IStorage {
   listClips(recordingId: number): Promise<ClipRow[]>;
   listClipsByEmail(email: string): Promise<ClipRow[]>;
   getClip(id: number): Promise<ClipRow | undefined>;
+  deleteClip(id: number): Promise<void>;
   addHostPost(v: Omit<HostPostRow, "id" | "createdAt">): Promise<HostPostRow>;
   listHostPosts(email: string): Promise<HostPostRow[]>;
   updateClip(id: number, patch: Partial<ClipRow>): Promise<ClipRow | undefined>;
@@ -816,7 +821,8 @@ export interface IStorage {
   claimClipEdit(): Promise<ClipRow | undefined>;
   listSocialMetrics(): Promise<SocialMetricRow[]>;
   upsertSocialMetric(v: Omit<SocialMetricRow, "id">): Promise<SocialMetricRow>;
-  replaceClips(recordingId: number, rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt">[]): Promise<ClipRow[]>;
+  replaceClips(recordingId: number, rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes">[]): Promise<ClipRow[]>;
+  addClip(v: Partial<ClipRow> & { recordingId: number; email: string; title: string; startSec: number; endSec: number }): Promise<ClipRow>;
   listDestinations(eventId: number): Promise<DestinationRow[]>;
   getDestination(id: number): Promise<DestinationRow | undefined>;
   createDestination(eventId: number, ownerEmail: string, v: DestinationInput): Promise<DestinationRow>;
@@ -1825,6 +1831,58 @@ class DatabaseStorage implements IStorage {
    * The clean episode as a recording of its own, beside the original — never
    * in place of it. Saved once: a second save returns the first copy.
    */
+  async saveEditedCopy(source: RecordingRow, videoKey: string, durationSec: number): Promise<RecordingRow> {
+    await ready();
+    const now = new Date().toISOString();
+    const [row] = await db
+      .insert(recordings)
+      .values({
+        eventId: source.eventId,
+        studioId: source.studioId,
+        signupId: source.signupId,
+        email: source.email,
+        title: `${source.title || "Episode"} (edited)`.slice(0, 160),
+        // CLEAN_-prefixed so Pōstify's episode list leaves it out, like the clean copy: it's a finished episode.
+        egressId: `CLEAN_EDIT_${source.id}_${Date.now()}`,
+        status: "Ready",
+        url: videoKey,
+        durationSec: Math.round(durationSec),
+        sizeBytes: "0",
+        startedAt: now,
+        endedAt: now,
+        clipStatus: "none",
+      })
+      .returning();
+    return row;
+  }
+
+  async setEpisodeEdit(recordingId: number, json: string): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ episodeEdit: json }).where(eq(recordings.id, recordingId));
+  }
+
+  async claimEpisodeEdit(): Promise<RecordingRow | undefined> {
+    await ready();
+    const stale = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
+    const [row] = await db
+      .update(recordings)
+      .set({ episodeEdit: sqlExpr`(jsonb_set(${recordings.episodeEdit}::jsonb, '{status}', '"running"') || jsonb_build_object('at', ${now}::text))::text` as any })
+      .where(
+        sqlExpr`${recordings.id} = (
+          SELECT id FROM recordings
+          WHERE episode_edit <> ''
+            AND (episode_edit::jsonb->>'status' = 'queued'
+                 OR (episode_edit::jsonb->>'status' = 'running' AND episode_edit::jsonb->>'at' < ${stale}))
+          ORDER BY id
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED
+        )`,
+      )
+      .returning();
+    return row;
+  }
+
   async saveCleanCopy(source: RecordingRow, videoKey: string, durationSec: number): Promise<RecordingRow> {
     await ready();
     const egressId = `CLEAN_${source.id}`;
@@ -2170,6 +2228,18 @@ class DatabaseStorage implements IStorage {
     return db.select().from(hostPosts).where(eq(hostPosts.email, email.trim().toLowerCase())).orderBy(desc(hostPosts.id)).limit(200);
   }
 
+  async addClip(v: Partial<ClipRow> & { recordingId: number; email: string; title: string; startSec: number; endSec: number }): Promise<ClipRow> {
+    await ready();
+    const { id: _id, ...rest } = v;
+    const [row] = await db.insert(clips).values({ ...rest, createdAt: new Date().toISOString() }).returning();
+    return row;
+  }
+
+  async deleteClip(id: number): Promise<void> {
+    await ready();
+    await db.delete(clips).where(eq(clips.id, id));
+  }
+
   async getClip(id: number): Promise<ClipRow | undefined> {
     await ready();
     const [row] = await db.select().from(clips).where(eq(clips.id, id));
@@ -2215,7 +2285,7 @@ class DatabaseStorage implements IStorage {
   /** A re-run replaces what was there, so a retried job can't double the list. */
   async replaceClips(
     recordingId: number,
-    rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt">[],
+    rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes">[],
   ): Promise<ClipRow[]> {
     await ready();
     await db.delete(clips).where(eq(clips.recordingId, recordingId));

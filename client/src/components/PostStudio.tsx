@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PLANS, OVERAGE_CAP_CHOICES, episodeCredits, cents, type PlanKey } from "@shared/tokens";
-import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, type ClipFormat, type ClipOptions } from "@shared/schema";
+import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, type ClipFormat, type ClipOptions, type EpisodeEdit } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { startPlanCheckout, openBillingPortal } from "@/lib/tokens";
@@ -432,6 +432,164 @@ function GenerateMore({ beta, plan }: { beta?: Beta; plan?: Plan | null }) {
   );
 }
 
+const hms = (sec: number) => {
+  const t = Math.max(0, Math.round(sec));
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), x = t % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`;
+};
+
+/** An intro or outro: a short video uploaded once, remembered for next time. */
+function BookendPicker({ label, value, onChange }: { label: string; value: { key: string; name: string } | null; onChange: (v: { key: string; name: string } | null) => void }) {
+  const { toast } = useToast();
+  const input = useRef<HTMLInputElement>(null);
+  const [pct, setPct] = useState<number | null>(null);
+  const go = async (file: File) => {
+    if (!file.type.startsWith("video/")) return toast({ title: "That isn't a video", variant: "destructive" });
+    if (file.size > 500 * 1024 ** 2) return toast({ title: "Keep it under 500MB", description: "An intro or outro is usually a few seconds.", variant: "destructive" });
+    try {
+      setPct(0);
+      const { uploadUrl, storageKey } = (await (await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name })).json()) as { uploadUrl: string; storageKey: string };
+      await putWithProgress(uploadUrl, file, setPct);
+      onChange({ key: storageKey, name: file.name });
+    } catch (e) {
+      toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setPct(null);
+      if (input.current) input.current.value = "";
+    }
+  };
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <input ref={input} type="file" accept="video/*" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} />
+      <span className="w-12 shrink-0 text-xs font-semibold text-muted-foreground">{label}</span>
+      {value ? (
+        <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs">
+          <Film className="h-3 w-3 shrink-0 text-[#053877]" /> <span className="truncate">{value.name}</span>
+          <button type="button" onClick={() => onChange(null)} aria-label={`Remove ${label}`} className="text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /></button>
+        </span>
+      ) : (
+        <Button type="button" size="sm" variant="outline" disabled={pct !== null} onClick={() => input.current?.click()} className="h-7 gap-1.5 rounded-full text-xs">
+          {pct === null ? <Upload className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />} {pct === null ? `Add ${label.toLowerCase()}` : `${pct}%`}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Under the Viewer in Episode mode. Two things you do with a whole episode:
+ * mark a moment and make it a clip; and edit the episode itself — trim the
+ * ends, put an intro and outro on — into a new copy in the Library.
+ */
+function EpisodeTools({ rec, source, videoRef, formats, onFormats }: {
+  rec: Rec; source: "clean" | "original"; videoRef: React.RefObject<HTMLVideoElement>;
+  formats: ClipFormat[]; onFormats: (f: ClipFormat[]) => void;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const now = () => videoRef.current?.currentTime ?? 0;
+  const [tab, setTab] = useState<"clip" | "edit">("clip");
+  // Make a clip
+  const [mark, setMark] = useState<{ in: number | null; out: number | null }>({ in: null, out: null });
+  const [title, setTitle] = useState("");
+  const len = mark.in !== null && mark.out !== null ? mark.out - mark.in : 0;
+  const makeClip = useMutation({
+    mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/clips`, { startSec: mark.in, endSec: mark.out, title, source: source === "clean" ? "clean" : "", formats })).json(),
+    onSuccess: () => {
+      setMark({ in: null, out: null });
+      setTitle("");
+      void qc.invalidateQueries({ queryKey: ["/api/host/clips"] });
+      void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
+      toast({ title: "Making your clip", description: "It appears with your other clips in a minute or two." });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't make that clip", description: e.message, variant: "destructive" }),
+  });
+  // Edit the episode
+  const remember = (k: string) => { try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as { key: string; name: string }) : null; } catch { return null; } };
+  const [intro, setIntroState] = useState(() => remember("mv_intro"));
+  const [outro, setOutroState] = useState(() => remember("mv_outro"));
+  const keep = (k: string, v: { key: string; name: string } | null) => { try { v ? localStorage.setItem(k, JSON.stringify(v)) : localStorage.removeItem(k); } catch { /* private mode */ } };
+  const setIntro = (v: { key: string; name: string } | null) => { setIntroState(v); keep("mv_intro", v); };
+  const setOutro = (v: { key: string; name: string } | null) => { setOutroState(v); keep("mv_outro", v); };
+  const [trim, setTrim] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  let ed: EpisodeEdit | null = null;
+  try { ed = rec.episodeEdit ? (JSON.parse(rec.episodeEdit) as EpisodeEdit) : null; } catch { ed = null; }
+  const busy = ed?.status === "queued" || ed?.status === "running";
+  const makeEdit = useMutation({
+    mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/episode-edit`, {
+      source, trimStart: trim.start, trimEnd: trim.end, introKey: intro?.key, introName: intro?.name, outroKey: outro?.key, outroName: outro?.name,
+    })).json(),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
+      toast({ title: "Making your edited episode", description: "It goes into your Library as a new copy. A long episode takes a while." });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't start that", description: e.message, variant: "destructive" }),
+  });
+  const tabBtn = (k: "clip" | "edit", label: string) => (
+    <button type="button" onClick={() => setTab(k)} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-[#F0A71F] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`episode-tab-${k}`}>{label}</button>
+  );
+  return (
+    <div className="rounded-2xl border border-border bg-card" data-testid="episode-tools">
+      <div className="flex gap-1 border-b border-border px-2">{tabBtn("clip", "Make a clip")}{tabBtn("edit", "Edit episode")}</div>
+      {tab === "clip" ? (
+        <div className="space-y-3 p-4">
+          <p className="text-xs text-muted-foreground">Play or scrub to the moment, then mark where it starts and ends.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" size="sm" variant="outline" onClick={() => setMark((m) => ({ in: now(), out: m.out !== null && m.out > now() ? m.out : null }))} className="gap-1.5 rounded-full" data-testid="mark-in">
+              Mark in{mark.in !== null ? ` · ${hms(mark.in)}` : ""}
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setMark((m) => ({ ...m, out: now() }))} disabled={mark.in === null} className="gap-1.5 rounded-full" data-testid="mark-out">
+              Mark out{mark.out !== null ? ` · ${hms(mark.out)}` : ""}
+            </Button>
+            {len > 0 && <span className={`text-xs font-semibold tabular-nums ${len < 5 || len > 180 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{hms(len)} long</span>}
+            {mark.in !== null && (
+              <button type="button" onClick={() => { if (videoRef.current && mark.in !== null) { videoRef.current.currentTime = mark.in; void videoRef.current.play(); } }} className="text-xs text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]">Play from mark</button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={90} placeholder="Title for the clip" className="h-9 min-w-[14rem] flex-1" data-testid="mark-title" />
+            <div className="flex items-center gap-1">
+              {CLIP_FORMATS.map((f) => {
+                const on = formats.includes(f);
+                return (
+                  <button key={f} type="button" onClick={() => (on && formats.length === 1 ? null : onFormats(CLIP_FORMATS.filter((x) => (x === f ? !on : formats.includes(x)))))} className={`rounded-full border px-2.5 py-1 text-xs font-semibold capitalize ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:border-[#053877]/40"}`}>{f}</button>
+                );
+              })}
+            </div>
+            <Button type="button" onClick={() => makeClip.mutate()} disabled={makeClip.isPending || len < 5 || len > 180 || !title.trim()} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="mark-make">
+              {makeClip.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-4 w-4" />} Make clip · {formats.length} credit{formats.length === 1 ? "" : "s"}
+            </Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">Animated captions, from the {source === "clean" ? "clean" : "original"} episode. 5 seconds to 3 minutes.</p>
+        </div>
+      ) : (
+        <div className="space-y-3 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="w-12 shrink-0 text-xs font-semibold text-muted-foreground">Trim</span>
+            <Button type="button" size="sm" variant="outline" onClick={() => setTrim((t) => ({ ...t, start: now() }))} className="h-7 rounded-full text-xs" data-testid="trim-start">Start at {hms(trim.start)}</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setTrim((t) => ({ ...t, end: now() }))} className="h-7 rounded-full text-xs" data-testid="trim-end">End at {trim.end ? hms(trim.end) : "the end"}</Button>
+            {(trim.start > 0 || trim.end > 0) && <button type="button" onClick={() => setTrim({ start: 0, end: 0 })} className="text-xs text-muted-foreground underline underline-offset-2">Reset</button>}
+            <span className="text-[11px] text-muted-foreground">Pause where it should start or end, then press.</span>
+          </div>
+          <BookendPicker label="Intro" value={intro} onChange={setIntro} />
+          <BookendPicker label="Outro" value={outro} onChange={setOutro} />
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+            <p className="text-xs text-muted-foreground">
+              {busy ? "Making your edited episode…" : ed?.status === "done" ? "Your last edit is in your Library." : ed?.status === "failed" ? `The last edit didn't work: ${ed.error || "try again"}.` : `From the ${source} episode. Saved as a new copy in your Library; nothing is replaced.`}
+            </p>
+            <div className="flex items-center gap-2">
+              {ed?.status === "done" && <Button asChild size="sm" variant="outline" className="rounded-full"><a href="/host/dashboard/library">Open Library</a></Button>}
+              <Button type="button" onClick={() => makeEdit.mutate()} disabled={busy || makeEdit.isPending || (!trim.start && !trim.end && !intro && !outro) || (trim.end > 0 && trim.end < trim.start + 5)} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="edit-make">
+                {busy || makeEdit.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} Make edited episode
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** One button on a clip, with a hover note on where it works best. */
 function Pill({ tip, children, ...rest }: { tip: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement> & { onClick?: () => void; as?: "button" }) {
   const cls = "inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] font-medium text-foreground hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]";
@@ -509,6 +667,8 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
   const [editing, setEditing] = useState(false);
   const [posting, setPosting] = useState(false);
   const updating = c.editStatus === "queued" || c.editStatus === "running";
+  // A clip marked in the Viewer has no files until it's made.
+  const making = updating && !c.url && !c.verticalUrl && !c.squareUrl;
   const src = c.verticalUrl || c.squareUrl || c.url;
   const files = [
     { href: c.verticalUrl, label: "Vertical", tip: "9:16 — best for Instagram Reels, TikTok and YouTube Shorts." },
@@ -526,7 +686,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
         {updating && (
           <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#000741]/75 text-white backdrop-blur-[2px]">
             <Loader2 className="h-6 w-6 animate-spin text-[#F0A71F]" />
-            <span className="text-xs font-semibold">Updating the text…</span>
+            <span className="text-xs font-semibold">{making ? "Making your clip…" : "Updating the text…"}</span>
           </span>
         )}
       </button>
@@ -535,7 +695,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
         <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{updating && c.editTitle ? c.editTitle : c.title}</p>
         {c.editStatus === "failed" && <p className="mt-1 text-xs text-destructive">Couldn't update the text. Try again.</p>}
         {c.reason && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground" title={c.reason}>{c.reason}</p>}
-        <div className="mt-auto flex flex-wrap gap-1 pt-2.5">
+        <div className={`mt-auto flex flex-wrap gap-1 pt-2.5 ${making ? "hidden" : ""}`}>
           {files.map((f) => (
             <Pill key={f.label} tip={f.tip} href={downloadHref(f.href, `${c.title} ${f.label.toLowerCase()}`)} download>
               <Download className="h-3 w-3" /> {f.label}
@@ -662,7 +822,7 @@ export function PostStudio() {
     queryKey: ["/api/host/recordings"],
     queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(),
     // Live while anything is moving; still otherwise.
-    refetchInterval: (q) => ((q.state.data as Rec[] | undefined)?.some((r) => r.clipStatus === "queued" || r.clipStatus === "running" || cleanOf(r)?.status === "running") ? 4000 : false),
+    refetchInterval: (q) => ((q.state.data as Rec[] | undefined)?.some((r) => r.clipStatus === "queued" || r.clipStatus === "running" || cleanOf(r)?.status === "running" || /"status":"(queued|running)"/.test(r.episodeEdit)) ? 4000 : false),
   });
   const moving = (recs.data ?? []).some((r) => r.clipStatus === "queued" || r.clipStatus === "running");
   const clips = useQuery<ClipRow[]>({
@@ -687,6 +847,10 @@ export function PostStudio() {
     if (rec?.clipStatus === "done") void qc.invalidateQueries({ queryKey: ["/api/host/clips"] });
   }, [rec?.clipStatus, qc]);
 
+  // The Viewer: clips, or the whole episode (clean or original) to watch, mark and edit.
+  const [view, setView] = useState<"clips" | "episode">("clips");
+  const [epSource, setEpSource] = useState<"clean" | "original">("clean");
+  const epRef = useRef<HTMLVideoElement>(null);
   // What to make: remembered for next time, since a show tends to want the same.
   const [opts, setOpts] = useState<ClipOptions>(() => {
     try { return parseClipOptions(localStorage.getItem("mv_clip_options") ?? ""); } catch { return { ...DEFAULT_CLIP_OPTIONS }; }
@@ -846,9 +1010,36 @@ export function PostStudio() {
 
         {/* Preview */}
         <div className="flex flex-col gap-3">
-          <div className="relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5">
-            {/* Clips only: full episodes, clean or original, are watched in the Library. */}
-            {preview ? (
+          <div className="relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5" data-testid="post-viewer">
+            {/* The Viewer: Clips, or the whole Episode (clean or original). */}
+            {!running && (
+              <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
+                <div className="flex gap-1 rounded-full bg-black/60 p-1 text-xs font-semibold backdrop-blur">
+                  {(["clips", "episode"] as const).map((v) => (
+                    <button key={v} type="button" onClick={() => { setView(v); setPreview(null); }} className={`rounded-full px-3 py-1 capitalize ${view === v ? "bg-white text-[#000741]" : "text-white/80 hover:text-white"}`} data-testid={`viewer-${v}`}>{v}</button>
+                  ))}
+                </div>
+                {view === "episode" && clean?.videoKey && (
+                  <div className="flex gap-1 rounded-full bg-black/60 p-1 text-[11px] font-semibold backdrop-blur">
+                    {(["clean", "original"] as const).map((v) => (
+                      <button key={v} type="button" onClick={() => setEpSource(v)} className={`rounded-full px-2.5 py-0.5 capitalize ${epSource === v ? "bg-[#F0A71F] text-[#1a1200]" : "text-white/75 hover:text-white"}`} data-testid={`viewer-source-${v}`}>{v}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {view === "episode" && !running ? (
+              <video
+                ref={epRef}
+                key={`${rec.id}-${clean?.videoKey && epSource === "clean" ? "clean" : "original"}`}
+                src={clean?.videoKey && epSource === "clean" ? `/api/host/recordings/${rec.id}/clean/video` : `/api/host/recordings/${rec.id}/video`}
+                controls
+                playsInline
+                preload="metadata"
+                className="h-full w-full bg-black object-contain"
+                data-testid="viewer-episode-video"
+              />
+            ) : preview ? (
               <video key={preview.url} src={preview.url} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
             ) : running ? (
               <WorkingScene rec={rec} p={p} pct={pct} />
@@ -917,6 +1108,15 @@ export function PostStudio() {
               </Button>
             ) : null /* Not started: the start is the middle of the window. */}
           </div>
+          {view === "episode" && !running && (
+            <EpisodeTools
+              rec={rec}
+              source={clean?.videoKey && epSource === "clean" ? "clean" : "original"}
+              videoRef={epRef}
+              formats={opts.formats}
+              onFormats={(f) => setOpts({ ...opts, formats: f })}
+            />
+          )}
         </div>
 
         {/* Pipeline */}

@@ -110,6 +110,8 @@ interface Job {
   transcript: Line[];
   /** Only (re)make the clean episode; the clips are already done. */
   cleanOnly?: boolean;
+  /** "Edit episode": the source is downloadUrl; cut to trimStart–trimEnd (0 = the end), with an intro and outro. */
+  episodeEdit?: { trimStart: number; trimEnd: number; introUrl?: string; outroUrl?: string };
   /** What the podcaster picked: which shapes, and the caption style. Absent = all three, animated. */
   options?: { formats: Shape[]; captions: "animated" | "classic" };
   /** "Edit text": remake one clip's three shapes with a new title and subtitle. */
@@ -1277,7 +1279,67 @@ async function handleEdit(job: Job): Promise<void> {
   }
 }
 
+/**
+ * "Edit episode": intro + the episode (trimmed) + outro, one 720p file, filed
+ * in the Library as a new recording. Each part is scaled into 1280×720 (never
+ * cropped), set to 30fps and stereo 48k so they join cleanly; a part with no
+ * sound gets silence of its own length. Never throws.
+ */
+async function handleEpisodeEdit(job: Job): Promise<void> {
+  const e = job.episodeEdit!;
+  const tag = `[${job.recordingId}] edit`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `epedit-${job.recordingId}-`));
+  try {
+    console.log(`${tag}: trim ${e.trimStart}–${e.trimEnd || "end"}${e.introUrl ? ", intro" : ""}${e.outroUrl ? ", outro" : ""}`);
+    const probe = async (u: string) => {
+      const out = await run("ffprobe", ["-v", "error", "-show_entries", "format=duration:stream=codec_type", "-of", "json", u]);
+      const j = JSON.parse(out) as { format?: { duration?: string }; streams?: { codec_type: string }[] };
+      return { dur: Number(j.format?.duration) || 0, audio: (j.streams ?? []).some((x) => x.codec_type === "audio") };
+    };
+    const parts: { url: string; ss?: number; t?: number }[] = [];
+    if (e.introUrl) parts.push({ url: e.introUrl });
+    parts.push({ url: job.downloadUrl, ss: e.trimStart || undefined, t: e.trimEnd ? e.trimEnd - e.trimStart : undefined });
+    if (e.outroUrl) parts.push({ url: e.outroUrl });
+
+    const args: string[] = ["-y", "-v", "error"];
+    const graph: string[] = [];
+    let silentAt = parts.length;
+    let total = 0;
+    for (const [i, p] of parts.entries()) {
+      const info = await probe(p.url);
+      const dur = p.t ?? Math.max(0, info.dur - (p.ss ?? 0));
+      total += dur;
+      if (p.ss) args.push("-ss", String(p.ss));
+      if (p.t) args.push("-t", String(p.t));
+      args.push("-i", p.url);
+      graph.push(`[${i}:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30,format=yuv420p[v${i}]`);
+      if (info.audio) {
+        graph.push(`[${i}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a${i}]`);
+      } else {
+        // Silence as long as this part, so the join stays in step.
+        graph.push(`[${silentAt}:a]atrim=duration=${dur.toFixed(3)},aformat=sample_fmts=fltp:channel_layouts=stereo[a${i}]`);
+        (p as { silent?: number }).silent = silentAt++;
+      }
+    }
+    for (const p of parts) if ((p as { silent?: number }).silent !== undefined) args.push("-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo");
+    graph.push(`${parts.map((_, i) => `[v${i}][a${i}]`).join("")}concat=n=${parts.length}:v=1:a=1[v][a]`);
+    const script = path.join(dir, "graph.txt");
+    await fs.writeFile(script, graph.join(";"));
+    const out = path.join(dir, `${job.recordingId}-edited.mp4`);
+    await run("ffmpeg", [...args, "-filter_complex_script", script, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", process.env.CLEAN_PRESET || "superfast", "-crf", "23", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out]);
+    const videoKey = await uploadBig(out, "video/mp4");
+    await api("POST", `/api/agent/episode-edits/${job.recordingId}/done`, { videoKey, durationSec: Math.round(total) });
+    console.log(`${tag}: done`);
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/episode-edits/${job.recordingId}/failed`, { error: (err as Error).message }).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function handle(job: Job): Promise<void> {
+  if (job.episodeEdit) return handleEpisodeEdit(job);
   if (job.clipEdit) return handleEdit(job);
   if (job.cleanOnly) return handleClean(job);
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `clip-${job.recordingId}-`));
@@ -1464,11 +1526,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 
 async function tick(): Promise<boolean> {
-  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit"] });
+  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  holding = job.clipEdit ? null : job.recordingId;
+  holding = job.clipEdit || job.episodeEdit ? null : job.recordingId;
   try {
     await handle(job);
     holding = null;

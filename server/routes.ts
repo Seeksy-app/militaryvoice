@@ -43,6 +43,7 @@ import {
   clipResultSchema,
   CLIP_STAGES,
   parseClipOptions,
+  type EpisodeEdit,
   type ClipProgress,
   type CleanResult,
   transcriptBatchSchema,
@@ -5070,7 +5071,10 @@ export function registerRoutes(app: Express): void {
     const edit = canEdit ? await storage.claimClipEdit() : undefined;
     if (edit) {
       const rec = await storage.getRecording(edit.recordingId);
-      const url = rec?.url ? (/^https?:\/\//i.test(rec.url) ? rec.url : await signedRecordingUrl(rec.url, 7200).catch(() => "")) : "";
+      let cleanKey = "";
+      try { cleanKey = rec?.clean ? (JSON.parse(rec.clean) as CleanResult).videoKey ?? "" : ""; } catch { cleanKey = ""; }
+      const from = edit.source === "clean" && cleanKey ? cleanKey : rec?.url ?? "";
+      const url = from ? (/^https?:\/\//i.test(from) ? from : await signedRecordingUrl(from, 7200).catch(() => "")) : "";
       if (!rec || !url) {
         await storage.updateClip(edit.id, { editStatus: "failed", editError: "The recording couldn't be opened." });
       } else {
@@ -5086,7 +5090,9 @@ export function registerRoutes(app: Express): void {
             clipEdit: {
               clipId: edit.id, title: edit.editTitle, subtitle: edit.editSubtitle, startSec: edit.startSec, endSec: edit.endSec,
               // Remake only the shapes this clip has.
-              shapes: [edit.verticalUrl && "vertical", edit.squareUrl && "square", edit.url && "wide"].filter(Boolean),
+              shapes: edit.verticalUrl || edit.squareUrl || edit.url
+                ? [edit.verticalUrl && "vertical", edit.squareUrl && "square", edit.url && "wide"].filter(Boolean)
+                : edit.editShapes.split(",").filter(Boolean),
             },
           },
         });
@@ -5094,6 +5100,29 @@ export function registerRoutes(app: Express): void {
       }
     }
     let rec = await storage.claimClipJob();
+    // Nothing to clip: an "Edit episode" to make, if this worker can.
+    if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("episode-edit")) {
+      const ed = await storage.claimEpisodeEdit();
+      if (ed) {
+        let e: EpisodeEdit | null = null;
+        try { e = JSON.parse(ed.episodeEdit); } catch { e = null; }
+        let clean: CleanResult | null = null;
+        try { clean = ed.clean ? JSON.parse(ed.clean) : null; } catch { clean = null; }
+        const key = e?.source === "clean" ? clean?.videoKey : ed.url;
+        const sign = async (k?: string) => (!k ? "" : /^https?:\/\//i.test(k) ? k : await signedRecordingUrl(k, 6 * 3600).catch(() => ""));
+        const src = await sign(key);
+        if (!e || !src) {
+          await storage.setEpisodeEdit(ed.id, JSON.stringify({ ...(e ?? {}), status: "failed", error: "The episode couldn't be opened.", at: new Date().toISOString() }));
+        } else {
+          return res.json({
+            job: {
+              recordingId: ed.id, title: ed.title, durationSec: ed.durationSec, downloadUrl: src, show: "", host: "", transcript: [],
+              episodeEdit: { trimStart: e.trimStart, trimEnd: e.trimEnd, introUrl: await sign(e.introKey), outroUrl: await sign(e.outroKey) },
+            },
+          });
+        }
+      }
+    }
     // Nothing to clip: maybe a clean episode to (re)make on its own.
     let cleanOnly = false;
     if (!rec) {
@@ -5393,6 +5422,95 @@ export function registerRoutes(app: Express): void {
     res.json(row);
   });
 
+  /**
+   * A clip they marked themselves in the Viewer: in and out points on the
+   * original or the clean episode, a title, the shapes. Made like an Edit
+   * text remake (animated captions, Creatomate); 1 credit per shape.
+   */
+  app.post("/api/host/recordings/:id/clips", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email || rec.status !== "Ready") return res.status(404).json({ message: "No such recording." });
+    const b = req.body ?? {};
+    const startSec = Math.max(0, Math.floor(Number(b.startSec) || 0));
+    const endSec = Math.ceil(Number(b.endSec) || 0);
+    if (endSec - startSec < 5) return res.status(400).json({ message: "A clip needs at least 5 seconds." });
+    if (endSec - startSec > 180) return res.status(400).json({ message: "Clips up to 3 minutes, please." });
+    const title = String(b.title ?? "").replace(/\s+/g, " ").trim().slice(0, 90);
+    if (!title) return res.status(400).json({ message: "Give the clip a title." });
+    const source = b.source === "clean" ? "clean" : "";
+    const formats = parseClipOptions({ formats: b.formats, captions: "animated" }).formats;
+    const allowance = await postifyAllowance(email);
+    const show = await showNameFor(rec);
+    const clip = await storage.addClip({
+      recordingId: rec.id, eventId: rec.eventId, signupId: rec.signupId ?? null, email: rec.email,
+      title, subtitle: show, reason: "Marked by you in the Viewer", startSec, endSec,
+      source, editTitle: title, editSubtitle: show, editShapes: formats.join(","), editStatus: "", editAt: new Date().toISOString(),
+    });
+    let paid;
+    try {
+      paid = await chargeCredits(email, allowance, formats.length, `clip:${clip.id}`, `Clip: ${title}`);
+    } catch (err: any) {
+      console.error("Charging a marked clip failed:", err?.message);
+      paid = "error" as const;
+    }
+    if (paid !== "free" && paid !== "paid") {
+      await storage.deleteClip(clip.id);
+      return res.status(402).json({ message: paid === "limit" ? OVER_LIMIT : paid === "no" ? "This needs credits. Pick a plan on the Pōstify page." : "We couldn't record the credits just now. Try again in a moment." });
+    }
+    // Queued only once it's paid for, so the worker never starts one that isn't.
+    res.status(201).json(await storage.updateClip(clip.id, { editStatus: "queued", editAt: new Date().toISOString() }));
+  });
+
+  /** "Edit episode": trim, intro, outro — made by the clipper into a new copy in the Library. */
+  app.post("/api/host/recordings/:id/episode-edit", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
+    let prev: EpisodeEdit | null = null;
+    try { prev = rec.episodeEdit ? JSON.parse(rec.episodeEdit) : null; } catch { prev = null; }
+    if (prev && (prev.status === "queued" || prev.status === "running")) return res.status(409).json({ message: "An edit of this episode is already being made." });
+    const b = req.body ?? {};
+    const source: EpisodeEdit["source"] = b.source === "clean" ? "clean" : "original";
+    let clean: CleanResult | null = null;
+    try { clean = rec.clean ? JSON.parse(rec.clean) : null; } catch { clean = null; }
+    if (source === "clean" && !clean?.videoKey) return res.status(409).json({ message: "The clean episode isn't ready yet." });
+    const key = (v: unknown) => (typeof v === "string" && /^show-assets\/[\w.-]+$/.test(v) ? v : undefined);
+    const trimStart = Math.max(0, Number(b.trimStart) || 0);
+    const trimEnd = Math.max(0, Number(b.trimEnd) || 0);
+    if (trimEnd && trimEnd < trimStart + 5) return res.status(400).json({ message: "The end has to come after the start." });
+    const e: EpisodeEdit = {
+      source, trimStart, trimEnd,
+      introKey: key(b.introKey), introName: String(b.introName ?? "").slice(0, 120) || undefined,
+      outroKey: key(b.outroKey), outroName: String(b.outroName ?? "").slice(0, 120) || undefined,
+      status: "queued", at: new Date().toISOString(),
+    };
+    if (!e.trimStart && !e.trimEnd && !e.introKey && !e.outroKey) return res.status(400).json({ message: "Trim it, or add an intro or outro, first." });
+    await storage.setEpisodeEdit(rec.id, JSON.stringify(e));
+    res.json(e);
+  });
+
+  app.post("/api/agent/episode-edits/:id/done", requireAgent, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec) return res.status(404).json({ message: "No such recording." });
+    const videoKey = typeof req.body?.videoKey === "string" && /^clean\/[\w.-]+$/.test(req.body.videoKey) ? req.body.videoKey : "";
+    if (!videoKey) return res.status(400).json({ message: "No file." });
+    const copy = await storage.saveEditedCopy(rec, videoKey, Number(req.body?.durationSec) || rec.durationSec);
+    let e: any = {};
+    try { e = JSON.parse(rec.episodeEdit); } catch { e = {}; }
+    await storage.setEpisodeEdit(rec.id, JSON.stringify({ ...e, status: "done", resultId: copy.id, error: undefined, at: new Date().toISOString() }));
+    res.json({ id: copy.id });
+  });
+
+  app.post("/api/agent/episode-edits/:id/failed", requireAgent, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec) return res.status(404).json({ message: "No such recording." });
+    let e: any = {};
+    try { e = JSON.parse(rec.episodeEdit); } catch { e = {}; }
+    await storage.setEpisodeEdit(rec.id, JSON.stringify({ ...e, status: "failed", error: String(req.body?.error ?? "").slice(0, 300), at: new Date().toISOString() }));
+    res.json({ ok: true });
+  });
+
   /** The clipper has remade a clip with its new text: swap the files and the words in together. */
   app.post("/api/agent/clip-edits/:id/done", requireAgent, async (req, res) => {
     const clip = await storage.getClip(Number(req.params.id));
@@ -5553,9 +5671,14 @@ export function registerRoutes(app: Express): void {
    */
   async function payForEpisode(email: string, rec: { id: number; title: string }, allowance: Awaited<ReturnType<typeof postifyAllowance>>, credits: number): Promise<"free" | "paid" | "no" | "limit"> {
     if (allowance.unlimited || allowance.left > 0) return "free";
-    const ref = `episode:${rec.id}`;
+    return chargeCredits(email, allowance, credits, `episode:${rec.id}`, `Pōstify: ${rec.title || "episode"}`);
+  }
+
+  /** Take credits once per ref: from the balance, then as extras on their plan up to their limit. */
+  async function chargeCredits(email: string, allowance: Awaited<ReturnType<typeof postifyAllowance>>, credits: number, ref: string, why: string): Promise<"free" | "paid" | "no" | "limit"> {
+    if (allowance.unlimited) return "free";
     if (await storage.hasTokenRef(ref)) return "paid";
-    const reason = `Pōstify: ${rec.title || "episode"}`.slice(0, 200);
+    const reason = why.slice(0, 200);
     if (allowance.tokens >= credits) {
       await storage.addTokens({ email, delta: -credits, reason, ref });
       return "paid";

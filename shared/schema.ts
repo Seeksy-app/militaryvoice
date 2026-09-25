@@ -1148,6 +1148,8 @@ export const recordings = pgTable("recordings", {
   postifyBeta: boolean("postify_beta").notNull().default(false),
   /** What the podcaster asked Pōstify for (ClipOptions as JSON); empty = everything. */
   clipOptions: text("clip_options").notNull().default(""),
+  /** "Edit episode" (EpisodeEdit as JSON): trim, intro and outro, made into a new Library copy. */
+  episodeEdit: text("episode_edit").notNull().default(""),
 });
 export type RecordingRow = typeof recordings.$inferSelect;
 
@@ -1256,6 +1258,10 @@ export const clips = pgTable(
     editSubtitle: text("edit_subtitle").notNull().default(""),
     /** "" | queued | running | failed */
     editStatus: text("edit_status").notNull().default(""),
+    /** Which file the moment is cut from: "" the original, "clean" the clean episode (a clip someone marked in the Viewer). */
+    source: text("source").notNull().default(""),
+    /** Shapes to make when there are none yet (a clip marked in the Viewer), comma-separated. */
+    editShapes: text("edit_shapes").notNull().default(""),
     editError: text("edit_error").notNull().default(""),
     editAt: text("edit_at").notNull().default(""),
     createdAt: text("created_at").notNull(),
@@ -1307,6 +1313,26 @@ export type SocialMetricRow = typeof socialMetrics.$inferSelect;
  * the caption style. Only what's picked is rendered — the shapes are most of
  * what a clip costs (Creatomate bills by the second, per shape).
  */
+/**
+ * Basic editing of a whole episode in Pōstify's Viewer: trim the start and
+ * end, and put an intro and an outro on. The result is a new recording in the
+ * Library — the original and the clean episode are never changed.
+ */
+export interface EpisodeEdit {
+  source: "clean" | "original";
+  trimStart: number;
+  /** 0 = to the end. */
+  trimEnd: number;
+  introKey?: string;
+  introName?: string;
+  outroKey?: string;
+  outroName?: string;
+  status: "queued" | "running" | "done" | "failed";
+  error?: string;
+  resultId?: number;
+  at: string;
+}
+
 export const CLIP_FORMATS = ["vertical", "square", "wide"] as const;
 export type ClipFormat = (typeof CLIP_FORMATS)[number];
 export interface ClipOptions {
