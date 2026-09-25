@@ -42,6 +42,7 @@ import {
   insertEventShowSchema,
   clipResultSchema,
   CLIP_STAGES,
+  parseClipOptions,
   type ClipProgress,
   type CleanResult,
   transcriptBatchSchema,
@@ -5082,7 +5083,11 @@ export function registerRoutes(app: Express): void {
             show: edit.editSubtitle,
             host: "",
             transcript: [],
-            clipEdit: { clipId: edit.id, title: edit.editTitle, subtitle: edit.editSubtitle, startSec: edit.startSec, endSec: edit.endSec },
+            clipEdit: {
+              clipId: edit.id, title: edit.editTitle, subtitle: edit.editSubtitle, startSec: edit.startSec, endSec: edit.endSec,
+              // Remake only the shapes this clip has.
+              shapes: [edit.verticalUrl && "vertical", edit.squareUrl && "square", edit.url && "wide"].filter(Boolean),
+            },
           },
         });
         return;
@@ -5143,6 +5148,7 @@ export function registerRoutes(app: Express): void {
         host: (rec.signupId ? (await storage.getSignupById(rec.signupId))?.hostName : "") ?? "",
         transcript: lines,
         cleanOnly,
+        options: parseClipOptions(rec.clipOptions),
       },
     });
   });
@@ -5392,14 +5398,14 @@ export function registerRoutes(app: Express): void {
     const clip = await storage.getClip(Number(req.params.id));
     if (!clip) return res.status(404).json({ message: "No such clip." });
     const b = req.body ?? {};
-    const ok = (u: unknown) => typeof u === "string" && /^https?:\/\//.test(u);
-    if (!ok(b.url) || !ok(b.verticalUrl) || !ok(b.squareUrl)) return res.status(400).json({ message: "Three files, please." });
+    const ok = (u: unknown): u is string => typeof u === "string" && /^https?:\/\//.test(u);
+    if (!ok(b.url) && !ok(b.verticalUrl) && !ok(b.squareUrl)) return res.status(400).json({ message: "No files came back." });
     await storage.updateClip(clip.id, {
       title: clip.editTitle || clip.title,
       subtitle: clip.editSubtitle,
-      url: b.url,
-      verticalUrl: b.verticalUrl,
-      squareUrl: b.squareUrl,
+      url: ok(b.url) ? b.url : clip.url,
+      verticalUrl: ok(b.verticalUrl) ? b.verticalUrl : clip.verticalUrl,
+      squareUrl: ok(b.squareUrl) ? b.squareUrl : clip.squareUrl,
       editStatus: "",
       editError: "",
     });
@@ -5653,6 +5659,7 @@ export function registerRoutes(app: Express): void {
       if (paid === "no") return res.status(402).json({ message: NEED_TOKENS });
       if (paid === "free") await storage.markPostifyBeta(rec.id);
     }
+    if (req.body?.options) await storage.setClipOptions(rec.id, JSON.stringify(parseClipOptions(req.body.options)));
     await storage.setClipStatus(rec.id, "queued", "");
     res.json({ ok: true });
   });

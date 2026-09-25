@@ -1146,6 +1146,8 @@ export const recordings = pgTable("recordings", {
   clean: text("clean").notNull().default(""),
   /** Started by the podcaster through Postify, so it counts against their beta allowance. */
   postifyBeta: boolean("postify_beta").notNull().default(false),
+  /** What the podcaster asked Pōstify for (ClipOptions as JSON); empty = everything. */
+  clipOptions: text("clip_options").notNull().default(""),
 });
 export type RecordingRow = typeof recordings.$inferSelect;
 
@@ -1300,6 +1302,26 @@ export const socialMetrics = pgTable(
 export type SocialMetricRow = typeof socialMetrics.$inferSelect;
 
 /** One clip as the worker hands it back, before it has urls. */
+/**
+ * The podcaster's choice when they start Pōstify: which shapes to make, and
+ * the caption style. Only what's picked is rendered — the shapes are most of
+ * what a clip costs (Creatomate bills by the second, per shape).
+ */
+export const CLIP_FORMATS = ["vertical", "square", "wide"] as const;
+export type ClipFormat = (typeof CLIP_FORMATS)[number];
+export interface ClipOptions {
+  formats: ClipFormat[];
+  /** animated: word-by-word highlight, framing that follows each speaker (Creatomate). classic: bold burned-in captions (our own renderer). */
+  captions: "animated" | "classic";
+}
+export const DEFAULT_CLIP_OPTIONS: ClipOptions = { formats: ["vertical", "square", "wide"], captions: "animated" };
+export function parseClipOptions(raw: unknown): ClipOptions {
+  let v: any = raw;
+  if (typeof raw === "string") { try { v = raw ? JSON.parse(raw) : {}; } catch { v = {}; } }
+  const formats = Array.isArray(v?.formats) ? CLIP_FORMATS.filter((f) => v.formats.includes(f)) : [];
+  return { formats: formats.length ? formats : [...DEFAULT_CLIP_OPTIONS.formats], captions: v?.captions === "classic" ? "classic" : "animated" };
+}
+
 export const clipResultSchema = z.object({
   title: z.string().trim().min(1).max(120),
   caption: z.string().trim().max(400).default(""),

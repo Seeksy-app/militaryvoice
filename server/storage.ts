@@ -787,6 +787,7 @@ export interface IStorage {
   listRecordings(eventId?: number): Promise<RecordingRow[]>;
   getRecording(id: number): Promise<RecordingRow | undefined>;
   setClipStatus(recordingId: number, status: ClipStatus, error?: string): Promise<RecordingRow | undefined>;
+  setClipOptions(recordingId: number, json: string): Promise<void>;
   setClipProgress(recordingId: number, progress: string): Promise<void>;
   setClean(recordingId: number, clean: string): Promise<void>;
   claimCleanJob(): Promise<RecordingRow | undefined>;
@@ -1963,6 +1964,11 @@ class DatabaseStorage implements IStorage {
   async setClipProgress(recordingId: number, progress: string): Promise<void> {
     await ready();
     await db.update(recordings).set({ clipProgress: progress, clipClaimedAt: new Date().toISOString() }).where(eq(recordings.id, recordingId));
+  }
+
+  async setClipOptions(recordingId: number, json: string): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ clipOptions: json }).where(eq(recordings.id, recordingId));
   }
 
   async setClipStatus(recordingId: number, status: ClipStatus, error = ""): Promise<RecordingRow | undefined> {

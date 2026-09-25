@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TOKEN_PACKS } from "@shared/tokens";
+import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, type ClipFormat, type ClipOptions } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { startTokenCheckout } from "@/lib/tokens";
@@ -262,6 +263,55 @@ function PipelineRow({ icon: Icon, title, detail, state }: { icon: typeof Check;
         {state === "done" ? "Done" : state === "active" ? "Working" : state === "soon" ? "Coming soon" : state === "failed" ? "Stopped" : ""}
       </span>
     </li>
+  );
+}
+
+const FORMAT_CHOICES: { f: ClipFormat; label: string; tip: string }[] = [
+  { f: "vertical", label: "Vertical", tip: "9:16 — Reels, TikTok, YouTube Shorts" },
+  { f: "square", label: "Square", tip: "1:1 — Instagram and Facebook feed, LinkedIn" },
+  { f: "wide", label: "Wide", tip: "16:9 — YouTube, LinkedIn, X" },
+];
+
+/**
+ * What to make, picked before starting: the shapes, and the caption style.
+ * Not "cheap or good" — where you post, and the look you want. Only what's
+ * picked is made, which is also what keeps it affordable.
+ */
+function ClipChoices({ opts, onChange }: { opts: ClipOptions; onChange: (o: ClipOptions) => void }) {
+  const chip = (on: boolean) => `rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${on ? "border-[#F0A71F] bg-[#F0A71F] text-[#1a1200]" : "border-white/25 text-white/80 hover:border-white/50 hover:text-white"}`;
+  const toggle = (f: ClipFormat) => {
+    const has = opts.formats.includes(f);
+    if (has && opts.formats.length === 1) return; // at least one
+    onChange({ ...opts, formats: CLIP_FORMATS.filter((x) => (x === f ? !has : opts.formats.includes(x))) });
+  };
+  return (
+    <div className="flex flex-col items-center gap-2" data-testid="post-choices">
+      <div className="flex flex-wrap items-center justify-center gap-1.5">
+        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-white/50">Shapes</span>
+        {FORMAT_CHOICES.map((c) => (
+          <Tooltip key={c.f}>
+            <TooltipTrigger asChild>
+              <button type="button" onClick={() => toggle(c.f)} className={chip(opts.formats.includes(c.f))} aria-pressed={opts.formats.includes(c.f)} data-testid={`post-format-${c.f}`}>{c.label}</button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">{c.tip}</TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-1.5">
+        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-white/50">Captions</span>
+        {([
+          { v: "animated", label: "Animated", tip: "Word-by-word highlight, and the picture follows whoever's talking." },
+          { v: "classic", label: "Classic", tip: "Bold captions burned in, framed on the speaker. Quicker to make." },
+        ] as const).map((c) => (
+          <Tooltip key={c.v}>
+            <TooltipTrigger asChild>
+              <button type="button" onClick={() => onChange({ ...opts, captions: c.v })} className={chip(opts.captions === c.v)} aria-pressed={opts.captions === c.v} data-testid={`post-captions-${c.v}`}>{c.label}</button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[16rem] text-xs">{c.tip}</TooltipContent>
+          </Tooltip>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -591,8 +641,13 @@ export function PostStudio() {
     if (rec?.clipStatus === "done") void qc.invalidateQueries({ queryKey: ["/api/host/clips"] });
   }, [rec?.clipStatus, qc]);
 
+  // What to make: remembered for next time, since a show tends to want the same.
+  const [opts, setOpts] = useState<ClipOptions>(() => {
+    try { return parseClipOptions(localStorage.getItem("mv_clip_options") ?? ""); } catch { return { ...DEFAULT_CLIP_OPTIONS }; }
+  });
+  useEffect(() => { try { localStorage.setItem("mv_clip_options", JSON.stringify(opts)); } catch { /* private mode */ } }, [opts]);
   const start = useMutation({
-    mutationFn: async (id: number) => (await apiRequest("POST", `/api/host/recordings/${id}/clip`)).json(),
+    mutationFn: async (id: number) => (await apiRequest("POST", `/api/host/recordings/${id}/clip`, { options: opts })).json(),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
       void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
@@ -771,7 +826,7 @@ export function PostStudio() {
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-white">
                 <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F0A71F] text-[#1a1200] shadow-lg shadow-[#F0A71F]/20"><Wand2 className="h-7 w-7" /></span>
                 <p className="text-xl font-bold sm:text-2xl">Ready for Pōstify</p>
-                <p className="hidden max-w-md text-sm text-white/65 sm:block">We transcribe it, pick the moments that stand on their own, cut each one vertical, square and wide with captions, and make a clean episode.</p>
+                <ClipChoices opts={opts} onChange={setOpts} />
                 {outOfBeta && !rec.postifyBeta ? (
                   <GetTokens beta={beta} />
                 ) : (
@@ -791,7 +846,7 @@ export function PostStudio() {
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"><Sparkles className="h-4 w-4" /></span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-foreground">{rec.title || "Session"}</p>
-                <p className="text-xs text-muted-foreground">{done ? `${mine.length} clips, each in three shapes with captions` : running ? stageLabel(rec, p) : "Clips in three shapes with captions, and a clean episode"}</p>
+                <p className="text-xs text-muted-foreground">{done ? `${mine.length} clips with captions` : running ? stageLabel(rec, p) : `Clips (${opts.formats.join(", ")}, ${opts.captions} captions) and a clean episode`}</p>
               </div>
             </div>
             {done ? (
