@@ -40,7 +40,8 @@ const FREE_REVEALS_PER_MONTH = FREE_DISCOVERY.reveals;
 /** This member's monthly allowances: the free ones, or Discovery Pro's. */
 async function allowanceFor(email: string): Promise<{ reveals: number; lookups: number; pro: boolean }> {
   const a = await storage.getAddon(email, "discovery");
-  return a && ["active", "trialing"].includes(a.status)
+  // "comped": given by an admin, no Stripe subscription behind it.
+  return a && ["active", "trialing", "comped"].includes(a.status)
     ? { reveals: ADDONS.discovery.reveals, lookups: ADDONS.discovery.lookups, pro: true }
     : { reveals: FREE_DISCOVERY.reveals, lookups: FREE_DISCOVERY.lookups, pro: false };
 }

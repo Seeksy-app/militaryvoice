@@ -5873,6 +5873,22 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  /**
+   * An admin gives someone an add-on free ("comped": no Stripe subscription),
+   * or takes it back. A paid subscription is never overwritten.
+   */
+  app.post("/api/admin/addons/grant", requireAdmin, async (req, res) => {
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const addon = String(req.body?.addon ?? "") as AddonKey;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || !(addon in ADDONS)) return res.status(400).json({ message: "An email and an add-on." });
+    const have = await storage.getAddon(email, addon);
+    if (have?.subscriptionId && ["active", "trialing", "past_due"].includes(have.status)) return res.status(409).json({ message: "They pay for it already." });
+    const on = req.body?.on !== false;
+    const row = await storage.upsertAddon({ email, addon, status: on ? "comped" : "canceled", customerId: have?.customerId ?? "", subscriptionId: "", periodEnd: "" });
+    console.log(`Admin ${getAdminEmail(req)} ${on ? "gave" : "took back"} ${addon} for ${email}`);
+    res.json(row);
+  });
+
   /** Their limit on extra credits a month. */
   app.post("/api/host/plan/cap", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
