@@ -1148,6 +1148,13 @@ export const recordings = pgTable("recordings", {
   postifyBeta: boolean("postify_beta").notNull().default(false),
   /** What the podcaster asked Pōstify for (ClipOptions as JSON); empty = everything. */
   clipOptions: text("clip_options").notNull().default(""),
+  /**
+   * Brought in from somewhere else (Zoom): {provider, url, fileId, meetingId},
+   * JSON. While status is "Importing" the worker is fetching it; empty for
+   * everything recorded or uploaded here.
+   */
+  importSource: text("import_source").notNull().default(""),
+  importClaimedAt: text("import_claimed_at").notNull().default(""),
   /** "Edit episode" (EpisodeEdit as JSON): trim, intro and outro, made into a new Library copy. */
   episodeEdit: text("episode_edit").notNull().default(""),
 });
@@ -1929,6 +1936,26 @@ export const postifyTokens = pgTable("postify_tokens", {
   createdAt: text("created_at").notNull(),
 }, (t) => [uniqueIndex("postify_tokens_ref_idx").on(t.ref), index("postify_tokens_email_idx").on(t.email)]);
 export type PostifyTokenRow = typeof postifyTokens.$inferSelect;
+
+/**
+ * A podcaster's Zoom, connected with OAuth: new cloud recordings come into
+ * their Library on their own (autoImport), and past ones can be picked.
+ * Tokens stay server-side; the refresh token is what keeps it working.
+ */
+export const zoomConnections = pgTable("zoom_connections", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  zoomUserId: text("zoom_user_id").notNull(),
+  zoomAccountId: text("zoom_account_id").notNull().default(""),
+  zoomEmail: text("zoom_email").notNull().default(""),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  autoImport: boolean("auto_import").notNull().default(true),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [uniqueIndex("zoom_connections_email_idx").on(t.email), index("zoom_connections_user_idx").on(t.zoomUserId)]);
+export type ZoomConnectionRow = typeof zoomConnections.$inferSelect;
 
 /** An add-on (Discovery Pro), its own Stripe subscription. One row per person per add-on. */
 export const addonSubscriptions = pgTable("addon_subscriptions", {

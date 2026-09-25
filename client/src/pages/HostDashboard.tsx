@@ -65,6 +65,7 @@ import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
 import { GreenRoomScreen } from "@/components/GreenRoomScreen";
+import { ZoomConnect } from "@/components/ZoomConnect";
 import Discover from "@/pages/Discover";
 import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
@@ -1197,6 +1198,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 <ConnectedAccountsStrip accounts={social.accounts} />
               </div>
             )}
+            {/* Where episodes come from: Zoom's cloud recordings, into the Library. */}
+            <ZoomConnect />
             {social?.configured && (
               <div className="mt-4 scroll-mt-24 border-t border-border pt-4" id="section-social-accounts" data-testid="section-social-accounts">
                 <div className="mb-2 flex items-center justify-between gap-3">

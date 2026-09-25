@@ -51,7 +51,7 @@ export function MyRecordings({
     queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(),
     // A session that's still being written turns up shortly after it stops.
     refetchInterval: (q) =>
-      (q.state.data ?? []).some((r) => r.status === "Recording") ? 15_000 : false,
+      (q.state.data ?? []).some((r) => r.status === "Recording" || r.status === "Importing") ? 15_000 : false,
   });
   const data = eventId == null ? all : (all ?? []).filter((r) => r.eventId === eventId);
 
@@ -98,7 +98,7 @@ export function MyRecordings({
                 )
               ) : (
                 <span className="absolute inset-0 flex items-center justify-center gap-1.5 text-xs font-medium text-white/70">
-                  {r.status === "Recording" ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Still recording</> : "Didn't save — tell us and we'll look"}
+                  {r.status === "Recording" ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Still recording</> : r.status === "Importing" ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Importing from Zoom…</> : r.egressId.startsWith("ZOOM_") ? `Couldn't bring it in from Zoom${r.error ? `: ${r.error}` : ""}` : "Didn't save — tell us and we'll look"}
                 </span>
               )}
             </div>
@@ -132,7 +132,7 @@ export function MyRecordings({
                       <Share2 className="h-4 w-4" /> Post it
                     </DropdownMenuItem>
                     {/* Uploads and Pōstify's copies; a studio session is the event's too. */}
-                    {(r.egressId.startsWith("UPLOAD_") || r.egressId.startsWith("CLEAN_")) && (
+                    {(r.egressId.startsWith("UPLOAD_") || r.egressId.startsWith("CLEAN_") || r.egressId.startsWith("ZOOM_")) && (
                       <DropdownMenuItem onSelect={() => setDeleting(r)} className="gap-2 text-destructive focus:text-destructive" data-testid={`button-delete-recording-${r.id}`}>
                         <Trash2 className="h-4 w-4" /> Delete
                       </DropdownMenuItem>

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -799,6 +799,17 @@ export interface IStorage {
   overageCentsSince(email: string, sinceIso: string): Promise<number>;
   getSubscription(email: string): Promise<PostifySubscriptionRow | undefined>;
   getAddon(email: string, addon: string): Promise<AddonSubscriptionRow | undefined>;
+  getZoom(email: string): Promise<ZoomConnectionRow | undefined>;
+  getZoomsByUserId(zoomUserId: string): Promise<ZoomConnectionRow[]>;
+  upsertZoom(v: Omit<ZoomConnectionRow, "id" | "createdAt" | "updatedAt" | "autoImport"> & { autoImport?: boolean }): Promise<ZoomConnectionRow>;
+  updateZoom(email: string, patch: Partial<ZoomConnectionRow>): Promise<void>;
+  deleteZoom(email: string): Promise<void>;
+  deleteZoomsByUserId(zoomUserId: string): Promise<void>;
+  /** A Zoom recording to bring into someone's Library; nothing if that file is already there. */
+  queueImport(v: { email: string; title: string; egressId: string; startedAt: string; durationSec: number; sizeBytes: number; source: string }): Promise<RecordingRow | undefined>;
+  claimImport(): Promise<RecordingRow | undefined>;
+  finishImport(id: number, v: { url: string; durationSec: number; sizeBytes: number }): Promise<void>;
+  failImport(id: number, error: string): Promise<void>;
   upsertAddon(v: Partial<AddonSubscriptionRow> & { email: string; addon: string }): Promise<AddonSubscriptionRow>;
   getSubscriptionById(subscriptionId: string): Promise<PostifySubscriptionRow | undefined>;
   upsertSubscription(v: Partial<PostifySubscriptionRow> & { email: string }): Promise<PostifySubscriptionRow>;
@@ -1936,6 +1947,99 @@ class DatabaseStorage implements IStorage {
       .from(postifyTokens)
       .where(and(eq(postifyTokens.email, email.trim().toLowerCase()), sqlExpr`${postifyTokens.createdAt} >= ${sinceIso}`));
     return Number(row?.n ?? 0);
+  }
+
+  async getZoom(email: string): Promise<ZoomConnectionRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(zoomConnections).where(eq(zoomConnections.email, email.trim().toLowerCase()));
+    return row;
+  }
+
+  async getZoomsByUserId(zoomUserId: string): Promise<ZoomConnectionRow[]> {
+    await ready();
+    return db.select().from(zoomConnections).where(eq(zoomConnections.zoomUserId, zoomUserId));
+  }
+
+  async upsertZoom(v: Omit<ZoomConnectionRow, "id" | "createdAt" | "updatedAt" | "autoImport"> & { autoImport?: boolean }): Promise<ZoomConnectionRow> {
+    await ready();
+    const email = v.email.trim().toLowerCase();
+    const now = new Date().toISOString();
+    const [row] = await db
+      .insert(zoomConnections)
+      .values({ ...v, email, createdAt: now, updatedAt: now })
+      .onConflictDoUpdate({ target: zoomConnections.email, set: { ...v, email, updatedAt: now } })
+      .returning();
+    return row;
+  }
+
+  async updateZoom(email: string, patch: Partial<ZoomConnectionRow>): Promise<void> {
+    await ready();
+    const { id: _id, email: _e, ...rest } = patch;
+    await db.update(zoomConnections).set({ ...rest, updatedAt: new Date().toISOString() }).where(eq(zoomConnections.email, email.trim().toLowerCase()));
+  }
+
+  async deleteZoom(email: string): Promise<void> {
+    await ready();
+    await db.delete(zoomConnections).where(eq(zoomConnections.email, email.trim().toLowerCase()));
+  }
+
+  async deleteZoomsByUserId(zoomUserId: string): Promise<void> {
+    await ready();
+    await db.delete(zoomConnections).where(eq(zoomConnections.zoomUserId, zoomUserId));
+  }
+
+  async queueImport(v: { email: string; title: string; egressId: string; startedAt: string; durationSec: number; sizeBytes: number; source: string }): Promise<RecordingRow | undefined> {
+    await ready();
+    const [dupe] = await db.select({ id: recordings.id }).from(recordings).where(eq(recordings.egressId, v.egressId)).limit(1);
+    if (dupe) return undefined;
+    const [row] = await db
+      .insert(recordings)
+      .values({
+        eventId: 0, studioId: 0, signupId: null,
+        email: v.email.trim().toLowerCase(),
+        title: v.title.slice(0, 160),
+        egressId: v.egressId,
+        status: "Importing",
+        url: "",
+        durationSec: Math.round(v.durationSec),
+        sizeBytes: String(v.sizeBytes || 0),
+        startedAt: v.startedAt,
+        endedAt: v.startedAt,
+        clipStatus: "none",
+        importSource: v.source,
+      })
+      .returning();
+    return row;
+  }
+
+  async claimImport(): Promise<RecordingRow | undefined> {
+    await ready();
+    // Thirty minutes: a worker that died mid-download hands it on.
+    const stale = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const [row] = await db
+      .update(recordings)
+      .set({ importClaimedAt: new Date().toISOString() })
+      .where(
+        sqlExpr`${recordings.id} = (
+          SELECT id FROM recordings
+          WHERE status = 'Importing' AND (import_claimed_at = '' OR import_claimed_at < ${stale})
+          ORDER BY id
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED
+        )`,
+      )
+      .returning();
+    return row;
+  }
+
+  async finishImport(id: number, v: { url: string; durationSec: number; sizeBytes: number }): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ status: "Ready", url: v.url, durationSec: Math.round(v.durationSec), sizeBytes: String(v.sizeBytes) }).where(eq(recordings.id, id));
+  }
+
+  async failImport(id: number, error: string): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ status: "Failed", error: error.slice(0, 500) }).where(eq(recordings.id, id));
   }
 
   async getAddon(email: string, addon: string): Promise<AddonSubscriptionRow | undefined> {

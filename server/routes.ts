@@ -115,6 +115,7 @@ import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmai
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
 import { draftYoutubeDescription, chaptersFrom } from "./youtubeDraft.js";
+import { registerZoom, importFetch } from "./zoom.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
 import { episodeCredits, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -5110,6 +5111,20 @@ export function registerRoutes(app: Express): void {
     return profile?.podcastName?.trim() || rec.title;
   }
 
+  registerZoom(app);
+
+  /** The worker has fetched an import (Zoom): the file is in storage now. */
+  app.post("/api/agent/imports/:id/done", requireAgent, async (req, res) => {
+    const key = typeof req.body?.key === "string" && /^clean\/[\w.-]+$/.test(req.body.key) ? req.body.key : "";
+    if (!key) return res.status(400).json({ message: "No file." });
+    await storage.finishImport(Number(req.params.id), { url: key, durationSec: Number(req.body?.durationSec) || 0, sizeBytes: Number(req.body?.sizeBytes) || 0 });
+    res.json({ ok: true });
+  });
+  app.post("/api/agent/imports/:id/failed", requireAgent, async (req, res) => {
+    await storage.failImport(Number(req.params.id), String(req.body?.error ?? "Couldn't bring it in."));
+    res.json({ ok: true });
+  });
+
   app.post("/api/agent/clip-jobs/claim", requireAgent, async (req, res) => {
     // "Edit text" first: a minute's work someone is watching the screen for.
     // Only to a worker that says it can: an older one would read the job as
@@ -5144,6 +5159,18 @@ export function registerRoutes(app: Express): void {
           },
         });
         return;
+      }
+    }
+    // A recording to bring in (Zoom), if this worker can: quick, and someone's Library is waiting on it.
+    if (Array.isArray(req.body?.can) && req.body.can.includes("import")) {
+      const imp = await storage.claimImport();
+      if (imp) {
+        const from = await importFetch(imp).catch(() => null);
+        if (!from) {
+          await storage.failImport(imp.id, "Zoom isn't connected any more, so the recording couldn't be fetched.");
+        } else {
+          return res.json({ job: { recordingId: imp.id, title: imp.title, durationSec: imp.durationSec, downloadUrl: from.url, show: "", host: "", transcript: [], importFrom: { headers: from.headers } } });
+        }
       }
     }
     let rec = await storage.claimClipJob();
@@ -5526,7 +5553,8 @@ export function registerRoutes(app: Express): void {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
     const rec = await storage.getRecording(Number(req.params.id));
     if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
-    const upload = rec.egressId.startsWith("UPLOAD_");
+    // An upload or a Zoom import: our copy of their file (the Zoom original stays in Zoom).
+    const upload = rec.egressId.startsWith("UPLOAD_") || rec.egressId.startsWith("ZOOM_");
     if (!upload && !rec.egressId.startsWith("CLEAN_")) return res.status(403).json({ message: "Studio recordings stay with the event, so they can't be deleted here." });
     if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.status(409).json({ message: "Pōstify is still working on this one." });
     await storage.deleteRecordingAndClips(rec.id);

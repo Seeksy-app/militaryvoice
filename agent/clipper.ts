@@ -112,6 +112,8 @@ interface Job {
   cleanOnly?: boolean;
   /** "Edit episode": the source is downloadUrl; cut to trimStart–trimEnd (0 = the end), with an intro and outro. */
   episodeEdit?: { trimStart: number; trimEnd: number; introUrl?: string; outroUrl?: string };
+  /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
+  importFrom?: { headers: Record<string, string> };
   /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
   clipCount?: number;
   /** What the podcaster picked: which shapes, and the caption style. Absent = all three, animated. */
@@ -1345,7 +1347,35 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
   }
 }
 
+/**
+ * An import (a Zoom cloud recording): download it (Zoom redirects to its own
+ * storage; the auth header only goes to zoom.us), measure it, put it in our
+ * storage, and file it. Never throws — a failed import marks that recording.
+ */
+async function handleImport(job: Job): Promise<void> {
+  const tag = `[${job.recordingId}] import`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `import-${job.recordingId}-`));
+  try {
+    console.log(`${tag}: ${job.title}`);
+    const file = path.join(dir, "recording.mp4");
+    const res = await fetch(job.downloadUrl, { headers: job.importFrom?.headers ?? {}, redirect: "follow" });
+    if (!res.ok || !res.body) throw new Error(`the download was refused (${res.status})`);
+    await pipeline(Readable.fromWeb(res.body as never), createWriteStream(file));
+    const sizeBytes = (await fs.stat(file)).size;
+    const durationSec = Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]).catch(() => "0")).trim()) || job.durationSec;
+    const key = await uploadBig(file, "video/mp4");
+    await api("POST", `/api/agent/imports/${job.recordingId}/done`, { key, durationSec: Math.round(durationSec), sizeBytes });
+    console.log(`${tag}: in the Library (${Math.round(sizeBytes / 1048576)}MB)`);
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/imports/${job.recordingId}/failed`, { error: (err as Error).message }).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function handle(job: Job): Promise<void> {
+  if (job.importFrom) return handleImport(job);
   if (job.episodeEdit) return handleEpisodeEdit(job);
   if (job.clipEdit) return handleEdit(job);
   if (job.cleanOnly) return handleClean(job);
@@ -1533,11 +1563,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 
 async function tick(): Promise<boolean> {
-  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit"] });
+  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "import"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  holding = job.clipEdit || job.episodeEdit ? null : job.recordingId;
+  holding = job.clipEdit || job.episodeEdit || job.importFrom ? null : job.recordingId;
   try {
     await handle(job);
     holding = null;
