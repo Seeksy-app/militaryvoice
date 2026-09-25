@@ -123,7 +123,7 @@ export default function Pricing() {
             <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
               {[
                 "Unused credits carry over while you're on a plan (beta).",
-                "Change plan, update your card or cancel any time, in one click.",
+                "Update your card or cancel any time, in one click.",
                 "Your originals are never changed or replaced.",
                 "Episodes up to 90 minutes each.",
               ].map((t) => (

@@ -373,7 +373,7 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
               </div>
             </div>
             <Button variant="outline" onClick={() => void go("portal", openBillingPortal)} disabled={busy !== null} className="w-full gap-2 rounded-full" data-testid="plan-portal">
-              {busy === "portal" && <Loader2 className="h-4 w-4 animate-spin" />} Manage billing: card, plan, invoices, cancel
+              {busy === "portal" && <Loader2 className="h-4 w-4 animate-spin" />} Manage billing: card, invoices, cancel
             </Button>
           </>
         ) : (

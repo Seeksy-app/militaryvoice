@@ -214,8 +214,38 @@ export async function reportExtraCredits(v: { customerId: string; credits: numbe
   }));
 }
 
-/** Stripe's own page for changing card, plan or cancelling. */
+let portalConfig: Promise<string> | null = null;
+
+/**
+ * Pōstify's own portal settings. The account's default portal belongs to
+ * other businesses too and offers their plans (a $2,500 "Marketing Services"
+ * switch); this one only does card, invoices and cancelling at the end of
+ * the month. Made once, found again by its metadata.
+ */
+function ensurePortalConfig(): Promise<string> {
+  portalConfig ??= (async () => {
+    const list = await stripe("GET", "/billing_portal/configurations?limit=100&active=true");
+    const found = (list.data ?? []).find((c: any) => c.metadata?.app === "postify");
+    if (found) return String(found.id);
+    const c = await stripe("POST", "/billing_portal/configurations", flat({
+      business_profile: { headline: "Pōstify by MilitaryVoices.ai" },
+      features: {
+        invoice_history: { enabled: true },
+        payment_method_update: { enabled: true },
+        customer_update: { enabled: true, allowed_updates: ["email", "address"] },
+        subscription_cancel: { enabled: true, mode: "at_period_end" },
+        subscription_update: { enabled: false },
+      },
+      metadata: { app: "postify" },
+    }));
+    return String(c.id);
+  })().catch((err) => { portalConfig = null; throw err; });
+  return portalConfig;
+}
+
+/** Stripe's own page for their Pōstify plan: card, invoices, cancel. */
 export async function billingPortal(customerId: string, returnUrl: string): Promise<string> {
-  const s = await stripe("POST", "/billing_portal/sessions", flat({ customer: customerId, return_url: returnUrl }));
+  const configuration = await ensurePortalConfig();
+  const s = await stripe("POST", "/billing_portal/sessions", flat({ customer: customerId, return_url: returnUrl, configuration }));
   return String(s.url);
 }
