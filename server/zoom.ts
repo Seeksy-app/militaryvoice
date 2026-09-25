@@ -91,7 +91,10 @@ async function queue(email: string, m: ZoomMeeting, downloadToken?: string) {
 export async function importFetch(rec: { email: string; importSource: string }): Promise<{ url: string; headers: Record<string, string> } | null> {
   let s: { provider?: string; url?: string; token?: string } = {};
   try { s = JSON.parse(rec.importSource); } catch { return null; }
-  if (s.provider !== "zoom" || !s.url) return null;
+  if (!s.url) return null;
+  // Sent to their import link (Zapier): the address as given, with Zoom's download token if one came with it.
+  if (s.provider === "link") return { url: s.token ? `${s.url}${s.url.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(s.token)}` : s.url, headers: {} };
+  if (s.provider !== "zoom") return null;
   const c = await storage.getZoom(rec.email);
   if (c) return { url: s.url, headers: { Authorization: `Bearer ${await zoomAccessToken(c)}` } };
   // Disconnected since: the event's own download token still works for a day.
@@ -110,6 +113,54 @@ function signedByZoom(req: Request): boolean {
 }
 
 export function registerZoom(app: Express): void {
+  // ---- The personal import link (Zapier and friends) ---------------------------
+
+  app.get("/api/host/import-link", requireHostSession, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json({ url: `${origin(req)}/api/import/${await storage.importToken(getSessionEmail(req) ?? "")}` });
+  });
+
+  /** A new link; the old one stops working at once. */
+  app.post("/api/host/import-link/reset", requireHostSession, async (req, res) => {
+    res.json({ url: `${origin(req)}/api/import/${await storage.importToken(getSessionEmail(req) ?? "", true)}` });
+  });
+
+  /**
+   * Anything that can POST a video's address: JSON or a form, with `url` (or
+   * Zoom's `download_url`), optionally Zoom's `download_token`, a `title`
+   * (or `topic`) and `start_time`. It's filed as "Importing" and the worker
+   * fetches it. Forgiving about names because Zapier passes fields as the
+   * person maps them.
+   */
+  app.post("/api/import/:token", async (req, res) => {
+    const email = await storage.emailForImportToken(String(req.params.token));
+    if (!email) return res.status(404).json({ message: "This import link isn't valid any more. Copy the new one from your MilitaryVoices dashboard." });
+    const b = req.body ?? {};
+    const first = (v: unknown) => (Array.isArray(v) ? v[0] : v);
+    // Zapier can send several recording files as a list; prefer an MP4.
+    const urls = [b.url, b.download_url, b.file, b.video_url].flatMap((v) => (Array.isArray(v) ? v : String(v ?? "").split(","))).map((v) => String(v ?? "").trim()).filter((v) => /^https:\/\//i.test(v));
+    const types = String(first(b.file_type) ?? "").split(",");
+    const url = urls.find((_, i) => (types[i] ?? "").trim().toUpperCase() === "MP4") ?? urls[0];
+    if (!url) return res.status(400).json({ message: "Send the recording's download address as `url` (in Zapier: Recording Files Download Url)." });
+    // A public address only: our worker fetches it, so no local or private hosts.
+    const host = new URL(url).hostname.toLowerCase();
+    if (host === "localhost" || /^[\d.]+$/.test(host) || host.includes(":") || host.endsWith(".internal") || host.endsWith(".local")) return res.status(400).json({ message: "That address can't be fetched." });
+    if ((await storage.pendingImports(email)) >= 10) return res.status(429).json({ message: "Ten are already coming in. Try again when they've finished." });
+    const title = String(first(b.title) ?? first(b.topic) ?? "").trim() || "Imported recording";
+    const start = Date.parse(String(first(b.start_time) ?? ""));
+    const token = String(first(b.download_token) ?? first(b.access_token) ?? "").trim();
+    const row = await storage.queueImport({
+      email,
+      title,
+      egressId: `LINK_${crypto.createHash("sha256").update(url.split("?")[0]).digest("hex").slice(0, 24)}`,
+      startedAt: new Date(Number.isFinite(start) ? start : Date.now()).toISOString(),
+      durationSec: (Number(first(b.duration)) || 0) * 60,
+      sizeBytes: Number(first(b.file_size)) || 0,
+      source: JSON.stringify({ provider: "link", url, token: token || undefined }),
+    });
+    res.status(row ? 201 : 200).json(row ? { ok: true, id: row.id, message: "It's coming into the Library." } : { ok: true, message: "Already in the Library." });
+  });
+
   app.get("/api/host/zoom", requireHostSession, async (req, res) => {
     res.set("Cache-Control", "no-store");
     const c = await storage.getZoom(getSessionEmail(req) ?? "");

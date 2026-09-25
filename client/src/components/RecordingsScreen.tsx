@@ -65,7 +65,13 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
         Your episodes: every session the studio recorded, every video you've uploaded, and the clean episodes Pōstify makes.
       </p>
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
-        <div className="col-span-2 sm:col-span-3 lg:col-span-2"><UploadRecording /></div>
+        <div className="col-span-2 sm:col-span-3 lg:col-span-2">
+          <UploadRecording />
+          {/* The Zoom question, answered where they'd ask it. */}
+          <p className="mt-1.5 px-1 text-[11px] text-muted-foreground" data-testid="zoom-hint">
+            From Zoom? Open <a href="https://zoom.us/recording" target="_blank" rel="noreferrer" className="font-medium text-[#053877] underline-offset-2 hover:underline dark:text-[#8fb5e8]">zoom.us/recording</a>, download the MP4 and drop it here — or <a href="/host/dashboard/integrations#import-link" className="font-medium text-[#053877] underline-offset-2 hover:underline dark:text-[#8fb5e8]">make it automatic</a>.
+          </p>
+        </div>
         {stats.map((s) => (
           <div key={s.label} className="flex flex-col justify-center rounded-2xl border border-border bg-card px-4 py-3" data-testid={`library-stat-${s.label}`}>
             <s.icon className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" />

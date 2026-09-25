@@ -1362,6 +1362,9 @@ async function handleImport(job: Job): Promise<void> {
     if (!res.ok || !res.body) throw new Error(`the download was refused (${res.status})`);
     await pipeline(Readable.fromWeb(res.body as never), createWriteStream(file));
     const sizeBytes = (await fs.stat(file)).size;
+    // A link can point at anything; only a real video goes in the Library.
+    const streams = await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", file]).catch(() => "");
+    if (!/video/.test(streams)) throw new Error("that address isn't a video file (a Zoom link may need its download token)");
     const durationSec = Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]).catch(() => "0")).trim()) || job.durationSec;
     const key = await uploadBig(file, "video/mp4");
     await api("POST", `/api/agent/imports/${job.recordingId}/done`, { key, durationSec: Math.round(durationSec), sizeBytes });

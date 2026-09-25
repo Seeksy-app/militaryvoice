@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -800,6 +800,10 @@ export interface IStorage {
   getSubscription(email: string): Promise<PostifySubscriptionRow | undefined>;
   getAddon(email: string, addon: string): Promise<AddonSubscriptionRow | undefined>;
   getZoom(email: string): Promise<ZoomConnectionRow | undefined>;
+  /** Their import link token, made on first ask; `fresh` replaces it. */
+  importToken(email: string, fresh?: boolean): Promise<string>;
+  emailForImportToken(token: string): Promise<string | undefined>;
+  pendingImports(email: string): Promise<number>;
   getZoomsByUserId(zoomUserId: string): Promise<ZoomConnectionRow[]>;
   upsertZoom(v: Omit<ZoomConnectionRow, "id" | "createdAt" | "updatedAt" | "autoImport"> & { autoImport?: boolean }): Promise<ZoomConnectionRow>;
   updateZoom(email: string, patch: Partial<ZoomConnectionRow>): Promise<void>;
@@ -1947,6 +1951,31 @@ class DatabaseStorage implements IStorage {
       .from(postifyTokens)
       .where(and(eq(postifyTokens.email, email.trim().toLowerCase()), sqlExpr`${postifyTokens.createdAt} >= ${sinceIso}`));
     return Number(row?.n ?? 0);
+  }
+
+  async importToken(email: string, fresh = false): Promise<string> {
+    await ready();
+    const e = email.trim().toLowerCase();
+    const [row] = await db.select().from(importLinks).where(eq(importLinks.email, e));
+    if (row && !fresh) return row.token;
+    const token = randomBytes(18).toString("base64url");
+    await db
+      .insert(importLinks)
+      .values({ email: e, token, createdAt: new Date().toISOString() })
+      .onConflictDoUpdate({ target: importLinks.email, set: { token, createdAt: new Date().toISOString() } });
+    return token;
+  }
+
+  async emailForImportToken(token: string): Promise<string | undefined> {
+    await ready();
+    const [row] = await db.select().from(importLinks).where(eq(importLinks.token, token));
+    return row?.email;
+  }
+
+  async pendingImports(email: string): Promise<number> {
+    await ready();
+    const rows = await db.select({ id: recordings.id }).from(recordings).where(and(eq(recordings.email, email.trim().toLowerCase()), eq(recordings.status, "Importing")));
+    return rows.length;
   }
 
   async getZoom(email: string): Promise<ZoomConnectionRow | undefined> {

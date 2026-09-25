@@ -1957,6 +1957,18 @@ export const zoomConnections = pgTable("zoom_connections", {
 }, (t) => [uniqueIndex("zoom_connections_email_idx").on(t.email), index("zoom_connections_user_idx").on(t.zoomUserId)]);
 export type ZoomConnectionRow = typeof zoomConnections.$inferSelect;
 
+/**
+ * A podcaster's personal import link (/api/import/<token>): anything that can
+ * POST a video's address — a Zapier "New Recording" zap from Zoom — drops it
+ * into their Library. The token is the only key, so it can be replaced.
+ */
+export const importLinks = pgTable("import_links", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  token: text("token").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (t) => [uniqueIndex("import_links_email_idx").on(t.email), uniqueIndex("import_links_token_idx").on(t.token)]);
+
 /** An add-on (Discovery Pro), its own Stripe subscription. One row per person per add-on. */
 export const addonSubscriptions = pgTable("addon_subscriptions", {
   id: serial("id").primaryKey(),

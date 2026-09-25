@@ -79,6 +79,43 @@ export function ZoomConnect() {
         </label>
       )}
       <ZoomPicker open={picking} onOpenChange={setPicking} />
+      {!z.connected && <ImportLink />}
+    </div>
+  );
+}
+
+/**
+ * Automatic, without our own Zoom app: Zapier's Zoom "New Recording" trigger
+ * posts each recording to the podcaster's personal import link.
+ */
+function ImportLink() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const link = useQuery<{ url: string }>({ queryKey: ["/api/host/import-link"], queryFn: async () => (await apiRequest("GET", "/api/host/import-link")).json() });
+  const reset = useMutation({
+    mutationFn: async () => (await apiRequest("POST", "/api/host/import-link/reset")).json(),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ["/api/host/import-link"] }); toast({ title: "New link made", description: "The old one stopped working. Update it in Zapier." }); },
+  });
+  const [copied, setCopied] = useState(false);
+  const copy = () => link.data && navigator.clipboard.writeText(link.data.url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  return (
+    <div id="import-link" className="mt-4 scroll-mt-24 border-t border-border pt-4" data-testid="import-link">
+      <p className="text-sm font-semibold text-foreground">Make it automatic with Zapier</p>
+      <p className="mt-0.5 text-sm text-muted-foreground">Each new Zoom cloud recording comes into your Library on its own. It takes about five minutes to set up, once.</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs" data-testid="import-link-url">{link.data?.url ?? "…"}</code>
+        <Button size="sm" onClick={copy} disabled={!link.data} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="import-link-copy">
+          {copied ? <><Check className="h-3.5 w-3.5" /> Copied</> : "Copy your link"}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => reset.mutate()} disabled={reset.isPending} className="rounded-full text-muted-foreground">New link</Button>
+      </div>
+      <p className="mt-1 text-[11px] text-muted-foreground">Keep it private: anyone with it can add videos to your Library.</p>
+      <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-foreground/85">
+        <li>In <a href="https://zapier.com/app/zaps" target="_blank" rel="noreferrer" className="font-medium text-[#053877] underline-offset-2 hover:underline dark:text-[#8fb5e8]">Zapier</a>, make a new Zap. Trigger: <b>Zoom → New Recording</b>, and connect your Zoom.</li>
+        <li>Action: <b>Webhooks by Zapier → POST</b>. URL: paste your link above. Payload type: <b>json</b>.</li>
+        <li>Data: <b>url</b> = Recording Files Download Url, <b>file_type</b> = Recording Files File Type, <b>download_token</b> = Download Token, <b>title</b> = Topic, <b>start_time</b> = Start Time.</li>
+        <li>Test it, then turn the Zap on. Your next cloud recording shows up in your Library as "Importing…", then it's ready.</li>
+      </ol>
     </div>
   );
 }
