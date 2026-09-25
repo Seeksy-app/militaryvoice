@@ -19,6 +19,7 @@ import { uploadPhoto } from "./photoStorage.js";
 import { waitUntil } from "@vercel/functions";
 import sharp from "sharp";
 import { getAdminEmail, getSessionEmail, requireHostSession } from "./session.js";
+import { ADDONS, FREE_DISCOVERY } from "../shared/tokens.js";
 import {
   discoveryMembers,
   discoveryCache,
@@ -35,7 +36,14 @@ import {
 const BASE = "https://api-dashboard.influencers.club/public/v1";
 export const PLATFORMS = ["instagram", "youtube", "tiktok", "twitter", "twitch"] as const;
 type Platform = (typeof PLATFORMS)[number];
-const FREE_REVEALS_PER_MONTH = 10;
+const FREE_REVEALS_PER_MONTH = FREE_DISCOVERY.reveals;
+/** This member's monthly allowances: the free ones, or Discovery Pro's. */
+async function allowanceFor(email: string): Promise<{ reveals: number; lookups: number; pro: boolean }> {
+  const a = await storage.getAddon(email, "discovery");
+  return a && ["active", "trialing"].includes(a.status)
+    ? { reveals: ADDONS.discovery.reveals, lookups: ADDONS.discovery.lookups, pro: true }
+    : { reveals: FREE_DISCOVERY.reveals, lookups: FREE_DISCOVERY.lookups, pro: false };
+}
 const PAGE_SIZE = 10;
 /** Featured in the hero's demo ahead of our lineup, as platform:handle. Read from cache only. */
 const SHOWCASE: string[] = ["instagram:dr.brittiniewick_dpt"];
@@ -528,7 +536,6 @@ function readFilters(raw: any): Record<string, unknown> {
 // ---------------------------------------------------------------------------
 
 const ENRICH_BATCH = 10;
-const ENRICH_PER_MONTH = 200;
 const platformName = (p: string) => ({ instagram: "Instagram", youtube: "YouTube", tiktok: "TikTok", twitter: "X", twitch: "Twitch" })[p] ?? p;
 
 /** What someone typed or pasted, read as a lookup. Links name their own platform. */
@@ -577,8 +584,9 @@ export function registerDiscoveryRoutes(app: Express): void {
         email,
         isPodcaster: !!profile,
         member: member ? { role: member.role, orgName: member.orgName, since: member.createdAt } : null,
-        reveals: member ? { used: await revealsThisMonth(email), allowance: FREE_REVEALS_PER_MONTH } : null,
-        lookups: member && member.role !== "admin" ? { used: await lookupsThisMonth(email), allowance: ENRICH_PER_MONTH } : null,
+        reveals: member ? { used: await revealsThisMonth(email), allowance: (await allowanceFor(email)).reveals } : null,
+        discoveryPro: member ? (await allowanceFor(email)).pro : false,
+        lookups: member && member.role !== "admin" ? { used: await lookupsThisMonth(email), allowance: (await allowanceFor(email)).lookups } : null,
         // Signed in to the admin too: they can spend credits on filling a page.
         isAdmin: !!adminEmail,
       };
@@ -929,7 +937,8 @@ export function registerDiscoveryRoutes(app: Express): void {
         .where(and(eq(discoveryReveals.email, email), eq(discoveryReveals.platform, platform), eq(discoveryReveals.handle, handle.toLowerCase())));
       if (!again) {
         const used = await revealsThisMonth(email);
-        if (used >= FREE_REVEALS_PER_MONTH) throw new HttpError(429, `You've used your ${FREE_REVEALS_PER_MONTH} free contacts this month. They reset on the 1st.`);
+        const { reveals, pro } = await allowanceFor(email);
+        if (used >= reveals) throw new HttpError(429, pro ? `You've used your ${reveals} contacts this month. They reset on the 1st.` : `You've used your ${reveals} free contacts this month. Discovery Pro gives you ${ADDONS.discovery.reveals}: militaryvoices.ai/pricing`);
       }
       const contact = await cached(`contact:${platform}:${handle.toLowerCase()}`, 3650 * DAY, async () => {
         const r = await ic("/creators/enrich/handle/profile/", { handle, platform, email_required: "preferred" });
@@ -942,7 +951,7 @@ export function registerDiscoveryRoutes(app: Express): void {
         };
       });
       if (!again) await db.insert(discoveryReveals).values({ email, platform, handle: handle.toLowerCase(), createdAt: new Date().toISOString() });
-      return { ...contact, reveals: { used: await revealsThisMonth(email), allowance: FREE_REVEALS_PER_MONTH } };
+      return { ...contact, reveals: { used: await revealsThisMonth(email), allowance: (await allowanceFor(email)).reveals } };
     }),
   );
 
@@ -1018,6 +1027,7 @@ export function registerDiscoveryRoutes(app: Express): void {
       const fallback = asPlatform(req.body?.platform);
       const unlimited = member.role === "admin";
       let used = unlimited ? 0 : await lookupsThisMonth(who);
+      const perMonth = (await allowanceFor(who)).lookups;
       const lineup = await verifiedCreators().catch(() => []);
 
       const rows: Record<string, unknown>[] = [];
@@ -1030,7 +1040,7 @@ export function registerDiscoveryRoutes(app: Express): void {
           const subject = want.kind === "email" ? want.email : `${want.platform}:${want.handle.toLowerCase()}`;
           const free = await isFresh(want.kind === "email" ? `email:${want.email}` : `raw:${subject}`, want.kind === "email" ? 365 * DAY : 7 * DAY);
           if (!free && !unlimited) {
-            if (used >= ENRICH_PER_MONTH) return void (rows[i] = { input, status: "limit", message: `You've used this month's ${ENRICH_PER_MONTH} look-ups.` });
+            if (used >= perMonth) return void (rows[i] = { input, status: "limit", message: `You've used this month's ${perMonth} look-ups.` });
             used++;
           }
           try {
@@ -1093,7 +1103,7 @@ export function registerDiscoveryRoutes(app: Express): void {
           }
         }),
       );
-      return { rows, lookups: unlimited ? null : { used, allowance: ENRICH_PER_MONTH } };
+      return { rows, lookups: unlimited ? null : { used, allowance: perMonth } };
     }),
   );
 

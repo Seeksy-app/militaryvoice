@@ -3,9 +3,9 @@ import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { startPlanCheckout, startTokenCheckout } from "@/lib/tokens";
-import { PLANS, CREDIT_PACKS, TEST_PACK, cents, episodeCredits } from "@shared/tokens";
-import { Check, Coins, Scissors, Wand2, Sparkles, Loader2, Gauge } from "lucide-react";
+import { startPlanCheckout, startTokenCheckout, startAddonCheckout } from "@/lib/tokens";
+import { PLANS, CREDIT_PACKS, ADDONS, TEST_PACK, cents, episodeCredits } from "@shared/tokens";
+import { Check, Coins, Scissors, Wand2, Sparkles, Loader2, Gauge, Compass } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -35,7 +35,7 @@ const EXAMPLES = [
 const COMPARE: { row: string; cells: [string, string, string, string]; note?: string }[] = [
   { row: "Monthly price", cells: ["$15", "$29", "$19.95", "$49"] },
   { row: "A weekly 60-minute show (4 episodes a month)", cells: ["Not enough: 150 minutes is 2½ episodes", "Covered", "About $23.55 (a few extra credits)", "Covered, room for 10"], note: "Pōstify: 4 clips an episode, vertical and square, animated captions." },
-  { row: "Clips per episode", cells: ["As many as it finds", "As many as it finds", "4 picked, plus any you mark", "4 picked, plus any you mark"] },
+  { row: "Clips per episode", cells: ["As many as it finds", "As many as it finds", "4 picked, plus any you mark", "6 picked, plus any you mark"] },
   { row: "The whole episode cleaned (ums, false starts, dead air out) as MP3 and MP4", cells: ["Not listed", "Not listed", "Included", "Included"] },
   { row: "Post and schedule to your own accounts", cells: ["Auto-post", "Included", "Included", "Included"] },
   { row: "Your first episode free", cells: ["—", "—", "Yes", "Yes"] },
@@ -186,6 +186,24 @@ export default function Pricing() {
             </div>
           ))}
         </div>
+
+        {/* Add-ons: their own subscriptions, with or without a plan. */}
+        <section id="discovery" className="mx-auto mt-12 max-w-3xl scroll-mt-24">
+          <p className="text-center text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00]">Add-on</p>
+          <div className="mt-3 flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 sm:flex-row sm:items-center" data-testid="addon-discovery">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Compass className="h-6 w-6" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-lg font-bold text-foreground" style={HEADLINE_FONT}>{ADDONS.discovery.name} <span className="text-base font-semibold text-muted-foreground">· {cents(ADDONS.discovery.cents)}/month</span></p>
+              <p className="text-sm text-muted-foreground">{ADDONS.discovery.blurb} Works with or without a Pōstify plan.</p>
+              <ul className="mt-2 space-y-1 text-sm text-foreground/85">
+                {ADDONS.discovery.features.map((f) => <li key={f} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" /> {f}</li>)}
+              </ul>
+            </div>
+            <Button onClick={() => void go("discovery", () => startAddonCheckout("discovery"))} disabled={busy !== null} className="shrink-0 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="addon-discovery-buy">
+              {busy === "discovery" && <Loader2 className="h-4 w-4 animate-spin" />} Add Discovery Pro
+            </Button>
+          </div>
+        </section>
 
         <Comparison />
 

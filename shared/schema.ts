@@ -1930,6 +1930,19 @@ export const postifyTokens = pgTable("postify_tokens", {
 }, (t) => [uniqueIndex("postify_tokens_ref_idx").on(t.ref), index("postify_tokens_email_idx").on(t.email)]);
 export type PostifyTokenRow = typeof postifyTokens.$inferSelect;
 
+/** An add-on (Discovery Pro), its own Stripe subscription. One row per person per add-on. */
+export const addonSubscriptions = pgTable("addon_subscriptions", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  addon: text("addon").notNull(),
+  status: text("status").notNull().default("active"),
+  customerId: text("customer_id").notNull().default(""),
+  subscriptionId: text("subscription_id").notNull().default(""),
+  periodEnd: text("period_end").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [uniqueIndex("addon_subscriptions_email_addon_idx").on(t.email, t.addon)]);
+export type AddonSubscriptionRow = typeof addonSubscriptions.$inferSelect;
+
 /** A podcaster's Pōstify plan, mirrored from Stripe (the webhook and the return page keep it current). */
 export const postifySubscriptions = pgTable("postify_subscriptions", {
   id: serial("id").primaryKey(),

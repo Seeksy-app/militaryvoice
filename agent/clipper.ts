@@ -112,6 +112,8 @@ interface Job {
   cleanOnly?: boolean;
   /** "Edit episode": the source is downloadUrl; cut to trimStart–trimEnd (0 = the end), with an intro and outro. */
   episodeEdit?: { trimStart: number; trimEnd: number; introUrl?: string; outroUrl?: string };
+  /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
+  clipCount?: number;
   /** What the podcaster picked: which shapes, and the caption style. Absent = all three, animated. */
   options?: { formats: Shape[]; captions: "animated" | "classic" };
   /** "Edit text": remake one clip's three shapes with a new title and subtitle. */
@@ -907,7 +909,9 @@ const PICK_TOOL = {
 
 export async function pickMoments(job: Job, lines: Line[]): Promise<Moment[]> {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return densestStretches(lines);
+  // How many: the plan's (Pro makes 6), else CLIP_COUNT.
+  const n = job.clipCount && job.clipCount > 0 ? Math.min(12, job.clipCount) : WANTED;
+  if (!key) return densestStretches(lines, n);
 
   const client = new Anthropic({ apiKey: key });
   const prompt = `You are cutting clips from one segment of a 24-hour podcastathon for the military and veteran community.
@@ -917,7 +921,7 @@ Segment length: ${Math.round(job.durationSec)} seconds.
 
 Below is the transcript, each line prefixed with its offset in seconds from the start of the recording.
 
-Pick the ${WANTED} strongest moments to post on their own. What makes a moment strong here:
+Pick the ${n} strongest moments to post on their own. What makes a moment strong here:
 
 - It is a story, a turn, or a claim someone would repeat — not an introduction, not a sign-off, not housekeeping.
 - It stands up with no setup. Someone who has never heard of this show understands it cold.
@@ -927,7 +931,7 @@ Pick the ${WANTED} strongest moments to post on their own. What makes a moment s
 
 This community's stories carry real weight. Do not pick a moment because it sounds dramatic out of context, and do not write a caption that makes someone's service or loss into bait. Write the caption the way the host would say it.
 
-If the segment genuinely has fewer than ${WANTED} moments that stand alone, return fewer. Returning two good ones is better than four with filler.
+If the segment genuinely has fewer than ${n} moments that stand alone, return fewer. Returning two good ones is better than four with filler.
 
 Transcript:
 ${transcriptText(lines)}`;
@@ -959,7 +963,7 @@ ${transcriptText(lines)}`;
     if ((raw as unknown[]).length) break;
     console.warn(`   the pick came back empty (stop: ${res.stop_reason})${attempt === 1 ? " — asking again" : ""}`);
   }
-  if (!(raw as unknown[]).length) return densestStretches(lines);
+  if (!(raw as unknown[]).length) return densestStretches(lines, n);
   const moments = (raw as Moment[]).map((m) => ({
     title: String(m.title ?? "").slice(0, 120),
     caption: String(m.caption ?? "").slice(0, 400),
@@ -967,7 +971,7 @@ ${transcriptText(lines)}`;
     startSec: Math.max(0, Math.floor(Number(m.startSec))),
     endSec: Math.ceil(Number(m.endSec)),
   }));
-  return sane(moments, job.durationSec);
+  return sane(moments, job.durationSec, n);
 }
 
 /**
@@ -977,7 +981,7 @@ ${transcriptText(lines)}`;
  * otherwise — it exists so a missing API key degrades the clips rather than
  * dropping the whole job on the floor.
  */
-export function densestStretches(lines: Line[]): Moment[] {
+export function densestStretches(lines: Line[], n = WANTED): Moment[] {
   if (lines.length === 0) return [];
   const WINDOW = 45;
   const end = Math.max(...lines.map((l) => l.endSec));
@@ -999,12 +1003,12 @@ export function densestStretches(lines: Line[]): Moment[] {
   return scored
     .sort((a, b) => ((b as never as { _words: number })._words ?? 0) - ((a as never as { _words: number })._words ?? 0))
     .filter((m, i, all) => all.slice(0, i).every((o) => m.startSec >= o.endSec || m.endSec <= o.startSec))
-    .slice(0, WANTED)
+    .slice(0, n)
     .sort((a, b) => a.startSec - b.startSec);
 }
 
 /** Refuse anything that would cut badly, rather than rendering it and finding out. */
-export function sane(moments: Moment[], durationSec: number): Moment[] {
+export function sane(moments: Moment[], durationSec: number, n = WANTED): Moment[] {
   const kept: Moment[] = [];
   for (const m of moments.sort((a, b) => a.startSec - b.startSec)) {
     const start = Math.max(0, m.startSec);
@@ -1023,7 +1027,7 @@ export function sane(moments: Moment[], durationSec: number): Moment[] {
     if (!m.title.trim()) continue;
     kept.push({ ...m, startSec: start, endSec: stop });
   }
-  return kept.slice(0, WANTED);
+  return kept.slice(0, n);
 }
 
 // ---------------------------------------------------------------------------

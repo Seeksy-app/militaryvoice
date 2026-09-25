@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, type PostifySubscriptionRow, hostPosts, type HostPostRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -798,6 +798,8 @@ export interface IStorage {
   /** Extra credits billed since a date (this plan period). */
   overageCentsSince(email: string, sinceIso: string): Promise<number>;
   getSubscription(email: string): Promise<PostifySubscriptionRow | undefined>;
+  getAddon(email: string, addon: string): Promise<AddonSubscriptionRow | undefined>;
+  upsertAddon(v: Partial<AddonSubscriptionRow> & { email: string; addon: string }): Promise<AddonSubscriptionRow>;
   getSubscriptionById(subscriptionId: string): Promise<PostifySubscriptionRow | undefined>;
   upsertSubscription(v: Partial<PostifySubscriptionRow> & { email: string }): Promise<PostifySubscriptionRow>;
   saveCleanCopy(source: RecordingRow, videoKey: string, durationSec: number): Promise<RecordingRow>;
@@ -1934,6 +1936,25 @@ class DatabaseStorage implements IStorage {
       .from(postifyTokens)
       .where(and(eq(postifyTokens.email, email.trim().toLowerCase()), sqlExpr`${postifyTokens.createdAt} >= ${sinceIso}`));
     return Number(row?.n ?? 0);
+  }
+
+  async getAddon(email: string, addon: string): Promise<AddonSubscriptionRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(addonSubscriptions).where(and(eq(addonSubscriptions.email, email.trim().toLowerCase()), eq(addonSubscriptions.addon, addon)));
+    return row;
+  }
+
+  async upsertAddon(v: Partial<AddonSubscriptionRow> & { email: string; addon: string }): Promise<AddonSubscriptionRow> {
+    await ready();
+    const email = v.email.trim().toLowerCase();
+    const { id: _id, ...rest } = v;
+    const now = new Date().toISOString();
+    const [row] = await db
+      .insert(addonSubscriptions)
+      .values({ ...rest, email, updatedAt: now })
+      .onConflictDoUpdate({ target: [addonSubscriptions.email, addonSubscriptions.addon], set: { ...rest, email, updatedAt: now } })
+      .returning();
+    return row;
   }
 
   async getSubscription(email: string): Promise<PostifySubscriptionRow | undefined> {

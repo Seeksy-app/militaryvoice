@@ -156,6 +156,22 @@ export default function Discover() {
       return "direct";
     }
   });
+  // Back from buying Discovery Pro: confirm it with Stripe, then the new allowances show.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const sid = url.searchParams.get("addon");
+    if (!sid) return;
+    url.searchParams.delete("addon");
+    window.history.replaceState(null, "", url.pathname + url.search);
+    apiRequest("POST", "/api/host/addon/confirm", { sessionId: sid })
+      .then(() => {
+        toast({ title: "Discovery Pro is on", description: "100 contact reveals and 1,000 look-ups a month." });
+        void queryClient.invalidateQueries({ queryKey: ["/api/discover/me"] });
+      })
+      .catch((e: Error) => toast({ title: "Paid — switching it on", description: e.message, variant: "destructive" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     void fetch("/api/discover/visit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ source }) }).catch(() => {});
   }, [source]);

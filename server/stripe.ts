@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { tokenPack, PLANS, planOf, type PlanKey, type PlanInterval } from "../shared/tokens.js";
+import { tokenPack, PLANS, planOf, ADDONS, type PlanKey, type PlanInterval, type AddonKey } from "../shared/tokens.js";
 
 /**
  * Stripe Checkout for Pōstify tokens, over Stripe's REST API (no SDK: three
@@ -214,6 +214,53 @@ export async function readPlanSession(sessionId: string): Promise<PlanState | nu
   const s = await stripe("GET", `/checkout/sessions/${sessionId}`);
   if (s?.metadata?.kind !== "postify_plan" || !s.subscription) return null;
   return readSubscription(String(s.subscription));
+}
+
+// ---------------------------------------------------------------------------
+// Add-ons (Discovery Pro): a monthly subscription of their own.
+// ---------------------------------------------------------------------------
+
+async function addonPrice(addon: AddonKey): Promise<string> {
+  const a = ADDONS[addon];
+  const key = `mv_addon_${a.key}_monthly`;
+  const found = await stripe("GET", `/prices?limit=1&lookup_keys[]=${key}`);
+  if (found.data?.[0]?.id) return String(found.data[0].id);
+  const p = await stripe("POST", "/prices", flat({ lookup_key: key, currency: "usd", unit_amount: a.cents, recurring: { interval: "month" }, product_data: { name: `MilitaryVoices ${a.name}` } }));
+  return String(p.id);
+}
+
+export async function createAddonCheckout(v: { email: string; addon: AddonKey; origin: string; customerId?: string }): Promise<string> {
+  const meta = { kind: "mv_addon", email: v.email, addon: v.addon };
+  const s = await stripe("POST", "/checkout/sessions", flat({
+    mode: "subscription",
+    ...(v.customerId ? { customer: v.customerId } : { customer_email: v.email }),
+    client_reference_id: v.email,
+    line_items: [{ price: await addonPrice(v.addon), quantity: 1 }],
+    metadata: meta,
+    subscription_data: { metadata: meta },
+    success_url: `${v.origin}/discover?addon={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${v.origin}/pricing#discovery`,
+  }));
+  return String(s.url);
+}
+
+export interface AddonState { email: string; addon: AddonKey; status: string; customerId: string; subscriptionId: string; periodEnd: string }
+
+export function addonStateFrom(sub: any): AddonState | null {
+  if (!sub || sub.object !== "subscription" || sub.metadata?.kind !== "mv_addon") return null;
+  const addon = String(sub.metadata.addon) as AddonKey;
+  const email = String(sub.metadata.email || "").trim().toLowerCase();
+  if (!(addon in ADDONS) || !email) return null;
+  const end = Number(sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end);
+  return { email, addon, status: String(sub.status), customerId: String(sub.customer), subscriptionId: String(sub.id), periodEnd: end ? new Date(end * 1000).toISOString() : "" };
+}
+
+/** Back from an add-on checkout: the subscription it made, read from Stripe. */
+export async function readAddonSession(sessionId: string): Promise<AddonState | null> {
+  if (!/^cs_[\w]+$/.test(sessionId)) return null;
+  const s = await stripe("GET", `/checkout/sessions/${sessionId}`);
+  if (s?.metadata?.kind !== "mv_addon" || !s.subscription) return null;
+  return addonStateFrom(await stripe("GET", `/subscriptions/${encodeURIComponent(String(s.subscription))}`));
 }
 
 /** Extra credits used: Stripe adds them to the next bill at the plan's extra-credit price. */

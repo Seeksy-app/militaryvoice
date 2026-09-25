@@ -31,6 +31,20 @@ export async function startPlanCheckout(plan: string, interval: "month" | "year"
   }
 }
 
+/** Off to Stripe Checkout for an add-on (Discovery Pro). Not signed in: Discovery signs them in first. */
+export async function startAddonCheckout(addon: string): Promise<void> {
+  try {
+    const { url } = await (await apiRequest("POST", "/api/host/addon/checkout", { addon })).json();
+    window.location.href = url;
+  } catch (e) {
+    if ((e as { status?: number }).status === 401) {
+      window.location.href = "/discover";
+      return;
+    }
+    throw e;
+  }
+}
+
 /** Stripe's billing page for their plan: card, change plan, invoices, cancel. */
 export async function openBillingPortal(): Promise<void> {
   const { url } = await (await apiRequest("POST", "/api/host/plan/portal")).json();

@@ -189,7 +189,8 @@ export function HostNav({
           {groups.map((g) => {
             const items = g.items;
             return (
-              <div key={g.title} className={g.title === "Help" ? "mt-auto" : undefined}>
+              // What isn't live yet sits apart from what is: a gap and a rule above it.
+              <div key={g.title} className={g.title === "Help" ? "mt-auto" : g.title === "Coming soon" ? "mt-6 border-t border-white/10 pt-6" : undefined}>
                 <p className="mb-1.5 px-3 text-xs font-extrabold uppercase tracking-[0.14em] text-white">{g.title}</p>
                 <div className="flex flex-col gap-0.5">{items.map((it) => link(it, false))}</div>
               </div>

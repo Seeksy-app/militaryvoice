@@ -9,8 +9,9 @@
  * credit costs us at most ~50¢, and the plans sell them at 50–66¢.
  */
 export const PLANS = {
-  creator: { key: "creator", name: "Creator", cents: 1995, yearCents: 19900, credits: 30, overageCents: 60, blurb: "About 3 animated episodes a month, or 6 with Classic captions." },
-  pro: { key: "pro", name: "Pro", cents: 4900, yearCents: 49000, credits: 90, overageCents: 50, blurb: "About 10 animated episodes a month, or 18 with Classic captions.", popular: true },
+  creator: { key: "creator", name: "Creator", cents: 1995, yearCents: 19900, credits: 30, clipsPerEpisode: 4, overageCents: 60, blurb: "About 3 animated episodes a month, or 6 with Classic captions." },
+  // Pro: 6 clips an episode for the same credits as 4 (≈90¢ more of Creatomate per episode, still well over cost).
+  pro: { key: "pro", name: "Pro", cents: 4900, yearCents: 49000, credits: 90, clipsPerEpisode: 6, overageCents: 50, blurb: "About 10 animated episodes a month, or 18 with Classic captions — and 6 clips an episode instead of 4.", popular: true },
 } as const;
 /**
  * Yearly: two months free, and the year's credits (12 months' worth) the day
@@ -48,6 +49,21 @@ export const CREDIT_PACKS = [
   { key: "pack-50", tokens: 50, price: 35, blurb: "A season's highlights.", popular: true },
   { key: "pack-120", tokens: 120, price: 78, blurb: "For a network, or a backlog." },
 ] as const;
+
+/**
+ * Add-ons: their own monthly subscriptions, with or without a Pōstify plan.
+ * Discovery Pro raises Discovery's monthly allowances (free: 10 contact
+ * reveals, 200 look-ups).
+ */
+export const ADDONS = {
+  discovery: {
+    key: "discovery", name: "Discovery Pro", cents: 2900, reveals: 100, lookups: 1000,
+    blurb: "Find military and veteran creators, guests and sponsors, and reach them.",
+    features: ["100 contact reveals a month (10 free)", "1,000 profile look-ups a month (200 free)", "Plus everything in free Discovery: every filter, saved lists, full profiles"],
+  },
+} as const;
+export type AddonKey = keyof typeof ADDONS;
+export const FREE_DISCOVERY = { reveals: 10, lookups: 200 } as const;
 
 /** Not on the page: /pricing?test shows it, for trying a real payment for $1. */
 export const TEST_PACK = { key: "tokens-2", tokens: 2, price: 1, blurb: "Test pack: a real $1 payment." } as const;

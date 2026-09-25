@@ -115,8 +115,8 @@ import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmai
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
 import { draftYoutubeDescription, chaptersFrom } from "./youtubeDraft.js";
-import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, type PlanState } from "./stripe.js";
-import { episodeCredits, planOf, PLANS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey } from "../shared/tokens.js";
+import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
+import { episodeCredits, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   publishPhoto,
@@ -5225,6 +5225,12 @@ export function registerRoutes(app: Express): void {
         transcript: lines,
         cleanOnly,
         options: parseClipOptions(rec.clipOptions),
+        // Pro makes 6 clips an episode; everyone else the clipper's own count.
+        clipCount: await (async () => {
+          const sub = rec.email ? await storage.getSubscription(rec.email) : undefined;
+          const plan = sub && ["active", "trialing"].includes(sub.status) ? planOf(sub.plan) : undefined;
+          return plan?.clipsPerEpisode;
+        })(),
       },
     });
   });
@@ -5835,6 +5841,38 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // ---- Add-ons (Discovery Pro) ---------------------------------------------------
+
+  app.post("/api/host/addon/checkout", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    if (!stripeReady()) return res.status(503).json({ message: "Payments aren't switched on yet. Try again soon." });
+    const addon = String(req.body?.addon ?? "") as AddonKey;
+    if (!(addon in ADDONS)) return res.status(400).json({ message: "Which add-on?" });
+    const have = await storage.getAddon(email, addon);
+    if (have && ["active", "trialing", "past_due"].includes(have.status)) return res.status(409).json({ message: "You already have it. Manage it under Manage billing." });
+    const plan = await storage.getSubscription(email);
+    try {
+      res.json({ url: await createAddonCheckout({ email, addon, origin: originOf(req), customerId: have?.customerId || plan?.customerId || undefined }) });
+    } catch (err: any) {
+      console.error("Add-on checkout failed:", err?.message);
+      res.status(502).json({ message: "Checkout didn't open. Try again in a moment." });
+    }
+  });
+
+  app.post("/api/host/addon/confirm", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    try {
+      const state = await readAddonSession(String(req.body?.sessionId ?? ""));
+      if (!state || state.email !== email) return res.status(404).json({ message: "We couldn't find that subscription." });
+      await storage.upsertAddon(state);
+      res.json({ addon: ADDONS[state.addon].name });
+    } catch (err: any) {
+      console.error("Add-on confirm failed:", err?.message);
+      res.status(502).json({ message: "We couldn't check that just now. Refresh in a moment." });
+    }
+  });
+
   /** Their limit on extra credits a month. */
   app.post("/api/host/plan/cap", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
@@ -5850,9 +5888,11 @@ export function registerRoutes(app: Express): void {
   app.post("/api/host/plan/portal", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
     const sub = await storage.getSubscription(email);
-    if (!sub?.customerId) return res.status(404).json({ message: "No plan yet." });
+    const addon = await storage.getAddon(email, "discovery");
+    const customerId = sub?.customerId || addon?.customerId;
+    if (!customerId) return res.status(404).json({ message: "No plan yet." });
     try {
-      res.json({ url: await billingPortal(sub.customerId, `${originOf(req)}/host/dashboard/postify`) });
+      res.json({ url: await billingPortal(customerId, `${originOf(req)}${sub?.customerId ? "/host/dashboard/postify" : "/discover"}`) });
     } catch (err: any) {
       console.error("Billing portal failed:", err?.message);
       res.status(502).json({ message: "The billing page didn't open. Try again in a moment." });
@@ -5909,6 +5949,10 @@ export function registerRoutes(app: Express): void {
       if (event.type === "invoice.paid" && obj?.subscription && ["subscription_create", "subscription_cycle", "subscription_update"].includes(obj.billing_reason)) {
         const state = await readSubscription(String(obj.subscription));
         if (state) await syncPlan(state, String(obj.id));
+      }
+      if (event.type.startsWith("customer.subscription.")) {
+        const addon = addonStateFrom(obj);
+        if (addon) await storage.upsertAddon(addon);
       }
       if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted" || event.type === "customer.subscription.created") {
         const state = planStateFrom(obj);
