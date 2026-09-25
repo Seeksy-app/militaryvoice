@@ -108,7 +108,7 @@ export const HELP_INDEX: HelpEntry[] = [
   },
   {
     title: "Recordings and clips after the show",
-    summary: "Your segment's recording and the clips cut from it land on your dashboard under Recordings & clips.",
+    summary: "Your segment's recording and the clips cut from it land on your dashboard under Media → Recordings.",
     href: "/host/dashboard",
     keywords: "recording clips download after the show video shorts captions",
     audience: "podcasters",

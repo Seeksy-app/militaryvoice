@@ -59,6 +59,7 @@ import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
 import { ShowMaterials } from "@/components/ShowMaterials";
 import { EventSettings } from "@/components/EventSettings";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
+import { PostStudio } from "@/components/PostStudio";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { ContactsScreen } from "@/components/ContactsScreen";
@@ -494,13 +495,14 @@ function AnchoredHeading({ id, icon: Icon, label }: { id: string; icon: typeof R
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
 const SCREEN_SLUG: Record<Screen, string> = {
   cohost: "cohost",
   analytics: "analytics",
+  postify: "postify",
   dashboard: "",
   editProfile: "profile",
   events: "events",
@@ -1184,6 +1186,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     )}
 
           </section>
+        ) : screen === "postify" ? (
+          <PostStudio />
         ) : screen === "analytics" ? (
           <MyAnalytics onConnect={() => goTo("integrations")} />
         ) : screen === "pro" ? (
@@ -1346,7 +1350,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                         {[
                           { key: "analytics", label: "Your analytics", icon: BarChart3, go: () => goTo("analytics") },
                           { key: "discovery", label: "Discovery", icon: Compass, href: "/discover" },
-                          { key: "recordings", label: "Recordings & clips", icon: Film, go: () => goTo("recordings") },
+                          { key: "recordings", label: "Recordings", icon: Film, go: () => goTo("recordings") },
                           { key: "promotion", label: "Promote your show", icon: Megaphone, go: () => goTo("promotion") },
                         ].map((d) => {
                           const cls = "flex items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]";

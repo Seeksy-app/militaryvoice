@@ -1,8 +1,8 @@
 import type { ComponentType } from "react";
-import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3 } from "lucide-react";
+import { LayoutDashboard, UserRound, CalendarDays, Link2, Megaphone, Users, Film, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2 } from "lucide-react";
 import { Link } from "wouter";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "recordings" | "contacts" | "pro" | "cohost" | "analytics";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify";
 
 interface Item {
   key: HostScreen;
@@ -15,6 +15,8 @@ interface Item {
   feature?: string;
   /** A page rather than a screen: the help hub. */
   href?: string;
+  /** A small word after the label, e.g. "Beta". */
+  tag?: string;
 }
 
 /**
@@ -69,8 +71,11 @@ export function HostNav({
       ],
     },
     {
-      title: "After the show",
-      items: [{ key: "recordings", label: "Recordings & clips", hint: "Yours after the show", icon: Film }],
+      title: "Media",
+      items: [
+        { key: "recordings", label: "Recordings", hint: "Your sessions and clips", icon: Film },
+        { key: "postify", label: "Pōstify", hint: "Clips and a clean episode, from any episode", icon: Wand2, tag: "Beta" },
+      ],
     },
     // Pro is one quiet line until it opens. Three greyed doors with locks were
     // three more things to read on a page that already asked too much.
@@ -150,6 +155,9 @@ export function HostNav({
             <span className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-bold leading-none ${compact ? (active ? "bg-white text-[#053877]" : "bg-[#053877] text-white") : "bg-[#F0A71F] text-[#1a1200]"}`} data-testid="badge-host-events-count">
               {it.badge}
             </span>
+          )}
+          {it.tag && (
+            <span className={`rounded-full px-1.5 py-px text-[10px] font-bold uppercase leading-4 tracking-wide ${compact ? "bg-[#F0A71F]/20 text-[#8a5a00]" : "bg-[#F0A71F]/20 text-[#F0A71F]"}`}>{it.tag}</span>
           )}
           {it.locked && compact && <Lock className="h-3 w-3 opacity-60" />}
         </span>
