@@ -31,7 +31,6 @@ import {
   Compass,
   Film,
   Megaphone,
-  Users,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PlatformIcon, formatFollowers } from "@/components/SocialIcons";
