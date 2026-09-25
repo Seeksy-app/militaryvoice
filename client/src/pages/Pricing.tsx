@@ -98,7 +98,7 @@ export default function Pricing() {
         <ul className="mx-auto mt-10 grid max-w-3xl gap-2 text-sm text-muted-foreground sm:grid-cols-2">
           {[
             "Tokens don't expire during the beta.",
-            "Episodes up to 60 minutes each.",
+            "Episodes up to 90 minutes each.",
             "Your originals are never changed or replaced.",
             `Each episode: 4 clips + its clean episode = ${EPISODE_TOKENS} tokens.`,
             "Secure checkout by Stripe. Tokens are added the moment it's paid.",

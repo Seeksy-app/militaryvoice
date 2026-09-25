@@ -5381,7 +5381,7 @@ export function registerRoutes(app: Express): void {
   const postTesters = () =>
     new Set((process.env.POST_TESTERS || "marineocsblog@gmail.com").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
   const BETA_EPISODES = () => Number(process.env.POSTIFY_BETA_EPISODES || 1);
-  const BETA_MAX_SEC = () => Number(process.env.POSTIFY_BETA_MAX_MIN || 60) * 60;
+  const BETA_MAX_SEC = () => Number(process.env.POSTIFY_BETA_MAX_MIN || 90) * 60;
   async function postifyAllowance(email: string) {
     const e = email.trim().toLowerCase();
     const unlimited = postTesters().has(e) || (await storage.isAdminEmail(e));

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -136,6 +137,98 @@ function stageLabel(r: Rec, p: ClipProgress | null): string {
     case "upload": return "Saving your clips…";
     default: return "Starting…";
   }
+}
+
+// A fixed waveform, so the picture is the same every time.
+const WAVE = Array.from({ length: 72 }, (_, i) => 0.22 + 0.78 * Math.abs(Math.sin(i * 1.7) * Math.cos(i * 0.43)));
+
+/**
+ * What the window shows while Pōstify works: a picture of the step it's
+ * really on (from clip_progress), not a spinner. Loading fills the waveform
+ * in; the transcript is a playhead reading across it with the word count;
+ * the moments land where they really are in the episode; the cut shows the
+ * three shapes and how many are finished.
+ */
+function WorkingScene({ rec, p, pct }: { rec: Rec; p: ClipProgress | null; pct: number }) {
+  const stage = rec.clipStatus === "queued" ? "queued" : p?.stage ?? "download";
+  const total = Math.max(1, rec.durationSec);
+  const moments = p?.moments ?? [];
+  const cutting = stage === "render" || stage === "upload";
+  return (
+    <div className="absolute inset-0 flex flex-col text-white">
+      <div className="flex items-center justify-between px-4 pt-3 sm:px-5 sm:pt-4">
+        <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold backdrop-blur">
+          <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#F0A71F] opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-[#F0A71F]" /></span>
+          Pōstify is working
+        </span>
+        <span className="text-2xl font-bold tabular-nums text-[#F0A71F] sm:text-3xl">{pct}%</span>
+      </div>
+
+      <div className="relative flex flex-1 items-center justify-center px-4 sm:px-8">
+        <AnimatePresence mode="wait" initial={false}>
+          {cutting ? (
+            <motion.div key="cut" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex items-end justify-center gap-3 sm:gap-5">
+              {[{ r: "16/9", w: "w-28 sm:w-44", l: "Wide" }, { r: "9/16", w: "w-14 sm:w-24", l: "Vertical" }, { r: "1/1", w: "w-20 sm:w-32", l: "Square" }].map((f, i) => (
+                <motion.div key={f.l} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.25 }} className="flex flex-col items-center gap-1.5">
+                  <div className={`relative overflow-hidden rounded-lg bg-white/5 ring-1 ring-white/20 ${f.w}`} style={{ aspectRatio: f.r }}>
+                    <motion.div className="absolute inset-y-0 w-1/2 bg-gradient-to-r from-transparent via-white/15 to-transparent" animate={{ x: ["-100%", "220%"] }} transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.3, ease: "easeInOut" }} />
+                    <div className="absolute inset-x-2 bottom-2 space-y-1">
+                      <div className="h-1 rounded bg-[#F0A71F]/80" />
+                      <div className="mx-auto h-1 w-2/3 rounded bg-white/50" />
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-medium text-white/60 sm:text-xs">{f.l}</span>
+                </motion.div>
+              ))}
+            </motion.div>
+          ) : (
+            <motion.div key="wave" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="relative h-24 w-full max-w-2xl sm:h-32">
+              <div className="flex h-full items-center gap-[3px]">
+                {/* Plain CSS, so the waveform is there even before (or without) any animation frame. */}
+                {WAVE.map((h, i) => (
+                  <span
+                    key={i}
+                    className={`flex-1 rounded-full bg-white/70 ${stage === "queued" || stage === "download" ? "animate-pulse" : "opacity-80"}`}
+                    style={{ height: `${h * 100}%`, animationDelay: `${(i % 24) * 60}ms` }}
+                  />
+                ))}
+              </div>
+              {stage === "transcript" && (
+                <motion.div className="absolute inset-y-[-8px] w-0.5 rounded bg-[#F0A71F] shadow-[0_0_12px_#F0A71F]" animate={{ left: ["0%", "100%"] }} transition={{ duration: 3.2, repeat: Infinity, ease: "linear" }} />
+              )}
+              {stage === "moments" && (
+                <>
+                  <motion.div className="absolute inset-y-0 w-16 bg-gradient-to-r from-transparent via-[#F0A71F]/25 to-transparent" animate={{ left: ["-10%", "100%"] }} transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }} />
+                  {moments.map((m, i) => (
+                    <div
+                      key={i}
+                      className="absolute inset-y-[-6px] rounded-md border-2 border-[#F0A71F] bg-[#F0A71F]/25 shadow-[0_0_14px_rgba(240,167,31,0.45)]"
+                      style={{ left: `${(m.startSec / total) * 100}%`, width: `${Math.max(3, ((m.endSec - m.startSec) / total) * 100)}%` }}
+                    />
+                  ))}
+                </>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <div className="px-4 pb-4 text-center sm:px-6 sm:pb-5">
+        <p className="text-base font-semibold sm:text-lg">{stageLabel(rec, p)}</p>
+        <p className="mt-0.5 text-xs text-white/60 sm:text-sm">
+          {stage === "queued"
+            ? "Next in line. You can leave this page; it keeps going."
+            : stage === "transcript" && p?.words
+              ? `${p.words.toLocaleString()} words so far`
+              : stage === "moments" && moments.length
+                ? `${moments.length} moment${moments.length === 1 ? "" : "s"} found: ${moments.map((m) => m.title).slice(0, 2).join(" · ")}`
+                : cutting
+                  ? `${p?.finished ?? 0} of ${moments.length || "?"} clips finished, each vertical, square and wide with captions`
+                  : "Every step shows here as it happens. You can leave this page."}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function Ring({ pct }: { pct: number }) {
@@ -640,7 +733,9 @@ export function PostStudio() {
               <video key={cleanVideo} src={cleanVideo} controls playsInline preload="metadata" className="h-full w-full bg-black object-contain" />
             ) : preview ? (
               <video key={preview.url} src={preview.url} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
-            ) : running || failed ? (
+            ) : running ? (
+              <WorkingScene rec={rec} p={p} pct={pct} />
+            ) : failed ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center text-white">
                 <div className="relative flex items-center justify-center">
                   <div className="scale-75 sm:scale-100"><Ring pct={failed ? 0 : pct} /></div>
@@ -660,10 +755,24 @@ export function PostStudio() {
                 </span>
               </button>
             ) : (
-              <button type="button" onClick={() => void showRecording()} className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-white">
-                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/10 ring-1 ring-white/20"><Play className="h-6 w-6" /></span>
-                <span className="text-sm text-white/75">Play the recording</span>
-              </button>
+              // Not started: the way in is the middle of the window.
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-white">
+                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F0A71F] text-[#1a1200] shadow-lg shadow-[#F0A71F]/20"><Wand2 className="h-7 w-7" /></span>
+                <p className="text-xl font-bold sm:text-2xl">Ready for Pōstify</p>
+                <p className="hidden max-w-md text-sm text-white/65 sm:block">We transcribe it, pick the moments that stand on their own, cut each one vertical, square and wide with captions, and make a clean episode.</p>
+                {outOfBeta && !rec.postifyBeta ? (
+                  <GetTokens beta={beta} />
+                ) : (
+                  <Button onClick={() => start.mutate(rec.id)} disabled={start.isPending} className="h-11 gap-2 rounded-full bg-[#F0A71F] px-6 text-base font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="post-start-hero">
+                    {start.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />} Start Pōstify
+                  </Button>
+                )}
+                <p className="text-xs text-white/55">
+                  {beta?.unlimited || rec.postifyBeta ? "Included" : freeLeft ? "Free · your beta episode" : payWithTokens ? `${beta?.episodeTokens} tokens · you have ${beta?.tokens}` : `An episode is ${beta?.episodeTokens ?? 5} tokens`}
+                  {" · "}
+                  <button type="button" onClick={() => void showRecording()} className="underline underline-offset-2 hover:text-white">Play the recording</button>
+                </p>
+              </div>
             )}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#053877]/15 bg-[#053877]/[0.04] px-4 py-3">
@@ -671,20 +780,18 @@ export function PostStudio() {
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"><Sparkles className="h-4 w-4" /></span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-foreground">{rec.title || "Session"}</p>
-                <p className="text-xs text-muted-foreground">{done ? `${mine.length} clips, each in three shapes with captions` : running ? stageLabel(rec, p) : "Transcribe, pick the moments, and cut them in three shapes"}</p>
+                <p className="text-xs text-muted-foreground">{done ? `${mine.length} clips, each in three shapes with captions` : running ? stageLabel(rec, p) : "Clips in three shapes with captions, and a clean episode"}</p>
               </div>
             </div>
             {done ? (
               <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400"><Check className="h-4 w-4" /> Ready</span>
             ) : running ? (
               <Button disabled className="gap-2 rounded-full"><Loader2 className="h-4 w-4 animate-spin" /> {pct}%</Button>
-            ) : outOfBeta && !rec.postifyBeta ? (
-              <GetTokens beta={beta} />
-            ) : (
+            ) : failed ? (
               <Button onClick={() => start.mutate(rec.id)} disabled={start.isPending} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-start">
-                <Scissors className="h-4 w-4" /> {failed ? "Try again" : payWithTokens && !rec.postifyBeta ? `Make clips · ${beta?.episodeTokens} tokens` : "Make clips"}
+                <Sparkles className="h-4 w-4" /> Try again
               </Button>
-            )}
+            ) : null /* Not started: the start is the middle of the window. */}
           </div>
         </div>
 
