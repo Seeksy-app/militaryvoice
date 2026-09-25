@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, libraryFolders, type LibraryFolderRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -784,6 +784,13 @@ export interface IStorage {
     v: { status: string; url?: string; durationSec?: number; sizeBytes?: string; error?: string },
   ): Promise<RecordingRow | undefined>;
   listRecordingsByEmail(email: string): Promise<RecordingRow[]>;
+  listFolders(email: string): Promise<LibraryFolderRow[]>;
+  createFolder(email: string, name: string): Promise<LibraryFolderRow>;
+  renameFolder(email: string, id: number, name: string): Promise<LibraryFolderRow | undefined>;
+  /** The folder goes; what was in it goes back to the Library, not away. */
+  deleteFolder(email: string, id: number): Promise<void>;
+  /** File an episode, with its clean and edited copies, in a folder (0 for none). */
+  fileRecording(email: string, ids: number[], folderId: number): Promise<void>;
   listRecordings(eventId?: number): Promise<RecordingRow[]>;
   getRecording(id: number): Promise<RecordingRow | undefined>;
   setClipStatus(recordingId: number, status: ClipStatus, error?: string): Promise<RecordingRow | undefined>;
@@ -1870,6 +1877,8 @@ class DatabaseStorage implements IStorage {
         startedAt: now,
         endedAt: now,
         clipStatus: "none",
+        // Filed with the episode it came from.
+        folderId: source.folderId,
       })
       .returning();
     return row;
@@ -1924,6 +1933,8 @@ class DatabaseStorage implements IStorage {
         startedAt: now,
         endedAt: now,
         clipStatus: "none",
+        // Filed with the episode it came from.
+        folderId: source.folderId,
       })
       .returning();
     return row;
@@ -2183,6 +2194,36 @@ class DatabaseStorage implements IStorage {
       .where(eq(recordings.egressId, egressId))
       .returning();
     return row;
+  }
+
+  async listFolders(email: string): Promise<LibraryFolderRow[]> {
+    await ready();
+    return db.select().from(libraryFolders).where(eq(libraryFolders.email, email.toLowerCase().trim())).orderBy(libraryFolders.name);
+  }
+
+  async createFolder(email: string, name: string): Promise<LibraryFolderRow> {
+    await ready();
+    const [row] = await db.insert(libraryFolders).values({ email: email.toLowerCase().trim(), name, createdAt: new Date().toISOString() }).returning();
+    return row;
+  }
+
+  async renameFolder(email: string, id: number, name: string): Promise<LibraryFolderRow | undefined> {
+    await ready();
+    const [row] = await db.update(libraryFolders).set({ name }).where(and(eq(libraryFolders.id, id), eq(libraryFolders.email, email.toLowerCase().trim()))).returning();
+    return row;
+  }
+
+  async deleteFolder(email: string, id: number): Promise<void> {
+    await ready();
+    const e = email.toLowerCase().trim();
+    await db.update(recordings).set({ folderId: 0 }).where(and(eq(recordings.email, e), eq(recordings.folderId, id)));
+    await db.delete(libraryFolders).where(and(eq(libraryFolders.id, id), eq(libraryFolders.email, e)));
+  }
+
+  async fileRecording(email: string, ids: number[], folderId: number): Promise<void> {
+    await ready();
+    if (!ids.length) return;
+    await db.update(recordings).set({ folderId }).where(and(eq(recordings.email, email.toLowerCase().trim()), inArray(recordings.id, ids)));
   }
 
   async listRecordingsByEmail(email: string): Promise<RecordingRow[]> {

@@ -1157,8 +1157,19 @@ export const recordings = pgTable("recordings", {
   importClaimedAt: text("import_claimed_at").notNull().default(""),
   /** "Edit episode" (EpisodeEdit as JSON): trim, intro and outro, made into a new Library copy. */
   episodeEdit: text("episode_edit").notNull().default(""),
+  /** The Library folder it's filed in (library_folders.id); 0 for none. */
+  folderId: integer("folder_id").notNull().default(0),
 });
 export type RecordingRow = typeof recordings.$inferSelect;
+
+/** Folders a podcaster makes in their Library to sort episodes. */
+export const libraryFolders = pgTable("library_folders", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  name: text("name").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("library_folders_email_idx").on(t.email)]);
+export type LibraryFolderRow = typeof libraryFolders.$inferSelect;
 
 export const CLIP_STATUSES = ["none", "queued", "running", "done", "failed"] as const;
 

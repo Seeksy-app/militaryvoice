@@ -2794,6 +2794,44 @@ export function registerRoutes(app: Express): void {
     res.json(await storage.listRecordingsByEmail(email));
   });
 
+  /** Library folders: the podcaster's own, for sorting episodes. */
+  const folderName = (v: unknown) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, 60) : "");
+  app.get("/api/host/folders", requireHostSession, async (req, res) => {
+    noStore(res);
+    res.json(await storage.listFolders(getSessionEmail(req) ?? ""));
+  });
+  app.post("/api/host/folders", requireHostSession, async (req, res) => {
+    const email = getSessionEmail(req) ?? "";
+    const name = folderName(req.body?.name);
+    if (!name) return res.status(400).json({ message: "Give the folder a name." });
+    const mine = await storage.listFolders(email);
+    if (mine.length >= 50) return res.status(400).json({ message: "That's 50 folders — tidy a few first." });
+    if (mine.some((f) => f.name.toLowerCase() === name.toLowerCase())) return res.status(409).json({ message: "You already have a folder called that." });
+    res.status(201).json(await storage.createFolder(email, name));
+  });
+  app.patch("/api/host/folders/:id", requireHostSession, async (req, res) => {
+    const name = folderName(req.body?.name);
+    if (!name) return res.status(400).json({ message: "Give the folder a name." });
+    const row = await storage.renameFolder(getSessionEmail(req) ?? "", Number(req.params.id), name);
+    if (!row) return res.status(404).json({ message: "No such folder." });
+    res.json(row);
+  });
+  app.delete("/api/host/folders/:id", requireHostSession, async (req, res) => {
+    await storage.deleteFolder(getSessionEmail(req) ?? "", Number(req.params.id));
+    res.json({ ok: true });
+  });
+  /** Move an episode (and its clean and edited copies) into a folder, or out (folderId 0). */
+  app.post("/api/host/recordings/:id/folder", requireHostSession, async (req, res) => {
+    const email = getSessionEmail(req) ?? "";
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email.trim().toLowerCase()) return res.status(404).json({ message: "No such recording." });
+    const folderId = Number(req.body?.folderId) || 0;
+    if (folderId && !(await storage.listFolders(email)).some((f) => f.id === folderId)) return res.status(404).json({ message: "No such folder." });
+    const copies = (await storage.listRecordingsByEmail(email)).filter((r) => new RegExp(`^CLEAN_(EDIT_)?${rec.id}(_|$)`).test(r.egressId));
+    await storage.fileRecording(email, [rec.id, ...copies.map((c) => c.id)], folderId);
+    res.json({ ok: true });
+  });
+
   /** A short-lived signed link, made on demand — the bucket itself is private. */
   app.get("/api/host/recordings/:id/download", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
@@ -5546,8 +5584,9 @@ export function registerRoutes(app: Express): void {
   /**
    * Delete from the Library. Uploads and Pōstify's own copies (clean,
    * edited) only: a studio session is the event's recording too, so it stays.
-   * An upload's file goes with it; a clean copy's file is also the clean
-   * episode Pōstify offers on the original, so only the Library entry goes.
+   * An upload's file goes with it, and so do its clean and edited copies;
+   * a clean copy alone: its file is also the clean episode Pōstify offers
+   * on the original, so only the Library entry goes.
    */
   app.delete("/api/host/recordings/:id", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
@@ -5558,6 +5597,11 @@ export function registerRoutes(app: Express): void {
     if (!upload && !rec.egressId.startsWith("CLEAN_")) return res.status(403).json({ message: "Studio recordings stay with the event, so they can't be deleted here." });
     if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.status(409).json({ message: "Pōstify is still working on this one." });
     await storage.deleteRecordingAndClips(rec.id);
+    // The episode goes as a whole: its clean and edited copies share its Library card.
+    if (upload) {
+      const copies = (await storage.listRecordingsByEmail(rec.email)).filter((r) => new RegExp(`^CLEAN_(EDIT_)?${rec.id}(_|$)`).test(r.egressId));
+      for (const c of copies) await storage.deleteRecordingAndClips(c.id);
+    }
     if (upload && rec.url && !/^https?:\/\//.test(rec.url)) await deleteRecordingObject(rec.url).catch((err) => console.error("Couldn't delete an upload's file:", err));
     res.json({ ok: true });
   });
