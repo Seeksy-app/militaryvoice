@@ -116,6 +116,7 @@ import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItem
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
 import { draftYoutubeDescription, chaptersFrom } from "./youtubeDraft.js";
 import { registerZoom, importFetch } from "./zoom.js";
+import { registerMusic } from "./music.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
 import { episodeCredits, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -5150,6 +5151,7 @@ export function registerRoutes(app: Express): void {
   }
 
   registerZoom(app);
+  registerMusic(app, requireAdmin);
 
   /** The worker has fetched an import (Zoom): the file is in storage now. */
   app.post("/api/agent/imports/:id/done", requireAgent, async (req, res) => {

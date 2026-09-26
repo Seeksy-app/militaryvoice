@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, libraryFolders, type LibraryFolderRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, libraryFolders, type LibraryFolderRow, musicTracks, type MusicTrackRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -794,6 +794,9 @@ export interface IStorage {
     v: { status: string; url?: string; durationSec?: number; sizeBytes?: string; error?: string },
   ): Promise<RecordingRow | undefined>;
   listRecordingsByEmail(email: string): Promise<RecordingRow[]>;
+  listMusic(): Promise<MusicTrackRow[]>;
+  getMusic(key: string): Promise<MusicTrackRow | undefined>;
+  upsertMusic(v: { key: string; name: string; mood: string; prompt: string; url: string; durationSec: number }): Promise<MusicTrackRow>;
   listFolders(email: string): Promise<LibraryFolderRow[]>;
   createFolder(email: string, name: string): Promise<LibraryFolderRow>;
   renameFolder(email: string, id: number, name: string): Promise<LibraryFolderRow | undefined>;
@@ -2219,6 +2222,27 @@ class DatabaseStorage implements IStorage {
         endedAt: new Date().toISOString(),
       })
       .where(eq(recordings.egressId, egressId))
+      .returning();
+    return row;
+  }
+
+  async listMusic(): Promise<MusicTrackRow[]> {
+    await ready();
+    return db.select().from(musicTracks).where(eq(musicTracks.active, true)).orderBy(musicTracks.id);
+  }
+
+  async getMusic(key: string): Promise<MusicTrackRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(musicTracks).where(eq(musicTracks.key, key));
+    return row;
+  }
+
+  async upsertMusic(v: { key: string; name: string; mood: string; prompt: string; url: string; durationSec: number }): Promise<MusicTrackRow> {
+    await ready();
+    const [row] = await db
+      .insert(musicTracks)
+      .values({ ...v, active: true, createdAt: new Date().toISOString() })
+      .onConflictDoUpdate({ target: musicTracks.key, set: { ...v, active: true } })
       .returning();
     return row;
   }

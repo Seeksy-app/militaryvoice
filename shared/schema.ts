@@ -1162,6 +1162,21 @@ export const recordings = pgTable("recordings", {
 });
 export type RecordingRow = typeof recordings.$inferSelect;
 
+/** Pōstify's music library (shared/music.ts seeds it; the admin generates each track once). */
+export const musicTracks = pgTable("music_tracks", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull(),
+  name: text("name").notNull(),
+  mood: text("mood").notNull().default(""),
+  prompt: text("prompt").notNull().default(""),
+  /** In the recordings bucket, e.g. music/honor-march.mp3. */
+  url: text("url").notNull().default(""),
+  durationSec: integer("duration_sec").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  createdAt: text("created_at").notNull(),
+}, (t) => [uniqueIndex("music_tracks_key_idx").on(t.key)]);
+export type MusicTrackRow = typeof musicTracks.$inferSelect;
+
 /** Folders a podcaster makes in their Library to sort episodes. */
 export const libraryFolders = pgTable("library_folders", {
   id: serial("id").primaryKey(),
@@ -1374,13 +1389,16 @@ export interface ClipOptions {
   formats: ClipFormat[];
   /** animated: word-by-word highlight, framing that follows each speaker (Creatomate). classic: bold burned-in captions (our own renderer). */
   captions: "animated" | "classic";
+  /** A music_tracks key to play under the clips, or "" for none. */
+  music?: string;
 }
-export const DEFAULT_CLIP_OPTIONS: ClipOptions = { formats: ["vertical", "square", "wide"], captions: "animated" };
+export const DEFAULT_CLIP_OPTIONS: ClipOptions = { formats: ["vertical", "square", "wide"], captions: "animated", music: "" };
 export function parseClipOptions(raw: unknown): ClipOptions {
   let v: any = raw;
   if (typeof raw === "string") { try { v = raw ? JSON.parse(raw) : {}; } catch { v = {}; } }
   const formats = Array.isArray(v?.formats) ? CLIP_FORMATS.filter((f) => v.formats.includes(f)) : [];
-  return { formats: formats.length ? formats : [...DEFAULT_CLIP_OPTIONS.formats], captions: v?.captions === "classic" ? "classic" : "animated" };
+  const music = typeof v?.music === "string" && /^[a-z0-9-]{1,40}$/.test(v.music) ? v.music : "";
+  return { formats: formats.length ? formats : [...DEFAULT_CLIP_OPTIONS.formats], captions: v?.captions === "classic" ? "classic" : "animated", music };
 }
 
 export const clipResultSchema = z.object({
