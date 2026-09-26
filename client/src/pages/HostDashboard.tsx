@@ -31,6 +31,9 @@ import {
   Compass,
   Film,
   Megaphone,
+  Plus,
+  SquarePlay,
+  SquarePen,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PlatformIcon, formatFollowers } from "@/components/SocialIcons";
@@ -1351,20 +1354,44 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       {/* Four doors that are about the account, not any one
                           event: the event lives in its own card below. */}
                       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5" data-testid="general-doors">
+                        {/* + Create first, as on YouTube: the three things a
+                            podcaster starts from here. The green room is Go
+                            live, and still on the event card below. */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button type="button" className="flex items-center gap-2.5 rounded-xl border border-[#053877] bg-[#053877] px-3.5 py-2.5 text-left text-sm font-semibold text-white transition-colors hover:bg-[#0a4a99] dark:border-[#8ab4f8]/40 dark:bg-[#0a4a99]" data-testid="door-create">
+                              <Plus className="h-4 w-4 shrink-0" /> <span className="truncate">Create</span>
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start" className="w-56 rounded-xl p-1.5">
+                            <DropdownMenuItem
+                              className="gap-3 rounded-lg px-3 py-2.5 text-sm"
+                              onSelect={() => {
+                                try { sessionStorage.setItem("mv_open_upload", "1"); } catch { /* the Library still opens */ }
+                                goTo("recordings");
+                              }}
+                              data-testid="create-upload"
+                            >
+                              <SquarePlay className="h-5 w-5" /> Upload video
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="gap-3 rounded-lg px-3 py-2.5 text-sm" onSelect={() => goTo("greenroom")} data-testid="create-live">
+                              <Radio className="h-5 w-5" /> Go live
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="gap-3 rounded-lg px-3 py-2.5 text-sm" onSelect={() => goTo("social")} data-testid="create-post">
+                              <SquarePen className="h-5 w-5" /> Create post
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                         {[
-                          // The green room first: the door people come back for on the day.
-                          { key: "green-room", label: "Green room", icon: Headphones, go: () => goTo("greenroom"), green: true },
                           { key: "analytics", label: "Your analytics", icon: BarChart3, go: () => goTo("analytics") },
                           { key: "discovery", label: "Discovery", icon: Compass, go: () => goTo("discovery") },
                           { key: "recordings", label: "Library", icon: Film, go: () => goTo("recordings") },
                           { key: "promotion", label: "Promote your show", icon: Megaphone, go: () => goTo("promotion") },
-                        ].map((d) => {
-                          const green = "green" in d && d.green;
-                          const cls = `flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium text-foreground transition-colors ${green ? "border-emerald-600/60 bg-emerald-50 hover:bg-emerald-100/70 dark:bg-emerald-950/30" : "border-border bg-card hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]"}`;
-                          const inner = (<><d.icon className={`h-4 w-4 shrink-0 ${green ? "text-emerald-700 dark:text-emerald-400" : "text-[#053877]"}`} /> <span className="truncate">{d.label}</span></>);
-                          // Every door is a dashboard screen now (Discovery moved in).
-                          return <button key={d.key} type="button" onClick={d.go} className={`${cls} text-left`} data-testid={`door-${d.key}`}>{inner}</button>;
-                        })}
+                        ].map((d) => (
+                          <button key={d.key} type="button" onClick={d.go} className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]" data-testid={`door-${d.key}`}>
+                            <d.icon className="h-4 w-4 shrink-0 text-[#053877] dark:text-[#8ab4f8]" /> <span className="truncate">{d.label}</span>
+                          </button>
+                        ))}
                       </div>
                     </div>
                   </div>

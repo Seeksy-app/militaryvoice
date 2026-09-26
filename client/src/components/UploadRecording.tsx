@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -6,7 +6,9 @@ import { durationOf, putWithProgress } from "@/lib/upload";
 import { Loader2, Upload } from "lucide-react";
 
 /** Add a video you already have: it's filed as a recording, nothing more (clipping is Pōstify's). */
-export function UploadRecording({ onDone, tall = false, title = "Drop a video here, or click to browse", note = "MP4, MOV or WebM, up to 2GB. Then make clips from it in Pōstify." }: {
+export function UploadRecording({ onDone, tall = false, autoOpen = false, title = "Drop a video here, or click to browse", note = "MP4, MOV or WebM, up to 2GB. Then make clips from it in Pōstify." }: {
+  /** Open the file picker on arrival: the dashboard's + Create › Upload video. */
+  autoOpen?: boolean;
   /** Called with the new recording's id once it's filed. */
   onDone?: (id: number) => void;
   /** Fill the space it's given (the Pōstify Viewer), centred, rather than a row. */
@@ -20,6 +22,17 @@ export function UploadRecording({ onDone, tall = false, title = "Drop a video he
   const [pct, setPct] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [over, setOver] = useState(false);
+  useEffect(() => {
+    if (!autoOpen) return;
+    try {
+      if (sessionStorage.getItem("mv_open_upload") !== "1") return;
+      sessionStorage.removeItem("mv_open_upload");
+    } catch {
+      return;
+    }
+    // Still inside the click that asked for it, so the browser lets the picker open.
+    input.current?.click();
+  }, [autoOpen]);
   async function go(file: File) {
     if (!file.type.startsWith("video/") && !/\.(mp4|mov|m4v|webm)$/i.test(file.name)) {
       toast({ title: "That isn't a video", description: "Upload an MP4, MOV or WebM.", variant: "destructive" });

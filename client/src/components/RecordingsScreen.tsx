@@ -69,7 +69,7 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
       </p>
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
         <div className="col-span-2 sm:col-span-3 lg:col-span-2">
-          <UploadRecording />
+          <UploadRecording autoOpen />
         </div>
         {stats.map((s) => (
           <div key={s.label} className="flex flex-col justify-center rounded-2xl border border-border bg-card px-4 py-3" data-testid={`library-stat-${s.label}`}>
