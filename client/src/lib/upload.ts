@@ -1,11 +1,19 @@
-/** How long a video runs, read in the browser before it's sent. */
+/**
+ * How long a video runs, read in the browser before it's sent. Never holds
+ * the upload up: a file the browser can't read (HEVC .mov, a background tab
+ * that defers media) answers 0 after a few seconds and the server measures it.
+ */
 export function durationOf(file: File): Promise<number> {
   return new Promise((resolve) => {
     const v = document.createElement("video");
+    const url = URL.createObjectURL(file);
+    const done = (sec: number) => { clearTimeout(t); URL.revokeObjectURL(url); v.removeAttribute("src"); resolve(sec); };
+    const t = setTimeout(() => done(0), 6000);
     v.preload = "metadata";
-    v.onloadedmetadata = () => { URL.revokeObjectURL(v.src); resolve(Number.isFinite(v.duration) ? v.duration : 0); };
-    v.onerror = () => resolve(0);
-    v.src = URL.createObjectURL(file);
+    v.muted = true;
+    v.onloadedmetadata = () => done(Number.isFinite(v.duration) ? v.duration : 0);
+    v.onerror = () => done(0);
+    v.src = url;
   });
 }
 
