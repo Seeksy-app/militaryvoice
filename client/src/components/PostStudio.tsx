@@ -6,13 +6,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PLANS, CREDIT_PACKS, OVERAGE_CAP_CHOICES, episodeCredits, cents, type PlanKey } from "@shared/tokens";
-import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, parseMusicMix, type ClipFormat, type ClipOptions, type EpisodeEdit } from "@shared/schema";
+import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, parseMusicMix, parseEditSuggest, type ClipFormat, type ClipOptions, type EpisodeEdit, type EditSuggestion } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { startPlanCheckout, openBillingPortal, startTokenCheckout } from "@/lib/tokens";
 import { PostDialog } from "@/components/PostDialog";
 import { durationOf, uploadToStorage } from "@/lib/upload";
-import { TrimStrip } from "@/components/TrimStrip";
+import { TrimStrip, type Cut } from "@/components/TrimStrip";
 import { UploadRecording } from "@/components/UploadRecording";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
@@ -645,6 +645,26 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false, onFocus }:
   const setIntro = (v: { key: string; name: string } | null) => { setIntroState(v); keep("mv_intro", v); };
   const setOutro = (v: { key: string; name: string } | null) => { setOutroState(v); keep("mv_outro", v); };
   const [trim, setTrim] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  // Sections taken out of the middle.
+  const [cuts, setCuts] = useState<Cut[]>([]);
+  const cutTotal = cuts.reduce((a, c) => a + (c[1] - c[0]), 0);
+  // The AI's recommended edits, for this version of the episode; the ones you've answered go.
+  const sug = parseEditSuggest(rec.editSuggest);
+  const sugBusy = sug?.status === "queued" || sug?.status === "running";
+  const [answered, setAnswered] = useState<string[]>([]);
+  const sugKey = (i: number) => `${sug?.at}:${i}`;
+  const pending = sug?.status === "done" && sug.source === source ? (sug.items ?? []).map((it, i) => ({ ...it, i })).filter((it) => !answered.includes(sugKey(it.i))) : [];
+  const accept = (it: EditSuggestion & { i: number }) => {
+    if (it.kind === "start") setTrim((t) => ({ ...t, start: it.to }));
+    else if (it.kind === "end") setTrim((t) => ({ ...t, end: it.from }));
+    else setCuts((c) => [...c, [it.from, it.to] as Cut].sort((a, b) => a[0] - b[0]));
+    setAnswered((a) => [...a, sugKey(it.i)]);
+  };
+  const suggest = useMutation({
+    mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/suggest-edits`, { source })).json(),
+    onSuccess: () => { setAnswered([]); void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] }); },
+    onError: (e: Error) => toast({ title: "Couldn't start that", description: e.message, variant: "destructive" }),
+  });
   const keepEnd = trim.end || pos.d;
   const keepLen = Math.max(0, keepEnd - trim.start);
   // An end pressed at 0:11 keeps eleven seconds, not everything after them.
@@ -654,7 +674,7 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false, onFocus }:
   const busy = ed?.status === "queued" || ed?.status === "running";
   const makeEdit = useMutation({
     mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/episode-edit`, {
-      source, trimStart: trim.start, trimEnd: trim.end, introKey: intro?.key, introName: intro?.name, outroKey: outro?.key, outroName: outro?.name,
+      source, trimStart: trim.start, trimEnd: trim.end, cuts, introKey: intro?.key, introName: intro?.name, outroKey: outro?.key, outroName: outro?.name,
     })).json(),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
@@ -694,7 +714,17 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false, onFocus }:
             end={keepEnd}
             minLen={5}
             tone="gold"
-            extra={focusBtn}
+            extra={<>
+              <button type="button" onClick={() => { const t = Math.max(trim.start, Math.min(pos.t, keepEnd - 1)); setCuts((c) => [...c, [t, Math.min(keepEnd, t + 10)] as Cut].sort((a, b) => a[0] - b[0])); }} className="mr-1 inline-flex h-7 items-center gap-1 rounded-full border border-red-300 px-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950" data-testid="trim-add-cut">
+                <Scissors className="h-3.5 w-3.5" /> Cut a section
+              </button>
+              {focusBtn}
+            </>}
+            cuts={cuts}
+            onCuts={setCuts}
+            suggestions={pending}
+            onAccept={(i) => accept(pending[i])}
+            onDismiss={(i) => setAnswered((a) => [...a, sugKey(pending[i].i)])}
             onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
           />
         )}
@@ -731,18 +761,52 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false, onFocus }:
         <div className="space-y-3 p-4">
           {/* The trim is set on the timeline above; this just says what it does. */}
           <p className={`flex flex-wrap items-center gap-x-2 text-sm ${shortKeep ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`} data-testid="trim-summary">
-            {!trim.start && !trim.end ? (
+            {!trim.start && !trim.end && !cuts.length ? (
               <span>What's inside the gold is kept. Drag the <span className="font-semibold text-foreground">Start</span> flag to where the show should begin and the <span className="font-semibold text-foreground">End</span> flag to where it should finish; the player shows the frame as you drag. <span className="text-foreground">Zoom to start</span> and <span className="text-foreground">Zoom to end</span> bring the first and last 30 seconds up close.</span>
             ) : (
               <>
                 <span className="text-foreground">
-                  {[trim.start > 0 && `Cuts ${hms(trim.start)} from the start`, trim.end > 0 && `${trim.start > 0 ? "and" : "Cuts"} ${hms(pos.d - trim.end)} from the end`].filter(Boolean).join(" ")}.
+                  {"Cuts " + [trim.start > 0 && `${hms(trim.start)} from the start`, trim.end > 0 && `${hms(pos.d - trim.end)} from the end`, cuts.length > 0 && `${cuts.length === 1 ? "a section" : `${cuts.length} sections`} (${hms(cutTotal)}) from the middle`].filter(Boolean).join(", ").replace(/, ([^,]*)$/, " and $1")}.
                 </span>
                 {shortKeep && <span>That's most of the episode. Check the handles.</span>}
-                <button type="button" onClick={() => setTrim({ start: 0, end: 0 })} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">Reset</button>
+                <button type="button" onClick={() => { setTrim({ start: 0, end: 0 }); setCuts([]); }} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">Reset</button>
               </>
             )}
           </p>
+          {/* Recommended edits: the AI listens and says where it starts, ends, and what to cut. You decide. */}
+          <div className="rounded-xl border border-red-200/70 bg-red-50/40 p-3 dark:border-red-900/50 dark:bg-red-950/20" data-testid="edit-suggest">
+            {sugBusy ? (
+              <p className="flex items-center gap-2 text-sm text-foreground"><Loader2 className="h-4 w-4 animate-spin text-red-600" /> Listening to the episode for edits… a minute or two. You can keep working.</p>
+            ) : pending.length > 0 ? (
+              <>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-red-600" /> {pending.length} recommended edit{pending.length === 1 ? "" : "s"}</p>
+                  <button type="button" onClick={() => pending.forEach(accept)} className="text-xs font-semibold text-red-700 underline underline-offset-2 dark:text-red-400" data-testid="suggest-accept-all">Accept all</button>
+                </div>
+                <ul className="space-y-1.5">
+                  {pending.map((it, n) => (
+                    <li key={sugKey(it.i)} className="flex flex-wrap items-center gap-2 text-sm">
+                      <button type="button" onClick={() => seek(it.from)} className="shrink-0 rounded-md bg-background px-1.5 py-0.5 text-xs font-semibold tabular-nums hover:bg-muted" title="Play from here">
+                        {it.kind === "start" ? `Start at ${hms(it.to)}` : it.kind === "end" ? `End at ${hms(it.from)}` : `Cut ${hms(it.from)}–${hms(it.to)}`}
+                      </button>
+                      <span className="min-w-0 flex-1 text-muted-foreground">{it.reason}</span>
+                      <button type="button" onClick={() => accept(it)} className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-semibold text-white hover:bg-red-700" data-testid={`suggest-accept-${n}`}><Check className="h-3 w-3" /> Accept</button>
+                      <button type="button" onClick={() => setAnswered((a) => [...a, sugKey(it.i)])} className="text-xs text-muted-foreground hover:text-foreground">Dismiss</button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-muted-foreground">
+                  {sug?.status === "failed" ? `The suggestions didn't work: ${sug.error || "try again"}.` : sug?.status === "done" && sug.source === source ? ((sug.items ?? []).length ? "All recommended edits answered." : "Nothing to recommend: it starts and ends cleanly.") : "Let the AI listen for tech checks, restarts and interruptions, and recommend the start, the end and what to cut."}
+                </p>
+                <Button type="button" size="sm" onClick={() => suggest.mutate()} disabled={suggest.isPending} className="gap-1.5 rounded-full bg-red-600 text-white hover:bg-red-700" data-testid="suggest-edits">
+                  {suggest.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {sug?.status === "done" && sug.source === source ? "Suggest again" : "Suggest edits"}
+                </Button>
+              </div>
+            )}
+          </div>
           <div className="flex flex-wrap gap-x-8 gap-y-3">
             <BookendPicker label="Intro" value={intro} onChange={setIntro} />
             <BookendPicker label="Outro" value={outro} onChange={setOutro} />
@@ -753,7 +817,7 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false, onFocus }:
             </p>
             <div className="flex items-center gap-2">
               {ed?.status === "done" && <Button asChild size="sm" variant="outline" className="rounded-full"><a href="/host/dashboard/library">Open Library</a></Button>}
-              <Button type="button" onClick={() => { if (shortKeep && !window.confirm(`This keeps only ${hms(keepLen)} of ${hms(pos.d)}. Make it anyway?`)) return; makeEdit.mutate(); }} disabled={busy || makeEdit.isPending || (!trim.start && !trim.end && !intro && !outro) || (trim.end > 0 && trim.end < trim.start + 5)} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="edit-make">
+              <Button type="button" onClick={() => { if (shortKeep && !window.confirm(`This keeps only ${hms(keepLen)} of ${hms(pos.d)}. Make it anyway?`)) return; makeEdit.mutate(); }} disabled={busy || makeEdit.isPending || (!trim.start && !trim.end && !cuts.length && !intro && !outro) || (trim.end > 0 && trim.end < trim.start + 5)} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="edit-make">
                 {busy || makeEdit.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} Make edited episode
               </Button>
             </div>
@@ -1073,7 +1137,7 @@ export function PostStudio() {
     queryKey: ["/api/host/recordings"],
     queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(),
     // Live while anything is moving; still otherwise.
-    refetchInterval: (q) => ((q.state.data as Rec[] | undefined)?.some((r) => r.clipStatus === "queued" || r.clipStatus === "running" || cleanOf(r)?.status === "running" || /"status":\s*"(queued|running)"/.test(r.episodeEdit) || /"status":\s*"(queued|running)"/.test(r.musicMix)) ? 4000 : false),
+    refetchInterval: (q) => ((q.state.data as Rec[] | undefined)?.some((r) => r.clipStatus === "queued" || r.clipStatus === "running" || cleanOf(r)?.status === "running" || /"status":\s*"(queued|running)"/.test(r.episodeEdit) || /"status":\s*"(queued|running)"/.test(r.musicMix) || /"status":\s*"(queued|running)"/.test(r.editSuggest)) ? 4000 : false),
   });
   const moving = (recs.data ?? []).some((r) => r.clipStatus === "queued" || r.clipStatus === "running");
   const clips = useQuery<ClipRow[]>({

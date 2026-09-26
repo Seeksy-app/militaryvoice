@@ -842,6 +842,9 @@ export interface IStorage {
   setMusicMix(recordingId: number, json: string): Promise<void>;
   /** The next "Add music" to mix, or one whose worker went quiet for 15 minutes. */
   claimMusicMix(): Promise<RecordingRow | undefined>;
+  setEditSuggest(recordingId: number, json: string): Promise<void>;
+  /** The next "Suggest edits" to work out, or one whose worker went quiet. */
+  claimEditSuggest(): Promise<RecordingRow | undefined>;
   /** Claim one import straight away (the server's fast path); nothing if the worker has it. */
   claimImportById(id: number): Promise<RecordingRow | undefined>;
   /** Hand an import back to the worker. */
@@ -2151,6 +2154,26 @@ class DatabaseStorage implements IStorage {
       const next = JSON.stringify({ ...m, status: "running", at: new Date().toISOString() });
       // Only if nobody changed it in between.
       const [won] = await db.update(recordings).set({ musicMix: next }).where(and(eq(recordings.id, r.id), eq(recordings.musicMix, r.musicMix))).returning();
+      if (won) return won;
+    }
+    return undefined;
+  }
+
+  async setEditSuggest(recordingId: number, json: string): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ editSuggest: json }).where(eq(recordings.id, recordingId));
+  }
+
+  async claimEditSuggest(): Promise<RecordingRow | undefined> {
+    await ready();
+    const stale = new Date(Date.now() - 20 * 60 * 1000).toISOString();
+    const rows = await db.select().from(recordings).where(sqlExpr`${recordings.editSuggest} LIKE '%"status":"queued"%' OR (${recordings.editSuggest} LIKE '%"status":"running"%')`).limit(20);
+    for (const r of rows) {
+      let m: { status?: string; at?: string } = {};
+      try { m = JSON.parse(r.editSuggest); } catch { continue; }
+      if (m.status === "running" && (m.at ?? "") > stale) continue;
+      const next = JSON.stringify({ ...m, status: "running", at: new Date().toISOString() });
+      const [won] = await db.update(recordings).set({ editSuggest: next }).where(and(eq(recordings.id, r.id), eq(recordings.editSuggest, r.editSuggest))).returning();
       if (won) return won;
     }
     return undefined;

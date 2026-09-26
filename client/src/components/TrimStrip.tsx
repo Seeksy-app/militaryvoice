@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ChevronsLeft, ChevronsRight, Minus, Plus, Scissors } from "lucide-react";
+import { Check, ChevronsLeft, ChevronsRight, Minus, Plus, Scissors, Sparkles, X } from "lucide-react";
 
 // Whole seconds down, as the player shows them (21:59, not 22:00).
 const hms = (sec: number) => {
@@ -13,7 +13,9 @@ const hms = (sec: number) => {
 const tick = (sec: number) => (sec < 60 ? `${sec}s` : hms(sec));
 const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800];
 
-type Drag = { kind: "start" | "end" | "move" | "head"; x0: number; s0: number; e0: number; t0?: number; knob?: boolean };
+type Drag = { kind: "start" | "end" | "move" | "head" | "cs" | "ce" | "cm"; x0: number; s0: number; e0: number; t0?: number; knob?: boolean; i?: number };
+export type Cut = [number, number];
+export type Suggestion = { from: number; to: number; reason: string };
 
 /**
  * The episode's timeline, under the player, like Canva's: a ruler, a strip of
@@ -23,7 +25,7 @@ type Drag = { kind: "start" | "end" | "move" | "head"; x0: number; s0: number; e
  * second; the view follows the playhead while it plays. A focused handle
  * nudges with the arrow keys (a second, or five with Shift).
  */
-export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra, flags = true }: {
+export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra, flags = true, cuts = [], onCuts, suggestions = [], onAccept, onDismiss }: {
   videoRef: React.RefObject<HTMLVideoElement>;
   duration: number;
   /** Where the player is. */
@@ -43,6 +45,13 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   extra?: React.ReactNode;
   /** "Start 0:10" / "End 21:59" flags riding the edges, to grab. */
   flags?: boolean;
+  /** Sections taken out of the middle: red, each with edges to drag and a ✕. */
+  cuts?: Cut[];
+  onCuts?: (cuts: Cut[]) => void;
+  /** Cuts the AI recommends: dotted red until accepted or dismissed. */
+  suggestions?: Suggestion[];
+  onAccept?: (i: number) => void;
+  onDismiss?: (i: number) => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -220,6 +229,16 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     if (kind === "start" || kind === "end") setHint("");
     if (kind === "head") show(timeAt(ev.clientX));
   };
+  const downCut = (kind: "cs" | "ce" | "cm", i: number) => (ev: React.PointerEvent) => {
+    ev.stopPropagation();
+    ev.preventDefault();
+    (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
+    setDrag({ kind, x0: ev.clientX, s0: cuts[i][0], e0: cuts[i][1], i });
+  };
+  const setCut = (i: number, a: number, b: number) => {
+    if (!onCuts) return;
+    onCuts(cuts.map((c, j) => (j === i ? [a, b] : c)));
+  };
   // The knob: a click opens the ✂ menu; a drag moves the playhead from where it was (no jump).
   const downKnob = (ev: React.PointerEvent) => {
     ev.stopPropagation();
@@ -240,6 +259,15 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
       ? Math.min(d, Math.max(0, drag.t0 + ((ev.clientX - drag.x0) / track.current!.getBoundingClientRect().width) * d))
       : timeAt(ev.clientX);
     if (drag.kind === "head") show(t);
+    else if (drag.kind === "cs" && drag.i != null) { const a = Math.max(start, Math.min(t, drag.e0 - 0.5)); setCut(drag.i, a, drag.e0); show(a); }
+    else if (drag.kind === "ce" && drag.i != null) { const b = Math.min(end, Math.max(t, drag.s0 + 0.5)); setCut(drag.i, drag.s0, b); show(b); }
+    else if (drag.kind === "cm" && drag.i != null) {
+      const len = drag.e0 - drag.s0;
+      const dt = ((ev.clientX - drag.x0) / track.current!.getBoundingClientRect().width) * d;
+      const a = Math.min(Math.max(start, drag.s0 + dt), end - len);
+      setCut(drag.i, a, a + len);
+      show(a);
+    }
     else if (drag.kind === "start") apply("start", t, drag.e0);
     else if (drag.kind === "end") apply("end", drag.s0, t);
     else {
@@ -334,6 +362,12 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
             const ink = tone === "violet" ? "text-white" : "text-[#1a1200]";
             return (
               <div className="relative h-7">
+                {cuts.map((c, i) => (
+                  <div key={`c${i}`} onPointerDown={downCut("cm", i)} className="absolute top-0.5 z-20 inline-flex h-6 -translate-x-1/2 cursor-grab touch-none items-center gap-1 whitespace-nowrap rounded-md bg-red-600 pl-2 text-[11px] font-bold tabular-nums text-white shadow-sm active:cursor-grabbing" style={{ left: (x(c[0]) + x(c[1])) / 2 }} data-testid={`trim-cut-${i}`}>
+                    <Scissors className="h-3 w-3" /> Cut {hms(c[1] - c[0])}
+                    <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => onCuts?.(cuts.filter((_, j) => j !== i))} className="rounded p-1 hover:bg-white/20" aria-label="Keep this section after all"><X className="h-3 w-3" /></button>
+                  </div>
+                ))}
                 <div onPointerDown={down("start")} className={`${flag} ${ink} ${close ? "-translate-x-full rounded-br-none" : "rounded-bl-none"} ${ghost ? "opacity-70" : ""}`} style={{ left: x(start), backgroundColor: color }} data-testid="trim-flag-start">
                   Start {hms(start)}
                 </div>
@@ -366,6 +400,16 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
               style={{ left: x(start), width: Math.max(0, x(end) - x(start)), borderColor: color }}
               data-testid="trim-kept"
             />
+            {suggestions.map((g, i) => (
+              <div key={`sr${i}`} className="pointer-events-none absolute inset-y-0 z-[14] border-2 border-dashed border-red-500 bg-red-500/15" style={{ left: x(g.from), width: Math.max(2, x(g.to) - x(g.from)) }} />
+            ))}
+            {cuts.map((c, i) => (
+              <div key={`cr${i}`} className="absolute inset-y-0 z-[15]" style={{ left: x(c[0]), width: Math.max(4, x(c[1]) - x(c[0])) }}>
+                <div onPointerDown={downCut("cm", i)} className="absolute inset-0 cursor-grab touch-none bg-[repeating-linear-gradient(135deg,rgba(220,38,38,0.7)_0_6px,rgba(0,0,0,0.55)_6px_12px)] active:cursor-grabbing" />
+                <div onPointerDown={downCut("cs", i)} className="absolute inset-y-0 left-0 w-2.5 cursor-ew-resize touch-none bg-red-600" data-testid={`trim-cut-start-${i}`} />
+                <div onPointerDown={downCut("ce", i)} className="absolute inset-y-0 right-0 w-2.5 cursor-ew-resize touch-none bg-red-600" data-testid={`trim-cut-end-${i}`} />
+              </div>
+            ))}
             <div role="slider" tabIndex={0} aria-label="Start" aria-valuemin={0} aria-valuemax={Math.round(d)} aria-valuenow={Math.round(start)} aria-valuetext={hms(start)}
               onPointerDown={down("start")} onKeyDown={nudge("start")}
               className={`${handle} rounded-l-md ${ghost ? "opacity-60" : ""}`} style={{ left: x(start), backgroundColor: color }} data-testid="trim-handle-start">

@@ -47,6 +47,9 @@ import {
   CLIP_FORMATS,
   toCleanTime,
   type EpisodeEdit,
+  type EditSuggest,
+  type EditSuggestion,
+  parseEditSuggest,
   type ClipProgress,
   type CleanResult,
   transcriptBatchSchema,
@@ -5278,6 +5281,30 @@ export function registerRoutes(app: Express): void {
         return;
       }
     }
+    // "Suggest edits": someone's waiting on the Edit episode screen for it.
+    if (Array.isArray(req.body?.can) && req.body.can.includes("suggest")) {
+      const sugRec = await storage.claimEditSuggest();
+      if (sugRec) {
+        let sug: { source?: string } = {};
+        try { sug = JSON.parse(sugRec.editSuggest); } catch { sug = {}; }
+        let clean: CleanResult | null = null;
+        try { clean = sugRec.clean ? JSON.parse(sugRec.clean) : null; } catch { clean = null; }
+        const key = sug.source === "clean" ? clean?.videoKey : sugRec.url;
+        const src = key ? (/^https?:\/\//i.test(key) ? key : await signedRecordingUrl(key, 6 * 3600).catch(() => "")) : "";
+        if (!src) {
+          await storage.setEditSuggest(sugRec.id, JSON.stringify({ ...sug, status: "failed", error: "The episode couldn't be opened.", at: new Date().toISOString() }));
+        } else {
+          const profile = await storage.getProfileByEmail(sugRec.email).catch(() => undefined);
+          return res.json({
+            job: {
+              recordingId: sugRec.id, title: sugRec.title, durationSec: sugRec.durationSec, downloadUrl: src,
+              show: profile?.podcastName ?? "", host: profile?.hostName ?? "", transcript: [],
+              suggestEdits: { source: sug.source === "clean" ? "clean" : "original" },
+            },
+          });
+        }
+      }
+    }
     // "Add music": seconds of work per clip, and someone's watching for it.
     if (Array.isArray(req.body?.can) && req.body.can.includes("music")) {
       const mixRec = await storage.claimMusicMix();
@@ -5333,7 +5360,7 @@ export function registerRoutes(app: Express): void {
           return res.json({
             job: {
               recordingId: ed.id, title: ed.title, durationSec: ed.durationSec, downloadUrl: src, show: "", host: "", transcript: [],
-              episodeEdit: { trimStart: e.trimStart, trimEnd: e.trimEnd, introUrl: await sign(e.introKey), outroUrl: await sign(e.outroKey) },
+              episodeEdit: { trimStart: e.trimStart, trimEnd: e.trimEnd, cuts: e.cuts ?? [], introUrl: await sign(e.introKey), outroUrl: await sign(e.outroKey) },
             },
           });
         }
@@ -5757,13 +5784,29 @@ export function registerRoutes(app: Express): void {
     const trimStart = Math.max(0, Number(b.trimStart) || 0);
     const trimEnd = Math.max(0, Number(b.trimEnd) || 0);
     if (trimEnd && trimEnd < trimStart + 5) return res.status(400).json({ message: "The end has to come after the start." });
+    // Middle cuts: inside the kept part, at least half a second each, merged where they touch.
+    const keepTo = trimEnd || Number.MAX_SAFE_INTEGER;
+    const cuts: [number, number][] = [];
+    for (const c of (Array.isArray(b.cuts) ? b.cuts : []).slice(0, 50)) {
+      const from = Math.max(trimStart, Number(c?.[0]) || 0);
+      const to = Math.min(keepTo, Number(c?.[1]) || 0);
+      if (to - from >= 0.5) cuts.push([from, to]);
+    }
+    cuts.sort((x, y) => x[0] - y[0]);
+    const merged: [number, number][] = [];
+    for (const c of cuts) {
+      const last = merged[merged.length - 1];
+      if (last && c[0] <= last[1]) last[1] = Math.max(last[1], c[1]);
+      else merged.push([c[0], c[1]]);
+    }
     const e: EpisodeEdit = {
       source, trimStart, trimEnd,
+      cuts: merged.length ? merged : undefined,
       introKey: key(b.introKey), introName: String(b.introName ?? "").slice(0, 120) || undefined,
       outroKey: key(b.outroKey), outroName: String(b.outroName ?? "").slice(0, 120) || undefined,
       status: "queued", at: new Date().toISOString(),
     };
-    if (!e.trimStart && !e.trimEnd && !e.introKey && !e.outroKey) return res.status(400).json({ message: "Trim it, or add an intro or outro, first." });
+    if (!e.trimStart && !e.trimEnd && !e.cuts && !e.introKey && !e.outroKey) return res.status(400).json({ message: "Trim it, cut a section, or add an intro or outro, first." });
     await storage.setEpisodeEdit(rec.id, JSON.stringify(e));
     res.json(e);
   });
@@ -5786,6 +5829,43 @@ export function registerRoutes(app: Express): void {
     let e: any = {};
     try { e = JSON.parse(rec.episodeEdit); } catch { e = {}; }
     await storage.setEpisodeEdit(rec.id, JSON.stringify({ ...e, status: "failed", error: String(req.body?.error ?? "").slice(0, 300), at: new Date().toISOString() }));
+    res.json({ ok: true });
+  });
+
+  // Recommended edits: the worker listens to the episode and says where it
+  // really starts and ends, and what could come out of the middle.
+  app.post("/api/host/recordings/:id/suggest-edits", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
+    const prev = parseEditSuggest(rec.editSuggest);
+    if (prev && (prev.status === "queued" || prev.status === "running")) return res.json(prev);
+    let clean: CleanResult | null = null;
+    try { clean = rec.clean ? JSON.parse(rec.clean) : null; } catch { clean = null; }
+    const source: "clean" | "original" = req.body?.source === "clean" && clean?.videoKey ? "clean" : "original";
+    const next: EditSuggest = { status: "queued", source, at: new Date().toISOString() };
+    await storage.setEditSuggest(rec.id, JSON.stringify(next));
+    res.json(next);
+  });
+  app.post("/api/agent/suggest-edits/:id/done", requireAgent, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec) return res.status(404).json({ message: "No such recording." });
+    const prev = parseEditSuggest(rec.editSuggest);
+    const d = rec.durationSec || Number.MAX_SAFE_INTEGER;
+    const items: EditSuggestion[] = (Array.isArray(req.body?.items) ? req.body.items : []).slice(0, 30).map((i: Record<string, unknown>) => ({
+      kind: i.kind === "start" || i.kind === "end" ? i.kind : "cut",
+      from: Math.max(0, Number(i.from) || 0),
+      to: Math.min(d, Number(i.to) || 0),
+      reason: String(i.reason ?? "").slice(0, 300),
+    })).filter((i: EditSuggestion) => i.to - i.from >= 0.5);
+    await storage.setEditSuggest(rec.id, JSON.stringify({ ...(prev ?? { source: "original" }), status: "done", items, error: undefined, at: new Date().toISOString() }));
+    res.json({ ok: true });
+  });
+  app.post("/api/agent/suggest-edits/:id/failed", requireAgent, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec) return res.status(404).json({ message: "No such recording." });
+    const prev = parseEditSuggest(rec.editSuggest);
+    await storage.setEditSuggest(rec.id, JSON.stringify({ ...(prev ?? { source: "original" }), status: "failed", error: String(req.body?.error ?? "").slice(0, 300), at: new Date().toISOString() }));
     res.json({ ok: true });
   });
 

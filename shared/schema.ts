@@ -1163,6 +1163,8 @@ export const recordings = pgTable("recordings", {
    * changed or taken off without stacking.
    */
   musicMix: text("music_mix").notNull().default(""),
+  /** Recommended edits from the AI (EditSuggest as JSON): where the show really starts and ends, and what to cut. */
+  editSuggest: text("edit_suggest").notNull().default(""),
   /** The Library folder it's filed in (library_folders.id); 0 for none. */
   folderId: integer("folder_id").notNull().default(0),
 });
@@ -1387,11 +1389,31 @@ export type SocialMetricRow = typeof socialMetrics.$inferSelect;
  * end, and put an intro and an outro on. The result is a new recording in the
  * Library — the original and the clean episode are never changed.
  */
+/** One recommended edit: trim the start to `to`, trim the end from `from`, or cut [from, to]. */
+export interface EditSuggestion {
+  kind: "start" | "end" | "cut";
+  from: number;
+  to: number;
+  reason: string;
+}
+export interface EditSuggest {
+  status: "queued" | "running" | "done" | "failed";
+  source: "clean" | "original";
+  items?: EditSuggestion[];
+  error?: string;
+  at: string;
+}
+export function parseEditSuggest(raw: string): EditSuggest | null {
+  try { return raw ? (JSON.parse(raw) as EditSuggest) : null; } catch { return null; }
+}
+
 export interface EpisodeEdit {
   source: "clean" | "original";
   trimStart: number;
   /** 0 = to the end. */
   trimEnd: number;
+  /** Sections taken out of the middle, [from, to] in seconds, in order. */
+  cuts?: [number, number][];
   introKey?: string;
   introName?: string;
   outroKey?: string;
