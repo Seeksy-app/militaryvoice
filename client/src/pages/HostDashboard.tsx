@@ -575,6 +575,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // The URL is the source of truth for which screen is showing, so a tab can
   // be linked, bookmarked and reached with the browser's back button.
   const screen: Screen = (tab && SLUG_SCREEN.get(tab.toLowerCase())) || "dashboard";
+  // An admin (in their own seat or viewing as someone): their buttons sit at
+  // the top of each screen, not in the nav. Same query SeatSwitcher reads.
+  const { data: adminMe } = useQuery<{ email: string }>({ queryKey: ["/api/admin/me"], retry: false, staleTime: 300_000 });
   const [profileDirty, setProfileDirty] = useState(false);
   const [remindEventSetup, setRemindEventSetup] = useState(false);
   // What a new account said it came for, before the profile exists to hold it.
@@ -944,6 +947,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const onTeamForGreenRoom = Boolean(crew?.isCrew || cohost?.isCohost);
   const crewMode = !!data && !loadingProfile && !hasProfile && !!crew?.isCrew;
   const inSetup = !!data && !loadingProfile && !hasProfile && !crewMode;
+  const adminBar = !!adminMe && !!data && hasProfile && !inSetup && screen !== "dashboard";
 
   // Signed in, past setup: this is a workspace, not a page of the website.
   // The public nav is for people deciding whether to take part; somebody who
@@ -1043,7 +1047,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             feature={proFeature}
             proOpen
             cohostHours={cohostHours}
-            admin={screen === "dashboard" ? undefined : <SeatSwitcher current={data.email} />}
             account={{
               name: profile?.podcastName || profile?.hostName || data.email,
               email: data.email,
@@ -1054,7 +1057,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         )}
         {/* Top-justified: whatever the screen is, it starts level with the
             top of the nav, not a band of white below it. */}
-        <div className="min-w-0 [&>*:first-child]:mt-0">
+        <div className={`min-w-0 [&>*:first-child]:mt-0 ${adminBar ? "[&>*:nth-child(2)]:mt-0" : ""}`}>
+        {/* Back to admin and View as, top right of the page (the dashboard
+            has them on its own dark card). */}
+        {adminBar && (
+          <div className="mb-3 hidden justify-end lg:flex" data-testid="admin-top-bar">
+            <SeatSwitcher current={data!.email} />
+          </div>
+        )}
 
         {loadingProfile ? (
           <div className="mt-8 space-y-4">
