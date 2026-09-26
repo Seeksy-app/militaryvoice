@@ -117,6 +117,18 @@ function putPart(url: string, blob: Blob, onBytes: (n: number) => void): Promise
  * there. Small files are one PUT.
  */
 export async function uploadToStorage(file: File, onProgress: (pct: number) => void): Promise<string> {
+  // Unlike the processing after it, an upload lives in this tab: leaving
+  // stops it, so the browser asks first.
+  const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+  window.addEventListener("beforeunload", warn);
+  try {
+    return await upload(file, onProgress);
+  } finally {
+    window.removeEventListener("beforeunload", warn);
+  }
+}
+
+async function upload(file: File, onProgress: (pct: number) => void): Promise<string> {
   if (file.size <= MULTIPART_OVER) {
     const { uploadUrl, storageKey } = await post<{ uploadUrl: string; storageKey: string }>("/api/host/assets/upload-url", { fileName: file.name });
     await putWithProgress(uploadUrl, file, onProgress);

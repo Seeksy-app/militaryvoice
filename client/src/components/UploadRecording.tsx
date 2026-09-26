@@ -88,7 +88,7 @@ export function UploadRecording({ onDone, tall = false, autoOpen = false, title 
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#053877]/10">
             <div className="h-full rounded-full bg-[#053877] transition-[width] duration-300" style={{ width: `${pct}%` }} />
           </div>
-          <p className="mt-1 text-xs tabular-nums text-muted-foreground">{pct}% · keep this tab open until it's done</p>
+          <p className="mt-1 text-xs tabular-nums text-muted-foreground">{pct}% · stay on this page until it's done; after that you can close it</p>
         </div>
       ) : (
         <div className={`min-w-0 ${tall ? "" : "flex-1"}`}>

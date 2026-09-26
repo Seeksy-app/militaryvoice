@@ -623,7 +623,7 @@ function EpisodeTools({ rec, source, videoRef }: {
       reset();
       void qc.invalidateQueries({ queryKey: ["/api/host/clips"] });
       void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
-      toast({ title: "Making your clip", description: "It appears with your other clips in a minute or two." });
+      toast({ title: "Making your clip", description: "It appears with your other clips in a minute or two. You can close this page; it keeps going." });
     },
     onError: (e: Error) => toast({ title: "Couldn't make that clip", description: e.message, variant: "destructive" }),
   });
@@ -644,7 +644,7 @@ function EpisodeTools({ rec, source, videoRef }: {
     })).json(),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
-      toast({ title: "Making your edited episode", description: "It goes into your Library as a new copy. A long episode takes a while." });
+      toast({ title: "Making your edited episode", description: "You can close this page; it keeps going. It lands in your Library as a new copy when it's done." });
     },
     onError: (e: Error) => toast({ title: "Couldn't start that", description: e.message, variant: "destructive" }),
   });
@@ -718,7 +718,7 @@ function EpisodeTools({ rec, source, videoRef }: {
           <BookendPicker label="Outro" value={outro} onChange={setOutro} />
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
             <p className="text-xs text-muted-foreground">
-              {busy ? "Making your edited episode…" : ed?.status === "done" ? "Your last edit is in your Library." : ed?.status === "failed" ? `The last edit didn't work: ${ed.error || "try again"}.` : `From the ${source} episode. Saved as a new copy in your Library; nothing is replaced.`}
+              {busy ? "Making your edited episode… You can close this page; it lands in your Library when it's done." : ed?.status === "done" ? "Your last edit is in your Library." : ed?.status === "failed" ? `The last edit didn't work: ${ed.error || "try again"}.` : `From the ${source} episode. Saved as a new copy in your Library; nothing is replaced.`}
             </p>
             <div className="flex items-center gap-2">
               {ed?.status === "done" && <Button asChild size="sm" variant="outline" className="rounded-full"><a href="/host/dashboard/library">Open Library</a></Button>}
