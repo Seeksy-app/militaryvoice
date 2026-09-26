@@ -169,7 +169,7 @@ export function SponsorFinder({ eventId }: { eventId: number }) {
             ))}
           </div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] text-muted-foreground">Takes 2 to 10 minutes. You can leave the page.</span>
+            <span className="text-[11px] text-muted-foreground">Takes 5 to 15 minutes. You can leave the page.</span>
             <div className="flex items-center gap-2">
               <select value={count} onChange={(e) => setCount(Number(e.target.value))} className="h-8 rounded-full border border-border bg-background px-2 text-xs" aria-label="How many companies">
                 {[8, 12, 20].map((n) => <option key={n} value={n}>{n} companies</option>)}

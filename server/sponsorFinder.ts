@@ -144,7 +144,8 @@ export function registerSponsorFinder(app: Express, requireAdmin: RequestHandler
       pkgs.length ? `Sponsorship packages: ${pkgs.join("; ")}.` : "",
       brief ? `What we're looking for: ${brief}` : `Favour companies with a record of sponsoring veteran causes, military family programs, podcasts or live events, or that sell to or hire veterans, and US companies with a real marketing budget.`,
       skip.length ? `Leave out these, we already have them: ${skip.slice(0, 80).join(", ")}.` : "",
-      `Only real companies with evidence behind why they fit. For contacts, only real people currently in the role; leave a field empty rather than guess.`,
+      `Size matters: these packages are $250 to $10,000, so prefer companies where that is a real decision for a marketing or partnerships lead — growing and mid-sized companies, veteran-focused brands, and the military programs of larger ones — over giants where it would never reach anyone.`,
+      `Only real companies with evidence behind why they fit. For each, make a real effort to name the person who would decide (partnerships, sponsorships, brand, marketing, or the military/veteran program lead) and their LinkedIn; only real people currently in the role, and leave a field empty rather than guess.`,
     ].filter(Boolean).join("\n");
     try {
       const runId = await startRun(PROCESSOR.find, input, FIND_SCHEMA);
