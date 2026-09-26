@@ -118,6 +118,8 @@ interface Job {
   clipCount?: number;
   /** What the podcaster picked: which shapes, and the caption style. Absent = all three, animated. */
   options?: { formats: Shape[]; captions: "animated" | "classic" };
+  /** A track to play under the clips (a signed link to the MP3). */
+  music?: { url: string; name: string };
   /** "Edit text": remake one clip's three shapes with a new title and subtitle. */
   clipEdit?: { clipId: number; title: string; subtitle: string; startSec: number; endSec: number; shapes?: Shape[] };
 }
@@ -1377,6 +1379,44 @@ async function handleImport(job: Job): Promise<void> {
   }
 }
 
+/**
+ * Music under a finished clip. Over talking it ducks out of the way (a
+ * sidechain on the voice); a clip with nothing said gets it at full level.
+ * The track loops if the clip runs longer, and fades out at the end.
+ */
+async function mixMusic(file: string, music: string, speech: boolean): Promise<void> {
+  const probe = await run("ffprobe", ["-v", "error", "-show_entries", "format=duration:stream=codec_type", "-of", "json", file]);
+  const j = JSON.parse(probe) as { format?: { duration?: string }; streams?: { codec_type: string }[] };
+  const dur = Number(j.format?.duration) || 0;
+  const hasAudio = (j.streams ?? []).some((x) => x.codec_type === "audio");
+  const fade = Math.max(0, dur - 1.5).toFixed(2);
+  const out = file.replace(/\.mp4$/, "-music.mp4");
+  const graph = speech && hasAudio
+    ? `[1:a]volume=0.5,afade=t=out:st=${fade}:d=1.5[m];[0:a]asplit=2[v1][v2];[m][v1]sidechaincompress=threshold=0.015:ratio=10:attack=15:release=450[duck];[v2][duck]amix=inputs=2:duration=first:normalize=0[a]`
+    : hasAudio
+      ? `[1:a]volume=0.9,afade=t=out:st=${fade}:d=1.5[m];[0:a][m]amix=inputs=2:duration=first:normalize=0[a]`
+      : `[1:a]volume=0.9,afade=t=out:st=${fade}:d=1.5,atrim=0:${dur.toFixed(2)}[a]`;
+  await run("ffmpeg", ["-y", "-v", "error", "-i", file, "-stream_loop", "-1", "-i", music, "-filter_complex", graph, "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-t", dur.toFixed(2), "-movflags", "+faststart", out]);
+  await fs.rename(out, file);
+}
+
+/**
+ * Nothing said in it (a product demo over music, a silent screen share):
+ * clips by the clock instead of by the words. One clip if it's a minute or
+ * less; otherwise evenly spaced 30-second pieces.
+ */
+function silentMoments(job: Job): Moment[] {
+  const dur = Math.max(1, Math.floor(job.durationSec));
+  const title = (job.title || job.show || "Clip").slice(0, 60);
+  if (dur <= 60) return [{ title, caption: "", reason: "the whole recording", startSec: 0, endSec: dur }];
+  const n = Math.max(1, Math.min(job.clipCount ?? Number(process.env.CLIP_COUNT || 4), Math.floor(dur / 30)));
+  const gap = (dur - n * 30) / n;
+  return Array.from({ length: n }, (_, i) => {
+    const start = Math.floor(gap / 2 + i * (30 + gap));
+    return { title: n > 1 ? `${title} · part ${i + 1}` : title, caption: "", reason: "a slice of the recording", startSec: start, endSec: Math.min(dur, start + 30) };
+  });
+}
+
 async function handle(job: Job): Promise<void> {
   if (job.importFrom) return handleImport(job);
   if (job.episodeEdit) return handleEpisodeEdit(job);
@@ -1442,8 +1482,18 @@ async function handle(job: Job): Promise<void> {
         return job.transcript;
       });
     }
-    if (lines.length === 0) throw new Error("no transcript, so nothing to choose from");
-    console.log(`[${job.recordingId}] ${lines.length} lines of transcript`);
+    // Nothing said, and no music asked for: nothing to make (the server gives the credits back).
+    const silent = lines.length === 0;
+    if (silent && !job.music) throw new Error("no transcript, so nothing to choose from");
+    let musicFile = "";
+    if (job.music) {
+      musicFile = path.join(dir, "music.mp3");
+      const got = await fetch(job.music.url);
+      if (!got.ok) throw new Error(`couldn't fetch the music: ${got.status}`);
+      await fs.writeFile(musicFile, new Uint8Array(await got.arrayBuffer()));
+      console.log(`[${job.recordingId}] music: ${job.music.name}`);
+    }
+    console.log(`[${job.recordingId}] ${silent ? "no talking — clips by the clock, with music" : `${lines.length} lines of transcript`}`);
     const words = lines.reduce((n, l) => n + l.text.split(/\s+/).filter(Boolean).length, 0);
     progress(job.recordingId, { stage: "moments", pct: 0, words, transcriptSource: live ? "live" : "transcribed after" });
 
@@ -1452,7 +1502,7 @@ async function handle(job: Job): Promise<void> {
     // that was the worker working, so every stage that takes real time says so
     // before it starts rather than after it finishes.
     console.log(`[${job.recordingId}] choosing moments…`);
-    const moments = await pickMoments(job, lines);
+    const moments = silent ? silentMoments(job) : await pickMoments(job, lines);
     console.log(`[${job.recordingId}] picked ${moments.length}`);
     progress(job.recordingId, { stage: "render", pct: 0, moments: moments.map((m) => ({ title: m.title, startSec: m.startSec, endSec: m.endSec })), finished: 0 });
     if (moments.length === 0) {
@@ -1485,7 +1535,8 @@ async function handle(job: Job): Promise<void> {
       const opts = job.options ?? { formats: ["vertical", "square", "wide"] as Shape[], captions: "animated" as const };
       const want = new Set(opts.formats);
       const tall = want.has("vertical") || want.has("square");
-      const geo = await framingFor(job, source, m, within, dir, !tall ? "none" : opts.captions === "animated" ? "shots" : "one");
+      // No talking: no one to follow, so the frame holds still.
+      const geo = await framingFor(job, source, m, within, dir, !tall || silent ? "none" : opts.captions === "animated" ? "shots" : "one");
 
       // The same words go into all three, drawn per shape because the type is
       // sized against the canvas it lands on.
@@ -1495,11 +1546,16 @@ async function handle(job: Job): Promise<void> {
         progress(job.recordingId, { stage: "render", pct: ((i * 4 + k) / (moments.length * 4)) * 100, detail: `Clip ${i + 1} of ${moments.length} · ${shape}` });
       step(0, "all three shapes");
       // Only the shapes they asked for; Classic captions are ours, no Creatomate.
-      const viaCreatomate = opts.captions === "animated" && (await renderWithCreatomate(job, m, source, geo, { wide, vertical, square }, [...want]));
+      const viaCreatomate = !silent && opts.captions === "animated" && (await renderWithCreatomate(job, m, source, geo, { wide, vertical, square }, [...want]));
       if (!viaCreatomate) {
         if (want.has("wide")) { step(0, "wide"); await render(source, wide, m, "wide", undefined, geo, within, capDir); }
         if (want.has("vertical")) { step(1, "vertical"); await render(source, vertical, m, "vertical", { file: bandFile, height: 220 }, geo, within, capDir); }
         if (want.has("square")) { step(2, "square"); await render(source, square, m, "square", { file: bandFile, height: 220 }, geo, within, capDir); }
+      }
+      if (musicFile) {
+        for (const [shape, file] of [["wide", wide], ["vertical", vertical], ["square", square]] as const) {
+          if (want.has(shape)) await mixMusic(file, musicFile, !silent);
+        }
       }
       step(3, "uploading");
 
@@ -1526,7 +1582,8 @@ async function handle(job: Job): Promise<void> {
     // The clips are out; the clean episode follows. It's no longer this
     // job's claim — a shutdown now mustn't requeue clips that are finished.
     holding = null;
-    await cleanEpisode(job, source, dir);
+    // A clean episode is cutting ums and dead air out of talk; with no talk there's nothing to cut.
+    if (!silent) await cleanEpisode(job, source, dir);
   } finally {
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }

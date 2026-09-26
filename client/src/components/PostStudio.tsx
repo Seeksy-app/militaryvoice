@@ -16,7 +16,7 @@ import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy } from "lucide-react";
+import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -337,6 +337,45 @@ function ClipChoices({ opts, onChange }: { opts: ClipOptions; onChange: (o: Clip
           })}
         </div>
       </div>
+      <MusicPick value={opts.music ?? ""} onChange={(music) => onChange({ ...opts, music })} />
+    </div>
+  );
+}
+
+/** Music under the clips: none, or one of our tracks, each playable before choosing. */
+function MusicPick({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const tracks = useQuery<{ key: string; name: string; mood: string; durationSec: number }[]>({ queryKey: ["/api/music"], queryFn: async () => (await apiRequest("GET", "/api/music")).json(), staleTime: 300_000 });
+  const [playing, setPlaying] = useState<string | null>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => () => audio.current?.pause(), []);
+  const list = tracks.data ?? [];
+  if (!list.length) return null;
+  const play = (key: string) => {
+    audio.current?.pause();
+    if (playing === key) { setPlaying(null); return; }
+    const a = new Audio(`/api/music/${key}/audio`);
+    a.volume = 0.8;
+    a.onended = () => setPlaying(null);
+    void a.play().catch(() => setPlaying(null));
+    audio.current = a;
+    setPlaying(key);
+  };
+  const chip = (on: boolean) => `inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-semibold transition-colors ${on ? "border-[#F0A71F] bg-[#F0A71F]/15 text-white" : "border-white/20 text-white/70 hover:border-white/45 hover:text-white"}`;
+  return (
+    <div className="flex max-w-xl flex-col items-center gap-1.5" data-testid="post-music">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-white/55">Music · optional</span>
+      <div className="flex flex-wrap items-center justify-center gap-1.5">
+        <button type="button" onClick={() => onChange("")} className={chip(!value)} aria-pressed={!value} data-testid="post-music-none">None</button>
+        {list.map((t) => (
+          <span key={t.key} className={chip(value === t.key)}>
+            <button type="button" onClick={() => play(t.key)} className="text-white/70 hover:text-white" aria-label={playing === t.key ? `Stop ${t.name}` : `Play ${t.name}`} title={t.mood}>
+              {playing === t.key ? <Pause className="h-3 w-3 fill-current" /> : <Play className="h-3 w-3 fill-current" />}
+            </button>
+            <button type="button" onClick={() => onChange(value === t.key ? "" : t.key)} aria-pressed={value === t.key} data-testid={`post-music-${t.key}`}>{t.name}</button>
+          </span>
+        ))}
+      </div>
+      {value && <p className="flex items-center gap-1 text-[11px] text-white/50"><Music2 className="h-3 w-3" /> Plays softly under talking, and full where nobody's speaking.</p>}
     </div>
   );
 }

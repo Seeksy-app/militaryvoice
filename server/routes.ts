@@ -5305,6 +5305,12 @@ export function registerRoutes(app: Express): void {
         transcript: lines,
         cleanOnly,
         options: parseClipOptions(rec.clipOptions),
+        // The track they picked to play under the clips.
+        music: await (async () => {
+          const key = parseClipOptions(rec.clipOptions).music;
+          const t = key ? await storage.getMusic(key) : undefined;
+          return t?.url ? { url: await signedRecordingUrl(t.url, 6 * 3600), name: t.name } : undefined;
+        })(),
         // Pro makes 6 clips an episode; everyone else the clipper's own count.
         clipCount: await (async () => {
           const sub = rec.email ? await storage.getSubscription(rec.email) : undefined;
