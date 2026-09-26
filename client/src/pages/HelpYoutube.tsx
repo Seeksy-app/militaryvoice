@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
-import { HelpSearch } from "@/components/HelpSearch";
+import { HelpArticle } from "@/components/HelpArticle";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Youtube, ArrowLeft } from "lucide-react";
@@ -18,31 +18,22 @@ export default function HelpYoutube() {
   return (
     <div className="min-h-screen bg-background">
       <NavBar />
-      <main className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6">
-        <Link href="/help" className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary" data-testid="link-help-back">
-          <ArrowLeft className="h-4 w-4" /> All help
-        </Link>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Help · Going out live</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
-          Your slot on your own YouTube, too
-        </h1>
-        <p className="mt-4 text-lg text-muted-foreground">
-          Your slot airs on The Podcast Marathon either way. Connect your channel once and it goes out there as well — live, to
-          your audience, at the same time. No stream key to find. Five minutes, start to finish.
-        </p>
-
-        <div className="mt-6"><HelpSearch compact /></div>
-
+      <HelpArticle
+        eyebrow="Help · Going out live"
+        title="Your slot on your own YouTube, too"
+        lead={<>Your slot airs on The Podcast Marathon either way. Connect your channel once and it goes out there as well — live, to your audience, at the same time. No stream key to find. Five minutes, start to finish.</>}
+        toc={[["#connect", "Connect your channel"], ["#verified", "Get past Google's warning"], ["#choose", "Choose what goes to your channel"], ["#before", "Before the day"]]}
+      >
         {/* Thirty seconds of the real thing, before the words. Served through
             the media door so the file lives with the rest of the library. */}
-        <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-black shadow-sm" data-testid="help-youtube-video">
+        <div className="overflow-hidden rounded-2xl border border-border bg-black shadow-sm" data-testid="help-youtube-video">
           <video controls playsInline preload="metadata" poster="/help-youtube-poster.jpg?v=2" src="/api/studio/media/18" className="aspect-video w-full">
             Your browser can't play this video. The steps below cover the same ground.
           </video>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">45 seconds: the whole connection, start to finish.</p>
 
-        <Section n={1} title="Connect your channel">
+        <Section n={1} id="connect" title="Connect your channel">
           <p>
             Sign in to your dashboard, open <strong>Integrations</strong>, and press <strong>Connect YouTube</strong>. Use
             the Google account that owns your channel.
@@ -71,7 +62,7 @@ export default function HelpYoutube() {
           <Step k="c" text={<>Press <strong>Continue</strong>.</>} src="/email/google-3.png" alt="Press Continue on the permission screen" />
         </Section>
 
-        <Section n={3} title="Choose what goes to your channel">
+        <Section n={3} id="choose" title="Choose what goes to your channel">
           <p>
             Straight after connecting, the card asks one question: <strong>just my segment</strong>, or{" "}
             <strong>the entire show</strong>.
@@ -91,7 +82,7 @@ export default function HelpYoutube() {
           <p className="mt-3">You can change your answer any time from the same card.</p>
         </Section>
 
-        <Section n={4} title="Before the day">
+        <Section n={4} id="before" title="Before the day">
           <ul className="list-disc space-y-2 pl-5">
             <li>
               <strong>Live streaming has to be switched on for your channel.</strong> YouTube asks for a verified phone number
@@ -115,7 +106,7 @@ export default function HelpYoutube() {
             <Link href="/host/dashboard/integrations">Connect my YouTube <ArrowRight className="h-4 w-4" /></Link>
           </Button>
         </div>
-      </main>
+      </HelpArticle>
       <SiteFooter />
     </div>
   );

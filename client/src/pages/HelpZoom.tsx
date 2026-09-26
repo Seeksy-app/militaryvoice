@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
-import { HelpSearch } from "@/components/HelpSearch";
+import { HelpArticle } from "@/components/HelpArticle";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, ArrowLeft, Video } from "lucide-react";
@@ -23,39 +23,12 @@ export default function HelpZoom() {
   return (
     <div className="min-h-screen bg-background">
       <NavBar />
-      <main className="mx-auto w-full max-w-3xl px-4 py-12 sm:px-6">
-        <Link href="/help" className="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary" data-testid="link-help-back">
-          <ArrowLeft className="h-4 w-4" /> All help
-        </Link>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Help · Your recordings</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
-          Your Zoom recordings, straight into your Library
-        </h1>
-        <p className="mt-4 text-lg text-muted-foreground">
-          Connect your Zoom account to MilitaryVoices.ai once. Your cloud recordings then come into your Library, ready for
-          Pōstify to make clips and a clean episode. The app only reads your recordings. It never changes, deletes or
-          shares anything in your Zoom account.
-        </p>
-
-        <div className="mt-6"><HelpSearch compact /></div>
-
-        <nav className="mt-6 rounded-2xl border border-border bg-card p-5 text-sm" aria-label="On this page" data-testid="help-zoom-contents">
-          <p className="font-semibold text-foreground">On this page</p>
-          <ol className="mt-2 grid gap-1.5 sm:grid-cols-2">
-            {[
-              ["#add", "Adding the app"],
-              ["#use", "Using it"],
-              ["#remove", "Removing the app"],
-              ["#data", "What we access and store"],
-              ["#support", "Help and contact"],
-            ].map(([href, label], i) => (
-              <li key={href}>
-                <a href={href} className="font-medium text-primary hover:underline">{i + 1}. {label}</a>
-              </li>
-            ))}
-          </ol>
-        </nav>
-
+      <HelpArticle
+        eyebrow="Help · Your recordings"
+        title="Your Zoom recordings, straight into your Library"
+        lead={<>Connect your Zoom account to MilitaryVoices.ai once. Your cloud recordings then come into your Library, ready for Pōstify to make clips and a clean episode. The app only reads your recordings. It never changes, deletes or shares anything in your Zoom account.</>}
+        toc={[["#add", "Adding the app"], ["#use", "Using it"], ["#remove", "Removing the app"], ["#data", "What we access and store"], ["#support", "Help and contact"]]}
+      >
         <Section n={1} id="add" title="Adding the app">
           <p className="font-semibold text-foreground">Before you start, you need:</p>
           <ul className="mt-2 list-disc space-y-2 pl-5">
@@ -299,7 +272,7 @@ export default function HelpZoom() {
             <Link href="/host/dashboard/integrations">Connect my Zoom <ArrowRight className="h-4 w-4" /></Link>
           </Button>
         </div>
-      </main>
+      </HelpArticle>
       <SiteFooter />
     </div>
   );
