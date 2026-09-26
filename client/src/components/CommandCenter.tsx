@@ -31,7 +31,10 @@ export function CommandCenter({
   serviceLine,
   eventName,
   eventStartUtc,
+  actions,
 }: {
+  /** Top right: the admin's account switcher and Sign out, which used to be a header bar of their own. */
+  actions?: React.ReactNode;
   firstName: string;
   photoUrl: string;
   podcastName: string;
@@ -45,6 +48,7 @@ export function CommandCenter({
     <section className="relative overflow-hidden rounded-2xl bg-[#04102b] px-5 pb-12 pt-5 text-white sm:px-7 sm:pt-6" data-testid="command-center">
       <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
       <div className="pointer-events-none absolute -right-8 -top-8 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
+      {actions && <div className="relative z-10 mb-3 flex flex-wrap items-center justify-end gap-2 sm:absolute sm:right-5 sm:top-5 sm:mb-0">{actions}</div>}
       <div className="relative flex flex-wrap items-end justify-between gap-5">
         {/* Who this is, once: the avatar and the show up here beside the
             greeting, so the page below can get on with the slot. */}

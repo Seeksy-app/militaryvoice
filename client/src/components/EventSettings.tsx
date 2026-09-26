@@ -20,7 +20,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, slotEnd, onAirWindow, totalSlots } from "@/lib/schedule";
 import { isLiveOnlyBlock } from "@shared/slots";
 import type { PublicEvent } from "@shared/schema";
-import { CalendarDays, ChevronRight, ArrowLeft, Check, Clock, Trash2, Megaphone, Rocket, Mic2 } from "lucide-react";
+import { CalendarDays, ChevronRight, ArrowLeft, ArrowRight, Check, Clock, Trash2, Megaphone, Rocket, Mic2, Users } from "lucide-react";
 import { GreenRoomButton } from "@/components/GreenRoomButton";
 import { CohostSlots } from "@/components/CohostSlots";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -41,8 +41,11 @@ export function EventSettings({
   profilePhotoUrl,
   onPickSlot,
   onOpenPromotion,
+  onOpenGreenRoom,
   children,
 }: {
+  /** The green room screen: what to check, and the way in. */
+  onOpenGreenRoom?: () => void;
   profilePhotoUrl?: string;
   /** Send them to the slot picker for this event. */
   onPickSlot: (eventId: number) => void;
@@ -51,7 +54,14 @@ export function EventSettings({
   /** Show materials / Stream / Recordings, rendered once an event is chosen. */
   children?: (entry: EventEntry) => React.ReactNode;
 }) {
-  const [openId, setOpenId] = useState<number | null>(null);
+  // Remembered while they step into Promotion or the green room and back.
+  const [openId, setOpenIdState] = useState<number | null>(() => {
+    try { const v = sessionStorage.getItem("mv_open_event"); return v ? Number(v) : null; } catch { return null; }
+  });
+  const setOpenId = (id: number | null) => {
+    setOpenIdState(id);
+    try { if (id == null) sessionStorage.setItem("mv_open_event", "list"); else sessionStorage.setItem("mv_open_event", String(id)); } catch { /* private window */ }
+  };
   const zone = detectLocalTimeZone();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -88,6 +98,15 @@ export function EventSettings({
   });
 
 
+
+  // One event of their own: open it. The list is for choosing, and with one there's nothing to choose.
+  useEffect(() => {
+    if (openId != null || !entries) return;
+    let chose = false;
+    try { chose = sessionStorage.getItem("mv_open_event") === "list"; } catch { /* private window */ }
+    const mineOnly = entries.filter((e) => !!e.show?.showName);
+    if (!chose && mineOnly.length === 1) setOpenIdState(mineOnly[0].event.id);
+  }, [entries, openId]);
 
   const open = entries?.find((e) => e.event.id === openId) ?? null;
   const eventFull =
@@ -132,6 +151,19 @@ export function EventSettings({
     queryFn: async () => (await apiRequest("GET", `/api/host/cohost-slots/${open!.event.id}`)).json(),
     enabled: !!open && open.slotIndex != null && showReady,
   });
+  const { data: plan } = useQuery<{ posts: { selected: boolean; status: string | null; postedAt: string | null }[] }>({
+    queryKey: ["/api/host/campaign", open?.signupId],
+    queryFn: async () => (await apiRequest("GET", `/api/host/campaign?signupId=${open!.signupId}`)).json(),
+    enabled: open?.signupId != null,
+    retry: false,
+  });
+  const planned = (plan?.posts ?? []).filter((p) => p.selected);
+  const postedCount = planned.filter((p) => p.postedAt || p.status === "posted").length;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
   const cohostOpenCount = (cohostBoard?.blocks ?? []).filter((b) => !b.takenBy && !b.mine && !b.yourShow).length;
   const cohostMine = (cohostBoard?.blocks ?? []).filter((b) => b.mine).length;
   // Once, the moment the show is first saved: offer the desk as a pop-up
@@ -296,28 +328,130 @@ export function EventSettings({
         <ArrowLeft className="h-3.5 w-3.5" /> All events
       </button>
 
-      <h2 className="text-xl font-bold tracking-tight">{open.event.name}</h2>
+      {(() => {
+        const air = open.slotIndex != null
+          ? onAirWindow(slotStart(open.event.startAtUtc, open.event.slotMinutes, open.slotIndex), {
+              onAirMinutes: open.event.onAirMinutes,
+              bufferMinutes: open.event.bufferMinutes,
+              bufferPosition: open.event.bufferPosition,
+            })
+          : null;
+        const target = air ? air.start.getTime() : new Date(open.event.startAtUtc).getTime();
+        const eventEnd = new Date(open.event.startAtUtc).getTime() + open.event.durationHours * 3600_000;
+        const live = air ? now >= air.start.getTime() && now < air.end.getTime() : now >= target && now < eventEnd;
+        const over = air ? now >= air.end.getTime() : now >= eventEnd;
+        const left = Math.max(0, target - now);
+        const d = Math.floor(left / 86_400_000), h = Math.floor((left % 86_400_000) / 3_600_000), m = Math.floor((left % 3_600_000) / 60_000);
+        const countdown: [string, string][] = d > 0 ? [[String(d), d === 1 ? "day" : "days"], [String(h), h === 1 ? "hr" : "hrs"], [String(m).padStart(2, "0"), "min"]] : [[String(h), h === 1 ? "hr" : "hrs"], [String(m).padStart(2, "0"), "min"]];
+        return (
+          /* The event's own dashboard: a dark card like the home page's —
+             what it is, when you're on, how long until — with the things to
+             do as doors under it, not three tabs to guess between. */
+          <div data-testid="event-dashboard">
+            <div className="relative overflow-hidden rounded-2xl bg-[#04102b] px-5 pb-16 pt-5 text-white sm:px-7 sm:pt-6">
+              <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
+              <div className="pointer-events-none absolute -right-8 -top-8 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
+              <div className="relative flex flex-wrap items-center justify-between gap-6">
+                <div className="flex min-w-0 items-center gap-4">
+                  {open.event.imageUrl ? (
+                    <img src={open.event.imageUrl} alt="" className="h-20 w-20 shrink-0 rounded-2xl object-cover ring-4 ring-white/10 sm:h-24 sm:w-24" />
+                  ) : (
+                    <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-white/10 sm:h-24 sm:w-24"><CalendarDays className="h-8 w-8 text-[#F0A71F]" /></span>
+                  )}
+                  <div className="min-w-0">
+                    <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#F0A71F]">
+                      <span className={`h-1.5 w-1.5 rounded-full ${live ? "animate-pulse bg-red-500" : "bg-[#F0A71F]"}`} /> {live ? "Live now" : over ? "Event over" : "Your event"}
+                    </p>
+                    <h2 className="mt-1 text-2xl font-bold tracking-tight text-white [text-wrap:balance] sm:text-3xl">{open.event.name}</h2>
+                    <p className="mt-1 text-sm text-white/75">
+                      {formatDateInZone(new Date(open.event.startAtUtc), zone)} · {open.event.durationHours} hours
+                    </p>
+                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className={`inline-flex max-w-full items-center gap-1 truncate rounded-full px-2.5 py-1 font-semibold ${showReady ? "bg-white/10 text-white" : "border border-dashed border-white/30 text-white/70"}`}>
+                        {showReady && <Check className="h-3 w-3 shrink-0 text-emerald-400" />}
+                        <span className="truncate">{showReady ? open.show!.showName : "Show not set up"}</span>
+                      </span>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold ${air ? "bg-[#F0A71F] text-[#1a1200]" : "border border-dashed border-white/30 text-white/70"}`}>
+                        <Clock className="h-3 w-3" /> {air ? `${onAirLabel} · ${zoneLabel(zone)}` : "No time yet"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {/* How long until: the number that matters on this page. */}
+                {!over && (
+                  <div className="shrink-0 text-right" data-testid="event-countdown">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/60">{live ? (air ? "You're on air" : "It's on") : air ? "You're on in" : "Starts in"}</p>
+                    {live ? (
+                      <p className="mt-1 text-3xl font-bold text-[#F0A71F]">Now</p>
+                    ) : (
+                      <p className="mt-1 flex items-baseline justify-end gap-3">
+                        {countdown.map(([n, u]) => (
+                          <span key={u} className="flex items-baseline gap-1">
+                            <span className="text-4xl font-bold tabular-nums text-white sm:text-5xl">{n}</span>
+                            <span className="text-xs font-semibold uppercase text-white/60">{u}</span>
+                          </span>
+                        ))}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
 
-      {/* ------------------------------------- slot and green room, in one line */}
-      {/* Two full-width cards to say one time and offer one button was most of
-          a screen before anybody reached the thing they came to do. The slot
-          is a clock and a time; the green room is the button beside it. */}
+            {/* The doors, over the foot of the dark card. */}
+            <div className="relative -mt-10 grid gap-3 px-3 sm:grid-cols-2 sm:px-5 xl:grid-cols-4" id="your-time-slot">
+              <Door
+                onClick={() => document.getElementById("event-show-form")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877] dark:text-[#8ab4f8]"><Mic2 className="h-5 w-5" /></span>}
+                title="Your show"
+                line={showReady ? "Name, artwork, format and guests" : "Set it up to take a time"}
+                stat={showReady ? "Ready" : "To do"}
+                good={showReady}
+                testId="event-door-show"
+              />
+              <Door
+                onClick={onOpenPromotion}
+                icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F0A71F]/15 text-[#b77a00]"><Megaphone className="h-5 w-5" /></span>}
+                title="Promotion"
+                line="Share card, posting plan and clips"
+                stat={planned.length ? `${postedCount}/${planned.length} posts out` : air ? "Plan your posts" : "After you take a time"}
+                good={planned.length > 0 && postedCount === planned.length}
+                testId="event-door-promotion"
+              />
+              <Door
+                onClick={onOpenGreenRoom}
+                href={onOpenGreenRoom ? undefined : greenRoomHref}
+                icon={<StudioIcon className="h-10 w-10 rounded-xl" tone="green" />}
+                title="Green room"
+                line="Check your camera and mic, then go live"
+                stat={live ? "Go in now" : "Open any time"}
+                good={live}
+                testId="event-door-greenroom"
+              />
+              <Door
+                onClick={air && showReady ? () => setCohostOpen(true) : undefined}
+                icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600/10 text-emerald-700"><Users className="h-5 w-5" /></span>}
+                title="Co-host"
+                line="Sit in at the desk with Alex or Riccoh"
+                stat={cohostMine > 0 ? `${cohostMine} hour${cohostMine === 1 ? "" : "s"} yours` : cohostBoard ? `${cohostOpenCount} open` : air && showReady ? "Take an hour" : "After your show's set"}
+                good={cohostMine > 0}
+                testId="event-door-cohost"
+              />
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Your time: change it or give it up. */}
       {open.slotIndex != null ? (
-        showReady ? (
-          /* Three narrow cards: your time, the green room, and the desk. */
-          <div className="mt-4 grid scroll-mt-24 gap-3 sm:grid-cols-3" id="your-time-slot" data-testid="event-strip">
-            <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877]">
-                <Clock className="h-4.5 w-4.5" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-bold text-[#053877] dark:text-[#8ab4f8]">{onAirLabel}</span>
-                <span className="block truncate text-xs text-muted-foreground">{zoneLabel(zone)} · your time</span>
-              </span>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-2.5 text-sm" data-testid="event-strip">
+          <span className="flex items-center gap-2 text-muted-foreground">
+            <Clock className="h-4 w-4" /> Your time: <span className="font-semibold text-foreground">{onAirLabel}</span> · {zoneLabel(zone)}
+          </span>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button variant="ghost" size="sm" className="shrink-0 gap-1.5 text-muted-foreground hover:text-destructive">
-                  <Trash2 className="h-3.5 w-3.5" /> Remove
+                  <Trash2 className="h-3.5 w-3.5" /> Give up this time
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
@@ -341,37 +475,14 @@ export function EventSettings({
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-            </div>
-            <a href={greenRoomHref} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 transition-colors hover:border-emerald-600/60" data-testid="link-green-room">
-              <StudioIcon className="h-9 w-9 shrink-0 rounded-xl" tone="green" />
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-foreground">Green room</span>
-                <span className="block truncate text-xs text-muted-foreground">Check your camera and mic, any time</span>
-              </span>
-            </a>
-            <button type="button" onClick={() => setCohostOpen(true)} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-left transition-colors hover:border-[#F0A71F]/70" data-testid="button-cohost-card">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F0A71F]/15 text-[#b77a00]">
-                <Mic2 className="h-4.5 w-4.5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-foreground">{cohostMine > 0 ? `Co-hosting ${cohostMine} hour${cohostMine === 1 ? "" : "s"}` : "Co-host an hour"}</span>
-                <span className="block truncate text-xs text-muted-foreground">{cohostBoard ? `${cohostOpenCount} open at the desk` : "Sit in with Alex or Riccoh"}</span>
-              </span>
-            </button>
-          </div>
-        ) : (
-          /* No show yet: the time, quietly, and straight into the form below. */
-          <p className="mt-2 flex flex-wrap items-center gap-x-2 text-sm text-muted-foreground" id="your-time-slot" data-testid="event-time-line">
-            <Clock className="h-3.5 w-3.5" /> Your time: <span className="font-semibold text-foreground">{onAirLabel}</span> · {zoneLabel(zone)}
-          </p>
-        )
+        </div>
       ) : (
-        <div className="mt-4 scroll-mt-24 rounded-2xl border border-border bg-card p-5" id="your-time-slot">
+        <div className="mt-6 rounded-2xl border border-border bg-card p-5">
           <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">Choose a time</h3>
           <p className="mb-3 mt-1 text-sm text-muted-foreground">
             {open.show?.showName
               ? "Tap any open time to take it."
-              : "Save your show above first — a slot needs a show attached to it."}
+              : "Save your show below first — a slot needs a show attached to it."}
           </p>
           <EventSlotPicker
             event={open.event}
@@ -409,7 +520,7 @@ export function EventSettings({
       )}
 
       {openShow && !(open.slotIndex == null && eventFull) && (
-        <div className="mt-6">
+        <div className="mt-6 scroll-mt-6" id="event-show-form">
           <EventShowForm
             eventId={open.event.id}
             eventName={open.event.name}
@@ -452,4 +563,32 @@ export function EventSettings({
       )}
     </section>
   );
+}
+
+/** A door on the event's dashboard: what it is, a line, and where it stands. */
+function Door({ onClick, href, icon, title, line, stat, good, testId }: {
+  onClick?: () => void;
+  href?: string;
+  icon: React.ReactNode;
+  title: string;
+  line: string;
+  stat: string;
+  good?: boolean;
+  testId: string;
+}) {
+  const inner = (
+    <>
+      <span className="flex items-start justify-between gap-2">
+        {icon}
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${good ? "bg-emerald-600/10 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>{stat}</span>
+      </span>
+      <span className="mt-3 flex items-center gap-1.5 text-base font-bold text-foreground">
+        {title} {(onClick || href) && <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" />}
+      </span>
+      <span className="mt-0.5 block text-sm text-muted-foreground">{line}</span>
+    </>
+  );
+  const cls = `group flex flex-col rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition-all ${onClick || href ? "hover:-translate-y-0.5 hover:border-[#053877]/30 hover:shadow-md" : "cursor-default opacity-80"}`;
+  if (href) return <a href={href} target="_blank" rel="noreferrer" className={cls} data-testid={testId}>{inner}</a>;
+  return <button type="button" onClick={onClick} disabled={!onClick} className={cls} data-testid={testId}>{inner}</button>;
 }

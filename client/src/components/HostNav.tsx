@@ -1,4 +1,5 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
+import { LogoLockupOnDark } from "@/components/Logo";
 import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones } from "lucide-react";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -39,7 +40,10 @@ export function HostNav({
   proOpen = false,
   cohostHours = 0,
   account,
+  admin,
 }: {
+  /** The admin's Back to admin / View as, under the mark (only ever passed for an admin). */
+  admin?: ReactNode;
   /** The person, at the foot of the column: where Profile and Sign out live, as in most apps. */
   account?: { name: string; email: string; photo: string; onSignOut: () => void };
   screen: HostScreen;
@@ -57,7 +61,7 @@ export function HostNav({
 }) {
   const groups: { title: string; items: Item[] }[] = [
     // Most-used first. Promotion lives inside Events (it's about an event);
-    // Profile and Integrations live in the account card at the foot.
+    // Profile lives in the account card at the foot; Integrations is in both.
     {
       title: "Your show",
       items: [
@@ -72,6 +76,8 @@ export function HostNav({
         { key: "recordings", label: "Library", hint: "Your episodes: studio sessions, uploads and clean episodes", icon: Library },
         { key: "postify", label: "Pōstify", hint: "Clips and a clean episode, from any episode", icon: Wand2, tag: "Beta" },
         { key: "social", label: "Social", hint: "Post and schedule to your accounts", icon: Share2 },
+        // In the column, not only in the account card: that's where people look for it.
+        { key: "integrations", label: "Integrations", hint: "Zoom, YouTube and your social accounts", icon: Link2 },
       ],
     },
     {
@@ -105,7 +111,6 @@ export function HostNav({
   const greenRoomItem: Item = { key: "greenroom", label: "Green room", hint: "Into the studio, and what to check first", icon: Headphones };
   const accountItems: Item[] = [
     { key: "editProfile", label: "Profile", hint: "About you", icon: UserRound },
-    { key: "integrations", label: "Integrations", hint: "Connected accounts", icon: Link2 },
   ];
 
   const link = (it: Item, compact: boolean) => {
@@ -184,10 +189,15 @@ export function HostNav({
         {[...groups.flatMap((g) => g.items).flatMap((it) => (it.key === "events" ? [it, greenRoomItem] : [it])), ...accountItems].map((it) => link(it, true))}
       </nav>
       {/* Desktop: the column. */}
-      <nav className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-10rem)]" aria-label="Dashboard sections">
+      <nav className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-3rem)]" aria-label="Dashboard sections">
         {/* Navy, the same as the command card beside it, so the page reads
             as one dark frame with the work in the middle. */}
-        <div className="flex min-h-[calc(100vh-10rem)] flex-col gap-5 rounded-2xl bg-[#04102b] p-3 shadow-sm">
+        <div className="flex min-h-[calc(100vh-3rem)] flex-col gap-5 rounded-2xl bg-[#04102b] p-3 shadow-sm">
+          {/* The mark heads the column now that there's no header bar. */}
+          <div className="px-3 pb-1 pt-2">
+            <Link href="/host/dashboard" data-testid="link-workspace-home-nav"><LogoLockupOnDark className="h-9 w-auto" /></Link>
+            {admin && <div className="mt-3 [&_a]:!border-white/20 [&_button]:!border-white/20">{admin}</div>}
+          </div>
           {groups.map((g) => {
             const items = g.items;
             return (

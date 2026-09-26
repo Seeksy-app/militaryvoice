@@ -516,28 +516,17 @@ function AnchoredHeading({ id, icon: Icon, label }: { id: string; icon: typeof R
   );
 }
 
-/** An event's two sides: its details, and promoting it. Promotion is about an event, so it lives here. */
-function EventTabs({ active, onGo }: { active: "events" | "promotion" | "greenroom"; onGo: (s: "events" | "promotion" | "greenroom") => void }) {
+/** Promotion and the green room belong to an event: the way back to its dashboard. */
+function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
   return (
-    <div className="mt-6 flex gap-1 border-b border-border" role="tablist" data-testid="event-tabs">
-      {([
-        { k: "events", label: "Details" },
-        { k: "promotion", label: "Promotion" },
-        { k: "greenroom", label: "Green room" },
-      ] as const).map((t) => (
-        <button
-          key={t.k}
-          type="button"
-          role="tab"
-          aria-selected={active === t.k}
-          onClick={() => onGo(t.k)}
-          className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${active === t.k ? "border-[#F0A71F] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
-          data-testid={`event-tab-${t.k}`}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
+    <button
+      type="button"
+      onClick={() => onGo("events")}
+      className="mb-1 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+      data-testid="button-back-to-event"
+    >
+      <ArrowLeft className="h-3.5 w-3.5" /> Back to your event
+    </button>
   );
 }
 
@@ -973,49 +962,26 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           /* A navy bar across the top, the same navy as the nav and the
              command card, so the page is one frame: the mark on the left,
              who you are and the way out on the right. */
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#04102b] px-4 py-3 text-white sm:px-5" data-testid="workspace-header">
+          /* No header bar on a computer: the mark heads the nav column, and
+             who you are, View as and Sign out sit on the dashboard's own card
+             (and the account card). A phone has no column, so it keeps one
+             slim line. */
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-[#04102b] px-4 py-2.5 text-white lg:hidden" data-testid="workspace-header">
             <Link href="/host/dashboard" className="shrink-0" data-testid="link-workspace-home">
-              <LogoLockupOnDark className="h-9 w-auto" />
+              <LogoLockupOnDark className="h-8 w-auto" />
             </Link>
-            <div className="flex min-w-0 items-center gap-3">
-              {/* Who you are is the way to your profile, as everywhere else. */}
-              <button
-                type="button"
-                onClick={() => goTo("editProfile")}
-                title="Your profile"
-                className="-my-1 -ml-1 flex min-w-0 items-center gap-3 rounded-xl py-1 pl-1 pr-2 text-left transition-colors hover:bg-white/10"
-                data-testid="button-header-profile"
-              >
-              {profile?.photoUrl ? (
-                <img
-                  src={resolveUploadUrl(profile.photoUrl)}
-                  alt=""
-                  className="h-10 w-10 shrink-0 rounded-full object-cover ring-2 ring-white/20"
-                />
-              ) : (
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white">
-                  {(profile?.podcastName || data?.email || "?").trim().charAt(0).toUpperCase()}
-                </span>
-              )}
-              <span className="hidden min-w-0 leading-tight sm:block">
-                <span className="block truncate text-sm font-semibold text-white">
-                  {profile?.podcastName || data?.email}
-                </span>
-                <span className="block truncate text-xs text-white/65">{data?.email}</span>
-                {sessionLine && <span className="block truncate text-[11px] text-white/45" data-testid="text-session-until">{sessionLine}</span>}
-              </span>
-              </button>
+            <div className="flex min-w-0 items-center gap-2">
               <SeatSwitcher current={data?.email ?? ""} />
               <Button
                 variant="outline"
                 size="sm"
-                className="ml-1 shrink-0 gap-1.5 rounded-full border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white"
+                className="shrink-0 gap-1.5 rounded-full border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white"
                 onClick={() => logout.mutate()}
                 disabled={logout.isPending}
+                aria-label="Sign out"
                 data-testid="button-host-logout"
               >
                 <LogOut className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Sign out</span>
               </Button>
             </div>
           </div>
@@ -1071,6 +1037,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             feature={proFeature}
             proOpen
             cohostHours={cohostHours}
+            admin={screen === "dashboard" ? undefined : <SeatSwitcher current={data.email} />}
             account={{
               name: profile?.podcastName || profile?.hostName || data.email,
               email: data.email,
@@ -1269,19 +1236,19 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <Discover embedded />
         ) : screen === "greenroom" ? (
           <>
-            <EventTabs active="greenroom" onGo={goTo} />
+            <BackToEvent onGo={goTo} />
             <GreenRoomScreen />
           </>
         ) : screen === "promotion" ? (
           <>
-            <EventTabs active="promotion" onGo={goTo} />
+            <BackToEvent onGo={goTo} />
             <PromotionScreen contacts={data.contacts} />
           </>
         ) : screen === "events" ? (
           <>
-          <EventTabs active="events" onGo={goTo} />
           <EventSettings
-            onOpenPromotion={() => setScreen("promotion")}
+            onOpenPromotion={() => goTo("promotion")}
+            onOpenGreenRoom={() => goTo("greenroom")}
             profilePhotoUrl={profile?.photoUrl}
             onPickSlot={() => {
               setScreen("dashboard");
@@ -1414,6 +1381,21 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     serviceLine={[profile?.serviceStatus, profile?.branch].filter((v) => v && v !== "Not applicable").join(" · ")}
                     eventName={data.event.name.trim()}
                     eventStartUtc={data.event.startAtUtc}
+                    actions={
+                      <div className="hidden items-center gap-2 lg:flex">
+                        <SeatSwitcher current={data.email} />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 shrink-0 gap-1.5 rounded-full border-white/25 bg-transparent px-3 text-xs text-white hover:bg-white/10 hover:text-white"
+                          onClick={() => logout.mutate()}
+                          disabled={logout.isPending}
+                          data-testid="button-card-logout"
+                        >
+                          <LogOut className="h-3.5 w-3.5" /> Sign out
+                        </Button>
+                      </div>
+                    }
                   />
                   {/* The accounts, with faces, sit over the bottom of the
                       dark card — the part of a dashboard worth looking at,
