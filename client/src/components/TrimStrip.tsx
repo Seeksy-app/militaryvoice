@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Check, ChevronsLeft, ChevronsRight, Minus, Plus, Scissors, Sparkles, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ArrowLeftToLine, ArrowRightToLine, ChevronsLeft, ChevronsRight, Scissors, X, ZoomIn, ZoomOut } from "lucide-react";
 
 // Whole seconds down, as the player shows them (21:59, not 22:00).
 const hms = (sec: number) => {
@@ -25,7 +26,7 @@ export type Suggestion = { from: number; to: number; reason: string };
  * second; the view follows the playhead while it plays. A focused handle
  * nudges with the arrow keys (a second, or five with Shift).
  */
-export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra, flags = true, cuts = [], onCuts, suggestions = [], onAccept, onDismiss }: {
+export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra, flags = true, cuts = [], onCuts, suggestions = [], actions, pendingCut }: {
   videoRef: React.RefObject<HTMLVideoElement>;
   duration: number;
   /** Where the player is. */
@@ -50,8 +51,10 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   onCuts?: (cuts: Cut[]) => void;
   /** Cuts the AI recommends: dotted red until accepted or dismissed. */
   suggestions?: Suggestion[];
-  onAccept?: (i: number) => void;
-  onDismiss?: (i: number) => void;
+  /** The job's own buttons, on the left of the timeline's toolbar (Cut before here…). */
+  actions?: ReactNode;
+  /** A cut being chosen: from where it was started to the playhead, drawn as it grows. */
+  pendingCut?: [number, number] | null;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -327,18 +330,19 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
 
   return (
     <div className="select-none" data-testid="trim-strip">
-      {/* Just the zoom: the player above has play and the time, the mode bar says what this is. */}
-      <div className="mb-2 flex flex-wrap items-center gap-1">
-        {d > 60 && tone === "gold" && (
-          <>
-            <button type="button" onClick={() => edge("start")} className="inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-start"><ChevronsLeft className="h-3.5 w-3.5" /> Zoom to start</button>
-            <button type="button" onClick={() => edge("end")} className="inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-end">Zoom to end <ChevronsRight className="h-3.5 w-3.5" /></button>
-          </>
-        )}
+      {/* The job's actions on the left; how you look at the timeline, as small icons, on the right. */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        {actions}
         <div className="ml-auto flex items-center gap-1">
+          {d > 60 && tone === "gold" && (
+            <>
+              <Icon tip="Zoom to the first 30 seconds" onClick={() => edge("start")} testid="trim-edge-start"><ArrowLeftToLine className="h-4 w-4" /></Icon>
+              <Icon tip="Zoom to the last 30 seconds" onClick={() => edge("end")} testid="trim-edge-end"><ArrowRightToLine className="h-4 w-4" /></Icon>
+            </>
+          )}
+          <Icon tip="Zoom out" onClick={() => zoomTo(zoom / 2)} disabled={zoom <= 1} testid="trim-zoom-out"><ZoomOut className="h-4 w-4" /></Icon>
+          <Icon tip="Zoom in" onClick={() => zoomTo(zoom * 2)} disabled={zoom >= maxZoom} testid="trim-zoom-in"><ZoomIn className="h-4 w-4" /></Icon>
           {extra}
-          <button type="button" onClick={() => zoomTo(zoom / 2)} disabled={zoom <= 1} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom out" data-testid="trim-zoom-out"><Minus className="h-3.5 w-3.5" /></button>
-          <button type="button" onClick={() => zoomTo(zoom * 2)} disabled={zoom >= maxZoom} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom in" data-testid="trim-zoom-in"><Plus className="h-3.5 w-3.5" /></button>
         </div>
       </div>
 
@@ -364,22 +368,31 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
               <div className="relative h-7">
                 {cuts.map((c, i) => (
                   <div key={`c${i}`} onPointerDown={downCut("cm", i)} className="absolute top-0.5 z-20 inline-flex h-6 -translate-x-1/2 cursor-grab touch-none items-center gap-1 whitespace-nowrap rounded-md bg-red-600 pl-2 text-[11px] font-bold tabular-nums text-white shadow-sm active:cursor-grabbing" style={{ left: (x(c[0]) + x(c[1])) / 2 }} data-testid={`trim-cut-${i}`}>
-                    <Scissors className="h-3 w-3" /> Cut {hms(c[1] - c[0])}
+                    <Scissors className="h-3 w-3" /> {secs(c[1] - c[0])}
                     <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => onCuts?.(cuts.filter((_, j) => j !== i))} className="rounded p-1 hover:bg-white/20" aria-label="Keep this section after all"><X className="h-3 w-3" /></button>
                   </div>
                 ))}
-                <div onPointerDown={down("start")} className={`${flag} ${ink} ${close ? "-translate-x-full rounded-br-none" : "rounded-bl-none"} ${ghost ? "opacity-70" : ""}`} style={{ left: x(start), backgroundColor: color }} data-testid="trim-flag-start">
-                  Start {hms(start)}
-                </div>
-                <div onPointerDown={down("end")} className={`${flag} ${ink} ${close ? "rounded-bl-none" : "-translate-x-full rounded-br-none"} ${ghost ? "opacity-70" : ""}`} style={{ left: x(end), backgroundColor: color }} data-testid="trim-flag-end">
-                  End {hms(end)}
-                </div>
+                {close ? (
+                  // Edges close together: one flag between them (kept inside the timeline) slides the whole thing.
+                  <div onPointerDown={down("move")} className={`${flag} ${ink} -translate-x-1/2 cursor-grab ${ghost ? "opacity-70" : ""}`} style={{ left: Math.min(Math.max((x(start) + x(end)) / 2, 58), inner - 58), backgroundColor: color }} data-testid="trim-flag-both">
+                    {hms(start)} → {hms(end)}
+                  </div>
+                ) : (
+                  <>
+                    <div onPointerDown={down("start")} className={`${flag} ${ink} rounded-bl-none ${ghost ? "opacity-70" : ""}`} style={{ left: x(start), backgroundColor: color }} data-testid="trim-flag-start">
+                      Start {hms(start)}
+                    </div>
+                    <div onPointerDown={down("end")} className={`${flag} ${ink} -translate-x-full rounded-br-none ${ghost ? "opacity-70" : ""}`} style={{ left: x(end), backgroundColor: color }} data-testid="trim-flag-end">
+                      End {hms(end)}
+                    </div>
+                  </>
+                )}
               </div>
             );
           })()}
 
           {/* The frames. */}
-          <div onPointerDown={down("head")} className="relative h-16 cursor-pointer touch-none overflow-hidden rounded-lg bg-[#050d26]">
+          <div onPointerDown={down("head")} className="relative h-14 cursor-pointer touch-none overflow-hidden rounded-lg bg-[#050d26]">
             <div className="absolute inset-0">
               {Array.from({ length: last - first + 1 }, (_, i) => first + i).map((j) => (
                 <canvas
@@ -400,6 +413,9 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
               style={{ left: x(start), width: Math.max(0, x(end) - x(start)), borderColor: color }}
               data-testid="trim-kept"
             />
+            {pendingCut && pendingCut[1] > pendingCut[0] && (
+              <div className="pointer-events-none absolute inset-y-0 z-[16] border-2 border-dashed border-red-500 bg-red-600/40" style={{ left: x(pendingCut[0]), width: Math.max(2, x(pendingCut[1]) - x(pendingCut[0])) }} data-testid="trim-pending-cut" />
+            )}
             {suggestions.map((g, i) => (
               <div key={`sr${i}`} className="pointer-events-none absolute inset-y-0 z-[14] border-2 border-dashed border-red-500 bg-red-500/15" style={{ left: x(g.from), width: Math.max(2, x(g.to) - x(g.from)) }} />
             ))}
@@ -454,9 +470,29 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
       )}
       {hint && (
         <p className="mt-1.5 text-xs font-semibold text-[#7a4b00] dark:text-[#F0A71F]" data-testid="trim-hint">
-          {hint === "start" ? "Now drag the Start flag to where the show should begin. The player shows the frame as you drag." : "Now drag the End flag to where the show should end. The player shows the frame as you drag."}
+          {hint === "start" ? "Play or drag to where the show should begin, then press Cut before here." : "Play or drag to where the show should end, then press Cut after here."}
         </p>
       )}
     </div>
+  );
+}
+
+/** "11s", or "1:05" past a minute: a cut's length, never mistaken for a time in the episode. */
+function secs(n: number) {
+  const t = Math.max(0, Math.round(n));
+  return t < 60 ? `${t}s` : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+}
+
+/** A small round icon button with its name on hover. */
+export function Icon({ tip, onClick, disabled, testid, active, children }: { tip: string; onClick: () => void; disabled?: boolean; testid?: string; active?: boolean; children: ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" onClick={onClick} disabled={disabled} aria-label={tip} className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:opacity-40 ${active ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`} data-testid={testid}>
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">{tip}</TooltipContent>
+    </Tooltip>
   );
 }

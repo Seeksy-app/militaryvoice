@@ -12,13 +12,13 @@ import { Label } from "@/components/ui/label";
 import { startPlanCheckout, openBillingPortal, startTokenCheckout } from "@/lib/tokens";
 import { PostDialog } from "@/components/PostDialog";
 import { durationOf, uploadToStorage } from "@/lib/upload";
-import { TrimStrip, type Cut } from "@/components/TrimStrip";
+import { TrimStrip, Icon, type Cut } from "@/components/TrimStrip";
 import { UploadRecording } from "@/components/UploadRecording";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard } from "lucide-react";
+import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -562,15 +562,14 @@ function BookendPicker({ label, value, onChange }: { label: string; value: { key
   return (
     <div className="flex min-w-0 items-center gap-2">
       <input ref={input} type="file" accept="video/*" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} />
-      <span className="w-12 shrink-0 text-xs font-semibold text-muted-foreground">{label}</span>
       {value ? (
         <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs">
-          <Film className="h-3 w-3 shrink-0 text-[#053877]" /> <span className="truncate">{value.name}</span>
+          <Film className="h-3 w-3 shrink-0 text-[#053877]" /> <span className="max-w-[9rem] truncate">{label}: {value.name}</span>
           <button type="button" onClick={() => onChange(null)} aria-label={`Remove ${label}`} className="text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /></button>
         </span>
       ) : (
         <Button type="button" size="sm" variant="outline" disabled={pct !== null} onClick={() => input.current?.click()} className="h-7 gap-1.5 rounded-full text-xs">
-          {pct === null ? <Upload className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />} {pct === null ? `Add ${label.toLowerCase()}` : `${pct}%`}
+          {pct === null ? <Plus className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />} {pct === null ? label : `${pct}%`}
         </Button>
       )}
     </div>
@@ -657,7 +656,7 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false, onFocus }:
   const accept = (it: EditSuggestion & { i: number }) => {
     if (it.kind === "start") setTrim((t) => ({ ...t, start: it.to }));
     else if (it.kind === "end") setTrim((t) => ({ ...t, end: it.from }));
-    else setCuts((c) => [...c, [it.from, it.to] as Cut].sort((a, b) => a[0] - b[0]));
+    else setCuts((c) => mergeCuts([...c, [it.from, it.to] as Cut]));
     setAnswered((a) => [...a, sugKey(it.i)]);
   };
   const suggest = useMutation({
@@ -682,150 +681,159 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false, onFocus }:
     },
     onError: (e: Error) => toast({ title: "Couldn't start that", description: e.message, variant: "destructive" }),
   });
-  const focusBtn = onFocus ? (
-    <button type="button" onClick={onFocus} className={`mr-1 inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold ${trimMode ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`} data-testid="post-focus-toggle">
-      {trimMode ? <><Minimize2 className="h-3.5 w-3.5" /> Done</> : <><Maximize2 className="h-3.5 w-3.5" /> Focus</>}
-    </button>
+  // Cut a section, in two presses: where it starts, then (after playing or dragging) where it ends.
+  const [cutFrom, setCutFrom] = useState<number | null>(null);
+  const pendingCut: Cut | null = cutFrom !== null ? [Math.min(cutFrom, pos.t), Math.max(cutFrom, pos.t)] : null;
+  const inKept = (t: number) => Math.min(Math.max(t, trim.start), keepEnd);
+  const cutBefore = () => { const t = inKept(pos.t); setTrim((tr) => ({ start: t < 0.25 ? 0 : t, end: tr.end && tr.end < t + 5 ? 0 : tr.end })); setCutFrom(null); };
+  const cutAfter = () => { const t = inKept(pos.t); setTrim((tr) => ({ start: tr.start > t - 5 ? 0 : tr.start, end: t >= pos.d - 0.25 ? 0 : t })); setCutFrom(null); };
+  const finishCut = () => { if (pendingCut && pendingCut[1] - pendingCut[0] >= 0.5) setCuts((c) => mergeCuts([...c, pendingCut])); setCutFrom(null); };
+  const summary = [trim.start > 0 && `${hms(trim.start)} from the start`, cuts.length > 0 && `${cuts.length === 1 ? "a section" : `${cuts.length} sections`} (${hms(cutTotal)})`, trim.end > 0 && `${hms(pos.d - trim.end)} from the end`].filter(Boolean) as string[];
+  const act = "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors";
+  const focusIcon = onFocus ? (
+    <Icon tip={trimMode ? "Exit full screen" : "Full screen"} onClick={onFocus} active={trimMode} testid="post-focus-toggle">
+      {trimMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+    </Icon>
   ) : null;
-  return (
-    <div className="rounded-2xl border border-border bg-card" data-testid="episode-tools">
-      {/* The timeline, right under the player: what it selects depends on the tab below. */}
-      <div className="border-b border-border p-4">
-        {tab === "clip" ? (
-          <TrimStrip
-            videoRef={videoRef}
-            duration={pos.d}
-            time={pos.t}
-            start={mark.in ?? ghostIn}
-            end={mark.out ?? Math.min(pos.d, (mark.in ?? ghostIn) + 30)}
-            minLen={5}
-            maxLen={180}
-            ghost={mark.in === null}
-            tone="violet"
-            extra={focusBtn}
-            onChange={(st, en) => setMark({ in: st, out: en })}
-          />
-        ) : (
-          <TrimStrip
-            videoRef={videoRef}
-            duration={pos.d}
-            time={pos.t}
-            start={trim.start}
-            end={keepEnd}
-            minLen={5}
-            tone="gold"
-            extra={<>
-              <button type="button" onClick={() => { const t = Math.max(trim.start, Math.min(pos.t, keepEnd - 1)); setCuts((c) => [...c, [t, Math.min(keepEnd, t + 10)] as Cut].sort((a, b) => a[0] - b[0])); }} className="mr-1 inline-flex h-7 items-center gap-1 rounded-full border border-red-300 px-2.5 text-xs font-semibold text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950" data-testid="trim-add-cut">
-                <Scissors className="h-3.5 w-3.5" /> Cut a section
-              </button>
-              {focusBtn}
-            </>}
-            cuts={cuts}
-            onCuts={setCuts}
-            suggestions={pending}
-            onAccept={(i) => accept(pending[i])}
-            onDismiss={(i) => setAnswered((a) => [...a, sugKey(pending[i].i)])}
-            onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
-          />
-        )}
-      </div>
-      {tab === "clip" ? (
-        <div className="space-y-3 p-4">
-          <p className="text-xs text-muted-foreground">What's inside the violet is the clip. Drag its <span className="font-semibold text-foreground">Start</span> and <span className="font-semibold text-foreground">End</span> flags, or slide the whole thing by its middle; the player shows the frame as you drag.</p>
-          <div className="flex flex-wrap items-center gap-2">
-            {lengthNote && <span className={`text-xs font-semibold ${len < 5 || len > 180 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{lengthNote}</span>}
+  const tip = (text: string, el: React.ReactElement) => (
+    <Tooltip><TooltipTrigger asChild>{el}</TooltipTrigger><TooltipContent side="top" className="max-w-[15rem] text-xs">{text}</TooltipContent></Tooltip>
+  );
+
+  if (tab === "clip") {
+    return (
+      <div className="rounded-2xl border border-border bg-card p-3" data-testid="episode-tools">
+        <TrimStrip
+          videoRef={videoRef}
+          duration={pos.d}
+          time={pos.t}
+          start={mark.in ?? ghostIn}
+          end={mark.out ?? Math.min(pos.d, (mark.in ?? ghostIn) + 30)}
+          minLen={5}
+          maxLen={180}
+          ghost={mark.in === null}
+          tone="violet"
+          extra={focusIcon}
+          actions={<>
+            {tip("The clip begins where the playhead is", <button type="button" onClick={() => { const t = now(); setMark((m) => ({ in: t, out: m.out !== null && m.out >= t + 5 && m.out - t <= 180 ? m.out : Math.min(pos.d, t + 30) })); }} className={`${act} border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950`} data-testid="mark-in"><ArrowLeftToLine className="h-3.5 w-3.5" /> Clip starts here</button>)}
+            {tip("The clip ends where the playhead is", <button type="button" onClick={() => { const t = now(); setMark((m) => ({ in: m.in !== null && m.in <= t - 5 && t - m.in <= 180 ? m.in : Math.max(0, t - 30), out: t })); }} className={`${act} border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950`} data-testid="mark-out">Clip ends here <ArrowRightToLine className="h-3.5 w-3.5" /></button>)}
             {mark.in !== null && mark.out !== null && (
-              <Button type="button" size="sm" variant="ghost" onClick={preview} className="gap-1.5 rounded-full" data-testid="mark-preview"><Play className="h-3.5 w-3.5" /> Preview</Button>
+              <button type="button" onClick={preview} className={`${act} border-border hover:bg-muted`} data-testid="mark-preview"><Play className="h-3.5 w-3.5" /> Play the clip</button>
             )}
-            {(mark.in !== null || title || formats.length > 0) && (
-              <button type="button" onClick={reset} className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="mark-reset"><X className="h-3.5 w-3.5" /> Don't save this</button>
-            )}
+          </>}
+          onChange={(st, en) => setMark({ in: st, out: en })}
+        />
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={90} placeholder="Name the clip" className="h-9 min-w-[12rem] flex-1" data-testid="mark-title" />
+          <div className="flex items-center gap-1" role="group" aria-label="Shapes">
+            {CLIP_FORMATS.map((f) => {
+              const on = formats.includes(f);
+              return (
+                <button key={f} type="button" aria-pressed={on} onClick={() => setFormats(CLIP_FORMATS.filter((x) => (x === f ? !on : formats.includes(x))))} className={`rounded-full border px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${on ? "border-violet-600 bg-violet-600 text-white" : "border-border bg-background text-foreground hover:border-violet-400"}`} data-testid={`mark-shape-${f}`}>{f}</button>
+              );
+            })}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={90} placeholder="Title for the clip" className="h-9 min-w-[14rem] flex-1" data-testid="mark-title" />
-            <div className="flex items-center gap-1" role="group" aria-label="Shapes">
-              {CLIP_FORMATS.map((f) => {
-                const on = formats.includes(f);
-                return (
-                  <button key={f} type="button" aria-pressed={on} onClick={() => setFormats(CLIP_FORMATS.filter((x) => (x === f ? !on : formats.includes(x))))} className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize transition-colors ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-background text-foreground hover:border-[#053877]/50"}`} data-testid={`mark-shape-${f}`}>{f}</button>
-                );
-              })}
-            </div>
-            <Button type="button" onClick={() => makeClip.mutate()} disabled={makeClip.isPending || len < 5 || len > 180 || !title.trim() || formats.length === 0} className="gap-2 rounded-full bg-violet-600 text-white hover:bg-violet-700" data-testid="mark-make">
-              {makeClip.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-4 w-4" />} Make clip · {formats.length} credit{formats.length === 1 ? "" : "s"}
-            </Button>
-          </div>
-          <p className="text-[11px] text-muted-foreground">Pick one or more shapes: 1 credit each. Animated captions, cut from the {source === "clean" ? "clean" : "original"} episode. 5 seconds to 3 minutes.</p>
-        </div>
-      ) : (
-        <div className="space-y-3 p-4">
-          {/* The trim is set on the timeline above; this just says what it does. */}
-          <p className={`flex flex-wrap items-center gap-x-2 text-sm ${shortKeep ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`} data-testid="trim-summary">
-            {!trim.start && !trim.end && !cuts.length ? (
-              <span>What's inside the gold is kept. Drag the <span className="font-semibold text-foreground">Start</span> flag to where the show should begin and the <span className="font-semibold text-foreground">End</span> flag to where it should finish; the player shows the frame as you drag. <span className="text-foreground">Zoom to start</span> and <span className="text-foreground">Zoom to end</span> bring the first and last 30 seconds up close.</span>
-            ) : (
-              <>
-                <span className="text-foreground">
-                  {"Cuts " + [trim.start > 0 && `${hms(trim.start)} from the start`, trim.end > 0 && `${hms(pos.d - trim.end)} from the end`, cuts.length > 0 && `${cuts.length === 1 ? "a section" : `${cuts.length} sections`} (${hms(cutTotal)}) from the middle`].filter(Boolean).join(", ").replace(/, ([^,]*)$/, " and $1")}.
-                </span>
-                {shortKeep && <span>That's most of the episode. Check the handles.</span>}
-                <button type="button" onClick={() => { setTrim({ start: 0, end: 0 }); setCuts([]); }} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">Reset</button>
-              </>
-            )}
-          </p>
-          {/* Recommended edits: the AI listens and says where it starts, ends, and what to cut. You decide. */}
-          <div className="rounded-xl border border-red-200/70 bg-red-50/40 p-3 dark:border-red-900/50 dark:bg-red-950/20" data-testid="edit-suggest">
-            {sugBusy ? (
-              <p className="flex items-center gap-2 text-sm text-foreground"><Loader2 className="h-4 w-4 animate-spin text-red-600" /> Listening to the episode for edits… a minute or two. You can keep working.</p>
-            ) : pending.length > 0 ? (
-              <>
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-red-600" /> {pending.length} recommended edit{pending.length === 1 ? "" : "s"}</p>
-                  <button type="button" onClick={() => pending.forEach(accept)} className="text-xs font-semibold text-red-700 underline underline-offset-2 dark:text-red-400" data-testid="suggest-accept-all">Accept all</button>
-                </div>
-                <ul className="space-y-1.5">
-                  {pending.map((it, n) => (
-                    <li key={sugKey(it.i)} className="flex flex-wrap items-center gap-2 text-sm">
-                      <button type="button" onClick={() => seek(it.from)} className="shrink-0 rounded-md bg-background px-1.5 py-0.5 text-xs font-semibold tabular-nums hover:bg-muted" title="Play from here">
-                        {it.kind === "start" ? `Start at ${hms(it.to)}` : it.kind === "end" ? `End at ${hms(it.from)}` : `Cut ${hms(it.from)}–${hms(it.to)}`}
-                      </button>
-                      <span className="min-w-0 flex-1 text-muted-foreground">{it.reason}</span>
-                      <button type="button" onClick={() => accept(it)} className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-semibold text-white hover:bg-red-700" data-testid={`suggest-accept-${n}`}><Check className="h-3 w-3" /> Accept</button>
-                      <button type="button" onClick={() => setAnswered((a) => [...a, sugKey(it.i)])} className="text-xs text-muted-foreground hover:text-foreground">Dismiss</button>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm text-muted-foreground">
-                  {sug?.status === "failed" ? `The suggestions didn't work: ${sug.error || "try again"}.` : sug?.status === "done" && sug.source === source ? ((sug.items ?? []).length ? "All recommended edits answered." : "Nothing to recommend: it starts and ends cleanly.") : "Let the AI listen for tech checks, restarts and interruptions, and recommend the start, the end and what to cut."}
-                </p>
-                <Button type="button" size="sm" onClick={() => suggest.mutate()} disabled={suggest.isPending} className="gap-1.5 rounded-full bg-red-600 text-white hover:bg-red-700" data-testid="suggest-edits">
-                  {suggest.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {sug?.status === "done" && sug.source === source ? "Suggest again" : "Suggest edits"}
-                </Button>
-              </div>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-x-8 gap-y-3">
-            <BookendPicker label="Intro" value={intro} onChange={setIntro} />
-            <BookendPicker label="Outro" value={outro} onChange={setOutro} />
-          </div>
-          <div className={`flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3 ${trimMode ? "sticky bottom-0 -mx-4 -mb-4 rounded-b-2xl bg-card px-4 pb-4 shadow-[0_-8px_16px_-12px_rgba(0,0,0,0.25)]" : ""}`}>
-            <p className="text-xs text-muted-foreground">
-              {busy ? "Making your edited episode… You can close this page; it lands in your Library when it's done." : ed?.status === "done" ? "Your last edit is in your Library." : ed?.status === "failed" ? `The last edit didn't work: ${ed.error || "try again"}.` : `From the ${source} episode. Saved as a new copy in your Library; nothing is replaced.`}
-            </p>
-            <div className="flex items-center gap-2">
-              {ed?.status === "done" && <Button asChild size="sm" variant="outline" className="rounded-full"><a href="/host/dashboard/library">Open Library</a></Button>}
-              <Button type="button" onClick={() => { if (shortKeep && !window.confirm(`This keeps only ${hms(keepLen)} of ${hms(pos.d)}. Make it anyway?`)) return; makeEdit.mutate(); }} disabled={busy || makeEdit.isPending || (!trim.start && !trim.end && !cuts.length && !intro && !outro) || (trim.end > 0 && trim.end < trim.start + 5)} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="edit-make">
-                {busy || makeEdit.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} Make edited episode
+          {tip(
+            `1 credit per shape. ${source === "clean" ? "From the clean episode" : "From the original"}, with animated captions. 5 seconds to 3 minutes.`,
+            <span>
+              <Button type="button" onClick={() => makeClip.mutate()} disabled={makeClip.isPending || len < 5 || len > 180 || !title.trim() || formats.length === 0} className="gap-2 rounded-full bg-violet-600 text-white hover:bg-violet-700" data-testid="mark-make">
+                {makeClip.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-4 w-4" />} Make clip{formats.length ? ` · ${formats.length} credit${formats.length === 1 ? "" : "s"}` : ""}
               </Button>
-            </div>
+            </span>,
+          )}
+        </div>
+        <p className={`mt-2 text-xs ${len && (len < 5 || len > 180) ? "font-semibold text-destructive" : "text-muted-foreground"}`}>
+          {mark.in === null ? "Play or drag to where the clip should start, then press Clip starts here." : lengthNote ? `${lengthNote}. Name it, pick its shapes, and make it.` : ""}
+          {(mark.in !== null || title || formats.length > 0) && <button type="button" onClick={reset} className="ml-2 underline underline-offset-2 hover:text-foreground" data-testid="mark-reset">Start over</button>}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3" data-testid="episode-tools">
+      <TrimStrip
+        videoRef={videoRef}
+        duration={pos.d}
+        time={pos.t}
+        start={trim.start}
+        end={keepEnd}
+        minLen={5}
+        tone="gold"
+        extra={focusIcon}
+        cuts={cuts}
+        onCuts={(c) => setCuts(mergeCuts(c))}
+        suggestions={pending}
+        pendingCut={pendingCut}
+        actions={<>
+          {tip("Removes everything before the playhead", <button type="button" onClick={cutBefore} className={`${act} border-[#F0A71F] text-[#7a4b00] hover:bg-[#F0A71F]/10 dark:text-[#F0A71F]`} data-testid="cut-before"><ArrowLeftToLine className="h-3.5 w-3.5" /> Cut before here</button>)}
+          {cutFrom === null
+            ? tip("Press here, play or drag to where the cut should end, then press …to here", <button type="button" onClick={() => setCutFrom(inKept(pos.t))} className={`${act} border-red-300 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950`} data-testid="cut-from"><Scissors className="h-3.5 w-3.5" /> Cut from here</button>)
+            : <>
+                <button type="button" onClick={finishCut} className={`${act} border-red-600 bg-red-600 text-white hover:bg-red-700`} data-testid="cut-to"><Scissors className="h-3.5 w-3.5" /> …to here{pendingCut ? ` · ${Math.round(pendingCut[1] - pendingCut[0])}s` : ""}</button>
+                <button type="button" onClick={() => setCutFrom(null)} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">Cancel</button>
+              </>}
+          {tip("Removes everything after the playhead", <button type="button" onClick={cutAfter} className={`${act} border-[#F0A71F] text-[#7a4b00] hover:bg-[#F0A71F]/10 dark:text-[#F0A71F]`} data-testid="cut-after">Cut after here <ArrowRightToLine className="h-3.5 w-3.5" /></button>)}
+        </>}
+        onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
+      />
+      <div className={`mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3 ${trimMode ? "sticky bottom-0 -mx-3 -mb-3 rounded-b-2xl bg-card px-3 pb-3 shadow-[0_-8px_16px_-12px_rgba(0,0,0,0.25)]" : ""}`}>
+        <p className={`mr-auto text-sm ${shortKeep ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`} data-testid="trim-summary">
+          {cutFrom !== null
+            ? "Now play or drag to where the cut should end, then press …to here."
+            : summary.length
+              ? <><span className="text-foreground">Cuts {summary.join(", ").replace(/, ([^,]*)$/, " and $1")}.</span>{shortKeep && " That's most of the episode."} <button type="button" onClick={() => { setTrim({ start: 0, end: 0 }); setCuts([]); }} className="text-xs underline underline-offset-2 hover:text-foreground">Undo all</button></>
+              : "Play or drag to a spot, then press a cut button."}
+        </p>
+        <BookendPicker label="Intro" value={intro} onChange={setIntro} />
+        <BookendPicker label="Outro" value={outro} onChange={setOutro} />
+        {tip("The AI listens for tech checks, restarts and interruptions, and suggests the start, the end and what to cut. You decide.", (
+          <Button type="button" size="sm" variant="outline" onClick={() => suggest.mutate()} disabled={suggest.isPending || sugBusy} className="h-9 gap-1.5 rounded-full border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300" data-testid="suggest-edits">
+            {suggest.isPending || sugBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {sugBusy ? "Listening…" : "Suggest edits"}
+          </Button>
+        ))}
+        <Button type="button" onClick={() => { if (shortKeep && !window.confirm(`This keeps only ${hms(keepLen)} of ${hms(pos.d)}. Make it anyway?`)) return; makeEdit.mutate(); }} disabled={busy || makeEdit.isPending || (!trim.start && !trim.end && !cuts.length && !intro && !outro) || (trim.end > 0 && trim.end < trim.start + 5)} className="h-9 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="edit-make">
+          {busy || makeEdit.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Making…</> : <><Wand2 className="h-4 w-4" /> Make edited episode</>}
+        </Button>
+      </div>
+      {(ed?.status === "failed" || sug?.status === "failed" || (sug?.status === "done" && sug.source === source && !pending.length && !(sug.items ?? []).length)) && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {ed?.status === "failed" ? <span className="text-destructive">The last edit didn't work: {ed.error || "try again"}. </span> : null}
+          {sug?.status === "failed" ? <span className="text-destructive">The suggestions didn't work: {sug.error || "try again"}.</span> : sug?.status === "done" && !(sug.items ?? []).length ? "The AI found nothing to cut: it starts and ends cleanly." : null}
+        </p>
+      )}
+      {pending.length > 0 && (
+        <div className="mt-3 rounded-xl border border-red-200/70 bg-red-50/40 p-3 dark:border-red-900/50 dark:bg-red-950/20" data-testid="edit-suggest">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-red-600" /> {pending.length} suggested edit{pending.length === 1 ? "" : "s"}, dotted on the timeline</p>
+            <button type="button" onClick={() => pending.forEach(accept)} className="text-xs font-semibold text-red-700 underline underline-offset-2 dark:text-red-400" data-testid="suggest-accept-all">Accept all</button>
           </div>
+          <ul className="space-y-1.5">
+            {pending.map((it, n) => (
+              <li key={sugKey(it.i)} className="flex flex-wrap items-center gap-2 text-sm">
+                <button type="button" onClick={() => seek(it.from)} className="shrink-0 rounded-md bg-background px-1.5 py-0.5 text-xs font-semibold tabular-nums hover:bg-muted" title="Play from here">
+                  {it.kind === "start" ? `Start at ${hms(it.to)}` : it.kind === "end" ? `End at ${hms(it.from)}` : `Cut ${hms(it.from)}–${hms(it.to)}`}
+                </button>
+                <span className="min-w-0 flex-1 text-muted-foreground">{it.reason}</span>
+                <button type="button" onClick={() => accept(it)} className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-0.5 text-xs font-semibold text-white hover:bg-red-700" data-testid={`suggest-accept-${n}`}><Check className="h-3 w-3" /> Accept</button>
+                <button type="button" onClick={() => setAnswered((a) => [...a, sugKey(it.i)])} className="text-xs text-muted-foreground hover:text-foreground">Dismiss</button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
   );
+}
+
+/** Cuts in order, with any that touch or overlap made one. */
+function mergeCuts(cuts: Cut[]): Cut[] {
+  const out: Cut[] = [];
+  for (const c of [...cuts].sort((a, b) => a[0] - b[0])) {
+    const last = out[out.length - 1];
+    if (last && c[0] <= last[1] + 0.05) last[1] = Math.max(last[1], c[1]);
+    else out.push([c[0], c[1]]);
+  }
+  return out;
 }
 
 /** A row of choices, each with an icon and a hover note saying what it's for. */
@@ -1171,6 +1179,8 @@ export function PostStudio() {
   const [mode, setMode] = useState<"edit" | "clip">("edit");
   // Focus: the player and its timeline alone on the screen, for fine trimming.
   const [focus, setFocus] = useState(false);
+  // Once everything has run (clips, clean episode, the music answered), the pipeline folds to one line.
+  const [pipeOpen, setPipeOpen] = useState(false);
   useEffect(() => {
     if (!focus) return;
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setFocus(false); };
@@ -1311,13 +1321,7 @@ export function PostStudio() {
     return (
       <section className="mt-6" data-testid="post-studio">
         {paidBanner}
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Pōstify</p>
-            <h2 className="mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
-          </div>
-          <CreditBalance beta={beta} plan={plan} />
-        </div>
+        <div className="mb-3 flex justify-end"><CreditBalance beta={beta} plan={plan} /></div>
         {/* Empty Viewer: drop an episode in (it's filed in the Library and picked), or pick one. */}
         <div className={`grid gap-4 ${list.length ? "lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]" : ""}`}>
           {list.length > 0 && episodeList}
@@ -1358,6 +1362,9 @@ export function PostStudio() {
   const recorded = clean?.durationSec || rec.durationSec;
   const removed = clean?.status === "done" || clean?.removedSec ? clean?.removedSec ?? 0 : null;
   const outCount = (clean?.fillers ?? 0) + (clean?.falseStarts ?? 0);
+  const mixNow = parseMusicMix(rec.musicMix);
+  const musicName = mixNow?.status === "done" ? musicList.data?.find((t) => t.key === mixNow.key)?.name ?? "" : "";
+  const pipelineDone = done && clean?.status === "done" && (mixNow?.status === "done" || mixNow?.status === "skipped");
   const stats = [
     { n: clock(recorded), label: "Recorded", color: "text-[#053877] dark:text-[#8fb5e8]" },
     { n: removed != null ? clock(Math.max(0, recorded - removed)) : "–", label: "Clean episode", color: "text-emerald-600 dark:text-emerald-400" },
@@ -1368,25 +1375,12 @@ export function PostStudio() {
   ];
 
   return (
-    <section className="mt-6" data-testid="post-studio">
+    <section className="mt-2" data-testid="post-studio">
       {paidBanner}
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Pōstify</p>
-          <h2 className="mt-1 flex flex-wrap items-center gap-3 text-2xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>From recording to clips {betaBadge}</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <CreditBalance beta={beta} plan={plan} />
-          <Button variant="outline" onClick={() => setSelected(-1)} className="gap-2 rounded-full" data-testid="post-add-episode">
-            <Upload className="h-4 w-4" /> Add an episode
-          </Button>
-        </div>
-      </div>
-
       {/* The episode list became a switcher over the Viewer: the Viewer gets the width. */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
         {/* Preview */}
-        <div className={focus ? "fixed inset-0 z-50 overflow-y-auto bg-background p-3 sm:p-6" : "flex min-w-0 flex-col gap-3"} data-testid={focus ? "post-focus" : undefined}>
+        <div className={focus ? "fixed inset-0 z-50 overflow-y-auto bg-background p-3 sm:p-6" : "flex min-w-0 flex-col gap-2"} data-testid={focus ? "post-focus" : undefined}>
           <div className={focus ? "mx-auto flex w-full max-w-6xl flex-col gap-3" : "contents"}>
           <div className="flex min-w-0 items-center gap-2">
             <DropdownMenu>
@@ -1414,11 +1408,15 @@ export function PostStudio() {
                     </DropdownMenuItem>
                   );
                 })}
+                <DropdownMenuItem onSelect={() => { setSelected(-1); setFocus(false); }} className="gap-2 border-t border-border py-2 font-medium" data-testid="post-add-episode">
+                  <Upload className="h-4 w-4" /> Add an episode
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-
+            {/* Credits matter before a run, not after it. */}
+            {!done && <div className="ml-auto flex items-center gap-2">{betaBadge}<CreditBalance beta={beta} plan={plan} /></div>}
           </div>
-          <div className={`relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5 ${focus ? "mx-auto w-full" : ""}`} style={focus ? { maxWidth: "calc((100vh - 22rem) * 16 / 9)", minWidth: "min(100%, 28rem)" } : undefined} data-testid="post-viewer">
+          <div className={`relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5 ${focus ? "mx-auto w-full" : view === "episode" ? "max-h-[46vh] w-full" : ""}`} style={focus ? { maxWidth: "calc((100vh - 22rem) * 16 / 9)", minWidth: "min(100%, 28rem)" } : undefined} data-testid="post-viewer">
             {view === "episode" && !running ? (
               <video
                 ref={epRef}
@@ -1543,9 +1541,23 @@ export function PostStudio() {
           </div>
         </div>
 
-        {/* Pipeline */}
+        {/* The side: the pipeline while it runs (one line once it's all done), then the numbers. */}
+        <div className="flex min-w-0 flex-col gap-3">
+        {pipelineDone && !pipeOpen ? (
+          <button type="button" onClick={() => setPipeOpen(true)} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-left hover:border-emerald-500/50" data-testid="pipeline-done">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white"><Check className="h-4 w-4" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-foreground">All done</span>
+              <span className="block truncate text-xs text-muted-foreground">{mine.length} clips · clean episode{musicName ? ` · ${musicName}` : ""}</span>
+            </span>
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </button>
+        ) : (
         <div className="rounded-2xl border border-border bg-card p-4">
-          <p className="pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Pipeline</p>
+          <div className="flex items-center justify-between pb-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Pipeline</p>
+            {pipelineDone && <button type="button" onClick={() => setPipeOpen(false)} className="text-xs text-muted-foreground hover:text-foreground">Hide</button>}
+          </div>
           <ul className="divide-y divide-border/60">
             <PipelineRow icon={Disc} title="Recording saved" detail={`${stamp(rec.durationSec)} long`} state={intro ? "active" : "done"} />
             <PipelineRow icon={Film} title="Load the recording" detail={p?.stage === "download" && p.pct != null ? `${p.pct}%` : undefined} state={state("download")} />
@@ -1584,16 +1596,17 @@ export function PostStudio() {
             />
           </ul>
         </div>
-      </div>
-
-      {/* Results */}
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {stats.map((s) => (
-          <div key={s.label} className="rounded-2xl border border-border bg-card px-3 py-4 text-center">
-            <p className={`text-2xl font-bold tabular-nums ${s.color}`}>{s.n}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{s.label}</p>
-          </div>
-        ))}
+        )}
+        {/* The numbers, in the side's white space. */}
+        <div className="grid grid-cols-2 gap-2" data-testid="post-stats">
+          {stats.map((st) => (
+            <div key={st.label} className="rounded-xl border border-border bg-card px-3 py-2.5">
+              <p className={`text-lg font-bold tabular-nums ${st.color}`}>{st.n}</p>
+              <p className="text-[11px] leading-tight text-muted-foreground">{st.label}</p>
+            </div>
+          ))}
+        </div>
+        </div>
       </div>
 
       {clean && (
