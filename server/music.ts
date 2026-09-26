@@ -42,6 +42,15 @@ export function registerMusic(app: Express, requireAdmin: RequestHandler): void 
     res.redirect(302, await signedRecordingUrl(t.url, 3600));
   });
 
+  /** Admin: which key the server reads and what ElevenLabs says about it (never the key itself). */
+  app.get("/api/admin/music/diag", requireAdmin, async (_req, res) => {
+    const name = process.env.ELEVENLABS_API_KEY ? "ELEVENLABS_API_KEY" : process.env.ELEVEN_LABS_API_KEY ? "ELEVEN_LABS_API_KEY" : "";
+    if (!name) return res.json({ name: "none" });
+    const r = await fetch("https://api.elevenlabs.io/v1/user/subscription", { headers: { "xi-api-key": elevenKey() } });
+    const j = r.ok ? ((await r.json()) as { tier?: string; status?: string }) : null;
+    res.json({ name, bothSet: !!process.env.ELEVENLABS_API_KEY && !!process.env.ELEVEN_LABS_API_KEY, subscription: r.status, tier: j?.tier, status: j?.status });
+  });
+
   /** Admin: what's generated and what isn't. */
   app.get("/api/admin/music", requireAdmin, async (_req, res) => {
     const have = new Map((await storage.listMusic()).map((t) => [t.key, t]));
