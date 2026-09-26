@@ -23,7 +23,7 @@ type Drag = { kind: "start" | "end" | "move" | "head"; x0: number; s0: number; e
  * second; the view follows the playhead while it plays. A focused handle
  * nudges with the arrow keys (a second, or five with Shift).
  */
-export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra }: {
+export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra, flags = true }: {
   videoRef: React.RefObject<HTMLVideoElement>;
   duration: number;
   /** Where the player is. */
@@ -41,6 +41,8 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   cut?: { before: string; after: string; onBefore: (t: number) => void; onAfter: (t: number) => void };
   /** More controls for the zoom row (Focus). */
   extra?: React.ReactNode;
+  /** "Start 0:10" / "End 21:59" flags riding the edges, to grab. */
+  flags?: boolean;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -324,6 +326,24 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
             ))}
           </div>
 
+          {/* The flags: the edit's two edges, labelled and easy to grab even zoomed out.
+              Start reaches right from its edge and End reaches left, unless they'd meet. */}
+          {flags && d > 0 && (() => {
+            const close = x(end) - x(start) < 170;
+            const flag = "absolute top-0.5 z-20 inline-flex h-6 cursor-ew-resize touch-none items-center gap-1 whitespace-nowrap rounded-md px-2 text-[11px] font-bold tabular-nums shadow-sm";
+            const ink = tone === "violet" ? "text-white" : "text-[#1a1200]";
+            return (
+              <div className="relative h-7">
+                <div onPointerDown={down("start")} className={`${flag} ${ink} ${close ? "-translate-x-full rounded-br-none" : "rounded-bl-none"} ${ghost ? "opacity-70" : ""}`} style={{ left: x(start), backgroundColor: color }} data-testid="trim-flag-start">
+                  Start {hms(start)}
+                </div>
+                <div onPointerDown={down("end")} className={`${flag} ${ink} ${close ? "rounded-bl-none" : "-translate-x-full rounded-br-none"} ${ghost ? "opacity-70" : ""}`} style={{ left: x(end), backgroundColor: color }} data-testid="trim-flag-end">
+                  End {hms(end)}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* The frames. */}
           <div onPointerDown={down("head")} className="relative h-16 cursor-pointer touch-none overflow-hidden rounded-lg bg-[#050d26]">
             <div className="absolute inset-0">
@@ -390,7 +410,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
       )}
       {hint && (
         <p className="mt-1.5 text-xs font-semibold text-[#7a4b00] dark:text-[#F0A71F]" data-testid="trim-hint">
-          {hint === "start" ? "Now move the playhead to where the show should begin (drag it, or play and pause), then click its ✂ and Cut everything before." : "Now move the playhead to where the show should end, then click its ✂ and Cut everything after."}
+          {hint === "start" ? "Now drag the Start flag to where the show should begin. The player shows the frame as you drag." : "Now drag the End flag to where the show should end. The player shows the frame as you drag."}
         </p>
       )}
     </div>

@@ -683,15 +683,6 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false, onFocus }:
             ghost={mark.in === null}
             tone="violet"
             extra={focusBtn}
-            cut={{
-              before: "Start the clip here",
-              after: "End the clip here",
-              onBefore: (t) => setMark((m) => ({ in: t, out: m.out !== null && m.out >= t + 5 && m.out - t <= 180 ? m.out : Math.min(pos.d, t + 30) })),
-              onAfter: (t) => setMark((m) => {
-                const st = m.in !== null && m.in <= t - 5 && t - m.in <= 180 ? m.in : Math.max(0, t - 30);
-                return { in: st, out: t };
-              }),
-            }}
             onChange={(st, en) => setMark({ in: st, out: en })}
           />
         ) : (
@@ -704,19 +695,13 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false, onFocus }:
             minLen={5}
             tone="gold"
             extra={focusBtn}
-            cut={{
-              before: "Cut everything before",
-              after: "Cut everything after",
-              onBefore: (t) => setTrim((tr) => ({ start: t < 0.25 ? 0 : t, end: tr.end && tr.end < t + 5 ? 0 : tr.end })),
-              onAfter: (t) => setTrim((tr) => ({ start: tr.start > t - 5 ? 0 : tr.start, end: t >= pos.d - 0.25 ? 0 : t })),
-            }}
             onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
           />
         )}
       </div>
       {tab === "clip" ? (
         <div className="space-y-3 p-4">
-          <p className="text-xs text-muted-foreground">Move the playhead to where the clip should start, click its <Scissors className="inline h-3.5 w-3.5 align-[-2px]" /> and <span className="font-semibold text-foreground">Start the clip here</span>; then the same for the end. Or drag the violet handles.</p>
+          <p className="text-xs text-muted-foreground">What's inside the violet is the clip. Drag its <span className="font-semibold text-foreground">Start</span> and <span className="font-semibold text-foreground">End</span> flags, or slide the whole thing by its middle; the player shows the frame as you drag.</p>
           <div className="flex flex-wrap items-center gap-2">
             {lengthNote && <span className={`text-xs font-semibold ${len < 5 || len > 180 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{lengthNote}</span>}
             {mark.in !== null && mark.out !== null && (
@@ -747,7 +732,7 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false, onFocus }:
           {/* The trim is set on the timeline above; this just says what it does. */}
           <p className={`flex flex-wrap items-center gap-x-2 text-sm ${shortKeep ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`} data-testid="trim-summary">
             {!trim.start && !trim.end ? (
-              <span>Move the playhead to where the show should begin, click its <Scissors className="inline h-3.5 w-3.5 align-[-2px]" /> and <span className="text-foreground">Cut everything before</span>. Do the same at the end. <span className="text-foreground">Zoom to start</span> and <span className="text-foreground">Zoom to end</span> show the first and last 30 seconds up close.</span>
+              <span>What's inside the gold is kept. Drag the <span className="font-semibold text-foreground">Start</span> flag to where the show should begin and the <span className="font-semibold text-foreground">End</span> flag to where it should finish; the player shows the frame as you drag. <span className="text-foreground">Zoom to start</span> and <span className="text-foreground">Zoom to end</span> bring the first and last 30 seconds up close.</span>
             ) : (
               <>
                 <span className="text-foreground">
