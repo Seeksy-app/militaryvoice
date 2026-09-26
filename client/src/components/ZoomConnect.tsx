@@ -59,37 +59,35 @@ export function ZoomConnect({ row = false }: { row?: boolean } = {}) {
   if (!zoom.data) return null;
   const z = zoom.data;
   return (
-    <div className={row ? "px-5 py-4" : "mt-6 rounded-2xl border border-border bg-card p-5"} data-testid="zoom-connect">
+    <div className={row ? "px-5 py-3.5" : "mt-6 rounded-2xl border border-border bg-card p-5"} data-testid="zoom-connect">
       <div className="flex flex-wrap items-center gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0B5CFF] text-white"><Video className="h-5 w-5" /></span>
         <div className="min-w-0 flex-1">
-          <p className="font-semibold text-foreground">Zoom</p>
+          <p className="text-sm font-semibold text-foreground">Zoom</p>
           <p className="text-sm text-muted-foreground">
-            {z.connected ? <>Connected as <span className="font-medium text-foreground">{z.zoomEmail || "your Zoom"}</span>. Cloud recordings come into your Library.</> : "Connect Zoom and your cloud recordings come into your Library, ready for Pōstify."}
+            {z.connected ? <>Connected as <span className="font-medium text-foreground">{z.zoomEmail || "your Zoom"}</span></> : "Your cloud recordings, into your Library, ready for Pōstify."}
+            {" · "}
+            <Link href="/help/zoom" className="font-medium text-primary hover:underline" data-testid="zoom-help-link">How it works</Link>
           </p>
-          <Link href="/help/zoom" className="mt-1 inline-block text-xs font-medium text-primary hover:underline" data-testid="zoom-help-link">
-            How it works →
-          </Link>
         </div>
         {z.connected ? (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => setPicking(true)} data-testid="zoom-import-past"><Download className="h-3.5 w-3.5" /> Import past recordings</Button>
-            <Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>Disconnect</Button>
+          /* One line: bring new ones in on their own, bring old ones in, or stop. */
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="mr-1 flex cursor-pointer items-center gap-2 text-sm text-foreground" title="Each new cloud recording comes into your Library by itself">
+              <Switch checked={z.autoImport} onCheckedChange={(v) => auto.mutate(v)} data-testid="zoom-auto" />
+              Auto-import new
+            </label>
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-full px-3.5 text-xs" onClick={() => setPicking(true)} data-testid="zoom-import-past"><Download className="h-3.5 w-3.5" /> Import past</Button>
+            <Button variant="ghost" size="sm" className="h-8 rounded-full px-3 text-xs text-muted-foreground" onClick={() => disconnect.mutate()} disabled={disconnect.isPending}>Disconnect</Button>
           </div>
         ) : z.configured ? (
-          <Button asChild className="gap-2 rounded-full bg-[#0B5CFF] text-white hover:bg-[#0a4fe0]" data-testid="zoom-connect-button">
+          <Button asChild size="sm" className="h-8 gap-2 rounded-full bg-[#0B5CFF] px-3.5 text-xs text-white hover:bg-[#0a4fe0]" data-testid="zoom-connect-button">
             <a href="/api/host/zoom/connect">Connect Zoom</a>
           </Button>
         ) : (
           <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">Coming soon</span>
         )}
       </div>
-      {z.connected && (
-        <label className="mt-4 flex cursor-pointer items-center gap-3 border-t border-border pt-4 text-sm">
-          <Switch checked={z.autoImport} onCheckedChange={(v) => auto.mutate(v)} data-testid="zoom-auto" />
-          Bring each new cloud recording into my Library on its own
-        </label>
-      )}
       <ZoomPicker open={picking} onOpenChange={setPicking} />
       {!z.connected && !row && <ImportLink />}
     </div>
