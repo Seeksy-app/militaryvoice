@@ -18,7 +18,7 @@ import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2 } from "lucide-react";
+import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -533,8 +533,9 @@ function GenerateMore({ beta, plan }: { beta?: Beta; plan?: Plan | null }) {
   );
 }
 
+// Whole seconds down, as the player counts them.
 const hms = (sec: number) => {
-  const t = Math.max(0, Math.round(sec));
+  const t = Math.max(0, Math.floor(sec + 0.001));
   const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), x = t % 60;
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`;
 };
@@ -673,9 +674,7 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false }: {
             minLen={5}
             maxLen={180}
             ghost={mark.in === null}
-            label="Clip"
             tone="violet"
-            title="Making a clip"
             onChange={(st, en) => setMark({ in: st, out: en })}
           />
         ) : (
@@ -686,9 +685,7 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false }: {
             start={trim.start}
             end={keepEnd}
             minLen={5}
-            label="Keeps"
             tone="gold"
-            title="Trimming the episode"
             onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
           />
         )}
@@ -1443,7 +1440,7 @@ export function PostStudio() {
                 value={view}
                 onChange={(v) => { setView(v); setPreview(null); }}
                 options={[
-                  { v: "clips", label: "Clips", icon: Scissors, tip: "Watch the clips Pōstify made" },
+                  { v: "clips", label: "Clips", icon: Clapperboard, tip: "Watch the clips Pōstify made" },
                   { v: "episode", label: "Episode", icon: Film, tip: "Watch the whole episode, to edit it or cut your own clip" },
                 ]}
                 testid="viewer"
@@ -1466,8 +1463,8 @@ export function PostStudio() {
                     value={mode}
                     onChange={setMode}
                     options={[
-                      { v: "edit", label: "Edit episode", icon: Wand2, tip: "Trim the start and end, add an intro or outro. Saved as a new copy in your Library." },
-                      { v: "clip", label: "Make a clip", icon: Crop, tip: "Pick 5 seconds to 3 minutes and cut it into the shapes you choose." },
+                      { v: "edit", label: "Edit episode", icon: Pencil, tip: "Trim the start and end, add an intro or outro. Saved as a new copy in your Library." },
+                      { v: "clip", label: "Make a clip", icon: Scissors, tip: "Pick 5 seconds to 3 minutes and cut it into the shapes you choose." },
                     ]}
                     testid="mode"
                     strong

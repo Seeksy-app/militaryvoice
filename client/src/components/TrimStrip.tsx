@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ChevronsLeft, ChevronsRight, Minus, Pause, Play, Plus } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Minus, Plus } from "lucide-react";
 
 // Whole seconds down, as the player shows them (21:59, not 22:00).
 const hms = (sec: number) => {
@@ -23,7 +23,7 @@ type Drag = { kind: "start" | "end" | "move" | "head"; x0: number; s0: number; e
  * second; the view follows the playhead while it plays. A focused handle
  * nudges with the arrow keys (a second, or five with Shift).
  */
-export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, label, tone = "gold", title }: {
+export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold" }: {
   videoRef: React.RefObject<HTMLVideoElement>;
   duration: number;
   /** Where the player is. */
@@ -35,12 +35,8 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   maxLen?: number;
   /** A suggested selection, drawn faintly until it's touched. */
   ghost?: boolean;
-  /** What the selected part is: "Keeps", "Clip". */
-  label?: string;
   /** Gold for trimming the episode, violet for a clip: two jobs that never look alike. */
   tone?: "gold" | "violet";
-  /** Says which job this timeline is doing, at its head. */
-  title?: string;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -248,8 +244,6 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
       el.scrollLeft = align === "left" ? px - 24 : align === "right" ? px - el.clientWidth + 24 : px - el.clientWidth / 2;
     });
   };
-  // The slider is logarithmic: each step of it doubles or halves the view.
-  const sliderValue = Math.round((Math.log(zoom) / Math.log(maxZoom)) * 100) || 0;
   // Dead air at either end: the first or last 30 seconds across the whole width.
   const edge = (which: "start" | "end") => {
     const z = d / 30;
@@ -262,36 +256,21 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   const step = STEPS.find((s) => (d ? (s / d) * inner : 0) >= 80) ?? STEPS[STEPS.length - 1];
   const ticks = d ? Array.from({ length: Math.floor(d / step) + 1 }, (_, i) => i * step) : [];
 
-  const togglePlay = () => {
-    const vid = videoRef.current;
-    if (!vid) return;
-    if (vid.paused) void vid.play(); else vid.pause();
-  };
   const handle = "absolute inset-y-0 z-20 flex w-4 cursor-ew-resize touch-none items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-[#053877] dark:focus-visible:ring-white";
 
   return (
     <div className="select-none" data-testid="trim-strip">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        {title && <span className="mr-1 text-xs font-bold uppercase tracking-[0.1em]" style={{ color: tone === "violet" ? "#7c3aed" : "#b36b00" }} data-testid="trim-title">{title}</span>}
-        <button type="button" onClick={togglePlay} className="flex h-8 w-8 items-center justify-center rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" aria-label={playing ? "Pause" : "Play"} data-testid="trim-play">
-          {playing ? <Pause className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current" />}
-        </button>
-        <span className="text-sm font-semibold tabular-nums">{hms(time)} <span className="font-normal text-muted-foreground">/ {hms(d)}</span></span>
-        {label && d > 0 && (
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${ghost ? "bg-muted text-muted-foreground" : tone === "violet" ? "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200" : "bg-[#F0A71F]/20 text-[#7a4b00] dark:text-[#F0A71F]"}`} data-testid="trim-label">
-            {label} {hms(start)} → {hms(end)} · {hms(end - start)}
-          </span>
+      {/* Just the zoom: the player above has play and the time, the mode bar says what this is. */}
+      <div className="mb-2 flex flex-wrap items-center gap-1">
+        {d > 60 && tone === "gold" && (
+          <>
+            <button type="button" onClick={() => edge("start")} className="inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-start"><ChevronsLeft className="h-3.5 w-3.5" /> Zoom to start</button>
+            <button type="button" onClick={() => edge("end")} className="inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-end">Zoom to end <ChevronsRight className="h-3.5 w-3.5" /></button>
+          </>
         )}
-        <div className="ml-auto flex flex-wrap items-center gap-1">
-          {d > 60 && tone === "gold" && (
-            <>
-              <button type="button" onClick={() => edge("start")} className="inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-start"><ChevronsLeft className="h-3.5 w-3.5" /> Zoom to start</button>
-              <button type="button" onClick={() => edge("end")} className="mr-2 inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-end">Zoom to end <ChevronsRight className="h-3.5 w-3.5" /></button>
-            </>
-          )}
-          <button type="button" onClick={() => zoomTo(zoom / 2)} disabled={zoom <= 1} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom out"><Minus className="h-3.5 w-3.5" /></button>
-          <input type="range" min={0} max={100} step={1} value={sliderValue} onChange={(e) => zoomTo(Math.pow(maxZoom, Number(e.target.value) / 100))} className="w-24 accent-[#053877]" aria-label="Zoom" data-testid="trim-zoom" />
-          <button type="button" onClick={() => zoomTo(zoom * 2)} disabled={zoom >= maxZoom} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom in"><Plus className="h-3.5 w-3.5" /></button>
+        <div className="ml-auto flex items-center gap-1">
+          <button type="button" onClick={() => zoomTo(zoom / 2)} disabled={zoom <= 1} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom out" data-testid="trim-zoom-out"><Minus className="h-3.5 w-3.5" /></button>
+          <button type="button" onClick={() => zoomTo(zoom * 2)} disabled={zoom >= maxZoom} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom in" data-testid="trim-zoom-in"><Plus className="h-3.5 w-3.5" /></button>
         </div>
       </div>
 
