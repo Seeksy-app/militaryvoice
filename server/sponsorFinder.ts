@@ -11,7 +11,13 @@ import type { SponsorSearchRow } from "../shared/schema.js";
  * here, stored, and checked when the admin page asks.
  */
 const API = "https://api.parallel.ai/v1/tasks/runs";
-const key = () => (process.env.PARALLEL_API_KEY || "").trim();
+const KEY_NAMES = ["PARALLEL_API_KEY", "PARALLEL_AI_API_KEY", "PARALLELAI_API_KEY", "PARALLEL_KEY", "PARALLEL_WEB_API_KEY"];
+const key = () => KEY_NAMES.map((n) => (process.env[n] || "").trim()).find(Boolean) || "";
+/** When the key can't be found: the names that look close (names only, never values). */
+const missing = () => {
+  const near = Object.keys(process.env).filter((n) => /parallel/i.test(n));
+  return `PARALLEL_API_KEY isn't set for this deployment.${near.length ? ` Found: ${near.join(", ")}.` : ""}`;
+};
 
 // Lists are exploratory research (pro, ~2–10 min, $0.10 a run); one person
 // at one company is a cross-checked look-up (core, ~1–5 min, $0.025).
@@ -116,11 +122,11 @@ export function registerSponsorFinder(app: Express, requireAdmin: RequestHandler
     const rows = await storage.listSponsorSearches(eventId);
     // Only the running ones cost a look, and only a handful are ever running.
     const settled = await Promise.all(rows.map((r) => (r.status === "running" ? settle(r).catch(() => r) : r)));
-    res.json({ configured: !!key(), searches: settled });
+    res.json({ configured: !!key(), missing: key() ? "" : missing(), searches: settled });
   });
 
   app.post("/api/admin/sponsor-finder", requireAdmin, async (req, res) => {
-    if (!key()) return res.status(503).json({ message: "PARALLEL_API_KEY isn't set in Vercel yet." });
+    if (!key()) return res.status(503).json({ message: missing() });
     const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
     const brief = String(req.body?.brief ?? "").trim().slice(0, 1500);
     const count = Math.min(25, Math.max(5, Number(req.body?.count) || 12));
@@ -151,7 +157,7 @@ export function registerSponsorFinder(app: Express, requireAdmin: RequestHandler
   // The right person at one company: for a result that came back without
   // one, or a company Riccoh already has in mind.
   app.post("/api/admin/sponsor-finder/contact", requireAdmin, async (req, res) => {
-    if (!key()) return res.status(503).json({ message: "PARALLEL_API_KEY isn't set in Vercel yet." });
+    if (!key()) return res.status(503).json({ message: missing() });
     const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
     const company = String(req.body?.company ?? "").trim().slice(0, 200);
     const website = String(req.body?.website ?? "").trim().slice(0, 300);

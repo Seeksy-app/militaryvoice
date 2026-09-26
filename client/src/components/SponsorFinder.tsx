@@ -64,7 +64,7 @@ export function SponsorFinder({ eventId }: { eventId: number }) {
   const [count, setCount] = useState(12);
   const [now, setNow] = useState(Date.now());
 
-  const { data } = useQuery<{ configured: boolean; searches: Search[] }>({
+  const { data } = useQuery<{ configured: boolean; missing?: string; searches: Search[] }>({
     queryKey: ["/api/admin/sponsor-finder", eventId],
     queryFn: () => adminGet(`/api/admin/sponsor-finder?eventId=${eventId}`),
     refetchInterval: (q) => (q.state.data?.searches.some((s) => s.status === "running") ? 12000 : false),
@@ -149,7 +149,7 @@ export function SponsorFinder({ eventId }: { eventId: number }) {
       </div>
 
       {data && !data.configured ? (
-        <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">Add <code className="font-mono text-xs">PARALLEL_API_KEY</code> in Vercel and redeploy to turn this on.</p>
+        <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-900/30 dark:text-amber-200">Add <code className="font-mono text-xs">PARALLEL_API_KEY</code> in Vercel (Production) and redeploy to turn this on.{data.missing?.includes("Found:") ? ` ${data.missing.slice(data.missing.indexOf("Found:"))}` : ""}</p>
       ) : (
         <div className="mt-4 rounded-xl border border-dashed border-[#053877]/40 bg-[#053877]/[0.03] p-3">
           <Textarea
