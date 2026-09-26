@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronsLeft, ChevronsRight, Minus, Pause, Play, Plus } from "lucide-react";
 
+// Whole seconds down, as the player shows them (21:59, not 22:00).
 const hms = (sec: number) => {
-  const s = Math.max(0, Math.round(sec));
+  const s = Math.max(0, Math.floor(sec + 0.001));
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const r = String(s % 60).padStart(2, "0");
@@ -47,6 +48,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   const [width, setWidth] = useState(800);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [hint, setHint] = useState<"" | "start" | "end">("");
   const frame = useRef(0);
   const d = duration || 0;
   const inner = width * zoom;
@@ -198,6 +200,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     ev.preventDefault();
     (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
     setDrag({ kind, x0: ev.clientX, s0: start, e0: end });
+    if (kind === "start" || kind === "end") setHint("");
     if (kind === "head") show(timeAt(ev.clientX));
   };
   const move = (ev: React.PointerEvent) => {
@@ -247,6 +250,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     const z = d / 30;
     if (which === "start") { zoomTo(z, 0, "left"); show(start); }
     else { zoomTo(z, d, "right"); show(end); }
+    setHint(which);
   };
 
   // A tick every `step` seconds, at least ~80px apart.
@@ -275,8 +279,8 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
         <div className="ml-auto flex flex-wrap items-center gap-1">
           {d > 60 && (
             <>
-              <button type="button" onClick={() => edge("start")} className="inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-start"><ChevronsLeft className="h-3.5 w-3.5" /> Trim the start</button>
-              <button type="button" onClick={() => edge("end")} className="mr-2 inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-end">Trim the end <ChevronsRight className="h-3.5 w-3.5" /></button>
+              <button type="button" onClick={() => edge("start")} className="inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-start"><ChevronsLeft className="h-3.5 w-3.5" /> Zoom to start</button>
+              <button type="button" onClick={() => edge("end")} className="mr-2 inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-end">Zoom to end <ChevronsRight className="h-3.5 w-3.5" /></button>
             </>
           )}
           <button type="button" onClick={() => zoomTo(zoom / 2)} disabled={zoom <= 1} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom out"><Minus className="h-3.5 w-3.5" /></button>
@@ -338,6 +342,11 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
           </div>
         </div>
       </div>
+      {hint && (
+        <p className="mt-1.5 text-xs font-semibold text-[#7a4b00] dark:text-[#F0A71F]" data-testid="trim-hint">
+          {hint === "start" ? "Now drag the gold handle on the left to where the show should begin. The player shows the frame." : "Now drag the gold handle on the right to where the show should end. The player shows the frame."}
+        </p>
+      )}
     </div>
   );
 }

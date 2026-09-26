@@ -729,27 +729,25 @@ function EpisodeTools({ rec, source, videoRef, trimMode = false }: {
         </div>
       ) : (
         <div className="space-y-3 p-4">
-          {/* What stays, drawn: gold is kept, grey is cut, the line is where you are. */}
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="w-12 shrink-0 text-xs font-semibold text-muted-foreground">Trim</span>
-              <Button type="button" size="sm" variant="outline" onClick={() => setTrim((t) => ({ start: now(), end: t.end && t.end <= now() ? 0 : t.end }))} className="h-7 rounded-full text-xs" data-testid="trim-start">
-                {trim.start ? `Starts at ${hms(trim.start)}` : "Start here"}
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => setTrim((t) => ({ ...t, end: now() }))} className="h-7 rounded-full text-xs" data-testid="trim-end">
-                {trim.end ? `Ends at ${hms(trim.end)}` : "End here"}
-              </Button>
-              {(trim.start > 0 || trim.end > 0) && <button type="button" onClick={() => setTrim({ start: 0, end: 0 })} className="text-xs text-muted-foreground underline underline-offset-2">Reset</button>}
-            </div>
-            <p className={`text-[11px] ${shortKeep ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`} data-testid="trim-summary">
-              {!trim.start && !trim.end
-                ? "Drag the gold handles on the timeline to where the episode should begin and end: the player shows the frame. Or pause and press Start here / End here."
-                : `Keeps ${hms(trim.start)} to ${hms(keepEnd)}: ${hms(keepLen)} of ${hms(pos.d)}.${shortKeep ? " That's most of the episode cut. Check the start and end." : ""}`}
-            </p>
+          {/* The trim is set on the timeline above; this just says what it does. */}
+          <p className={`flex flex-wrap items-center gap-x-2 text-sm ${shortKeep ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`} data-testid="trim-summary">
+            {!trim.start && !trim.end ? (
+              <span>Drag the gold handles on the timeline to cut the start and the end. <span className="text-foreground">Zoom to start</span> and <span className="text-foreground">Zoom to end</span> show the first and last 30 seconds up close.</span>
+            ) : (
+              <>
+                <span className="text-foreground">
+                  {[trim.start > 0 && `Cuts ${hms(trim.start)} from the start`, trim.end > 0 && `${trim.start > 0 ? "and" : "Cuts"} ${hms(pos.d - trim.end)} from the end`].filter(Boolean).join(" ")}.
+                </span>
+                {shortKeep && <span>That's most of the episode. Check the handles.</span>}
+                <button type="button" onClick={() => setTrim({ start: 0, end: 0 })} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">Reset</button>
+              </>
+            )}
+          </p>
+          <div className="flex flex-wrap gap-x-8 gap-y-3">
+            <BookendPicker label="Intro" value={intro} onChange={setIntro} />
+            <BookendPicker label="Outro" value={outro} onChange={setOutro} />
           </div>
-          <BookendPicker label="Intro" value={intro} onChange={setIntro} />
-          <BookendPicker label="Outro" value={outro} onChange={setOutro} />
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+          <div className={`flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3 ${trimMode ? "sticky bottom-0 -mx-4 -mb-4 rounded-b-2xl bg-card px-4 pb-4 shadow-[0_-8px_16px_-12px_rgba(0,0,0,0.25)]" : ""}`}>
             <p className="text-xs text-muted-foreground">
               {busy ? "Making your edited episode… You can close this page; it lands in your Library when it's done." : ed?.status === "done" ? "Your last edit is in your Library." : ed?.status === "failed" ? `The last edit didn't work: ${ed.error || "try again"}.` : `From the ${source} episode. Saved as a new copy in your Library; nothing is replaced.`}
             </p>
