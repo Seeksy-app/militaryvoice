@@ -5522,8 +5522,20 @@ export function registerRoutes(app: Express): void {
       res.json({ ok: true, requeued: true });
       return;
     }
-    await storage.setClipStatus(rec.id, "failed", String(req.body?.error ?? "").slice(0, 500));
+    const raw = String(req.body?.error ?? "");
+    // Nothing said in it (a demo over music, a silent screen share): nothing
+    // for Pōstify to pick from, and nothing that trying again would change.
+    const silent = /no transcript/i.test(raw);
+    await storage.setClipStatus(rec.id, "failed", (silent ? "There's no talking in this recording, so there's nothing to clip. Your credits for it are back." : raw).slice(0, 500));
     res.json({ ok: true });
+    // Credits back for an episode that couldn't be made, once.
+    if (silent) {
+      const charge = await storage.tokenRowByRef(`episode:${rec.id}`);
+      const back = charge ? -charge.delta + (charge.overage || 0) : 0;
+      if (charge && back > 0 && !(await storage.hasTokenRef(`refund:episode:${rec.id}`))) {
+        await storage.addTokens({ email: charge.email, delta: back, reason: `Refund: ${rec.title || "episode"} had no talking`, ref: `refund:episode:${rec.id}` }).catch((e) => console.error("Refund failed:", (e as Error).message));
+      }
+    }
   });
 
   /** A podcaster's own clips, newest first. */

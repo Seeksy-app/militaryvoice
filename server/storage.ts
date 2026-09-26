@@ -842,6 +842,8 @@ export interface IStorage {
   claimEpisodeEdit(): Promise<RecordingRow | undefined>;
   createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number; free: boolean; queue?: boolean }): Promise<RecordingRow>;
   hasTokenRef(ref: string): Promise<boolean>;
+  /** The ledger row a charge wrote, by its ref. */
+  tokenRowByRef(ref: string): Promise<{ email: string; delta: number; overage: number } | undefined>;
   claimClipJob(): Promise<RecordingRow | undefined>;
   appendTranscript(studioId: number, eventId: number, lines: { speaker: string; text: string; startMs: number; endMs: number }[]): Promise<number>;
   transcriptBetween(studioId: number, startMs: number, endMs: number): Promise<TranscriptLineRow[]>;
@@ -1948,6 +1950,12 @@ class DatabaseStorage implements IStorage {
         folderId: source.folderId,
       })
       .returning();
+    return row;
+  }
+
+  async tokenRowByRef(ref: string): Promise<{ email: string; delta: number; overage: number } | undefined> {
+    await ready();
+    const [row] = await db.select({ email: postifyTokens.email, delta: postifyTokens.delta, overage: postifyTokens.overage }).from(postifyTokens).where(eq(postifyTokens.ref, ref)).limit(1);
     return row;
   }
 
