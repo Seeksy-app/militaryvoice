@@ -433,7 +433,7 @@ export async function speakerFocus(source: string, m: Moment, words: string, who
       // 768 wide: enough to see who's talking, a third of the image tokens of 1280.
       "-vf", `crop=${even(whole.w)}:${even(whole.h)}:${whole.x}:${whole.y},scale=768:-2`, frame]);
     const img = (await fs.readFile(frame)).toString("base64");
-    const client = new Anthropic({ apiKey: key });
+    const client = new Anthropic({ apiKey: key, timeout: 45_000, maxRetries: 1 }) // a stalled look must not hold the job for half an hour;
     // Pointing at who's speaking is a small look, asked ~10 times a clip:
     // Sonnet does it well at a fraction of Opus's price. Opus stays on
     // choosing the moments, which is the product.
@@ -921,7 +921,7 @@ export async function pickMoments(job: Job, lines: Line[]): Promise<Moment[]> {
   const n = job.clipCount && job.clipCount > 0 ? Math.min(12, job.clipCount) : WANTED;
   if (!key) return densestStretches(lines, n);
 
-  const client = new Anthropic({ apiKey: key });
+  const client = new Anthropic({ apiKey: key, timeout: 5 * 60_000, maxRetries: 1 });
   const prompt = `You are cutting clips from one segment of a 24-hour podcastathon for the military and veteran community.
 
 Show: ${job.show}${job.host ? `\nHost: ${job.host}` : ""}
