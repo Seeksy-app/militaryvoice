@@ -23,7 +23,7 @@ type Drag = { kind: "start" | "end" | "move" | "head"; x0: number; s0: number; e
  * second; the view follows the playhead while it plays. A focused handle
  * nudges with the arrow keys (a second, or five with Shift).
  */
-export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, label }: {
+export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, label, tone = "gold", title }: {
   videoRef: React.RefObject<HTMLVideoElement>;
   duration: number;
   /** Where the player is. */
@@ -35,8 +35,12 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   maxLen?: number;
   /** A suggested selection, drawn faintly until it's touched. */
   ghost?: boolean;
-  /** What the gold part is: "Keeps", "Clip". */
+  /** What the selected part is: "Keeps", "Clip". */
   label?: string;
+  /** Gold for trimming the episode, violet for a clip: two jobs that never look alike. */
+  tone?: "gold" | "violet";
+  /** Says which job this timeline is doing, at its head. */
+  title?: string;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -49,6 +53,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   const [drag, setDrag] = useState<Drag | null>(null);
   const [playing, setPlaying] = useState(false);
   const [hint, setHint] = useState<"" | "start" | "end">("");
+  const color = tone === "violet" ? "#7c3aed" : "#F0A71F";
   const frame = useRef(0);
   const d = duration || 0;
   const inner = width * zoom;
@@ -262,22 +267,23 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     if (!vid) return;
     if (vid.paused) void vid.play(); else vid.pause();
   };
-  const handle = "absolute inset-y-0 z-20 flex w-4 cursor-ew-resize touch-none items-center justify-center bg-[#F0A71F] outline-none focus-visible:ring-2 focus-visible:ring-[#053877] dark:focus-visible:ring-white";
+  const handle = "absolute inset-y-0 z-20 flex w-4 cursor-ew-resize touch-none items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-[#053877] dark:focus-visible:ring-white";
 
   return (
     <div className="select-none" data-testid="trim-strip">
       <div className="mb-2 flex flex-wrap items-center gap-2">
+        {title && <span className="mr-1 text-xs font-bold uppercase tracking-[0.1em]" style={{ color: tone === "violet" ? "#7c3aed" : "#b36b00" }} data-testid="trim-title">{title}</span>}
         <button type="button" onClick={togglePlay} className="flex h-8 w-8 items-center justify-center rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" aria-label={playing ? "Pause" : "Play"} data-testid="trim-play">
           {playing ? <Pause className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current" />}
         </button>
         <span className="text-sm font-semibold tabular-nums">{hms(time)} <span className="font-normal text-muted-foreground">/ {hms(d)}</span></span>
         {label && d > 0 && (
-          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${ghost ? "bg-muted text-muted-foreground" : "bg-[#F0A71F]/20 text-[#7a4b00] dark:text-[#F0A71F]"}`} data-testid="trim-label">
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums ${ghost ? "bg-muted text-muted-foreground" : tone === "violet" ? "bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200" : "bg-[#F0A71F]/20 text-[#7a4b00] dark:text-[#F0A71F]"}`} data-testid="trim-label">
             {label} {hms(start)} → {hms(end)} · {hms(end - start)}
           </span>
         )}
         <div className="ml-auto flex flex-wrap items-center gap-1">
-          {d > 60 && (
+          {d > 60 && tone === "gold" && (
             <>
               <button type="button" onClick={() => edge("start")} className="inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-start"><ChevronsLeft className="h-3.5 w-3.5" /> Zoom to start</button>
               <button type="button" onClick={() => edge("end")} className="mr-2 inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-end">Zoom to end <ChevronsRight className="h-3.5 w-3.5" /></button>
@@ -319,18 +325,18 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
             {/* What's kept: gold edges; drag the middle to slide it. */}
             <div
               onPointerDown={down("move")}
-              className={`absolute inset-y-0 z-10 cursor-grab touch-none rounded-md border-y-[3px] border-[#F0A71F] active:cursor-grabbing ${ghost ? "opacity-50" : ""}`}
-              style={{ left: x(start), width: Math.max(0, x(end) - x(start)) }}
+              className={`absolute inset-y-0 z-10 cursor-grab touch-none rounded-md border-y-[3px] active:cursor-grabbing ${ghost ? "opacity-50" : ""}`}
+              style={{ left: x(start), width: Math.max(0, x(end) - x(start)), borderColor: color }}
               data-testid="trim-kept"
             />
             <div role="slider" tabIndex={0} aria-label="Start" aria-valuemin={0} aria-valuemax={Math.round(d)} aria-valuenow={Math.round(start)} aria-valuetext={hms(start)}
               onPointerDown={down("start")} onKeyDown={nudge("start")}
-              className={`${handle} rounded-l-md ${ghost ? "opacity-60" : ""}`} style={{ left: x(start) }} data-testid="trim-handle-start">
+              className={`${handle} rounded-l-md ${ghost ? "opacity-60" : ""}`} style={{ left: x(start), backgroundColor: color }} data-testid="trim-handle-start">
               <span className="h-6 w-0.5 rounded bg-[#1a1200]/60" />
             </div>
             <div role="slider" tabIndex={0} aria-label="End" aria-valuemin={0} aria-valuemax={Math.round(d)} aria-valuenow={Math.round(end)} aria-valuetext={hms(end)}
               onPointerDown={down("end")} onKeyDown={nudge("end")}
-              className={`${handle} rounded-r-md ${ghost ? "opacity-60" : ""}`} style={{ left: x(end) - 16 }} data-testid="trim-handle-end">
+              className={`${handle} rounded-r-md ${ghost ? "opacity-60" : ""}`} style={{ left: x(end) - 16, backgroundColor: color }} data-testid="trim-handle-end">
               <span className="h-6 w-0.5 rounded bg-[#1a1200]/60" />
             </div>
           </div>
@@ -344,7 +350,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
       </div>
       {hint && (
         <p className="mt-1.5 text-xs font-semibold text-[#7a4b00] dark:text-[#F0A71F]" data-testid="trim-hint">
-          {hint === "start" ? "Now drag the gold handle on the left to where the show should begin. The player shows the frame." : "Now drag the gold handle on the right to where the show should end. The player shows the frame."}
+          {hint === "start" ? "Now drag the handle on the left to where the show should begin. The player shows the frame." : "Now drag the handle on the right to where the show should end. The player shows the frame."}
         </p>
       )}
     </div>

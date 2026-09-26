@@ -581,16 +581,16 @@ function BookendPicker({ label, value, onChange }: { label: string; value: { key
  * mark a moment and make it a clip; and edit the episode itself — trim the
  * ends, put an intro and outro on — into a new copy in the Library.
  */
-function EpisodeTools({ rec, source, videoRef, trimMode = false }: {
+function EpisodeTools({ rec, source, videoRef, tab, trimMode = false }: {
   rec: Rec; source: "clean" | "original"; videoRef: React.RefObject<HTMLVideoElement>;
-  /** Focus to trim: open on Edit episode. */
+  /** Which job: set by the bar under the player. */
+  tab: "edit" | "clip";
+  /** In Focus: the Make bar stays on screen. */
   trimMode?: boolean;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const now = () => videoRef.current?.currentTime ?? 0;
-  const [tab, setTab] = useState<"clip" | "edit">("clip");
-  useEffect(() => { if (trimMode) setTab("edit"); }, [trimMode]);
   // Make a clip. Shapes start unpicked: the button counts what you choose.
   const [mark, setMark] = useState<{ in: number | null; out: number | null }>({ in: null, out: null });
   const [title, setTitle] = useState("");
@@ -659,9 +659,6 @@ function EpisodeTools({ rec, source, videoRef, trimMode = false }: {
     },
     onError: (e: Error) => toast({ title: "Couldn't start that", description: e.message, variant: "destructive" }),
   });
-  const tabBtn = (k: "clip" | "edit", label: string) => (
-    <button type="button" onClick={() => setTab(k)} className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-[#F0A71F] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`episode-tab-${k}`}>{label}</button>
-  );
   return (
     <div className="rounded-2xl border border-border bg-card" data-testid="episode-tools">
       {/* The timeline, right under the player: what it selects depends on the tab below. */}
@@ -677,6 +674,8 @@ function EpisodeTools({ rec, source, videoRef, trimMode = false }: {
             maxLen={180}
             ghost={mark.in === null}
             label="Clip"
+            tone="violet"
+            title="Making a clip"
             onChange={(st, en) => setMark({ in: st, out: en })}
           />
         ) : (
@@ -688,19 +687,20 @@ function EpisodeTools({ rec, source, videoRef, trimMode = false }: {
             end={keepEnd}
             minLen={5}
             label="Keeps"
+            tone="gold"
+            title="Trimming the episode"
             onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
           />
         )}
       </div>
-      <div className="flex gap-1 border-b border-border px-2">{tabBtn("clip", "Make a clip")}{tabBtn("edit", "Edit episode")}</div>
       {tab === "clip" ? (
         <div className="space-y-3 p-4">
-          <p className="text-xs text-muted-foreground">Drag the gold handles on the timeline: the player shows the frame. Slide the middle to move the clip, zoom in to cut to the second, or pause and press <span className="font-semibold text-foreground">Set start</span> and <span className="font-semibold text-foreground">Set end</span>.</p>
+          <p className="text-xs text-muted-foreground">Drag the violet handles on the timeline: the player shows the frame. Slide the middle to move the clip, zoom in to cut to the second, or pause and press <span className="font-semibold text-foreground">Set start</span> and <span className="font-semibold text-foreground">Set end</span>.</p>
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" size="sm" variant={mark.in === null ? "default" : "outline"} onClick={() => setMark((m) => ({ in: now(), out: m.out !== null && m.out > now() ? m.out : null }))} className={`gap-1.5 rounded-full ${mark.in === null ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} data-testid="mark-in">
+            <Button type="button" size="sm" variant={mark.in === null ? "default" : "outline"} onClick={() => setMark((m) => ({ in: now(), out: m.out !== null && m.out > now() ? m.out : null }))} className={`gap-1.5 rounded-full ${mark.in === null ? "bg-violet-600 text-white hover:bg-violet-700" : ""}`} data-testid="mark-in">
               {mark.in === null ? "Set start" : `Start ${hms(mark.in)}`}
             </Button>
-            <Button type="button" size="sm" variant={mark.in !== null && mark.out === null ? "default" : "outline"} onClick={() => setMark((m) => ({ ...m, out: now() }))} disabled={mark.in === null} className={`gap-1.5 rounded-full ${mark.in !== null && mark.out === null ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} data-testid="mark-out">
+            <Button type="button" size="sm" variant={mark.in !== null && mark.out === null ? "default" : "outline"} onClick={() => setMark((m) => ({ ...m, out: now() }))} disabled={mark.in === null} className={`gap-1.5 rounded-full ${mark.in !== null && mark.out === null ? "bg-violet-600 text-white hover:bg-violet-700" : ""}`} data-testid="mark-out">
               {mark.out === null ? "Set end" : `End ${hms(mark.out)}`}
             </Button>
             {lengthNote && <span className={`text-xs font-semibold ${len < 5 || len > 180 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{lengthNote}</span>}
@@ -721,7 +721,7 @@ function EpisodeTools({ rec, source, videoRef, trimMode = false }: {
                 );
               })}
             </div>
-            <Button type="button" onClick={() => makeClip.mutate()} disabled={makeClip.isPending || len < 5 || len > 180 || !title.trim() || formats.length === 0} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="mark-make">
+            <Button type="button" onClick={() => makeClip.mutate()} disabled={makeClip.isPending || len < 5 || len > 180 || !title.trim() || formats.length === 0} className="gap-2 rounded-full bg-violet-600 text-white hover:bg-violet-700" data-testid="mark-make">
               {makeClip.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Scissors className="h-4 w-4" />} Make clip · {formats.length} credit{formats.length === 1 ? "" : "s"}
             </Button>
           </div>
@@ -760,6 +760,42 @@ function EpisodeTools({ rec, source, videoRef, trimMode = false }: {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** A row of choices, each with an icon and a hover note saying what it's for. */
+function Seg<T extends string>({ value, onChange, options, testid, small = false, strong = false }: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { v: T; label: string; icon: React.ComponentType<{ className?: string }>; tip: string }[];
+  testid: string;
+  small?: boolean;
+  /** The job switch: bigger, and the picked one in its colour. */
+  strong?: boolean;
+}) {
+  return (
+    <div className={`inline-flex rounded-full border border-border bg-card p-1 ${strong ? "shadow-sm" : ""}`} role="group">
+      {options.map((o) => {
+        const on = o.v === value;
+        const picked = strong ? (o.v === "clip" ? "bg-violet-600 text-white" : "bg-[#F0A71F] text-[#1a1200]") : small ? "bg-[#F0A71F] text-[#1a1200]" : "bg-[#053877] text-white dark:bg-white dark:text-[#000741]";
+        return (
+          <Tooltip key={o.v}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-pressed={on}
+                onClick={() => onChange(o.v)}
+                className={`inline-flex items-center gap-1.5 rounded-full font-semibold transition-colors ${strong ? "px-4 py-2 text-sm" : small ? "px-2.5 py-1 text-xs" : "px-3 py-1.5 text-xs"} ${on ? picked : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                data-testid={`${testid}-${o.v}`}
+              >
+                <o.icon className={strong ? "h-4 w-4" : "h-3.5 w-3.5"} /> {o.label}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[16rem] text-xs">{o.tip}</TooltipContent>
+          </Tooltip>
+        );
+      })}
     </div>
   );
 }
@@ -1067,6 +1103,8 @@ export function PostStudio() {
 
   // The Viewer: clips, or the whole episode (clean or original) to watch, mark and edit.
   const [view, setView] = useState<"clips" | "episode">("clips");
+  // What you're doing with the episode: editing it (first, the usual job) or cutting a clip.
+  const [mode, setMode] = useState<"edit" | "clip">("edit");
   // Focus: the player and its timeline alone on the screen, for fine trimming.
   const [focus, setFocus] = useState(false);
   useEffect(() => {
@@ -1315,29 +1353,12 @@ export function PostStudio() {
               </DropdownMenuContent>
             </DropdownMenu>
             {!running && (
-              <Button type="button" size="sm" variant={focus ? "default" : "outline"} onClick={() => { setView("episode"); setPreview(null); setFocus((f) => !f); }} className={`ml-auto shrink-0 gap-1.5 rounded-full ${focus ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} data-testid="post-focus-toggle">
+              <Button type="button" size="sm" variant={focus ? "default" : "outline"} onClick={() => { setView("episode"); setPreview(null); if (!focus) setMode("edit"); setFocus((f) => !f); }} className={`ml-auto shrink-0 gap-1.5 rounded-full ${focus ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} data-testid="post-focus-toggle">
                 {focus ? <><Minimize2 className="h-3.5 w-3.5" /> Done</> : <><Maximize2 className="h-3.5 w-3.5" /> Focus to trim</>}
               </Button>
             )}
           </div>
           <div className={`relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5 ${focus ? "mx-auto w-full" : ""}`} style={focus ? { maxWidth: "calc((100vh - 22rem) * 16 / 9)", minWidth: "min(100%, 28rem)" } : undefined} data-testid="post-viewer">
-            {/* The Viewer: Clips, or the whole Episode (clean or original). */}
-            {!running && (
-              <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
-                <div className="flex gap-1 rounded-full bg-black/60 p-1 text-xs font-semibold backdrop-blur">
-                  {(["clips", "episode"] as const).map((v) => (
-                    <button key={v} type="button" onClick={() => { setView(v); setPreview(null); }} className={`rounded-full px-3 py-1 capitalize ${view === v ? "bg-white text-[#000741]" : "text-white/80 hover:text-white"}`} data-testid={`viewer-${v}`}>{v}</button>
-                  ))}
-                </div>
-                {view === "episode" && clean?.videoKey && (
-                  <div className="flex gap-1 rounded-full bg-black/60 p-1 text-[11px] font-semibold backdrop-blur">
-                    {(["clean", "original"] as const).map((v) => (
-                      <button key={v} type="button" onClick={() => setEpSource(v)} className={`rounded-full px-2.5 py-0.5 capitalize ${epSource === v ? "bg-[#F0A71F] text-[#1a1200]" : "text-white/75 hover:text-white"}`} data-testid={`viewer-source-${v}`}>{v}</button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
             {view === "episode" && !running ? (
               <video
                 ref={epRef}
@@ -1413,11 +1434,54 @@ export function PostStudio() {
               </div>
             )}
           </div>
+          {/* Everything about the Viewer in one bar under it: what you're watching, and
+              what you're doing. Doing sits above the timeline, so it's the last thing
+              read before dragging. */}
+          {!running && (
+            <div className="flex flex-wrap items-center gap-2" data-testid="viewer-bar">
+              <Seg
+                value={view}
+                onChange={(v) => { setView(v); setPreview(null); }}
+                options={[
+                  { v: "clips", label: "Clips", icon: Scissors, tip: "Watch the clips Pōstify made" },
+                  { v: "episode", label: "Episode", icon: Film, tip: "Watch the whole episode, to edit it or cut your own clip" },
+                ]}
+                testid="viewer"
+              />
+              {view === "episode" && clean?.videoKey && (
+                <Seg
+                  value={epSource}
+                  onChange={setEpSource}
+                  options={[
+                    { v: "clean", label: "Clean", icon: Sparkles, tip: "The clean episode: ums, false starts and dead air taken out" },
+                    { v: "original", label: "Original", icon: Disc, tip: "The episode as it was recorded" },
+                  ]}
+                  testid="viewer-source"
+                  small
+                />
+              )}
+              {view === "episode" && (
+                <div className="ml-auto">
+                  <Seg
+                    value={mode}
+                    onChange={setMode}
+                    options={[
+                      { v: "edit", label: "Edit episode", icon: Wand2, tip: "Trim the start and end, add an intro or outro. Saved as a new copy in your Library." },
+                      { v: "clip", label: "Make a clip", icon: Crop, tip: "Pick 5 seconds to 3 minutes and cut it into the shapes you choose." },
+                    ]}
+                    testid="mode"
+                    strong
+                  />
+                </div>
+              )}
+            </div>
+          )}
           {view === "episode" && !running && (
             <EpisodeTools
               rec={rec}
               source={clean?.videoKey && epSource === "clean" ? "clean" : "original"}
               videoRef={epRef}
+              tab={mode}
               trimMode={focus}
             />
           )}
