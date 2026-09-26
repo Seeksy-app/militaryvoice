@@ -3,6 +3,9 @@ import type { Express, Request, Response } from "express";
 import { storage } from "./storage.js";
 import { getSessionEmail, requireHostSession } from "./session.js";
 import type { ZoomConnectionRow } from "../shared/schema.js";
+import { waitUntil } from "@vercel/functions";
+import { signedRecordingUpload } from "./recordingStorage.js";
+import { sendImportReadyEmail } from "./email.js";
 
 /**
  * Zoom, connected per podcaster (OAuth, a Zoom Marketplace app). Their cloud
@@ -63,7 +66,7 @@ async function zoomApi<T>(c: ZoomConnectionRow, path: string): Promise<T> {
   return j;
 }
 
-interface ZoomFile { id: string; file_type: string; file_size?: number; download_url: string; recording_type?: string; status?: string }
+interface ZoomFile { id: string; file_type: string; file_size?: number; download_url: string; recording_type?: string; status?: string; recording_start?: string; recording_end?: string }
 interface ZoomMeeting { uuid: string; id: number | string; topic: string; start_time: string; duration: number; host_id?: string; recording_files?: ZoomFile[] }
 
 /** The one video to keep from a meeting: the speaker with the shared screen, else the speaker, else any finished MP4. */
@@ -77,16 +80,65 @@ export function bestZoomFile(m: ZoomMeeting): ZoomFile | undefined {
 async function queue(email: string, m: ZoomMeeting, downloadToken?: string, auto = false) {
   const f = bestZoomFile(m);
   if (!f) return undefined;
+  // The file's own start and end give its length to the second; the meeting's is whole minutes.
+  const exact = f.recording_start && f.recording_end ? (Date.parse(f.recording_end) - Date.parse(f.recording_start)) / 1000 : NaN;
   return storage.queueImport({
     email,
     title: m.topic || "Zoom recording",
     egressId: `ZOOM_${f.id}`,
     startedAt: new Date(m.start_time || Date.now()).toISOString(),
-    durationSec: (m.duration || 0) * 60,
+    durationSec: Number.isFinite(exact) && exact > 0 ? exact : (m.duration || 0) * 60,
     sizeBytes: f.file_size ?? 0,
     source: JSON.stringify({ provider: "zoom", url: f.download_url, fileId: f.id, meetingId: String(m.id), token: downloadToken || undefined, auto: auto || undefined }),
   });
 }
+
+/**
+ * The fast path: the server copies a Zoom recording straight into storage the
+ * moment it's queued (Zoom to R2, streamed), instead of waiting up to half a
+ * minute for the worker to poll and then downloading and re-uploading it.
+ * Anything that doesn't fit (too big, no length, an error) goes back to the
+ * worker, which does the same job the slow way.
+ */
+const FAST_MAX_BYTES = 450 * 1048576;
+async function fastImport(id: number): Promise<void> {
+  const row = await storage.claimImportById(id);
+  if (!row) return;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 240_000);
+  try {
+    const src = await importFetch(row);
+    if (!src) throw new Error("nowhere to fetch it from");
+    const got = await fetch(src.url, { headers: src.headers, redirect: "follow", signal: ctrl.signal });
+    const len = Number(got.headers.get("content-length") || 0);
+    if (!got.ok || !got.body) throw new Error(`Zoom said ${got.status}`);
+    if (!len || len > FAST_MAX_BYTES) throw new Error(`size ${len}: the worker's job`);
+    const key = `clean/${Date.now()}-zoom-${id}.mp4`;
+    const put = await fetch(signedRecordingUpload(key), {
+      method: "PUT",
+      body: got.body,
+      headers: { "content-type": "video/mp4", "content-length": String(len) },
+      signal: ctrl.signal,
+      duplex: "half",
+    } as RequestInit);
+    if (!put.ok) throw new Error(`storage said ${put.status}`);
+    const moved = await storage.finishImport(id, { url: key, durationSec: row.durationSec, sizeBytes: len });
+    let s: { auto?: boolean } = {};
+    try { s = JSON.parse(row.importSource || "{}"); } catch { s = {}; }
+    if (moved && s.auto === true) {
+      await sendImportReadyEmail({ to: moved.email, recordingId: moved.id, title: moved.title, startedAt: moved.startedAt, durationSec: moved.durationSec, provider: "zoom" }).catch((e) => console.error("Import-ready email failed:", (e as Error).message));
+    }
+  } catch (err) {
+    console.warn(`Fast import ${id} handed to the worker: ${(err as Error).message}`);
+    await storage.releaseImport(id).catch(() => {});
+  } finally {
+    clearTimeout(timer);
+  }
+}
+const importSoon = (id: number) => {
+  const job = fastImport(id);
+  try { waitUntil(job); } catch { /* not on Vercel */ }
+};
 
 /** For the worker: where to fetch an Importing recording from, with the auth it needs right now. */
 export async function importFetch(rec: { email: string; importSource: string }): Promise<{ url: string; headers: Record<string, string> } | null> {
@@ -248,6 +300,7 @@ export function registerZoom(app: Express): void {
       const row = await queue(c.email, m);
       if (!row) return res.status(409).json({ message: "Already in your Library, or no video in that recording." });
       res.status(201).json({ id: row.id });
+      importSoon(row.id);
     } catch (err) {
       res.status(502).json({ message: (err as Error).message });
     }
@@ -271,7 +324,10 @@ export function registerZoom(app: Express): void {
         const m = b.payload?.object as ZoomMeeting | undefined;
         if (m?.host_id) {
           for (const c of await storage.getZoomsByUserId(m.host_id)) {
-            if (c.autoImport) await queue(c.email, m, b.download_token, true);
+            if (c.autoImport) {
+              const row = await queue(c.email, m, b.download_token, true);
+              if (row) importSoon(row.id);
+            }
           }
         }
       }

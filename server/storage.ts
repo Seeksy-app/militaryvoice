@@ -833,6 +833,10 @@ export interface IStorage {
   /** A Zoom recording to bring into someone's Library; nothing if that file is already there. */
   queueImport(v: { email: string; title: string; egressId: string; startedAt: string; durationSec: number; sizeBytes: number; source: string }): Promise<RecordingRow | undefined>;
   claimImport(): Promise<RecordingRow | undefined>;
+  /** Claim one import straight away (the server's fast path); nothing if the worker has it. */
+  claimImportById(id: number): Promise<RecordingRow | undefined>;
+  /** Hand an import back to the worker. */
+  releaseImport(id: number): Promise<void>;
   /** Marks it Ready. Returns the row only when this call moved it from Importing to Ready, so a caller acts on that once. */
   finishImport(id: number, v: { url: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow | undefined>;
   failImport(id: number, error: string): Promise<void>;
@@ -2095,6 +2099,21 @@ class DatabaseStorage implements IStorage {
       )
       .returning();
     return row;
+  }
+
+  async claimImportById(id: number): Promise<RecordingRow | undefined> {
+    await ready();
+    const [row] = await db
+      .update(recordings)
+      .set({ importClaimedAt: new Date().toISOString() })
+      .where(and(eq(recordings.id, id), eq(recordings.status, "Importing"), eq(recordings.importClaimedAt, "")))
+      .returning();
+    return row;
+  }
+
+  async releaseImport(id: number): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ importClaimedAt: "" }).where(and(eq(recordings.id, id), eq(recordings.status, "Importing")));
   }
 
   async finishImport(id: number, v: { url: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow | undefined> {
