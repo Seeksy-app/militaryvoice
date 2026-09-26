@@ -660,11 +660,9 @@ function EpisodeTools({ rec, source, videoRef }: {
   );
   return (
     <div className="rounded-2xl border border-border bg-card" data-testid="episode-tools">
-      <div className="flex gap-1 border-b border-border px-2">{tabBtn("clip", "Make a clip")}{tabBtn("edit", "Edit episode")}</div>
-      {tab === "clip" ? (
-        <div className="space-y-3 p-4">
-          <p className="text-xs text-muted-foreground">Drag the gold handles: the player shows the frame you're on. Slide the middle to move the whole clip, or pause and press <span className="font-semibold text-foreground">Set start</span> and <span className="font-semibold text-foreground">Set end</span>.</p>
-          {/* The episode as frames: drag the gold handles (the player shows the frame), or slide the middle. */}
+      {/* The timeline, right under the player: what it selects depends on the tab below. */}
+      <div className="border-b border-border p-4">
+        {tab === "clip" ? (
           <TrimStrip
             videoRef={videoRef}
             duration={pos.d}
@@ -674,8 +672,26 @@ function EpisodeTools({ rec, source, videoRef }: {
             minLen={5}
             maxLen={180}
             ghost={mark.in === null}
+            label="Clip"
             onChange={(st, en) => setMark({ in: st, out: en })}
           />
+        ) : (
+          <TrimStrip
+            videoRef={videoRef}
+            duration={pos.d}
+            time={pos.t}
+            start={trim.start}
+            end={keepEnd}
+            minLen={5}
+            label="Keeps"
+            onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
+          />
+        )}
+      </div>
+      <div className="flex gap-1 border-b border-border px-2">{tabBtn("clip", "Make a clip")}{tabBtn("edit", "Edit episode")}</div>
+      {tab === "clip" ? (
+        <div className="space-y-3 p-4">
+          <p className="text-xs text-muted-foreground">Drag the gold handles on the timeline: the player shows the frame. Slide the middle to move the clip, zoom in to cut to the second, or pause and press <span className="font-semibold text-foreground">Set start</span> and <span className="font-semibold text-foreground">Set end</span>.</p>
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" size="sm" variant={mark.in === null ? "default" : "outline"} onClick={() => setMark((m) => ({ in: now(), out: m.out !== null && m.out > now() ? m.out : null }))} className={`gap-1.5 rounded-full ${mark.in === null ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} data-testid="mark-in">
               {mark.in === null ? "Set start" : `Start ${hms(mark.in)}`}
@@ -721,18 +737,9 @@ function EpisodeTools({ rec, source, videoRef }: {
               </Button>
               {(trim.start > 0 || trim.end > 0) && <button type="button" onClick={() => setTrim({ start: 0, end: 0 })} className="text-xs text-muted-foreground underline underline-offset-2">Reset</button>}
             </div>
-            <TrimStrip
-              videoRef={videoRef}
-              duration={pos.d}
-              time={pos.t}
-              start={trim.start}
-              end={keepEnd}
-              minLen={5}
-              onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
-            />
             <p className={`text-[11px] ${shortKeep ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`} data-testid="trim-summary">
               {!trim.start && !trim.end
-                ? "Drag the gold handles to where the episode should begin and end: the player shows the frame. Or pause and press Start here / End here."
+                ? "Drag the gold handles on the timeline to where the episode should begin and end: the player shows the frame. Or pause and press Start here / End here."
                 : `Keeps ${hms(trim.start)} to ${hms(keepEnd)}: ${hms(keepLen)} of ${hms(pos.d)}.${shortKeep ? " That's most of the episode cut. Check the start and end." : ""}`}
             </p>
           </div>
