@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import { LogoLockupOnDark } from "@/components/Logo";
+import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones } from "lucide-react";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -195,7 +196,10 @@ export function HostNav({
         <div className="flex min-h-[calc(100vh-3rem)] flex-col gap-5 rounded-2xl bg-[#04102b] p-3 shadow-sm">
           {/* The mark heads the column now that there's no header bar. */}
           <div className="px-3 pb-1 pt-2">
-            <Link href="/host/dashboard" data-testid="link-workspace-home-nav"><LogoLockupOnDark className="h-9 w-auto" /></Link>
+            <div className="flex items-center justify-between gap-2">
+              <Link href="/host/dashboard" data-testid="link-workspace-home-nav"><LogoLockupOnDark className="h-9 w-auto" /></Link>
+              <ThemeSwitch />
+            </div>
             {admin && <div className="mt-3 [&_a]:!border-white/20 [&_button]:!border-white/20">{admin}</div>}
           </div>
           {groups.map((g) => {

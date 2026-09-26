@@ -77,6 +77,7 @@ import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
 import { CohostDashboard, type CohostInfo } from "@/components/CohostDashboard";
 import { HostNav } from "@/components/HostNav";
 import { IntegrationsScreen } from "@/components/IntegrationsScreen";
+import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { ProScreen } from "@/components/ProScreen";
 import { AudienceConsent } from "@/components/AudienceConsent";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
@@ -972,6 +973,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
               <LogoLockupOnDark className="h-8 w-auto" />
             </Link>
             <div className="flex min-w-0 items-center gap-2">
+              <ThemeSwitch />
               <SeatSwitcher current={data?.email ?? ""} />
               <Button
                 variant="outline"
