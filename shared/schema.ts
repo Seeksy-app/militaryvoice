@@ -1432,6 +1432,8 @@ export interface ClipOptions {
   captions: "animated" | "classic";
   /** A music_tracks key to play under the clips, or "" for none. */
   music?: string;
+  /** "Generate more": this many more clips, none overlapping the ones already made. */
+  more?: { count: number; avoid: [number, number][] };
 }
 export const DEFAULT_CLIP_OPTIONS: ClipOptions = { formats: ["vertical", "square", "wide"], captions: "animated", music: "" };
 export function parseClipOptions(raw: unknown): ClipOptions {
@@ -1439,7 +1441,10 @@ export function parseClipOptions(raw: unknown): ClipOptions {
   if (typeof raw === "string") { try { v = raw ? JSON.parse(raw) : {}; } catch { v = {}; } }
   const formats = Array.isArray(v?.formats) ? CLIP_FORMATS.filter((f) => v.formats.includes(f)) : [];
   const music = typeof v?.music === "string" && /^[a-z0-9-]{1,40}$/.test(v.music) ? v.music : "";
-  return { formats: formats.length ? formats : [...DEFAULT_CLIP_OPTIONS.formats], captions: v?.captions === "classic" ? "classic" : "animated", music };
+  const more = v?.more && Number(v.more.count) > 0
+    ? { count: Math.min(8, Math.round(Number(v.more.count))), avoid: (Array.isArray(v.more.avoid) ? v.more.avoid : []).filter((a: unknown) => Array.isArray(a) && a.length === 2).map((a: number[]) => [Number(a[0]) || 0, Number(a[1]) || 0] as [number, number]) }
+    : undefined;
+  return { formats: formats.length ? formats : [...DEFAULT_CLIP_OPTIONS.formats], captions: v?.captions === "classic" ? "classic" : "animated", music, ...(more ? { more } : {}) };
 }
 
 export const clipResultSchema = z.object({

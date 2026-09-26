@@ -514,19 +514,47 @@ function CreditPacks({ busy, go, label }: { busy: string | null; go: (what: stri
 }
 
 /** The last card in the clips: more episodes, with the plans. */
-function GenerateMore({ beta, plan }: { beta?: Beta; plan?: Plan | null }) {
+/**
+ * More clips from this episode, none overlapping the ones it has. With
+ * credits (or a plan that bills extras) it just starts; without, it offers
+ * a plan.
+ */
+function GenerateMore({ rec, beta, plan, count, captions }: { rec: Rec; beta?: Beta; plan?: Plan | null; count: number; captions: "animated" | "classic" }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
   const [open, setOpen] = useState(false);
+  const credits = captions === "classic" ? count : count * 2;
+  const canPay = Boolean(beta?.unlimited || (beta?.tokens ?? 0) >= credits || plan);
+  const more = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/host/recordings/${rec.id}/more-clips`, { method: "POST", credentials: "include" });
+      if (r.status === 402) return { needPlan: true };
+      if (!r.ok) throw new Error((await r.json().catch(() => null))?.message || "Couldn't start that.");
+      return r.json();
+    },
+    onSuccess: (r: { needPlan?: boolean }) => {
+      if (r.needPlan) return setOpen(true);
+      void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
+      void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
+      toast({ title: `Making ${count} more clips`, description: "Different moments from this episode. They join your clips here in a few minutes; you can close this page." });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't make more clips", description: e.message, variant: "destructive" }),
+  });
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
-        className="flex min-h-[18rem] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] p-6 text-center transition-colors hover:border-[#053877]/50 hover:bg-[#053877]/[0.06]"
+        onClick={() => (canPay ? more.mutate() : setOpen(true))}
+        disabled={more.isPending}
+        className="flex min-h-[18rem] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] p-6 text-center transition-colors hover:border-[#053877]/50 hover:bg-[#053877]/[0.06] disabled:opacity-60"
         data-testid="post-generate-more"
       >
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Sparkles className="h-6 w-6" /></span>
-        <span className="text-base font-semibold text-foreground">Generate more</span>
-        <span className="max-w-[14rem] text-sm text-muted-foreground">Clips and a clean episode from your next one.</span>
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]">{more.isPending ? <Loader2 className="h-6 w-6 animate-spin" /> : <Sparkles className="h-6 w-6" />}</span>
+        <span className="text-base font-semibold text-foreground">{count} more clips</span>
+        <span className="max-w-[14rem] text-sm text-muted-foreground">
+          Different moments from this episode, in all three shapes.{" "}
+          {beta?.unlimited ? "Included." : `${credits} credits${beta?.tokens != null ? ` · you have ${beta.tokens}` : ""}.`}
+        </span>
       </button>
       <PlanDialog open={open} onOpenChange={setOpen} beta={beta} plan={plan} />
     </>
@@ -1633,7 +1661,7 @@ export function PostStudio() {
                     // Play it where they can see it: up at the player, not down at the card.
                     document.querySelector('[data-testid="post-viewer"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }} />),
-                  <GenerateMore key="more" beta={beta} plan={plan} />,
+                  <GenerateMore key="more" rec={rec} beta={beta} plan={plan} count={clipsN} captions={parseClipOptions(rec.clipOptions).captions} />,
                 ]
               : moments.map((m, i) => {
                   const ready = i < readyN;

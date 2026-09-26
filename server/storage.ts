@@ -886,6 +886,7 @@ export interface IStorage {
   listSocialMetrics(): Promise<SocialMetricRow[]>;
   upsertSocialMetric(v: Omit<SocialMetricRow, "id">): Promise<SocialMetricRow>;
   replaceClips(recordingId: number, rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes">[]): Promise<ClipRow[]>;
+  appendClips(recordingId: number, rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes">[]): Promise<ClipRow[]>;
   addClip(v: Partial<ClipRow> & { recordingId: number; email: string; title: string; startSec: number; endSec: number }): Promise<ClipRow>;
   listDestinations(eventId: number): Promise<DestinationRow[]>;
   getDestination(id: number): Promise<DestinationRow | undefined>;
@@ -2669,6 +2670,17 @@ class DatabaseStorage implements IStorage {
   }
 
   /** A re-run replaces what was there, so a retried job can't double the list. */
+  /** "Generate more": the new clips join the ones already there. */
+  async appendClips(
+    recordingId: number,
+    rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes">[],
+  ): Promise<ClipRow[]> {
+    await ready();
+    if (rows.length === 0) return [];
+    const now = new Date().toISOString();
+    return db.insert(clips).values(rows.map((r) => ({ ...r, recordingId, createdAt: now }))).returning();
+  }
+
   async replaceClips(
     recordingId: number,
     rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes">[],

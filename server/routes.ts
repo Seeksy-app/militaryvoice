@@ -5525,7 +5525,17 @@ export function registerRoutes(app: Express): void {
         cutAssetId: 0,
         subtitle: show,
       }));
-    const saved = await storage.replaceClips(rec.id, rows);
+    // "Generate more" adds to the clips already made; a first run is the set.
+    const opts = parseClipOptions(rec.clipOptions);
+    if (opts.more) {
+      await storage.appendClips(rec.id, rows);
+      const { more: _done, ...rest } = opts;
+      await storage.setClipOptions(rec.id, JSON.stringify(rest));
+      // Music already on the others goes on the new ones too.
+      const mix = parseMusicMix(rec.musicMix);
+      if (mix?.status === "done") await storage.setMusicMix(rec.id, JSON.stringify({ ...mix, status: "queued", at: new Date().toISOString() }));
+    }
+    const saved = opts.more ? await storage.listClips(rec.id) : await storage.replaceClips(rec.id, rows);
     await storage.setClipStatus(rec.id, "done", "");
     try {
       const prev = rec.clipProgress ? JSON.parse(rec.clipProgress) : {};
@@ -6401,6 +6411,35 @@ export function registerRoutes(app: Express): void {
     await storage.setClipOptions(rec.id, JSON.stringify(options));
     await storage.setClipStatus(rec.id, "queued", "");
     res.json({ ok: true });
+  });
+
+  // "Generate more": another set of clips from an episode that's done, none
+  // overlapping the ones it has. Charged like the clips of an episode (2 a
+  // clip animated, 1 Classic), never the clean episode again.
+  app.post("/api/host/recordings/:id/more-clips", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    if (!(await canPost(email))) return res.status(403).json({ message: "This isn't switched on for your account yet." });
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
+    if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.json({ ok: true, already: true });
+    if (rec.clipStatus !== "done") return res.status(409).json({ message: "Make this episode's clips first." });
+    const opts = parseClipOptions(rec.clipOptions);
+    const count = await clipsFor(email);
+    const credits = opts.captions === "classic" ? count : count * 2;
+    const allowance = await postifyAllowance(email);
+    let paid;
+    try {
+      paid = await chargeCredits(email, allowance, credits, `more:${rec.id}:${Date.now()}`, `Pōstify: ${count} more clips from ${rec.title || "an episode"}`);
+    } catch (err: any) {
+      console.error("Charging more clips failed:", err?.message);
+      return res.status(502).json({ message: "We couldn't record the extra credits with Stripe just now. Try again in a moment." });
+    }
+    if (paid === "no") return res.status(402).json({ message: "Not enough credits for more clips. Pick a plan or buy credits." });
+    if (paid === "limit") return res.status(402).json({ message: OVER_LIMIT });
+    const avoid = (await storage.listClips(rec.id)).map((c) => [c.startSec, c.endSec] as [number, number]);
+    await storage.setClipOptions(rec.id, JSON.stringify({ ...opts, more: { count, avoid } }));
+    await storage.setClipStatus(rec.id, "queued", "");
+    res.json({ ok: true, count, credits });
   });
 
   /** Make the clean episode again, without touching the clips. */
