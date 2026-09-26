@@ -2882,6 +2882,19 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
+  // Rename an episode; its clean and edited copies follow, keeping their "(clean)" / "(edited)".
+  app.post("/api/host/recordings/:id/title", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
+    const title = String(req.body?.title ?? "").replace(/\s+/g, " ").trim().replace(/ \((clean|edited)\)$/i, "").slice(0, 150);
+    if (!title) return res.status(400).json({ message: "Give it a name." });
+    await storage.setRecordingTitle(email, rec.id, title);
+    const copies = (await storage.listRecordingsByEmail(email)).filter((r) => new RegExp(`^CLEAN_(EDIT_)?${rec.id}(_|$)`).test(r.egressId));
+    for (const c of copies) await storage.setRecordingTitle(email, c.id, `${title} (${c.egressId.startsWith("CLEAN_EDIT_") ? "edited" : "clean"})`);
+    res.json({ title });
+  });
+
   /** A short-lived signed link, made on demand — the bucket itself is private. */
   app.get("/api/host/recordings/:id/download", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();

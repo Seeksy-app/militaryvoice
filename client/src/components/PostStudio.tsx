@@ -635,6 +635,10 @@ function EpisodeTools({ rec, source, videoRef }: {
   const setIntro = (v: { key: string; name: string } | null) => { setIntroState(v); keep("mv_intro", v); };
   const setOutro = (v: { key: string; name: string } | null) => { setOutroState(v); keep("mv_outro", v); };
   const [trim, setTrim] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  const keepEnd = trim.end || pos.d;
+  const keepLen = Math.max(0, keepEnd - trim.start);
+  // An end pressed at 0:11 keeps eleven seconds, not everything after them.
+  const shortKeep = pos.d > 60 && (trim.start > 0 || trim.end > 0) && keepLen < pos.d * 0.5;
   let ed: EpisodeEdit | null = null;
   try { ed = rec.episodeEdit ? (JSON.parse(rec.episodeEdit) as EpisodeEdit) : null; } catch { ed = null; }
   const busy = ed?.status === "queued" || ed?.status === "running";
@@ -707,12 +711,37 @@ function EpisodeTools({ rec, source, videoRef }: {
         </div>
       ) : (
         <div className="space-y-3 p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="w-12 shrink-0 text-xs font-semibold text-muted-foreground">Trim</span>
-            <Button type="button" size="sm" variant="outline" onClick={() => setTrim((t) => ({ ...t, start: now() }))} className="h-7 rounded-full text-xs" data-testid="trim-start">Start at {hms(trim.start)}</Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => setTrim((t) => ({ ...t, end: now() }))} className="h-7 rounded-full text-xs" data-testid="trim-end">End at {trim.end ? hms(trim.end) : "the end"}</Button>
-            {(trim.start > 0 || trim.end > 0) && <button type="button" onClick={() => setTrim({ start: 0, end: 0 })} className="text-xs text-muted-foreground underline underline-offset-2">Reset</button>}
-            <span className="text-[11px] text-muted-foreground">Pause where it should start or end, then press.</span>
+          {/* What stays, drawn: gold is kept, grey is cut, the line is where you are. */}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-12 shrink-0 text-xs font-semibold text-muted-foreground">Trim</span>
+              <Button type="button" size="sm" variant="outline" onClick={() => setTrim((t) => ({ start: now(), end: t.end && t.end <= now() ? 0 : t.end }))} className="h-7 rounded-full text-xs" data-testid="trim-start">
+                {trim.start ? `Starts at ${hms(trim.start)}` : "Start here"}
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setTrim((t) => ({ ...t, end: now() }))} className="h-7 rounded-full text-xs" data-testid="trim-end">
+                {trim.end ? `Ends at ${hms(trim.end)}` : "End here"}
+              </Button>
+              {(trim.start > 0 || trim.end > 0) && <button type="button" onClick={() => setTrim({ start: 0, end: 0 })} className="text-xs text-muted-foreground underline underline-offset-2">Reset</button>}
+            </div>
+            <div
+              role="slider"
+              aria-label="Episode timeline"
+              aria-valuemin={0}
+              aria-valuemax={Math.round(pos.d)}
+              aria-valuenow={Math.round(pos.t)}
+              tabIndex={0}
+              onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * pos.d); }}
+              className="relative h-3 cursor-pointer rounded-full bg-muted"
+              data-testid="trim-timeline"
+            >
+              <div className="absolute inset-y-0 rounded-full bg-[#F0A71F]" style={{ left: pct(trim.start), width: `calc(${pct(keepEnd)} - ${pct(trim.start)})` }} />
+              <div className="absolute -inset-y-1 w-0.5 rounded bg-[#053877] dark:bg-white" style={{ left: pct(pos.t) }} />
+            </div>
+            <p className={`text-[11px] ${shortKeep ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`} data-testid="trim-summary">
+              {!trim.start && !trim.end
+                ? "Pause where the episode should begin and press Start here; pause where it should finish and press End here."
+                : `Keeps ${hms(trim.start)} to ${hms(keepEnd)}: ${hms(keepLen)} of ${hms(pos.d)}.${shortKeep ? " That's most of the episode cut. Check the start and end." : ""}`}
+            </p>
           </div>
           <BookendPicker label="Intro" value={intro} onChange={setIntro} />
           <BookendPicker label="Outro" value={outro} onChange={setOutro} />
@@ -722,7 +751,7 @@ function EpisodeTools({ rec, source, videoRef }: {
             </p>
             <div className="flex items-center gap-2">
               {ed?.status === "done" && <Button asChild size="sm" variant="outline" className="rounded-full"><a href="/host/dashboard/library">Open Library</a></Button>}
-              <Button type="button" onClick={() => makeEdit.mutate()} disabled={busy || makeEdit.isPending || (!trim.start && !trim.end && !intro && !outro) || (trim.end > 0 && trim.end < trim.start + 5)} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="edit-make">
+              <Button type="button" onClick={() => { if (shortKeep && !window.confirm(`This keeps only ${hms(keepLen)} of ${hms(pos.d)}. Make it anyway?`)) return; makeEdit.mutate(); }} disabled={busy || makeEdit.isPending || (!trim.start && !trim.end && !intro && !outro) || (trim.end > 0 && trim.end < trim.start + 5)} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="edit-make">
                 {busy || makeEdit.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} Make edited episode
               </Button>
             </div>

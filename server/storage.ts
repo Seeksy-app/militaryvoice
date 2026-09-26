@@ -810,6 +810,7 @@ export interface IStorage {
   deleteFolder(email: string, id: number): Promise<void>;
   /** File an episode, with its clean and edited copies, in a folder (0 for none). */
   fileRecording(email: string, ids: number[], folderId: number): Promise<void>;
+  setRecordingTitle(email: string, id: number, title: string): Promise<void>;
   listRecordings(eventId?: number): Promise<RecordingRow[]>;
   getRecording(id: number): Promise<RecordingRow | undefined>;
   setClipStatus(recordingId: number, status: ClipStatus, error?: string): Promise<RecordingRow | undefined>;
@@ -2344,6 +2345,11 @@ class DatabaseStorage implements IStorage {
     const e = email.toLowerCase().trim();
     await db.update(recordings).set({ folderId: 0 }).where(and(eq(recordings.email, e), eq(recordings.folderId, id)));
     await db.delete(libraryFolders).where(and(eq(libraryFolders.id, id), eq(libraryFolders.email, e)));
+  }
+
+  async setRecordingTitle(email: string, id: number, title: string): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ title }).where(and(eq(recordings.email, email.toLowerCase().trim()), eq(recordings.id, id)));
   }
 
   async fileRecording(email: string, ids: number[], folderId: number): Promise<void> {

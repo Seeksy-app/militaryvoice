@@ -94,6 +94,19 @@ export function MyRecordings({
   /** The open folder: null for everything. */
   const [openFolder, setOpenFolder] = useState<number | null>(null);
   const [naming, setNaming] = useState<{ id: number | null; name: string; file?: number } | null>(null);
+  const [renaming, setRenaming] = useState<{ id: number; title: string } | null>(null);
+  async function saveTitle() {
+    if (!renaming) return;
+    const title = renaming.title.trim();
+    if (!title) return setRenaming(null);
+    try {
+      await apiRequest("POST", `/api/host/recordings/${renaming.id}/title`, { title });
+      await qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
+      setRenaming(null);
+    } catch (e) {
+      toast({ title: "Couldn't rename that", description: (e as Error).message, variant: "destructive" });
+    }
+  }
   const [removingFolder, setRemovingFolder] = useState<LibraryFolderRow | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
   const { toast } = useToast();
@@ -255,7 +268,25 @@ export function MyRecordings({
             </div>
             <div className="flex items-start gap-2 p-3">
               <div className="min-w-0 flex-1">
-                <p className="line-clamp-2 text-sm font-semibold leading-snug text-card-foreground" title={plainTitle(main.title)}>{plainTitle(main.title) || "Your session"}</p>
+                {renaming?.id === main.id ? (
+                  <form onSubmit={(e) => { e.preventDefault(); void saveTitle(); }} className="flex items-center gap-1">
+                    <Input
+                      autoFocus
+                      value={renaming.title}
+                      maxLength={150}
+                      onChange={(e) => setRenaming({ id: main.id, title: e.target.value })}
+                      onKeyDown={(e) => e.key === "Escape" && setRenaming(null)}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="h-8 min-w-0 flex-1 text-sm"
+                      aria-label="Episode name"
+                      data-testid={`input-rename-${main.id}`}
+                    />
+                    <Button type="submit" size="sm" className="h-8 rounded-full px-3 text-xs" data-testid={`button-save-rename-${main.id}`}>Save</Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full" onClick={() => setRenaming(null)} aria-label="Cancel"><X className="h-3.5 w-3.5" /></Button>
+                  </form>
+                ) : (
+                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-card-foreground" title={plainTitle(main.title)}>{plainTitle(main.title) || "Your session"}</p>
+                )}
                 <p className="mt-0.5 tabular-nums text-xs text-muted-foreground">
                   {new Date(r.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
                   {size(r.sizeBytes) ? ` · ${size(r.sizeBytes)}` : ""}
@@ -296,6 +327,9 @@ export function MyRecordings({
                         <Wand2 className="h-4 w-4 text-[#b36b00]" /> {main.clipStatus === "done" ? "Clips in Pōstify" : "Pōstify it"}
                       </DropdownMenuItem>
                     )}
+                    <DropdownMenuItem onSelect={() => setRenaming({ id: main.id, title: plainTitle(main.title) })} className="gap-2" data-testid={`button-rename-recording-${main.id}`}>
+                      <Pencil className="h-4 w-4" /> Rename
+                    </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => setPublishing(r)} className="gap-2" data-testid={`button-publish-recording-${r.id}`}>
                       <Share2 className="h-4 w-4" /> Post it
                     </DropdownMenuItem>
