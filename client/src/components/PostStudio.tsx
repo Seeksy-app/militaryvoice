@@ -759,7 +759,7 @@ function downloadHref(url: string, name: string): string {
 }
 
 /** "Edit text": the title and the gold line under it, remade in all three shapes. */
-function EditTextDialog({ c, open, onOpenChange }: { c: ClipRow; open: boolean; onOpenChange: (v: boolean) => void }) {
+export function EditTextDialog({ c, open, onOpenChange }: { c: ClipRow; open: boolean; onOpenChange: (v: boolean) => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [title, setTitle] = useState(c.title);
@@ -1306,7 +1306,11 @@ export function PostStudio() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
             {done
               ? [
-                  ...mine.map((c) => <ClipCard key={c.id} c={c} onPreview={() => setPreview({ kind: "clip", url: c.verticalUrl || c.url })} />),
+                  ...mine.map((c) => <ClipCard key={c.id} c={c} onPreview={() => {
+                    setPreview({ kind: "clip", url: c.verticalUrl || c.url });
+                    // Play it where they can see it: up at the player, not down at the card.
+                    document.querySelector('[data-testid="post-viewer"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }} />),
                   <GenerateMore key="more" beta={beta} plan={plan} />,
                 ]
               : moments.map((m, i) => {

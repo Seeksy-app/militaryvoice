@@ -3,11 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { PostDialog, type PostTarget } from "@/components/PostDialog";
+import { EditTextDialog } from "@/components/PostStudio";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import type { ClipRow, HostPostRow, RecordingRow, SocialPlatform } from "@shared/schema";
-import { AlertTriangle, CalendarClock, Check, FolderOpen, Link2, Play, Repeat2, Scissors, Send, Share2, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, FolderOpen, Link2, Pencil, Play, Repeat2, Scissors, Send, Share2, Trash2 } from "lucide-react";
 
 /**
  * Social: one place to post anything in the Library or out of Pōstify to the
@@ -19,6 +20,7 @@ export function SocialScreen() {
   const [viewing, setViewing] = useState<{ src: string; title: string } | null>(null);
   const [tab, setTab] = useState<"clips" | "scheduled" | "posted">("clips");
   const [deleting, setDeleting] = useState<ClipRow | null>(null);
+  const [editing, setEditing] = useState<ClipRow | null>(null);
 
   const social = useQuery<{ configured: boolean; accounts: { platform: SocialPlatform; username?: string; followers?: number }[] }>({
     queryKey: ["/api/host/social"],
@@ -169,6 +171,9 @@ export function SocialScreen() {
                   <Button size="sm" onClick={() => postClip(c)} className="h-7 flex-1 gap-1 rounded-full bg-[#053877] px-2 text-xs text-white hover:bg-[#0a4a99]" data-testid={`social-post-clip-${c.id}`}>
                     <Send className="h-3 w-3" /> Post it
                   </Button>
+                  <button type="button" onClick={() => setEditing(c)} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Edit ${c.title}`} title="Edit the title and subtitle" data-testid={`social-edit-${c.id}`}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
                   <button type="button" onClick={() => setDeleting(c)} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-destructive" aria-label={`Delete ${c.title}`} data-testid={`social-delete-${c.id}`}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -190,6 +195,7 @@ export function SocialScreen() {
         </DialogContent>
       </Dialog>
       <PostDialog target={target} onClose={() => setTarget(null)} />
+      {editing && <EditTextDialog c={editing} open={!!editing} onOpenChange={(v) => !v && setEditing(null)} />}
       <ConfirmDelete open={!!deleting} onOpenChange={(v) => !v && setDeleting(null)} title={`Delete "${deleting?.title ?? "this clip"}"?`} description="All its shapes go for good. Anything already posted stays on your accounts." url={`/api/host/clips/${deleting?.id}`} />
     </section>
   );
