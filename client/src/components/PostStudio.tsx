@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PLANS, CREDIT_PACKS, OVERAGE_CAP_CHOICES, episodeCredits, cents, type PlanKey } from "@shared/tokens";
-import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, type ClipFormat, type ClipOptions, type EpisodeEdit } from "@shared/schema";
+import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, parseMusicMix, type ClipFormat, type ClipOptions, type EpisodeEdit } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { startPlanCheckout, openBillingPortal, startTokenCheckout } from "@/lib/tokens";
@@ -24,7 +24,7 @@ import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film
 // nothing animates on a timer pretending to work.
 
 type Rec = RecordingRow;
-type RowState = "done" | "active" | "waiting" | "soon" | "failed";
+type RowState = "done" | "active" | "waiting" | "soon" | "failed" | "ask";
 
 const stamp = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
 
@@ -253,17 +253,17 @@ function PipelineRow({ icon: Icon, title, detail, state }: { icon: typeof Check;
     <li className={`flex items-start gap-3 py-2 ${state === "soon" ? "opacity-55" : ""}`}>
       <span
         className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-          state === "done" ? "bg-emerald-500 text-white" : state === "active" ? "bg-[#F0A71F]/15 text-[#b36b00] ring-2 ring-[#F0A71F]" : state === "failed" ? "bg-destructive/15 text-destructive" : "bg-muted text-muted-foreground"
+          state === "done" ? "bg-emerald-500 text-white" : state === "active" || state === "ask" ? "bg-[#F0A71F]/15 text-[#b36b00] ring-2 ring-[#F0A71F]" : state === "failed" ? "bg-destructive/15 text-destructive" : "bg-muted text-muted-foreground"
         }`}
       >
         {state === "done" ? <Check className="h-4 w-4" /> : state === "active" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : state === "failed" ? <AlertTriangle className="h-3.5 w-3.5" /> : <Icon className="h-3.5 w-3.5" />}
       </span>
       <span className="min-w-0 flex-1">
-        <span className={`block text-sm font-medium ${state === "active" ? "text-foreground" : state === "done" ? "text-foreground" : "text-muted-foreground"}`}>{title}</span>
+        <span className={`block text-sm font-medium ${state === "active" || state === "ask" ? "text-foreground" : state === "done" ? "text-foreground" : "text-muted-foreground"}`}>{title}</span>
         {detail && <span className="block text-xs text-muted-foreground">{detail}</span>}
       </span>
-      <span className={`shrink-0 text-xs font-medium ${state === "done" ? "text-emerald-600 dark:text-emerald-400" : state === "active" ? "text-[#b36b00] dark:text-[#F0A71F]" : "text-muted-foreground"}`}>
-        {state === "done" ? "Done" : state === "active" ? "Working" : state === "soon" ? "Coming soon" : state === "failed" ? "Stopped" : ""}
+      <span className={`shrink-0 text-xs font-medium ${state === "done" ? "text-emerald-600 dark:text-emerald-400" : state === "active" || state === "ask" ? "text-[#b36b00] dark:text-[#F0A71F]" : "text-muted-foreground"}`}>
+        {state === "done" ? "Done" : state === "active" ? "Working" : state === "ask" ? "Your pick" : state === "soon" ? "Coming soon" : state === "failed" ? "Stopped" : ""}
       </span>
     </li>
   );
@@ -928,6 +928,66 @@ function ChoosePlan({ beta, plan }: { beta?: Beta; plan?: Plan | null }) {
   );
 }
 
+/**
+ * "Add music": the last step of the pipeline, asked once the clips are made.
+ * Play any track first; picking one mixes it into every clip (a few seconds
+ * a clip, no credits). Skip leaves them as they are; either can be changed.
+ */
+function PipelineMusic({ rec, onChange }: { rec: Rec; onChange: () => void }) {
+  const { toast } = useToast();
+  const tracks = useQuery<{ key: string; name: string; mood: string; durationSec: number }[]>({ queryKey: ["/api/music"], queryFn: async () => (await apiRequest("GET", "/api/music")).json(), staleTime: 300_000 });
+  const [playing, setPlaying] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => () => audio.current?.pause(), []);
+  const play = (key: string) => {
+    audio.current?.pause();
+    if (playing === key) { setPlaying(null); return; }
+    const a = new Audio(`/api/music/${key}/audio`);
+    a.volume = 0.8;
+    a.onended = () => setPlaying(null);
+    void a.play().catch(() => setPlaying(null));
+    audio.current = a;
+    setPlaying(key);
+  };
+  const choose = async (key: string) => {
+    audio.current?.pause();
+    setPlaying(null);
+    setBusy(key || "skip");
+    try {
+      await apiRequest("POST", `/api/host/recordings/${rec.id}/music`, { key });
+      onChange();
+    } catch (e) {
+      toast({ title: "Couldn't do that", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="mt-2 rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/[0.06] p-2" data-testid="pipeline-music">
+      <ul className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+        {(tracks.data ?? []).map((t) => (
+          <li key={t.key} className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-background/70">
+            <button type="button" onClick={() => play(t.key)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#053877] text-white" aria-label={playing === t.key ? `Stop ${t.name}` : `Play ${t.name}`}>
+              {playing === t.key ? <Pause className="h-3 w-3 fill-current" /> : <Play className="h-3 w-3 fill-current" />}
+            </button>
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block truncate text-sm font-medium text-foreground">{t.name}</span>
+              <span className="block text-[11px] text-muted-foreground">{t.mood}</span>
+            </span>
+            <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void choose(t.key)} className="h-7 rounded-full px-2.5 text-xs" data-testid={`music-use-${t.key}`}>
+              {busy === t.key ? <Loader2 className="h-3 w-3 animate-spin" /> : "Use"}
+            </Button>
+          </li>
+        ))}
+      </ul>
+      <button type="button" disabled={busy !== null} onClick={() => void choose("")} className="mt-1 w-full rounded-lg py-1.5 text-xs font-semibold text-muted-foreground hover:bg-background/70 hover:text-foreground" data-testid="music-skip">
+        {busy === "skip" ? "…" : "No music, thanks"}
+      </button>
+    </div>
+  );
+}
+
 export function PostStudio() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -947,7 +1007,7 @@ export function PostStudio() {
     queryKey: ["/api/host/recordings"],
     queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(),
     // Live while anything is moving; still otherwise.
-    refetchInterval: (q) => ((q.state.data as Rec[] | undefined)?.some((r) => r.clipStatus === "queued" || r.clipStatus === "running" || cleanOf(r)?.status === "running" || /"status":"(queued|running)"/.test(r.episodeEdit)) ? 4000 : false),
+    refetchInterval: (q) => ((q.state.data as Rec[] | undefined)?.some((r) => r.clipStatus === "queued" || r.clipStatus === "running" || cleanOf(r)?.status === "running" || /"status":"(queued|running)"/.test(r.episodeEdit) || /"status":"(queued|running)"/.test(r.musicMix)) ? 4000 : false),
   });
   const moving = (recs.data ?? []).some((r) => r.clipStatus === "queued" || r.clipStatus === "running");
   const clips = useQuery<ClipRow[]>({
@@ -968,7 +1028,7 @@ export function PostStudio() {
   const savedCopy = rec ? (recs.data ?? []).find((r) => r.egressId === `CLEAN_${rec.id}`) ?? null : null;
   const mine = useMemo(() => (clips.data ?? []).filter((c) => c.recordingId === rec?.id).sort((a, b) => a.startSec - b.startSec), [clips.data, rec?.id]);
 
-  useEffect(() => setPreview(null), [rec?.id]);
+  useEffect(() => { setPreview(null); setMusicOpen(false); }, [rec?.id]);
 
   // When a run finishes, the clips list needs a fresh read right away.
   useEffect(() => {
@@ -989,7 +1049,7 @@ export function PostStudio() {
   });
   useEffect(() => { try { localStorage.setItem("mv_clip_options", JSON.stringify(opts)); } catch { /* private mode */ } }, [opts]);
   const start = useMutation({
-    mutationFn: async (id: number) => (await apiRequest("POST", `/api/host/recordings/${id}/clip`, { options: opts })).json(),
+    mutationFn: async (id: number) => (await apiRequest("POST", `/api/host/recordings/${id}/clip`, { options: { ...opts, formats: ["vertical", "square", "wide"] } })).json(),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
       void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
@@ -1000,8 +1060,46 @@ export function PostStudio() {
   const beta = features.data?.beta;
   const plan = features.data?.plan ?? null;
   const freeLeft = Boolean(beta && (beta.unlimited || (beta.left ?? 1) > 0));
-  // What this episode will cost with the shapes and captions picked.
-  const cost = episodeCredits(opts);
+  // A flat price: every clip in all three shapes; Pro makes 6 clips.
+  const clipsN = plan ? PLANS[plan.key]?.clipsPerEpisode ?? 4 : 4;
+  const cost = episodeCredits(opts, clipsN);
+  const affordable = (r: Rec) => Boolean(beta?.unlimited || r.postifyBeta || freeLeft || (beta?.tokens ?? 0) >= cost || plan);
+  const [showOptions, setShowOptions] = useState(false);
+  const [musicOpen, setMusicOpen] = useState(false);
+  const musicList = useQuery<{ key: string; name: string }[]>({ queryKey: ["/api/music"], queryFn: async () => (await apiRequest("GET", "/api/music")).json(), staleTime: 300_000 });
+
+  // A few seconds of "Recording saved" filling in before the real steps: it
+  // was already done, but a start that jumps straight to step two reads as nothing happening.
+  const [introUntil, setIntroUntil] = useState(0);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!introUntil) return;
+    const t = setTimeout(() => tick((n) => n + 1), Math.max(0, introUntil - Date.now()) + 50);
+    return () => clearTimeout(t);
+  }, [introUntil]);
+  const intro = introUntil > Date.now();
+  const begin = (id: number) => {
+    setIntroUntil(Date.now() + 3500);
+    setView("clips");
+    setPreview(null);
+    start.mutate(id);
+  };
+  // From the Library's "Pōstify it": that click was the start.
+  const autoGo = useRef(typeof window !== "undefined" && new URLSearchParams(window.location.search).get("go") === "1");
+  const autoRec = selected != null && selected > 0 ? (recs.data ?? []).find((r) => r.id === selected) : undefined;
+  useEffect(() => {
+    if (!autoGo.current || !autoRec || !features.data) return;
+    autoGo.current = false;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("go");
+    window.history.replaceState(null, "", url.pathname + url.search);
+    if (autoRec.status === "Ready" && autoRec.clipStatus === "none" && affordable(autoRec)) begin(autoRec.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRec?.id, features.data]);
+
+  // Music mixed in: the clips' files changed.
+  const mixState = (recs.data ?? []).map((r) => `${r.id}:${/"status":"(\w+)"/.exec(r.musicMix)?.[1] ?? ""}`).join(",");
+  useEffect(() => { void qc.invalidateQueries({ queryKey: ["/api/host/clips"] }); }, [mixState, qc]);
   const betaBadge = beta && !beta.unlimited ? (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F]/15 px-2.5 py-1 text-xs font-semibold text-[#8a5a00] dark:text-[#F0A71F]" data-testid="post-beta">
       Beta{freeLeft ? ` · ${beta.left} free episode${beta.left === 1 ? "" : "s"}` : ""}
@@ -1143,7 +1241,7 @@ export function PostStudio() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,17rem)]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_minmax(0,18rem)]">
         {episodeList}
 
         {/* Preview */}
@@ -1179,8 +1277,8 @@ export function PostStudio() {
               />
             ) : preview ? (
               <video key={preview.url} src={preview.url} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
-            ) : running ? (
-              <WorkingScene rec={rec} p={p} pct={pct} />
+            ) : running || intro ? (
+              <WorkingScene rec={rec} p={intro ? null : p} pct={intro ? 0 : pct} />
             ) : failed ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center text-white">
                 <div className="relative flex items-center justify-center">
@@ -1189,8 +1287,13 @@ export function PostStudio() {
                 </div>
                 <p className="text-lg font-semibold">{stageLabel(rec, p)}</p>
                 <p className="hidden max-w-sm px-4 text-sm text-white/65 sm:block">
-                  {failed ? rec.clipError || "Something went wrong. Try again below." : rec.clipStatus === "queued" ? "Next in line. This screen fills in as each step finishes." : "Every word was transcribed live, so there's no upload and no wait."}
+                  {failed ? rec.clipError || "Something went wrong." : rec.clipStatus === "queued" ? "Next in line. This screen fills in as each step finishes." : "Every word was transcribed live, so there's no upload and no wait."}
                 </p>
+                {failed && (
+                  <Button onClick={() => begin(rec.id)} disabled={start.isPending} className="gap-2 rounded-full bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b94a]" data-testid="post-start">
+                    <Sparkles className="h-4 w-4" /> Try again
+                  </Button>
+                )}
               </div>
             ) : done && mine[0] ? (
               <button type="button" onClick={() => setPreview({ kind: "clip", url: mine[0].url || mine[0].verticalUrl })} className="absolute inset-0">
@@ -1201,52 +1304,40 @@ export function PostStudio() {
                 </span>
               </button>
             ) : (
-              // Not started: the way in is the middle of the window.
+              // Not started: one button. Every clip comes in all three shapes; captions are under Options.
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-white">
                 <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F0A71F] text-[#1a1200] shadow-lg shadow-[#F0A71F]/20"><Wand2 className="h-7 w-7" /></span>
                 <p className="text-xl font-bold sm:text-2xl">Ready for Pōstify</p>
-                <ClipChoices opts={opts} onChange={setOpts} />
-                {!(beta?.unlimited || rec.postifyBeta || freeLeft || (beta?.tokens ?? 0) >= cost || plan) ? (
+                <p className="max-w-md text-sm text-white/70">{clipsN} clips in vertical, square and wide, with {opts.captions === "classic" ? "Classic" : "animated"} captions, and a clean episode. You can add music at the end.</p>
+                {!affordable(rec) ? (
                   <ChoosePlan beta={beta} plan={plan} />
                 ) : (
-                  <Button onClick={() => start.mutate(rec.id)} disabled={start.isPending || opts.formats.length === 0} className="h-11 gap-2 rounded-full bg-[#F0A71F] px-6 text-base font-semibold text-[#1a1200] hover:bg-[#f5b94a] disabled:opacity-40" data-testid="post-start-hero">
+                  <Button onClick={() => begin(rec.id)} disabled={start.isPending} className="h-11 gap-2 rounded-full bg-[#F0A71F] px-6 text-base font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="post-start-hero">
                     {start.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />} Start Pōstify
                   </Button>
                 )}
                 <p className="text-xs text-white/55">
-                  {opts.formats.length === 0
-                    ? "Pick at least one shape to start"
-                    : beta?.unlimited || rec.postifyBeta
+                  {beta?.unlimited || rec.postifyBeta
                     ? "Included"
                     : freeLeft
                       ? "Free · your beta episode"
                       : (beta?.tokens ?? 0) >= cost
-                        ? `Uses ${cost} credits · you have ${beta?.tokens}`
+                        ? `${cost} credits · you have ${beta?.tokens}`
                         : plan
-                          ? `Uses ${cost} credits: ${beta?.tokens ?? 0} left + ${cost - (beta?.tokens ?? 0)} extra at ${cents(plan.overageCents)}`
-                          : `This one is ${cost} credits`}
-
+                          ? `${cost} credits: ${beta?.tokens ?? 0} left + ${cost - (beta?.tokens ?? 0)} extra at ${cents(plan.overageCents)}`
+                          : `${cost} credits`}
+                  {" · "}
+                  <button type="button" onClick={() => setShowOptions((v) => !v)} className="underline underline-offset-2 hover:text-white" data-testid="post-options">Options</button>
                 </p>
+                {showOptions && (
+                  <div className="flex items-center gap-1 rounded-full bg-white/10 p-1 text-xs font-semibold" role="group" aria-label="Caption style">
+                    {([["animated", "Animated captions"], ["classic", "Classic (cheaper, quicker)"]] as const).map(([v, label]) => (
+                      <button key={v} type="button" onClick={() => setOpts({ ...opts, captions: v })} aria-pressed={opts.captions === v} className={`rounded-full px-3 py-1 ${opts.captions === v ? "bg-[#F0A71F] text-[#1a1200]" : "text-white/75 hover:text-white"}`} data-testid={`post-captions-${v}`}>{label}</button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#053877]/15 bg-[#053877]/[0.04] px-4 py-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"><Sparkles className="h-4 w-4" /></span>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-foreground">{rec.title || "Session"}</p>
-                <p className="text-xs text-muted-foreground">{done ? `${mine.length} clips with captions` : running ? stageLabel(rec, p) : opts.formats.length ? `Clips (${opts.formats.join(", ")}, ${opts.captions} captions) and a clean episode` : "Pick your shapes, then start"}</p>
-              </div>
-            </div>
-            {done ? (
-              <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-600 dark:text-emerald-400"><Check className="h-4 w-4" /> Ready</span>
-            ) : running ? (
-              <Button disabled className="gap-2 rounded-full"><Loader2 className="h-4 w-4 animate-spin" /> {pct}%</Button>
-            ) : failed ? (
-              <Button onClick={() => start.mutate(rec.id)} disabled={start.isPending} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="post-start">
-                <Sparkles className="h-4 w-4" /> Try again
-              </Button>
-            ) : null /* Not started: the start is the middle of the window. */}
           </div>
           {view === "episode" && !running && (
             <EpisodeTools
@@ -1261,11 +1352,34 @@ export function PostStudio() {
         <div className="rounded-2xl border border-border bg-card p-4">
           <p className="pb-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Pipeline</p>
           <ul className="divide-y divide-border/60">
-            <PipelineRow icon={Disc} title="Recording saved" detail={`${stamp(rec.durationSec)} long`} state="done" />
+            <PipelineRow icon={Disc} title="Recording saved" detail={`${stamp(rec.durationSec)} long`} state={intro ? "active" : "done"} />
             <PipelineRow icon={Film} title="Load the recording" detail={p?.stage === "download" && p.pct != null ? `${p.pct}%` : undefined} state={state("download")} />
             <PipelineRow icon={FileText} title="Transcript" detail={p?.words ? `${p.words.toLocaleString("en-US")} words · ${p.transcriptSource === "live" ? "written live" : "transcribed after"}` : p?.transcriptSource === "live" ? "Written live on air" : undefined} state={state("transcript")} />
             <PipelineRow icon={Sparkles} title="Pick the moments" detail={pickedN ? `${pickedN} that stand on their own` : undefined} state={state("moments")} />
             <PipelineRow icon={Crop} title="Cut in three shapes" detail={p?.stage === "render" ? renderDetail(p) || undefined : readyN ? "16:9 · 9:16 · 1:1 + captions" : undefined} state={state("render")} />
+            {(() => {
+              const mix = parseMusicMix(rec.musicMix);
+              const track = mix?.key ? musicList.data?.find((t) => t.key === mix.key)?.name ?? "the track" : "";
+              const asking = done && (!mix || mix.status === "failed" || musicOpen);
+              return (
+                <li className="py-0">
+                  <ul>
+                    <PipelineRow
+                      icon={Music2}
+                      title="Add music"
+                      detail={!done ? "Optional, once the clips are made" : mix?.status === "queued" || mix?.status === "running" ? `Mixing in ${track}…` : mix?.status === "done" ? track : mix?.status === "skipped" ? "No music" : mix?.status === "failed" ? "That didn't work. Pick again" : "Pick a track, or skip"}
+                      state={!done ? "waiting" : mix?.status === "queued" || mix?.status === "running" ? "active" : musicOpen ? "ask" : mix?.status === "done" || mix?.status === "skipped" ? "done" : mix?.status === "failed" ? "failed" : "ask"}
+                    />
+                  </ul>
+                  {done && (mix?.status === "done" || mix?.status === "skipped") && !musicOpen && (
+                    <button type="button" onClick={() => setMusicOpen(true)} className="-mt-1 mb-1 ml-10 text-xs font-medium text-primary hover:underline" data-testid="music-change">{mix?.status === "done" ? "Change the music" : "Add music"}</button>
+                  )}
+                  {asking && !(mix?.status === "queued" || mix?.status === "running") && (
+                    <PipelineMusic rec={rec} onChange={() => { setMusicOpen(false); void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] }); }} />
+                  )}
+                </li>
+              );
+            })()}
             <PipelineRow icon={Send} title="Ready to post" detail={done ? "In your dashboard" : undefined} state={done ? "done" : state("upload") === "done" ? "active" : "waiting"} />
             <PipelineRow
               icon={Wand2}

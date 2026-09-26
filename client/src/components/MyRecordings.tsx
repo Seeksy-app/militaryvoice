@@ -292,7 +292,7 @@ export function MyRecordings({
                     {/* Clips and the clean episode are made in Pōstify. */}
                     {/* A clean copy is already Pōstify's output; clips come from the original. */}
                     {!main.egressId.startsWith("CLEAN_") && (
-                      <DropdownMenuItem onSelect={() => { window.location.href = `/host/dashboard/postify?rec=${main.id}`; }} className="gap-2" data-testid={`button-postify-recording-${main.id}`}>
+                      <DropdownMenuItem onSelect={() => { window.location.href = `/host/dashboard/postify?rec=${main.id}${main.clipStatus === "none" ? "&go=1" : ""}`; }} className="gap-2" data-testid={`button-postify-recording-${main.id}`}>
                         <Wand2 className="h-4 w-4 text-[#b36b00]" /> {main.clipStatus === "done" ? "Clips in Pōstify" : "Pōstify it"}
                       </DropdownMenuItem>
                     )}

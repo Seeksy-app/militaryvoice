@@ -120,6 +120,8 @@ interface Job {
   options?: { formats: Shape[]; captions: "animated" | "classic" };
   /** A track to play under the clips (a signed link to the MP3). */
   music?: { url: string; name: string };
+  /** "Add music" to finished clips: mix the track into each clip's files (from before any music). */
+  musicMix?: { url: string; name: string; silent: boolean; clips: { id: number; url: string; verticalUrl: string; squareUrl: string }[] };
   /** "Edit text": remake one clip's three shapes with a new title and subtitle. */
   clipEdit?: { clipId: number; title: string; subtitle: string; startSec: number; endSec: number; shapes?: Shape[] };
 }
@@ -1417,7 +1419,43 @@ function silentMoments(job: Job): Moment[] {
   });
 }
 
+/** "Add music": each finished clip, every shape, with the track mixed in; the new files replace them. */
+async function handleMusic(job: Job): Promise<void> {
+  const mm = job.musicMix!;
+  const tag = `[${job.recordingId}] music`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `music-${job.recordingId}-`));
+  try {
+    console.log(`${tag}: ${mm.name} under ${mm.clips.length} clips`);
+    const music = path.join(dir, "music.mp3");
+    const got = await fetch(mm.url);
+    if (!got.ok) throw new Error(`couldn't fetch the music: ${got.status}`);
+    await fs.writeFile(music, new Uint8Array(await got.arrayBuffer()));
+    const out: { id: number; url: string; verticalUrl: string; squareUrl: string }[] = [];
+    for (const c of mm.clips) {
+      const next = { id: c.id, url: "", verticalUrl: "", squareUrl: "" };
+      for (const k of ["url", "verticalUrl", "squareUrl"] as const) {
+        if (!c[k]) continue;
+        const file = path.join(dir, `${c.id}-${k}.mp4`);
+        const res = await fetch(c[k]);
+        if (!res.ok || !res.body) throw new Error(`couldn't fetch clip ${c.id}: ${res.status}`);
+        await pipeline(Readable.fromWeb(res.body as never), createWriteStream(file));
+        await mixMusic(file, music, !mm.silent);
+        next[k] = await uploadFile(file, "video/mp4");
+      }
+      out.push(next);
+    }
+    await api("POST", `/api/agent/music-jobs/${job.recordingId}/done`, { clips: out });
+    console.log(`${tag}: done`);
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/music-jobs/${job.recordingId}/failed`, { error: (err as Error).message }).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function handle(job: Job): Promise<void> {
+  if (job.musicMix) return handleMusic(job);
   if (job.importFrom) return handleImport(job);
   if (job.episodeEdit) return handleEpisodeEdit(job);
   if (job.clipEdit) return handleEdit(job);
@@ -1482,9 +1520,8 @@ async function handle(job: Job): Promise<void> {
         return job.transcript;
       });
     }
-    // Nothing said, and no music asked for: nothing to make (the server gives the credits back).
+    // Nothing said (a demo over music, a silent screen share): clips by the clock; music can go on after.
     const silent = lines.length === 0;
-    if (silent && !job.music) throw new Error("no transcript, so nothing to choose from");
     let musicFile = "";
     if (job.music) {
       musicFile = path.join(dir, "music.mp3");
@@ -1623,11 +1660,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 
 async function tick(): Promise<boolean> {
-  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "import"] });
+  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "import", "music"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  holding = job.clipEdit || job.episodeEdit || job.importFrom ? null : job.recordingId;
+  holding = job.clipEdit || job.episodeEdit || job.importFrom || job.musicMix ? null : job.recordingId;
   try {
     await handle(job);
     holding = null;

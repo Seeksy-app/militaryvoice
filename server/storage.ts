@@ -833,6 +833,9 @@ export interface IStorage {
   /** A Zoom recording to bring into someone's Library; nothing if that file is already there. */
   queueImport(v: { email: string; title: string; egressId: string; startedAt: string; durationSec: number; sizeBytes: number; source: string }): Promise<RecordingRow | undefined>;
   claimImport(): Promise<RecordingRow | undefined>;
+  setMusicMix(recordingId: number, json: string): Promise<void>;
+  /** The next "Add music" to mix, or one whose worker went quiet for 15 minutes. */
+  claimMusicMix(): Promise<RecordingRow | undefined>;
   /** Claim one import straight away (the server's fast path); nothing if the worker has it. */
   claimImportById(id: number): Promise<RecordingRow | undefined>;
   /** Hand an import back to the worker. */
@@ -2099,6 +2102,27 @@ class DatabaseStorage implements IStorage {
       )
       .returning();
     return row;
+  }
+
+  async setMusicMix(recordingId: number, json: string): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ musicMix: json }).where(eq(recordings.id, recordingId));
+  }
+
+  async claimMusicMix(): Promise<RecordingRow | undefined> {
+    await ready();
+    const stale = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const rows = await db.select().from(recordings).where(sqlExpr`${recordings.musicMix} LIKE '%"status":"queued"%' OR (${recordings.musicMix} LIKE '%"status":"running"%')`).limit(20);
+    for (const r of rows) {
+      let m: { status?: string; at?: string } = {};
+      try { m = JSON.parse(r.musicMix); } catch { continue; }
+      if (m.status === "running" && (m.at ?? "") > stale) continue;
+      const next = JSON.stringify({ ...m, status: "running", at: new Date().toISOString() });
+      // Only if nobody changed it in between.
+      const [won] = await db.update(recordings).set({ musicMix: next }).where(and(eq(recordings.id, r.id), eq(recordings.musicMix, r.musicMix))).returning();
+      if (won) return won;
+    }
+    return undefined;
   }
 
   async claimImportById(id: number): Promise<RecordingRow | undefined> {

@@ -43,6 +43,7 @@ import {
   clipResultSchema,
   CLIP_STAGES,
   parseClipOptions,
+  parseMusicMix,
   CLIP_FORMATS,
   toCleanTime,
   type EpisodeEdit,
@@ -5218,6 +5219,31 @@ export function registerRoutes(app: Express): void {
         return;
       }
     }
+    // "Add music": seconds of work per clip, and someone's watching for it.
+    if (Array.isArray(req.body?.can) && req.body.can.includes("music")) {
+      const mixRec = await storage.claimMusicMix();
+      if (mixRec) {
+        const mix = parseMusicMix(mixRec.musicMix);
+        const track = mix?.key ? await storage.getMusic(mix.key) : undefined;
+        const clipRows = await storage.listClips(mixRec.id);
+        if (!mix || !track?.url || !clipRows.length) {
+          await storage.setMusicMix(mixRec.id, JSON.stringify({ ...(mix ?? {}), status: "failed", error: "That track or the clips couldn't be found." }));
+        } else {
+          return res.json({
+            job: {
+              recordingId: mixRec.id, title: mixRec.title, durationSec: mixRec.durationSec, downloadUrl: "", show: "", host: "", transcript: [],
+              musicMix: {
+                url: await signedRecordingUrl(track.url, 3 * 3600),
+                name: track.name,
+                // Nothing said in any clip: the track plays at full level rather than under a voice.
+                silent: clipRows.every((c) => !c.transcript.trim()),
+                clips: clipRows.map((c) => ({ id: c.id, ...(mix.orig?.[String(c.id)] ?? { url: c.url, verticalUrl: c.verticalUrl, squareUrl: c.squareUrl }) })),
+              },
+            },
+          });
+        }
+      }
+    }
     // A recording to bring in (Zoom), if this worker can: quick, and someone's Library is waiting on it.
     if (Array.isArray(req.body?.can) && req.body.can.includes("import")) {
       const imp = await storage.claimImport();
@@ -6152,6 +6178,57 @@ export function registerRoutes(app: Express): void {
     const title = String(req.body?.title ?? "").trim().slice(0, 140) || String(req.body?.fileName ?? "Video").replace(/\.[a-z0-9]+$/i, "").slice(0, 140);
     const rec = await storage.createUploadedRecording({ email, title, storageKey, durationSec, sizeBytes: Number(req.body?.sizeBytes) || 0, free: false, queue: false });
     res.status(201).json({ id: rec.id });
+  });
+
+  /**
+   * "Add music" (or take it off): the last step of Pōstify. The clips' files
+   * from before any music are kept, so changing the track mixes from those
+   * rather than stacking a second track on the first.
+   */
+  app.post("/api/host/recordings/:id/music", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
+    if (rec.clipStatus !== "done") return res.status(409).json({ message: "The clips aren't ready yet." });
+    const mix = parseMusicMix(rec.musicMix);
+    if (mix && (mix.status === "queued" || mix.status === "running")) return res.status(409).json({ message: "Music is being added right now." });
+    const key = String(req.body?.key ?? "");
+    const clipRows = await storage.listClips(rec.id);
+    // Before any music: what's there now, unless a track is already mixed in.
+    const orig = mix?.orig ?? Object.fromEntries(clipRows.map((c) => [String(c.id), { url: c.url, verticalUrl: c.verticalUrl, squareUrl: c.squareUrl }]));
+    const now = new Date().toISOString();
+    if (!key) {
+      // No music: put the originals back if a track was mixed in.
+      if (mix?.status === "done" && mix.orig) {
+        for (const c of clipRows) {
+          const o = mix.orig[String(c.id)];
+          if (o) await storage.updateClip(c.id, o);
+        }
+      }
+      await storage.setMusicMix(rec.id, JSON.stringify({ key: "", status: "skipped", at: now, orig }));
+      return res.json({ ok: true });
+    }
+    const track = await storage.getMusic(key);
+    if (!track?.url) return res.status(404).json({ message: "No such track." });
+    await storage.setMusicMix(rec.id, JSON.stringify({ key, status: "queued", at: now, orig }));
+    res.json({ ok: true });
+  });
+  app.post("/api/agent/music-jobs/:id/done", requireAgent, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    const mix = rec ? parseMusicMix(rec.musicMix) : null;
+    if (!rec || !mix) return res.status(404).json({ message: "No such job." });
+    const mine = new Set((await storage.listClips(rec.id)).map((c) => c.id));
+    for (const c of (Array.isArray(req.body?.clips) ? req.body.clips : []) as { id: number; url: string; verticalUrl: string; squareUrl: string }[]) {
+      if (mine.has(Number(c.id))) await storage.updateClip(Number(c.id), { url: String(c.url ?? ""), verticalUrl: String(c.verticalUrl ?? ""), squareUrl: String(c.squareUrl ?? "") });
+    }
+    await storage.setMusicMix(rec.id, JSON.stringify({ ...mix, status: "done", at: new Date().toISOString() }));
+    res.json({ ok: true });
+  });
+  app.post("/api/agent/music-jobs/:id/failed", requireAgent, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    const mix = rec ? parseMusicMix(rec.musicMix) : null;
+    if (rec && mix) await storage.setMusicMix(rec.id, JSON.stringify({ ...mix, status: "failed", error: String(req.body?.error ?? "").slice(0, 300) }));
+    res.json({ ok: true });
   });
 
   /** The podcaster's own "Make clips": queue one of their finished recordings that hasn't been clipped (or failed). */

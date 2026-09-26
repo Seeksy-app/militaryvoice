@@ -1157,10 +1157,29 @@ export const recordings = pgTable("recordings", {
   importClaimedAt: text("import_claimed_at").notNull().default(""),
   /** "Edit episode" (EpisodeEdit as JSON): trim, intro and outro, made into a new Library copy. */
   episodeEdit: text("episode_edit").notNull().default(""),
+  /**
+   * "Add music" after the clips are made (MusicMix as JSON): the track, its
+   * state, and each clip's files from before any music, so a track can be
+   * changed or taken off without stacking.
+   */
+  musicMix: text("music_mix").notNull().default(""),
   /** The Library folder it's filed in (library_folders.id); 0 for none. */
   folderId: integer("folder_id").notNull().default(0),
 });
 export type RecordingRow = typeof recordings.$inferSelect;
+
+export interface MusicMix {
+  key: string;
+  status: "queued" | "running" | "done" | "failed" | "skipped";
+  at: string;
+  error?: string;
+  /** Each clip's files before any music: clip id → its three URLs. */
+  orig?: Record<string, { url: string; verticalUrl: string; squareUrl: string }>;
+}
+export function parseMusicMix(raw: string): MusicMix | null {
+  if (!raw) return null;
+  try { return JSON.parse(raw) as MusicMix; } catch { return null; }
+}
 
 /** Pōstify's music library (shared/music.ts seeds it; the admin generates each track once). */
 export const musicTracks = pgTable("music_tracks", {
