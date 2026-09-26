@@ -119,7 +119,7 @@ interface Job {
   /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
   clipCount?: number;
   /** What the podcaster picked: which shapes, and the caption style. Absent = all three, animated. */
-  options?: { formats: Shape[]; captions: "animated" | "classic" };
+  options?: { formats: Shape[]; captions: "animated" | "classic"; more?: { count: number; avoid: [number, number][] } };
   /** A track to play under the clips (a signed link to the MP3). */
   music?: { url: string; name: string };
   /** "Add music" to finished clips: mix the track into each clip's files (from before any music). */
@@ -920,7 +920,10 @@ const PICK_TOOL = {
 export async function pickMoments(job: Job, lines: Line[]): Promise<Moment[]> {
   const key = process.env.ANTHROPIC_API_KEY;
   // How many: the plan's (Pro makes 6), else CLIP_COUNT.
-  const n = job.clipCount && job.clipCount > 0 ? Math.min(12, job.clipCount) : WANTED;
+  const more = job.options?.more;
+  const n = more ? Math.min(8, more.count) : job.clipCount && job.clipCount > 0 ? Math.min(12, job.clipCount) : WANTED;
+  const avoid = more?.avoid ?? [];
+  const clear = (m: Moment) => !avoid.some(([a, b]) => m.startSec < b && m.endSec > a);
   if (!key) return densestStretches(lines, n);
 
   const client = new Anthropic({ apiKey: key, timeout: 5 * 60_000, maxRetries: 1 });
@@ -941,7 +944,10 @@ Pick the ${n} strongest moments to post on their own. What makes a moment strong
 
 This community's stories carry real weight. Do not pick a moment because it sounds dramatic out of context, and do not write a caption that makes someone's service or loss into bait. Write the caption the way the host would say it.
 
-If the segment genuinely has fewer than ${n} moments that stand alone, return fewer. Returning two good ones is better than four with filler.
+If the segment genuinely has fewer than ${n} moments that stand alone, return fewer. Returning two good ones is better than four with filler.${avoid.length ? `
+
+These moments already have clips. Pick different ones that do not overlap them:
+${avoid.map(([a, b]) => `- ${Math.round(a)}s to ${Math.round(b)}s`).join("\n")}` : ""}
 
 Transcript:
 ${transcriptText(lines)}`;
@@ -973,7 +979,7 @@ ${transcriptText(lines)}`;
     if ((raw as unknown[]).length) break;
     console.warn(`   the pick came back empty (stop: ${res.stop_reason})${attempt === 1 ? " — asking again" : ""}`);
   }
-  if (!(raw as unknown[]).length) return densestStretches(lines, n);
+  if (!(raw as unknown[]).length) return more ? [] : densestStretches(lines, n);
   const moments = (raw as Moment[]).map((m) => ({
     title: String(m.title ?? "").slice(0, 120),
     caption: String(m.caption ?? "").slice(0, 400),
@@ -981,7 +987,7 @@ ${transcriptText(lines)}`;
     startSec: Math.max(0, Math.floor(Number(m.startSec))),
     endSec: Math.ceil(Number(m.endSec)),
   }));
-  return sane(moments, job.durationSec, n);
+  return sane(moments.filter(clear), job.durationSec, n);
 }
 
 /**
@@ -1745,7 +1751,8 @@ async function handle(job: Job): Promise<void> {
     // job's claim — a shutdown now mustn't requeue clips that are finished.
     holding.delete(job.recordingId);
     // A clean episode is cutting ums and dead air out of talk; with no talk there's nothing to cut.
-    if (!silent) await cleanEpisode(job, source, dir);
+    // "Generate more" is clips only: the clean episode is already made.
+    if (!silent && !job.options?.more) await cleanEpisode(job, source, dir);
   } finally {
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
