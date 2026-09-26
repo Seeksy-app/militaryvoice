@@ -113,7 +113,7 @@ interface Job {
   /** Only (re)make the clean episode; the clips are already done. */
   cleanOnly?: boolean;
   /** "Edit episode": the source is downloadUrl; cut to trimStart–trimEnd (0 = the end), with an intro and outro. */
-  episodeEdit?: { trimStart: number; trimEnd: number; introUrl?: string; outroUrl?: string };
+  episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; introUrl?: string; outroUrl?: string };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
   /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
@@ -124,6 +124,8 @@ interface Job {
   music?: { url: string; name: string };
   /** "Add music" to finished clips: mix the track into each clip's files (from before any music). */
   musicMix?: { url: string; name: string; silent: boolean; clips: { id: number; url: string; verticalUrl: string; squareUrl: string }[] };
+  /** "Suggest edits": listen to the episode (this version of it) and recommend the trim and any cuts. */
+  suggestEdits?: { source: "clean" | "original" };
   /** "Edit text": remake one clip's three shapes with a new title and subtitle. */
   clipEdit?: { clipId: number; title: string; subtitle: string; startSec: number; endSec: number; shapes?: Shape[] };
 }
@@ -1305,6 +1307,101 @@ async function handleEdit(job: Job): Promise<void> {
  * cropped), set to 30fps and stereo 48k so they join cleanly; a part with no
  * sound gets silence of its own length. Never throws.
  */
+const SUGGEST_TOOL = {
+  name: "suggest_edits",
+  description: "Recommend how to edit this episode: where the show really starts and ends, and any sections to cut from the middle.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      start: { type: ["number", "null"], description: "Seconds: where the show really begins (after tech checks, countdowns, \"are we recording?\"). null if it already starts cleanly." },
+      startReason: { type: "string" },
+      end: { type: ["number", "null"], description: "Seconds: where the show really ends (after the sign-off, before goodbyes off-mic and fumbling to stop the recording). null if it already ends cleanly." },
+      endReason: { type: "string" },
+      cuts: {
+        type: "array",
+        description: "Sections to remove from the middle, in order. Only real problems. Empty if there are none.",
+        items: {
+          type: "object",
+          properties: {
+            from: { type: "number", description: "Seconds, on the first word to cut." },
+            to: { type: "number", description: "Seconds, just before the first word to keep." },
+            reason: { type: "string", description: "One short sentence, the way an editor would say it to the host." },
+          },
+          required: ["from", "to", "reason"],
+        },
+      },
+    },
+    required: ["start", "end", "cuts"],
+  },
+};
+
+/**
+ * "Suggest edits": transcribe this version of the episode, then have Claude
+ * read it like an editor would. The host decides; nothing is cut here.
+ */
+async function handleSuggest(job: Job): Promise<void> {
+  const tag = `[${job.recordingId}] suggest`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `suggest-${job.recordingId}-`));
+  try {
+    const key = process.env.ANTHROPIC_API_KEY;
+    if (!key) throw new Error("The AI isn't set up on the worker.");
+    const file = path.join(dir, "episode.mp4");
+    const res = await fetch(job.downloadUrl);
+    if (!res.ok || !res.body) throw new Error(`Couldn't fetch the episode (${res.status}).`);
+    await pipeline(Readable.fromWeb(res.body as never), createWriteStream(file));
+    const lines = await transcribeWithScribe(file, dir).catch(async (err) => {
+      console.warn(`${tag}: Scribe failed: ${err.message} — falling back`);
+      if (process.env.DEEPGRAM_API_KEY) return transcribeWithDeepgram(file, dir);
+      return transcribeLocally(file, dir);
+    });
+    const dur = Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]).catch(() => "0")).trim()) || job.durationSec;
+    if (!lines.length) {
+      await api("POST", `/api/agent/suggest-edits/${job.recordingId}/done`, { items: [] });
+      return;
+    }
+    const client = new Anthropic({ apiKey: key, timeout: 5 * 60_000, maxRetries: 1 });
+    const prompt = `You are the editor for a military and veteran podcast${job.show ? `, "${job.show}"` : ""}${job.host ? `, hosted by ${job.host}` : ""}. The host has asked what should come out of this episode before it's published.
+
+Length: ${Math.round(dur)} seconds. Below is the transcript, each line prefixed with its offset in seconds.
+
+Recommend:
+- start: where the show really begins. Cut the tech check, the countdown, "can you hear me", "are we live", small talk before the welcome. If it opens cleanly, null.
+- end: where the show really ends: just after the last sign-off line. Cut goodbyes after that, "stop the recording", fumbling. If it ends cleanly, null.
+- cuts: sections from the middle that a careful editor would remove: a restart or retake ("let me say that again"), a tech problem (frozen audio, "you cut out"), a phone or a dog interrupting, off-the-record talk someone asked to leave out, housekeeping between host and guest. Not ums or short pauses: those are already handled. Not anything that is simply slow or off-topic but still a real part of the conversation: the host's voice and their guest's stories stay.
+
+Be conservative: every cut must be something the host would thank you for. Put cut edges on word boundaries: from = the start of the first word to remove, to = the start of the first word to keep. Fewer, certain suggestions beat many doubtful ones. None at all is a fine answer.
+
+Transcript:
+${transcriptText(lines)}`;
+    const out = await client.messages.create({
+      model: "claude-opus-5",
+      max_tokens: 16000,
+      thinking: { type: "adaptive" },
+      tools: [SUGGEST_TOOL],
+      tool_choice: { type: "tool", name: "suggest_edits" },
+      messages: [{ role: "user", content: prompt }],
+    });
+    const use = out.content.find((c) => c.type === "tool_use");
+    const r = (use && use.type === "tool_use" ? use.input : {}) as { start?: number | null; startReason?: string; end?: number | null; endReason?: string; cuts?: unknown };
+    let cuts = r.cuts as { from: number; to: number; reason: string }[] | string | undefined;
+    if (typeof cuts === "string") { try { cuts = JSON.parse(cuts); } catch { cuts = []; } }
+    const items: { kind: "start" | "end" | "cut"; from: number; to: number; reason: string }[] = [];
+    if (typeof r.start === "number" && r.start > 0.5 && r.start < dur / 2) items.push({ kind: "start", from: 0, to: r.start, reason: r.startReason || "Before the show begins." });
+    if (typeof r.end === "number" && r.end > dur / 2 && dur - r.end > 0.5) items.push({ kind: "end", from: r.end, to: dur, reason: r.endReason || "After the show ends." });
+    for (const c of Array.isArray(cuts) ? cuts : []) {
+      const from = Number(c.from), to = Number(c.to);
+      if (Number.isFinite(from) && Number.isFinite(to) && to - from >= 0.5 && from >= 0 && to <= dur) items.push({ kind: "cut", from, to, reason: String(c.reason ?? "") });
+    }
+    console.log(`${tag}: ${items.length} suggestion${items.length === 1 ? "" : "s"}`);
+    await api("POST", `/api/agent/suggest-edits/${job.recordingId}/done`, { items });
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/suggest-edits/${job.recordingId}/failed`, { error: (err as Error).message }).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function handleEpisodeEdit(job: Job): Promise<void> {
   const e = job.episodeEdit!;
   const tag = `[${job.recordingId}] edit`;
@@ -1318,7 +1415,20 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
     };
     const parts: { url: string; ss?: number; t?: number }[] = [];
     if (e.introUrl) parts.push({ url: e.introUrl });
-    parts.push({ url: job.downloadUrl, ss: e.trimStart || undefined, t: e.trimEnd ? e.trimEnd - e.trimStart : undefined });
+    // The episode as the pieces that are kept: the trim, less any sections cut from the middle.
+    const cuts = (e.cuts ?? []).filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0]);
+    if (!cuts.length) {
+      parts.push({ url: job.downloadUrl, ss: e.trimStart || undefined, t: e.trimEnd ? e.trimEnd - e.trimStart : undefined });
+    } else {
+      const to = e.trimEnd || (await probe(job.downloadUrl)).dur;
+      let at = e.trimStart || 0;
+      for (const [a, b] of cuts) {
+        if (a - at >= 0.2) parts.push({ url: job.downloadUrl, ss: at || undefined, t: a - at });
+        at = Math.max(at, b);
+      }
+      if (to - at >= 0.2) parts.push({ url: job.downloadUrl, ss: at || undefined, t: to - at });
+      console.log(`${tag}: ${cuts.length} cut${cuts.length === 1 ? "" : "s"} from the middle, ${parts.length - (e.introUrl ? 1 : 0)} pieces kept`);
+    }
     if (e.outroUrl) parts.push({ url: e.outroUrl });
 
     const args: string[] = ["-y", "-v", "error"];
@@ -1465,6 +1575,7 @@ async function handle(job: Job): Promise<void> {
   if (job.musicMix) return handleMusic(job);
   if (job.importFrom) return handleImport(job);
   if (job.episodeEdit) return handleEpisodeEdit(job);
+  if (job.suggestEdits) return handleSuggest(job);
   if (job.clipEdit) return handleEdit(job);
   if (job.cleanOnly) return handleClean(job);
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `clip-${job.recordingId}-`));
@@ -1675,11 +1786,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 
 async function tick(): Promise<boolean> {
-  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "import", "music"] });
+  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "import", "music", "suggest"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  if (!(job.clipEdit || job.episodeEdit || job.importFrom || job.musicMix)) holding.add(job.recordingId);
+  if (!(job.clipEdit || job.episodeEdit || job.importFrom || job.musicMix || job.suggestEdits)) holding.add(job.recordingId);
   try {
     await handle(job);
     holding.delete(job.recordingId);
