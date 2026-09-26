@@ -1035,7 +1035,7 @@ export function PostStudio() {
     queryKey: ["/api/host/recordings"],
     queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(),
     // Live while anything is moving; still otherwise.
-    refetchInterval: (q) => ((q.state.data as Rec[] | undefined)?.some((r) => r.clipStatus === "queued" || r.clipStatus === "running" || cleanOf(r)?.status === "running" || /"status":"(queued|running)"/.test(r.episodeEdit) || /"status":"(queued|running)"/.test(r.musicMix)) ? 4000 : false),
+    refetchInterval: (q) => ((q.state.data as Rec[] | undefined)?.some((r) => r.clipStatus === "queued" || r.clipStatus === "running" || cleanOf(r)?.status === "running" || /"status":\s*"(queued|running)"/.test(r.episodeEdit) || /"status":\s*"(queued|running)"/.test(r.musicMix)) ? 4000 : false),
   });
   const moving = (recs.data ?? []).some((r) => r.clipStatus === "queued" || r.clipStatus === "running");
   const clips = useQuery<ClipRow[]>({
@@ -1126,7 +1126,7 @@ export function PostStudio() {
   }, [autoRec?.id, features.data]);
 
   // Music mixed in: the clips' files changed.
-  const mixState = (recs.data ?? []).map((r) => `${r.id}:${/"status":"(\w+)"/.exec(r.musicMix)?.[1] ?? ""}`).join(",");
+  const mixState = (recs.data ?? []).map((r) => `${r.id}:${/"status":\s*"(\w+)"/.exec(r.musicMix)?.[1] ?? ""}`).join(",");
   useEffect(() => { void qc.invalidateQueries({ queryKey: ["/api/host/clips"] }); }, [mixState, qc]);
   const betaBadge = beta && !beta.unlimited ? (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F]/15 px-2.5 py-1 text-xs font-semibold text-[#8a5a00] dark:text-[#F0A71F]" data-testid="post-beta">
