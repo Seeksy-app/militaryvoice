@@ -74,6 +74,7 @@ import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
 import { MyAnalytics } from "@/components/MyAnalytics";
+import { PodcastListens } from "@/components/PodcastStats";
 import { isPodcaster } from "@shared/schema";
 import { StudioIcon } from "@/components/GreenRoomButton";
 import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
@@ -1178,7 +1179,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         ) : screen === "social" ? (
           <SocialScreen />
         ) : screen === "analytics" ? (
-          <MyAnalytics onConnect={() => goTo("integrations")} />
+          <section className="mt-6">
+            <PodcastListens onConnect={() => { window.location.hash = "section-podcast-stats"; goTo("integrations"); }} />
+            <MyAnalytics onConnect={() => goTo("integrations")} />
+          </section>
         ) : screen === "pro" ? (
           <ProScreen feature={proFeature} />
         ) : screen === "contacts" ? (

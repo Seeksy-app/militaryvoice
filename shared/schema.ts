@@ -2031,6 +2031,45 @@ export const postifyTokens = pgTable("postify_tokens", {
 export type PostifyTokenRow = typeof postifyTokens.$inferSelect;
 
 /**
+ * A podcaster's listening numbers, from where their show is hosted or listened
+ * to: Buzzsprout or Podbean (their own API key, read on a schedule) and
+ * Spotify (the CSV they export from Spotify for Creators, uploaded monthly).
+ * One row per podcaster per source. `creds` is sealed (server/secretBox).
+ */
+export const podcastStats = pgTable("podcast_stats", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  /** buzzsprout | podbean | spotify */
+  source: text("source").notNull(),
+  creds: text("creds").notNull().default(""),
+  /** The show's name as the source knows it. */
+  showName: text("show_name").notNull().default(""),
+  /** PodcastStatsData as JSON. */
+  data: text("data").notNull().default(""),
+  status: text("status").notNull().default("ok"),
+  error: text("error").notNull().default(""),
+  fetchedAt: text("fetched_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [uniqueIndex("podcast_stats_email_source").on(t.email, t.source)]);
+export type PodcastStatsRow = typeof podcastStats.$inferSelect;
+
+/** What every source is boiled down to, so the Analytics screen shows one shape. */
+export interface PodcastStatsData {
+  /** Lifetime downloads (Buzzsprout, Podbean) or streams (Spotify). */
+  total: number;
+  /** "downloads" or "streams": the word the source uses. */
+  unit: "downloads" | "streams";
+  episodes: { title: string; published: string; count: number }[];
+  /** Per day or per month, oldest first. */
+  series?: { date: string; count: number }[];
+  followers?: number;
+  audience?: { age?: Record<string, number>; gender?: Record<string, number>; countries?: Record<string, number>; apps?: Record<string, number> };
+  /** The span the numbers cover, for "as of". */
+  from?: string;
+  to?: string;
+}
+
+/**
  * A podcaster's Zoom, connected with OAuth: new cloud recordings come into
  * their Library on their own (autoImport), and past ones can be picked.
  * Tokens stay server-side; the refresh token is what keeps it working.

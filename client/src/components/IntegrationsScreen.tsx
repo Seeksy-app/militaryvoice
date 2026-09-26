@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 import { ZoomConnect, ImportLink } from "@/components/ZoomConnect";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { AudienceConsent } from "@/components/AudienceConsent";
+import { PodcastStatsRows } from "@/components/PodcastStats";
 import { PlatformIcon, platformLabel, platformBackground, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
 import type { ProfileRow, SocialAccount } from "@shared/schema";
-import { Check, ChevronDown, ExternalLink, Link2, Radio, RefreshCw, Share2, Upload, Video, Webhook } from "lucide-react";
+import { Check, ChevronDown, ExternalLink, Headphones, Link2, Radio, RefreshCw, Share2, Upload, Video, Webhook } from "lucide-react";
 
 /**
  * Integrations as lists you read down: your social accounts, where your
@@ -133,6 +134,15 @@ export function IntegrationsScreen({
           line="MP4, MOV or WebM, up to 2GB, straight into your Library."
           right={<Button variant="outline" size="sm" className="h-8 rounded-full px-3.5 text-xs" onClick={onOpenLibrary}>Open Library</Button>}
         />
+      </Group>
+
+      <Group
+        id="section-podcast-stats"
+        icon={<Headphones className="h-4 w-4" />}
+        title="Podcast stats"
+        line="Your downloads and streams, in Your analytics, with where your show fits among MilitaryVoices podcasts. Only you see your numbers."
+      >
+        <PodcastStatsRows Row={Row} />
       </Group>
 
       <Group

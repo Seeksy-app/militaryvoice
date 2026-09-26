@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, sponsorSearches, type SponsorSearchRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, libraryFolders, type LibraryFolderRow, musicTracks, type MusicTrackRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, sponsorSearches, type SponsorSearchRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, libraryFolders, type LibraryFolderRow, musicTracks, type MusicTrackRow, podcastStats, type PodcastStatsRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -843,6 +843,11 @@ export interface IStorage {
   /** The next "Add music" to mix, or one whose worker went quiet for 15 minutes. */
   claimMusicMix(): Promise<RecordingRow | undefined>;
   setEditSuggest(recordingId: number, json: string): Promise<void>;
+  listPodcastStats(email: string): Promise<PodcastStatsRow[]>;
+  /** Every podcaster's, for the comparison: only the numbers are used, never shown by name. */
+  allPodcastStats(): Promise<PodcastStatsRow[]>;
+  upsertPodcastStats(email: string, source: string, patch: Partial<Omit<PodcastStatsRow, "id" | "email" | "source" | "createdAt">>): Promise<PodcastStatsRow>;
+  deletePodcastStats(email: string, source: string): Promise<void>;
   /** The next "Suggest edits" to work out, or one whose worker went quiet. */
   claimEditSuggest(): Promise<RecordingRow | undefined>;
   /** Claim one import straight away (the server's fast path); nothing if the worker has it. */
@@ -2157,6 +2162,29 @@ class DatabaseStorage implements IStorage {
       if (won) return won;
     }
     return undefined;
+  }
+
+  async listPodcastStats(email: string): Promise<PodcastStatsRow[]> {
+    await ready();
+    return db.select().from(podcastStats).where(eq(podcastStats.email, email.toLowerCase().trim()));
+  }
+  async allPodcastStats(): Promise<PodcastStatsRow[]> {
+    await ready();
+    return db.select().from(podcastStats);
+  }
+  async upsertPodcastStats(email: string, source: string, patch: Partial<Omit<PodcastStatsRow, "id" | "email" | "source" | "createdAt">>): Promise<PodcastStatsRow> {
+    await ready();
+    const e = email.toLowerCase().trim();
+    const [row] = await db
+      .insert(podcastStats)
+      .values({ email: e, source, createdAt: new Date().toISOString(), ...patch })
+      .onConflictDoUpdate({ target: [podcastStats.email, podcastStats.source], set: patch })
+      .returning();
+    return row;
+  }
+  async deletePodcastStats(email: string, source: string): Promise<void> {
+    await ready();
+    await db.delete(podcastStats).where(and(eq(podcastStats.email, email.toLowerCase().trim()), eq(podcastStats.source, source)));
   }
 
   async setEditSuggest(recordingId: number, json: string): Promise<void> {
