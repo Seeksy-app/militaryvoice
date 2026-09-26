@@ -474,9 +474,9 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
             </div>
             <CreditPacks busy={busy} go={go} label="Or buy credits once, no plan" />
             <ul className="space-y-1 text-xs text-muted-foreground">
-              <li><span className="font-semibold text-foreground">Classic captions:</span> 1 credit a clip, every shape included.</li>
-              <li><span className="font-semibold text-foreground">Animated captions:</span> 1 credit per shape, per clip.</li>
-              <li><span className="font-semibold text-foreground">The clean episode:</span> 1 credit. Your first episode is free.</li>
+              <li><span className="font-semibold text-foreground">An episode:</span> 8 credits (12 on Pro): every clip in all three shapes with animated captions, and the clean episode.</li>
+              <li><span className="font-semibold text-foreground">Classic captions:</span> 5 credits (7 on Pro).</li>
+              <li><span className="font-semibold text-foreground">Music and text edits:</span> included. Your first episode is free.</li>
             </ul>
             <p className="text-center text-xs text-muted-foreground">Secure checkout by Stripe. <a href="/pricing" className="underline underline-offset-2 hover:text-foreground">All the details</a></p>
           </>

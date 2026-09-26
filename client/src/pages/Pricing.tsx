@@ -14,16 +14,16 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 // live in shared/tokens.ts so the server charges exactly what this page shows.
 
 const HOW = [
-  { icon: Scissors, title: "Classic captions: 1 credit a clip", body: "Bold captions burned in, framed on whoever's speaking. Vertical, square and wide all included." },
-  { icon: Wand2, title: "Animated captions: 1 credit per shape", body: "Word-by-word highlight, and the picture follows each speaker. Pick just the shapes you post." },
-  { icon: Sparkles, title: "Clean episode: 1 credit", body: "The whole episode with the ums, false starts and dead air taken out. Your first episode is free." },
+  { icon: Wand2, title: "8 credits an episode, everything included", body: "Four clips in every shape (vertical, square and wide) with animated captions that follow whoever's speaking, plus the clean episode." },
+  { icon: Scissors, title: "Classic captions: 5 credits", body: "Bold captions burned in instead of animated ones: quicker, and still every shape and the clean episode." },
+  { icon: Sparkles, title: "Music and edits included", body: "Add a track from our library to every clip, and fix a title or subtitle, at no extra cost. Your first episode is free." },
 ];
 
 const EXAMPLES = [
-  { label: "4 clips, Classic, every shape", credits: episodeCredits({ formats: ["vertical", "square", "wide"], captions: "classic" }) },
-  { label: "4 clips, Animated, vertical only", credits: episodeCredits({ formats: ["vertical"], captions: "animated" }) },
-  { label: "4 clips, Animated, vertical + square", credits: episodeCredits({ formats: ["vertical", "square"], captions: "animated" }) },
-  { label: "4 clips, Animated, every shape", credits: episodeCredits({ formats: ["vertical", "square", "wide"], captions: "animated" }) },
+  { label: "An episode, animated captions (4 clips)", credits: episodeCredits({ captions: "animated" }) },
+  { label: "An episode, Classic captions (4 clips)", credits: episodeCredits({ captions: "classic" }) },
+  { label: "A Pro episode, animated (6 clips)", credits: episodeCredits({ captions: "animated" }, 6) },
+  { label: "A Pro episode, Classic (6 clips)", credits: episodeCredits({ captions: "classic" }, 6) },
 ];
 
 /**
@@ -34,7 +34,7 @@ const EXAMPLES = [
  */
 const COMPARE: { row: string; cells: [string, string, string, string]; note?: string }[] = [
   { row: "Monthly price", cells: ["$15", "$29", "$19.95", "$49"] },
-  { row: "A weekly 60-minute show (4 episodes a month)", cells: ["Not enough: 150 minutes is 2½ episodes", "Covered", "About $23.55 (a few extra credits)", "Covered, room for 10"], note: "Pōstify: 4 clips an episode, vertical and square, animated captions." },
+  { row: "A weekly 60-minute show (4 episodes a month)", cells: ["Not enough: 150 minutes is 2½ episodes", "Covered", "About $21.15 (2 extra credits)", "Covered, room for 7"], note: "Pōstify: every clip in vertical, square and wide, animated captions, 8 credits an episode (12 on Pro)." },
   { row: "Clips per episode", cells: ["As many as it finds", "As many as it finds", "4 picked, plus any you mark", "6 picked, plus any you mark"] },
   { row: "The whole episode cleaned (ums, false starts, dead air out) as MP3 and MP4", cells: ["Not listed", "Not listed", "Included", "Included"] },
   { row: "Post and schedule to your own accounts", cells: ["Auto-post", "Included", "Included", "Included"] },

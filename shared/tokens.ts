@@ -9,9 +9,9 @@
  * credit costs us at most ~50¢, and the plans sell them at 50–66¢.
  */
 export const PLANS = {
-  creator: { key: "creator", name: "Creator", cents: 1995, yearCents: 19900, credits: 30, clipsPerEpisode: 4, overageCents: 60, blurb: "About 3 animated episodes a month, or 6 with Classic captions." },
-  // Pro: 6 clips an episode for the same credits as 4 (≈90¢ more of Creatomate per episode, still well over cost).
-  pro: { key: "pro", name: "Pro", cents: 4900, yearCents: 49000, credits: 90, clipsPerEpisode: 6, overageCents: 50, blurb: "About 10 animated episodes a month, or 18 with Classic captions — and 6 clips an episode instead of 4.", popular: true },
+  creator: { key: "creator", name: "Creator", cents: 1995, yearCents: 19900, credits: 30, clipsPerEpisode: 4, overageCents: 60, blurb: "About 3 episodes a month with animated captions, or 6 with Classic." },
+  // Pro: 6 clips an episode (12 credits animated, 7 Classic).
+  pro: { key: "pro", name: "Pro", cents: 4900, yearCents: 49000, credits: 90, clipsPerEpisode: 6, overageCents: 50, blurb: "6 clips an episode instead of 4: about 7 episodes a month with animated captions, or 12 with Classic.", popular: true },
 } as const;
 /**
  * Yearly: two months free, and the year's credits (12 months' worth) the day
@@ -30,13 +30,15 @@ export const OVERAGE_CAP_CHOICES = [0, 1000, 2000, 5000, 10000] as const;
 export const CLIPS_PER_EPISODE = 4;
 
 /**
- * What an episode costs in credits:
- *  - Classic captions: 1 credit a clip, every shape included;
- *  - Animated captions: 1 credit per shape, per clip;
- *  - the clean episode: 1 credit.
+ * What an episode costs in credits: a flat price for everything — every clip
+ * in all three shapes, and the clean episode.
+ *  - Animated captions: 2 credits a clip (8 for the usual 4; 12 for Pro's 6);
+ *  - Classic captions: 1 credit a clip, plus 1 for the clean episode.
+ * Our cost for an animated clip in all three shapes is about $1.15, so a
+ * credit at 50–66¢ covers it.
  */
-export function episodeCredits(o: { formats: readonly string[]; captions: "animated" | "classic" }, clips = CLIPS_PER_EPISODE): number {
-  return 1 + (o.captions === "classic" ? clips : clips * Math.max(1, o.formats.length));
+export function episodeCredits(o: { formats?: readonly string[]; captions: "animated" | "classic" }, clips = CLIPS_PER_EPISODE): number {
+  return o.captions === "classic" ? clips + 1 : clips * 2;
 }
 
 /**

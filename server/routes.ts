@@ -43,6 +43,7 @@ import {
   clipResultSchema,
   CLIP_STAGES,
   parseClipOptions,
+  CLIP_FORMATS,
   toCleanTime,
   type EpisodeEdit,
   type ClipProgress,
@@ -5852,6 +5853,14 @@ export function registerRoutes(app: Express): void {
     const extraCents = active ? await storage.overageCentsSince(e, active.periodStart || active.createdAt) : 0;
     return { unlimited, used, tokens, sub: active, extraCents, limit: BETA_EPISODES(), maxMinutes: Math.round(BETA_MAX_SEC() / 60), left: unlimited ? Infinity : Math.max(0, BETA_EPISODES() - used) };
   }
+  /** Clips an episode makes for this person: Pro 6, everyone else 4. */
+  async function clipsFor(email: string): Promise<number> {
+    const sub = await storage.getSubscription(email.trim().toLowerCase());
+    const plan = sub && ["active", "trialing"].includes(sub.status) ? planOf(sub.plan) : undefined;
+    return plan?.clipsPerEpisode ?? 4;
+  }
+  /** Every episode is cut in all three shapes now; only the caption style (and music) are theirs to pick. */
+  const allShapes = (o: ReturnType<typeof parseClipOptions>) => ({ ...o, formats: [...CLIP_FORMATS] });
   const NEED_CREDITS = "Your free beta episode is used. Pick a plan on the Pōstify page to keep going.";
   const OVER_LIMIT = "That would go past your limit on extra credits this month. Raise it under Plan, or wait for next month's credits.";
   /**
@@ -6121,7 +6130,7 @@ export function registerRoutes(app: Express): void {
     const free = allowance.unlimited || allowance.left > 0;
     const rec = await storage.createUploadedRecording({ email, title, storageKey, durationSec, sizeBytes: Number(req.body?.sizeBytes) || 0, free });
     if (!free) {
-      const paid = await payForEpisode(email, rec, allowance, episodeCredits(parseClipOptions(req.body?.options)));
+      const paid = await payForEpisode(email, rec, allowance, episodeCredits(allShapes(parseClipOptions(req.body?.options)), await clipsFor(email)));
       if (paid === "no" || paid === "limit") {
         // Kept in the Library, just not clipped: they can start it once they have credits.
         await storage.setClipStatus(rec.id, "none", "");
@@ -6156,13 +6165,13 @@ export function registerRoutes(app: Express): void {
     if (rec.status !== "Ready") return res.status(409).json({ message: "That recording is still being saved." });
     if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.json({ ok: true, already: true });
     if (rec.clipStatus === "done") return res.status(409).json({ message: "Clips are already made for this one." });
-    const options = parseClipOptions(req.body?.options ?? rec.clipOptions);
+    const options = allShapes(parseClipOptions(req.body?.options ?? rec.clipOptions));
     if (!rec.postifyBeta) {
       const allowance = await postifyAllowance(email);
       if (!allowance.unlimited && rec.durationSec > BETA_MAX_SEC()) return res.status(400).json({ message: `The beta takes episodes up to ${allowance.maxMinutes} minutes.` });
       let paid;
       try {
-        paid = await payForEpisode(email, rec, allowance, episodeCredits(options));
+        paid = await payForEpisode(email, rec, allowance, episodeCredits(options, await clipsFor(email)));
       } catch (err: any) {
         console.error("Charging an episode failed:", err?.message);
         return res.status(502).json({ message: "We couldn't record the extra credits with Stripe just now. Try again in a moment." });
