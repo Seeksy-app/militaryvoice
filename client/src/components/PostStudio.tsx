@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { startPlanCheckout, openBillingPortal, startTokenCheckout } from "@/lib/tokens";
 import { PostDialog } from "@/components/PostDialog";
-import { durationOf, putWithProgress } from "@/lib/upload";
+import { durationOf, uploadToStorage } from "@/lib/upload";
 import { UploadRecording } from "@/components/UploadRecording";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
@@ -547,8 +547,7 @@ function BookendPicker({ label, value, onChange }: { label: string; value: { key
     if (file.size > 500 * 1024 ** 2) return toast({ title: "Keep it under 500MB", description: "An intro or outro is usually a few seconds.", variant: "destructive" });
     try {
       setPct(0);
-      const { uploadUrl, storageKey } = (await (await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name })).json()) as { uploadUrl: string; storageKey: string };
-      await putWithProgress(uploadUrl, file, setPct);
+      const storageKey = await uploadToStorage(file, setPct);
       onChange({ key: storageKey, name: file.name });
     } catch (e) {
       toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });

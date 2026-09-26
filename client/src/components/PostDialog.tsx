@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import type { SocialPlatform } from "@shared/schema";
-import { putWithProgress } from "@/lib/upload";
+import { uploadToStorage } from "@/lib/upload";
 import { CalendarClock, ImagePlus, Loader2, Send, Sparkles, X } from "lucide-react";
 
 interface YouTubeSettings { title: string; description: string; privacyStatus: "public" | "unlisted" | "private"; tags: string; thumbnailKey: string; thumbnailName: string; madeForKids: boolean; notifySubscribers: boolean }
@@ -46,8 +46,7 @@ function YouTubeFields({ target, yt, onChange }: { target: PostTarget; yt: YouTu
     if (file.size > 2 * 1024 ** 2) return toast({ title: "YouTube takes thumbnails up to 2MB", description: "1280×720 as a JPG is plenty.", variant: "destructive" });
     try {
       setThumbPct(0);
-      const { uploadUrl, storageKey } = (await (await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name })).json()) as { uploadUrl: string; storageKey: string };
-      await putWithProgress(uploadUrl, file, setThumbPct);
+      const storageKey = await uploadToStorage(file, setThumbPct);
       onChange({ ...yt, thumbnailKey: storageKey, thumbnailName: file.name });
     } catch (e) {
       toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });

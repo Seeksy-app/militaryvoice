@@ -59,7 +59,7 @@ function uriEncode(v: string, encodeSlash: boolean): string {
  * is identical bar the verb, which is why this takes it as an argument rather
  * than existing twice.
  */
-function presignS3(method: "GET" | "PUT" | "DELETE", path: string, expiresInSeconds: number): string {
+function presignS3(method: "GET" | "PUT" | "DELETE" | "POST", path: string, expiresInSeconds: number, extra: Record<string, string> = {}): string {
   const t = storageTarget();
   if (!t) throw new Error("No recording storage configured.");
 
@@ -79,6 +79,8 @@ function presignS3(method: "GET" | "PUT" | "DELETE", path: string, expiresInSeco
     "X-Amz-Date": amzDate,
     "X-Amz-Expires": String(expiresInSeconds),
     "X-Amz-SignedHeaders": "host",
+    // Multipart's own parameters (uploads, partNumber, uploadId) are signed with the rest.
+    ...extra,
   };
   const canonicalQuery = Object.keys(params)
     .sort()
@@ -121,6 +123,40 @@ function presignS3(method: "GET" | "PUT" | "DELETE", path: string, expiresInSeco
 export async function putRecordingObject(path: string, body: Buffer, contentType: string): Promise<void> {
   const r = await fetch(presignS3("PUT", path, 900), { method: "PUT", headers: { "content-type": contentType }, body: new Uint8Array(body) });
   if (!r.ok) throw new Error(`Storage refused the file (${r.status}).`);
+}
+
+/**
+ * Multipart uploads, so an episode goes up in pieces: a dropped connection
+ * costs one 16MB piece, not the whole file, and a closed tab can pick up
+ * where it stopped. The browser PUTs each part to a presigned URL; starting
+ * and finishing are small signed calls made from here.
+ */
+export async function startMultipart(path: string, contentType: string): Promise<string> {
+  if (!usingR2()) throw new Error("Recording uploads need R2.");
+  const r = await fetch(presignS3("POST", path, 900, { uploads: "" }), { method: "POST", headers: { "content-type": contentType } });
+  const body = await r.text();
+  const id = body.match(/<UploadId>([^<]+)<\/UploadId>/)?.[1];
+  if (!r.ok || !id) throw new Error(`Storage wouldn't start the upload (${r.status}).`);
+  return id;
+}
+
+export function signedPartUrl(path: string, uploadId: string, partNumber: number, expiresInSeconds = 6 * 3600): string {
+  return presignS3("PUT", path, expiresInSeconds, { partNumber: String(partNumber), uploadId });
+}
+
+export async function completeMultipart(path: string, uploadId: string, parts: Array<{ partNumber: number; etag: string }>): Promise<void> {
+  const xml = `<CompleteMultipartUpload>${parts
+    .sort((a, b) => a.partNumber - b.partNumber)
+    .map((p) => `<Part><PartNumber>${p.partNumber}</PartNumber><ETag>${p.etag.replace(/[<>&]/g, "")}</ETag></Part>`)
+    .join("")}</CompleteMultipartUpload>`;
+  const r = await fetch(presignS3("POST", path, 900, { uploadId }), { method: "POST", headers: { "content-type": "application/xml" }, body: xml });
+  const body = await r.text();
+  // S3 can answer 200 with an error inside, so the body is checked too.
+  if (!r.ok || /<Error>/.test(body)) throw new Error(`Storage couldn't finish the upload (${r.status}${body.match(/<Code>([^<]+)/)?.[1] ? ` ${body.match(/<Code>([^<]+)/)![1]}` : ""}).`);
+}
+
+export async function abortMultipart(path: string, uploadId: string): Promise<void> {
+  await fetch(presignS3("DELETE", path, 900, { uploadId }), { method: "DELETE" }).catch(() => undefined);
 }
 
 export function signedRecordingUpload(path: string, expiresInSeconds = 7_200): string {

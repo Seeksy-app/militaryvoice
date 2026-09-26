@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { durationOf, putWithProgress } from "@/lib/upload";
+import { durationOf, uploadToStorage } from "@/lib/upload";
 import { Loader2, Upload } from "lucide-react";
 
 /** Add a video you already have: it's filed as a recording, nothing more (clipping is Pōstify's). */
@@ -46,8 +46,7 @@ export function UploadRecording({ onDone, tall = false, autoOpen = false, title 
       setPct(0);
       setName(file.name);
       const durationSec = await durationOf(file);
-      const { uploadUrl, storageKey } = (await (await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name })).json()) as { uploadUrl: string; storageKey: string };
-      await putWithProgress(uploadUrl, file, setPct);
+      const storageKey = await uploadToStorage(file, setPct);
       const { id } = (await (await apiRequest("POST", "/api/host/uploads/recording", { storageKey, fileName: file.name, durationSec, sizeBytes: file.size })).json()) as { id: number };
       await qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
       if (onDone) onDone(id);

@@ -86,7 +86,7 @@ import {
   listIngressForRoom,
   webhooks,
 } from "./livekit.js";
-import { ensureRecordingsBucket, signedRecordingUrl, signedRecordingUpload, deleteRecordingObject, putRecordingObject } from "./recordingStorage.js";
+import { ensureRecordingsBucket, signedRecordingUrl, signedRecordingUpload, deleteRecordingObject, putRecordingObject, startMultipart, signedPartUrl, completeMultipart, abortMultipart } from "./recordingStorage.js";
 import {
   isYoutubeConfigured,
   consentUrl,
@@ -2248,6 +2248,50 @@ export function registerRoutes(app: Express): void {
       console.error("Could not sign an asset upload:", err);
       res.status(502).json({ message: "Couldn't start the upload. Try again in a moment." });
     }
+  });
+
+  // Big files go up in parts (client/src/lib/upload.ts): start, sign parts
+  // as they're needed, finish. Same show-assets/ keys as a single PUT, so
+  // everything downstream is unchanged.
+  const MULTIPART_KEY = /^show-assets\/[\w.-]+$/;
+  app.post("/api/host/uploads/multipart/start", requireHostSession, async (req, res) => {
+    const name = String(req.body?.fileName ?? "file").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-80);
+    const key = `show-assets/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-${name}`;
+    try {
+      const uploadId = await startMultipart(key, String(req.body?.contentType || "video/mp4").slice(0, 100));
+      res.json({ storageKey: key, uploadId });
+    } catch (err) {
+      console.error("Could not start a multipart upload:", err);
+      res.status(502).json({ message: "Couldn't start the upload. Try again in a moment." });
+    }
+  });
+  app.post("/api/host/uploads/multipart/parts", requireHostSession, (req, res) => {
+    const key = String(req.body?.storageKey ?? "");
+    const uploadId = String(req.body?.uploadId ?? "");
+    const parts = (Array.isArray(req.body?.parts) ? req.body.parts : []).map(Number).filter((n: number) => Number.isInteger(n) && n >= 1 && n <= 10_000).slice(0, 50);
+    if (!MULTIPART_KEY.test(key) || !uploadId || !parts.length) return res.status(400).json({ message: "That upload didn't come through." });
+    res.json({ urls: Object.fromEntries(parts.map((n: number) => [n, signedPartUrl(key, uploadId, n)])) });
+  });
+  app.post("/api/host/uploads/multipart/complete", requireHostSession, async (req, res) => {
+    const key = String(req.body?.storageKey ?? "");
+    const uploadId = String(req.body?.uploadId ?? "");
+    const parts = (Array.isArray(req.body?.parts) ? req.body.parts : [])
+      .map((p: { partNumber?: unknown; etag?: unknown }) => ({ partNumber: Number(p?.partNumber), etag: String(p?.etag ?? "") }))
+      .filter((p: { partNumber: number; etag: string }) => Number.isInteger(p.partNumber) && p.partNumber >= 1 && p.etag);
+    if (!MULTIPART_KEY.test(key) || !uploadId || !parts.length) return res.status(400).json({ message: "That upload didn't come through." });
+    try {
+      await completeMultipart(key, uploadId, parts);
+      res.json({ storageKey: key });
+    } catch (err) {
+      console.error("Could not finish a multipart upload:", err);
+      res.status(502).json({ message: (err as Error).message });
+    }
+  });
+  app.post("/api/host/uploads/multipart/abort", requireHostSession, async (req, res) => {
+    const key = String(req.body?.storageKey ?? "");
+    const uploadId = String(req.body?.uploadId ?? "");
+    if (MULTIPART_KEY.test(key) && uploadId) await abortMultipart(key, uploadId);
+    res.json({ ok: true });
   });
 
   /**
