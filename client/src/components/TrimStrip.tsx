@@ -58,7 +58,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     let stopped = false;
     const v = document.createElement("video");
     v.muted = true;
-    v.preload = "auto";
+    v.preload = "metadata"; // seeks fetch only what each frame needs, not the whole episode
     v.playsInline = true;
     v.src = src;
     const seekTo = (t: number) => new Promise<void>((resolve) => {
