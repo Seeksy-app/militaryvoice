@@ -582,12 +582,14 @@ function BookendPicker({ label, value, onChange }: { label: string; value: { key
  * mark a moment and make it a clip; and edit the episode itself — trim the
  * ends, put an intro and outro on — into a new copy in the Library.
  */
-function EpisodeTools({ rec, source, videoRef, tab, trimMode = false }: {
+function EpisodeTools({ rec, source, videoRef, tab, trimMode = false, onFocus }: {
   rec: Rec; source: "clean" | "original"; videoRef: React.RefObject<HTMLVideoElement>;
   /** Which job: set by the bar under the player. */
   tab: "edit" | "clip";
   /** In Focus: the Make bar stays on screen. */
   trimMode?: boolean;
+  /** Focus in and out, from the timeline's own row. */
+  onFocus?: () => void;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -660,6 +662,11 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false }: {
     },
     onError: (e: Error) => toast({ title: "Couldn't start that", description: e.message, variant: "destructive" }),
   });
+  const focusBtn = onFocus ? (
+    <button type="button" onClick={onFocus} className={`mr-1 inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold ${trimMode ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`} data-testid="post-focus-toggle">
+      {trimMode ? <><Minimize2 className="h-3.5 w-3.5" /> Done</> : <><Maximize2 className="h-3.5 w-3.5" /> Focus</>}
+    </button>
+  ) : null;
   return (
     <div className="rounded-2xl border border-border bg-card" data-testid="episode-tools">
       {/* The timeline, right under the player: what it selects depends on the tab below. */}
@@ -675,6 +682,16 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false }: {
             maxLen={180}
             ghost={mark.in === null}
             tone="violet"
+            extra={focusBtn}
+            cut={{
+              before: "Start the clip here",
+              after: "End the clip here",
+              onBefore: (t) => setMark((m) => ({ in: t, out: m.out !== null && m.out >= t + 5 && m.out - t <= 180 ? m.out : Math.min(pos.d, t + 30) })),
+              onAfter: (t) => setMark((m) => {
+                const st = m.in !== null && m.in <= t - 5 && t - m.in <= 180 ? m.in : Math.max(0, t - 30);
+                return { in: st, out: t };
+              }),
+            }}
             onChange={(st, en) => setMark({ in: st, out: en })}
           />
         ) : (
@@ -686,20 +703,21 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false }: {
             end={keepEnd}
             minLen={5}
             tone="gold"
+            extra={focusBtn}
+            cut={{
+              before: "Cut everything before",
+              after: "Cut everything after",
+              onBefore: (t) => setTrim((tr) => ({ start: t < 0.25 ? 0 : t, end: tr.end && tr.end < t + 5 ? 0 : tr.end })),
+              onAfter: (t) => setTrim((tr) => ({ start: tr.start > t - 5 ? 0 : tr.start, end: t >= pos.d - 0.25 ? 0 : t })),
+            }}
             onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
           />
         )}
       </div>
       {tab === "clip" ? (
         <div className="space-y-3 p-4">
-          <p className="text-xs text-muted-foreground">Drag the violet handles on the timeline: the player shows the frame. Slide the middle to move the clip, zoom in to cut to the second, or pause and press <span className="font-semibold text-foreground">Set start</span> and <span className="font-semibold text-foreground">Set end</span>.</p>
+          <p className="text-xs text-muted-foreground">Move the playhead to where the clip should start, click its <Scissors className="inline h-3.5 w-3.5 align-[-2px]" /> and <span className="font-semibold text-foreground">Start the clip here</span>; then the same for the end. Or drag the violet handles.</p>
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" size="sm" variant={mark.in === null ? "default" : "outline"} onClick={() => setMark((m) => ({ in: now(), out: m.out !== null && m.out > now() ? m.out : null }))} className={`gap-1.5 rounded-full ${mark.in === null ? "bg-violet-600 text-white hover:bg-violet-700" : ""}`} data-testid="mark-in">
-              {mark.in === null ? "Set start" : `Start ${hms(mark.in)}`}
-            </Button>
-            <Button type="button" size="sm" variant={mark.in !== null && mark.out === null ? "default" : "outline"} onClick={() => setMark((m) => ({ ...m, out: now() }))} disabled={mark.in === null} className={`gap-1.5 rounded-full ${mark.in !== null && mark.out === null ? "bg-violet-600 text-white hover:bg-violet-700" : ""}`} data-testid="mark-out">
-              {mark.out === null ? "Set end" : `End ${hms(mark.out)}`}
-            </Button>
             {lengthNote && <span className={`text-xs font-semibold ${len < 5 || len > 180 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400"}`}>{lengthNote}</span>}
             {mark.in !== null && mark.out !== null && (
               <Button type="button" size="sm" variant="ghost" onClick={preview} className="gap-1.5 rounded-full" data-testid="mark-preview"><Play className="h-3.5 w-3.5" /> Preview</Button>
@@ -729,7 +747,7 @@ function EpisodeTools({ rec, source, videoRef, tab, trimMode = false }: {
           {/* The trim is set on the timeline above; this just says what it does. */}
           <p className={`flex flex-wrap items-center gap-x-2 text-sm ${shortKeep ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`} data-testid="trim-summary">
             {!trim.start && !trim.end ? (
-              <span>Drag the gold handles on the timeline to cut the start and the end. <span className="text-foreground">Zoom to start</span> and <span className="text-foreground">Zoom to end</span> show the first and last 30 seconds up close.</span>
+              <span>Move the playhead to where the show should begin, click its <Scissors className="inline h-3.5 w-3.5 align-[-2px]" /> and <span className="text-foreground">Cut everything before</span>. Do the same at the end. <span className="text-foreground">Zoom to start</span> and <span className="text-foreground">Zoom to end</span> show the first and last 30 seconds up close.</span>
             ) : (
               <>
                 <span className="text-foreground">
@@ -775,7 +793,7 @@ function Seg<T extends string>({ value, onChange, options, testid, small = false
     <div className={`inline-flex rounded-full border border-border bg-card p-1 ${strong ? "shadow-sm" : ""}`} role="group">
       {options.map((o) => {
         const on = o.v === value;
-        const picked = strong ? (o.v === "clip" ? "bg-violet-600 text-white" : "bg-[#F0A71F] text-[#1a1200]") : small ? "bg-[#F0A71F] text-[#1a1200]" : "bg-[#053877] text-white dark:bg-white dark:text-[#000741]";
+        const picked = strong ? (o.v === "clip" ? "bg-violet-600 text-white" : o.v === "edit" ? "bg-[#F0A71F] text-[#1a1200]" : "bg-[#053877] text-white dark:bg-white dark:text-[#000741]") : small ? "bg-[#F0A71F] text-[#1a1200]" : "bg-[#053877] text-white dark:bg-white dark:text-[#000741]";
         return (
           <Tooltip key={o.v}>
             <TooltipTrigger asChild>
@@ -1349,11 +1367,7 @@ export function PostStudio() {
                 })}
               </DropdownMenuContent>
             </DropdownMenu>
-            {!running && (
-              <Button type="button" size="sm" variant={focus ? "default" : "outline"} onClick={() => { setView("episode"); setPreview(null); if (!focus) setMode("edit"); setFocus((f) => !f); }} className={`ml-auto shrink-0 gap-1.5 rounded-full ${focus ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} data-testid="post-focus-toggle">
-                {focus ? <><Minimize2 className="h-3.5 w-3.5" /> Done</> : <><Maximize2 className="h-3.5 w-3.5" /> Focus to trim</>}
-              </Button>
-            )}
+
           </div>
           <div className={`relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5 ${focus ? "mx-auto w-full" : ""}`} style={focus ? { maxWidth: "calc((100vh - 22rem) * 16 / 9)", minWidth: "min(100%, 28rem)" } : undefined} data-testid="post-viewer">
             {view === "episode" && !running ? (
@@ -1437,37 +1451,31 @@ export function PostStudio() {
           {!running && (
             <div className="flex flex-wrap items-center gap-2" data-testid="viewer-bar">
               <Seg
-                value={view}
-                onChange={(v) => { setView(v); setPreview(null); }}
+                value={view === "clips" ? "clips" : mode}
+                onChange={(v) => {
+                  setPreview(null);
+                  if (v === "clips") setView("clips");
+                  else { setView("episode"); setMode(v); }
+                }}
                 options={[
                   { v: "clips", label: "Clips", icon: Clapperboard, tip: "Watch the clips Pōstify made" },
-                  { v: "episode", label: "Episode", icon: Film, tip: "Watch the whole episode, to edit it or cut your own clip" },
+                  { v: "edit", label: "Edit episode", icon: Pencil, tip: "Trim the start and end, add an intro or outro. Saved as a new copy in your Library." },
+                  { v: "clip", label: "Make a clip", icon: Scissors, tip: "Pick 5 seconds to 3 minutes and cut it into the shapes you choose." },
                 ]}
-                testid="viewer"
+                testid="mode"
+                strong
               />
               {view === "episode" && clean?.videoKey && (
-                <Seg
-                  value={epSource}
-                  onChange={setEpSource}
-                  options={[
-                    { v: "clean", label: "Clean", icon: Sparkles, tip: "The clean episode: ums, false starts and dead air taken out" },
-                    { v: "original", label: "Original", icon: Disc, tip: "The episode as it was recorded" },
-                  ]}
-                  testid="viewer-source"
-                  small
-                />
-              )}
-              {view === "episode" && (
                 <div className="ml-auto">
                   <Seg
-                    value={mode}
-                    onChange={setMode}
+                    value={epSource}
+                    onChange={setEpSource}
                     options={[
-                      { v: "edit", label: "Edit episode", icon: Pencil, tip: "Trim the start and end, add an intro or outro. Saved as a new copy in your Library." },
-                      { v: "clip", label: "Make a clip", icon: Scissors, tip: "Pick 5 seconds to 3 minutes and cut it into the shapes you choose." },
+                      { v: "clean", label: "Clean", icon: Sparkles, tip: "The clean episode: ums, false starts and dead air taken out" },
+                      { v: "original", label: "Original", icon: Disc, tip: "The episode as it was recorded" },
                     ]}
-                    testid="mode"
-                    strong
+                    testid="viewer-source"
+                    small
                   />
                 </div>
               )}
@@ -1480,6 +1488,7 @@ export function PostStudio() {
               videoRef={epRef}
               tab={mode}
               trimMode={focus}
+              onFocus={() => { setView("episode"); setPreview(null); setFocus((f) => !f); }}
             />
           )}
           </div>

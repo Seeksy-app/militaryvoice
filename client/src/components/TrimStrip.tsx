@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ChevronsLeft, ChevronsRight, Minus, Plus } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Minus, Plus, Scissors } from "lucide-react";
 
 // Whole seconds down, as the player shows them (21:59, not 22:00).
 const hms = (sec: number) => {
@@ -13,7 +13,7 @@ const hms = (sec: number) => {
 const tick = (sec: number) => (sec < 60 ? `${sec}s` : hms(sec));
 const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800];
 
-type Drag = { kind: "start" | "end" | "move" | "head"; x0: number; s0: number; e0: number };
+type Drag = { kind: "start" | "end" | "move" | "head"; x0: number; s0: number; e0: number; t0?: number; knob?: boolean };
 
 /**
  * The episode's timeline, under the player, like Canva's: a ruler, a strip of
@@ -23,7 +23,7 @@ type Drag = { kind: "start" | "end" | "move" | "head"; x0: number; s0: number; e
  * second; the view follows the playhead while it plays. A focused handle
  * nudges with the arrow keys (a second, or five with Shift).
  */
-export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold" }: {
+export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra }: {
   videoRef: React.RefObject<HTMLVideoElement>;
   duration: number;
   /** Where the player is. */
@@ -37,6 +37,10 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   ghost?: boolean;
   /** Gold for trimming the episode, violet for a clip: two jobs that never look alike. */
   tone?: "gold" | "violet";
+  /** The ✂ on the playhead, Canva's Split: click it to cut at the playhead. */
+  cut?: { before: string; after: string; onBefore: (t: number) => void; onAfter: (t: number) => void };
+  /** More controls for the zoom row (Focus). */
+  extra?: React.ReactNode;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -49,6 +53,16 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   const [drag, setDrag] = useState<Drag | null>(null);
   const [playing, setPlaying] = useState(false);
   const [hint, setHint] = useState<"" | "start" | "end">("");
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: Event) => { if (!(e.target as HTMLElement)?.closest?.("[data-cut-menu]")) setMenu(null); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setMenu(null); };
+    document.addEventListener("pointerdown", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("pointerdown", close); window.removeEventListener("scroll", close, true); window.removeEventListener("keydown", esc); };
+  }, [menu]);
   const color = tone === "violet" ? "#7c3aed" : "#F0A71F";
   const frame = useRef(0);
   const d = duration || 0;
@@ -204,6 +218,13 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     if (kind === "start" || kind === "end") setHint("");
     if (kind === "head") show(timeAt(ev.clientX));
   };
+  // The knob: a click opens the ✂ menu; a drag moves the playhead from where it was (no jump).
+  const downKnob = (ev: React.PointerEvent) => {
+    ev.stopPropagation();
+    ev.preventDefault();
+    (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
+    setDrag({ kind: "head", x0: ev.clientX, s0: start, e0: end, t0: time, knob: true });
+  };
   const move = (ev: React.PointerEvent) => {
     if (!drag) return;
     // Dragging into either edge of a zoomed timeline scrolls it along.
@@ -213,7 +234,9 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
       if (ev.clientX > r.right - 32) el.scrollLeft += 14;
       else if (ev.clientX < r.left + 32) el.scrollLeft -= 14;
     }
-    const t = timeAt(ev.clientX);
+    const t = drag.knob && drag.t0 != null
+      ? Math.min(d, Math.max(0, drag.t0 + ((ev.clientX - drag.x0) / track.current!.getBoundingClientRect().width) * d))
+      : timeAt(ev.clientX);
     if (drag.kind === "head") show(t);
     else if (drag.kind === "start") apply("start", t, drag.e0);
     else if (drag.kind === "end") apply("end", drag.s0, t);
@@ -222,7 +245,21 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
       apply("move", drag.s0 + dt, drag.e0 + dt);
     }
   };
-  const up = () => setDrag(null);
+  const up = (ev: React.PointerEvent) => {
+    if (drag?.knob && cut && Math.abs(ev.clientX - drag.x0) < 4) {
+      const r = (ev.target as HTMLElement).getBoundingClientRect();
+      videoRef.current?.pause();
+      setMenu({ x: r.left + r.width / 2, y: r.bottom + 6 });
+    }
+    setDrag(null);
+  };
+  // Arrow keys move the playhead: a second, or five with Shift.
+  const keys = (ev: React.KeyboardEvent) => {
+    const dir = ev.key === "ArrowLeft" ? -1 : ev.key === "ArrowRight" ? 1 : 0;
+    if (!dir || (ev.target as HTMLElement).getAttribute("role") === "slider") return;
+    ev.preventDefault();
+    show(Math.min(d, Math.max(0, time + dir * (ev.shiftKey ? 5 : 1))));
+  };
   const nudge = (kind: "start" | "end") => (ev: React.KeyboardEvent) => {
     const step = ev.shiftKey ? 5 : 1;
     const dir = ev.key === "ArrowLeft" ? -1 : ev.key === "ArrowRight" ? 1 : 0;
@@ -269,15 +306,16 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
           </>
         )}
         <div className="ml-auto flex items-center gap-1">
+          {extra}
           <button type="button" onClick={() => zoomTo(zoom / 2)} disabled={zoom <= 1} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom out" data-testid="trim-zoom-out"><Minus className="h-3.5 w-3.5" /></button>
           <button type="button" onClick={() => zoomTo(zoom * 2)} disabled={zoom >= maxZoom} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom in" data-testid="trim-zoom-in"><Plus className="h-3.5 w-3.5" /></button>
         </div>
       </div>
 
-      <div ref={scroller} className="overflow-x-auto overflow-y-hidden px-2 pb-1" onPointerMove={move} onPointerUp={up} onPointerCancel={up} onScroll={(e) => setScrollX(e.currentTarget.scrollLeft)}>
+      <div ref={scroller} className="overflow-x-auto overflow-y-hidden px-2 pb-1" onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)} onKeyDown={keys} tabIndex={0} onScroll={(e) => setScrollX(e.currentTarget.scrollLeft)}>
         <div ref={track} className="relative" style={{ width: inner }}>
           {/* The ruler: press anywhere on it to grab the playhead. */}
-          <div onPointerDown={down("head")} className="relative h-6 cursor-ew-resize touch-none" data-testid="trim-ruler">
+          <div onPointerDown={down("head")} className={`relative cursor-ew-resize touch-none ${cut ? "h-8" : "h-6"}`} data-testid="trim-ruler">
             {ticks.map((t, i) => (
               <div key={t} className="absolute top-0 flex h-full flex-col" style={{ left: x(t) }}>
                 <span className={`whitespace-nowrap text-[10px] tabular-nums text-muted-foreground ${i === 0 ? "pl-1.5" : x(t) > inner - 24 ? "-translate-x-full" : "-translate-x-1/2"}`}>{tick(t)}</span>
@@ -322,14 +360,37 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
 
           {/* The playhead, over the ruler and the frames; its knob can be dragged. */}
           <div className="pointer-events-none absolute bottom-0 top-0 z-30" style={{ left: x(time) }}>
-            <div onPointerDown={down("head")} className="pointer-events-auto absolute -left-[7px] top-0 h-3.5 w-3.5 cursor-ew-resize touch-none rounded-full border-2 border-white bg-[#053877] shadow dark:border-[#053877] dark:bg-white" data-testid="trim-playhead" />
-            <div className="absolute -left-px bottom-0 top-3 w-0.5 bg-[#053877] dark:bg-white" />
+            {cut ? (
+              <button
+                type="button"
+                onPointerDown={downKnob}
+                title="Click to cut here · drag to move"
+                className="pointer-events-auto absolute top-0 flex h-6 w-6 -translate-x-1/2 cursor-pointer touch-none items-center justify-center rounded-full border-2 border-white bg-[#053877] text-white shadow-md hover:scale-110 dark:border-[#053877] dark:bg-white dark:text-[#053877]"
+                data-testid="trim-playhead"
+              >
+                <Scissors className="h-3 w-3" />
+              </button>
+            ) : (
+              <div onPointerDown={down("head")} className="pointer-events-auto absolute -left-[7px] top-0 h-3.5 w-3.5 cursor-ew-resize touch-none rounded-full border-2 border-white bg-[#053877] shadow dark:border-[#053877] dark:bg-white" data-testid="trim-playhead" />
+            )}
+            <div className={`absolute -left-px bottom-0 w-0.5 bg-[#053877] dark:bg-white ${cut ? "top-6" : "top-3"}`} />
           </div>
         </div>
       </div>
+      {menu && cut && (
+        <div data-cut-menu className="fixed z-[70] w-56 -translate-x-1/2 rounded-xl border border-border bg-popover p-1.5 text-sm shadow-lg" style={{ left: menu.x, top: menu.y }} data-testid="trim-cut-menu">
+          <p className="px-2 pb-1 pt-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">At {hms(time)}</p>
+          <button type="button" onClick={() => { cut.onBefore(time); setMenu(null); setHint(""); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-muted" data-testid="trim-cut-before">
+            <ChevronsLeft className="h-4 w-4" /> {cut.before}
+          </button>
+          <button type="button" onClick={() => { cut.onAfter(time); setMenu(null); setHint(""); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-muted" data-testid="trim-cut-after">
+            <ChevronsRight className="h-4 w-4" /> {cut.after}
+          </button>
+        </div>
+      )}
       {hint && (
         <p className="mt-1.5 text-xs font-semibold text-[#7a4b00] dark:text-[#F0A71F]" data-testid="trim-hint">
-          {hint === "start" ? "Now drag the handle on the left to where the show should begin. The player shows the frame." : "Now drag the handle on the right to where the show should end. The player shows the frame."}
+          {hint === "start" ? "Now move the playhead to where the show should begin (drag it, or play and pause), then click its ✂ and Cut everything before." : "Now move the playhead to where the show should end, then click its ✂ and Cut everything after."}
         </p>
       )}
     </div>
