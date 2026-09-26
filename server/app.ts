@@ -26,6 +26,13 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false, limit: "10mb" }));
+// No other site may frame ours (clickjacking); vercel.json sets the same for static files.
+app.use((_req, res, next) => {
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  next();
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
