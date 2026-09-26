@@ -32,6 +32,9 @@ function size(bytes: string): string {
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
 }
 
+/** Ours to delete: uploads, imports, Pōstify's copies and staged test episodes. Studio sessions belong to the event. */
+const deletable = (r: RecordingRow) => /^(UPLOAD_|CLEAN_|ZOOM_|LINK_|STAGED_)/.test(r.egressId);
+
 /** The episode a clean or edited copy was made from (CLEAN_12, CLEAN_EDIT_12_…). */
 function sourceOf(r: RecordingRow): number | null {
   const m = r.egressId.match(/^CLEAN_(EDIT_)?(\d+)/);
@@ -274,7 +277,7 @@ export function MyRecordings({
                   </div>
                 )}
               </div>
-              {r.status === "Ready" && (
+              {(r.status === "Ready" || (r.status !== "Recording" && deletable(r))) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full" aria-label="More" data-testid={`menu-recording-${r.id}`}>
@@ -282,6 +285,7 @@ export function MyRecordings({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-52">
+                    {r.status === "Ready" && (<>
                     <DropdownMenuItem onSelect={() => void download(r.id)} className="gap-2" data-testid={`button-download-recording-${r.id}`}>
                       <Download className="h-4 w-4" /> {versions.length > 0 ? `Download ${versions.find((v) => v.rec.id === r.id)?.label.toLowerCase()}` : "Download"}
                     </DropdownMenuItem>
@@ -317,8 +321,9 @@ export function MyRecordings({
                         </DropdownMenuItem>
                       </DropdownMenuSubContent>
                     </DropdownMenuSub>
-                    {/* Uploads and Pōstify's copies; a studio session is the event's too. */}
-                    {(r.egressId.startsWith("UPLOAD_") || r.egressId.startsWith("CLEAN_") || r.egressId.startsWith("ZOOM_") || r.egressId.startsWith("LINK_")) && (
+                    </>)}
+                    {/* Uploads, imports and Pōstify's copies (a failed import too); a studio session is the event's too. */}
+                    {deletable(r) && (
                       <DropdownMenuItem onSelect={() => setDeleting(r)} className="gap-2 text-destructive focus:text-destructive" data-testid={`button-delete-recording-${r.id}`}>
                         <Trash2 className="h-4 w-4" /> Delete
                       </DropdownMenuItem>
