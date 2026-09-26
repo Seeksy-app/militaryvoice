@@ -1237,10 +1237,15 @@ async function framingFor(job: Job, source: string, m: Moment, within: Line[], d
     }).slice(0, 12);
     const said = (from: number, to: number) =>
       within.filter((l) => l.endSec > m.startSec + from && l.startSec < m.startSec + to).map((l) => l.text).join(" ") || within.map((l) => l.text).join(" ");
-    focusShots = [];
-    for (const sh of shots) {
-      focusShots.push({ ...sh, focus: await speakerFocus(source, m, said(sh.from, sh.to), measured.whole, dir, m.startSec + (sh.from + sh.to) / 2) });
-    }
+    // Asked together, four at a time, not one after another: a dozen looks in series was minutes a clip.
+    focusShots = new Array(shots.length);
+    let nextShot = 0;
+    await Promise.all(Array.from({ length: Math.min(4, shots.length) }, async () => {
+      for (let k = nextShot++; k < shots.length; k = nextShot++) {
+        const sh = shots[k];
+        focusShots![k] = { ...sh, focus: await speakerFocus(source, m, said(sh.from, sh.to), measured.whole, dir, m.startSec + (sh.from + sh.to) / 2) };
+      }
+    }));
     // Neighbours that frame the same person in the same place are one
     // shot: no reframe where nothing moved.
     const same = (a: Box | null, b: Box | null) =>
@@ -1550,8 +1555,10 @@ async function handle(job: Job): Promise<void> {
       return;
     }
 
-    const out: Record<string, unknown>[] = [];
-    for (const [i, m] of moments.entries()) {
+    // Two clips at a time: most of a clip is waiting on Creatomate, not this machine.
+    const out: Record<string, unknown>[] = new Array(moments.length);
+    let finishedN = 0;
+    const cutOne = async (i: number, m: Moment) => {
       const stem = `${job.recordingId}-${i + 1}`;
       const within = lines.filter((l) => l.endSec > m.startSec && l.startSec < m.endSec);
 
@@ -1598,7 +1605,7 @@ async function handle(job: Job): Promise<void> {
       }
       step(3, "uploading");
 
-      out.push({
+      out[i] = ({
         title: m.title,
         caption: m.caption,
         reason: m.reason,
@@ -1611,8 +1618,13 @@ async function handle(job: Job): Promise<void> {
         subtitlesUrl: await uploadFile(subs, "text/plain"),
       });
       console.log(`[${job.recordingId}] ${i + 1}/${moments.length} — ${m.title}`);
-      progress(job.recordingId, { stage: "render", pct: ((i + 1) / moments.length) * 100, finished: i + 1, detail: `${i + 1} of ${moments.length} ready` });
-    }
+      finishedN++;
+      progress(job.recordingId, { stage: "render", pct: (finishedN / moments.length) * 100, finished: finishedN, detail: `${finishedN} of ${moments.length} ready` });
+    };
+    let nextClip = 0;
+    await Promise.all(Array.from({ length: Math.min(Number(process.env.CLIP_PARALLEL || 2), moments.length) }, async () => {
+      for (let i = nextClip++; i < moments.length; i = nextClip++) await cutOne(i, moments[i]);
+    }));
     progress(job.recordingId, { stage: "upload", pct: 100 });
 
     await api("POST", `/api/agent/clip-jobs/${job.recordingId}/done`, { clips: out });
