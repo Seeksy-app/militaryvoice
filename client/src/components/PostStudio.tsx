@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { startPlanCheckout, openBillingPortal, startTokenCheckout } from "@/lib/tokens";
 import { PostDialog } from "@/components/PostDialog";
 import { durationOf, uploadToStorage } from "@/lib/upload";
+import { TrimStrip } from "@/components/TrimStrip";
 import { UploadRecording } from "@/components/UploadRecording";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
@@ -594,6 +595,8 @@ function EpisodeTools({ rec, source, videoRef }: {
   const reset = () => { setMark({ in: null, out: null }); setTitle(""); setFormats([]); };
   // Where the player is, for the timeline bar; and stopping a Preview at the end mark.
   const [pos, setPos] = useState({ t: 0, d: 0 });
+  // Before anything is marked, the strip suggests 30 seconds from where you are.
+  const ghostIn = Math.max(0, Math.min(pos.t, pos.d - 30));
   const stopAt = useRef<number | null>(null);
   useEffect(() => {
     const v = videoRef.current;
@@ -660,24 +663,19 @@ function EpisodeTools({ rec, source, videoRef }: {
       <div className="flex gap-1 border-b border-border px-2">{tabBtn("clip", "Make a clip")}{tabBtn("edit", "Edit episode")}</div>
       {tab === "clip" ? (
         <div className="space-y-3 p-4">
-          <p className="text-xs text-muted-foreground">Play or scrub the episode above. Pause where the clip should start and press <span className="font-semibold text-foreground">Set start</span>, then do the same for the end.</p>
-          {/* The whole episode as a bar: your selection in gold, where you are as a line. Click to jump. */}
-          <div
-            role="slider"
-            aria-label="Episode timeline"
-            aria-valuemin={0}
-            aria-valuemax={Math.round(pos.d)}
-            aria-valuenow={Math.round(pos.t)}
-            tabIndex={0}
-            onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * pos.d); }}
-            className="relative h-3 cursor-pointer rounded-full bg-muted"
-            data-testid="clip-timeline"
-          >
-            {mark.in !== null && (
-              <div className="absolute inset-y-0 rounded-full bg-[#F0A71F]" style={{ left: pct(mark.in), width: mark.out !== null ? `calc(${pct(mark.out)} - ${pct(mark.in)})` : "3px" }} />
-            )}
-            <div className="absolute -inset-y-1 w-0.5 rounded bg-[#053877] dark:bg-white" style={{ left: pct(pos.t) }} />
-          </div>
+          <p className="text-xs text-muted-foreground">Drag the gold handles: the player shows the frame you're on. Slide the middle to move the whole clip, or pause and press <span className="font-semibold text-foreground">Set start</span> and <span className="font-semibold text-foreground">Set end</span>.</p>
+          {/* The episode as frames: drag the gold handles (the player shows the frame), or slide the middle. */}
+          <TrimStrip
+            videoRef={videoRef}
+            duration={pos.d}
+            time={pos.t}
+            start={mark.in ?? ghostIn}
+            end={mark.out ?? Math.min(pos.d, (mark.in ?? ghostIn) + 30)}
+            minLen={5}
+            maxLen={180}
+            ghost={mark.in === null}
+            onChange={(st, en) => setMark({ in: st, out: en })}
+          />
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" size="sm" variant={mark.in === null ? "default" : "outline"} onClick={() => setMark((m) => ({ in: now(), out: m.out !== null && m.out > now() ? m.out : null }))} className={`gap-1.5 rounded-full ${mark.in === null ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} data-testid="mark-in">
               {mark.in === null ? "Set start" : `Start ${hms(mark.in)}`}
@@ -723,23 +721,18 @@ function EpisodeTools({ rec, source, videoRef }: {
               </Button>
               {(trim.start > 0 || trim.end > 0) && <button type="button" onClick={() => setTrim({ start: 0, end: 0 })} className="text-xs text-muted-foreground underline underline-offset-2">Reset</button>}
             </div>
-            <div
-              role="slider"
-              aria-label="Episode timeline"
-              aria-valuemin={0}
-              aria-valuemax={Math.round(pos.d)}
-              aria-valuenow={Math.round(pos.t)}
-              tabIndex={0}
-              onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * pos.d); }}
-              className="relative h-3 cursor-pointer rounded-full bg-muted"
-              data-testid="trim-timeline"
-            >
-              <div className="absolute inset-y-0 rounded-full bg-[#F0A71F]" style={{ left: pct(trim.start), width: `calc(${pct(keepEnd)} - ${pct(trim.start)})` }} />
-              <div className="absolute -inset-y-1 w-0.5 rounded bg-[#053877] dark:bg-white" style={{ left: pct(pos.t) }} />
-            </div>
+            <TrimStrip
+              videoRef={videoRef}
+              duration={pos.d}
+              time={pos.t}
+              start={trim.start}
+              end={keepEnd}
+              minLen={5}
+              onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
+            />
             <p className={`text-[11px] ${shortKeep ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`} data-testid="trim-summary">
               {!trim.start && !trim.end
-                ? "Pause where the episode should begin and press Start here; pause where it should finish and press End here."
+                ? "Drag the gold handles to where the episode should begin and end: the player shows the frame. Or pause and press Start here / End here."
                 : `Keeps ${hms(trim.start)} to ${hms(keepEnd)}: ${hms(keepLen)} of ${hms(pos.d)}.${shortKeep ? " That's most of the episode cut. Check the start and end." : ""}`}
             </p>
           </div>
