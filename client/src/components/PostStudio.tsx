@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PLANS, CREDIT_PACKS, OVERAGE_CAP_CHOICES, episodeCredits, cents, type PlanKey } from "@shared/tokens";
 import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, parseMusicMix, type ClipFormat, type ClipOptions, type EpisodeEdit } from "@shared/schema";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,7 @@ import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy } from "lucide-react";
+import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2 } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -580,13 +581,16 @@ function BookendPicker({ label, value, onChange }: { label: string; value: { key
  * mark a moment and make it a clip; and edit the episode itself — trim the
  * ends, put an intro and outro on — into a new copy in the Library.
  */
-function EpisodeTools({ rec, source, videoRef }: {
+function EpisodeTools({ rec, source, videoRef, trimMode = false }: {
   rec: Rec; source: "clean" | "original"; videoRef: React.RefObject<HTMLVideoElement>;
+  /** Focus to trim: open on Edit episode. */
+  trimMode?: boolean;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const now = () => videoRef.current?.currentTime ?? 0;
   const [tab, setTab] = useState<"clip" | "edit">("clip");
+  useEffect(() => { if (trimMode) setTab("edit"); }, [trimMode]);
   // Make a clip. Shapes start unpicked: the button counts what you choose.
   const [mark, setMark] = useState<{ in: number | null; out: number | null }>({ in: null, out: null });
   const [title, setTitle] = useState("");
@@ -1065,6 +1069,16 @@ export function PostStudio() {
 
   // The Viewer: clips, or the whole episode (clean or original) to watch, mark and edit.
   const [view, setView] = useState<"clips" | "episode">("clips");
+  // Focus: the player and its timeline alone on the screen, for fine trimming.
+  const [focus, setFocus] = useState(false);
+  useEffect(() => {
+    if (!focus) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setFocus(false); };
+    window.addEventListener("keydown", esc);
+    const was = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", esc); document.body.style.overflow = was; };
+  }, [focus]);
   const [epSource, setEpSource] = useState<"clean" | "original">("clean");
   const epRef = useRef<HTMLVideoElement>(null);
   // What to make: remembered for next time, since a show tends to want the same.
@@ -1269,12 +1283,46 @@ export function PostStudio() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_minmax(0,18rem)]">
-        {episodeList}
-
+      {/* The episode list became a switcher over the Viewer: the Viewer gets the width. */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
         {/* Preview */}
-        <div className="flex flex-col gap-3">
-          <div className="relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5" data-testid="post-viewer">
+        <div className={focus ? "fixed inset-0 z-50 overflow-y-auto bg-background p-3 sm:p-6" : "flex min-w-0 flex-col gap-3"} data-testid={focus ? "post-focus" : undefined}>
+          <div className={focus ? "mx-auto flex w-full max-w-6xl flex-col gap-3" : "contents"}>
+          <div className="flex min-w-0 items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="flex min-w-0 items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-left hover:border-[#053877]/40" data-testid="post-episode-switcher">
+                  <Film className="h-4 w-4 shrink-0 text-[#053877] dark:text-[#8fb5e8]" />
+                  <span className="truncate text-sm font-semibold">{rec.title || "Session"}</span>
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{stamp(rec.durationSec)}</span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="max-h-80 w-80 overflow-y-auto">
+                {list.map((r) => {
+                  const tag = r.clipStatus === "done" ? "Clips ready" : r.clipStatus === "running" ? "Working" : r.clipStatus === "queued" ? "Queued" : r.clipStatus === "failed" ? "Stopped" : "Not clipped";
+                  return (
+                    <DropdownMenuItem key={r.id} onSelect={() => { setSelected(r.id); setFocus(false); }} className="flex flex-col items-start gap-0.5 py-2">
+                      <span className="flex w-full items-center gap-2">
+                        <span className="truncate text-sm font-medium">{r.title || "Session"}</span>
+                        {r.id === rec.id && <Check className="ml-auto h-3.5 w-3.5 shrink-0" />}
+                      </span>
+                      <span className="flex w-full justify-between gap-2 text-xs text-muted-foreground">
+                        <span>{stamp(r.durationSec)} · {new Date(r.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                        <span className={r.clipStatus === "done" ? "text-emerald-600 dark:text-emerald-400" : ""}>{tag}</span>
+                      </span>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {!running && (
+              <Button type="button" size="sm" variant={focus ? "default" : "outline"} onClick={() => { setView("episode"); setPreview(null); setFocus((f) => !f); }} className={`ml-auto shrink-0 gap-1.5 rounded-full ${focus ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} data-testid="post-focus-toggle">
+                {focus ? <><Minimize2 className="h-3.5 w-3.5" /> Done</> : <><Maximize2 className="h-3.5 w-3.5" /> Focus to trim</>}
+              </Button>
+            )}
+          </div>
+          <div className={`relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5 ${focus ? "mx-auto w-full" : ""}`} style={focus ? { maxWidth: "calc((100vh - 22rem) * 16 / 9)", minWidth: "min(100%, 28rem)" } : undefined} data-testid="post-viewer">
             {/* The Viewer: Clips, or the whole Episode (clean or original). */}
             {!running && (
               <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
@@ -1372,8 +1420,10 @@ export function PostStudio() {
               rec={rec}
               source={clean?.videoKey && epSource === "clean" ? "clean" : "original"}
               videoRef={epRef}
+              trimMode={focus}
             />
           )}
+          </div>
         </div>
 
         {/* Pipeline */}

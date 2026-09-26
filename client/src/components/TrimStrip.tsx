@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Minus, Pause, Play, Plus } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Minus, Pause, Play, Plus } from "lucide-react";
 
 const hms = (sec: number) => {
   const s = Math.max(0, Math.round(sec));
@@ -11,7 +11,6 @@ const hms = (sec: number) => {
 /** Ruler labels: "10s" under a minute, "1:30" after, like Canva's. */
 const tick = (sec: number) => (sec < 60 ? `${sec}s` : hms(sec));
 const STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800];
-const ZOOMS = [1, 2, 4, 8, 16, 32, 64];
 
 type Drag = { kind: "start" | "end" | "move" | "head"; x0: number; s0: number; e0: number };
 
@@ -40,8 +39,10 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
-  const cells = useRef<(HTMLCanvasElement | null)[]>([]);
+  const cells = useRef(new Map<number, HTMLCanvasElement>());
   const cache = useRef(new Map<number, HTMLCanvasElement>());
+  const grabber = useRef<HTMLVideoElement | null>(null);
+  const [scrollX, setScrollX] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [width, setWidth] = useState(800);
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -50,7 +51,12 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   const d = duration || 0;
   const inner = width * zoom;
   const x = (t: number) => (d ? Math.min(inner, Math.max(0, (t / d) * inner)) : 0);
-  const count = Math.max(4, Math.min(90, Math.round(inner / 96)));
+  // Frames are 96px slots along the (zoomed) timeline; only those on screen are drawn.
+  const CELL = 96;
+  const slots = Math.max(1, Math.ceil(inner / CELL));
+  const first = Math.max(0, Math.floor((scrollX - 8) / CELL) - 2);
+  const last = Math.min(slots - 1, Math.ceil((scrollX + width) / CELL) + 2);
+  const slotTime = (j: number) => Math.min(d, ((j + 0.5) * CELL * d) / inner);
 
   // The visible width, for the ruler and how many frames fit.
   useLayoutEffect(() => {
@@ -81,78 +87,75 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     if (px < el.scrollLeft + 24 || px > el.scrollLeft + el.clientWidth - 24) el.scrollLeft = px - el.clientWidth * 0.2;
   }, [time, playing, drag, zoom]);
 
-  // The frames: a hidden copy of the video seeks through the episode and draws
-  // each into its cell. Drawing another origin's video onto a canvas is allowed
-  // (it just can't be read back). Frames already fetched are reused at once
-  // when you zoom, then the new ones fill in, nearest the view first.
+  // The frames: a hidden copy of the video seeks to each slot on screen and
+  // draws it. Drawing another origin's video onto a canvas is allowed (it just
+  // can't be read back). Every frame fetched is kept (to the half second), so
+  // zooming or scrolling paints the nearest one at once, then sharpens.
   const src = videoRef.current?.currentSrc || videoRef.current?.src || "";
   useEffect(() => {
     cache.current = new Map();
+    if (!src) return;
+    const v = document.createElement("video");
+    v.muted = true;
+    v.preload = "metadata"; // seeks fetch only what each frame needs
+    v.playsInline = true;
+    v.src = src;
+    grabber.current = v;
+    return () => { v.removeAttribute("src"); v.load(); grabber.current = null; };
   }, [src]);
   useEffect(() => {
-    if (!src || !d) return;
+    const vid = grabber.current;
+    if (!vid || !d) return;
     let stopped = false;
-    const paint = (i: number, img: HTMLCanvasElement | HTMLVideoElement, w: number, h: number) => {
-      const c = cells.current[i];
-      if (!c || !w || !h) return;
-      c.width = Math.max(40, c.clientWidth * 2);
+    const paint = (j: number, img: HTMLCanvasElement) => {
+      const c = cells.current.get(j);
+      if (!c || !img.width || !img.height) return;
+      c.width = CELL * 2;
       c.height = Math.max(40, c.clientHeight * 2);
-      const scale = Math.max(c.width / w, c.height / h);
+      const scale = Math.max(c.width / img.width, c.height / img.height);
       const sw = c.width / scale;
       const sh = c.height / scale;
-      try { c.getContext("2d")?.drawImage(img, (w - sw) / 2, (h - sh) / 2, sw, sh, 0, 0, c.width, c.height); } catch { /* stays dark */ }
+      try { c.getContext("2d")?.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, 0, 0, c.width, c.height); } catch { /* stays dark */ }
     };
-    const times = Array.from({ length: count }, (_, i) => ((i + 0.5) / count) * d);
-    // Whatever's cached nearest each cell, straight away.
+    const want = Array.from({ length: last - first + 1 }, (_, i) => first + i);
     const keys = [...cache.current.keys()];
     if (keys.length) {
-      times.forEach((t, i) => {
+      for (const j of want) {
+        const t = slotTime(j);
         const k = keys.reduce((a, b) => (Math.abs(b - t) < Math.abs(a - t) ? b : a));
-        const img = cache.current.get(k)!;
-        paint(i, img, img.width, img.height);
-      });
+        paint(j, cache.current.get(k)!);
+      }
     }
-    let v: HTMLVideoElement | null = null;
     const timer = setTimeout(async () => {
-      v = document.createElement("video");
-      v.muted = true;
-      v.preload = "metadata"; // seeks fetch only what each frame needs
-      v.playsInline = true;
-      v.src = src;
-      const vid = v;
       const seekTo = (t: number) => new Promise<void>((resolve) => {
         const done = () => { vid.removeEventListener("seeked", done); resolve(); };
         vid.addEventListener("seeked", done);
         setTimeout(done, 5000);
         vid.currentTime = t;
       });
-      await new Promise<void>((r) => { if (vid.readyState >= 1) r(); else { vid.onloadedmetadata = () => r(); setTimeout(r, 8000); } });
-      // Nearest the middle of what's on screen first.
-      const el = scroller.current;
-      const mid = el ? ((el.scrollLeft + el.clientWidth / 2) / inner) * d : d / 2;
-      const order = times.map((t, i) => ({ t, i })).sort((a, b) => Math.abs(a.t - mid) - Math.abs(b.t - mid));
-      for (const { t, i } of order) {
-        if (stopped) break;
-        const k = Math.round(t);
+      if (vid.readyState < 1) await new Promise<void>((r) => { vid.addEventListener("loadedmetadata", () => r(), { once: true }); setTimeout(r, 8000); });
+      // From the middle of the view outwards.
+      const midJ = (first + last) / 2;
+      for (const j of [...want].sort((a, b) => Math.abs(a - midJ) - Math.abs(b - midJ))) {
+        if (stopped) return;
+        const t = slotTime(j);
+        const k = Math.round(t * 2) / 2;
         const have = cache.current.get(k);
-        if (have) { paint(i, have, have.width, have.height); continue; }
+        if (have) { paint(j, have); continue; }
         await seekTo(t);
-        if (stopped || !vid.videoWidth) continue;
-        // Keep a small copy for when the zoom changes.
+        if (stopped) return;
+        if (!vid.videoWidth) continue;
         const keep = document.createElement("canvas");
         keep.width = 192;
         keep.height = Math.round((192 * vid.videoHeight) / vid.videoWidth) || 108;
         try { keep.getContext("2d")?.drawImage(vid, 0, 0, keep.width, keep.height); } catch { continue; }
         cache.current.set(k, keep);
-        paint(i, keep, keep.width, keep.height);
+        paint(j, keep);
       }
-    }, 250);
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-      if (v) { v.removeAttribute("src"); v.load(); }
-    };
-  }, [src, d, count, inner]);
+    }, 200);
+    return () => { stopped = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src, d, first, last, inner]);
 
   const timeAt = (clientX: number) => {
     const r = track.current!.getBoundingClientRect();
@@ -225,14 +228,26 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     else apply("end", start, end + dir * step);
   };
 
-  // Zoom around the playhead, so what you're looking at stays put.
-  const zoomTo = (z: number) => {
+  // Zoom goes as far as ~20 seconds across the whole width, however long the episode.
+  const maxZoom = Math.max(4, d / 20);
+  // Zoom around a moment (the playhead by default), so what you're looking at stays put.
+  const zoomTo = (z: number, around = time, align: "center" | "left" | "right" = "center") => {
     const el = scroller.current;
-    const next = Math.min(ZOOMS[ZOOMS.length - 1], Math.max(1, z));
+    const next = Math.min(maxZoom, Math.max(1, z));
     setZoom(next);
-    if (el && d) requestAnimationFrame(() => { el.scrollLeft = (time / d) * width * next + 8 - el.clientWidth / 2; });
+    if (el && d) requestAnimationFrame(() => {
+      const px = (around / d) * width * next + 8;
+      el.scrollLeft = align === "left" ? px - 24 : align === "right" ? px - el.clientWidth + 24 : px - el.clientWidth / 2;
+    });
   };
-  const zi = Math.max(0, ZOOMS.indexOf(zoom));
+  // The slider is logarithmic: each step of it doubles or halves the view.
+  const sliderValue = Math.round((Math.log(zoom) / Math.log(maxZoom)) * 100) || 0;
+  // Dead air at either end: the first or last 30 seconds across the whole width.
+  const edge = (which: "start" | "end") => {
+    const z = d / 30;
+    if (which === "start") { zoomTo(z, 0, "left"); show(start); }
+    else { zoomTo(z, d, "right"); show(end); }
+  };
 
   // A tick every `step` seconds, at least ~80px apart.
   const step = STEPS.find((s) => (d ? (s / d) * inner : 0) >= 80) ?? STEPS[STEPS.length - 1];
@@ -257,14 +272,20 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
             {label} {hms(start)} → {hms(end)} · {hms(end - start)}
           </span>
         )}
-        <div className="ml-auto flex items-center gap-1">
-          <button type="button" onClick={() => zoomTo(ZOOMS[Math.max(0, zi - 1)])} disabled={zoom === 1} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom out"><Minus className="h-3.5 w-3.5" /></button>
-          <input type="range" min={0} max={ZOOMS.length - 1} step={1} value={zi} onChange={(e) => zoomTo(ZOOMS[Number(e.target.value)])} className="w-24 accent-[#053877]" aria-label="Zoom" data-testid="trim-zoom" />
-          <button type="button" onClick={() => zoomTo(ZOOMS[Math.min(ZOOMS.length - 1, zi + 1)])} disabled={zoom === ZOOMS[ZOOMS.length - 1]} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom in"><Plus className="h-3.5 w-3.5" /></button>
+        <div className="ml-auto flex flex-wrap items-center gap-1">
+          {d > 60 && (
+            <>
+              <button type="button" onClick={() => edge("start")} className="inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-start"><ChevronsLeft className="h-3.5 w-3.5" /> Trim the start</button>
+              <button type="button" onClick={() => edge("end")} className="mr-2 inline-flex h-7 items-center gap-1 rounded-full border border-border px-2.5 text-xs font-semibold hover:bg-muted" data-testid="trim-edge-end">Trim the end <ChevronsRight className="h-3.5 w-3.5" /></button>
+            </>
+          )}
+          <button type="button" onClick={() => zoomTo(zoom / 2)} disabled={zoom <= 1} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom out"><Minus className="h-3.5 w-3.5" /></button>
+          <input type="range" min={0} max={100} step={1} value={sliderValue} onChange={(e) => zoomTo(Math.pow(maxZoom, Number(e.target.value) / 100))} className="w-24 accent-[#053877]" aria-label="Zoom" data-testid="trim-zoom" />
+          <button type="button" onClick={() => zoomTo(zoom * 2)} disabled={zoom >= maxZoom} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-40" aria-label="Zoom in"><Plus className="h-3.5 w-3.5" /></button>
         </div>
       </div>
 
-      <div ref={scroller} className="overflow-x-auto overflow-y-hidden px-2 pb-1" onPointerMove={move} onPointerUp={up} onPointerCancel={up}>
+      <div ref={scroller} className="overflow-x-auto overflow-y-hidden px-2 pb-1" onPointerMove={move} onPointerUp={up} onPointerCancel={up} onScroll={(e) => setScrollX(e.currentTarget.scrollLeft)}>
         <div ref={track} className="relative" style={{ width: inner }}>
           {/* The ruler: press anywhere on it to grab the playhead. */}
           <div onPointerDown={down("head")} className="relative h-6 cursor-ew-resize touch-none" data-testid="trim-ruler">
@@ -278,9 +299,14 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
 
           {/* The frames. */}
           <div onPointerDown={down("head")} className="relative h-16 cursor-pointer touch-none overflow-hidden rounded-lg bg-[#050d26]">
-            <div className="absolute inset-0 flex">
-              {Array.from({ length: count }, (_, i) => (
-                <canvas key={`${count}-${i}`} ref={(c) => { cells.current[i] = c; }} className="h-full w-0 min-w-0 flex-1 border-r border-black/40" />
+            <div className="absolute inset-0">
+              {Array.from({ length: last - first + 1 }, (_, i) => first + i).map((j) => (
+                <canvas
+                  key={`${Math.round(inner)}-${j}`}
+                  ref={(c) => { if (c) cells.current.set(j, c); else cells.current.delete(j); }}
+                  className="absolute inset-y-0 h-full border-r border-black/40"
+                  style={{ left: j * CELL, width: Math.min(CELL, inner - j * CELL) }}
+                />
               ))}
             </div>
             {/* What's cut, dimmed. */}
