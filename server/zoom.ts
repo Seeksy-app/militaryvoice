@@ -73,7 +73,8 @@ export function bestZoomFile(m: ZoomMeeting): ZoomFile | undefined {
   return [...mp4s].sort((a, b) => (order.indexOf(a.recording_type ?? "") + 99) % 99 - (order.indexOf(b.recording_type ?? "") + 99) % 99)[0];
 }
 
-async function queue(email: string, m: ZoomMeeting, downloadToken?: string) {
+/** `auto`: it arrived by itself (the recording.completed event), so we email them when it's in; not for the "Import past recordings" list, where they're watching it come in. */
+async function queue(email: string, m: ZoomMeeting, downloadToken?: string, auto = false) {
   const f = bestZoomFile(m);
   if (!f) return undefined;
   return storage.queueImport({
@@ -83,7 +84,7 @@ async function queue(email: string, m: ZoomMeeting, downloadToken?: string) {
     startedAt: new Date(m.start_time || Date.now()).toISOString(),
     durationSec: (m.duration || 0) * 60,
     sizeBytes: f.file_size ?? 0,
-    source: JSON.stringify({ provider: "zoom", url: f.download_url, fileId: f.id, meetingId: String(m.id), token: downloadToken || undefined }),
+    source: JSON.stringify({ provider: "zoom", url: f.download_url, fileId: f.id, meetingId: String(m.id), token: downloadToken || undefined, auto: auto || undefined }),
   });
 }
 
@@ -156,7 +157,8 @@ export function registerZoom(app: Express): void {
       startedAt: new Date(Number.isFinite(start) ? start : Date.now()).toISOString(),
       durationSec: (Number(first(b.duration)) || 0) * 60,
       sizeBytes: Number(first(b.file_size)) || 0,
-      source: JSON.stringify({ provider: "link", url, token: token || undefined }),
+      // auto: nobody is watching this one arrive, so we email them when it's in the Library.
+      source: JSON.stringify({ provider: "link", url, token: token || undefined, auto: true }),
     });
     res.status(row ? 201 : 200).json(row ? { ok: true, id: row.id, message: "It's coming into the Library." } : { ok: true, message: "Already in the Library." });
   });
@@ -269,7 +271,7 @@ export function registerZoom(app: Express): void {
         const m = b.payload?.object as ZoomMeeting | undefined;
         if (m?.host_id) {
           for (const c of await storage.getZoomsByUserId(m.host_id)) {
-            if (c.autoImport) await queue(c.email, m, b.download_token);
+            if (c.autoImport) await queue(c.email, m, b.download_token, true);
           }
         }
       }

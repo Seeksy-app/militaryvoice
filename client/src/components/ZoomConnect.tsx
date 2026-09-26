@@ -15,7 +15,7 @@ interface ZoomRec { meetingId: string; uuid: string; topic: string; startTime: s
  * Integrations → Zoom: connect it, and their cloud recordings come into the
  * Library — new ones on their own, past ones from a list.
  */
-export function ZoomConnect() {
+export function ZoomConnect({ row = false }: { row?: boolean } = {}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const zoom = useQuery<ZoomState>({ queryKey: ["/api/host/zoom"], queryFn: async () => (await apiRequest("GET", "/api/host/zoom")).json() });
@@ -59,7 +59,7 @@ export function ZoomConnect() {
   if (!zoom.data) return null;
   const z = zoom.data;
   return (
-    <div className="mt-6 rounded-2xl border border-border bg-card p-5" data-testid="zoom-connect">
+    <div className={row ? "px-5 py-4" : "mt-6 rounded-2xl border border-border bg-card p-5"} data-testid="zoom-connect">
       <div className="flex flex-wrap items-center gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0B5CFF] text-white"><Video className="h-5 w-5" /></span>
         <div className="min-w-0 flex-1">
@@ -91,7 +91,7 @@ export function ZoomConnect() {
         </label>
       )}
       <ZoomPicker open={picking} onOpenChange={setPicking} />
-      {!z.connected && <ImportLink />}
+      {!z.connected && !row && <ImportLink />}
     </div>
   );
 }
@@ -100,7 +100,7 @@ export function ZoomConnect() {
  * Automatic, without our own Zoom app: Zapier's Zoom "New Recording" trigger
  * posts each recording to the podcaster's personal import link.
  */
-function ImportLink() {
+export function ImportLink({ bare = false }: { bare?: boolean } = {}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const link = useQuery<{ url: string }>({ queryKey: ["/api/host/import-link"], queryFn: async () => (await apiRequest("GET", "/api/host/import-link")).json() });
@@ -111,10 +111,10 @@ function ImportLink() {
   const [copied, setCopied] = useState(false);
   const copy = () => link.data && navigator.clipboard.writeText(link.data.url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   return (
-    <div id="import-link" className="mt-4 scroll-mt-24 border-t border-border pt-4" data-testid="import-link">
-      <p className="text-sm font-semibold text-foreground">Make it automatic with Zapier</p>
-      <p className="mt-0.5 text-sm text-muted-foreground">Each new Zoom cloud recording comes into your Library on its own. It takes about five minutes to set up, once.</p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+    <div id={bare ? undefined : "import-link"} className={bare ? "" : "mt-4 scroll-mt-24 border-t border-border pt-4"} data-testid="import-link">
+      {!bare && <p className="text-sm font-semibold text-foreground">Make it automatic with Zapier</p>}
+      {!bare && <p className="mt-0.5 text-sm text-muted-foreground">Each new Zoom cloud recording comes into your Library on its own. It takes about five minutes to set up, once.</p>}
+      <div className={`${bare ? "" : "mt-3 "}flex flex-wrap items-center gap-2`}>
         <code className="min-w-0 flex-1 truncate rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs" data-testid="import-link-url">{link.data?.url ?? "…"}</code>
         <Button size="sm" onClick={copy} disabled={!link.data} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="import-link-copy">
           {copied ? <><Check className="h-3.5 w-3.5" /> Copied</> : "Copy your link"}

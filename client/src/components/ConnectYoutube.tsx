@@ -20,7 +20,7 @@ interface Status {
   scope: "segment" | "show";
 }
 
-export function ConnectYoutube({ locked = false, lockedReason = "" }: { locked?: boolean; lockedReason?: string } = {}) {
+export function ConnectYoutube({ locked = false, lockedReason = "", row = false }: { locked?: boolean; lockedReason?: string; row?: boolean } = {}) {
   const { toast } = useToast();
   const [howTo, setHowTo] = useState(false);
   const queryClient = useQueryClient();
@@ -83,7 +83,7 @@ export function ConnectYoutube({ locked = false, lockedReason = "" }: { locked?:
   if (!data?.configured) return null;
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-6">
+    <section className={row ? "px-5 py-4" : "rounded-2xl border border-border bg-card p-6"}>
       <div className="flex flex-wrap items-center gap-3">
         <div
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white"
@@ -93,7 +93,7 @@ export function ConnectYoutube({ locked = false, lockedReason = "" }: { locked?:
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-base font-semibold text-card-foreground">
-            {data.connected ? `Connected — ${data.channelTitle}` : "Send your slot to your own YouTube"}
+            {data.connected ? `YouTube Live — ${data.channelTitle}` : row ? "YouTube Live" : "Send your slot to your own YouTube"}
           </div>
           <p className="text-xs text-muted-foreground">
             {data.connected
@@ -104,10 +104,10 @@ export function ConnectYoutube({ locked = false, lockedReason = "" }: { locked?:
           </p>
           {/* Say why there is only one button here. Without this it reads as a
               half-finished list and people go looking for the others. */}
-          <p className="mt-1.5 text-xs text-muted-foreground">
+          {!row && <p className="mt-1.5 text-xs text-muted-foreground">
             YouTube is the only channel we can send to directly. Facebook, LinkedIn and X don't allow it without a
             third-party tool — ask us and we'll set one up with you.
-          </p>
+          </p>}
           {/* What Google will show them, before they press the button and
               meet it cold. The full walkthrough is a page; this is the
               three presses, where they are about to need them. */}

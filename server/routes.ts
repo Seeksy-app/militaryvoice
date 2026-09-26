@@ -111,7 +111,7 @@ import { emailShell, EMAIL_BANNERS } from "./email.js";
 import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
-import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, buildCalendarLinks } from "./email.js";
+import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, sendImportReadyEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
 import { draftYoutubeDescription, chaptersFrom } from "./youtubeDraft.js";
@@ -5155,8 +5155,21 @@ export function registerRoutes(app: Express): void {
   app.post("/api/agent/imports/:id/done", requireAgent, async (req, res) => {
     const key = typeof req.body?.key === "string" && /^clean\/[\w.-]+$/.test(req.body.key) ? req.body.key : "";
     if (!key) return res.status(400).json({ message: "No file." });
-    await storage.finishImport(Number(req.params.id), { url: key, durationSec: Number(req.body?.durationSec) || 0, sizeBytes: Number(req.body?.sizeBytes) || 0 });
+    const moved = await storage.finishImport(Number(req.params.id), { url: key, durationSec: Number(req.body?.durationSec) || 0, sizeBytes: Number(req.body?.sizeBytes) || 0 });
     res.json({ ok: true });
+    // It came in by itself (Zoom's event or their import link): tell them it's
+    // in. `moved` is set only on the call that took it from Importing to Ready,
+    // so a retried or doubled "done" can't send it twice.
+    if (moved?.email) {
+      let src: { provider?: string; auto?: boolean } = {};
+      try { src = JSON.parse(moved.importSource || "{}"); } catch { src = {}; }
+      if (src.auto === true && (src.provider === "zoom" || src.provider === "link")) {
+        const mail = sendImportReadyEmail({ to: moved.email, recordingId: moved.id, title: moved.title, startedAt: moved.startedAt, durationSec: moved.durationSec, provider: src.provider })
+          .catch((err) => { console.error("Import-ready email failed:", (err as Error).message); return false; });
+        // After the reply, so the worker never waits on it; kept alive on Vercel.
+        try { waitUntil(mail); } catch { /* not on Vercel */ }
+      }
+    }
   });
   app.post("/api/agent/imports/:id/failed", requireAgent, async (req, res) => {
     await storage.failImport(Number(req.params.id), String(req.body?.error ?? "Couldn't bring it in."));

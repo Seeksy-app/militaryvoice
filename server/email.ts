@@ -779,6 +779,72 @@ export async function sendListenerStartingSoon(v: StartingSoonInput): Promise<bo
 }
 
 // ---------------------------------------------------------------------------
+// Import finished: a recording that came in by itself is in their Library.
+// ---------------------------------------------------------------------------
+
+/** 754 -> "12:34", 3754 -> "1:02:34". */
+function clockLength(totalSec: number): string {
+  const s = Math.max(0, Math.round(totalSec || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
+
+export interface ImportReadyInput {
+  to: string;
+  recordingId: number;
+  title: string;
+  startedAt: string; // ISO
+  durationSec: number;
+  /** Where it came from: Zoom's recording.completed event, or their personal import link. */
+  provider: "zoom" | "link";
+}
+
+/**
+ * Sent once, when an automatic import (Zoom's event or the import link) lands
+ * in the Library. Not for "Import past recordings": they're watching then.
+ */
+export async function sendImportReadyEmail(v: ImportReadyInput): Promise<boolean> {
+  const zoom = v.provider === "zoom";
+  const title = v.title.trim() || (zoom ? "Zoom recording" : "Imported recording");
+  const when = Date.parse(v.startedAt);
+  const date = Number.isFinite(when)
+    ? new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" }).format(new Date(when))
+    : "";
+  const length = v.durationSec > 0 ? clockLength(v.durationSec) : "";
+  const libraryUrl = `${SITE}/host/dashboard/library`;
+  const postifyUrl = `${SITE}/host/dashboard/postify?rec=${encodeURIComponent(String(v.recordingId))}`;
+  const integrationsUrl = `${SITE}/host/dashboard/integrations`;
+  const subject = zoom ? "Your Zoom recording is in your Library" : "Your recording is in your Library";
+  const footer = zoom
+    ? { lead: "You're getting this because automatic import is on.", link: "Turn it off on the Zoom card in Integrations" }
+    : { lead: "You're getting this because a recording was sent to your import link.", link: "Manage or replace the import link in Integrations" };
+  const facts = [date, length ? `Length ${length}` : ""].filter(Boolean);
+  return sendEmail({
+    to: v.to,
+    subject,
+    html: emailShell({
+      banner: EMAIL_BANNERS.studio,
+      bannerAlt: "MilitaryVoices.ai",
+      eyebrow: "Library",
+      heading: subject,
+      body: `
+        <p style="margin:0 0 14px;">${zoom ? "Your Zoom recording came in by itself" : "The recording sent to your import link came in"} and it's ready in your Library.</p>
+        <div style="background:#f3f6fb;border:1px solid #d8e2f0;border-radius:12px;padding:14px 18px;margin:0 0 14px;">
+          <p style="margin:0;color:#0b1220;font-size:17px;font-weight:700;">${escapeHtml(title)}</p>
+          ${facts.length ? `<p style="margin:4px 0 0;color:#6b7280;font-size:14px;">${escapeHtml(facts.join(" · "))}</p>` : ""}
+        </div>`,
+      cta: { href: libraryUrl, label: "Open your Library" },
+      secondary: `<p style="margin:0;font-size:14px;"><a href="${postifyUrl}" style="color:#053877;font-weight:600;">Make clips and a clean episode with Pōstify</a></p>
+        <p style="margin:18px 0 0;color:#374151;font-size:16px;">The MilitaryVoices.ai team</p>`,
+      footerNote: `${escapeHtml(footer.lead)} <a href="${integrationsUrl}" style="color:#6b7280;">${escapeHtml(footer.link)}</a>.`,
+    }),
+    text: `${subject}\n\n${title}${facts.length ? `\n${facts.join(" · ")}` : ""}\n\nOpen your Library: ${libraryUrl}\nMake clips and a clean episode with Pōstify: ${postifyUrl}\n\nThe MilitaryVoices.ai team\n\n${footer.lead} ${footer.link}: ${integrationsUrl}\n`,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Broadcast — one-to-many announcement email
 // ---------------------------------------------------------------------------
 

@@ -76,6 +76,7 @@ import { StudioIcon } from "@/components/GreenRoomButton";
 import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
 import { CohostDashboard, type CohostInfo } from "@/components/CohostDashboard";
 import { HostNav } from "@/components/HostNav";
+import { IntegrationsScreen } from "@/components/IntegrationsScreen";
 import { ProScreen } from "@/components/ProScreen";
 import { AudienceConsent } from "@/components/AudienceConsent";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
@@ -1147,81 +1148,16 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         ) : screen === "recordings" ? (
           <RecordingsScreen socialAccounts={profile?.socialAccounts} />
         ) : screen === "integrations" ? (
-          <section className="mt-6">
-            {/* Posting accounts lead: nearly everyone has them, and they are
-                what the clips and the follow buttons depend on. Going live on
-                your own channel is the smaller, optional half, so it sits
-                under. "Use your own gear" is out for now — it invites people
-                to bring an encoder to an event that doesn't need one. */}
-            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-              <Link2 className="h-4 w-4" /> Posting accounts
-            </h2>
-            <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
-              Link the accounts you post from. Connected ones show as follow buttons on your card in the public
-              lineup, and are where we can send clips after your slot.
-            </p>
-            {social?.accounts && social.accounts.length > 0 && (
-              <div className="mb-6 rounded-2xl border border-border bg-card p-5">
-                <ConnectedAccountsStrip accounts={social.accounts} />
-              </div>
-            )}
-            {/* Where episodes come from: Zoom's cloud recordings, into the Library. */}
-            <ZoomConnect />
-            {social?.configured && (
-              <div className="mt-4 scroll-mt-24 border-t border-border pt-4" id="section-social-accounts" data-testid="section-social-accounts">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Social accounts</p>
-                  <div className="flex items-center gap-1">
-                    {social.accounts.length > 0 && (
-                      <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
-                onClick={() => refreshSocial.mutate()}
-                disabled={refreshSocial.isPending}
-                data-testid="button-social-refresh"
-                      >
-                <RefreshCw className={`h-3 w-3 ${refreshSocial.isPending ? "animate-spin" : ""}`} /> Refresh
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 gap-1 rounded-full px-2.5 text-xs"
-                      onClick={() => connectSocial.mutate()}
-                      disabled={connectSocial.isPending}
-                      data-testid="button-social-connect"
-                    >
-                      <Link2 className="h-3 w-3" />
-                      {connectSocial.isPending ? "Opening…" : social.accounts.length ? "Manage" : "Connect accounts"}
-                    </Button>
-                  </div>
-                </div>
-                <SocialTiles accounts={social.accounts} onConnect={() => connectSocial.mutate()} connecting={connectSocial.isPending} />
-                {social.accounts.length > 0 && profile && <AudienceConsent profile={profile} />}
-
-                {/* Linkable on its own, because "go and connect your YouTube"
-                    is a thing we say in emails and in the checklist, and
-                    "Integrations, then scroll down" is a worse instruction
-                    than a link that lands on it. */}
-                <AnchoredHeading id="section-going-out-live" icon={Radio} label="Going out live" />
-                <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
-                  Do you want your slot to go out on your own channel as well as ours? Optional — it airs on
-                  MilitaryVoices.ai either way.
-                </p>
-                <ConnectYoutube
-                  locked={noWayIn}
-                  lockedReason="Claim a time slot first — the event is full at the moment."
-                />
-                {social.accounts.length === 0 && (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Nothing linked yet. Connected accounts light up here and show as follow buttons on your card in the lineup.
-                  </p>
-                )}
-              </div>
-                    )}
-
-          </section>
+          <IntegrationsScreen
+            social={social}
+            profile={profile}
+            onConnectSocial={() => connectSocial.mutate()}
+            connecting={connectSocial.isPending}
+            onRefreshSocial={() => refreshSocial.mutate()}
+            refreshing={refreshSocial.isPending}
+            onOpenLibrary={() => goTo("recordings")}
+            youtubeLocked={noWayIn}
+          />
         ) : screen === "postify" ? (
           <PostStudio />
         ) : screen === "social" ? (

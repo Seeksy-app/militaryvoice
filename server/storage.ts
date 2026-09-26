@@ -829,7 +829,8 @@ export interface IStorage {
   /** A Zoom recording to bring into someone's Library; nothing if that file is already there. */
   queueImport(v: { email: string; title: string; egressId: string; startedAt: string; durationSec: number; sizeBytes: number; source: string }): Promise<RecordingRow | undefined>;
   claimImport(): Promise<RecordingRow | undefined>;
-  finishImport(id: number, v: { url: string; durationSec: number; sizeBytes: number }): Promise<void>;
+  /** Marks it Ready. Returns the row only when this call moved it from Importing to Ready, so a caller acts on that once. */
+  finishImport(id: number, v: { url: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow | undefined>;
   failImport(id: number, error: string): Promise<void>;
   upsertAddon(v: Partial<AddonSubscriptionRow> & { email: string; addon: string }): Promise<AddonSubscriptionRow>;
   getSubscriptionById(subscriptionId: string): Promise<PostifySubscriptionRow | undefined>;
@@ -2083,9 +2084,16 @@ class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async finishImport(id: number, v: { url: string; durationSec: number; sizeBytes: number }): Promise<void> {
+  async finishImport(id: number, v: { url: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow | undefined> {
     await ready();
-    await db.update(recordings).set({ status: "Ready", url: v.url, durationSec: Math.round(v.durationSec), sizeBytes: String(v.sizeBytes) }).where(eq(recordings.id, id));
+    const patch = { status: "Ready", url: v.url, durationSec: Math.round(v.durationSec), sizeBytes: String(v.sizeBytes) };
+    // Importing -> Ready in one statement, so of two workers (or a retried
+    // call) only one gets the row back and anything keyed on it happens once.
+    const [moved] = await db.update(recordings).set(patch).where(and(eq(recordings.id, id), eq(recordings.status, "Importing"))).returning();
+    if (moved) return moved;
+    // Already Ready, or marked Failed before the file landed: store it as before.
+    await db.update(recordings).set(patch).where(eq(recordings.id, id));
+    return undefined;
   }
 
   async failImport(id: number, error: string): Promise<void> {

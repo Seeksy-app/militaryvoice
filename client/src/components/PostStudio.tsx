@@ -281,38 +281,61 @@ const FORMAT_CHOICES: { f: ClipFormat; label: string; tip: string }[] = [
  * picked is made, which is also what keeps it affordable.
  */
 function ClipChoices({ opts, onChange }: { opts: ClipOptions; onChange: (o: ClipOptions) => void }) {
-  const chip = (on: boolean) => `rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${on ? "border-[#F0A71F] bg-[#F0A71F] text-[#1a1200]" : "border-white/25 text-white/80 hover:border-white/50 hover:text-white"}`;
+  // Shapes: tick any you want, untick any you don't — nothing is chosen for you.
   const toggle = (f: ClipFormat) => {
     const has = opts.formats.includes(f);
-    if (has && opts.formats.length === 1) return; // at least one
     onChange({ ...opts, formats: CLIP_FORMATS.filter((x) => (x === f ? !has : opts.formats.includes(x))) });
   };
+  const glyph: Record<ClipFormat, string> = { vertical: "h-4 w-[9px]", square: "h-3.5 w-3.5", wide: "h-[9px] w-4" };
+  const pill = (on: boolean) =>
+    `inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+      on ? "border-[#F0A71F] bg-[#F0A71F]/15 text-white" : "border-white/20 text-white/70 hover:border-white/45 hover:text-white"
+    }`;
+  const box = (on: boolean, round = false) =>
+    `flex h-4 w-4 shrink-0 items-center justify-center border ${round ? "rounded-full" : "rounded"} ${on ? "border-[#F0A71F] bg-[#F0A71F] text-[#1a1200]" : "border-white/40"}`;
   return (
-    <div className="flex flex-col items-center gap-2" data-testid="post-choices">
-      <div className="flex flex-wrap items-center justify-center gap-1.5">
-        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-white/50">Shapes</span>
-        {FORMAT_CHOICES.map((c) => (
-          <Tooltip key={c.f}>
-            <TooltipTrigger asChild>
-              <button type="button" onClick={() => toggle(c.f)} className={chip(opts.formats.includes(c.f))} aria-pressed={opts.formats.includes(c.f)} data-testid={`post-format-${c.f}`}>{c.label}</button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">{c.tip}</TooltipContent>
-          </Tooltip>
-        ))}
+    <div className="flex flex-col items-center gap-3" data-testid="post-choices">
+      <div className="flex flex-col items-center gap-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-white/55">Shapes · pick one or more</span>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {FORMAT_CHOICES.map((c) => {
+            const on = opts.formats.includes(c.f);
+            return (
+              <Tooltip key={c.f}>
+                <TooltipTrigger asChild>
+                  <button type="button" onClick={() => toggle(c.f)} className={pill(on)} aria-pressed={on} data-testid={`post-format-${c.f}`}>
+                    <span className={box(on)}>{on && <Check className="h-3 w-3" strokeWidth={3} />}</span>
+                    <span className={`rounded-[2px] border-2 ${on ? "border-[#F0A71F]" : "border-white/50"} ${glyph[c.f]}`} aria-hidden="true" />
+                    {c.label}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">{c.tip}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
       </div>
-      <div className="flex flex-wrap items-center justify-center gap-1.5">
-        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wider text-white/50">Captions</span>
-        {([
-          { v: "animated", label: "Animated", tip: "Word-by-word highlight, and the picture follows whoever's talking." },
-          { v: "classic", label: "Classic", tip: "Bold captions burned in, framed on the speaker. Quicker to make." },
-        ] as const).map((c) => (
-          <Tooltip key={c.v}>
-            <TooltipTrigger asChild>
-              <button type="button" onClick={() => onChange({ ...opts, captions: c.v })} className={chip(opts.captions === c.v)} aria-pressed={opts.captions === c.v} data-testid={`post-captions-${c.v}`}>{c.label}</button>
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[16rem] text-xs">{c.tip}</TooltipContent>
-          </Tooltip>
-        ))}
+      <div className="flex flex-col items-center gap-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-white/55">Captions · pick one</span>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {([
+            { v: "animated", label: "Animated", tip: "Word-by-word highlight, and the picture follows whoever's talking." },
+            { v: "classic", label: "Classic", tip: "Bold captions burned in, framed on the speaker. Quicker to make." },
+          ] as const).map((c) => {
+            const on = opts.captions === c.v;
+            return (
+              <Tooltip key={c.v}>
+                <TooltipTrigger asChild>
+                  <button type="button" onClick={() => onChange({ ...opts, captions: c.v })} className={pill(on)} aria-pressed={on} data-testid={`post-captions-${c.v}`}>
+                    <span className={box(on, true)}>{on && <span className="h-1.5 w-1.5 rounded-full bg-[#1a1200]" />}</span>
+                    {c.label}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[16rem] text-xs">{c.tip}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -918,8 +941,12 @@ export function PostStudio() {
   const [epSource, setEpSource] = useState<"clean" | "original">("clean");
   const epRef = useRef<HTMLVideoElement>(null);
   // What to make: remembered for next time, since a show tends to want the same.
+  // Shapes start empty every time (a pre-ticked one meant ticking another to untick it);
+  // the caption style is remembered, since a show tends to want the same.
   const [opts, setOpts] = useState<ClipOptions>(() => {
-    try { return parseClipOptions(localStorage.getItem("mv_clip_options") ?? ""); } catch { return { ...DEFAULT_CLIP_OPTIONS }; }
+    let saved: ClipOptions = { ...DEFAULT_CLIP_OPTIONS };
+    try { saved = parseClipOptions(localStorage.getItem("mv_clip_options") ?? ""); } catch { /* private mode */ }
+    return { ...saved, formats: [] };
   });
   useEffect(() => { try { localStorage.setItem("mv_clip_options", JSON.stringify(opts)); } catch { /* private mode */ } }, [opts]);
   const start = useMutation({
@@ -1143,12 +1170,14 @@ export function PostStudio() {
                 {!(beta?.unlimited || rec.postifyBeta || freeLeft || (beta?.tokens ?? 0) >= cost || plan) ? (
                   <ChoosePlan beta={beta} plan={plan} />
                 ) : (
-                  <Button onClick={() => start.mutate(rec.id)} disabled={start.isPending} className="h-11 gap-2 rounded-full bg-[#F0A71F] px-6 text-base font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="post-start-hero">
+                  <Button onClick={() => start.mutate(rec.id)} disabled={start.isPending || opts.formats.length === 0} className="h-11 gap-2 rounded-full bg-[#F0A71F] px-6 text-base font-semibold text-[#1a1200] hover:bg-[#f5b94a] disabled:opacity-40" data-testid="post-start-hero">
                     {start.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />} Start Pōstify
                   </Button>
                 )}
                 <p className="text-xs text-white/55">
-                  {beta?.unlimited || rec.postifyBeta
+                  {opts.formats.length === 0
+                    ? "Pick at least one shape to start"
+                    : beta?.unlimited || rec.postifyBeta
                     ? "Included"
                     : freeLeft
                       ? "Free · your beta episode"
@@ -1167,7 +1196,7 @@ export function PostStudio() {
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"><Sparkles className="h-4 w-4" /></span>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-foreground">{rec.title || "Session"}</p>
-                <p className="text-xs text-muted-foreground">{done ? `${mine.length} clips with captions` : running ? stageLabel(rec, p) : `Clips (${opts.formats.join(", ")}, ${opts.captions} captions) and a clean episode`}</p>
+                <p className="text-xs text-muted-foreground">{done ? `${mine.length} clips with captions` : running ? stageLabel(rec, p) : opts.formats.length ? `Clips (${opts.formats.join(", ")}, ${opts.captions} captions) and a clean episode` : "Pick your shapes, then start"}</p>
               </div>
             </div>
             {done ? (
