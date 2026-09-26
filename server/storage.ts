@@ -51,6 +51,7 @@ import postgres from "postgres";
 import { and, eq, ne, or, asc, desc, isNull, inArray, lte, lt, sql as sqlExpr } from "drizzle-orm";
 import { ensureSchema as syncSchemaFromDefinitions, schemaFingerprint } from "./schemaSync.js";
 import { seal, unseal } from "./secretBox.js";
+import { REVIEW_EMAIL } from "../shared/review.js";
 
 /** Zoom tokens are sealed in the database and opened on the way out. */
 const openZoom = (r: ZoomConnectionRow): ZoomConnectionRow => ({ ...r, accessToken: unseal(r.accessToken), refreshToken: unseal(r.refreshToken) });
@@ -1139,7 +1140,8 @@ class DatabaseStorage implements IStorage {
       .select()
       .from(podcasterProfiles)
       .where(
-        and(ne(podcasterProfiles.podcastName, ""), ne(podcasterProfiles.hostName, ""), ne(podcasterProfiles.photoUrl, "")),
+        // The app-review account is never on the public lineup.
+        and(ne(podcasterProfiles.podcastName, ""), ne(podcasterProfiles.hostName, ""), ne(podcasterProfiles.photoUrl, ""), ne(podcasterProfiles.email, REVIEW_EMAIL)),
       )
       .orderBy(podcasterProfiles.createdAt);
   }

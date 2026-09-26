@@ -16,6 +16,7 @@ import HostDashboard from "@/pages/HostDashboard";
 import Landing from "@/pages/Landing";
 import Faq from "@/pages/Faq";
 import HelpYoutube from "@/pages/HelpYoutube";
+import ReviewLogin from "@/pages/ReviewLogin";
 import HelpZoom from "@/pages/HelpZoom";
 import HelpIndex from "@/pages/HelpIndex";
 import Discover from "@/pages/Discover";
@@ -79,6 +80,7 @@ function AppRouter() {
       <Route path="/schedule">{() => <Home />}</Route>
       <Route path="/agenda">{() => <Agenda />}</Route>
       <Route path="/faq">{() => <Faq />}</Route>
+      <Route path="/review">{() => <ReviewLogin />}</Route>
       <Route path="/help">{() => <HelpIndex />}</Route>
       <Route path="/discover">{() => <Discover />}</Route>
       <Route path="/promo/discovery">{() => <PromoDiscovery />}</Route>
