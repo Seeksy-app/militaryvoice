@@ -57,7 +57,9 @@ import { cutList, snapToAudio, keepRanges, selectGraph, envelope, type Word } fr
 
 const API_BASE = (process.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "");
 const AGENT_TOKEN = process.env.AGENT_TOKEN || "";
-const POLL_MS = Number(process.env.CLIP_POLL_MS || 30_000);
+const POLL_MS = Number(process.env.CLIP_POLL_MS || 5_000);
+/** Jobs at once: a long episode no longer holds up a one-minute one behind it. */
+const LANES = Math.max(1, Number(process.env.CLIP_WORKERS || 2));
 /** How many clips to cut from one segment. Five posts is a week of material. */
 const WANTED = Number(process.env.CLIP_COUNT || 4);
 const MIN_SEC = 20;
@@ -1185,7 +1187,7 @@ function progress(id: number, p: Record<string, unknown>): void {
 async function handleClean(job: Job): Promise<void> {
   // The clips are done: a shutdown or a failure here must never requeue or
   // fail them. The clean episode reports its own outcome.
-  holding = null;
+  holding.delete(job.recordingId);
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `clean-${job.recordingId}-`));
   try {
     console.log(`[${job.recordingId}] clean episode only — ${job.show}`);
@@ -1618,7 +1620,7 @@ async function handle(job: Job): Promise<void> {
 
     // The clips are out; the clean episode follows. It's no longer this
     // job's claim — a shutdown now mustn't requeue clips that are finished.
-    holding = null;
+    holding.delete(job.recordingId);
     // A clean episode is cutting ums and dead air out of talk; with no talk there's nothing to cut.
     if (!silent) await cleanEpisode(job, source, dir);
   } finally {
@@ -1637,16 +1639,17 @@ async function handle(job: Job): Promise<void> {
  * which it did, three times in one afternoon, each time looking like the
  * queue was broken rather than like the last worker had been killed.
  */
-let holding: number | null = null;
+const holding = new Set<number>();
 
 async function release(): Promise<void> {
-  if (holding === null) return;
-  const id = holding;
-  holding = null;
-  console.log(`\nhanding #${id} back to the queue…`);
-  await api("POST", `/api/agent/clip-jobs/${id}/failed`, { requeue: true }).catch((err) =>
-    console.error(`could not release #${id}: ${(err as Error).message} — it will be reclaimed in 10 minutes`),
-  );
+  const ids = [...holding];
+  holding.clear();
+  await Promise.all(ids.map(async (id) => {
+    console.log(`\nhanding #${id} back to the queue…`);
+    await api("POST", `/api/agent/clip-jobs/${id}/failed`, { requeue: true }).catch((err) =>
+      console.error(`could not release #${id}: ${(err as Error).message} — it will be reclaimed in 10 minutes`),
+    );
+  }));
 }
 
 // SIGHUP included: closing a terminal window sends that, not SIGINT, and a
@@ -1664,12 +1667,12 @@ async function tick(): Promise<boolean> {
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  holding = job.clipEdit || job.episodeEdit || job.importFrom || job.musicMix ? null : job.recordingId;
+  if (!(job.clipEdit || job.episodeEdit || job.importFrom || job.musicMix)) holding.add(job.recordingId);
   try {
     await handle(job);
-    holding = null;
+    holding.delete(job.recordingId);
   } catch (err) {
-    holding = null;
+    holding.delete(job.recordingId);
     const message = (err as Error).message ?? String(err);
     console.error(`[${job.recordingId}] failed: ${message}`);
     await api("POST", `/api/agent/clip-jobs/${job.recordingId}/failed`, { error: message }).catch(() => {});
@@ -1683,16 +1686,23 @@ async function main(): Promise<void> {
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn("No ANTHROPIC_API_KEY — falling back to speech density, which picks worse moments.");
   }
-  for (;;) {
-    try {
-      // Keep going while there is a queue; a marathon ends with 48 of these
-      // waiting and nobody wants the last one thirty minutes after the rest.
-      while (await tick());
-    } catch (err) {
-      console.error("poll failed:", (err as Error).message);
+  console.log(`${LANES} jobs at a time`);
+  // Each lane claims its own jobs (claims are atomic on the server), so a long
+  // episode in one lane doesn't hold up a short one behind it.
+  const lane = async (n: number) => {
+    await new Promise((r) => setTimeout(r, n * 1500));
+    for (;;) {
+      try {
+        // Keep going while there is a queue; a marathon ends with 48 of these
+        // waiting and nobody wants the last one thirty minutes after the rest.
+        while (await tick());
+      } catch (err) {
+        console.error("poll failed:", (err as Error).message);
+      }
+      await new Promise((r) => setTimeout(r, POLL_MS));
     }
-    await new Promise((r) => setTimeout(r, POLL_MS));
-  }
+  };
+  await Promise.all(Array.from({ length: LANES }, (_, i) => lane(i)));
 }
 
 // Importing this file to test a piece of it must not start the loop.
