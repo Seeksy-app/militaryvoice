@@ -1962,6 +1962,29 @@ export const sponsorLeads = pgTable("sponsor_leads", {
 export type SponsorLeadRow = typeof sponsorLeads.$inferSelect;
 
 /**
+ * The sponsor finder: a research run on Parallel that comes back with
+ * companies that fit the event (kind "find"), or the right person to write to
+ * at one of them (kind "contact", with `company` naming it). A run takes
+ * minutes, so the row is the job: running until Parallel says otherwise.
+ */
+export const sponsorSearches = pgTable("sponsor_searches", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  kind: text("kind").notNull().default("find"),
+  brief: text("brief").notNull().default(""),
+  company: text("company").notNull().default(""),
+  runId: text("run_id").notNull().default(""),
+  /** running → done | failed */
+  status: text("status").notNull().default("running"),
+  /** The run's JSON answer, as text. */
+  result: text("result").notNull().default(""),
+  error: text("error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [index("sponsor_searches_event_idx").on(t.eventId)]);
+export type SponsorSearchRow = typeof sponsorSearches.$inferSelect;
+
+/**
  * A click on a sponsor's link, wherever it was: the agenda card, the strip,
  * an email. The sponsor asked how many people clicked; this is the answer,
  * with where they clicked from so the answer has shape.

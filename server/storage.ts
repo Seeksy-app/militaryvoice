@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, libraryFolders, type LibraryFolderRow, musicTracks, type MusicTrackRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, sponsorSearches, type SponsorSearchRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, libraryFolders, type LibraryFolderRow, musicTracks, type MusicTrackRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -706,6 +706,11 @@ export interface IStorage {
   createSponsorLead(row: Omit<SponsorLeadRow, "id" | "createdAt" | "updatedAt">): Promise<SponsorLeadRow>;
   updateSponsorLead(id: number, patch: Partial<SponsorLeadRow>): Promise<SponsorLeadRow | null>;
   deleteSponsorLead(id: number): Promise<void>;
+  listSponsorSearches(eventId: number): Promise<SponsorSearchRow[]>;
+  getSponsorSearch(id: number): Promise<SponsorSearchRow | null>;
+  createSponsorSearch(row: Pick<SponsorSearchRow, "eventId" | "kind" | "brief" | "company" | "runId">): Promise<SponsorSearchRow>;
+  updateSponsorSearch(id: number, patch: Partial<Pick<SponsorSearchRow, "status" | "result" | "error">>): Promise<SponsorSearchRow | null>;
+  deleteSponsorSearch(id: number): Promise<void>;
   createInbound(row: Omit<InboundEmailRow, "id" | "createdAt">): Promise<InboundEmailRow>;
   listInbound(limit?: number): Promise<InboundEmailRow[]>;
   listInboundByEmail(email: string): Promise<InboundEmailRow[]>;
@@ -1231,6 +1236,31 @@ class DatabaseStorage implements IStorage {
   async deleteSponsorLead(id: number): Promise<void> {
     await ready();
     await db.delete(sponsorLeads).where(eq(sponsorLeads.id, id));
+  }
+
+  async listSponsorSearches(eventId: number): Promise<SponsorSearchRow[]> {
+    await ready();
+    return db.select().from(sponsorSearches).where(eq(sponsorSearches.eventId, eventId)).orderBy(desc(sponsorSearches.id)).limit(60);
+  }
+  async getSponsorSearch(id: number): Promise<SponsorSearchRow | null> {
+    await ready();
+    const [r] = await db.select().from(sponsorSearches).where(eq(sponsorSearches.id, id));
+    return r ?? null;
+  }
+  async createSponsorSearch(row: Pick<SponsorSearchRow, "eventId" | "kind" | "brief" | "company" | "runId">): Promise<SponsorSearchRow> {
+    await ready();
+    const now = new Date().toISOString();
+    const [r] = await db.insert(sponsorSearches).values({ ...row, status: "running", createdAt: now, updatedAt: now }).returning();
+    return r;
+  }
+  async updateSponsorSearch(id: number, patch: Partial<Pick<SponsorSearchRow, "status" | "result" | "error">>): Promise<SponsorSearchRow | null> {
+    await ready();
+    const [r] = await db.update(sponsorSearches).set({ ...patch, updatedAt: new Date().toISOString() }).where(eq(sponsorSearches.id, id)).returning();
+    return r ?? null;
+  }
+  async deleteSponsorSearch(id: number): Promise<void> {
+    await ready();
+    await db.delete(sponsorSearches).where(eq(sponsorSearches.id, id));
   }
 
   async createInbound(row: Omit<InboundEmailRow, "id" | "createdAt">): Promise<InboundEmailRow> {
