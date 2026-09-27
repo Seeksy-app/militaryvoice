@@ -116,6 +116,7 @@ import { emailShell, EMAIL_BANNERS } from "./email.js";
 import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
+import { notify, pushPublicKey, type PushMessage } from "./push.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, sendImportReadyEmail, buildCalendarLinks } from "./email.js";
 import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
@@ -2974,6 +2975,12 @@ export function registerRoutes(app: Express): void {
     });
   });
 
+  /** A notification to their devices, after the reply (kept alive on Vercel so the job's caller never waits on it). */
+  function pushAfter(email: string, msg: PushMessage) {
+    const p = notify(email, msg).catch(() => 0);
+    try { waitUntil(p); } catch { /* not on Vercel */ }
+  }
+
   /** "Post later": an ISO time from the body, "past" when it's already gone, or "" for now. */
   function scheduleFrom(body: any): string | "past" {
     const raw = String(body?.scheduledAt ?? "").trim();
@@ -3230,6 +3237,40 @@ export function registerRoutes(app: Express): void {
       engagement: engage,
       posts: rows.map((r) => ({ id: r.id, kind: r.kind, refId: r.refId, shape: r.shape, title: r.title, at: r.scheduledAt || r.createdAt, platforms: r.platforms, results: r.results, metrics: r.metrics, metricsAt: r.metricsAt })),
     });
+  });
+
+  // ---- Notifications (Web Push) -------------------------------------------------
+
+  /** The public key a browser subscribes with; empty when notifications aren't set up. */
+  app.get("/api/push/key", (_req, res) => {
+    res.json({ key: pushPublicKey() });
+  });
+
+  /** This device wants notifications (or is renewing its subscription). */
+  app.post("/api/host/push/subscribe", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const sub = req.body?.subscription;
+    const endpoint = typeof sub?.endpoint === "string" ? sub.endpoint : "";
+    const p256dh = typeof sub?.keys?.p256dh === "string" ? sub.keys.p256dh : "";
+    const auth = typeof sub?.keys?.auth === "string" ? sub.keys.auth : "";
+    if (!/^https:\/\//.test(endpoint) || !p256dh || !auth) return res.status(400).json({ message: "That isn't a push subscription." });
+    await storage.savePushSubscription({ email, endpoint, p256dh, auth, userAgent: String(req.get("user-agent") ?? "").slice(0, 300) });
+    res.json({ ok: true });
+  });
+
+  app.post("/api/host/push/unsubscribe", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const endpoint = String(req.body?.endpoint ?? "");
+    const mine = (await storage.listPushSubscriptions(email)).some((s) => s.endpoint === endpoint);
+    if (mine) await storage.deletePushSubscription(endpoint);
+    res.json({ ok: true });
+  });
+
+  /** "Send me a test": proves the whole path to this person's devices. */
+  app.post("/api/host/push/test", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const sent = await notify(email, { title: "Notifications are on", body: "We'll tell you here when your clips and episodes are ready.", url: "/host/dashboard", tag: "test" });
+    res.json({ sent });
   });
 
   /** Their posting queue: the times it posts at, and the next slots, open or taken. */
@@ -5484,6 +5525,7 @@ export function registerRoutes(app: Express): void {
     if (!key) return res.status(400).json({ message: "No file." });
     const moved = await storage.finishImport(Number(req.params.id), { url: key, durationSec: Number(req.body?.durationSec) || 0, sizeBytes: Number(req.body?.sizeBytes) || 0 });
     res.json({ ok: true });
+    if (moved?.email) pushAfter(moved.email, { title: "Your recording is in your Library", body: `${moved.title || "Your recording"} is ready to Pōstify.`, url: `/host/dashboard/postify?rec=${moved.id}`, tag: `import-${moved.id}` });
     // It came in by itself (Zoom's event or their import link): tell them it's
     // in. `moved` is set only on the call that took it from Importing to Ready,
     // so a retried or doubled "done" can't send it twice.
@@ -5836,6 +5878,10 @@ export function registerRoutes(app: Express): void {
       await storage.setClipProgress(rec.id, JSON.stringify({ ...prev, stage: "done", pct: 100, finished: saved.length, at: new Date().toISOString() }));
     } catch { /* progress is decoration */ }
     res.json({ saved: saved.length });
+    if (rec.email && saved.length) {
+      const title = rec.title || "your episode";
+      pushAfter(rec.email, { title: opts.more ? "Your new clips are ready" : "Your clips are ready", body: `${saved.length} clips from ${title}, ready to post.`, url: `/host/dashboard/postify?rec=${rec.id}`, tag: `clips-${rec.id}` });
+    }
   });
 
   /**
@@ -5883,6 +5929,10 @@ export function registerRoutes(app: Express): void {
       await storage.saveCleanCopy(rec, out.videoKey, Math.max(0, (out.durationSec ?? rec.durationSec) - (out.removedSec ?? 0))).catch((err) => console.error("Couldn't file the clean episode:", err));
     }
     res.json({ ok: true });
+    if (status === "done" && out.videoKey && rec.email) {
+      const cut = Math.round((out.removedSec ?? 0) / 60);
+      pushAfter(rec.email, { title: "Your clean episode is ready", body: `${rec.title || "Your episode"}${cut ? `, ${cut} minute${cut === 1 ? "" : "s"} shorter` : ""}. It's in your Library.`, url: "/host/dashboard/recordings", tag: `clean-${rec.id}` });
+    }
   });
 
   /** Keep the clean episode: saved as its own recording next to the original. */
@@ -6156,6 +6206,7 @@ export function registerRoutes(app: Express): void {
     try { e = JSON.parse(rec.episodeEdit); } catch { e = {}; }
     await storage.setEpisodeEdit(rec.id, JSON.stringify({ ...e, status: "done", resultId: copy.id, error: undefined, at: new Date().toISOString() }));
     res.json({ id: copy.id });
+    if (rec.email) pushAfter(rec.email, { title: "Your edited episode is ready", body: `${rec.title || "Your episode"} (edited) is in your Library.`, url: "/host/dashboard/recordings", tag: `edit-${rec.id}` });
   });
 
   app.post("/api/agent/episode-edits/:id/failed", requireAgent, async (req, res) => {

@@ -13,6 +13,7 @@ import { startPlanCheckout, openBillingPortal, startTokenCheckout } from "@/lib/
 import { PostDialog } from "@/components/PostDialog";
 import { durationOf, uploadToStorage } from "@/lib/upload";
 import { TrimStrip, Icon, SplitIcon, type Cut } from "@/components/TrimStrip";
+import { NotifyPrompt } from "@/components/Notifications";
 import { UploadRecording } from "@/components/UploadRecording";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
@@ -236,6 +237,7 @@ function WorkingScene({ rec, p, pct, eta }: { rec: Rec; p: ClipProgress | null; 
                   : "Every step shows here as it happens. You can leave this page."}
         </p>
         {eta && <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-[#F0A71F]" data-testid="post-eta"><Clock3 className="h-3.5 w-3.5" /> {eta}</p>}
+        <div><NotifyPrompt /></div>
       </div>
     </div>
   );

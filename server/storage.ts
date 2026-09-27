@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, sponsorSearches, type SponsorSearchRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, libraryFolders, type LibraryFolderRow, musicTracks, type MusicTrackRow, podcastStats, type PodcastStatsRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, sponsorSearches, type SponsorSearchRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, pushSubscriptions, type PushSubscriptionRow, libraryFolders, type LibraryFolderRow, musicTracks, type MusicTrackRow, podcastStats, type PodcastStatsRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -888,6 +888,9 @@ export interface IStorage {
   getHostPost(id: number): Promise<HostPostRow | undefined>;
   updateHostPost(id: number, patch: Partial<Omit<HostPostRow, "id" | "email" | "createdAt">>): Promise<void>;
   deleteHostPost(id: number): Promise<void>;
+  savePushSubscription(v: { email: string; endpoint: string; p256dh: string; auth: string; userAgent: string }): Promise<void>;
+  listPushSubscriptions(email: string): Promise<PushSubscriptionRow[]>;
+  deletePushSubscription(endpoint: string): Promise<void>;
   updateClip(id: number, patch: Partial<ClipRow>): Promise<ClipRow | undefined>;
   /** The next "Edit text" remake, or one whose worker went quiet for 15 minutes. */
   claimClipEdit(): Promise<ClipRow | undefined>;
@@ -2638,6 +2641,23 @@ class DatabaseStorage implements IStorage {
   async updateHostPost(id: number, patch: Partial<Omit<HostPostRow, "id" | "email" | "createdAt">>): Promise<void> {
     await ready();
     await db.update(hostPosts).set(patch).where(eq(hostPosts.id, id));
+  }
+
+  async savePushSubscription(v: { email: string; endpoint: string; p256dh: string; auth: string; userAgent: string }): Promise<void> {
+    await ready();
+    const row = { ...v, email: v.email.trim().toLowerCase(), createdAt: new Date().toISOString() };
+    // One row per device: a device that signs in as someone else moves to them.
+    await db.insert(pushSubscriptions).values(row).onConflictDoUpdate({ target: pushSubscriptions.endpoint, set: { email: row.email, p256dh: row.p256dh, auth: row.auth, userAgent: row.userAgent } });
+  }
+
+  async listPushSubscriptions(email: string): Promise<PushSubscriptionRow[]> {
+    await ready();
+    return db.select().from(pushSubscriptions).where(eq(pushSubscriptions.email, email.trim().toLowerCase()));
+  }
+
+  async deletePushSubscription(endpoint: string): Promise<void> {
+    await ready();
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
   }
 
   async deleteHostPost(id: number): Promise<void> {

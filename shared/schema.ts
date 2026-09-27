@@ -2198,6 +2198,18 @@ export interface PostResult { platform: string; ok: boolean; url: string; error:
 export type PostMetrics = Record<string, { views?: number; likes?: number; comments?: number; shares?: number; saves?: number; reach?: number; error?: string }>;
 export type HostPostRow = typeof hostPosts.$inferSelect;
 
+/** A device (browser or installed app) that's asked for notifications: its Web Push subscription. */
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [uniqueIndex("push_subscriptions_endpoint_idx").on(t.endpoint), index("push_subscriptions_email_idx").on(t.email)]);
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+
 export const socialPosts = pgTable("social_posts", {
   id: serial("id").primaryKey(),
   eventId: integer("event_id").notNull(),
