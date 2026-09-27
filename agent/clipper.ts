@@ -1143,6 +1143,13 @@ ${transcriptText(lines)}`;
  * otherwise — it exists so a missing API key degrades the clips rather than
  * dropping the whole job on the floor.
  */
+/** A title from what was said: seven words, no fillers or false starts, a capital, no trailing comma. */
+export function roughTitle(text: string): string {
+  const words = text.split(/\s+/).filter((w) => w && !/-$/.test(w) && !/^(um+|uh+|erm*|ah+|hmm+|mm+|so|and|but|like)[,.!?]*$/i.test(w)).slice(0, 7);
+  const t = words.join(" ").replace(/[,;:]+$/, "");
+  return t ? t[0].toUpperCase() + t.slice(1) : "Clip";
+}
+
 export function densestStretches(lines: Line[], n = WANTED): Moment[] {
   if (lines.length === 0) return [];
   const WINDOW = 45;
@@ -1153,7 +1160,8 @@ export function densestStretches(lines: Line[], n = WANTED): Moment[] {
     const words = inWindow.reduce((n, l) => n + l.text.split(/\s+/).length, 0);
     if (words < 40) continue;
     scored.push({
-      title: inWindow[0]?.text.split(/\s+/).slice(0, 7).join(" ") || "Clip",
+      // The first words said, without the ums and false starts ("Uh, there's…").
+      title: roughTitle(inWindow.map((l) => l.text).join(" ")),
       caption: "",
       reason: "Picked by speech density — no model was configured, so this is a rough cut.",
       startSec: Math.floor(t),
