@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { startPlanCheckout, openBillingPortal, startTokenCheckout } from "@/lib/tokens";
 import { PostDialog } from "@/components/PostDialog";
 import { durationOf, uploadToStorage } from "@/lib/upload";
-import { TrimStrip, Icon, type Cut } from "@/components/TrimStrip";
+import { TrimStrip, Icon, SplitIcon, type Cut } from "@/components/TrimStrip";
 import { UploadRecording } from "@/components/UploadRecording";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
@@ -762,7 +762,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
       <p className={`text-sm ${shortKeep ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`} data-testid="trim-summary">
         {summary.length
           ? <><span className="text-foreground">Cuts {summary.join(", ").replace(/, ([^,]*)$/, " and $1")}.</span>{shortKeep && " That's most of the episode."} <button type="button" onClick={() => { setTrim({ start: 0, end: 0 }); setCuts([]); setSplits([]); setSel(null); }} className="text-xs underline underline-offset-2 hover:text-foreground" data-testid="trim-undo">Undo all</button></>
-          : "Edit on the timeline below: Trim the ends, or Split and delete a piece."}
+          : "Trim or split on the timeline below."}
       </p>
       <div className="flex flex-wrap gap-2">
         <BookendPicker label="Intro" value={intro} onChange={setIntro} />
@@ -885,21 +885,22 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
             selected={sel}
             onPick={trimming ? undefined : pick}
             onDelete={del}
+            onSplit={trimming ? undefined : split}
+            canSplit={canSplit}
             actions={
               <>
-                <TimelineButton tip="Drag the two ends to cut dead air from the start and end" on={trimming} onClick={() => { setTrimming((v) => !v); setSel(null); }} testid="tool-trim">
-                  <Scissors className="h-4 w-4" /> {trimming ? "Done" : `Trim · ${hms(Math.max(0, keepLen - cutTotal))}`}
+                {/* Icons with their names on hover, as in Canva: Split, and Trim with what's kept. */}
+                <TimelineButton tip="Split (S)" onClick={split} disabled={!canSplit || trimming} testid="tool-split" square>
+                  <SplitIcon />
                 </TimelineButton>
-                {!trimming && (
-                  <TimelineButton tip="Split the episode at the playhead (S), then click a piece to delete it" onClick={split} disabled={!canSplit} testid="tool-split">
-                    <SplitIcon /> Split
-                  </TimelineButton>
-                )}
-                <span className="hidden text-xs text-muted-foreground sm:inline" data-testid="tool-hint">
-                  {trimming ? "Drag the gold ends. Press Done when it starts and ends where you want." : sel ? "Press Delete to take this piece out." : bounds.length > 2 ? "Click a piece to delete it." : "Move the playhead to a spot, then Split."}
-                </span>
+                <TimelineButton tip="Trim" on={trimming} onClick={() => { setTrimming((v) => !v); setSel(null); }} testid="tool-trim">
+                  <Scissors className="h-4 w-4" /> {hms(Math.max(0, keepLen - cutTotal))}
+                </TimelineButton>
               </>
             }
+            extra={trimming ? (
+              <button type="button" onClick={() => setTrimming(false)} className="ml-1 inline-flex h-8 items-center rounded-lg bg-[#F0A71F] px-4 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="tool-done">Done</button>
+            ) : undefined}
             onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
           />
         )}
@@ -935,25 +936,16 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
 }
 
 /** A timeline tool, like Canva's: icon and word, pressed while it's on. */
-function TimelineButton({ tip, on, onClick, disabled, testid, tone, children }: { tip: string; on?: boolean; onClick: () => void; disabled?: boolean; testid: string; tone?: "violet"; children: React.ReactNode }) {
+function TimelineButton({ tip, on, onClick, disabled, testid, tone, square, children }: { tip: string; on?: boolean; onClick: () => void; disabled?: boolean; testid: string; tone?: "violet"; square?: boolean; children: React.ReactNode }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button type="button" aria-pressed={on} onClick={onClick} disabled={disabled} className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold tabular-nums transition-colors disabled:opacity-40 ${on ? "border-[#F0A71F] bg-[#F0A71F] text-[#1a1200]" : tone === "violet" ? "border-violet-300 bg-background text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950" : "border-border bg-background hover:bg-muted"}`} data-testid={testid}>
+        <button type="button" aria-pressed={on} onClick={onClick} disabled={disabled} aria-label={tip} className={`inline-flex h-9 items-center gap-1.5 rounded-lg border ${square ? "w-9 justify-center" : "px-3"} text-sm font-semibold tabular-nums transition-colors disabled:opacity-40 ${on ? "border-[#F0A71F] bg-[#F0A71F] text-[#1a1200]" : tone === "violet" ? "border-violet-300 bg-background text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950" : "border-border bg-background hover:bg-muted"}`} data-testid={testid}>
           {children}
         </button>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-[16rem] text-xs">{tip}</TooltipContent>
     </Tooltip>
-  );
-}
-
-/** Canva's split mark: a frame parted down the middle. */
-function SplitIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M9 6H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h4M15 6h4a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-4M12 3v18" />
-    </svg>
   );
 }
 

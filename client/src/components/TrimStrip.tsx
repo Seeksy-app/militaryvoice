@@ -26,7 +26,7 @@ export type Suggestion = { from: number; to: number; reason: string };
  * second; the view follows the playhead while it plays. A focused handle
  * nudges with the arrow keys (a second, or five with Shift).
  */
-export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra, flags = true, cuts = [], onCuts, suggestions = [], actions, pendingCut, trimming = true, onTrimming, splits = [], selected = null, onPick, onDelete }: {
+export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra, flags = true, cuts = [], onCuts, suggestions = [], actions, pendingCut, trimming = true, onTrimming, splits = [], selected = null, onPick, onDelete, onSplit, canSplit = false }: {
   videoRef: React.RefObject<HTMLVideoElement>;
   duration: number;
   /** Where the player is. */
@@ -66,6 +66,9 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   /** A click (not a drag) on the frames, at this time. */
   onPick?: (t: number) => void;
   onDelete?: () => void;
+  /** Canva's pop-up Split: once the playhead has been moved, a Split beside its knob. */
+  onSplit?: () => void;
+  canSplit?: boolean;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -82,6 +85,9 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   // the player catches up (on a long episode each seek takes a moment, and a
   // line drawn at the player's time trailed the mouse and snapped back).
   const [scrub, setScrub] = useState<number | null>(null);
+  // The pop-up Split shows after the playhead is moved, until it plays or splits.
+  const [moved, setMoved] = useState(false);
+  useEffect(() => { if (playing) setMoved(false); }, [playing]);
   const seeking = useRef(false);
   const wanted = useRef<number | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -323,6 +329,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     }
   };
   const up = (ev: React.PointerEvent) => {
+    if (drag?.kind === "head" && onSplit) setMoved(true);
     // A click on the frames picks the piece there; a drag only scrubs.
     if (drag?.pick && onPick && Math.abs(ev.clientX - drag.x0) < 4) onPick(timeAt(ev.clientX));
     if (drag?.knob && cut && Math.abs(ev.clientX - drag.x0) < 4) {
@@ -339,6 +346,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     ev.preventDefault();
     const t = Math.min(d, Math.max(0, head + dir * (ev.shiftKey ? 5 : 1)));
     setScrub(t);
+    if (onSplit) setMoved(true);
     show(t);
   };
   const nudge = (kind: "start" | "end") => (ev: React.KeyboardEvent) => {
@@ -514,7 +522,19 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
                 <Scissors className="h-3 w-3" />
               </button>
             ) : (
-              <div onPointerDown={downKnob} className="pointer-events-auto absolute -left-[10px] -top-0.5 h-5 w-5 cursor-grab touch-none rounded-full border-2 border-white bg-[#053877] shadow-md transition-transform hover:scale-110 active:cursor-grabbing dark:border-[#053877] dark:bg-white" data-testid="trim-playhead" />
+              <>
+                <div onPointerDown={downKnob} className="pointer-events-auto absolute -left-[10px] -top-0.5 h-5 w-5 cursor-grab touch-none rounded-full border-2 border-white bg-[#053877] shadow-md transition-transform hover:scale-110 active:cursor-grabbing dark:border-[#053877] dark:bg-white" data-testid="trim-playhead" />
+                {moved && canSplit && onSplit && !drag && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => { onSplit(); setMoved(false); }} aria-label="Split" className={`pointer-events-auto absolute -top-1.5 ${x(head) > inner - 48 ? "right-3" : "left-3"} flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-background text-foreground shadow-md hover:bg-muted`} data-testid="trim-split-pop">
+                        <SplitIcon />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">Split</TooltipContent>
+                  </Tooltip>
+                )}
+              </>
             )}
             <div className={`absolute -left-px bottom-0 w-0.5 bg-[#053877] dark:bg-white ${cut ? "top-6" : "top-4"}`} />
           </div>
@@ -544,6 +564,15 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
 function secs(n: number) {
   const t = Math.max(0, Math.round(n));
   return t < 60 ? `${t}s` : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+}
+
+/** Canva's split mark: a frame parted down the middle. */
+export function SplitIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9 6H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h4M15 6h4a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-4M12 3v18" />
+    </svg>
+  );
 }
 
 /** A small round icon button with its name on hover. */
