@@ -43,7 +43,7 @@
 // thing that cannot be read back out of Vercel once it is marked sensitive.
 import "dotenv/config";
 import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { createWriteStream, readFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -185,8 +185,20 @@ async function uploadFile(file: string, contentType: string): Promise<string> {
 // flight: each decodes video and holds hundreds of MB, and eight together
 // (two jobs × two clips × frame grabs) ran the 2GB worker out of memory.
 // One on the 2GB worker: two caption renders at once (each holds every
-// caption image) still ran it out of memory on 27 Sep.
-const FFMPEG_SLOTS = Math.max(1, Number(process.env.FFMPEG_SLOTS || 1));
+// caption image) still ran it out of memory on 27 Sep. So the default follows
+// the machine: one per ~2GB of the container's limit (Pro, 4GB: two).
+const FFMPEG_SLOTS = Math.max(1, Number(process.env.FFMPEG_SLOTS || Math.floor(memoryLimit() / 1.9e9)));
+
+/** The container's memory limit (cgroup), not the host's, which os.totalmem() reports. */
+function memoryLimit(): number {
+  for (const f of ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]) {
+    try {
+      const n = Number(readFileSync(f, "utf8").trim());
+      if (n > 0 && n < os.totalmem()) return n;
+    } catch { /* not this cgroup version */ }
+  }
+  return os.totalmem();
+}
 let ffmpegBusy = 0;
 const ffmpegWaiting: (() => void)[] = [];
 async function slot<T>(work: () => Promise<T>): Promise<T> {
@@ -1858,7 +1870,7 @@ async function main(): Promise<void> {
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn("No ANTHROPIC_API_KEY — falling back to speech density, which picks worse moments.");
   }
-  console.log(`${LANES} jobs at a time`);
+  console.log(`${LANES} jobs at a time, ${FFMPEG_SLOTS} ffmpeg at a time (${(memoryLimit() / 1e9).toFixed(1)}GB)`);
   // Each lane claims its own jobs (claims are atomic on the server), so a long
   // episode in one lane doesn't hold up a short one behind it.
   const lane = async (n: number) => {
