@@ -54,6 +54,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import { textPath, fitSize, textWidth } from "../server/textPath.js";
 import { cutList, snapToAudio, keepRanges, selectGraph, envelope, type Word } from "./refine.js";
+import { captionTrack, type TimedWord } from "./wordCaptions.js";
 
 const API_BASE = (process.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "");
 const AGENT_TOKEN = process.env.AGENT_TOKEN || "";
@@ -240,19 +241,45 @@ const ffmpeg = (args: string[]) => run("ffmpeg", ["-hide_banner", "-loglevel", "
  * code and look identical everywhere.
  */
 export async function titleBand(text: string, width: number, height: number, sub: string): Promise<Buffer> {
-  const pad = Math.round(width * 0.06);
-  const size = fitSize(text, "bold", Math.round(height * 0.3), Math.round(height * 0.14), width - pad * 2);
+  // Montserrat, placed where Creatomate put it (title centred at 40% of the
+  // band, show line at 80%), so a clip made here matches one made there.
+  const vmin = width / 100;
+  const boxW = width * 0.92;
+  let size = fitSize(text, "heavy", Math.round(vmin * 6.2), Math.round(vmin * 3.4), boxW);
+  // Too long for one line even small: two lines, as large as fits.
+  let rows = [text];
+  if (textWidth(text, size, "heavy") > boxW) {
+    rows = wrapTitle(text, Math.round(vmin * 4.4), boxW);
+    size = Math.min(...rows.map((r) => fitSize(r, "heavy", Math.round(vmin * 4.4), Math.round(vmin * 2.6), boxW)));
+  }
+  const lead = size * 1.12;
+  const titleSvg = rows
+    .map((r, i) => textPath(r, { x: width / 2, y: height * 0.4 + size * 0.36 + (i - (rows.length - 1) / 2) * lead, size, weight: "heavy", fill: "#ffffff", anchor: "middle" }))
+    .join("");
   // The show line shrinks to fit, then shortens: an episode title ("Devil Dawg
   // Double Dare Ep 5 with Genius Network Founder, Joe Polish") ran off both
   // edges at a fixed size.
   const subText = sub.length > 52 ? `${sub.slice(0, 50).trimEnd()}…` : sub;
-  const subSize = fitSize(subText, "regular", Math.round(size * 0.42), Math.round(height * 0.07), (width - pad * 2) / 1.12);
+  const subSize = fitSize(subText, "strong", Math.round(vmin * 3), Math.round(vmin * 2), boxW / 1.1);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
     <rect width="${width}" height="${height}" fill="#000741"/>
-    ${textPath(text, { x: width / 2, y: height * 0.52, size, weight: "bold", fill: "#ffffff", anchor: "middle" })}
-    ${subText ? textPath(subText, { x: width / 2, y: height * 0.8, size: subSize, weight: "regular", fill: "#F0A71F", anchor: "middle", letterSpacing: subSize * 0.08 }) : ""}
+    ${titleSvg}
+    ${subText ? textPath(subText, { x: width / 2, y: height * 0.8 + subSize * 0.36, size: subSize, weight: "strong", fill: "#F0A71F", anchor: "middle", letterSpacing: subSize * 0.08 }) : ""}
   </svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+/** A title into two lines of about equal width. */
+function wrapTitle(text: string, size: number, boxW: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  let best = [text];
+  let bestW = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(" "), b = words.slice(i).join(" ");
+    const w = Math.max(textWidth(a, size, "heavy"), textWidth(b, size, "heavy"));
+    if (w < bestW) { bestW = w; best = [a, b]; }
+  }
+  return best;
 }
 
 /** h264 will not encode an odd dimension, and stacking halves one twice. */
@@ -524,6 +551,7 @@ export async function shotsIn(source: string, m: Moment): Promise<{ from: number
 }
 
 const focusOf = (g: unknown): Box | null => ((g as { focus?: Box | null } | undefined)?.focus ?? null);
+const shotsOf = (g: unknown) => (g as { focusShots?: { from: number; to: number; focus: Box | null }[] | null } | undefined)?.focusShots ?? null;
 
 /** Grow a speaker box to a panel's shape, with room around them, kept inside the picture. */
 export function frameAround(focus: Box, within: Box, aspect: number): Box {
@@ -538,6 +566,12 @@ export function frameAround(focus: Box, within: Box, aspect: number): Box {
   return { x: Math.round(x), y: Math.round(y), w: Math.round(w), h: Math.round(h) };
 }
 
+/** No speaker found in a shot: the picture's full height, centred (Creatomate's rule). */
+function wholeHeight(r: Box, aspect: number): Box {
+  const w = Math.min(r.w, r.h * aspect);
+  return { x: Math.round(r.x + (r.w - w) / 2), y: r.y, w: Math.round(w), h: r.h };
+}
+
 /** Cut one moment into one shape. */
 export async function render(
   source: string,
@@ -548,6 +582,10 @@ export async function render(
   geo?: Awaited<ReturnType<typeof frameGeometry>>,
   captions?: { text: string; startSec: number; endSec: number }[],
   dir?: string,
+  // Animated captions: word timings from the start of the clip. Drawn here
+  // the way Creatomate drew them, with its framing (it follows a camera that
+  // cuts, and puts a picture it can't frame whole over a blur of itself).
+  words?: TimedWord[],
 ): Promise<void> {
   const dur = (m.endSec - m.startSec).toFixed(2);
   const size = shape === "wide" ? [1920, 1080] : shape === "vertical" ? [1080, 1920] : [1080, 1080];
@@ -561,12 +599,13 @@ export async function render(
   const cut = r ? `crop=${even(r.w)}:${even(r.h)}:${r.x}:${r.y},` : "";
 
   const chain: string[] = [];
+  const shotInputs: string[] = [];
   if (shape === "wide") {
     // A wide shot in a wide frame keeps its letterbox — cropping a two-shot to
     // 16:9 is how one of the two people disappears. The blur is of real
     // picture now rather than of the black bar it used to be given.
     chain.push(
-      `[0:v]${cut}scale=${W}:${videoH}:force_original_aspect_ratio=increase,crop=${W}:${videoH},boxblur=28:2,setsar=1[bg]`,
+      `[0:v]${cut}scale=${W}:${videoH}:force_original_aspect_ratio=increase,crop=${W}:${videoH},scale=${even(W / 8)}:${even(videoH / 8)},boxblur=4:2,scale=${W}:${videoH},setsar=1[bg]`,
       `[0:v]${cut}scale=${W}:${videoH}:force_original_aspect_ratio=decrease,setsar=1[fg]`,
       `[bg][fg]overlay=(W-w)/2:(H-h)/2[stage]`,
     );
@@ -586,6 +625,27 @@ export async function render(
       `[rr]${box(geo.right)}[bot]`,
       `[top][bot]vstack=inputs=2[stage]`,
     );
+  } else if (words && shotsOf(geo)?.length && r) {
+    // A show that cuts between cameras: reframe on the speaker at every cut.
+    // Each shot is its own input (a seek into the same file), cropped and
+    // joined end to end. One split of one input would have to hold every
+    // frame of the later shots in memory until the earlier ones were done.
+    const aspect = W / videoH;
+    const shots = shotsOf(geo)!;
+    shots.forEach((sh, k) => {
+      const f = sh.focus ? frameAround(sh.focus, r, aspect) : wholeHeight(r, aspect);
+      shotInputs.push("-ss", String(m.startSec + sh.from), "-t", (sh.to - sh.from).toFixed(3), "-i", source);
+      chain.push(`[${k + 1}:v]crop=${even(f.w)}:${even(f.h)}:${f.x}:${f.y},scale=${W}:${videoH},setsar=1,fps=30,format=yuv420p[s${k}]`);
+    });
+    chain.push(`${shots.map((_, k) => `[s${k}]`).join("")}concat=n=${shots.length}:v=1:a=0[stage]`);
+  } else if (words && !focusOf(geo)) {
+    // The whole picture over a blurred copy of itself, as Creatomate did it: a
+    // room of people keeps all its people.
+    chain.push(
+      `[0:v]${cut}scale=${W}:${videoH}:force_original_aspect_ratio=increase,crop=${W}:${videoH},scale=${even(W / 8)}:${even(videoH / 8)},boxblur=4:2,scale=${W}:${videoH},setsar=1[bg]`,
+      `[0:v]${cut}scale=${W}:${videoH}:force_original_aspect_ratio=decrease,setsar=1[fg]`,
+      `[bg][fg]overlay=(W-w)/2:(H-h)/2[stage]`,
+    );
   } else if (focusOf(geo) && r) {
     // One camera on a room: frame the speaker, not the whole table.
     const f = frameAround(focusOf(geo)!, r, W / videoH);
@@ -598,13 +658,26 @@ export async function render(
     );
   }
 
-  const args = ["-ss", String(m.startSec), "-t", dur, "-i", source];
+  const args = ["-ss", String(m.startSec), "-t", dur, "-i", source, ...shotInputs];
+  const inputs = () => args.filter((a) => a === "-i").length;
   let last = "[stage]";
   if (band) {
+    const idx = inputs();
     args.push("-i", band.file);
     chain.push(`[stage]pad=${W}:${H}:0:${band.height}:color=#000741[padded]`);
-    chain.push(`[padded][1:v]overlay=0:0[banded]`);
+    chain.push(`[padded][${idx}:v]overlay=0:0[banded]`);
     last = "[banded]";
+  }
+
+  const track = words && dir ? await captionTrack(words, shape, W, H, m.endSec - m.startSec, path.join(dir, `words-${shape}`)) : null;
+  if (words) {
+    if (track) {
+      const idx = inputs();
+      args.push("-f", "concat", "-safe", "0", "-i", track.list);
+      chain.push(`[${idx}:v]format=rgba[words]`, `${last}[words]overlay=0:${track.y}:eof_action=pass:format=auto[v]`);
+    } else {
+      chain.push(`${last}null[v]`);
+    }
   }
 
   // Burned in, not a sidecar. Most of these are watched with the sound off,
@@ -614,8 +687,10 @@ export async function render(
   // Each caption is its own overlay, switched on for the seconds it belongs
   // to. Forty is the cap: a filter graph of a few dozen overlays is nothing,
   // a few hundred is a parser that takes longer than the encode.
-  const caps = splitCaptions((captions ?? []).filter((c) => c.text.trim()), W, H).slice(0, 40);
-  if (caps.length && dir) {
+  const caps = words ? [] : splitCaptions((captions ?? []).filter((c) => c.text.trim()), W, H).slice(0, 40);
+  if (words) {
+    // Drawn above.
+  } else if (caps.length && dir) {
     let prev = last;
     for (let i = 0; i < caps.length; i++) {
       const c = caps[i];
@@ -623,7 +698,7 @@ export async function render(
       const f = path.join(dir, `cap-${shape}-${i}.png`);
       await fs.writeFile(f, buf);
       args.push("-i", f);
-      const idx = args.filter((a) => a === "-i").length - 1;
+      const idx = inputs() - 1;
       const from = Math.max(0, c.startSec - m.startSec).toFixed(2);
       const to = Math.max(0, c.endSec - m.startSec).toFixed(2);
       const y = H - Math.round(H * 0.055) - ch;
@@ -693,6 +768,48 @@ export function transcriptCovers(lines: Line[], durationSec: number): boolean {
  */
 /** Word timings from the last Scribe read of each file. */
 const scribeWordsFor = new Map<string, Word[]>();
+
+/**
+ * Each word of one moment, timed from the start of the clip, for the animated
+ * captions. From the Scribe read of the whole file when the job made one;
+ * otherwise Scribe on just this moment's sound (a few seconds, a cent or two);
+ * and if that can't be had, the transcript lines' words spread over each
+ * line's time by length — close, not exact.
+ */
+export async function momentWords(source: string, m: Moment, within: Line[], dir: string): Promise<TimedWord[]> {
+  const len = m.endSec - m.startSec;
+  const inMoment = (ws: Word[], offset: number) =>
+    ws.filter((w) => (w.type ?? "word") === "word" && w.end - offset > 0 && w.start - offset < len)
+      .map((w) => ({ text: w.text, start: Math.max(0, w.start - offset), end: Math.min(len, w.end - offset) }));
+  const whole = scribeWordsFor.get(source);
+  if (whole?.length) return inMoment(whole, m.startSec);
+  if ((process.env.ELEVENLABS_API_KEY || "").trim()) {
+    try {
+      const sub = path.join(dir, `words-${Math.round(m.startSec)}`);
+      await fs.mkdir(sub, { recursive: true });
+      const audio = path.join(sub, "moment.m4a");
+      await run("ffmpeg", ["-y", "-v", "error", "-ss", String(m.startSec), "-t", len.toFixed(2), "-i", source, "-vn", "-c:a", "aac", "-b:a", "96k", audio]);
+      await transcribeWithScribe(audio, sub);
+      const got = inMoment(scribeWordsFor.get(audio) ?? [], 0);
+      scribeWordsFor.delete(audio);
+      if (got.length) return got;
+    } catch (err) {
+      console.warn(`   word timings from Scribe failed (${(err as Error).message}); spreading the transcript instead`);
+    }
+  }
+  return within.flatMap((l) => {
+    const ws = l.text.split(/\s+/).filter(Boolean);
+    const total = ws.reduce((n, w) => n + w.length + 1, 0) || 1;
+    let at = l.startSec - m.startSec;
+    const span = Math.max(0.1, l.endSec - l.startSec);
+    return ws.map((w) => {
+      const d = span * ((w.length + 1) / total);
+      const out = { text: w, start: at, end: at + d };
+      at += d;
+      return out;
+    });
+  }).filter((w) => w.end > 0 && w.start < len).map((w) => ({ ...w, start: Math.max(0, w.start), end: Math.min(len, w.end) }));
+}
 
 /** Word timings for a file: from the Scribe read the job already made, or a fresh one. */
 export async function wordsFor(file: string, dir: string): Promise<Word[]> {
@@ -1755,11 +1872,29 @@ async function handle(job: Job): Promise<void> {
         progress(job.recordingId, { stage: "render", pct: ((i * 4 + k) / (moments.length * 4)) * 100, detail: `Clip ${i + 1} of ${moments.length} · ${shape}` });
       step(0, "all three shapes");
       // Only the shapes they asked for; Classic captions are ours, no Creatomate.
-      const made = !silent && opts.captions === "animated" ? await renderWithCreatomate(job, m, source, geo, { wide, vertical, square }, [...want]) : new Set<Shape>();
-      // Whatever Creatomate didn't make, we make here.
-      if (want.has("wide") && !made.has("wide")) { step(0, "wide"); await render(source, wide, m, "wide", undefined, geo, within, capDir); }
-      if (want.has("vertical") && !made.has("vertical")) { step(1, "vertical"); await render(source, vertical, m, "vertical", { file: bandFile, height: 220 }, geo, within, capDir); }
-      if (want.has("square") && !made.has("square")) { step(2, "square"); await render(source, square, m, "square", { file: bandFile, height: 220 }, geo, within, capDir); }
+      // CLIP_RENDERER=local: animated captions made here too, no Creatomate.
+      const animated = !silent && opts.captions === "animated";
+      const ours = (process.env.CLIP_RENDERER || "").toLowerCase() === "local";
+      const made = animated && !ours ? await renderWithCreatomate(job, m, source, geo, { wide, vertical, square }, [...want]) : new Set<Shape>();
+      // Whatever Creatomate didn't make, we make here, with the same
+      // word-by-word captions (a straggling wide used to come back Classic).
+      const todo = (["wide", "vertical", "square"] as const).filter((x) => want.has(x) && !made.has(x));
+      const words = animated && todo.length ? await momentWords(source, m, within, dir) : undefined;
+      const t0 = Date.now();
+      // All at once: the ffmpeg slots decide how many actually run.
+      await Promise.all(todo.map(async (x) => {
+        const file = { wide, vertical, square }[x];
+        const band = x === "wide" ? undefined : { file: bandFile, height: 220 };
+        try {
+          await render(source, file, m, x, band, geo, within, capDir, words);
+        } catch (err) {
+          if (!words) throw err;
+          // A clip with Classic captions beats no clip.
+          console.warn(`[${job.recordingId}] animated ${x} failed (${(err as Error).message.slice(0, 300)}); making it with Classic captions`);
+          await render(source, file, m, x, band, geo, within, capDir);
+        }
+      }));
+      if (todo.length) console.log(`[${job.recordingId}] rendered ${todo.join(", ")} here in ${Math.round((Date.now() - t0) / 1000)}s`);
       if (musicFile) {
         for (const [shape, file] of [["wide", wide], ["vertical", vertical], ["square", square]] as const) {
           if (want.has(shape)) await mixMusic(file, musicFile, !silent);

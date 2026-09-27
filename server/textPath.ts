@@ -1,5 +1,6 @@
 import opentype from "opentype.js";
 import { INTER_BOLD_B64, INTER_REGULAR_B64 } from "./assets/fonts.js";
+import { MONTSERRAT_700_B64, MONTSERRAT_800_B64 } from "./assets/montserrat.js";
 
 // Draw text as vector outlines instead of asking the renderer for a font.
 //
@@ -9,14 +10,17 @@ import { INTER_BOLD_B64, INTER_REGULAR_B64 } from "./assets/fonts.js";
 // Helvetica. Outlines have no such dependency: the glyphs travel in the
 // bundle, and the card renders identically everywhere.
 
-export type Weight = "regular" | "bold";
+/** Inter regular and bold; Montserrat 700 ("strong") and 800 ("heavy") for clips. */
+export type Weight = "regular" | "bold" | "strong" | "heavy";
+
+const SOURCES: Record<Weight, string> = { regular: INTER_REGULAR_B64, bold: INTER_BOLD_B64, strong: MONTSERRAT_700_B64, heavy: MONTSERRAT_800_B64 };
 
 const fonts = new Map<Weight, opentype.Font>();
 
 function font(weight: Weight): opentype.Font {
   const cached = fonts.get(weight);
   if (cached) return cached;
-  const bytes = Buffer.from(weight === "bold" ? INTER_BOLD_B64 : INTER_REGULAR_B64, "base64");
+  const bytes = Buffer.from(SOURCES[weight], "base64");
   const parsed = opentype.parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
   fonts.set(weight, parsed);
   return parsed;
@@ -45,8 +49,28 @@ export function textPath(
   // centres a touch left without dropping it.
   const w = textWidth(text, o.size, o.weight, ls) - ls;
   const x = o.anchor === "middle" ? o.x - w / 2 : o.x;
-  const d = font(o.weight).getPath(text, x, o.y, o.size, opts(o.size, ls)).toPathData(2);
+  const d = pathData(font(o.weight).getPath(text, x, o.y, o.size, opts(o.size, ls)).commands);
   return `<path d="${d}" fill="${o.fill}"/>`;
+}
+
+/**
+ * SVG path data from the outline's commands, written here. opentype.js's own
+ * toPathData(2) sometimes prints NaN for a coordinate that is a perfectly good
+ * number (about 1 glyph in 60 in Montserrat, depending on where it lands), and
+ * librsvg stops drawing the word at the NaN: "families" came out as "f".
+ */
+function pathData(commands: opentype.PathCommand[]): string {
+  const n = (v: number) => (Math.round(v * 100) / 100).toString();
+  return commands
+    .map((c) => {
+      switch (c.type) {
+        case "M": case "L": return `${c.type}${n(c.x)} ${n(c.y)}`;
+        case "Q": return `Q${n(c.x1)} ${n(c.y1)} ${n(c.x)} ${n(c.y)}`;
+        case "C": return `C${n(c.x1)} ${n(c.y1)} ${n(c.x2)} ${n(c.y2)} ${n(c.x)} ${n(c.y)}`;
+        default: return "Z";
+      }
+    })
+    .join("");
 }
 
 /**
