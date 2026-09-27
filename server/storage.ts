@@ -844,6 +844,8 @@ export interface IStorage {
   claimMusicMix(): Promise<RecordingRow | undefined>;
   setEditSuggest(recordingId: number, json: string): Promise<void>;
   setTranscriptJson(recordingId: number, json: string): Promise<void>;
+  /** The worker's "still on it": keeps a running job's claim fresh. */
+  touchClipClaim(recordingId: number): Promise<void>;
   listPodcastStats(email: string): Promise<PodcastStatsRow[]>;
   /** Every podcaster's, for the comparison: only the numbers are used, never shown by name. */
   allPodcastStats(): Promise<PodcastStatsRow[]>;
@@ -2187,6 +2189,11 @@ class DatabaseStorage implements IStorage {
   async deletePodcastStats(email: string, source: string): Promise<void> {
     await ready();
     await db.delete(podcastStats).where(and(eq(podcastStats.email, email.toLowerCase().trim()), eq(podcastStats.source, source)));
+  }
+
+  async touchClipClaim(recordingId: number): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ clipClaimedAt: new Date().toISOString() }).where(and(eq(recordings.id, recordingId), eq(recordings.clipStatus, "running")));
   }
 
   async setTranscriptJson(recordingId: number, json: string): Promise<void> {

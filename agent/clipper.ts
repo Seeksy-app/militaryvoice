@@ -1826,11 +1826,17 @@ async function tick(): Promise<boolean> {
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  if (!(job.clipEdit || job.episodeEdit || job.importFrom || job.musicMix || job.suggestEdits)) holding.add(job.recordingId);
+  const clipJob = !(job.clipEdit || job.episodeEdit || job.importFrom || job.musicMix || job.suggestEdits);
+  if (clipJob) holding.add(job.recordingId);
+  // "Still on it", every minute: a long quiet stretch (waiting on Creatomate)
+  // must not look like a dead worker, or another lane claims the same job.
+  const beat = clipJob ? setInterval(() => { api("POST", `/api/agent/clip-jobs/${job.recordingId}/heartbeat`).catch(() => {}); }, 60_000) : undefined;
   try {
     await handle(job);
+    clearInterval(beat);
     holding.delete(job.recordingId);
   } catch (err) {
+    clearInterval(beat);
     holding.delete(job.recordingId);
     const message = (err as Error).message ?? String(err);
     console.error(`[${job.recordingId}] failed: ${message}`);

@@ -5620,6 +5620,13 @@ export function registerRoutes(app: Express): void {
   });
 
   /** Where a running job has got to: the processing screen reads it, and it keeps the claim alive. */
+  // The worker's "still on it" (every minute while it holds a job), so a long
+  // wait on Creatomate never looks like a dead worker to the stale-claim rule.
+  app.post("/api/agent/clip-jobs/:id/heartbeat", requireAgent, async (req, res) => {
+    await storage.touchClipClaim(Number(req.params.id));
+    res.json({ ok: true });
+  });
+
   // The transcript the worker made, kept so the next run (Generate more, Suggest edits) needn't make it again.
   app.post("/api/agent/clip-jobs/:id/transcript", requireAgent, async (req, res) => {
     const lines = (Array.isArray(req.body?.lines) ? req.body.lines : []).slice(0, 20000)
@@ -5657,6 +5664,7 @@ export function registerRoutes(app: Express): void {
     const timing = { startedAt: prev.startedAt ?? now, renderAt: stage === "render" && prev.stage !== "render" ? now : prev.renderAt };
     const merged = { ...prev, ...Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)), ...timing };
     await storage.setClipProgress(id, JSON.stringify(merged));
+    await storage.touchClipClaim(id);
     res.json({ ok: true });
   });
 
