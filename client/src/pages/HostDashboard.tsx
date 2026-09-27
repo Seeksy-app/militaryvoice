@@ -75,6 +75,7 @@ import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
 import { MyAnalytics } from "@/components/MyAnalytics";
 import { PodcastListens } from "@/components/PodcastStats";
+import { GetTheApp } from "@/components/GetTheApp";
 import { isPodcaster } from "@shared/schema";
 import { StudioIcon } from "@/components/GreenRoomButton";
 import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
@@ -1345,6 +1346,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 : null;
               return (
                 <>
+                  <GetTheApp variant="banner" />
                   <CommandCenter
                     firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || "there"}
                     photoUrl={profile?.photoUrl ?? ""}

@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { startPwa } from "./lib/pwa";
 
 // The app used hash routing before (militaryvoices.ai/#/agenda). Links that were
 // already shared keep working: translate a legacy hash path into a real path,
@@ -14,5 +15,8 @@ function upgradeLegacyHashRoute() {
 }
 upgradeLegacyHashRoute();
 window.addEventListener("hashchange", upgradeLegacyHashRoute);
+
+// The installable app: keep the install offer, register the service worker.
+startPwa();
 
 createRoot(document.getElementById("root")!).render(<App />);

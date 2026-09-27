@@ -1,0 +1,24 @@
+{
+  "id": "/host",
+  "name": "MilitaryVoices.ai",
+  "short_name": "MilitaryVoices",
+  "description": "Your show, your clips and your audience: the platform for military voices.",
+  "start_url": "/host/dashboard?source=app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#000741",
+  "theme_color": "#000741",
+  "categories": ["productivity", "social", "entertainment"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Library", "url": "/host/dashboard/library?source=app", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Pōstify", "url": "/host/dashboard/postify?source=app", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Social", "url": "/host/dashboard/social?source=app", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Your analytics", "url": "/host/dashboard/analytics?source=app", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

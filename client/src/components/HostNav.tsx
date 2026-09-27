@@ -1,6 +1,7 @@
 import type { ComponentType, ReactNode } from "react";
 import { LogoLockupOnDark } from "@/components/Logo";
 import { ThemeSwitch } from "@/components/ThemeSwitch";
+import { GetTheApp } from "@/components/GetTheApp";
 import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones } from "lucide-react";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -208,7 +209,10 @@ export function HostNav({
               // What isn't live yet sits apart from what is: a gap and a rule above it.
               <div key={g.title} className={g.title === "Help" ? "mt-auto" : g.title === "Coming soon" ? "mt-6 border-t border-white/10 pt-6" : undefined}>
                 <p className="mb-1.5 px-3 text-xs font-extrabold uppercase tracking-[0.14em] text-white">{g.title}</p>
-                <div className="flex flex-col gap-0.5">{items.map((it) => link(it, false))}</div>
+                <div className="flex flex-col gap-0.5">
+                  {items.map((it) => link(it, false))}
+                  {g.title === "Help" && <GetTheApp variant="nav" />}
+                </div>
               </div>
             );
           })}
