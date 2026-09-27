@@ -686,9 +686,11 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   // Make a clip. Shapes start unpicked: the button counts what you choose.
   const [mark, setMark] = useState<{ in: number | null; out: number | null }>({ in: null, out: null });
   const [title, setTitle] = useState("");
-  const [formats, setFormats] = useState<ClipFormat[]>([]);
+  // Vertical to start with: it's the one almost everyone posts.
+  const [formats, setFormats] = useState<ClipFormat[]>(["vertical"]);
+  const titleRef = useRef<HTMLInputElement>(null);
   const len = mark.in !== null && mark.out !== null ? mark.out - mark.in : 0;
-  const reset = () => { setMark({ in: null, out: null }); setTitle(""); setFormats([]); };
+  const reset = () => { setMark({ in: null, out: null }); setTitle(""); setFormats(["vertical"]); };
   // Where the player is, for the timeline bar; and stopping a Preview at the end mark.
   const [pos, setPos] = useState({ t: 0, d: 0 });
   // Before anything is marked, the strip suggests 30 seconds from where you are.
@@ -714,7 +716,6 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
     void v.play();
   };
   const pct = (t: number) => (pos.d ? `${Math.min(100, Math.max(0, (t / pos.d) * 100))}%` : "0%");
-  const lengthNote = len <= 0 ? "" : len < 5 ? "Too short: at least 5 seconds" : len > 180 ? "Too long: Shorts and Reels allow 3 minutes" : `${hms(len)} long`;
   const makeClip = useMutation({
     mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/clips`, { startSec: mark.in, endSec: mark.out, title, source: source === "clean" ? "clean" : "", formats })).json(),
     onSuccess: () => {
@@ -876,25 +877,44 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
       </Button>
     </>
   );
+  // The toolbar only says where the work is: marking, naming and making all happen on the timeline, in order.
   const clipTools = (
     <>
-      <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={90} placeholder="Name the clip" className="h-9 w-52 min-w-0" data-testid="mark-title" />
+      <span className="min-w-0 truncate text-sm text-muted-foreground">Mark the moment on the timeline below.</span>
+      {mark.in !== null && <button type="button" onClick={reset} className="ml-auto text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground" data-testid="mark-reset">Start over</button>}
+    </>
+  );
+  const make = () => {
+    if (!title.trim()) { titleRef.current?.focus(); return toast({ title: "Give the clip a name", description: "It's the headline across the top of the clip." }); }
+    if (!formats.length) return toast({ title: "Pick at least one shape", description: "Vertical for Reels, TikTok and Shorts; square for the feed; wide for YouTube." });
+    makeClip.mutate();
+  };
+  // Step 3, once both ends are marked: name it, pick the shapes, make it.
+  const finish = (
+    <>
+      <TimelineButton tip="Play just the clip" onClick={preview} testid="mark-preview">
+        <Play className="h-4 w-4" /> Play clip
+      </TimelineButton>
+      <span className="text-xs font-semibold tabular-nums text-violet-700 dark:text-violet-300">{hms(len)}</span>
+      <span className="mx-1 hidden h-6 w-px bg-border sm:block" aria-hidden />
+      <Input ref={titleRef} autoFocus value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") make(); }} maxLength={90} placeholder="3. Name the clip" className={`h-9 w-56 min-w-0 ${title.trim() ? "" : "border-violet-400 ring-2 ring-violet-200 dark:ring-violet-900"}`} data-testid="mark-title" />
       <div className="flex gap-1" role="group" aria-label="Shapes">
         {CLIP_FORMATS.map((f) => {
           const on = formats.includes(f);
           return (
-            <button key={f} type="button" aria-pressed={on} onClick={() => setFormats(CLIP_FORMATS.filter((x) => (x === f ? !on : formats.includes(x))))} className={`h-9 rounded-lg border px-2.5 text-xs font-semibold capitalize transition-colors ${on ? "border-violet-600 bg-violet-600 text-white" : "border-border bg-background text-foreground hover:border-violet-400"}`} data-testid={`mark-shape-${f}`}>{f}</button>
+            <Tooltip key={f}>
+              <TooltipTrigger asChild>
+                <button type="button" aria-pressed={on} onClick={() => setFormats(CLIP_FORMATS.filter((x) => (x === f ? !on : formats.includes(x))))} className={`h-9 rounded-lg border px-2.5 text-xs font-semibold capitalize transition-colors ${on ? "border-violet-600 bg-violet-600 text-white" : "border-border bg-background text-foreground hover:border-violet-400"}`} data-testid={`mark-shape-${f}`}>{f}</button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">{f === "vertical" ? "9:16, for Reels, TikTok and Shorts" : f === "square" ? "1:1, for the Instagram and Facebook feed" : "16:9, for YouTube, LinkedIn and X"}</TooltipContent>
+            </Tooltip>
           );
         })}
       </div>
-      <span className={`ml-auto min-w-0 truncate text-xs ${len && (len < 5 || len > 180) ? "font-semibold text-destructive" : "text-muted-foreground"}`}>
-        {mark.in !== null && lengthNote ? lengthNote : ""}
-        {(mark.in !== null || title || formats.length > 0) && <button type="button" onClick={reset} className="ml-2 underline underline-offset-2 hover:text-foreground" data-testid="mark-reset">Start over</button>}
-      </span>
       {tip(
-        `1 credit per shape. ${source === "clean" ? "From the clean episode" : "From the original"}, with animated captions. 5 seconds to 3 minutes.`,
+        `1 credit per shape. ${source === "clean" ? "From the clean episode" : "From the original"}, with animated captions.`,
         <span className="shrink-0">
-          <Button type="button" onClick={() => makeClip.mutate()} disabled={makeClip.isPending || len < 5 || len > 180 || !title.trim() || formats.length === 0} className="h-9 gap-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700" data-testid="mark-make">
+          <Button type="button" onClick={make} disabled={makeClip.isPending} className="h-9 gap-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700" data-testid="mark-make">
             {makeClip.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clapperboard className="h-4 w-4" />} Make clip{formats.length ? ` · ${formats.length} credit${formats.length === 1 ? "" : "s"}` : ""}
           </Button>
         </span>,
@@ -963,18 +983,13 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
                 >
                   <ArrowRightToLine className="h-4 w-4" /> End here
                 </TimelineButton>
-                {mark.in !== null && mark.out !== null && (
-                  <TimelineButton tip="Play just the clip" onClick={preview} testid="mark-preview">
-                    <Play className="h-4 w-4" /> Play clip
-                  </TimelineButton>
+                {mark.in !== null && mark.out !== null ? finish : (
+                  <span className="hidden text-xs text-muted-foreground sm:inline" data-testid="mark-step">
+                    {mark.in === null
+                      ? "1. Move the playhead to where the clip starts, then press Start here."
+                      : "2. Move the playhead to where it ends, then press End here."}
+                  </span>
                 )}
-                <span className="hidden text-xs text-muted-foreground sm:inline" data-testid="mark-step">
-                  {mark.in === null
-                    ? "1. Move the playhead to where the clip starts, then press Start here."
-                    : mark.out === null
-                      ? "2. Move the playhead to where it ends, then press End here."
-                      : "3. Name it, pick the shapes above, and press Make clip."}
-                </span>
               </>
             }
             onChange={() => {}}
