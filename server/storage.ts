@@ -1959,7 +1959,9 @@ class DatabaseStorage implements IStorage {
 
   async claimEpisodeEdit(): Promise<RecordingRow | undefined> {
     await ready();
-    const stale = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    // Half an hour: an hour-long episode edits in under fifteen minutes, and
+    // a worker restarted mid-edit hands it back anyway (release, in the clipper).
+    const stale = new Date(Date.now() - 30 * 60 * 1000).toISOString();
     const now = new Date().toISOString();
     const [row] = await db
       .update(recordings)

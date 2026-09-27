@@ -5899,7 +5899,10 @@ export function registerRoutes(app: Express): void {
     if (!rec) return res.status(404).json({ message: "No such recording." });
     let e: any = {};
     try { e = JSON.parse(rec.episodeEdit); } catch { e = {}; }
-    await storage.setEpisodeEdit(rec.id, JSON.stringify({ ...e, status: "failed", error: String(req.body?.error ?? "").slice(0, 300), at: new Date().toISOString() }));
+    // requeue: the worker is shutting down mid-edit and hands it back, rather
+    // than leaving it "running" until the stale rule reclaims it.
+    const next = req.body?.requeue ? { ...e, status: "queued", error: undefined } : { ...e, status: "failed", error: String(req.body?.error ?? "").slice(0, 300) };
+    await storage.setEpisodeEdit(rec.id, JSON.stringify({ ...next, at: new Date().toISOString() }));
     res.json({ ok: true });
   });
 
