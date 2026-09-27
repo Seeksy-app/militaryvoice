@@ -149,7 +149,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
       try { c.getContext("2d")?.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, 0, 0, c.width, c.height); } catch { /* stays dark */ }
     };
     const want = Array.from({ length: last - first + 1 }, (_, i) => first + i);
-    const keys = [...cache.current.keys()];
+    const keys = Array.from(cache.current.keys());
     if (keys.length) {
       for (const j of want) {
         const t = slotTime(j);

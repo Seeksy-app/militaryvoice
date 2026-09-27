@@ -223,7 +223,7 @@ async function benchmark(mine: PodcastStatsRow[]) {
       if (!d || d.unit !== unit || !d.episodes.length) continue;
       byShow.set(r.email, Math.max(byShow.get(r.email) ?? 0, perEpisode(d)));
     }
-    const peers = [...byShow.values()];
+    const peers = Array.from(byShow.values());
     if (peers.length < 5) { out.push({ unit, avg, percentile: -1, peers: peers.length }); continue; }
     const below = peers.filter((v) => v < avg).length;
     out.push({ unit, avg, percentile: Math.round((below / peers.length) * 100), peers: peers.length });
