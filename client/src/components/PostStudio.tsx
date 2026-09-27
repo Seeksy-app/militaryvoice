@@ -19,7 +19,7 @@ import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine } from "lucide-react";
+import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -1013,18 +1013,7 @@ function Seg<T extends string>({ value, onChange, options, testid, small = false
   );
 }
 
-/** One button on a clip, with a hover note on where it works best. */
-function Pill({ tip, children, ...rest }: { tip: string; children: React.ReactNode } & React.AnchorHTMLAttributes<HTMLAnchorElement> & { onClick?: () => void; as?: "button" }) {
-  const cls = "inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] font-medium text-foreground hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]";
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        {rest.href ? <a {...rest} className={cls}>{children}</a> : <button type="button" onClick={rest.onClick} className={cls}>{children}</button>}
-      </TooltipTrigger>
-      <TooltipContent side="top" className="max-w-[14rem] text-xs">{tip}</TooltipContent>
-    </Tooltip>
-  );
-}
+const CARD_ICON = "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border text-foreground/80 hover:border-[#053877]/40 hover:bg-[#053877]/[0.05] hover:text-foreground";
 
 /**
  * A link that downloads rather than opens a tab. The clips are on Supabase's
@@ -1105,7 +1094,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
       <button type="button" onClick={onPreview} className="relative aspect-[9/16] w-full overflow-hidden bg-black" aria-label={`Preview ${c.title}`}>
         {src && <video src={`${src}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />}
         <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-[#000741] shadow-lg"><Play className="h-5 w-5 fill-current" /></span>
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-[#000741] shadow-lg"><Play className="h-4 w-4 fill-current" /></span>
         </span>
         {updating && (
           <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#000741]/75 text-white backdrop-blur-[2px]">
@@ -1114,49 +1103,71 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
           </span>
         )}
       </button>
-      <div className="flex flex-1 flex-col p-3">
+      <div className="flex flex-1 flex-col p-2.5">
         <p className="mb-1 inline-flex items-center gap-1 text-[11px] font-medium tabular-nums text-muted-foreground"><Clock3 className="h-3 w-3" /> {stamp(c.startSec)}–{stamp(c.endSec)}</p>
-        <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{updating && c.editTitle ? c.editTitle : c.title}</p>
+        <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-foreground">{updating && c.editTitle ? c.editTitle : c.title}</p>
         {c.editStatus === "failed" && <p className="mt-1 text-xs text-destructive">Couldn't update the text. Try again.</p>}
         {c.reason && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground" title={c.reason}>{c.reason}</p>}
-        <div className={`mt-auto flex flex-wrap gap-1 pt-2.5 ${making ? "hidden" : ""}`}>
-          {files.map((f) => (
-            <Pill key={f.label} tip={f.tip} href={downloadHref(f.href, `${c.title} ${f.label.toLowerCase()}`)} download>
-              <Download className="h-3 w-3" /> {f.label}
-            </Pill>
-          ))}
-          {c.caption && (
-            <Pill
-              tip="Copies the words to post with it — paste them into Instagram, TikTok or LinkedIn."
-              onClick={() =>
-                navigator.clipboard.writeText(c.caption).then(
-                  () => toast({ title: "Caption copied", description: "Paste it in with the clip." }),
-                  () => toast({ title: "Couldn't copy", description: c.caption }),
-                )
-              }
-            >
-              <Copy className="h-3 w-3" /> Caption
-            </Pill>
-          )}
-          <Pill tip="Play it here." onClick={onPreview}>
-            <Play className="h-3 w-3" /> Watch
-          </Pill>
-          <Pill tip="Post it to your accounts, now or later." onClick={() => setPosting(true)}>
-            <Send className="h-3 w-3" /> Post it
-          </Pill>
-          <Pill tip="Delete this clip." onClick={() => setDeleting(true)}>
-            <Trash2 className="h-3 w-3" /> Delete
-          </Pill>
-          {!updating && (
-            <Pill tip="Change the title and the gold line under it. All three shapes are remade." onClick={() => setEditing(true)}>
-              <Pencil className="h-3 w-3" /> Edit text
-            </Pill>
-          )}
-          {c.subtitlesUrl && (
-            <Pill tip="The words as a subtitle file (.srt), for uploading to YouTube or LinkedIn." href={downloadHref(c.subtitlesUrl, `${c.title} subtitles`)} download>
-              <Download className="h-3 w-3" /> Subtitles
-            </Pill>
-          )}
+        {/* One clear action, Post it; the rest are small icons with hover notes. */}
+        <div className={`mt-auto flex items-center gap-1 pt-2.5 ${making ? "hidden" : ""}`}>
+          <Button size="sm" onClick={() => setPosting(true)} className="h-8 min-w-0 flex-1 gap-1.5 rounded-full bg-[#053877] px-3 text-xs text-white hover:bg-[#0a4a99]" data-testid={`clip-post-${c.id}`}>
+            <Send className="h-3.5 w-3.5" /> Post it
+          </Button>
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={CARD_ICON} aria-label="Download" data-testid={`clip-download-${c.id}`}><Download className="h-3.5 w-3.5" /></button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">Download: vertical, square, wide or subtitles</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end" className="w-64">
+              {files.map((f) => (
+                <DropdownMenuItem key={f.label} asChild className="flex-col items-start gap-0">
+                  <a href={downloadHref(f.href, `${c.title} ${f.label.toLowerCase()}`)} download>
+                    <span className="flex items-center gap-2 text-sm font-medium"><Download className="h-3.5 w-3.5" /> {f.label}</span>
+                    <span className="pl-5 text-xs text-muted-foreground">{f.tip}</span>
+                  </a>
+                </DropdownMenuItem>
+              ))}
+              {c.subtitlesUrl && (
+                <DropdownMenuItem asChild className="flex-col items-start gap-0">
+                  <a href={downloadHref(c.subtitlesUrl, `${c.title} subtitles`)} download>
+                    <span className="flex items-center gap-2 text-sm font-medium"><FileText className="h-3.5 w-3.5" /> Subtitles</span>
+                    <span className="pl-5 text-xs text-muted-foreground">An .srt file, for YouTube or LinkedIn.</span>
+                  </a>
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={CARD_ICON} aria-label="More" data-testid={`clip-more-${c.id}`}><MoreHorizontal className="h-4 w-4" /></button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">Copy the caption, edit the text, or delete</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end" className="w-56">
+              {c.caption && (
+                <DropdownMenuItem
+                  className="gap-2"
+                  onSelect={() =>
+                    navigator.clipboard.writeText(c.caption).then(
+                      () => toast({ title: "Caption copied", description: "Paste it in with the clip." }),
+                      () => toast({ title: "Couldn't copy", description: c.caption }),
+                    )
+                  }
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copy the caption
+                </DropdownMenuItem>
+              )}
+              {!updating && <DropdownMenuItem className="gap-2" onSelect={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" /> Edit the title and text</DropdownMenuItem>}
+              <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onSelect={() => setDeleting(true)}><Trash2 className="h-3.5 w-3.5" /> Delete this clip</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>
@@ -1855,7 +1866,7 @@ export function PostStudio() {
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{done ? mine.length : `${readyN} of ${moments.length || clipsN}`}</span>
             {!done && eta && <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-[#b36b00] dark:text-[#F0A71F]"><Clock3 className="h-3.5 w-3.5" /> {eta}</span>}
           </p>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
             {done
               ? [
                   // A clip plays in its own pop-up; the editor's player stays on the episode.

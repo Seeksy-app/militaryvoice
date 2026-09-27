@@ -14,12 +14,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { ClipRow, HostPostRow, PostMetrics, PostResult, RecordingRow, SocialPlatform } from "@shared/schema";
-import { AlertTriangle, BarChart3, Heart, Lightbulb, MessageCircle, Repeat2, TrendingDown, TrendingUp, Users, Eye, ChevronDown, Clapperboard, Film, ImagePlus, Upload, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, ListPlus, Loader2, Play, Plus, Send, Settings2, Target, Trash2, X } from "lucide-react";
+import { AlertTriangle, BarChart3, Heart, Lightbulb, MessageCircle, Repeat2, TrendingDown, TrendingUp, Users, Eye, ChevronDown, Clapperboard, Film, ImagePlus, Upload, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, Loader2, Play, Plus, Send, Settings2, Share2, Target, Trash2, X } from "lucide-react";
 
 /**
  * Social: the podcaster's own social desk, the way Later or Buffer lay it out.
- * Home says how the week is going, what's up next, what's ready to go and how
- * the last posts landed; the Calendar is the week at a glance, with open queue
+ * Home is a dashboard for every channel, not a wall of clips: a box to post
+ * anything (a photo, a video, a clip, an episode), the week's numbers, each
+ * channel and when it was last fed, what's up next, how the last posts
+ * landed, and Pōstify's unposted clips kept small to one side; the Calendar is the week at a glance, with open queue
  * slots to fill and posts to drag to another day. Clips and episodes live in
  * the Library; Create post picks from there. Posting runs through Upload-Post:
  * the next open slot in their queue by default, now, or a time they pick.
@@ -109,6 +111,9 @@ export function SocialScreen() {
   });
 
   const noAccounts = social.isSuccess && connected.length === 0;
+  const followersTotal = accounts.reduce((n, x) => n + (x.followers ?? 0), 0);
+  const week7 = useQuery<Analytics>({ queryKey: ["/api/host/social/analytics", 7], queryFn: async () => (await apiRequest("GET", "/api/host/social/analytics?days=7")).json(), enabled: tab === "home" && connected.length > 0, retry: false });
+  const reach7 = trend(week7.data?.views?.per_day);
 
   return (
     <section className="mt-2" data-testid="social-screen">
@@ -139,7 +144,7 @@ export function SocialScreen() {
             <button type="button" onClick={() => setQueueOpen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card hover:bg-muted" aria-label="Queue times" data-testid="social-queue-settings"><Settings2 className="h-4 w-4" /></button>
           </Tip>
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            <DropdownMenuTrigger asChild className={tab === "home" ? "hidden" : ""}>
               <Button disabled={noAccounts} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="social-create"><Plus className="h-4 w-4" /> Create post <ChevronDown className="h-3.5 w-3.5 opacity-70" /></Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
@@ -160,79 +165,139 @@ export function SocialScreen() {
       )}
 
       {tab === "home" ? (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-          <div className="flex min-w-0 flex-col gap-4">
-            {/* Ready to post: clips from the Library that haven't gone out. */}
-            <Card title="Ready to post" icon={ListPlus} note={ready.length ? `${ready.length} clip${ready.length === 1 ? "" : "s"}` : undefined}>
-              {ready.length ? (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
-                  {ready.slice(0, 8).map((c) => {
-                    const src = c.verticalUrl || c.squareUrl || c.url;
-                    return (
-                      <div key={c.id} className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-background" data-testid={`social-ready-${c.id}`}>
-                        <button type="button" onClick={() => setViewing({ src, title: c.title })} className="relative aspect-[4/5] bg-black" aria-label={`Play ${c.title}`}>
-                          <video src={`${src}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-                          <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-[#000741]"><Play className="h-3.5 w-3.5 fill-current" /></span></span>
-                        </button>
-                        <div className="flex flex-1 flex-col gap-2 p-2">
-                          <p className="line-clamp-2 text-xs font-semibold leading-snug">{c.title}</p>
-                          <div className="mt-auto flex items-center gap-1">
-                            <Tip text="Add to your queue: every connected account, the next open slot">
-                              <Button size="sm" onClick={() => queueClip.mutate(c)} disabled={queueClip.isPending || noAccounts} className="h-7 flex-1 gap-1 rounded-full bg-[#053877] px-2 text-xs text-white hover:bg-[#0a4a99]" data-testid={`social-queue-${c.id}`}>
-                                {queueClip.isPending && queueClip.variables?.id === c.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CalendarClock className="h-3 w-3" />} Queue
-                              </Button>
-                            </Tip>
-                            <Tip text="Choose the words, accounts and time">
-                              <button type="button" onClick={() => postClip(c)} disabled={noAccounts} className="flex h-7 w-7 items-center justify-center rounded-full border border-border hover:bg-muted" aria-label="Post with options" data-testid={`social-post-${c.id}`}><Send className="h-3.5 w-3.5" /></button>
-                            </Tip>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">{clipList.length ? "Every clip is posted or queued. Pōstify another episode for more." : <>No clips yet. <a href="/host/dashboard/postify" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Pōstify an episode</a> to make some.</>}</p>
-              )}
-            </Card>
-
-            {/* How the last posts landed, with a link to each one live. */}
-            <Card title="Recently posted" icon={Send}>
-              {gone.length ? (
-                <ul className="divide-y divide-border">
-                  {gone.slice(0, 8).map((p) => <PostRow key={p.id} p={p} onOpen={() => setOpen(p)} />)}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">Nothing yet. What goes out shows here, with a link to it on each account.</p>
-              )}
-            </Card>
+        <div className="flex flex-col gap-4">
+          {/* Start here: one box for anything they want to share, to every channel. */}
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="social-composer">
+            <div className="flex items-center gap-3">
+              <span className="flex shrink-0 -space-x-1.5">
+                {(connected.length ? connected : (["instagram", "youtube", "facebook"] as SocialPlatform[])).slice(0, 5).map((pl) => (
+                  <span key={pl} className={`flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-muted ${connected.length ? "" : "opacity-40"}`}><PlatformIcon platform={pl} className="h-4 w-4" /></span>
+                ))}
+              </span>
+              <button type="button" onClick={() => create("upload")} disabled={noAccounts} className="min-w-0 flex-1 truncate rounded-full border border-border bg-muted/40 px-4 py-2.5 text-left text-sm text-muted-foreground transition-colors hover:border-[#053877]/40 hover:bg-muted disabled:opacity-60" data-testid="social-compose">
+                What do you want to share today?
+              </button>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {([["upload", "Photo or video", ImagePlus], ["clips", "A clip", Clapperboard], ["episodes", "An episode", Film]] as const).map(([k, label, I]) => (
+                <button key={k} type="button" onClick={() => create(k)} disabled={noAccounts} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold hover:border-[#053877]/40 hover:bg-[#053877]/[0.04] disabled:opacity-50" data-testid={`social-compose-${k}`}>
+                  <I className="h-3.5 w-3.5 text-[#053877] dark:text-[#8fb5e8]" /> {label}
+                </button>
+              ))}
+              <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">One post, to every channel you pick, now or on your schedule.</span>
+            </div>
           </div>
 
-          <div className="flex min-w-0 flex-col gap-4">
-            <Card title="This week" icon={Target}>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-bold tabular-nums">{thisWeek}</span>
-                <span className="text-sm text-muted-foreground">of {goal} posts</span>
-              </div>
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[#F0A71F] transition-all" style={{ width: `${Math.min(100, (thisWeek / goal) * 100)}%` }} /></div>
-              <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+          {/* The numbers that matter this week. */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Stat label="Followers" icon={Users} value={compact(followersTotal)} sub={`across ${accounts.length} ${accounts.length === 1 ? "channel" : "channels"}`} />
+            <Stat label="Views, last 7 days" icon={Eye} value={reach7 ? compact(reach7.last) : "—"} sub={reach7 && reach7.change ? <span className={reach7.change > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600"}>{reach7.change > 0 ? "+" : ""}{compact(reach7.change)} this week</span> : "on everything you've posted"} onClick={() => go("analytics")} />
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><Target className="h-3.5 w-3.5" /> Posts this week</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums">{thisWeek} <span className="text-sm font-medium text-muted-foreground">of {goal}</span></p>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[#F0A71F] transition-all" style={{ width: `${Math.min(100, (thisWeek / goal) * 100)}%` }} /></div>
+              <div className="mt-1.5 flex items-center gap-0.5 text-[11px] text-muted-foreground">
                 Goal
                 {[3, 5, 7, 14].map((g) => (
-                  <button key={g} type="button" onClick={() => { setGoal(g); try { localStorage.setItem("mv_post_goal", String(g)); } catch { /* fine */ } }} className={`rounded-full px-2 py-0.5 font-semibold ${goal === g ? "bg-[#053877] text-white" : "hover:bg-muted"}`}>{g}</button>
+                  <button key={g} type="button" onClick={() => { setGoal(g); try { localStorage.setItem("mv_post_goal", String(g)); } catch { /* fine */ } }} className={`rounded-full px-1.5 font-semibold ${goal === g ? "bg-[#053877] text-white" : "hover:bg-muted"}`}>{g}</button>
                 ))}
               </div>
-            </Card>
+            </div>
+            <Stat label="Scheduled" icon={CalendarClock} value={String(upcoming.length)} sub={upcoming.length ? `next ${fmtWhen(upcoming[0].at)}` : queue.data?.next ? `next open slot ${fmtWhen(Date.parse(queue.data.next))}` : "nothing waiting"} onClick={() => go("calendar")} />
+          </div>
 
-            <Card title="Up next" icon={Clock} note={upcoming.length ? `${upcoming.length} scheduled` : undefined}>
-              {upcoming.length ? (
-                <ul className="divide-y divide-border">
-                  {upcoming.slice(0, 6).map((p) => <PostRow key={p.id} p={p} onOpen={() => setOpen(p)} onRemove={() => setRemoving(p)} compactRow />)}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">Nothing scheduled. Queue a clip from Ready to post{queue.data?.next ? `: the next open slot is ${fmtWhen(Date.parse(queue.data.next))}` : ""}.</p>
-              )}
-              <button type="button" onClick={() => go("calendar")} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">See the calendar <ChevronRight className="h-3 w-3" /></button>
-            </Card>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+            <div className="flex min-w-0 flex-col gap-4">
+              {/* Every channel, and whether it's been fed this week. */}
+              <Card title="Your channels" icon={Share2} note={accounts.length ? undefined : "none connected yet"}>
+                {accounts.length ? (
+                  <ul className="divide-y divide-border">
+                    {accounts.map((acc, i) => {
+                      const mine = posts.filter((p) => p.status !== "failed" && p.platforms.split(",").includes(acc.platform));
+                      const week = mine.filter((p) => p.at >= wk && p.at < wk + 7 * DAY).length;
+                      const last = mine.filter((p) => p.at <= now).sort((x, y) => y.at - x.at)[0];
+                      const quiet = !last || now - last.at > 7 * DAY;
+                      return (
+                        <li key={`${acc.platform}-${i}`} className="flex items-center gap-3 py-2.5" data-testid={`social-channel-${acc.platform}`}>
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted"><PlatformIcon platform={acc.platform} className="h-[18px] w-[18px]" /></span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold">{acc.username ? `@${acc.username.replace(/^@/, "")}` : platformLabel(acc.platform)}</span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {platformLabel(acc.platform)}{typeof acc.followers === "number" ? ` · ${compact(acc.followers)} followers` : ""}
+                            </span>
+                          </span>
+                          <span className="hidden w-24 text-right text-xs sm:block">
+                            <b className="tabular-nums">{week}</b> <span className="text-muted-foreground">this week</span>
+                          </span>
+                          <span className={`hidden w-32 text-right text-xs md:block ${quiet ? "font-semibold text-[#b36b00] dark:text-[#F0A71F]" : "text-muted-foreground"}`}>
+                            {last ? `Last post ${ago(last.at, now)}` : "No posts yet"}
+                          </span>
+                          <Button size="sm" variant="outline" onClick={() => create("upload")} className="h-8 shrink-0 gap-1 rounded-full px-3 text-xs" data-testid={`social-channel-post-${acc.platform}`}><Plus className="h-3.5 w-3.5" /> Post</Button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Connect Instagram, YouTube, TikTok, Facebook, LinkedIn or X and post to all of them from here.</p>
+                )}
+              </Card>
+
+              {/* How the last posts landed, with a link to each one live. */}
+              <Card title="Recently posted" icon={Send}>
+                {gone.length ? (
+                  <ul className="divide-y divide-border">
+                    {gone.slice(0, 6).map((p) => <PostRow key={p.id} p={p} onOpen={() => setOpen(p)} />)}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nothing yet. What goes out shows here, with a link to it on each channel.</p>
+                )}
+              </Card>
+            </div>
+
+            <div className="flex min-w-0 flex-col gap-4">
+              <Card title="Up next" icon={Clock} note={upcoming.length ? `${upcoming.length} scheduled` : undefined}>
+                {upcoming.length ? (
+                  <ul className="divide-y divide-border">
+                    {upcoming.slice(0, 5).map((p) => <PostRow key={p.id} p={p} onOpen={() => setOpen(p)} onRemove={() => setRemoving(p)} compactRow />)}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nothing scheduled{queue.data?.next ? `. Your next open slot is ${fmtWhen(Date.parse(queue.data.next))}` : ""}.</p>
+                )}
+                <button type="button" onClick={() => go("calendar")} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">See the calendar <ChevronRight className="h-3 w-3" /></button>
+              </Card>
+
+              {/* Clips from Pōstify that haven't gone out: one idea among many, kept small. */}
+              <Card title="Clips ready to post" icon={Clapperboard} note={ready.length ? String(ready.length) : undefined}>
+                {ready.length ? (
+                  <>
+                    <ul className="divide-y divide-border">
+                      {ready.slice(0, 4).map((c) => {
+                        const src = c.verticalUrl || c.squareUrl || c.url;
+                        return (
+                          <li key={c.id} className="flex items-center gap-2.5 py-2" data-testid={`social-ready-${c.id}`}>
+                            <button type="button" onClick={() => setViewing({ src, title: c.title })} className="relative h-12 w-9 shrink-0 overflow-hidden rounded-md bg-black" aria-label={`Play ${c.title}`}>
+                              <video src={`${src}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                            </button>
+                            <span className="line-clamp-2 min-w-0 flex-1 text-xs font-semibold leading-snug">{c.title}</span>
+                            <Tip text="Add to your queue: every connected channel, the next open slot">
+                              <button type="button" onClick={() => queueClip.mutate(c)} disabled={queueClip.isPending || noAccounts} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-50" aria-label="Queue" data-testid={`social-queue-${c.id}`}>
+                                {queueClip.isPending && queueClip.variables?.id === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarClock className="h-3.5 w-3.5" />}
+                              </button>
+                            </Tip>
+                            <Tip text="Choose the words, channels and time">
+                              <button type="button" onClick={() => postClip(c)} disabled={noAccounts} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-50" aria-label="Post with options" data-testid={`social-post-${c.id}`}><Send className="h-3.5 w-3.5" /></button>
+                            </Tip>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {ready.length > 4 && <button type="button" onClick={() => create("clips")} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">See all {ready.length} <ChevronRight className="h-3 w-3" /></button>}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{clipList.length ? "Every clip is posted or queued." : <>No clips yet. <a href="/host/dashboard/postify" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Create clips in Pōstify</a>.</>}</p>
+                )}
+              </Card>
+            </div>
           </div>
         </div>
       ) : tab === "analytics" ? (
@@ -306,6 +371,25 @@ export function SocialScreen() {
 
 function compact(n: number) {
   return n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1).replace(/\.0$/, "")}K` : String(n);
+}
+
+/** "3 days ago", "yesterday", "today". */
+function ago(t: number, now: number) {
+  const d = Math.floor((new Date(now).setHours(0, 0, 0, 0) - new Date(t).setHours(0, 0, 0, 0)) / DAY);
+  return d <= 0 ? "today" : d === 1 ? "yesterday" : d < 30 ? `${d} days ago` : new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function Stat({ label, icon: I, value, sub, onClick }: { label: string; icon: typeof Home; value: string; sub: React.ReactNode; onClick?: () => void }) {
+  const body = (
+    <>
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><I className="h-3.5 w-3.5" /> {label}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums">{value}</p>
+      <p className="mt-0.5 truncate text-xs text-muted-foreground">{sub}</p>
+    </>
+  );
+  return onClick
+    ? <button type="button" onClick={onClick} className="rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition-colors hover:border-[#053877]/40">{body}</button>
+    : <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">{body}</div>;
 }
 
 function Tip({ text, children }: { text: string; children: React.ReactElement }) {
