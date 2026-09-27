@@ -1393,6 +1393,7 @@ export function PostStudio() {
   const mixNow = parseMusicMix(rec.musicMix);
   const musicName = mixNow?.status === "done" ? musicList.data?.find((t) => t.key === mixNow.key)?.name ?? "" : "";
   const pipelineDone = done && clean?.status === "done" && (mixNow?.status === "done" || mixNow?.status === "skipped");
+  const editing = view === "episode" && !running;
   const stats = [
     { n: clock(recorded), label: "Recorded", color: "text-[#053877] dark:text-[#8fb5e8]" },
     { n: removed != null ? clock(Math.max(0, recorded - removed)) : "–", label: "Clean episode", color: "text-emerald-600 dark:text-emerald-400" },
@@ -1405,11 +1406,8 @@ export function PostStudio() {
   return (
     <section className="mt-2" data-testid="post-studio">
       {paidBanner}
-      {/* The episode list became a switcher over the Viewer: the Viewer gets the width. */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
-        {/* Preview */}
-        <div className={focus ? "fixed inset-0 z-50 overflow-y-auto bg-background p-3 sm:p-6" : "flex min-w-0 flex-col gap-2"} data-testid={focus ? "post-focus" : undefined}>
-          <div className={focus ? "mx-auto flex w-full max-w-6xl flex-col gap-3" : "contents"}>
+      {/* The switcher sits above both columns, so the player and the side start level. */}
+      <div className="mb-2">
           <div className="flex min-w-0 items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1444,7 +1442,14 @@ export function PostStudio() {
             {/* Credits matter before a run, not after it. */}
             {!done && <div className="ml-auto flex items-center gap-2">{betaBadge}<CreditBalance beta={beta} plan={plan} /></div>}
           </div>
-          <div className={`relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5 ${focus ? "mx-auto w-full" : view === "episode" ? "max-h-[46vh] w-full" : ""}`} style={focus ? { maxWidth: "calc((100vh - 22rem) * 16 / 9)", minWidth: "min(100%, 28rem)" } : undefined} data-testid="post-viewer">
+      </div>
+      {/* Editing takes the whole width: the side (All done, the numbers) folds away until you're back on Clips. */}
+      <div className={`grid gap-4 ${editing ? "" : "lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]"}`}>
+        {/* Preview */}
+        <div className={focus ? "fixed inset-0 z-50 overflow-y-auto bg-background p-3 sm:p-6" : "flex min-w-0 flex-col gap-2"} data-testid={focus ? "post-focus" : undefined}>
+          <div className={focus ? "mx-auto flex w-full max-w-6xl flex-col gap-3" : "contents"}>
+
+          <div className={`relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5 ${focus ? "mx-auto w-full" : view === "episode" ? "max-h-[50vh] w-full" : ""}`} style={focus ? { maxWidth: "calc((100vh - 22rem) * 16 / 9)", minWidth: "min(100%, 28rem)" } : undefined} data-testid="post-viewer">
             {view === "episode" && !running ? (
               <video
                 ref={epRef}
@@ -1570,7 +1575,7 @@ export function PostStudio() {
         </div>
 
         {/* The side: the pipeline while it runs (one line once it's all done), then the numbers. */}
-        <div className="flex min-w-0 flex-col gap-3">
+        <div className={editing ? "hidden" : "flex min-w-0 flex-col gap-3"}>
         {pipelineDone && !pipeOpen ? (
           <button type="button" onClick={() => setPipeOpen(true)} className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-left hover:border-emerald-500/50" data-testid="pipeline-done">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white"><Check className="h-4 w-4" /></span>
