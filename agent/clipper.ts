@@ -184,7 +184,9 @@ async function uploadFile(file: string, contentType: string): Promise<string> {
 // At most this many ffmpeg processes at once, whatever the lanes and clips in
 // flight: each decodes video and holds hundreds of MB, and eight together
 // (two jobs × two clips × frame grabs) ran the 2GB worker out of memory.
-const FFMPEG_SLOTS = Math.max(1, Number(process.env.FFMPEG_SLOTS || 2));
+// One on the 2GB worker: two caption renders at once (each holds every
+// caption image) still ran it out of memory on 27 Sep.
+const FFMPEG_SLOTS = Math.max(1, Number(process.env.FFMPEG_SLOTS || 1));
 let ffmpegBusy = 0;
 const ffmpegWaiting: (() => void)[] = [];
 async function slot<T>(work: () => Promise<T>): Promise<T> {
@@ -1174,11 +1176,12 @@ async function renderWithCreatomate(
       geo: { srcW, srcH, ...geo },
     });
     const pending = new Map(renders.map((r) => [r.id, r.shape]));
-    const deadline = Date.now() + 15 * 60_000;
-    // Once one shape is back, the others get five more minutes: a straggler
+    const sent = Date.now();
+    const deadline = sent + 15 * 60_000;
+    // Once one shape is back, the others get three more minutes: a straggler
     // (it's been the wide) is quicker to make here than to wait out.
     let firstBack = 0;
-    while (pending.size && Date.now() < deadline && !(firstBack && Date.now() - firstBack > 5 * 60_000)) {
+    while (pending.size && Date.now() < deadline && !(firstBack && Date.now() - firstBack > 3 * 60_000)) {
       await new Promise((z) => setTimeout(z, 5000));
       for (const [id, shape] of Array.from(pending)) {
         const s = await api<{ status: string; url: string; error: string }>("GET", `/api/agent/clip-renders/${id}`);
@@ -1195,6 +1198,7 @@ async function renderWithCreatomate(
           pending.delete(id);
           made.add(shape);
           firstBack ||= Date.now();
+          console.log(`[${job.recordingId}] Creatomate ${shape} back in ${Math.round((Date.now() - sent) / 1000)}s`);
         }
       }
     }
@@ -1764,6 +1768,8 @@ async function handle(job: Job): Promise<void> {
         subtitlesUrl: await uploadFile(subs, "text/plain"),
       });
       console.log(`[${job.recordingId}] ${i + 1}/${moments.length} — ${m.title}`);
+      // On the podcaster's screen now, not when the last clip is done.
+      await api("POST", `/api/agent/clip-jobs/${job.recordingId}/clip`, { clip: out[i] }).catch((err) => console.warn(`[${job.recordingId}] couldn't send clip ${i + 1} early (${(err as Error).message}); it goes with the rest`));
       finishedN++;
       progress(job.recordingId, { stage: "render", pct: (finishedN / moments.length) * 100, finished: finishedN, detail: `${finishedN} of ${moments.length} ready` });
     };
@@ -1773,7 +1779,8 @@ async function handle(job: Job): Promise<void> {
     }));
     progress(job.recordingId, { stage: "upload", pct: 100 });
 
-    await api("POST", `/api/agent/clip-jobs/${job.recordingId}/done`, { clips: out });
+    // Each clip went up as it finished; these fill in any that didn't make it then.
+    await api("POST", `/api/agent/clip-jobs/${job.recordingId}/done`, { clips: out.filter(Boolean), streamed: true });
     console.log(`[${job.recordingId}] done — ${out.length} clips`);
 
     // The clips are out; the clean episode follows. It's no longer this
