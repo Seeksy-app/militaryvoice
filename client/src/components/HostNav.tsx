@@ -202,20 +202,7 @@ export function HostNav({
   };
 
   // The account menu: the admin's way back and View as first (only for an admin), then the person's own.
-  const accountMenu = (side: "top" | "right") => account && (
-    <DropdownMenuContent side={side} align={side === "right" ? "end" : "start"} className="w-[232px]">
-      {account.admin}
-      <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{account.email}</DropdownMenuLabel>
-      <DropdownMenuSeparator />
-      <DropdownMenuItem onSelect={() => onGo("editProfile")} className="gap-2" data-testid="account-profile"><UserRound className="h-4 w-4" /> Profile</DropdownMenuItem>
-      <DropdownMenuItem onSelect={() => onGo("integrations")} className="gap-2" data-testid="account-integrations"><Link2 className="h-4 w-4" /> Integrations</DropdownMenuItem>
-      <NotificationsMenuItem />
-      <DropdownMenuSeparator />
-      <Appearance />
-      <DropdownMenuSeparator />
-      <DropdownMenuItem onSelect={account.onSignOut} className="gap-2" data-testid="account-signout"><LogOut className="h-4 w-4" /> Sign out</DropdownMenuItem>
-    </DropdownMenuContent>
-  );
+  const accountMenu = (side: "top" | "right") => account && <AccountMenuContent account={account} onGo={onGo} side={side} />;
   const avatar = (size: string) => account && (account.photo ? (
     <img src={account.photo} alt="" className={`${size} shrink-0 rounded-full object-cover ring-1 ring-white/20`} />
   ) : (
@@ -318,6 +305,35 @@ export function HostNav({
       </nav>
       )}
     </>
+  );
+}
+
+export interface Account { name: string; email: string; photo: string; onSignOut: () => void; admin?: ReactNode }
+
+/** The account menu: the admin's items first (only for an admin), then the person's own. Used by the nav and the phone's header. */
+export function AccountMenuContent({ account, onGo, side = "top", align }: { account: Account; onGo: (s: HostScreen) => void; side?: "top" | "right" | "bottom"; align?: "start" | "end" }) {
+  return (
+    <DropdownMenuContent side={side} align={align ?? (side === "top" ? "start" : "end")} className="w-[232px]">
+      {account.admin}
+      <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{account.email}</DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onSelect={() => onGo("editProfile")} className="gap-2" data-testid="account-profile"><UserRound className="h-4 w-4" /> Profile</DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => onGo("integrations")} className="gap-2" data-testid="account-integrations"><Link2 className="h-4 w-4" /> Integrations</DropdownMenuItem>
+      <NotificationsMenuItem />
+      <DropdownMenuSeparator />
+      <Appearance />
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onSelect={account.onSignOut} className="gap-2" data-testid="account-signout"><LogOut className="h-4 w-4" /> Sign out</DropdownMenuItem>
+    </DropdownMenuContent>
+  );
+}
+
+/** Their picture, or the first letter of their name. */
+export function AccountAvatar({ account, size = "h-9 w-9" }: { account: Account; size?: string }) {
+  return account.photo ? (
+    <img src={account.photo} alt="" className={`${size} shrink-0 rounded-full object-cover ring-1 ring-white/20`} />
+  ) : (
+    <span className={`flex ${size} shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white`}>{account.name.trim().charAt(0).toUpperCase()}</span>
   );
 }
 

@@ -80,7 +80,7 @@ import { isPodcaster } from "@shared/schema";
 import { StudioIcon } from "@/components/GreenRoomButton";
 import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
 import { CohostDashboard, type CohostInfo } from "@/components/CohostDashboard";
-import { HostNav } from "@/components/HostNav";
+import { HostNav, AccountMenuContent, AccountAvatar } from "@/components/HostNav";
 import { IntegrationsScreen } from "@/components/IntegrationsScreen";
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { ProScreen } from "@/components/ProScreen";
@@ -1008,6 +1008,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const onTeamForGreenRoom = Boolean(crew?.isCrew || cohost?.isCohost);
   const crewMode = !!data && !loadingProfile && !hasProfile && !!crew?.isCrew;
   const inSetup = !!data && !loadingProfile && !hasProfile && !crewMode;
+  // Who's signed in, for the account menu (the nav's foot on a computer, the header on a phone).
+  const account = data ? {
+    name: profile?.podcastName || profile?.hostName || data.email,
+    email: data.email,
+    photo: profile?.photoUrl ? resolveUploadUrl(profile.photoUrl) : "",
+    onSignOut: () => logout.mutate(),
+    admin: <SeatMenuItems current={data.email} />,
+  } : undefined;
 
   // Signed in, past setup: this is a workspace, not a page of the website.
   // The public nav is for people deciding whether to take part; somebody who
@@ -1039,20 +1047,22 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             <Link href="/host/dashboard" className="shrink-0" data-testid="link-workspace-home">
               <LogoLockupOnDark className="h-8 w-auto" />
             </Link>
-            <div className="flex min-w-0 items-center gap-2">
-              <ThemeSwitch />
-              <SeatSwitcher current={data?.email ?? ""} />
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 gap-1.5 rounded-full border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white"
-                onClick={() => logout.mutate()}
-                disabled={logout.isPending}
-                aria-label="Sign out"
-                data-testid="button-host-logout"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </Button>
+            {/* As on a computer: credits, and the account menu (Profile, Integrations,
+                Notifications, Appearance, Sign out, and View as for an admin). */}
+            <div className="flex min-w-0 items-center gap-1">
+              {hasProfile && !inSetup && <NavCredits variant="rail" />}
+              {account ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" aria-label="Your account" className="rounded-full p-0.5 hover:ring-2 hover:ring-white/30" data-testid="phone-account"><AccountAvatar account={account} /></button>
+                  </DropdownMenuTrigger>
+                  <AccountMenuContent account={account} onGo={(sc) => goTo(sc)} side="bottom" align="end" />
+                </DropdownMenu>
+              ) : (
+                <Button variant="outline" size="sm" className="shrink-0 gap-1.5 rounded-full border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => logout.mutate()} disabled={logout.isPending} aria-label="Sign out" data-testid="button-host-logout">
+                  <LogOut className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
           </div>
         ) : (
@@ -1111,13 +1121,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             feature={proFeature}
             proOpen
             cohostHours={cohostHours}
-            account={{
-              name: profile?.podcastName || profile?.hostName || data.email,
-              email: data.email,
-              photo: profile?.photoUrl ? resolveUploadUrl(profile.photoUrl) : "",
-              onSignOut: () => logout.mutate(),
-              admin: <SeatMenuItems current={data.email} />,
-            }}
+            account={account}
           />
           </div>
         )}
