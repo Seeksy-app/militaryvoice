@@ -130,6 +130,7 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
           scrollRoot={scroller}
           onOpenCreator={() => {}}
           similar={null}
+          own
         />
       </div>
     </div>

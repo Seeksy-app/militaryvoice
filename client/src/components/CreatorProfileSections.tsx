@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { ExternalLink, Heart, MessageCircle, Eye, Star, ShieldCheck, Film, Image as ImageIcon, Youtube } from "lucide-react";
+import { ExternalLink, Heart, MessageCircle, Eye, Star, ShieldCheck, Film, Image as ImageIcon, Youtube, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // The body of a creator's profile: nine numbered sections down the page and a
 // contents list that follows you. Brand managers read a profile top to bottom
@@ -123,10 +124,18 @@ function Bars({ items, color = NAVY, max: fixedMax }: { items: W[]; color?: stri
   );
 }
 
-function Block({ title, children, className = "" }: { title: string; children: ReactNode; className?: string }) {
+function Block({ title, children, className = "", tip }: { title: string; children: ReactNode; className?: string; tip?: string }) {
   return (
     <div className={className}>
-      <h4 className="mb-3 text-sm font-medium">{title}</h4>
+      <h4 className="mb-3 flex items-center gap-1.5 text-sm font-medium">
+        {title}
+        {tip && (
+          <Tooltip>
+            <TooltipTrigger asChild><button type="button" className="text-muted-foreground hover:text-foreground" aria-label="What this means"><Info className="h-3.5 w-3.5" /></button></TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[18rem] text-xs leading-relaxed">{tip}</TooltipContent>
+          </Tooltip>
+        )}
+      </h4>
       {children}
     </div>
   );
@@ -160,6 +169,8 @@ export function CreatorProfileSections(props: {
   scrollRoot: RefObject<HTMLElement>;
   onOpenCreator: (p: Person) => void;
   similar: ReactNode;
+  /** Their own analytics (say "you"), not a brand looking at someone else ("them"). */
+  own?: boolean;
 }) {
   const { profile, toolbar, header, placeholder } = props;
   if (!profile) {
@@ -182,7 +193,7 @@ export function CreatorProfileSections(props: {
   return <ProfileBody {...props} profile={profile} />;
 }
 
-function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onOpenCreator, similar }: {
+function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onOpenCreator, similar, own }: {
   profile: Profile;
   toolbar: ReactNode;
   header: ReactNode;
@@ -192,6 +203,7 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
   onOpenCreator: (p: Person) => void;
   /** The paid "more like this" search, run only when asked. */
   similar: ReactNode;
+  own?: boolean;
 }) {
   const sources = (["followers", "likers", "commenters"] as const).filter((k) => profile.audiences[k]);
   const [source, setSource] = useState<(typeof sources)[number] | undefined>(sources[0]);
@@ -370,7 +382,10 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
               </Block>
             )}
             {aud.notable.length > 0 && (
-              <Block title={`Notable accounts in the audience${aud.notableRatio != null ? ` · ${pctText(aud.notableRatio)} of it` : ""}`}>
+              <Block
+                title={`Well-known accounts that follow ${own ? "you" : "them"}`}
+                tip={`The biggest accounts among ${own ? "your" : "their"} followers: creators, brands and organisations with large audiences of their own.${aud.notableRatio != null ? ` About ${pctText(aud.notableRatio)} of ${own ? "your" : "their"} followers are accounts like these.` : ""} A good sign of influence in the space; read it with Real reach and Audience credibility, since a very high share can mean fewer everyday fans.`}
+              >
                 <div className="flex flex-wrap gap-3">
                   {aud.notable.slice(0, 10).map((p) => (
                     <a key={p.handle} href={p.url || brandUrl(profile.platform, p.handle)} target="_blank" rel="noreferrer" className="flex w-40 items-center gap-2 rounded-xl border border-border p-2 hover:border-[#053877]/40">
