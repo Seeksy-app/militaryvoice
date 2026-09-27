@@ -1205,6 +1205,40 @@ async function uploadBig(file: string, contentType: string): Promise<string> {
 }
 
 /**
+ * Rewrite an uploaded episode so a browser can play it at once: the index
+ * (moov) first, and only the video and sound (no cover-art or data tracks).
+ * A copy, not a re-encode: seconds for an hour, and the picture is untouched.
+ * Does nothing to a file that already streams.
+ */
+async function makeStreamable(job: Job, source: string, dir: string): Promise<void> {
+  const head = Buffer.alloc(1 << 16);
+  const fh = await fs.open(source, "r");
+  try { await fh.read(head, 0, head.length, 0); } finally { await fh.close(); }
+  let late = false;
+  for (let i = 0; i + 8 <= head.length;) {
+    const size = head.readUInt32BE(i);
+    const type = head.toString("latin1", i + 4, i + 8);
+    if (type === "moov") break;
+    if (type === "mdat") { late = true; break; }
+    if (size < 8) break;
+    i += size;
+  }
+  const probe = JSON.parse(await run("ffprobe", ["-v", "error", "-show_entries", "stream=index,codec_type:stream_disposition=attached_pic", "-of", "json", source])) as { streams?: { index: number; codec_type: string; disposition?: { attached_pic?: number } }[] };
+  const streams = probe.streams ?? [];
+  const video = streams.find((x) => x.codec_type === "video" && !x.disposition?.attached_pic);
+  const audio = streams.find((x) => x.codec_type === "audio");
+  const extra = streams.length > (video ? 1 : 0) + (audio ? 1 : 0);
+  if (!video || (!late && !extra)) return;
+  const fixed = path.join(dir, "streamable.mp4");
+  const t0 = Date.now();
+  await run("ffmpeg", ["-y", "-v", "error", "-i", source, "-map", `0:${video.index}`, ...(audio ? ["-map", `0:${audio.index}`] : []), "-c", "copy", "-map_chapters", "-1", "-write_tmcd", "0", "-movflags", "+faststart", fixed]);
+  const key = await uploadBig(fixed, "video/mp4");
+  await api("POST", `/api/agent/clip-jobs/${job.recordingId}/source`, { storageKey: key, sizeBytes: (await fs.stat(fixed)).size });
+  await fs.rm(fixed, { force: true });
+  console.log(`[${job.recordingId}] rewrote the episode to stream (${late ? "index at the end" : ""}${late && extra ? ", " : ""}${extra ? "extra tracks" : ""}) in ${Math.round((Date.now() - t0) / 1000)}s`);
+}
+
+/**
  * The whole episode with the ums, false starts and dead air taken out — the
  * podcast (MP3) and the video (720p MP4). Cuts come from the word timings and
  * are placed on the audio itself (see agent/refine.ts: the timings alone run
@@ -1803,6 +1837,10 @@ async function handle(job: Job): Promise<void> {
     progress(job.recordingId, { stage: "download", pct: 0, detail: total ? `${(total / 1048576).toFixed(0)}MB` : "" });
     await pipeline(Readable.fromWeb(res.body as never), meter, createWriteStream(source));
     console.log(`[${job.recordingId}] downloaded in ${Math.round((Date.now() - started) / 1000)}s`);
+    // An episode exported with its index at the end (and extra tracks) won't
+    // start in a browser until the whole file has come down: the editor sat
+    // spinning on a 250MB upload. Rewrite it once to stream, alongside the job.
+    const streamable = makeStreamable(job, source, dir).catch((err) => console.warn(`[${job.recordingId}] couldn't rewrite the episode to stream: ${(err as Error).message}`));
 
     let lines = job.transcript;
     const live = transcriptCovers(lines, job.durationSec);
@@ -1954,6 +1992,7 @@ async function handle(job: Job): Promise<void> {
     // Each clip went up as it finished; these fill in any that didn't make it then.
     await api("POST", `/api/agent/clip-jobs/${job.recordingId}/done`, { clips: out.filter(Boolean), streamed: true });
     console.log(`[${job.recordingId}] done — ${out.length} clips`);
+    await streamable;
 
     // The clips are out; the clean episode follows. It's no longer this
     // job's claim — a shutdown now mustn't requeue clips that are finished.

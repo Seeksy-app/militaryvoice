@@ -18,6 +18,8 @@ import { textPath, textWidth } from "../server/textPath.js";
 
 export interface TimedWord { text: string; start: number; end: number }
 
+const FILLER = /^(um+|uh+|erm*|ah+|hmm+|mm+|uh-huh)[,.!?]*$/i;
+
 type Shape = "wide" | "vertical" | "square";
 
 /** Creatomate's placement, so a clip made here sits where one made there did. */
@@ -107,7 +109,9 @@ async function statePng(group: string[], lit: number, W: number, L: ReturnType<t
  * are seconds from the start of the clip.
  */
 export async function captionTrack(words: TimedWord[], shape: Shape, W: number, H: number, duration: number, dir: string): Promise<{ list: string; y: number } | null> {
-  const clean = words.filter((w) => w.text.trim() && w.end > 0 && w.start < duration);
+  // Not on screen: false starts ("a-", "honest-") and fillers. They're in the
+  // sound; written out they read as mistakes in the caption.
+  const clean = words.filter((w) => w.text.trim() && w.end > 0 && w.start < duration && !/-$/.test(w.text.trim()) && !FILLER.test(w.text.trim()));
   if (!clean.length) return null;
   const L = captionLayout(shape, W, H);
   await fs.mkdir(dir, { recursive: true });
