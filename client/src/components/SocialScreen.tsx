@@ -11,8 +11,9 @@ import { uploadToStorage } from "@/lib/upload";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { ClipRow, HostPostRow, PostResult, RecordingRow, SocialPlatform } from "@shared/schema";
-import { AlertTriangle, ImagePlus, Upload, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, ListPlus, Loader2, Play, Plus, Send, Settings2, Target, Trash2, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, Clapperboard, Film, ImagePlus, Upload, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, ListPlus, Loader2, Play, Plus, Send, Settings2, Target, Trash2, X } from "lucide-react";
 
 /**
  * Social: the podcaster's own social desk, the way Later or Buffer lay it out.
@@ -43,6 +44,8 @@ export function SocialScreen() {
   const [target, setTarget] = useState<PostTarget | null>(null);
   const [targetAt, setTargetAt] = useState<string | undefined>(undefined);
   const [picking, setPicking] = useState<string | null>(null); // Create post, optionally for a slot (datetime-local)
+  const [pickKind, setPickKind] = useState<"clips" | "episodes" | "upload">("clips");
+  const create = (k: "clips" | "episodes" | "upload") => { setPickKind(k); setPicking(""); };
   const [open, setOpen] = useState<Post | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
   const [viewing, setViewing] = useState<{ src: string; title: string } | null>(null);
@@ -120,18 +123,30 @@ export function SocialScreen() {
           ))}
           <a href="/host/dashboard/integrations" className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground"><Link2 className="h-3.5 w-3.5" /> {accounts.length ? "Manage" : "Connect accounts"}</a>
         </div>
-        <Tip text="Queue times: the days and times your posts go out">
-          <button type="button" onClick={() => setQueueOpen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card hover:bg-muted" aria-label="Queue times" data-testid="social-queue-settings"><Settings2 className="h-4 w-4" /></button>
-        </Tip>
-        <Button onClick={() => setPicking("")} disabled={noAccounts} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="social-create"><Plus className="h-4 w-4" /> Create post</Button>
       </div>
 
-      <div className="mb-4 flex gap-1 border-b border-border" role="tablist">
+      {/* The two views, and on the same line the queue's times and the way to make a post. */}
+      <div className="mb-4 flex items-end gap-1 border-b border-border" role="tablist">
         {([["home", "Home", Home], ["calendar", "Calendar", CalendarDays]] as const).map(([k, label, I]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-[#F0A71F] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`social-tab-${k}`}>
             <I className="h-4 w-4" /> {label}
           </button>
         ))}
+        <div className="mb-1.5 ml-auto flex items-center gap-2">
+          <Tip text="Queue times: the days and times your posts go out">
+            <button type="button" onClick={() => setQueueOpen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card hover:bg-muted" aria-label="Queue times" data-testid="social-queue-settings"><Settings2 className="h-4 w-4" /></button>
+          </Tip>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button disabled={noAccounts} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="social-create"><Plus className="h-4 w-4" /> Create post <ChevronDown className="h-3.5 w-3.5 opacity-70" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onSelect={() => create("clips")} className="gap-2" data-testid="social-create-clip"><Clapperboard className="h-4 w-4" /> Choose a clip</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => create("episodes")} className="gap-2" data-testid="social-create-episode"><Film className="h-4 w-4" /> Choose an episode</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => create("upload")} className="gap-2" data-testid="social-create-upload"><Upload className="h-4 w-4" /> Upload new</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
 
       {noAccounts && (
@@ -224,7 +239,7 @@ export function SocialScreen() {
           onRemove={setRemoving}
           slots={(queue.data?.slots ?? []).filter((s) => s.available && s.post_count === 0).map((s) => Date.parse(s.datetime_utc))}
           onOpen={setOpen}
-          onSlot={(t) => setPicking(local(t))}
+          onSlot={(t) => { setPickKind("clips"); setPicking(local(t)); }}
           onMove={(p, t) => {
             if (t < Date.now() + 60_000) return toast({ title: "That's in the past", description: "Drop it on today or a later day.", variant: "destructive" });
             move.mutate({ id: p.id, at: t });
@@ -240,6 +255,7 @@ export function SocialScreen() {
             <DialogDescription>{picking ? `For ${fmtWhen(new Date(picking).getTime())}. ` : ""}Pick a clip or an episode from your Library, or upload something new.</DialogDescription>
           </DialogHeader>
           <LibraryPicker
+            initial={pickKind}
             clips={clipList}
             episodes={episodes}
             used={usedClips}
@@ -437,8 +453,8 @@ function Calendar({ posts, slots, onOpen, onSlot, onMove, onRemove }: { posts: P
   );
 }
 
-function LibraryPicker({ clips, episodes, used, onClip, onEpisode, onPhoto, onVideo }: { clips: ClipRow[]; episodes: RecordingRow[]; used: Set<number>; onClip: (c: ClipRow) => void; onEpisode: (r: RecordingRow) => void; onPhoto: (p: { storageKey: string; preview: string; title: string }) => void; onVideo: (id: number) => void }) {
-  const [kind, setKind] = useState<"clips" | "episodes" | "upload">("clips");
+function LibraryPicker({ initial = "clips", clips, episodes, used, onClip, onEpisode, onPhoto, onVideo }: { initial?: "clips" | "episodes" | "upload"; clips: ClipRow[]; episodes: RecordingRow[]; used: Set<number>; onClip: (c: ClipRow) => void; onEpisode: (r: RecordingRow) => void; onPhoto: (p: { storageKey: string; preview: string; title: string }) => void; onVideo: (id: number) => void }) {
+  const [kind, setKind] = useState<"clips" | "episodes" | "upload">(initial);
   const { toast } = useToast();
   const [pct, setPct] = useState<number | null>(null);
   const photo = async (file: File) => {
