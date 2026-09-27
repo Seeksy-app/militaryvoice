@@ -5302,6 +5302,8 @@ export function registerRoutes(app: Express): void {
               recordingId: sugRec.id, title: sugRec.title, durationSec: sugRec.durationSec, downloadUrl: src,
               show: profile?.podcastName ?? "", host: profile?.hostName ?? "", transcript: [],
               suggestEdits: { source: sug.source === "clean" ? "clean" : "original" },
+              // The original's transcript from the first run saves transcribing it again.
+              ...(sug.source !== "clean" ? { transcript: storedTranscript(sugRec.transcriptJson) } : {}),
             },
           });
         }
@@ -5403,7 +5405,7 @@ export function registerRoutes(app: Express): void {
     // the worker can cut straight from them.
     const startMs = Date.parse(rec.startedAt);
     const endMs = rec.endedAt ? Date.parse(rec.endedAt) : startMs + rec.durationSec * 1000;
-    const lines = Number.isFinite(startMs)
+    const live = Number.isFinite(startMs)
       ? (await storage.transcriptBetween(rec.studioId, startMs, endMs)).map((l) => ({
           speaker: l.speaker,
           text: l.text,
@@ -5411,6 +5413,8 @@ export function registerRoutes(app: Express): void {
           endSec: Math.max(0, (Number(l.endMs) - startMs) / 1000),
         }))
       : [];
+    // No studio transcript (an upload, an import): the one a previous run made, if there is one.
+    const lines = live.length ? live : storedTranscript(rec.transcriptJson);
 
     res.json({
       job: {
@@ -5616,6 +5620,15 @@ export function registerRoutes(app: Express): void {
   });
 
   /** Where a running job has got to: the processing screen reads it, and it keeps the claim alive. */
+  // The transcript the worker made, kept so the next run (Generate more, Suggest edits) needn't make it again.
+  app.post("/api/agent/clip-jobs/:id/transcript", requireAgent, async (req, res) => {
+    const lines = (Array.isArray(req.body?.lines) ? req.body.lines : []).slice(0, 20000)
+      .map((l: { startSec?: unknown; endSec?: unknown; speaker?: unknown; text?: unknown }) => [Number(l?.startSec) || 0, Number(l?.endSec) || 0, String(l?.speaker ?? "").slice(0, 60), String(l?.text ?? "").slice(0, 2000)]);
+    if (!lines.length) return res.json({ ok: true, saved: 0 });
+    await storage.setTranscriptJson(Number(req.params.id), JSON.stringify(lines));
+    res.json({ ok: true, saved: lines.length });
+  });
+
   app.post("/api/agent/clip-jobs/:id/progress", requireAgent, async (req, res) => {
     const id = Number(req.params.id);
     const b = req.body ?? {};
@@ -5638,7 +5651,11 @@ export function registerRoutes(app: Express): void {
     if (!rec) return res.status(404).json({ message: "No such recording." });
     let prev: Partial<ClipProgress> = {};
     try { prev = rec.clipProgress ? JSON.parse(rec.clipProgress) : {}; } catch { /* start fresh */ }
-    const merged = { ...prev, ...Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)) };
+    // A new run (the last one finished) starts clean: no clips or moments carried over from before.
+    if (prev.stage === "done") prev = { words: prev.words, transcriptSource: prev.transcriptSource };
+    const now = p.at;
+    const timing = { startedAt: prev.startedAt ?? now, renderAt: stage === "render" && prev.stage !== "render" ? now : prev.renderAt };
+    const merged = { ...prev, ...Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined)), ...timing };
     await storage.setClipProgress(id, JSON.stringify(merged));
     res.json({ ok: true });
   });
@@ -9925,4 +9942,14 @@ Watch at militaryvoices.ai/agenda
     res.setHeader("Content-Disposition", "attachment; filename=my-militaryvoice-contacts.csv");
     res.send(lines.join("\n"));
   });
+}
+
+/** A transcript kept from an earlier run, as the worker's lines. */
+function storedTranscript(raw: string): { speaker: string; text: string; startSec: number; endSec: number }[] {
+  try {
+    const rows = raw ? (JSON.parse(raw) as [number, number, string, string][]) : [];
+    return rows.map(([startSec, endSec, speaker, text]) => ({ startSec, endSec, speaker, text }));
+  } catch {
+    return [];
+  }
 }

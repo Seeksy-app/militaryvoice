@@ -1165,6 +1165,8 @@ export const recordings = pgTable("recordings", {
   musicMix: text("music_mix").notNull().default(""),
   /** Recommended edits from the AI (EditSuggest as JSON): where the show really starts and ends, and what to cut. */
   editSuggest: text("edit_suggest").notNull().default(""),
+  /** The episode's transcript from its first run ([startSec, endSec, speaker, text][] as JSON), so later runs skip transcribing. */
+  transcriptJson: text("transcript_json").notNull().default(""),
   /** The Library folder it's filed in (library_folders.id); 0 for none. */
   folderId: integer("folder_id").notNull().default(0),
 });
@@ -1255,6 +1257,9 @@ export interface ClipProgress {
   /** Clips fully rendered and uploaded so far. */
   finished?: number;
   at: string;
+  /** When this run began, and when its clips began rendering: for "about N minutes left". */
+  startedAt?: string;
+  renderAt?: string;
 }
 export type ClipStatus = (typeof CLIP_STATUSES)[number];
 

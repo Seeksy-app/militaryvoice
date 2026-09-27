@@ -843,6 +843,7 @@ export interface IStorage {
   /** The next "Add music" to mix, or one whose worker went quiet for 15 minutes. */
   claimMusicMix(): Promise<RecordingRow | undefined>;
   setEditSuggest(recordingId: number, json: string): Promise<void>;
+  setTranscriptJson(recordingId: number, json: string): Promise<void>;
   listPodcastStats(email: string): Promise<PodcastStatsRow[]>;
   /** Every podcaster's, for the comparison: only the numbers are used, never shown by name. */
   allPodcastStats(): Promise<PodcastStatsRow[]>;
@@ -2186,6 +2187,11 @@ class DatabaseStorage implements IStorage {
   async deletePodcastStats(email: string, source: string): Promise<void> {
     await ready();
     await db.delete(podcastStats).where(and(eq(podcastStats.email, email.toLowerCase().trim()), eq(podcastStats.source, source)));
+  }
+
+  async setTranscriptJson(recordingId: number, json: string): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ transcriptJson: json }).where(eq(recordings.id, recordingId));
   }
 
   async setEditSuggest(recordingId: number, json: string): Promise<void> {

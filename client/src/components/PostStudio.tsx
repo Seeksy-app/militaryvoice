@@ -158,7 +158,7 @@ const WAVE = Array.from({ length: 72 }, (_, i) => 0.22 + 0.78 * Math.abs(Math.si
  * the moments land where they really are in the episode; the cut shows the
  * three shapes and how many are finished.
  */
-function WorkingScene({ rec, p, pct }: { rec: Rec; p: ClipProgress | null; pct: number }) {
+function WorkingScene({ rec, p, pct, eta }: { rec: Rec; p: ClipProgress | null; pct: number; eta?: string }) {
   const stage = rec.clipStatus === "queued" ? "queued" : p?.stage ?? "download";
   const total = Math.max(1, rec.durationSec);
   const moments = p?.moments ?? [];
@@ -235,6 +235,7 @@ function WorkingScene({ rec, p, pct }: { rec: Rec; p: ClipProgress | null; pct: 
                   ? `${p?.finished ?? 0} of ${moments.length || "?"} clips finished, each vertical, square and wide with captions`
                   : "Every step shows here as it happens. You can leave this page."}
         </p>
+        {eta && <p className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-[#F0A71F]" data-testid="post-eta"><Clock3 className="h-3.5 w-3.5" /> {eta}</p>}
       </div>
     </div>
   );
@@ -1251,6 +1252,14 @@ export function PostStudio() {
   // The player shows the episode once it's done (it's the editor); before that, Pōstify's own screens.
   useEffect(() => { setView(rec?.clipStatus === "done" ? "episode" : "clips"); setPreview(null); }, [rec?.id, rec?.clipStatus]);
   const [pipeDialog, setPipeDialog] = useState(false);
+  // A clock for "about N minutes left", ticking only while something's being made.
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const busyNow = rec?.clipStatus === "queued" || rec?.clipStatus === "running";
+  useEffect(() => {
+    if (!busyNow) return;
+    const t = setInterval(() => setNowTick(Date.now()), 15000);
+    return () => clearInterval(t);
+  }, [busyNow]);
   const [clipPlay, setClipPlay] = useState<string | null>(null);
   const [navOpened, setNavOpened] = useState(false);
   // Shown once per browser, the first time the menu folds.
@@ -1469,6 +1478,27 @@ export function PostStudio() {
     { n: readyN ? String(readyN) : "–", label: "Clips ready", color: "text-violet-600 dark:text-violet-400" },
   ];
 
+  // About how long is left: typical times until the clips start rendering, then this run's own pace.
+  const eta = (() => {
+    if (!running) return "";
+    const n = Math.max(1, moments.length || clipsN);
+    const perClip = 120; // seconds a clip, two cut at once
+    const st = rec.clipStatus === "queued" ? "queued" : p?.stage ?? "download";
+    let left: number;
+    if ((st === "render" || st === "upload") && p?.renderAt) {
+      const k = p.finished ?? 0;
+      const spent = (nowTick - Date.parse(p.renderAt)) / 1000;
+      left = k > 0 ? (spent / k) * (n - k) : Math.max(60, n * perClip - spent);
+    } else {
+      const words = st === "download" || st === "queued" ? 60 + (rec.durationSec / 60) * 5 : 0;
+      const hear = st === "download" || st === "queued" || st === "transcript" ? (rec.durationSec / 60) * 4 : 0;
+      const pick = st === "moments" ? 60 : 90;
+      left = words + hear + pick + n * perClip;
+    }
+    const min = Math.ceil(left / 60);
+    return min <= 1 ? "Almost done" : `About ${min} minutes left`;
+  })();
+
   // The pieces, used by both layouts (the editor, and the pipeline while it runs).
   const viewerEl = (
     <div className="relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5" data-testid="post-viewer">
@@ -1486,7 +1516,7 @@ export function PostStudio() {
             ) : preview ? (
               <video key={preview.url} src={preview.url} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
             ) : running || intro ? (
-              <WorkingScene rec={rec} p={intro ? null : p} pct={intro ? 0 : pct} />
+              <WorkingScene rec={rec} p={intro ? null : p} pct={intro ? 0 : pct} eta={intro ? undefined : eta} />
             ) : failed ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center text-white">
                 <div className="relative flex items-center justify-center">
@@ -1692,12 +1722,19 @@ export function PostStudio() {
         />
       ) : (
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
-        <div className="flex min-w-0 flex-col gap-2">{viewerEl}</div>
-        {/* The side: the pipeline while it runs, then the numbers. */}
+        {/* The numbers sit under the player, in the space there; the side is just the pipeline. */}
         <div className="flex min-w-0 flex-col gap-3">
-          {pipelineCard}
-          {statsGrid}
+          {viewerEl}
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6" data-testid="post-stats">
+            {stats.map((st) => (
+              <div key={st.label} className="rounded-xl border border-border bg-card px-3 py-2.5">
+                <p className={`text-lg font-bold tabular-nums ${st.color}`}>{st.n}</p>
+                <p className="text-[11px] leading-tight text-muted-foreground">{st.label}</p>
+              </div>
+            ))}
+          </div>
         </div>
+        <div className="flex min-w-0 flex-col gap-3">{pipelineCard}</div>
       </div>
       )}
 
@@ -1734,7 +1771,8 @@ export function PostStudio() {
         <div className="mt-4 rounded-2xl border border-border bg-card p-4">
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
             <Scissors className="h-4 w-4 text-[#053877]" /> {done ? "Your clips" : "Clips being cut"}
-            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{done ? mine.length : `${readyN} of ${moments.length}`}</span>
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{done ? mine.length : `${readyN} of ${moments.length || clipsN}`}</span>
+            {!done && eta && <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-[#b36b00] dark:text-[#F0A71F]"><Clock3 className="h-3.5 w-3.5" /> {eta}</span>}
           </p>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
             {done
