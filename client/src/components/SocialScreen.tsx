@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip as ChartTip, XAxis, YAxis } from "recharts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +13,8 @@ import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import type { ClipRow, HostPostRow, PostResult, RecordingRow, SocialPlatform } from "@shared/schema";
-import { AlertTriangle, ChevronDown, Clapperboard, Film, ImagePlus, Upload, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, ListPlus, Loader2, Play, Plus, Send, Settings2, Target, Trash2, X } from "lucide-react";
+import type { ClipRow, HostPostRow, PostMetrics, PostResult, RecordingRow, SocialPlatform } from "@shared/schema";
+import { AlertTriangle, BarChart3, Heart, Lightbulb, MessageCircle, Repeat2, TrendingDown, TrendingUp, Users, Eye, ChevronDown, Clapperboard, Film, ImagePlus, Upload, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, ListPlus, Loader2, Play, Plus, Send, Settings2, Target, Trash2, X } from "lucide-react";
 
 /**
  * Social: the podcaster's own social desk, the way Later or Buffer lay it out.
@@ -39,8 +40,9 @@ const local = (t: number) => { const d = new Date(t); const p = (n: number) => S
 export function SocialScreen() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"home" | "calendar">(() => { try { return localStorage.getItem("mv_social_tab") === "calendar" ? "calendar" : "home"; } catch { return "home"; } });
-  const go = (t: "home" | "calendar") => { setTab(t); try { localStorage.setItem("mv_social_tab", t); } catch { /* fine */ } };
+  type Tab = "home" | "calendar" | "analytics";
+  const [tab, setTab] = useState<Tab>(() => { try { const v = localStorage.getItem("mv_social_tab"); return v === "calendar" || v === "analytics" ? v : "home"; } catch { return "home"; } });
+  const go = (t: Tab) => { setTab(t); try { localStorage.setItem("mv_social_tab", t); } catch { /* fine */ } };
   const [target, setTarget] = useState<PostTarget | null>(null);
   const [targetAt, setTargetAt] = useState<string | undefined>(undefined);
   const [picking, setPicking] = useState<string | null>(null); // Create post, optionally for a slot (datetime-local)
@@ -127,7 +129,7 @@ export function SocialScreen() {
 
       {/* The two views, and on the same line the queue's times and the way to make a post. */}
       <div className="mb-4 flex items-end gap-1 border-b border-border" role="tablist">
-        {([["home", "Home", Home], ["calendar", "Calendar", CalendarDays]] as const).map(([k, label, I]) => (
+        {([["home", "Home", Home], ["calendar", "Calendar", CalendarDays], ["analytics", "Analytics", BarChart3]] as const).map(([k, label, I]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-[#F0A71F] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`social-tab-${k}`}>
             <I className="h-4 w-4" /> {label}
           </button>
@@ -233,6 +235,8 @@ export function SocialScreen() {
             </Card>
           </div>
         </div>
+      ) : tab === "analytics" ? (
+        <Analytics clips={clipList} onOpen={(id) => { const p = posts.find((x) => x.id === id); if (p) setOpen(p); }} />
       ) : (
         <Calendar
           posts={posts}
@@ -630,5 +634,178 @@ function QueueDialog({ open, onClose, settings, onSaved }: { open: boolean; onCl
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+type Analytics = {
+  days: number; connected: boolean; start?: string; end?: string;
+  views?: { total_impressions?: number; per_platform?: Record<string, number>; per_day?: Record<string, number>; error?: string };
+  engagement?: { metrics?: Record<string, number>; per_platform?: Record<string, Record<string, number>>; per_day?: Record<string, Record<string, number>>; error?: string };
+  posts?: { id: number; kind: string; refId: number; shape: string; title: string; at: string; platforms: string; results: string; metrics: string; metricsAt: string }[];
+};
+
+/** Latest of a day-keyed series and its change since the first day. Upload-Post's daily numbers are running totals, so they're read, not added up. */
+function trend(series?: Record<string, number>) {
+  const days = Object.keys(series ?? {}).sort();
+  if (!days.length) return null;
+  const first = series![days[0]] ?? 0, last = series![days[days.length - 1]] ?? 0;
+  return { last, change: last - first, pct: first > 0 ? ((last - first) / first) * 100 : null };
+}
+
+/**
+ * Analytics: how the accounts are growing and which posts carried it, the way
+ * Later and Buffer lead: headline numbers with their change, one chart, where
+ * the reach comes from, the posts ranked, and plain-English tips once there's
+ * enough to go on.
+ */
+function Analytics({ clips, onOpen }: { clips: ClipRow[]; onOpen: (id: number) => void }) {
+  const [days, setDays] = useState<7 | 30 | 90>(30);
+  const [metric, setMetric] = useState<"reach" | "followers" | "likes">("reach");
+  const q = useQuery<Analytics>({ queryKey: ["/api/host/social/analytics", days], queryFn: async () => (await apiRequest("GET", `/api/host/social/analytics?days=${days}`)).json() });
+  const a = q.data;
+  const pd = a?.engagement?.per_day ?? {};
+  const series = metric === "reach" ? a?.views?.per_day : pd[metric];
+  const chart = Object.keys(series ?? {}).sort().map((d) => ({ d, v: series![d] }));
+  const reach = trend(a?.views?.per_day);
+  const followers = trend(pd.followers);
+  const engagementDay: Record<string, number> = {};
+  for (const k of ["likes", "comments", "shares"]) for (const [d, v] of Object.entries(pd[k] ?? {})) engagementDay[d] = (engagementDay[d] ?? 0) + (v ?? 0);
+  const engagement = trend(engagementDay);
+  const share = Object.entries(a?.views?.per_platform ?? {}).filter(([, v]) => v > 0).sort((x, y) => y[1] - x[1]);
+  const shareTotal = share.reduce((n, [, v]) => n + v, 0);
+
+  const posts = (a?.posts ?? []).map((p) => {
+    let m: PostMetrics = {};
+    try { m = p.metrics ? JSON.parse(p.metrics) : {}; } catch { m = {}; }
+    const sum = (k: "views" | "likes" | "comments" | "shares") => Object.values(m).reduce((n, v) => n + (v[k] ?? 0), 0);
+    const clip = p.kind === "clip" ? clips.find((c) => c.id === p.refId) : undefined;
+    return { ...p, m, views: sum("views"), likes: sum("likes"), comments: sum("comments"), shares: sum("shares"), measured: Object.keys(m).length > 0, len: clip ? clip.endSec - clip.startSec : 0, thumb: p.kind === "photo" ? `/api/host/posts/${p.id}/media` : clip ? clip.verticalUrl || clip.squareUrl || clip.url : p.kind === "recording" ? `/api/host/recordings/${p.refId}/video` : "" };
+  }).sort((x, y) => y.views - x.views || y.likes - x.likes);
+  const measured = posts.filter((p) => p.measured);
+
+  // Tips, from their own posts once there are a few with numbers.
+  const tips: string[] = [];
+  if (measured.length >= 3) {
+    const byPlatform: Record<string, number[]> = {};
+    for (const p of measured) for (const [pl, v] of Object.entries(p.m)) (byPlatform[pl] ??= []).push(v.views ?? 0);
+    const avg = (xs: number[]) => xs.reduce((a2, b) => a2 + b, 0) / Math.max(1, xs.length);
+    const best = Object.entries(byPlatform).map(([pl, xs]) => [pl, avg(xs)] as const).sort((x, y) => y[1] - x[1]);
+    if (best.length > 1 && best[0][1] > 0) tips.push(`${platformLabel(best[0][0] as SocialPlatform)} is where your posts get seen most: about ${compact(Math.round(best[0][1]))} views each.`);
+    const byDay: Record<number, number[]> = {};
+    for (const p of measured) (byDay[new Date(p.at).getDay()] ??= []).push(p.views);
+    const bestDay = Object.entries(byDay).filter(([, xs]) => xs.length >= 2).map(([d, xs]) => [Number(d), avg(xs)] as const).sort((x, y) => y[1] - x[1])[0];
+    if (bestDay) tips.push(`Your ${["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][bestDay[0]]} posts do best. Put your strongest clip there.`);
+    const short = measured.filter((p) => p.len > 0 && p.len < 45), long = measured.filter((p) => p.len >= 45);
+    if (short.length >= 2 && long.length >= 2) {
+      const s2 = avg(short.map((p) => p.views)), l2 = avg(long.map((p) => p.views));
+      if (s2 > l2 * 1.2) tips.push(`Clips under 45 seconds get ${Math.round((s2 / Math.max(1, l2) - 1) * 100)}% more views than longer ones.`);
+      else if (l2 > s2 * 1.2) tips.push(`Your longer clips (45 seconds and up) get ${Math.round((l2 / Math.max(1, s2) - 1) * 100)}% more views: your audience stays for the story.`);
+    }
+  }
+
+  if (q.isLoading) return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
+  if (!a?.connected) return <p className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">Connect your accounts and your numbers show here.</p>;
+
+  const kpi = (label: string, I: typeof Home, t: ReturnType<typeof trend>, hint: string) => (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><I className="h-3.5 w-3.5" /> {label}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums">{t ? compact(t.last) : "—"}</p>
+      {t && t.change !== 0 ? (
+        <p className={`mt-0.5 flex items-center gap-1 text-xs font-semibold ${t.change > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600"}`}>
+          {t.change > 0 ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+          {t.change > 0 ? "+" : ""}{label === "Followers" ? compact(t.change) : t.pct !== null ? `${Math.round(t.pct)}%` : compact(t.change)} <span className="font-normal text-muted-foreground">in {days} days</span>
+        </p>
+      ) : <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-4" data-testid="social-analytics">
+      <div className="flex items-center gap-1.5">
+        {([7, 30, 90] as const).map((d) => (
+          <button key={d} type="button" onClick={() => setDays(d)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${days === d ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:border-[#053877]/40"}`} data-testid={`analytics-days-${d}`}>Last {d} days</button>
+        ))}
+        {q.isFetching && <Loader2 className="ml-1 h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {kpi("Reach & views", Eye, reach, "People who saw your posts")}
+        {kpi("Followers", Users, followers, "Across your accounts")}
+        {kpi("Engagement", Heart, engagement, "Likes, comments and shares")}
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><Send className="h-3.5 w-3.5" /> Posts</p>
+          <p className="mt-1 text-2xl font-bold tabular-nums">{posts.length}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Sent from here in {days} days</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]">
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <div className="mb-3 flex items-center gap-1.5">
+            {([["reach", "Reach & views"], ["followers", "Followers"], ["likes", "Likes"]] as const).map(([k, l]) => (
+              <button key={k} type="button" onClick={() => setMetric(k)} className={`rounded-full px-2.5 py-1 text-xs font-semibold ${metric === k ? "bg-[#F0A71F] text-[#1a1200]" : "text-muted-foreground hover:bg-muted"}`}>{l}</button>
+            ))}
+          </div>
+          {chart.length > 1 ? (
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chart} margin={{ left: 0, right: 8, top: 4, bottom: 0 }}>
+                  <defs><linearGradient id="socialFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#F0A71F" stopOpacity={0.35} /><stop offset="100%" stopColor="#F0A71F" stopOpacity={0} /></linearGradient></defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" className="text-border" />
+                  <XAxis dataKey="d" tickFormatter={(d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={24} />
+                  <YAxis tickFormatter={(v: number) => compact(v)} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={40} domain={["auto", "auto"]} />
+                  <ChartTip formatter={(v: number) => v.toLocaleString()} labelFormatter={(d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} />
+                  <Area type="monotone" dataKey="v" stroke="#F0A71F" strokeWidth={2} fill="url(#socialFill)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : <p className="py-10 text-center text-sm text-muted-foreground">A chart appears after a couple of days of numbers.</p>}
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <Card title="Where your reach comes from" icon={Repeat2}>
+            {share.length ? (
+              <div className="space-y-2.5">
+                {share.map(([pl, v]) => (
+                  <div key={pl}>
+                    <div className="mb-1 flex items-center justify-between text-xs"><span className="flex items-center gap-1.5 font-medium"><PlatformIcon platform={pl as SocialPlatform} className="h-3.5 w-3.5" /> {platformLabel(pl as SocialPlatform)}</span><span className="tabular-nums text-muted-foreground">{Math.round((v / shareTotal) * 100)}%</span></div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[#053877]" style={{ width: `${(v / shareTotal) * 100}%` }} /></div>
+                  </div>
+                ))}
+              </div>
+            ) : <p className="text-sm text-muted-foreground">Nothing yet for this range.</p>}
+          </Card>
+          <Card title="Tips" icon={Lightbulb}>
+            {tips.length ? <ul className="list-disc space-y-1.5 pl-4 text-sm">{tips.map((t) => <li key={t}>{t}</li>)}</ul> : <p className="text-sm text-muted-foreground">Tips appear once a few of your posts from here have numbers: which platform, day and clip length work best for you.</p>}
+          </Card>
+        </div>
+      </div>
+
+      <Card title="Your posts" icon={TrendingUp} note={posts.length ? "Best first" : undefined}>
+        {posts.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-muted-foreground"><th className="pb-2 font-medium">Post</th><th className="pb-2 text-right font-medium"><Eye className="ml-auto h-3.5 w-3.5" aria-label="Views" /></th><th className="pb-2 text-right font-medium"><Heart className="ml-auto h-3.5 w-3.5" aria-label="Likes" /></th><th className="pb-2 text-right font-medium"><MessageCircle className="ml-auto h-3.5 w-3.5" aria-label="Comments" /></th><th className="pb-2 text-right font-medium"><Repeat2 className="ml-auto h-3.5 w-3.5" aria-label="Shares" /></th></tr></thead>
+              <tbody className="divide-y divide-border">
+                {posts.map((p) => (
+                  <tr key={p.id} onClick={() => onOpen(p.id)} className="cursor-pointer hover:bg-muted/40" data-testid={`analytics-post-${p.id}`}>
+                    <td className="py-2 pr-3">
+                      <span className="flex items-center gap-3">
+                        <span className="block h-11 w-8 shrink-0 overflow-hidden rounded bg-black">{p.thumb && (p.kind === "photo" ? <img src={p.thumb} alt="" className="h-full w-full object-cover" /> : <video src={`${p.thumb}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />)}</span>
+                        <span className="min-w-0">
+                          <span className="block max-w-[22rem] truncate font-medium">{p.title || "Untitled"}</span>
+                          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">{fmtWhen(Date.parse(p.at))} {(p.platforms.split(",").filter(Boolean) as SocialPlatform[]).map((pl) => <PlatformIcon key={pl} platform={pl} className="h-3 w-3" />)}</span>
+                        </span>
+                      </span>
+                    </td>
+                    {p.measured ? (["views", "likes", "comments", "shares"] as const).map((k) => <td key={k} className="py-2 text-right tabular-nums">{compact(p[k])}</td>) : <td colSpan={4} className="py-2 text-right text-xs text-muted-foreground">Numbers come in a few hours after it's out</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="text-sm text-muted-foreground">Nothing posted from here in the last {days} days.</p>}
+      </Card>
+    </div>
   );
 }
