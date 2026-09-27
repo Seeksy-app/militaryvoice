@@ -1430,6 +1430,15 @@ async function framingFor(job: Job, source: string, m: Moment, within: Line[], d
  * rather than coming back plainer. Never throws: a failed edit must not
  * touch the recording's own status.
  */
+/**
+ * Who draws animated captions. Our own renderer since 27 Sep 2026: the same
+ * look as Creatomate, in about a minute a clip rather than eight (and a wide
+ * that Creatomate often never returned). CLIP_RENDERER=creatomate goes back.
+ */
+function usesCreatomate(): boolean {
+  return (process.env.CLIP_RENDERER || "local").toLowerCase() === "creatomate";
+}
+
 async function handleEdit(job: Job): Promise<void> {
   const e = job.clipEdit!;
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `edit-${e.clipId}-`));
@@ -1444,7 +1453,14 @@ async function handleEdit(job: Job): Promise<void> {
     const tall = shapes.includes("vertical") || shapes.includes("square");
     const geo = await framingFor(job, cut, m, [], dir, tall ? "shots" : "none");
     const files = { wide: path.join(dir, "wide.mp4"), vertical: path.join(dir, "vertical.mp4"), square: path.join(dir, "square.mp4") };
-    if ((await renderWithCreatomate({ ...job, show: e.subtitle }, m, cut, geo, files, shapes)).size < shapes.length) throw new Error("Creatomate couldn't make it just now");
+    if (usesCreatomate()) {
+      if ((await renderWithCreatomate({ ...job, show: e.subtitle }, m, cut, geo, files, shapes)).size < shapes.length) throw new Error("Creatomate couldn't make it just now");
+    } else {
+      const band = path.join(dir, "band.png");
+      await fs.writeFile(band, await titleBand(e.title, 1080, 220, e.subtitle.toUpperCase()));
+      const words = await momentWords(cut, m, [], dir);
+      await Promise.all(shapes.map((x) => render(cut, files[x], m, x, x === "wide" ? undefined : { file: band, height: 220 }, geo, [], path.join(dir, "caps"), words)));
+    }
     await api("POST", `/api/agent/clip-edits/${e.clipId}/done`, {
       url: shapes.includes("wide") ? await uploadFile(files.wide, "video/mp4") : "",
       verticalUrl: shapes.includes("vertical") ? await uploadFile(files.vertical, "video/mp4") : "",
@@ -1872,9 +1888,8 @@ async function handle(job: Job): Promise<void> {
         progress(job.recordingId, { stage: "render", pct: ((i * 4 + k) / (moments.length * 4)) * 100, detail: `Clip ${i + 1} of ${moments.length} · ${shape}` });
       step(0, "all three shapes");
       // Only the shapes they asked for; Classic captions are ours, no Creatomate.
-      // CLIP_RENDERER=local: animated captions made here too, no Creatomate.
       const animated = !silent && opts.captions === "animated";
-      const ours = (process.env.CLIP_RENDERER || "").toLowerCase() === "local";
+      const ours = !usesCreatomate();
       const made = animated && !ours ? await renderWithCreatomate(job, m, source, geo, { wide, vertical, square }, [...want]) : new Set<Shape>();
       // Whatever Creatomate didn't make, we make here, with the same
       // word-by-word captions (a straggling wide used to come back Classic).
