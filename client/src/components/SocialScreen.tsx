@@ -205,7 +205,7 @@ type Item = { key: string; posts: HostPostRow[]; title: string; src: string; wid
 
 /** Small tiles: the clip's own picture, a quarter the size of Pōstify's cards. */
 function Grid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-[repeat(auto-fill,minmax(118px,1fr))] items-start gap-3">{children}</div>;
+  return <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] items-start gap-3">{children}</div>;
 }
 
 function Tile({ src, wide, title, badge, onPlay, testId, children }: { src: string; wide: boolean; title: string; badge?: React.ReactNode; onPlay: () => void; testId?: string; children?: React.ReactNode }) {

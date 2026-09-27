@@ -35,7 +35,7 @@ import {
   SquarePlay,
   SquarePen,
 } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PlatformIcon, formatFollowers } from "@/components/SocialIcons";
 import {
   AlertDialog,
@@ -252,6 +252,48 @@ function SeatSwitcher({ current }: { current: string }) {
         </DropdownMenu>
       )}
     </div>
+  );
+}
+
+/**
+ * The admin's Back to admin and View as, as items at the top of the account
+ * menu (the nav's foot), instead of a bar on every screen. Nothing for anyone
+ * who isn't an admin.
+ */
+function SeatMenuItems({ current }: { current: string }) {
+  const { data: me } = useQuery<{ email: string }>({ queryKey: ["/api/admin/me"], retry: false, staleTime: 300_000 });
+  const { data: seats = [] } = useQuery<{ email: string; label: string; kind: string }[]>({ queryKey: ["/api/admin/view-as"], enabled: !!me, retry: false, staleTime: 300_000 });
+  if (!me) return null;
+  const others = seats.filter((s) => s.email !== current.trim().toLowerCase());
+  const viewingAs = me.email.trim().toLowerCase() !== current.trim().toLowerCase();
+  return (
+    <>
+      <DropdownMenuItem onSelect={() => { window.location.href = "/admin"; }} className={`gap-2 font-semibold ${viewingAs ? "text-[#8a5a00] dark:text-[#F0A71F]" : ""}`} data-testid="seat-admin">
+        <ArrowLeft className="h-4 w-4" /> {viewingAs ? "Back to admin" : "Admin"}
+      </DropdownMenuItem>
+      {others.length > 0 && (
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="gap-2" data-testid="seat-menu"><Users className="h-4 w-4" /> View as</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="max-h-96 w-72 overflow-y-auto">
+            {others.map((s) => {
+              const [name, role] = s.label.split(" · ");
+              return (
+                <DropdownMenuItem
+                  key={s.email}
+                  onSelect={async () => { await apiRequest("POST", "/api/admin/view-as", { email: s.email }); window.location.href = "/host/dashboard"; }}
+                  className="flex flex-col items-start gap-0.5 py-2"
+                  data-testid={`seat-${s.email}`}
+                >
+                  <span className="text-sm font-semibold text-foreground">{name}</span>
+                  <span className="text-xs text-muted-foreground">{role ? `${role} · ` : ""}{s.email}</span>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+      )}
+      <DropdownMenuSeparator />
+    </>
   );
 }
 
@@ -966,7 +1008,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const onTeamForGreenRoom = Boolean(crew?.isCrew || cohost?.isCohost);
   const crewMode = !!data && !loadingProfile && !hasProfile && !!crew?.isCrew;
   const inSetup = !!data && !loadingProfile && !hasProfile && !crewMode;
-  const adminBar = !!adminMe && !!data && hasProfile && !inSetup && screen !== "dashboard";
 
   // Signed in, past setup: this is a workspace, not a page of the website.
   // The public nav is for people deciding whether to take part; somebody who
@@ -1074,20 +1115,17 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
               email: data.email,
               photo: profile?.photoUrl ? resolveUploadUrl(profile.photoUrl) : "",
               onSignOut: () => logout.mutate(),
+              admin: <SeatMenuItems current={data.email} />,
             }}
           />
           </div>
         )}
         {/* Top-justified: whatever the screen is, it starts level with the
             top of the nav, not a band of white below it. */}
-        <div className={`min-w-0 [&>*:first-child]:mt-0 ${adminBar ? "[&>*:nth-child(2)]:mt-0" : ""}`}>
+        <div className="min-w-0 [&>*:first-child]:mt-0">
         {/* Back to admin and View as, top right of the page (the dashboard
             has them on its own dark card). */}
-        {adminBar && (
-          <div className="mb-3 hidden justify-end lg:flex" data-testid="admin-top-bar">
-            <SeatSwitcher current={data!.email} />
-          </div>
-        )}
+
 
         {loadingProfile ? (
           <div className="mt-8 space-y-4">
@@ -1361,7 +1399,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     eventStartUtc={data.event.startAtUtc}
                     actions={
                       <div className="hidden items-center gap-2 lg:flex">
-                        <SeatSwitcher current={data.email} />
                         <Button
                           variant="outline"
                           size="sm"

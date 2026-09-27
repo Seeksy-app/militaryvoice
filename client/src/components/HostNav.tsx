@@ -52,8 +52,9 @@ export function HostNav({
   onToggle?: () => void;
   /** The admin's Back to admin / View as, under the mark (only ever passed for an admin). */
   admin?: ReactNode;
-  /** The person, at the foot of the column: where Profile and Sign out live, as in most apps. */
-  account?: { name: string; email: string; photo: string; onSignOut: () => void };
+  /** The person, at the foot of the column: where Profile and Sign out live, as in most apps.
+   *  `admin` is the admin's own items (Back to admin, View as), at the top of that menu. */
+  account?: { name: string; email: string; photo: string; onSignOut: () => void; admin?: ReactNode };
   screen: HostScreen;
   /** Hours they hold at the desk as co-host; the door shows when there are any. */
   cohostHours?: number;
@@ -188,6 +189,26 @@ export function HostNav({
     );
   };
 
+  // The account menu: the admin's way back and View as first (only for an admin), then the person's own.
+  const accountMenu = (side: "top" | "right") => account && (
+    <DropdownMenuContent side={side} align={side === "right" ? "end" : "start"} className="w-[232px]">
+      {account.admin}
+      <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{account.email}</DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onSelect={() => onGo("editProfile")} className="gap-2" data-testid="account-profile"><UserRound className="h-4 w-4" /> Profile</DropdownMenuItem>
+      <DropdownMenuItem onSelect={() => onGo("integrations")} className="gap-2" data-testid="account-integrations"><Link2 className="h-4 w-4" /> Integrations</DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <Appearance />
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onSelect={account.onSignOut} className="gap-2" data-testid="account-signout"><LogOut className="h-4 w-4" /> Sign out</DropdownMenuItem>
+    </DropdownMenuContent>
+  );
+  const avatar = (size: string) => account && (account.photo ? (
+    <img src={account.photo} alt="" className={`${size} shrink-0 rounded-full object-cover ring-1 ring-white/20`} />
+  ) : (
+    <span className={`flex ${size} shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white`}>{account.name.trim().charAt(0).toUpperCase()}</span>
+  ));
+
   return (
     <>
       {/* Phone: one scrolling strip. */}
@@ -211,6 +232,15 @@ export function HostNav({
                 </RailButton>
               );
             })}
+            {/* The account, at the foot as in the open column. */}
+            {account && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" aria-label="Account" className="mt-auto rounded-full p-0.5 hover:ring-2 hover:ring-white/30" data-testid="nav-rail-account">{avatar("h-9 w-9")}</button>
+                </DropdownMenuTrigger>
+                {accountMenu("right")}
+              </DropdownMenu>
+            )}
           </div>
         </nav>
       ) : (
@@ -258,11 +288,7 @@ export function HostNav({
                   className={`-mt-2 flex w-full items-center gap-2.5 rounded-xl border border-white/10 p-2 text-left transition-colors hover:bg-white/10 ${screen === "editProfile" || screen === "integrations" ? "bg-white/[0.12]" : ""}`}
                   data-testid="nav-host-account"
                 >
-                  {account.photo ? (
-                    <img src={account.photo} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/20" />
-                  ) : (
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white">{account.name.trim().charAt(0).toUpperCase()}</span>
-                  )}
+                  {avatar("h-9 w-9")}
                   <span className="min-w-0 flex-1 leading-tight">
                     <span className="block truncate text-[13px] font-semibold text-white">{account.name}</span>
                     <span className="block truncate text-[11px] text-white/50">Account settings</span>
@@ -270,16 +296,7 @@ export function HostNav({
                   <ChevronsUpDown className="h-4 w-4 shrink-0 text-white/40" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="start" className="w-[216px]">
-                <DropdownMenuLabel className="truncate text-xs font-normal text-muted-foreground">{account.email}</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => onGo("editProfile")} className="gap-2" data-testid="account-profile"><UserRound className="h-4 w-4" /> Profile</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onGo("integrations")} className="gap-2" data-testid="account-integrations"><Link2 className="h-4 w-4" /> Integrations</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <Appearance />
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={account.onSignOut} className="gap-2" data-testid="account-signout"><LogOut className="h-4 w-4" /> Sign out</DropdownMenuItem>
-              </DropdownMenuContent>
+              {accountMenu("top")}
             </DropdownMenu>
           )}
         </div>
