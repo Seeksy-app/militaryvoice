@@ -2188,9 +2188,14 @@ export const hostPosts = pgTable("host_posts", {
   results: text("results").notNull().default(""),
   /** A picture uploaded just for this post (kind "photo"): its storage key. */
   mediaKey: text("media_key").notNull().default(""),
+  /** How it's doing, per platform (JSON PostMetrics), and when that was read. */
+  metrics: text("metrics").notNull().default(""),
+  metricsAt: text("metrics_at").notNull().default(""),
 }, (t) => [index("host_posts_email_idx").on(t.email)]);
 /** How one post did on one platform: live, with its link, or why not. */
 export interface PostResult { platform: string; ok: boolean; url: string; error: string; at: string; inbox?: boolean }
+/** One post's numbers on each platform it went to. */
+export type PostMetrics = Record<string, { views?: number; likes?: number; comments?: number; shares?: number; saves?: number; reach?: number; error?: string }>;
 export type HostPostRow = typeof hostPosts.$inferSelect;
 
 export const socialPosts = pgTable("social_posts", {

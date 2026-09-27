@@ -144,9 +144,11 @@ import {
   queuePreview,
   postHistory,
   listScheduledPosts,
+  totalImpressions,
+  postAnalytics,
   type PublishResult,
 } from "./uploadPost.js";
-import type { HostPostRow, PostResult } from "../shared/schema.js";
+import type { HostPostRow, PostResult, PostMetrics } from "../shared/schema.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -2992,7 +2994,7 @@ export function registerRoutes(app: Express): void {
     email: string; kind: string; refId: number; shape: string; title: string; description: string; platforms: string[]; when: string; queue: boolean; mediaKey?: string;
     publish: (x: { externalId: string; addToQueue: boolean; scheduledDate?: string }) => Promise<PublishResult>;
   }): Promise<{ scheduled: boolean; scheduledAt: string }> {
-    const row = await storage.addHostPost({ email: o.email, kind: o.kind, refId: o.refId, shape: o.shape, title: o.title, description: o.description, platforms: o.platforms.join(","), scheduledAt: o.when || "", status: "sending", error: "", jobId: "", requestId: "", results: "", mediaKey: o.mediaKey ?? "" });
+    const row = await storage.addHostPost({ email: o.email, kind: o.kind, refId: o.refId, shape: o.shape, title: o.title, description: o.description, platforms: o.platforms.join(","), scheduledAt: o.when || "", status: "sending", error: "", jobId: "", requestId: "", results: "", mediaKey: o.mediaKey ?? "", metrics: "", metricsAt: "" });
     try {
       const r = await o.publish({ externalId: `hp-${row.id}`, addToQueue: o.queue && !o.when, scheduledDate: o.when || undefined });
       const raw = o.when || (o.queue ? r.scheduledDate ?? "" : "");
@@ -3111,7 +3113,9 @@ export function registerRoutes(app: Express): void {
         if (!history.length) return;
         const results: PostResult[] = history.map((h) => ({ platform: h.platform, ok: !!h.success, url: h.success && h.post_url && /^https?:/.test(h.post_url) ? h.post_url : "", error: h.error_message ?? "", at: h.upload_timestamp, inbox: h.fallback_to_inbox || undefined }));
         const failed = results.every((x) => !x.ok);
-        const patch = { results: JSON.stringify(results), status: failed ? "failed" : "sent", error: failed ? results[0]?.error ?? "" : "" };
+        // Upload-Post's own request id (a queued post only gets one when it goes out): per-post analytics use it.
+        const rid = history.find((h) => h.request_id)?.request_id ?? "";
+        const patch = { results: JSON.stringify(results), status: failed ? "failed" : "sent", error: failed ? results[0]?.error ?? "" : "", ...(rid && r.requestId.startsWith("hp-") ? { requestId: rid } : {}) };
         await storage.updateHostPost(r.id, patch);
         Object.assign(r, patch);
       } catch (err) {
@@ -3176,6 +3180,56 @@ export function registerRoutes(app: Express): void {
     } catch (err) {
       res.status(502).json({ message: `Couldn't cancel it: ${(err as Error).message}` });
     }
+  });
+
+  /**
+   * Social analytics for a range (7, 30 or 90 days): views/reach and
+   * engagement over time and per platform from Upload-Post's daily snapshots,
+   * and each post of ours with its own numbers. Post numbers are read live a
+   * few at a time (Upload-Post allows 100 reads per 5 minutes) and kept on the
+   * row; a post's are refreshed when they're more than six hours old.
+   */
+  app.get("/api/host/social/analytics", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const days = [7, 30, 90].includes(Number(req.query.days)) ? Number(req.query.days) : 30;
+    const profile = await storage.getProfileByEmail(email);
+    if (!profile?.uploadPostUsername || !isUploadPostConfigured()) return res.json({ days, connected: false });
+    const ymd = (t: number) => new Date(t).toISOString().slice(0, 10);
+    const end = Date.now();
+    const start = end - days * 86400_000;
+    const u = profile.uploadPostUsername;
+    const [views, engage] = await Promise.all([
+      totalImpressions(u, { start: ymd(start), end: ymd(end) }).catch((e) => ({ error: (e as Error).message })),
+      totalImpressions(u, { start: ymd(start), end: ymd(end), metrics: ["likes", "comments", "shares", "followers"] }).catch((e) => ({ error: (e as Error).message })),
+    ]);
+    // Our posts in the range that went out, with fresh-enough numbers.
+    const rows = (await storage.listHostPosts(email)).filter((r) => r.status === "sent" && Date.parse(r.scheduledAt || r.createdAt) >= start);
+    const stale = rows.filter((r) => r.requestId && !r.requestId.startsWith("hp-") && (!r.metricsAt || end - Date.parse(r.metricsAt) > 6 * 3600_000)).slice(0, 12);
+    await Promise.all(stale.map(async (r) => {
+      try {
+        const a = await postAnalytics(r.requestId);
+        const m: PostMetrics = {};
+        for (const [pl, v] of Object.entries(a.platforms ?? {})) {
+          const pm = v.post_metrics ?? {};
+          m[pl] = { views: pm.views ?? pm.impressions ?? pm.plays, likes: pm.likes ?? pm.favorites, comments: pm.comments, shares: pm.shares ?? pm.reposts, saves: pm.saves, reach: pm.reach, ...(v.post_metrics_error ? { error: v.post_metrics_error.slice(0, 200) } : {}) };
+        }
+        const patch = { metrics: JSON.stringify(m), metricsAt: new Date().toISOString() };
+        await storage.updateHostPost(r.id, patch);
+        Object.assign(r, patch);
+      } catch (err) {
+        console.warn(`Post analytics for post ${r.id}:`, (err as Error).message);
+      }
+    }));
+    res.json({
+      days,
+      connected: true,
+      start: ymd(start),
+      end: ymd(end),
+      views,
+      engagement: engage,
+      posts: rows.map((r) => ({ id: r.id, kind: r.kind, refId: r.refId, shape: r.shape, title: r.title, at: r.scheduledAt || r.createdAt, platforms: r.platforms, results: r.results, metrics: r.metrics, metricsAt: r.metricsAt })),
+    });
   });
 
   /** Their posting queue: the times it posts at, and the next slots, open or taken. */

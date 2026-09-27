@@ -457,6 +457,22 @@ export async function queuePreview(username: string, count = 21): Promise<{ time
   return upCall(`/uploadposts/queue/preview?profile_username=${encodeURIComponent(username)}&count=${Math.min(50, count)}`);
 }
 
+/**
+ * Totals for a profile over a range: views/reach (the default, one number per
+ * platform so nothing's counted twice) or named metrics, each per platform
+ * and per day.
+ */
+export async function totalImpressions(username: string, o: { start: string; end: string; metrics?: string[] }): Promise<{ total_impressions?: number; metrics?: Record<string, number>; per_platform?: Record<string, any>; per_day?: Record<string, any> }> {
+  const q = new URLSearchParams({ start_date: o.start, end_date: o.end, breakdown: "true" });
+  if (o.metrics?.length) q.set("metrics", o.metrics.join(","));
+  return upCall(`/uploadposts/total-impressions/${encodeURIComponent(username)}?${q}`);
+}
+
+/** One post's live numbers on each platform (100 calls per 5 minutes across the account). */
+export async function postAnalytics(requestId: string): Promise<{ platforms?: Record<string, { success?: boolean; post_url?: string; post_metrics?: Record<string, number>; post_metrics_error?: string }> }> {
+  return upCall(`/uploadposts/post-analytics/${encodeURIComponent(requestId)}`);
+}
+
 export interface HistoryItem { platform: string; success: boolean; post_url: string | null; error_message: string | null; upload_timestamp: string; job_id?: string | null; request_id?: string | null; external_id?: string | null; fallback_to_inbox?: boolean }
 /** What happened to one post of ours (by the external id we gave it), a row per platform. */
 export async function postHistory(externalId: string): Promise<{ history: HistoryItem[]; in_progress: unknown[] }> {
