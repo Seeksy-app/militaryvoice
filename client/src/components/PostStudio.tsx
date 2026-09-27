@@ -938,6 +938,18 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   );
 }
 
+/** A round icon on an episode card, its name on hover. */
+function CardIcon({ tip, onClick, testid, children }: { tip: string; onClick: () => void; testid: string; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" onClick={onClick} aria-label={tip} className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-foreground transition-colors hover:border-[#053877]/40 hover:bg-[#053877]/[0.06]" data-testid={testid}>{children}</button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-xs">{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 /** A timeline tool, like Canva's: icon and word, pressed while it's on. */
 function TimelineButton({ tip, on, onClick, disabled, testid, tone, square, children }: { tip: string; on?: boolean; onClick: () => void; disabled?: boolean; testid: string; tone?: "violet"; square?: boolean; children: React.ReactNode }) {
   return (
@@ -1441,47 +1453,53 @@ export function PostStudio() {
   // In testing: only for the accounts the server says.
   if (!features.data?.post) return null;
 
-  const episodeList = (
-      <div className="rounded-2xl border border-border bg-card p-3">
-        <p className="px-1.5 pb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Pick an episode</p>
-        <ul className="flex max-h-72 flex-col gap-1.5 overflow-y-auto lg:max-h-[22rem]">
+  if (!rec) {
+    if (recs.isLoading) return null;
+    // Open an episode, straight into the job they chose.
+    const open = (id: number, job?: "edit" | "clip") => { if (job) setMode(job); setSelected(id); };
+    return (
+      <section className="mt-6" data-testid="post-studio">
+        {paidBanner}
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-bold text-foreground">Pick an episode</h2>
+          <CreditBalance beta={beta} plan={plan} />
+        </div>
+        {/* Episodes as the Library shows them: the picture, how long, when, and what's been done. */}
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" data-testid="post-episode-grid">
+          <li className="min-h-[14rem]" data-testid="post-viewer-empty">
+            <UploadRecording tall title="Add an episode" note="Drop a video here, or click to browse. MP4, MOV or WebM, up to 2GB." onDone={(id) => setSelected(id)} />
+          </li>
           {list.map((r) => {
-            const on = r.id === rec?.id;
-            const tag = r.clipStatus === "done" ? "Clips ready" : r.clipStatus === "running" ? "Working" : r.clipStatus === "queued" ? "Queued" : r.clipStatus === "failed" ? "Stopped" : "Not clipped";
+            const clipped = r.clipStatus === "done";
+            const busyR = r.clipStatus === "running" || r.clipStatus === "queued";
+            const chip = clipped ? { t: "Clips ready", c: "bg-[#F0A71F] text-[#1a1200]" } : busyR ? { t: "Working", c: "bg-[#053877] text-white" } : r.clipStatus === "failed" ? { t: "Stopped", c: "bg-red-600 text-white" } : { t: "Not clipped yet", c: "bg-white/90 text-[#000741]" };
             return (
-              <li key={r.id}>
-                <button type="button" onClick={() => setSelected(r.id)} className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.05]" : "border-transparent hover:bg-muted/60"}`}>
-                  <span className="block truncate text-sm font-medium text-foreground">{r.title || "Session"}</span>
-                  <span className="mt-0.5 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>{stamp(r.durationSec)} · {new Date(r.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
-                    <span className={r.clipStatus === "done" ? "text-emerald-600 dark:text-emerald-400" : r.clipStatus === "running" ? "text-[#b36b00]" : ""}>{tag}</span>
-                  </span>
+              <li key={r.id} className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm" data-testid={`post-episode-${r.id}`}>
+                <button type="button" onClick={() => open(r.id)} className="relative aspect-video bg-[#050d26]" aria-label={`Open ${r.title || "episode"}`}>
+                  <video src={`/api/host/recordings/${r.id}/video#t=8`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                  <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold ${chip.c}`}>{chip.t}</span>
+                  {r.durationSec > 0 && <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">{stamp(r.durationSec)}</span>}
                 </button>
+                <div className="flex items-start gap-2 p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-sm font-semibold leading-snug text-card-foreground" title={r.title}>{r.title || "Session"}</p>
+                    <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{new Date(r.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</p>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    {clipped ? (
+                      <>
+                        <CardIcon tip="Make a clip" onClick={() => open(r.id, "clip")} testid={`post-episode-clip-${r.id}`}><Clapperboard className="h-4 w-4" /></CardIcon>
+                        <CardIcon tip="Edit episode" onClick={() => open(r.id, "edit")} testid={`post-episode-edit-${r.id}`}><Pencil className="h-4 w-4" /></CardIcon>
+                      </>
+                    ) : (
+                      <CardIcon tip={busyR ? "See how it's going" : "Start Pōstify: clips and a clean episode"} onClick={() => open(r.id)} testid={`post-episode-start-${r.id}`}><Wand2 className="h-4 w-4" /></CardIcon>
+                    )}
+                  </div>
+                </div>
               </li>
             );
           })}
         </ul>
-      </div>
-  );
-
-  if (!rec) {
-    if (recs.isLoading) return null;
-    return (
-      <section className="mt-6" data-testid="post-studio">
-        {paidBanner}
-        <div className="mb-3 flex justify-end"><CreditBalance beta={beta} plan={plan} /></div>
-        {/* Empty Viewer: drop an episode in (it's filed in the Library and picked), or pick one. */}
-        <div className={`grid gap-4 ${list.length ? "lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]" : ""}`}>
-          {list.length > 0 && episodeList}
-          <div className="aspect-video min-h-[16rem]" data-testid="post-viewer-empty">
-            <UploadRecording
-              tall
-              title="Drop an episode here, or click to browse"
-              note={`${list.length ? "Or pick one on the left. " : ""}MP4, MOV or WebM, up to 2GB. It's saved to your Library too.`}
-              onDone={(id) => setSelected(id)}
-            />
-          </div>
-        </div>
       </section>
     );
   }
