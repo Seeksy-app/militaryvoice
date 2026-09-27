@@ -143,6 +143,7 @@ import {
   saveQueueSettings,
   queuePreview,
   postHistory,
+  listScheduledPosts,
   type PublishResult,
 } from "./uploadPost.js";
 import type { HostPostRow, PostResult } from "../shared/schema.js";
@@ -3042,7 +3043,27 @@ export function registerRoutes(app: Express): void {
    */
   app.get("/api/host/posts", requireHostSession, async (req, res) => {
     noStore(res);
-    const rows = await storage.listHostPosts((getSessionEmail(req) ?? "").toLowerCase().trim());
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const rows = await storage.listHostPosts(email);
+    // Scheduled before job ids were kept: find each in Upload-Post's schedule
+    // (same title, same minute) so it can be moved or cancelled like any other.
+    const orphans = rows.filter((r) => r.status === "scheduled" && !r.jobId && Date.parse(r.scheduledAt) > Date.now());
+    if (orphans.length && isUploadPostConfigured()) {
+      try {
+        const profile = await storage.getProfileByEmail(email);
+        const jobs = profile?.uploadPostUsername ? await listScheduledPosts(profile.uploadPostUsername) : [];
+        for (const r of orphans) {
+          const j = jobs.find((x) => Math.abs(Date.parse(x.scheduled_date) - Date.parse(r.scheduledAt)) < 90_000 && (x.title ?? "").trim() === r.title.trim())
+            ?? jobs.find((x) => Math.abs(Date.parse(x.scheduled_date) - Date.parse(r.scheduledAt)) < 90_000);
+          if (j?.job_id && !rows.some((o) => o.jobId === j.job_id)) {
+            await storage.updateHostPost(r.id, { jobId: j.job_id });
+            r.jobId = j.job_id;
+          }
+        }
+      } catch (err) {
+        console.warn("Matching scheduled posts to their jobs:", (err as Error).message);
+      }
+    }
     const known = (r: HostPostRow) => { try { return r.results ? (JSON.parse(r.results) as PostResult[]) : []; } catch { return []; } };
     const due = rows.filter((r) => r.requestId && (r.status === "sent" || (r.status === "scheduled" && Date.parse(r.scheduledAt) < Date.now() - 60_000))
       && r.platforms.split(",").filter(Boolean).some((p) => !known(r).some((k) => k.platform === p))
@@ -3063,18 +3084,38 @@ export function registerRoutes(app: Express): void {
     res.json(rows);
   });
 
+  /**
+   * The Upload-Post job behind one of their scheduled posts: the one we kept,
+   * or (for posts from before job ids were kept) the job in their schedule
+   * with the same title at the same minute. "gone" when their schedule has
+   * nothing for it, i.e. it isn't waiting to go out anywhere.
+   */
+  async function jobFor(email: string, row: HostPostRow): Promise<string | "gone"> {
+    if (row.jobId) return row.jobId;
+    const profile = await storage.getProfileByEmail(email);
+    if (!profile?.uploadPostUsername) return "gone";
+    const jobs = await listScheduledPosts(profile.uploadPostUsername);
+    const near = jobs.filter((x) => Math.abs(Date.parse(x.scheduled_date) - Date.parse(row.scheduledAt)) < 90_000);
+    const j = near.find((x) => (x.title ?? "").trim() === row.title.trim()) ?? (near.length === 1 ? near[0] : undefined);
+    if (!j) return near.length ? "" : "gone";
+    await storage.updateHostPost(row.id, { jobId: j.job_id });
+    return j.job_id;
+  }
+
   /** Move a scheduled post (or change its words) before it goes out. */
   app.patch("/api/host/posts/:id", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
     const row = await storage.getHostPost(Number(req.params.id));
     if (!row || row.email !== email) return res.status(404).json({ message: "No such post." });
-    if (row.status !== "scheduled" || !row.jobId) return res.status(409).json({ message: "Only a scheduled post can be moved." });
+    if (row.status !== "scheduled") return res.status(409).json({ message: "Only a scheduled post can be moved." });
     const at = req.body?.scheduledAt ? scheduleFrom(req.body) : "";
     if (at === "past") return res.status(400).json({ message: "Pick a time in the future." });
     const title = typeof req.body?.title === "string" ? req.body.title.trim().slice(0, 300) : undefined;
     const description = typeof req.body?.description === "string" ? req.body.description.trim().slice(0, 4000) : undefined;
     try {
-      await editScheduledPost(row.jobId, { scheduledDate: at || undefined, title, caption: description });
+      const job = await jobFor(email, row);
+      if (!job || job === "gone") return res.status(409).json({ message: "Couldn't find it in your schedule to move it." });
+      await editScheduledPost(job, { scheduledDate: at || undefined, title, caption: description });
       await storage.updateHostPost(row.id, { ...(at ? { scheduledAt: at } : {}), ...(title !== undefined ? { title } : {}), ...(description !== undefined ? { description } : {}) });
       res.json({ ok: true, scheduledAt: at || row.scheduledAt });
     } catch (err) {
@@ -3089,7 +3130,10 @@ export function registerRoutes(app: Express): void {
     if (!row || row.email !== email) return res.status(404).json({ message: "No such post." });
     if (row.status !== "scheduled") return res.status(409).json({ message: "It's already gone out." });
     try {
-      if (row.jobId) await cancelScheduledPost(row.jobId);
+      const job = await jobFor(email, row);
+      // Two posts at the same minute and we can't tell which: better to say so than cancel the wrong one.
+      if (!job) return res.status(409).json({ message: "Couldn't tell which post that is in your schedule. Cancel it from Upload-Post, or ask us." });
+      if (job !== "gone") await cancelScheduledPost(job);
       await storage.deleteHostPost(row.id);
       res.json({ ok: true });
     } catch (err) {

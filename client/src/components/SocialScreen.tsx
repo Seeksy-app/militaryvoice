@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { PostDialog, type PostTarget } from "@/components/PostDialog";
+import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -43,6 +44,7 @@ export function SocialScreen() {
   const [open, setOpen] = useState<Post | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
   const [viewing, setViewing] = useState<{ src: string; title: string } | null>(null);
+  const [removing, setRemoving] = useState<Post | null>(null);
 
   const social = useQuery<{ configured: boolean; accounts: { platform: SocialPlatform; username?: string; followers?: number }[] }>({ queryKey: ["/api/host/social"], queryFn: async () => (await apiRequest("GET", "/api/host/social")).json() });
   const clips = useQuery<ClipRow[]>({ queryKey: ["/api/host/clips"], queryFn: async () => (await apiRequest("GET", "/api/host/clips")).json() });
@@ -205,7 +207,7 @@ export function SocialScreen() {
             <Card title="Up next" icon={Clock} note={upcoming.length ? `${upcoming.length} scheduled` : undefined}>
               {upcoming.length ? (
                 <ul className="divide-y divide-border">
-                  {upcoming.slice(0, 6).map((p) => <PostRow key={p.id} p={p} onOpen={() => setOpen(p)} compactRow />)}
+                  {upcoming.slice(0, 6).map((p) => <PostRow key={p.id} p={p} onOpen={() => setOpen(p)} onRemove={() => setRemoving(p)} compactRow />)}
                 </ul>
               ) : (
                 <p className="text-sm text-muted-foreground">Nothing scheduled. Queue a clip from Ready to post{queue.data?.next ? `: the next open slot is ${fmtWhen(Date.parse(queue.data.next))}` : ""}.</p>
@@ -217,6 +219,7 @@ export function SocialScreen() {
       ) : (
         <Calendar
           posts={posts}
+          onRemove={setRemoving}
           slots={(queue.data?.slots ?? []).filter((s) => s.available && s.post_count === 0).map((s) => Date.parse(s.datetime_utc))}
           onOpen={setOpen}
           onSlot={(t) => setPicking(local(t))}
@@ -246,6 +249,15 @@ export function SocialScreen() {
 
       {/* One post: where it went, and (while it's waiting) move or cancel. */}
       <PostDetail p={open} onClose={() => setOpen(null)} onMove={(p, t) => { move.mutate({ id: p.id, at: t }); setOpen(null); }} onCancel={(p) => cancel.mutate(p.id)} busy={move.isPending || cancel.isPending} />
+
+      <ConfirmDelete
+        open={!!removing}
+        onOpenChange={(v) => !v && setRemoving(null)}
+        title={`Delete "${removing?.title || "this post"}" from the queue?`}
+        description={removing ? `It was going out ${fmtWhen(removing.at)}. It won't post, and the clip goes back to Ready to post.` : ""}
+        url={`/api/host/posts/${removing?.id}`}
+        onDeleted={() => { setRemoving(null); setOpen(null); void qc.invalidateQueries({ queryKey: ["/api/host/social/queue"] }); }}
+      />
 
       <QueueDialog open={queueOpen} onClose={() => setQueueOpen(false)} settings={queue.data?.settings ?? null} onSaved={refresh} />
 
@@ -309,11 +321,11 @@ function Outcomes({ p }: { p: Post }) {
   );
 }
 
-function PostRow({ p, onOpen, compactRow }: { p: Post; onOpen: () => void; compactRow?: boolean }) {
+function PostRow({ p, onOpen, onRemove, compactRow }: { p: Post; onOpen: () => void; onRemove?: () => void; compactRow?: boolean }) {
   const failed = p.status === "failed";
   return (
-    <li>
-      <button type="button" onClick={onOpen} className="flex w-full items-center gap-3 py-2 text-left hover:bg-muted/40" data-testid={`social-post-row-${p.id}`}>
+    <li className="group flex items-center gap-1">
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-3 py-2 text-left hover:bg-muted/40" data-testid={`social-post-row-${p.id}`}>
         <Thumb p={p} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{p.title || "Untitled"}</span>
@@ -324,12 +336,17 @@ function PostRow({ p, onOpen, compactRow }: { p: Post; onOpen: () => void; compa
         {!compactRow && <Outcomes p={p} />}
         {compactRow && <span className="flex gap-0.5 text-muted-foreground">{(p.platforms.split(",").filter(Boolean) as SocialPlatform[]).map((pl) => <PlatformIcon key={pl} platform={pl} className="h-3.5 w-3.5" />)}</span>}
       </button>
+      {onRemove && (
+        <Tip text="Delete from the queue">
+          <button type="button" onClick={onRemove} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-red-50 hover:text-destructive dark:hover:bg-red-950" aria-label="Delete from the queue" data-testid={`social-remove-${p.id}`}><Trash2 className="h-4 w-4" /></button>
+        </Tip>
+      )}
     </li>
   );
 }
 
 /** The week: seven days, each with its posts and its open queue slots. Drag a waiting post to another day. */
-function Calendar({ posts, slots, onOpen, onSlot, onMove }: { posts: Post[]; slots: number[]; onOpen: (p: Post) => void; onSlot: (t: number) => void; onMove: (p: Post, t: number) => void }) {
+function Calendar({ posts, slots, onOpen, onSlot, onMove, onRemove }: { posts: Post[]; slots: number[]; onOpen: (p: Post) => void; onSlot: (t: number) => void; onMove: (p: Post, t: number) => void; onRemove: (p: Post) => void }) {
   const [start, setStart] = useState(() => weekStart(Date.now()));
   const [dragging, setDragging] = useState<Post | null>(null);
   const [over, setOver] = useState<number | null>(null);
@@ -374,8 +391,8 @@ function Calendar({ posts, slots, onOpen, onSlot, onMove }: { posts: Post[]; slo
               </p>
               {[...items.map((p) => ({ t: p.at, p })), ...open.map((t) => ({ t, p: null as Post | null }))].sort((a, b) => a.t - b.t).map(({ t, p }) =>
                 p ? (
+                  <div key={`p${p.id}`} className="group/item relative">
                   <button
-                    key={`p${p.id}`}
                     type="button"
                     draggable={movable(p)}
                     onDragStart={() => setDragging(p)}
@@ -390,6 +407,10 @@ function Calendar({ posts, slots, onOpen, onSlot, onMove }: { posts: Post[]; slo
                       <span className="line-clamp-2">{p.title || "Untitled"}</span>
                     </span>
                   </button>
+                  {p.status === "scheduled" && p.at > Date.now() && (
+                    <button type="button" onClick={() => onRemove(p)} className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm hover:text-destructive group-hover/item:flex" aria-label="Delete from the queue" title="Delete from the queue" data-testid={`social-cal-remove-${p.id}`}><X className="h-3 w-3" /></button>
+                  )}
+                  </div>
                 ) : (
                   <button key={`s${t}`} type="button" onClick={() => onSlot(t)} className="flex w-full items-center gap-1 rounded-lg border border-dashed border-border px-1.5 py-1.5 text-[11px] text-muted-foreground hover:border-[#053877]/50 hover:text-foreground" data-testid="social-open-slot">
                     <Plus className="h-3 w-3" /> <span className="tabular-nums">{fmtTime(t)}</span> open
@@ -486,7 +507,7 @@ function PostDetail({ p, onClose, onMove, onCancel, busy }: { p: Post | null; on
             )}
             <DialogFooter className="gap-2 sm:justify-between">
               {waiting ? (
-                <Button variant="ghost" className="gap-1.5 text-destructive hover:text-destructive" disabled={busy || !p.jobId} onClick={() => onCancel(p)} data-testid="social-cancel"><Trash2 className="h-4 w-4" /> Cancel post</Button>
+                <Button variant="ghost" className="gap-1.5 text-destructive hover:text-destructive" disabled={busy} onClick={() => onCancel(p)} data-testid="social-cancel"><Trash2 className="h-4 w-4" /> Delete from queue</Button>
               ) : <span />}
               <Button variant="outline" onClick={onClose}><X className="h-4 w-4" /> Close</Button>
             </DialogFooter>
