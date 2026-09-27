@@ -7,8 +7,9 @@ services:
     runtime: docker
     dockerfilePath: ./agent/Dockerfile
     dockerContext: .
-    # Standard (2GB): Starter's 512MB ran out on a full episode (24 Sep 2026).
-    plan: standard
+    # Pro (4GB, 2 CPU): Starter's 512MB ran out on a full episode (24 Sep
+    # 2026), and Standard's 2GB on two caption renders at once (27 Sep).
+    plan: pro
     branch: main
     autoDeploy: true
     buildFilter:
