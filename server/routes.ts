@@ -109,6 +109,7 @@ import {
   sendListenerStartingSoon,
   sendBroadcastEmail,
   resendApiGet,
+  bccFor,
 } from "./email.js";
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
 import { alexAnswer, type AlexTurn } from "./alex.js";
@@ -7170,7 +7171,7 @@ export function registerRoutes(app: Express): void {
     const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: subject.replace(/^re:\s*/i, ""), body: paragraphs });
     const headers: Record<string, string> = {};
     if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
-    const id = await sendOneOffEmail({ to: row.fromEmail, subject, html, text, headers });
+    const id = await sendOneOffEmail({ to: row.fromEmail, subject, html, text, headers, bcc: bccFor(from, row.fromEmail) });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     const now = new Date().toISOString();
     await storage.updateInbound(row.id, { status: "sent", repliedAt: now, replyResendId: id, replyFrom: from, replyText: text });
@@ -9830,7 +9831,7 @@ The ${eventName} team`;
     const latest = (await storage.listInboundByEmail(to))[0];
     const headers: Record<string, string> = {};
     if (latest?.messageId) { headers["In-Reply-To"] = latest.messageId; headers["References"] = latest.messageId; }
-    const id = await sendOneOffEmail({ to, subject, html, text, headers, ...named });
+    const id = await sendOneOffEmail({ to, subject, html, text, headers, ...named, bcc: bccFor(from, to) });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     const featured = await storage.getFeaturedEvent();
     const team = await storage.listEventTeam(featured.id);

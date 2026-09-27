@@ -1476,8 +1476,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       </div>
                     </div>
                   </div>
-                  {/* How to put the app on their phone, until they have. */}
-                  <div className="mt-4"><AppInstallCard /></div>
                   {/* Three cards: your events (the Marathon is one of them),
                       your audience, and what's left to do. The co-host hours
                       live on the event's own page, with the event. */}
@@ -1570,6 +1568,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       onGo={(sc) => goTo(sc)}
                     />
                   </div>
+                  {/* How to put the app on their phone, until they have. */}
+                  <div className="mt-6"><AppInstallCard /></div>
                 </>
               );
             })()}

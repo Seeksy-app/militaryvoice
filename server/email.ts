@@ -202,7 +202,7 @@ function buildText(input: ConfirmationEmailInput): string {
 
 /** Low-level Resend sender shared by every email type. Never throws — logs and
  *  returns false on failure so a flaky email provider never blocks a user flow. */
-async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string> }): Promise<string | null> {
+async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[] }): Promise<string | null> {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (RESEND_API_KEY) {
@@ -220,6 +220,7 @@ async function sendRawEmail(opts: { to: string; subject: string; html: string; t
         html: opts.html,
         text: opts.text,
         ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
+        ...(opts.bcc?.length ? { bcc: opts.bcc } : {}),
         ...(opts.headers && Object.keys(opts.headers).length ? { headers: opts.headers } : {}),
       }),
     });
@@ -263,8 +264,17 @@ export async function sendOneOffEmail(o: {
   headers?: Record<string, string>;
   /** A named sender on our domain, when it isn't hello@. */
   from?: string;
+  /** Hidden copies: whoever the mail speaks for sees what was said in their name. */
+  bcc?: string[];
 }): Promise<string | null> {
   return sendRawEmail(o);
+}
+
+/** Riccoh's own address: mail sent in his name is blind-copied to him. */
+export const RICCOH_EMAIL = (process.env.RICCOH_EMAIL || "riccoh.player@drphil.tv").trim().toLowerCase();
+/** The hidden copy for a mail sent as someone on the team, when it isn't already to them. */
+export function bccFor(from: string, to: string): string[] | undefined {
+  return from === "riccoh" && to.trim().toLowerCase() !== RICCOH_EMAIL ? [RICCOH_EMAIL] : undefined;
 }
 
 export async function resendApiGet(path: string): Promise<unknown> {
