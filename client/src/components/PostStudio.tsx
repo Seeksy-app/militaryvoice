@@ -18,7 +18,7 @@ import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine } from "lucide-react";
+import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, Menu as MenuIcon } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -1205,6 +1205,15 @@ export function PostStudio() {
   const [view, setView] = useState<"clips" | "episode">("clips");
   // What you're doing with the episode: editing it (first, the usual job) or cutting a clip.
   const [mode, setMode] = useState<"edit" | "clip">("edit");
+  // While editing (the whole episode, not while it's being made), the dashboard's
+  // side menu folds away for room; it listens for this. ☰ Menu brings it back.
+  const editingNow = view === "episode" && !!rec && rec.clipStatus !== "running" && rec.clipStatus !== "queued";
+  const [navOpened, setNavOpened] = useState(false);
+  useEffect(() => {
+    if (!editingNow) setNavOpened(false);
+    window.dispatchEvent(new CustomEvent("mv:editing", { detail: editingNow }));
+  }, [editingNow]);
+  useEffect(() => () => { window.dispatchEvent(new CustomEvent("mv:editing", { detail: false })); }, []);
   // Focus: the player and its timeline alone on the screen, for fine trimming.
   const [focus, setFocus] = useState(false);
   // Once everything has run (clips, clean episode, the music answered), the pipeline folds to one line.
@@ -1407,7 +1416,14 @@ export function PostStudio() {
     <section className="mt-2" data-testid="post-studio">
       {paidBanner}
       {/* The switcher sits above both columns, so the player and the side start level. */}
-      <div className="mb-2">
+      <div className="mb-2 flex min-w-0 items-center gap-2">
+        {/* While editing, the dashboard's menu is folded away: this brings it back. */}
+        {editing && !navOpened && (
+          <button type="button" onClick={() => { setNavOpened(true); window.dispatchEvent(new Event("mv:open-nav")); }} className="hidden shrink-0 items-center gap-1.5 rounded-full bg-[#04102b] px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-[#0a1f4d] lg:inline-flex" data-testid="nav-open">
+            <MenuIcon className="h-4 w-4" /> Menu
+          </button>
+        )}
+        <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1442,6 +1458,7 @@ export function PostStudio() {
             {/* Credits matter before a run, not after it. */}
             {!done && <div className="ml-auto flex items-center gap-2">{betaBadge}<CreditBalance beta={beta} plan={plan} /></div>}
           </div>
+        </div>
       </div>
       {/* Editing takes the whole width: the side (All done, the numbers) folds away until you're back on Clips. */}
       <div className={`grid gap-4 ${editing ? "" : "lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]"}`}>
@@ -1449,7 +1466,7 @@ export function PostStudio() {
         <div className={focus ? "fixed inset-0 z-50 overflow-y-auto bg-background p-3 sm:p-6" : "flex min-w-0 flex-col gap-2"} data-testid={focus ? "post-focus" : undefined}>
           <div className={focus ? "mx-auto flex w-full max-w-6xl flex-col gap-3" : "contents"}>
 
-          <div className={`relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5 ${focus ? "mx-auto w-full" : view === "episode" ? "max-h-[50vh] w-full" : ""}`} style={focus ? { maxWidth: "calc((100vh - 22rem) * 16 / 9)", minWidth: "min(100%, 28rem)" } : undefined} data-testid="post-viewer">
+          <div className={`relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5 ${focus ? "mx-auto w-full" : view === "episode" ? "max-h-[max(14rem,calc(100vh-25rem))] w-full" : ""}`} style={focus ? { maxWidth: "calc((100vh - 22rem) * 16 / 9)", minWidth: "min(100%, 28rem)" } : undefined} data-testid="post-viewer">
             {view === "episode" && !running ? (
               <video
                 ref={epRef}

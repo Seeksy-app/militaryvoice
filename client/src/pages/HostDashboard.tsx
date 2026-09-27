@@ -579,6 +579,21 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // An admin (in their own seat or viewing as someone): their buttons sit at
   // the top of each screen, not in the nav. Same query SeatSwitcher reads.
   const { data: adminMe } = useQuery<{ email: string }>({ queryKey: ["/api/admin/me"], retry: false, staleTime: 300_000 });
+  // Editing in Pōstify folds the side menu away for room; ☰ Menu brings it back until they stop editing.
+  const [editingNow, setEditingNow] = useState(false);
+  const [navPeek, setNavPeek] = useState(false);
+  useEffect(() => {
+    const on = (e: Event) => {
+      const v = Boolean((e as CustomEvent<boolean>).detail);
+      setEditingNow(v);
+      if (!v) setNavPeek(false);
+    };
+    const open = () => setNavPeek(true);
+    window.addEventListener("mv:editing", on);
+    window.addEventListener("mv:open-nav", open);
+    return () => { window.removeEventListener("mv:editing", on); window.removeEventListener("mv:open-nav", open); };
+  }, []);
+  const navTucked = editingNow && !navPeek;
   const [profileDirty, setProfileDirty] = useState(false);
   const [remindEventSetup, setRemindEventSetup] = useState(false);
   // What a new account said it came for, before the profile exists to hold it.
@@ -1037,8 +1052,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         {/* The nav down the left, like the admin's, with the page beside it.
             Hidden during first-time setup, where there is only one thing to
             do. */}
-        <div className={data && hasProfile && !inSetup ? "lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-8" : ""}>
+        <div className={data && hasProfile && !inSetup && !navTucked ? "lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-8" : ""}>
+        {navTucked && <NavTuckedNotice />}
         {data && hasProfile && !inSetup && (
+          <div className={navTucked ? "lg:hidden" : "contents"}>
           <HostNav
             screen={screen === "claim" ? "dashboard" : screen}
             eventsCount={hostEvents?.length ?? 0}
@@ -1055,6 +1072,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
               onSignOut: () => logout.mutate(),
             }}
           />
+          </div>
         )}
         {/* Top-justified: whatever the screen is, it starts level with the
             top of the nav, not a band of white below it. */}
@@ -1559,4 +1577,21 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
       </AlertDialog>
     </div>
   );
+}
+
+/**
+ * The first time the side menu folds away for editing, a note saying where it
+ * went (the ☰ Menu button beside the episode's name brings it back).
+ */
+function NavTuckedNotice() {
+  const { toast } = useToast();
+  useEffect(() => {
+    let seen = false;
+    try { seen = localStorage.getItem("mv_nav_tucked_seen") === "1"; localStorage.setItem("mv_nav_tucked_seen", "1"); } catch { /* show it anyway */ }
+    if (!seen && window.matchMedia("(min-width: 1024px)").matches) {
+      toast({ title: "Menu folded away while you edit", description: "The editor gets the whole width. Press ☰ Menu, top left beside the episode's name, to bring it back." });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return null;
 }
