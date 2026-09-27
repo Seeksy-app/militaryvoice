@@ -464,7 +464,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
                 )}
                 {marked && (
                   <div className={`${flag} ${ink} pointer-events-none cursor-default ${marked.to === null ? "rounded-bl-none" : "-translate-x-1/2"}`} style={{ left: marked.to === null ? x(marked.from) : Math.min(Math.max((x(marked.from) + x(marked.to)) / 2, 70), inner - 70), backgroundColor: color }} data-testid="clip-marked-flag">
-                    {marked.to === null ? `Start ${hms(marked.from)}` : `${hms(marked.from)} → ${hms(marked.to)} · ${secs(marked.to - marked.from)}`}
+                    {marked.to === null ? `Start ${hms(marked.from)}${head > marked.from + 1 ? ` · ${hms(head - marked.from)}` : ""}` : `${hms(marked.from)} → ${hms(marked.to)} · ${secs(marked.to - marked.from)}`}
                   </div>
                 )}
                 {!trimming ? null : close ? (
@@ -522,7 +522,9 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
               const to = marked.to ?? head;
               return (
                 <>
-                  {to > marked.from && <div className={`pointer-events-none absolute inset-y-0 z-10 rounded-md border-y-[3px] ${marked.to === null ? "border-dashed bg-violet-500/10" : "bg-violet-500/20"}`} style={{ left: x(marked.from), width: x(to) - x(marked.from), borderColor: color }} data-testid="clip-marked" />}
+                  {to > marked.from && <div className={`pointer-events-none absolute inset-y-0 z-10 rounded-md border-y-[3px] ${marked.to === null ? "border-dashed bg-violet-500/10" : "bg-violet-500/20"}`} style={{ left: x(marked.from), width: x(maxLen ? Math.min(to, marked.from + maxLen) : to) - x(marked.from), borderColor: color }} data-testid="clip-marked" />}
+                  {/* Past the longest a clip can be: red, so it's plain before End here is pressed. */}
+                  {marked.to === null && maxLen && to > marked.from + maxLen && <div className="pointer-events-none absolute inset-y-0 z-10 rounded-md border-y-[3px] border-dashed border-red-500 bg-red-500/25" style={{ left: x(marked.from + maxLen), width: x(to) - x(marked.from + maxLen) }} data-testid="clip-marked-over" />}
                   <div className="pointer-events-none absolute inset-y-0 z-[11] w-[3px] -translate-x-1/2 rounded" style={{ left: x(marked.from), backgroundColor: color }} />
                   {marked.to !== null && <div className="pointer-events-none absolute inset-y-0 z-[11] w-[3px] -translate-x-1/2 rounded" style={{ left: x(marked.to), backgroundColor: color }} />}
                 </>

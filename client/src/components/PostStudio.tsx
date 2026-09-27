@@ -963,6 +963,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
             trimming={false}
             tone="violet"
             marked={mark.in === null ? null : { from: mark.in, to: mark.out }}
+            maxLen={180}
             actions={
               <>
                 <TimelineButton tip="The clip starts where the playhead is" onClick={() => setMark({ in: now(), out: null })} testid="mark-in" tone="violet">
@@ -987,7 +988,11 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
                   <span className="hidden text-xs text-muted-foreground sm:inline" data-testid="mark-step">
                     {mark.in === null
                       ? "1. Move the playhead to where the clip starts, then press Start here."
-                      : "2. Move the playhead to where it ends, then press End here."}
+                      : pos.t - mark.in > 180
+                        ? <span className="font-semibold text-destructive">That's {hms(pos.t - mark.in)}: a clip is 3 minutes at most. Move the playhead back to {hms(mark.in + 180)} or before, or <button type="button" onClick={() => setMark((m) => ({ in: m.in, out: (m.in ?? 0) + 180 }))} className="underline underline-offset-2" data-testid="mark-use-max">end it at {hms(mark.in + 180)}</button>.</span>
+                        : pos.t < mark.in + 5
+                          ? `2. Move the playhead past ${hms(mark.in + 5)}, to where the clip ends, then press End here.`
+                          : `2. ${hms(pos.t - mark.in)} so far. Press End here when the playhead is where it ends.`}
                   </span>
                 )}
               </>
