@@ -125,14 +125,13 @@ export function HostNav({
     { key: "editProfile", label: "Profile", hint: "About you", icon: UserRound },
   ];
 
-  const link = (it: Item, compact: boolean) => {
+  const rawLink = (it: Item, compact: boolean) => {
     const Icon = it.icon;
     if (it.href) {
       return (
         <Link
           key={`href-${it.href}`}
           href={it.href}
-          title={compact ? undefined : it.hint}
           className={compact
             ? "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[#053877]/[0.06] px-3 py-1.5 text-sm font-medium text-foreground"
             : "flex items-center gap-3 rounded-lg px-3 py-2 text-left text-white/75 transition-colors hover:bg-white/10 hover:text-white"}
@@ -157,9 +156,6 @@ export function HostNav({
           onGo(it.key, it.feature);
         }}
         aria-current={active ? "page" : undefined}
-        // The hint moved to the tooltip: a second grey line under every item
-        // doubled the words in the column and made it hard to find anything.
-        title={compact ? undefined : inert ? "Coming after the Marathon" : it.hint}
         className={
           compact
             ? `flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${
@@ -189,6 +185,18 @@ export function HostNav({
           {it.locked && compact && <Lock className="h-3 w-3 opacity-60" />}
         </span>
       </a>
+    );
+  };
+  // The hint on hover, as the app's own tooltip to the right (the browser's grey title box read as broken).
+  const link = (it: Item, compact: boolean) => {
+    const el = rawLink(it, compact);
+    if (compact) return el;
+    const tip = !!it.locked && !proOpen ? "Coming after the Marathon" : it.hint;
+    return (
+      <Tooltip key={`tip-${it.key}-${it.feature ?? it.href ?? ""}`} delayDuration={350}>
+        <TooltipTrigger asChild>{el}</TooltipTrigger>
+        <TooltipContent side="right" sideOffset={10} className="max-w-[15rem] text-xs">{tip}</TooltipContent>
+      </Tooltip>
     );
   };
 
