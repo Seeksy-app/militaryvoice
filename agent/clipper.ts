@@ -1147,8 +1147,11 @@ async function renderWithCreatomate(
   geo: Awaited<ReturnType<typeof frameGeometry>>,
   files: { wide: string; vertical: string; square: string },
   shapes: Shape[] = ["vertical", "square", "wide"],
-): Promise<boolean> {
-  if ((process.env.CLIP_RENDERER || "").toLowerCase() === "ffmpeg") return false;
+): Promise<Set<Shape>> {
+  // The shapes Creatomate made. Whatever it didn't, the caller makes with ffmpeg:
+  // a slow wide mustn't throw away a vertical and a square that are already done.
+  const made = new Set<Shape>();
+  if ((process.env.CLIP_RENDERER || "").toLowerCase() === "ffmpeg") return made;
   try {
     const probe = await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", source]);
     const [srcW, srcH] = probe.trim().split(",").map(Number);
@@ -1172,25 +1175,34 @@ async function renderWithCreatomate(
     });
     const pending = new Map(renders.map((r) => [r.id, r.shape]));
     const deadline = Date.now() + 15 * 60_000;
-    while (pending.size && Date.now() < deadline) {
+    // Once one shape is back, the others get five more minutes: a straggler
+    // (it's been the wide) is quicker to make here than to wait out.
+    let firstBack = 0;
+    while (pending.size && Date.now() < deadline && !(firstBack && Date.now() - firstBack > 5 * 60_000)) {
       await new Promise((z) => setTimeout(z, 5000));
-      for (const [id, shape] of [...pending]) {
+      for (const [id, shape] of Array.from(pending)) {
         const s = await api<{ status: string; url: string; error: string }>("GET", `/api/agent/clip-renders/${id}`);
-        if (s.status === "failed") throw new Error(`Creatomate ${shape}: ${s.error || "failed"}`);
+        if (s.status === "failed") {
+          console.warn(`[${job.recordingId}] Creatomate ${shape} failed (${s.error || "no reason"}) — making it here`);
+          pending.delete(id);
+          continue;
+        }
         if (s.status === "succeeded" && s.url) {
           const got = await fetch(s.url);
           if (!got.ok || !got.body) throw new Error(`couldn't fetch the ${shape} render: ${got.status}`);
           // Straight to disk, not through memory.
           await pipeline(Readable.fromWeb(got.body as never), createWriteStream(files[shape]));
           pending.delete(id);
+          made.add(shape);
+          firstBack ||= Date.now();
         }
       }
     }
-    if (pending.size) throw new Error("Creatomate took longer than 15 minutes");
-    return true;
+    if (pending.size) console.warn(`[${job.recordingId}] Creatomate still on ${Array.from(pending.values()).join(", ")} — making ${pending.size === 1 ? "it" : "them"} here`);
+    return made;
   } catch (err) {
     console.warn(`[${job.recordingId}] Creatomate didn't render this one (${(err as Error).message}) — using ffmpeg`);
-    return false;
+    return made;
   }
 }
 
@@ -1299,7 +1311,7 @@ async function handleEdit(job: Job): Promise<void> {
     const tall = shapes.includes("vertical") || shapes.includes("square");
     const geo = await framingFor(job, cut, m, [], dir, tall ? "shots" : "none");
     const files = { wide: path.join(dir, "wide.mp4"), vertical: path.join(dir, "vertical.mp4"), square: path.join(dir, "square.mp4") };
-    if (!(await renderWithCreatomate({ ...job, show: e.subtitle }, m, cut, geo, files, shapes))) throw new Error("Creatomate couldn't make it just now");
+    if ((await renderWithCreatomate({ ...job, show: e.subtitle }, m, cut, geo, files, shapes)).size < shapes.length) throw new Error("Creatomate couldn't make it just now");
     await api("POST", `/api/agent/clip-edits/${e.clipId}/done`, {
       url: shapes.includes("wide") ? await uploadFile(files.wide, "video/mp4") : "",
       verticalUrl: shapes.includes("vertical") ? await uploadFile(files.vertical, "video/mp4") : "",
@@ -1727,12 +1739,11 @@ async function handle(job: Job): Promise<void> {
         progress(job.recordingId, { stage: "render", pct: ((i * 4 + k) / (moments.length * 4)) * 100, detail: `Clip ${i + 1} of ${moments.length} · ${shape}` });
       step(0, "all three shapes");
       // Only the shapes they asked for; Classic captions are ours, no Creatomate.
-      const viaCreatomate = !silent && opts.captions === "animated" && (await renderWithCreatomate(job, m, source, geo, { wide, vertical, square }, [...want]));
-      if (!viaCreatomate) {
-        if (want.has("wide")) { step(0, "wide"); await render(source, wide, m, "wide", undefined, geo, within, capDir); }
-        if (want.has("vertical")) { step(1, "vertical"); await render(source, vertical, m, "vertical", { file: bandFile, height: 220 }, geo, within, capDir); }
-        if (want.has("square")) { step(2, "square"); await render(source, square, m, "square", { file: bandFile, height: 220 }, geo, within, capDir); }
-      }
+      const made = !silent && opts.captions === "animated" ? await renderWithCreatomate(job, m, source, geo, { wide, vertical, square }, [...want]) : new Set<Shape>();
+      // Whatever Creatomate didn't make, we make here.
+      if (want.has("wide") && !made.has("wide")) { step(0, "wide"); await render(source, wide, m, "wide", undefined, geo, within, capDir); }
+      if (want.has("vertical") && !made.has("vertical")) { step(1, "vertical"); await render(source, vertical, m, "vertical", { file: bandFile, height: 220 }, geo, within, capDir); }
+      if (want.has("square") && !made.has("square")) { step(2, "square"); await render(source, square, m, "square", { file: bandFile, height: 220 }, geo, within, capDir); }
       if (musicFile) {
         for (const [shape, file] of [["wide", wide], ["vertical", vertical], ["square", square]] as const) {
           if (want.has(shape)) await mixMusic(file, musicFile, !silent);
