@@ -1053,7 +1053,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             Hidden during first-time setup, where there is only one thing to
             do. */}
         <div className={data && hasProfile && !inSetup && !navTucked ? "lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-8" : ""}>
-        {navTucked && <NavTuckedNotice />}
         {data && hasProfile && !inSetup && (
           <div className={navTucked ? "lg:hidden" : "contents"}>
           <HostNav
@@ -1577,21 +1576,4 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
       </AlertDialog>
     </div>
   );
-}
-
-/**
- * The first time the side menu folds away for editing, a note saying where it
- * went (the ☰ Menu button beside the episode's name brings it back).
- */
-function NavTuckedNotice() {
-  const { toast } = useToast();
-  useEffect(() => {
-    let seen = false;
-    try { seen = localStorage.getItem("mv_nav_tucked_seen") === "1"; localStorage.setItem("mv_nav_tucked_seen", "1"); } catch { /* show it anyway */ }
-    if (!seen && window.matchMedia("(min-width: 1024px)").matches) {
-      toast({ title: "Menu folded away while you edit", description: "The editor gets the whole width. Press ☰ Menu, top left beside the episode's name, to bring it back." });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return null;
 }

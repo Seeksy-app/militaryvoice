@@ -1209,6 +1209,18 @@ export function PostStudio() {
   // side menu folds away for room; it listens for this. ☰ Menu brings it back.
   const editingNow = view === "episode" && !!rec && rec.clipStatus !== "running" && rec.clipStatus !== "queued";
   const [navOpened, setNavOpened] = useState(false);
+  // Shown once per browser, the first time the menu folds.
+  const [menuTip, setMenuTip] = useState(false);
+  useEffect(() => {
+    if (!editingNow) return;
+    try {
+      if (localStorage.getItem("mv_nav_tucked_seen") === "1") return;
+      localStorage.setItem("mv_nav_tucked_seen", "1");
+    } catch { /* show it */ }
+    setMenuTip(true);
+    const t = setTimeout(() => setMenuTip(false), 12000);
+    return () => clearTimeout(t);
+  }, [editingNow]);
   useEffect(() => {
     if (!editingNow) setNavOpened(false);
     window.dispatchEvent(new CustomEvent("mv:editing", { detail: editingNow }));
@@ -1419,9 +1431,20 @@ export function PostStudio() {
       <div className="mb-2 flex min-w-0 items-center gap-2">
         {/* While editing, the dashboard's menu is folded away: this brings it back. */}
         {editing && !navOpened && (
-          <button type="button" onClick={() => { setNavOpened(true); window.dispatchEvent(new Event("mv:open-nav")); }} className="hidden shrink-0 items-center gap-1.5 rounded-full bg-[#04102b] px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-[#0a1f4d] lg:inline-flex" data-testid="nav-open">
-            <MenuIcon className="h-4 w-4" /> Menu
-          </button>
+          <div className="relative hidden shrink-0 lg:block">
+            <button type="button" onClick={() => { setNavOpened(true); setMenuTip(false); window.dispatchEvent(new Event("mv:open-nav")); }} className="inline-flex items-center gap-1.5 rounded-full bg-[#04102b] px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-[#0a1f4d]" data-testid="nav-open">
+              <MenuIcon className="h-4 w-4" /> Menu
+            </button>
+            {/* The first time: where the menu went, pointing at the button that brings it back. */}
+            {menuTip && (
+              <div className="absolute left-0 top-full z-30 mt-2 w-72 rounded-xl bg-[#04102b] p-3 text-sm text-white shadow-xl" role="status" data-testid="nav-tip">
+                <span className="absolute -top-1.5 left-6 h-3 w-3 rotate-45 bg-[#04102b]" aria-hidden />
+                <p className="font-semibold">The menu is folded away while you edit</p>
+                <p className="mt-0.5 text-white/75">The editor gets the whole width. Press Menu to bring it back.</p>
+                <button type="button" onClick={() => setMenuTip(false)} className="mt-2 rounded-full bg-white/15 px-3 py-1 text-xs font-semibold hover:bg-white/25">Got it</button>
+              </div>
+            )}
+          </div>
         )}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
@@ -1466,7 +1489,8 @@ export function PostStudio() {
         <div className={focus ? "fixed inset-0 z-50 overflow-y-auto bg-background p-3 sm:p-6" : "flex min-w-0 flex-col gap-2"} data-testid={focus ? "post-focus" : undefined}>
           <div className={focus ? "mx-auto flex w-full max-w-6xl flex-col gap-3" : "contents"}>
 
-          <div className={`relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5 ${focus ? "mx-auto w-full" : view === "episode" ? "max-h-[max(14rem,calc(100vh-25rem))] w-full" : ""}`} style={focus ? { maxWidth: "calc((100vh - 22rem) * 16 / 9)", minWidth: "min(100%, 28rem)" } : undefined} data-testid="post-viewer">
+          {/* The player keeps the video's own shape (16:9), sized by the height the editing tools leave, and centred. */}
+          <div className={`relative aspect-video overflow-hidden rounded-2xl bg-[#050d26] ring-1 ring-black/5 ${focus || view === "episode" ? "mx-auto" : ""}`} style={focus ? { width: "min(100%, max(28rem, calc((100vh - 22rem) * 16 / 9)))" } : view === "episode" ? { width: "min(100%, max(26rem, calc((100vh - 24rem) * 16 / 9)))" } : undefined} data-testid="post-viewer">
             {view === "episode" && !running ? (
               <video
                 ref={epRef}
