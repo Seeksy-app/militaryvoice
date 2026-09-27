@@ -26,7 +26,7 @@ export type Suggestion = { from: number; to: number; reason: string };
  * second; the view follows the playhead while it plays. A focused handle
  * nudges with the arrow keys (a second, or five with Shift).
  */
-export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra, flags = true, cuts = [], onCuts, suggestions = [], actions, pendingCut, trimming = true, onTrimming, splits = [], selected = null, onPick, onDelete, onSplit, canSplit = false, marked = null }: {
+export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra, flags = true, cuts = [], onCuts, suggestions = [], actions, pendingCut, trimming = true, onTrimming, splits = [], selected = null, onPick, onDelete, onSplit, canSplit = false, marked = null, segs, lead, tail }: {
   videoRef: React.RefObject<HTMLVideoElement>;
   duration: number;
   /** Where the player is. */
@@ -71,6 +71,11 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   canSplit?: boolean;
   /** A clip marked with the buttons, not dragged: its start, and its end once it's set. Drawn, not grabbable. */
   marked?: { from: number; to: number | null } | null;
+  /** The edit as it stands: only these parts of the source, end to end. What's cut is gone from the strip, as in Canva. */
+  segs?: [number, number][];
+  /** Tiles at either end of the strip (the intro and the outro), outside the zoomed timeline. */
+  lead?: ReactNode;
+  tail?: ReactNode;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -104,15 +109,32 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   }, [menu]);
   const color = tone === "violet" ? "#7c3aed" : "#F0A71F";
   const frame = useRef(0);
-  const d = duration || 0;
+  // Source time (what the player plays) and timeline time (what's kept, end to
+  // end). With nothing cut they're the same; everything below positions by
+  // source time through x(), and reads back source time through toS().
+  const kept = segs && segs.length ? segs : null;
+  const keptKey = kept ? kept.map(([a, b]) => `${a.toFixed(2)}-${b.toFixed(2)}`).join(",") : "";
+  const toE = (t: number) => {
+    if (!kept) return t;
+    let acc = 0;
+    for (const [a, b] of kept) { if (t < a) return acc; if (t <= b) return acc + (t - a); acc += b - a; }
+    return acc;
+  };
+  const toS = (u: number) => {
+    if (!kept) return u;
+    let acc = 0;
+    for (const [a, b] of kept) { if (u <= acc + (b - a)) return a + Math.max(0, u - acc); acc += b - a; }
+    return kept[kept.length - 1][1];
+  };
+  const d = kept ? kept.reduce((n, [a, b]) => n + (b - a), 0) : duration || 0;
   const inner = width * zoom;
-  const x = (t: number) => (d ? Math.min(inner, Math.max(0, (t / d) * inner)) : 0);
+  const x = (t: number) => (d ? Math.min(inner, Math.max(0, (toE(t) / d) * inner)) : 0);
   // Frames are 96px slots along the (zoomed) timeline; only those on screen are drawn.
   const CELL = 96;
   const slots = Math.max(1, Math.ceil(inner / CELL));
   const first = Math.max(0, Math.floor((scrollX - 8) / CELL) - 2);
   const last = Math.min(slots - 1, Math.ceil((scrollX + width) / CELL) + 2);
-  const slotTime = (j: number) => Math.min(d, ((j + 0.5) * CELL * d) / inner);
+  const slotTime = (j: number) => toS(Math.min(d, ((j + 0.5) * CELL * d) / inner));
 
   // The visible width, for the ruler and how many frames fit.
   useLayoutEffect(() => {
@@ -211,11 +233,11 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     }, 200);
     return () => { stopped = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src, d, first, last, inner]);
+  }, [src, d, first, last, inner, keptKey]);
 
   const timeAt = (clientX: number) => {
     const r = track.current!.getBoundingClientRect();
-    return Math.min(d, Math.max(0, ((clientX - r.left) / r.width) * d));
+    return toS(Math.min(d, Math.max(0, ((clientX - r.left) / r.width) * d)));
   };
   // The player follows whatever you're dragging: one seek at a time, always to
   // the latest spot. Seeks asked for every mouse move queued up behind each
@@ -311,7 +333,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
       else if (ev.clientX < r.left + 32) el.scrollLeft -= 14;
     }
     const t = drag.knob && drag.t0 != null
-      ? Math.min(d, Math.max(0, drag.t0 + ((ev.clientX - drag.x0) / track.current!.getBoundingClientRect().width) * d))
+      ? toS(Math.min(d, Math.max(0, toE(drag.t0) + ((ev.clientX - drag.x0) / track.current!.getBoundingClientRect().width) * d)))
       : timeAt(ev.clientX);
     if (drag.kind === "head") { setScrub(t); show(t); }
     else if (drag.kind === "cs" && drag.i != null) { const a = Math.max(start, Math.min(t, drag.e0 - 0.5)); setCut(drag.i, a, drag.e0); show(a); }
@@ -346,7 +368,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     const dir = ev.key === "ArrowLeft" ? -1 : ev.key === "ArrowRight" ? 1 : 0;
     if (!dir || (ev.target as HTMLElement).getAttribute("role") === "slider") return;
     ev.preventDefault();
-    const t = Math.min(d, Math.max(0, head + dir * (ev.shiftKey ? 5 : 1)));
+    const t = toS(Math.min(d, Math.max(0, toE(head) + dir * (ev.shiftKey ? 5 : 1))));
     setScrub(t);
     if (onSplit) setMoved(true);
     show(t);
@@ -368,16 +390,18 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     const next = Math.min(maxZoom, Math.max(1, z));
     setZoom(next);
     if (el && d) requestAnimationFrame(() => {
-      const px = (around / d) * width * next + 8;
+      const px = (toE(around) / d) * width * next + 8;
       el.scrollLeft = align === "left" ? px - 24 : align === "right" ? px - el.clientWidth + 24 : px - el.clientWidth / 2;
     });
   };
   // Dead air at either end: the first or last 30 seconds across the whole width.
   const edge = (which: "start" | "end") => {
-    const z = d / 30;
-    if (which === "start") { zoomTo(z, 0, "left"); show(start); }
-    else { zoomTo(z, d, "right"); show(end); }
+    // Trimming shows the whole recording again, so the zoom and scroll wait for that to draw.
+    const full = duration || d;
+    setZoom(Math.min(Math.max(4, full / 20), Math.max(1, full / 30)));
     onTrimming?.();
+    show(which === "start" ? start : end);
+    requestAnimationFrame(() => requestAnimationFrame(() => { const el = scroller.current; if (el) el.scrollLeft = which === "start" ? 0 : el.scrollWidth; }));
     setHint(which);
   };
 
@@ -393,7 +417,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
       <div className="mb-2 flex flex-wrap items-center gap-2">
         {actions}
         <div className="ml-auto flex items-center gap-1">
-          {d > 60 && tone === "gold" && (
+          {(duration || 0) > 60 && tone === "gold" && (
             <>
               <Icon tip="Zoom to the first 30 seconds" onClick={() => edge("start")} testid="trim-edge-start"><ArrowLeftToLine className="h-4 w-4" /></Icon>
               <Icon tip="Zoom to the last 30 seconds" onClick={() => edge("end")} testid="trim-edge-end"><ArrowRightToLine className="h-4 w-4" /></Icon>
@@ -405,13 +429,15 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
         </div>
       </div>
 
-      <div ref={scroller} className="overflow-x-auto overflow-y-hidden px-2 pb-1" onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)} onKeyDown={keys} tabIndex={0} onScroll={(e) => setScrollX(e.currentTarget.scrollLeft)}>
+      <div className="flex items-end">
+      {lead}
+      <div ref={scroller} className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden px-2 pb-1" onPointerMove={move} onPointerUp={up} onPointerCancel={() => setDrag(null)} onKeyDown={keys} tabIndex={0} onScroll={(e) => setScrollX(e.currentTarget.scrollLeft)}>
         <div ref={track} className="relative" style={{ width: inner }}>
           {/* The ruler: press anywhere on it to grab the playhead. */}
           <div onPointerDown={down("head")} className={`relative cursor-ew-resize touch-none ${cut ? "h-8" : "h-6"}`} data-testid="trim-ruler">
             {ticks.map((t, i) => (
-              <div key={t} className="absolute top-0 flex h-full flex-col" style={{ left: x(t) }}>
-                <span className={`whitespace-nowrap text-[10px] tabular-nums text-muted-foreground ${i === 0 ? "pl-1.5" : x(t) > inner - 24 ? "-translate-x-full" : "-translate-x-1/2"}`}>{tick(t)}</span>
+              <div key={t} className="absolute top-0 flex h-full flex-col" style={{ left: d ? (t / d) * inner : 0 }}>
+                <span className={`whitespace-nowrap text-[10px] tabular-nums text-muted-foreground ${i === 0 ? "pl-1.5" : (d ? (t / d) * inner : 0) > inner - 24 ? "-translate-x-full" : "-translate-x-1/2"}`}>{tick(t)}</span>
                 <span className="mt-auto h-1.5 w-px bg-border" />
               </div>
             ))}
@@ -472,6 +498,9 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
                 />
               ))}
             </div>
+            {kept && kept.slice(1).map(([a]) => (
+              <div key={`j${a}`} className="pointer-events-none absolute inset-y-0 z-[12] w-0.5 -translate-x-1/2 bg-white/70" style={{ left: x(a) }} title="A cut" />
+            ))}
             {/* What's cut, dimmed. */}
             <div className="pointer-events-none absolute inset-y-0 left-0 bg-black/65" style={{ width: x(start) }} />
             <div className="pointer-events-none absolute inset-y-0 right-0 bg-black/65" style={{ left: x(end) }} />
@@ -556,6 +585,8 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
             <div className={`absolute -left-px bottom-0 w-0.5 bg-[#053877] dark:bg-white ${cut ? "top-6" : "top-4"}`} />
           </div>
         </div>
+      </div>
+      {tail}
       </div>
       {menu && cut && (
         <div data-cut-menu className="fixed z-[70] w-56 -translate-x-1/2 rounded-xl border border-border bg-popover p-1.5 text-sm shadow-lg" style={{ left: menu.x, top: menu.y }} data-testid="trim-cut-menu">

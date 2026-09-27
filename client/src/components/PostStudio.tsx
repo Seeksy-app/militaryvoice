@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PLANS, CREDIT_PACKS, OVERAGE_CAP_CHOICES, episodeCredits, cents, type PlanKey } from "@shared/tokens";
-import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, parseMusicMix, parseEditSuggest, type ClipFormat, type ClipOptions, type EpisodeEdit, type EditSuggestion } from "@shared/schema";
+import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, parseMusicMix, parseEditSuggest, type ClipFormat, type ClipOptions, type EpisodeEdit, type EditSuggestion, type EditTransition } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { startPlanCheckout, openBillingPortal, startTokenCheckout } from "@/lib/tokens";
@@ -19,7 +19,7 @@ import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal } from "lucide-react";
+import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -571,8 +571,14 @@ const hms = (sec: number) => {
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`;
 };
 
-/** An intro or outro: a short video uploaded once, remembered for next time. */
-function BookendPicker({ label, value, onChange }: { label: string; value: { key: string; name: string } | null; onChange: (v: { key: string; name: string } | null) => void }) {
+type Bookend = { key: string; name: string; dur?: number };
+
+/**
+ * An intro or outro, as a block at that end of the timeline: empty, a dashed
+ * "+ Intro" to upload one; set, its name and length, with ✕ to take it off.
+ * Uploaded once and remembered for the next episode.
+ */
+function BookendTile({ label, value, onChange }: { label: "Intro" | "Outro"; value: Bookend | null; onChange: (v: Bookend | null) => void }) {
   const { toast } = useToast();
   const input = useRef<HTMLInputElement>(null);
   const [pct, setPct] = useState<number | null>(null);
@@ -581,8 +587,9 @@ function BookendPicker({ label, value, onChange }: { label: string; value: { key
     if (file.size > 500 * 1024 ** 2) return toast({ title: "Keep it under 500MB", description: "An intro or outro is usually a few seconds.", variant: "destructive" });
     try {
       setPct(0);
+      const dur = await durationOf(file).catch(() => 0);
       const storageKey = await uploadToStorage(file, setPct);
-      onChange({ key: storageKey, name: file.name });
+      onChange({ key: storageKey, name: file.name.replace(/\.[a-z0-9]+$/i, ""), dur: dur || undefined });
     } catch (e) {
       toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });
     } finally {
@@ -590,20 +597,61 @@ function BookendPicker({ label, value, onChange }: { label: string; value: { key
       if (input.current) input.current.value = "";
     }
   };
+  const box = "relative mb-1 flex h-14 w-24 shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg px-1.5 text-center sm:w-28";
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <>
       <input ref={input} type="file" accept="video/*" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} />
       {value ? (
-        <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs">
-          <Film className="h-3 w-3 shrink-0 text-[#053877]" /> <span className="max-w-[9rem] truncate">{label}: {value.name}</span>
-          <button type="button" onClick={() => onChange(null)} aria-label={`Remove ${label}`} className="text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /></button>
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className={`${box} group border-2 border-[#053877] bg-[#053877] text-white`} data-testid={`bookend-${label.toLowerCase()}`}>
+              <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-[#F0A71F]"><Film className="h-3 w-3" /> {label}</span>
+              <span className="w-full truncate text-[11px] font-medium">{value.name}</span>
+              {value.dur ? <span className="text-[10px] tabular-nums text-white/70">{hms(value.dur)}</span> : null}
+              <button type="button" onClick={() => onChange(null)} aria-label={`Take the ${label.toLowerCase()} off`} className="absolute right-0.5 top-0.5 rounded p-0.5 text-white/70 opacity-0 transition-opacity hover:bg-white/15 hover:text-white focus:opacity-100 group-hover:opacity-100" data-testid={`bookend-${label.toLowerCase()}-remove`}><X className="h-3 w-3" /></button>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[14rem] text-xs">{label === "Intro" ? "Plays before the episode" : "Plays after the episode"}. It's in the edited episode; the player above shows the episode only.</TooltipContent>
+        </Tooltip>
       ) : (
-        <Button type="button" size="sm" variant="outline" disabled={pct !== null} onClick={() => input.current?.click()} className="h-7 gap-1.5 rounded-full text-xs">
-          {pct === null ? <Plus className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />} {pct === null ? label : `${pct}%`}
-        </Button>
+        <button type="button" onClick={() => input.current?.click()} disabled={pct !== null} className={`${box} border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-[#053877]/50 hover:bg-[#053877]/[0.04] hover:text-foreground`} data-testid={`bookend-${label.toLowerCase()}-add`}>
+          {pct === null ? <Plus className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />}
+          <span className="text-xs font-semibold">{pct === null ? label : `${pct}%`}</span>
+        </button>
       )}
-    </div>
+    </>
+  );
+}
+
+const TRANSITIONS: { key: EditTransition; label: string; hint: string }[] = [
+  { key: "fade", label: "Fade", hint: "One blends into the other" },
+  { key: "black", label: "Dip to black", hint: "Fades out to black, then in" },
+  { key: "cut", label: "Cut", hint: "Straight from one to the other" },
+];
+
+/** The join between the intro (or outro) and the episode, as Canva shows it: a small button on the seam. */
+function TransitionButton({ value, onChange, where }: { value: EditTransition; onChange: (t: EditTransition) => void; where: "intro" | "outro" }) {
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className={`relative z-10 mb-[18px] flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-background shadow-sm ${value === "cut" ? "bg-muted text-muted-foreground" : "bg-[#F0A71F] text-[#1a1200]"} ${where === "intro" ? "-mx-2" : "-mx-2"}`} aria-label={`Transition: ${TRANSITIONS.find((t) => t.key === value)?.label}`} data-testid={`transition-${where}`}>
+              <Blend className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs">Transition {where === "intro" ? "into the episode" : "into the outro"}: {TRANSITIONS.find((t) => t.key === value)?.label}</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="center" className="w-56">
+        {TRANSITIONS.map((t) => (
+          <DropdownMenuItem key={t.key} onSelect={() => onChange(t.key)} className="flex-col items-start gap-0" data-testid={`transition-${where}-${t.key}`}>
+            <span className="flex items-center gap-2 text-sm font-medium">{value === t.key ? <Check className="h-3.5 w-3.5 text-[#053877]" /> : <span className="w-3.5" />} {t.label}</span>
+            <span className="pl-5 text-xs text-muted-foreground">{t.hint}</span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -669,12 +717,14 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
     onError: (e: Error) => toast({ title: "Couldn't make that clip", description: e.message, variant: "destructive" }),
   });
   // Edit the episode
-  const remember = (k: string) => { try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as { key: string; name: string }) : null; } catch { return null; } };
+  const remember = (k: string) => { try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as Bookend) : null; } catch { return null; } };
   const [intro, setIntroState] = useState(() => remember("mv_intro"));
   const [outro, setOutroState] = useState(() => remember("mv_outro"));
-  const keep = (k: string, v: { key: string; name: string } | null) => { try { v ? localStorage.setItem(k, JSON.stringify(v)) : localStorage.removeItem(k); } catch { /* private mode */ } };
-  const setIntro = (v: { key: string; name: string } | null) => { setIntroState(v); keep("mv_intro", v); };
-  const setOutro = (v: { key: string; name: string } | null) => { setOutroState(v); keep("mv_outro", v); };
+  const keep = (k: string, v: Bookend | null) => { try { v ? localStorage.setItem(k, JSON.stringify(v)) : localStorage.removeItem(k); } catch { /* private mode */ } };
+  const setIntro = (v: Bookend | null) => { setIntroState(v); keep("mv_intro", v); };
+  const setOutro = (v: Bookend | null) => { setOutroState(v); keep("mv_outro", v); };
+  const [introT, setIntroT] = useState<EditTransition>("fade");
+  const [outroT, setOutroT] = useState<EditTransition>("fade");
   const [trim, setTrim] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   // Sections taken out of the middle.
   const [cuts, setCuts] = useState<Cut[]>([]);
@@ -706,6 +756,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   const makeEdit = useMutation({
     mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/episode-edit`, {
       source, trimStart: trim.start, trimEnd: trim.end, cuts, introKey: intro?.key, introName: intro?.name, outroKey: outro?.key, outroName: outro?.name,
+      introTransition: intro ? introT : undefined, outroTransition: outro ? outroT : undefined,
     })).json(),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
@@ -751,6 +802,44 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [tab]);
+  // What's kept, end to end: the timeline shows only this, and the player skips the rest.
+  const keptSegs = useMemo<[number, number][] | undefined>(() => {
+    if (!pos.d || (!trim.start && !trim.end && !cuts.length)) return undefined;
+    const out: [number, number][] = [];
+    let at = trim.start;
+    for (const [a, b] of mergeCuts(cuts)) {
+      if (b <= at || a >= keepEnd) continue;
+      if (a - at > 0.05) out.push([at, a]);
+      at = Math.max(at, b);
+    }
+    if (keepEnd - at > 0.05) out.push([at, keepEnd]);
+    return out.length ? out : undefined;
+  }, [pos.d, trim.start, trim.end, keepEnd, cuts]);
+  const skipping = tab === "edit" && !trimming && !!keptSegs;
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !skipping || !keptSegs) return;
+    let raf = 0;
+    const check = () => {
+      const t = v.currentTime;
+      const last = keptSegs[keptSegs.length - 1][1];
+      if (t >= last - 0.03) { if (!v.paused) v.pause(); if (t > last) v.currentTime = last; return; }
+      const next = keptSegs.find(([a, b]) => t < b);
+      if (next && t < next[0] - 0.03) v.currentTime = next[0];
+    };
+    const loop = () => { check(); if (!v.paused) raf = requestAnimationFrame(loop); };
+    const onPlay = () => {
+      // Played from the very end: start again from the top of what's kept.
+      if (v.currentTime >= keptSegs[keptSegs.length - 1][1] - 0.1) v.currentTime = keptSegs[0][0];
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(loop);
+    };
+    v.addEventListener("play", onPlay);
+    // Sitting in a part that's just been taken out: step to what's kept.
+    check();
+    if (!v.paused) raf = requestAnimationFrame(loop);
+    return () => { v.removeEventListener("play", onPlay); cancelAnimationFrame(raf); };
+  }, [videoRef, skipping, keptSegs]);
   const summary = [trim.start > 0 && `${hms(trim.start)} from the start`, cuts.length > 0 && `${cuts.length === 1 ? "a section" : `${cuts.length} sections`} (${hms(cutTotal)})`, trim.end > 0 && `${hms(pos.d - trim.end)} from the end`].filter(Boolean) as string[];
   const tip = (text: string, el: React.ReactElement) => (
     <Tooltip><TooltipTrigger asChild>{el}</TooltipTrigger><TooltipContent side="left" className="max-w-[15rem] text-xs">{text}</TooltipContent></Tooltip>
@@ -765,8 +854,6 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   const iconBtn = "flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background transition-colors hover:bg-muted disabled:opacity-50";
   const editTools = (
     <>
-      <BookendPicker label="Intro" value={intro} onChange={setIntro} />
-      <BookendPicker label="Outro" value={outro} onChange={setOutro} />
       {tip(sugBusy ? "Listening to the episode…" : "Suggest edits: the AI finds tech checks, restarts and interruptions, and you decide", (
         <button type="button" onClick={() => suggest.mutate()} disabled={suggest.isPending || sugBusy} aria-label="Suggest edits" className={iconBtn} data-testid="suggest-edits">
           {suggest.isPending || sugBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-[#b7791f]" />}
@@ -892,8 +979,11 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
             end={keepEnd}
             minLen={5}
             tone="gold"
-            cuts={cuts}
+            cuts={trimming ? cuts : []}
             onCuts={(c) => setCuts(mergeCuts(c))}
+            segs={trimming ? undefined : keptSegs}
+            lead={<><BookendTile label="Intro" value={intro} onChange={setIntro} />{intro && <TransitionButton where="intro" value={introT} onChange={setIntroT} />}</>}
+            tail={<>{outro && <TransitionButton where="outro" value={outroT} onChange={setOutroT} />}<BookendTile label="Outro" value={outro} onChange={setOutro} /></>}
             suggestions={pending}
             trimming={trimming}
             onTrimming={() => { setTrimming(true); setSel(null); }}

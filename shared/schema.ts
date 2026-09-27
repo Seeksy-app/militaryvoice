@@ -1412,6 +1412,10 @@ export function parseEditSuggest(raw: string): EditSuggest | null {
   try { return raw ? (JSON.parse(raw) as EditSuggest) : null; } catch { return null; }
 }
 
+/** A join between two parts of an edited episode: a crossfade, a dip through black, or a straight cut. */
+export type EditTransition = "fade" | "black" | "cut";
+export const EDIT_TRANSITIONS: EditTransition[] = ["fade", "black", "cut"];
+
 export interface EpisodeEdit {
   source: "clean" | "original";
   trimStart: number;
@@ -1423,6 +1427,9 @@ export interface EpisodeEdit {
   introName?: string;
   outroKey?: string;
   outroName?: string;
+  /** How the intro hands over to the episode, and the episode to the outro. Fade when not said. */
+  introTransition?: EditTransition;
+  outroTransition?: EditTransition;
   status: "queued" | "running" | "done" | "failed";
   error?: string;
   resultId?: number;

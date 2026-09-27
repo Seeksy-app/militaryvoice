@@ -47,6 +47,7 @@ import {
   CLIP_FORMATS,
   toCleanTime,
   type EpisodeEdit,
+  EDIT_TRANSITIONS,
   type EditSuggest,
   type EditSuggestion,
   parseEditSuggest,
@@ -5663,7 +5664,7 @@ export function registerRoutes(app: Express): void {
           return res.json({
             job: {
               recordingId: ed.id, title: ed.title, durationSec: ed.durationSec, downloadUrl: src, show: "", host: "", transcript: [],
-              episodeEdit: { trimStart: e.trimStart, trimEnd: e.trimEnd, cuts: e.cuts ?? [], introUrl: await sign(e.introKey), outroUrl: await sign(e.outroKey) },
+              episodeEdit: { trimStart: e.trimStart, trimEnd: e.trimEnd, cuts: e.cuts ?? [], introUrl: await sign(e.introKey), outroUrl: await sign(e.outroKey), introTransition: e.introTransition ?? "fade", outroTransition: e.outroTransition ?? "fade" },
             },
           });
         }
@@ -6190,6 +6191,8 @@ export function registerRoutes(app: Express): void {
       cuts: merged.length ? merged : undefined,
       introKey: key(b.introKey), introName: String(b.introName ?? "").slice(0, 120) || undefined,
       outroKey: key(b.outroKey), outroName: String(b.outroName ?? "").slice(0, 120) || undefined,
+      introTransition: EDIT_TRANSITIONS.includes(b.introTransition) ? b.introTransition : undefined,
+      outroTransition: EDIT_TRANSITIONS.includes(b.outroTransition) ? b.outroTransition : undefined,
       status: "queued", at: new Date().toISOString(),
     };
     if (!e.trimStart && !e.trimEnd && !e.cuts && !e.introKey && !e.outroKey) return res.status(400).json({ message: "Trim it, cut a section, or add an intro or outro, first." });

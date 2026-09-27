@@ -114,7 +114,7 @@ interface Job {
   /** Only (re)make the clean episode; the clips are already done. */
   cleanOnly?: boolean;
   /** "Edit episode": the source is downloadUrl; cut to trimStart–trimEnd (0 = the end), with an intro and outro. */
-  episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; introUrl?: string; outroUrl?: string };
+  episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut" };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
   /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
@@ -1606,7 +1606,7 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
   const tag = `[${job.recordingId}] edit`;
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `epedit-${job.recordingId}-`));
   try {
-    console.log(`${tag}: trim ${e.trimStart}–${e.trimEnd || "end"}${e.introUrl ? ", intro" : ""}${e.outroUrl ? ", outro" : ""}`);
+    console.log(`${tag}: trim ${e.trimStart}–${e.trimEnd || "end"}${e.introUrl ? `, intro (${e.introTransition ?? "fade"})` : ""}${e.outroUrl ? `, outro (${e.outroTransition ?? "fade"})` : ""}`);
     const probe = async (u: string) => {
       const out = await run("ffprobe", ["-v", "error", "-show_entries", "format=duration:stream=codec_type", "-of", "json", u]);
       const j = JSON.parse(out) as { format?: { duration?: string }; streams?: { codec_type: string }[] };
@@ -1633,15 +1633,15 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
     const args: string[] = ["-y", "-v", "error"];
     const graph: string[] = [];
     let silentAt = parts.length;
-    let total = 0;
+    const durs: number[] = [];
     for (const [i, p] of parts.entries()) {
       const info = await probe(p.url);
       const dur = p.t ?? Math.max(0, info.dur - (p.ss ?? 0));
-      total += dur;
+      durs.push(dur);
       if (p.ss) args.push("-ss", String(p.ss));
       if (p.t) args.push("-t", String(p.t));
       args.push("-i", p.url);
-      graph.push(`[${i}:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30,format=yuv420p[v${i}]`);
+      graph.push(`[${i}:v]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30,format=yuv420p,settb=AVTB[v${i}]`);
       if (info.audio) {
         graph.push(`[${i}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a${i}]`);
       } else {
@@ -1651,7 +1651,31 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
       }
     }
     for (const p of parts) if ((p as { silent?: number }).silent !== undefined) args.push("-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo");
-    graph.push(`${parts.map((_, i) => `[v${i}][a${i}]`).join("")}concat=n=${parts.length}:v=1:a=1[v][a]`);
+    // The episode's kept pieces join straight; the intro and outro join it
+    // with their transition (a crossfade, or a dip through black) unless it's a cut.
+    const first = e.introUrl ? 1 : 0;
+    const lastEp = parts.length - (e.outroUrl ? 1 : 0);
+    const ep = parts.slice(first, lastEp).map((_, k) => first + k);
+    graph.push(`${ep.map((i) => `[v${i}][a${i}]`).join("")}concat=n=${ep.length}:v=1:a=1[mv][ma]`);
+    let cur = "m";
+    let total = ep.reduce((n, i) => n + durs[i], 0);
+    const join = (a: string, b: string, aDur: number, bDur: number, how: "fade" | "black" | "cut" | undefined, out: string) => {
+      const T = how === "cut" ? 0 : Math.min(0.75, aDur / 2, bDur / 2);
+      if (T < 0.1) {
+        graph.push(`[${a}v][${a}a][${b}v][${b}a]concat=n=2:v=1:a=1[${out}v][${out}a]`);
+        return aDur + bDur;
+      }
+      graph.push(`[${a}v][${b}v]xfade=transition=${how === "black" ? "fadeblack" : "fade"}:duration=${T.toFixed(3)}:offset=${(aDur - T).toFixed(3)}[${out}v]`);
+      graph.push(`[${a}a][${b}a]acrossfade=d=${T.toFixed(3)}[${out}a]`);
+      return aDur + bDur - T;
+    };
+    // Labels as <name>v / <name>a, so each join can take any two.
+    const lbl = (i: number) => { graph.push(`[v${i}]null[p${i}v]`, `[a${i}]anull[p${i}a]`); return `p${i}`; };
+    graph.push(`[mv]null[mainv]`, `[ma]anull[maina]`);
+    cur = "main";
+    if (e.introUrl) { total = join(lbl(0), cur, durs[0], total, e.introTransition, "j1"); cur = "j1"; }
+    if (e.outroUrl) { const o = parts.length - 1; total = join(cur, lbl(o), total, durs[o], e.outroTransition, "j2"); cur = "j2"; }
+    graph.push(`[${cur}v]null[v]`, `[${cur}a]anull[a]`);
     const script = path.join(dir, "graph.txt");
     await fs.writeFile(script, graph.join(";"));
     const out = path.join(dir, `${job.recordingId}-edited.mp4`);
