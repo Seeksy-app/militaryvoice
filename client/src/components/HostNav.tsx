@@ -2,7 +2,8 @@ import type { ComponentType, ReactNode } from "react";
 import { LogoLockupOnDark } from "@/components/Logo";
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones } from "lucide-react";
+import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -43,7 +44,12 @@ export function HostNav({
   cohostHours = 0,
   account,
   admin,
+  collapsed = false,
+  onToggle,
 }: {
+  /** Folded to a rail of icons (names on hover), with the button that opens it again. */
+  collapsed?: boolean;
+  onToggle?: () => void;
   /** The admin's Back to admin / View as, under the mark (only ever passed for an admin). */
   admin?: ReactNode;
   /** The person, at the foot of the column: where Profile and Sign out live, as in most apps. */
@@ -190,11 +196,40 @@ export function HostNav({
         {/* Right after Events on a phone: the Events tabs are a scroll away there, and on the day this is the door. */}
         {[...groups.flatMap((g) => g.items).flatMap((it) => (it.key === "events" ? [it, greenRoomItem] : [it])), ...accountItems].map((it) => link(it, true))}
       </nav>
-      {/* Desktop: the column. */}
+      {/* Desktop, folded: a rail of the same icons, names on hover, and the button that opens it. */}
+      {collapsed ? (
+        <nav className="sticky top-6 hidden self-start lg:block" aria-label="Dashboard sections">
+          <div className="flex min-h-[calc(100vh-3rem)] w-14 flex-col items-center gap-1 rounded-2xl bg-[#04102b] py-3 shadow-sm">
+            <RailButton tip="Expand menu" onClick={onToggle} testid="nav-expand"><PanelLeftOpen className="h-4 w-4" /></RailButton>
+            <span className="my-1.5 h-px w-7 bg-white/10" aria-hidden />
+            {groups.filter((g) => g.title !== "Coming soon").flatMap((g) => g.items).map((it) => {
+              const Icon = it.icon;
+              const active = screen === it.key || (it.key === "events" && (screen === "promotion" || screen === "greenroom"));
+              return (
+                <RailButton key={`r-${it.key}-${it.feature ?? ""}`} tip={it.label} active={active} href={it.href} onClick={it.href ? undefined : () => onGo(it.key, it.feature)} testid={`nav-rail-${it.key}`}>
+                  <Icon className="h-4 w-4" />
+                </RailButton>
+              );
+            })}
+          </div>
+        </nav>
+      ) : (
+      /* Desktop: the column. */
       <nav className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-3rem)]" aria-label="Dashboard sections">
         {/* Navy, the same as the command card beside it, so the page reads
             as one dark frame with the work in the middle. */}
-        <div className="flex min-h-[calc(100vh-3rem)] flex-col gap-5 rounded-2xl bg-[#04102b] p-3 shadow-sm">
+        <div className="relative flex min-h-[calc(100vh-3rem)] flex-col gap-5 rounded-2xl bg-[#04102b] p-3 shadow-sm">
+          {/* Fold it away: a tab on the column's edge, clear of the mark and the theme switch. */}
+          {onToggle && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" onClick={onToggle} aria-label="Collapse menu" className="absolute -right-3.5 top-16 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-md hover:bg-muted" data-testid="nav-collapse">
+                  <PanelLeftClose className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="text-xs">Collapse menu</TooltipContent>
+            </Tooltip>
+          )}
           {/* The mark heads the column now that there's no header bar. */}
           <div className="px-3 pb-1 pt-2">
             <div className="flex items-center justify-between gap-2">
@@ -248,6 +283,20 @@ export function HostNav({
           )}
         </div>
       </nav>
+      )}
     </>
+  );
+}
+
+/** One icon on the folded menu, its name on hover. */
+function RailButton({ tip, onClick, href, active, testid, children }: { tip: string; onClick?: () => void; href?: string; active?: boolean; testid: string; children: ReactNode }) {
+  const cls = `flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${active ? "bg-white/[0.14] text-[#F0A71F]" : "text-white/65 hover:bg-white/10 hover:text-white"}`;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {href ? <Link href={href} aria-label={tip} className={cls} data-testid={testid}>{children}</Link> : <button type="button" onClick={onClick} aria-label={tip} aria-current={active ? "page" : undefined} className={cls} data-testid={testid}>{children}</button>}
+      </TooltipTrigger>
+      <TooltipContent side="right" className="text-xs">{tip}</TooltipContent>
+    </Tooltip>
   );
 }

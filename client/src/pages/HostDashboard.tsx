@@ -580,21 +580,23 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // An admin (in their own seat or viewing as someone): their buttons sit at
   // the top of each screen, not in the nav. Same query SeatSwitcher reads.
   const { data: adminMe } = useQuery<{ email: string }>({ queryKey: ["/api/admin/me"], retry: false, staleTime: 300_000 });
-  // Editing in Pōstify folds the side menu away for room; ☰ Menu brings it back until they stop editing.
+  // The side menu folds to a rail of icons: their choice (kept in this
+  // browser), and on its own while editing in Pōstify, for room, until they
+  // open it again or stop editing.
   const [editingNow, setEditingNow] = useState(false);
-  const [navPeek, setNavPeek] = useState(false);
+  const [editNav, setEditNav] = useState<boolean | null>(null);
+  const [navPref, setNavPref] = useState(() => { try { return localStorage.getItem("mv_nav_collapsed") === "1"; } catch { return false; } });
   useEffect(() => {
-    const on = (e: Event) => {
-      const v = Boolean((e as CustomEvent<boolean>).detail);
-      setEditingNow(v);
-      if (!v) setNavPeek(false);
-    };
-    const open = () => setNavPeek(true);
+    const on = (e: Event) => { setEditingNow(Boolean((e as CustomEvent<boolean>).detail)); setEditNav(null); };
     window.addEventListener("mv:editing", on);
-    window.addEventListener("mv:open-nav", open);
-    return () => { window.removeEventListener("mv:editing", on); window.removeEventListener("mv:open-nav", open); };
+    return () => window.removeEventListener("mv:editing", on);
   }, []);
-  const navTucked = editingNow && !navPeek;
+  const navTucked = editingNow ? editNav ?? true : navPref;
+  const toggleNav = () => {
+    if (editingNow) { setEditNav(!navTucked); return; }
+    setNavPref(!navPref);
+    try { localStorage.setItem("mv_nav_collapsed", navPref ? "0" : "1"); } catch { /* this visit only */ }
+  };
   const [profileDirty, setProfileDirty] = useState(false);
   const [remindEventSetup, setRemindEventSetup] = useState(false);
   // What a new account said it came for, before the profile exists to hold it.
@@ -1053,10 +1055,12 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         {/* The nav down the left, like the admin's, with the page beside it.
             Hidden during first-time setup, where there is only one thing to
             do. */}
-        <div className={data && hasProfile && !inSetup && !navTucked ? "lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-8" : ""}>
+        <div className={data && hasProfile && !inSetup ? (navTucked ? "lg:grid lg:grid-cols-[56px_minmax(0,1fr)] lg:gap-4" : "lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-8") : ""}>
         {data && hasProfile && !inSetup && (
-          <div className={navTucked ? "lg:hidden" : "contents"}>
+          <div className="contents">
           <HostNav
+            collapsed={navTucked}
+            onToggle={toggleNav}
             screen={screen === "claim" ? "dashboard" : screen}
             eventsCount={hostEvents?.length ?? 0}
             contactsCount={data?.contacts?.length ?? 0}
