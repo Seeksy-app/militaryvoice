@@ -26,7 +26,7 @@ export type Suggestion = { from: number; to: number; reason: string };
  * second; the view follows the playhead while it plays. A focused handle
  * nudges with the arrow keys (a second, or five with Shift).
  */
-export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra, flags = true, cuts = [], onCuts, suggestions = [], actions, pendingCut, trimming = true, onTrimming, splits = [], selected = null, onPick, onDelete, onSplit, canSplit = false }: {
+export function TrimStrip({ videoRef, duration, time, start, end, onChange, minLen = 1, maxLen, ghost = false, tone = "gold", cut, extra, flags = true, cuts = [], onCuts, suggestions = [], actions, pendingCut, trimming = true, onTrimming, splits = [], selected = null, onPick, onDelete, onSplit, canSplit = false, marked = null }: {
   videoRef: React.RefObject<HTMLVideoElement>;
   duration: number;
   /** Where the player is. */
@@ -69,6 +69,8 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   /** Canva's pop-up Split: once the playhead has been moved, a Split beside its knob. */
   onSplit?: () => void;
   canSplit?: boolean;
+  /** A clip marked with the buttons, not dragged: its start, and its end once it's set. Drawn, not grabbable. */
+  marked?: { from: number; to: number | null } | null;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -434,6 +436,11 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
                     <Trash2 className="h-3 w-3" /> Delete {secs(selected[1] - selected[0])}
                   </button>
                 )}
+                {marked && (
+                  <div className={`${flag} ${ink} pointer-events-none cursor-default ${marked.to === null ? "rounded-bl-none" : "-translate-x-1/2"}`} style={{ left: marked.to === null ? x(marked.from) : Math.min(Math.max((x(marked.from) + x(marked.to)) / 2, 70), inner - 70), backgroundColor: color }} data-testid="clip-marked-flag">
+                    {marked.to === null ? `Start ${hms(marked.from)}` : `${hms(marked.from)} → ${hms(marked.to)} · ${secs(marked.to - marked.from)}`}
+                  </div>
+                )}
                 {!trimming ? null : close ? (
                   // Edges close together: one flag between them (kept inside the timeline) slides the whole thing.
                   <div onPointerDown={down("move")} className={`${flag} ${ink} -translate-x-1/2 cursor-grab ${ghost ? "opacity-70" : ""}`} style={{ left: Math.min(Math.max((x(start) + x(end)) / 2, 58), inner - 58), backgroundColor: color }} data-testid="trim-flag-both">
@@ -482,6 +489,16 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
               style={{ left: x(start), width: Math.max(0, x(end) - x(start)), borderColor: color }}
               data-testid="trim-kept"
             />}
+            {marked && (() => {
+              const to = marked.to ?? head;
+              return (
+                <>
+                  {to > marked.from && <div className={`pointer-events-none absolute inset-y-0 z-10 rounded-md border-y-[3px] ${marked.to === null ? "border-dashed bg-violet-500/10" : "bg-violet-500/20"}`} style={{ left: x(marked.from), width: x(to) - x(marked.from), borderColor: color }} data-testid="clip-marked" />}
+                  <div className="pointer-events-none absolute inset-y-0 z-[11] w-[3px] -translate-x-1/2 rounded" style={{ left: x(marked.from), backgroundColor: color }} />
+                  {marked.to !== null && <div className="pointer-events-none absolute inset-y-0 z-[11] w-[3px] -translate-x-1/2 rounded" style={{ left: x(marked.to), backgroundColor: color }} />}
+                </>
+              );
+            })()}
             {pendingCut && pendingCut[1] > pendingCut[0] && (
               <div className="pointer-events-none absolute inset-y-0 z-[16] border-2 border-dashed border-red-500 bg-red-600/40" style={{ left: x(pendingCut[0]), width: Math.max(2, x(pendingCut[1]) - x(pendingCut[0])) }} data-testid="trim-pending-cut" />
             )}

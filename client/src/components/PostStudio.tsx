@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PLANS, CREDIT_PACKS, OVERAGE_CAP_CHOICES, episodeCredits, cents, type PlanKey } from "@shared/tokens";
 import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, parseMusicMix, parseEditSuggest, type ClipFormat, type ClipOptions, type EpisodeEdit, type EditSuggestion } from "@shared/schema";
 import { Input } from "@/components/ui/input";
@@ -635,7 +635,6 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   // Where the player is, for the timeline bar; and stopping a Preview at the end mark.
   const [pos, setPos] = useState({ t: 0, d: 0 });
   // Before anything is marked, the strip suggests 30 seconds from where you are.
-  const ghostIn = Math.max(0, Math.min(pos.t, pos.d - 30));
   const stopAt = useRef<number | null>(null);
   useEffect(() => {
     const v = videoRef.current;
@@ -833,25 +832,39 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
         {tab === "clip" ? clipTools : editTools}
       </div>
       {/* The player as wide as the screen's height allows, centred. */}
-      <div className="mx-auto w-full" style={{ maxWidth: "calc((100vh - 22rem) * 16 / 9)" }}>{viewer}</div>
+      <div className="rounded-2xl border border-border bg-card p-3 shadow-sm" data-testid="viewer-frame">
+        <div className="mx-auto w-full" style={{ maxWidth: "calc((100vh - 24rem) * 16 / 9)" }}>{viewer}</div>
+      </div>
       <div className="mt-3 rounded-2xl border border-border bg-card p-3">
         {tab === "clip" ? (
+          // A clip is marked with two buttons and the playhead: nothing to drag but the playhead.
           <TrimStrip
             videoRef={videoRef}
             duration={pos.d}
             time={pos.t}
-            start={mark.in ?? ghostIn}
-            end={mark.out ?? Math.min(pos.d, (mark.in ?? ghostIn) + 30)}
-            minLen={5}
-            maxLen={180}
-            ghost={mark.in === null}
+            start={0}
+            end={pos.d}
+            trimming={false}
             tone="violet"
+            marked={mark.in === null ? null : { from: mark.in, to: mark.out }}
             actions={
               <>
-                <TimelineButton tip="The clip starts where the playhead is" onClick={() => { const t = now(); setMark((m) => ({ in: t, out: m.out !== null && m.out >= t + 5 && m.out - t <= 180 ? m.out : Math.min(pos.d, t + 30) })); }} testid="mark-in" tone="violet">
+                <TimelineButton tip="The clip starts where the playhead is" onClick={() => setMark({ in: now(), out: null })} testid="mark-in" tone="violet">
                   <ArrowLeftToLine className="h-4 w-4" /> Start here
                 </TimelineButton>
-                <TimelineButton tip="The clip ends where the playhead is" onClick={() => { const t = now(); setMark((m) => ({ in: m.in !== null && m.in <= t - 5 && t - m.in <= 180 ? m.in : Math.max(0, t - 30), out: t })); }} testid="mark-out" tone="violet">
+                <TimelineButton
+                  tip={mark.in === null ? "Press Start here first" : "The clip ends where the playhead is"}
+                  disabled={mark.in === null}
+                  onClick={() => {
+                    const t = now();
+                    if (mark.in === null) return;
+                    if (t - mark.in < 5) return toast({ title: "Move the playhead further on", description: "The end has to be at least 5 seconds after the start.", variant: "destructive" });
+                    if (t - mark.in > 180) return toast({ title: "That's over 3 minutes", description: "Move the playhead back: a clip can be 3 minutes at most.", variant: "destructive" });
+                    setMark((m) => ({ in: m.in, out: t }));
+                  }}
+                  testid="mark-out"
+                  tone="violet"
+                >
                   <ArrowRightToLine className="h-4 w-4" /> End here
                 </TimelineButton>
                 {mark.in !== null && mark.out !== null && (
@@ -859,10 +872,16 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
                     <Play className="h-4 w-4" /> Play clip
                   </TimelineButton>
                 )}
-                <span className="hidden text-xs text-muted-foreground sm:inline">{mark.in === null ? "Move the playhead to where the clip starts." : "Or drag the violet ends."}</span>
+                <span className="hidden text-xs text-muted-foreground sm:inline" data-testid="mark-step">
+                  {mark.in === null
+                    ? "1. Move the playhead to where the clip starts, then press Start here."
+                    : mark.out === null
+                      ? "2. Move the playhead to where it ends, then press End here."
+                      : "3. Name it, pick the shapes above, and press Make clip."}
+                </span>
               </>
             }
-            onChange={(st, en) => setMark({ in: st, out: en })}
+            onChange={() => {}}
           />
         ) : (
           <TrimStrip
@@ -1013,7 +1032,7 @@ function Seg<T extends string>({ value, onChange, options, testid, small = false
   );
 }
 
-const CARD_ICON = "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border text-foreground/80 hover:border-[#053877]/40 hover:bg-[#053877]/[0.05] hover:text-foreground";
+const CARD_ICON = "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border text-foreground/80 hover:border-[#053877]/40 hover:bg-[#053877]/[0.05] hover:text-foreground";
 
 /**
  * A link that downloads rather than opens a tab. The clips are on Supabase's
@@ -1094,7 +1113,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
       <button type="button" onClick={onPreview} className="relative aspect-[9/16] w-full overflow-hidden bg-black" aria-label={`Preview ${c.title}`}>
         {src && <video src={`${src}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />}
         <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-[#000741] shadow-lg"><Play className="h-4 w-4 fill-current" /></span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-[#000741] shadow-lg"><Play className="h-3.5 w-3.5 fill-current" /></span>
         </span>
         {updating && (
           <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#000741]/75 text-white backdrop-blur-[2px]">
@@ -1103,44 +1122,15 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
           </span>
         )}
       </button>
-      <div className="flex flex-1 flex-col p-2.5">
-        <p className="mb-1 inline-flex items-center gap-1 text-[11px] font-medium tabular-nums text-muted-foreground"><Clock3 className="h-3 w-3" /> {stamp(c.startSec)}–{stamp(c.endSec)}</p>
-        <p className="line-clamp-2 text-[13px] font-semibold leading-snug text-foreground">{updating && c.editTitle ? c.editTitle : c.title}</p>
+      <div className="flex flex-1 flex-col p-2">
+        <p className="mb-0.5 inline-flex items-center gap-1 text-[10px] font-medium tabular-nums text-muted-foreground"><Clock3 className="h-3 w-3" /> {stamp(c.startSec)}–{stamp(c.endSec)}</p>
+        <p className="line-clamp-2 text-xs font-semibold leading-snug text-foreground" title={c.reason || undefined}>{updating && c.editTitle ? c.editTitle : c.title}</p>
         {c.editStatus === "failed" && <p className="mt-1 text-xs text-destructive">Couldn't update the text. Try again.</p>}
-        {c.reason && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground" title={c.reason}>{c.reason}</p>}
         {/* One clear action, Post it; the rest are small icons with hover notes. */}
-        <div className={`mt-auto flex items-center gap-1 pt-2.5 ${making ? "hidden" : ""}`}>
-          <Button size="sm" onClick={() => setPosting(true)} className="h-8 min-w-0 flex-1 gap-1.5 rounded-full bg-[#053877] px-3 text-xs text-white hover:bg-[#0a4a99]" data-testid={`clip-post-${c.id}`}>
-            <Send className="h-3.5 w-3.5" /> Post it
+        <div className={`mt-auto flex items-center gap-1 pt-2 ${making ? "hidden" : ""}`}>
+          <Button size="sm" onClick={() => setPosting(true)} className="h-7 min-w-0 flex-1 gap-1 rounded-full bg-[#053877] px-2 text-xs text-white hover:bg-[#0a4a99]" data-testid={`clip-post-${c.id}`}>
+            <Send className="h-3 w-3" /> Post
           </Button>
-          <DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" className={CARD_ICON} aria-label="Download" data-testid={`clip-download-${c.id}`}><Download className="h-3.5 w-3.5" /></button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">Download: vertical, square, wide or subtitles</TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent align="end" className="w-64">
-              {files.map((f) => (
-                <DropdownMenuItem key={f.label} asChild className="flex-col items-start gap-0">
-                  <a href={downloadHref(f.href, `${c.title} ${f.label.toLowerCase()}`)} download>
-                    <span className="flex items-center gap-2 text-sm font-medium"><Download className="h-3.5 w-3.5" /> {f.label}</span>
-                    <span className="pl-5 text-xs text-muted-foreground">{f.tip}</span>
-                  </a>
-                </DropdownMenuItem>
-              ))}
-              {c.subtitlesUrl && (
-                <DropdownMenuItem asChild className="flex-col items-start gap-0">
-                  <a href={downloadHref(c.subtitlesUrl, `${c.title} subtitles`)} download>
-                    <span className="flex items-center gap-2 text-sm font-medium"><FileText className="h-3.5 w-3.5" /> Subtitles</span>
-                    <span className="pl-5 text-xs text-muted-foreground">An .srt file, for YouTube or LinkedIn.</span>
-                  </a>
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
           <DropdownMenu>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1148,9 +1138,23 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
                   <button type="button" className={CARD_ICON} aria-label="More" data-testid={`clip-more-${c.id}`}><MoreHorizontal className="h-4 w-4" /></button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">Copy the caption, edit the text, or delete</TooltipContent>
+              <TooltipContent side="top" className="text-xs">Download, copy the caption, edit the text, or delete</TooltipContent>
             </Tooltip>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-64">
+              {files.map((f) => (
+                <DropdownMenuItem key={f.label} asChild className="flex-col items-start gap-0">
+                  <a href={downloadHref(f.href, `${c.title} ${f.label.toLowerCase()}`)} download>
+                    <span className="flex items-center gap-2 text-sm font-medium"><Download className="h-3.5 w-3.5" /> Download {f.label.toLowerCase()}</span>
+                    <span className="pl-5 text-xs text-muted-foreground">{f.tip}</span>
+                  </a>
+                </DropdownMenuItem>
+              ))}
+              {c.subtitlesUrl && (
+                <DropdownMenuItem asChild className="gap-2">
+                  <a href={downloadHref(c.subtitlesUrl, `${c.title} subtitles`)} download><FileText className="h-3.5 w-3.5" /> Download subtitles (.srt)</a>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
               {c.caption && (
                 <DropdownMenuItem
                   className="gap-2"
@@ -1866,7 +1870,7 @@ export function PostStudio() {
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{done ? mine.length : `${readyN} of ${moments.length || clipsN}`}</span>
             {!done && eta && <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-[#b36b00] dark:text-[#F0A71F]"><Clock3 className="h-3.5 w-3.5" /> {eta}</span>}
           </p>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(168px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(128px,1fr))]">
             {done
               ? [
                   // A clip plays in its own pop-up; the editor's player stays on the episode.
