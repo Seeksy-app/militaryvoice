@@ -898,8 +898,16 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
                 </TimelineButton>
               </>
             }
-            extra={trimming ? (
-              <button type="button" onClick={() => setTrimming(false)} className="ml-1 inline-flex h-8 items-center rounded-lg bg-[#F0A71F] px-4 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="tool-done">Done</button>
+            extra={trimming || bounds.length > 2 || sel ? (
+              // Done with this one edit (a trim, or a split and a delete): what was
+              // cut stays cut, the split lines and the pick clear, and the next edit
+              // starts clean. The blue button makes the episode once they're all done.
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" onClick={() => { setTrimming(false); setSplits([]); setSel(null); }} className="ml-1 inline-flex h-8 items-center rounded-lg bg-[#F0A71F] px-4 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="tool-done">Done</button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-[15rem] text-xs">Finish this edit and keep going. Make edited episode when they're all done.</TooltipContent>
+              </Tooltip>
             ) : undefined}
             onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
           />
