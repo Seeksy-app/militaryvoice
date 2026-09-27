@@ -6090,7 +6090,7 @@ export function registerRoutes(app: Express): void {
     const startSec = Math.max(0, Math.floor(Number(b.startSec) || 0));
     const endSec = Math.ceil(Number(b.endSec) || 0);
     if (endSec - startSec < 5) return res.status(400).json({ message: "A clip needs at least 5 seconds." });
-    if (endSec - startSec > 180) return res.status(400).json({ message: "Clips up to 3 minutes, please." });
+    if (endSec - startSec > 180) return res.status(400).json({ message: "Clips are 3 minutes at most: that's the longest YouTube Shorts and Instagram Reels allow. Use Edit episode for a longer piece." });
     const title = String(b.title ?? "").replace(/\s+/g, " ").trim().slice(0, 90);
     if (!title) return res.status(400).json({ message: "Give the clip a title." });
     const source = b.source === "clean" ? "clean" : "";

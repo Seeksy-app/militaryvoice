@@ -705,7 +705,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
     void v.play();
   };
   const pct = (t: number) => (pos.d ? `${Math.min(100, Math.max(0, (t / pos.d) * 100))}%` : "0%");
-  const lengthNote = len <= 0 ? "" : len < 5 ? "Too short: at least 5 seconds" : len > 180 ? "Too long: 3 minutes at most" : `${hms(len)} long`;
+  const lengthNote = len <= 0 ? "" : len < 5 ? "Too short: at least 5 seconds" : len > 180 ? "Too long: Shorts and Reels allow 3 minutes" : `${hms(len)} long`;
   const makeClip = useMutation({
     mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/clips`, { startSec: mark.in, endSec: mark.out, title, source: source === "clean" ? "clean" : "", formats })).json(),
     onSuccess: () => {
@@ -946,7 +946,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
                     const t = now();
                     if (mark.in === null) return;
                     if (t - mark.in < 5) return toast({ title: "Move the playhead further on", description: "The end has to be at least 5 seconds after the start.", variant: "destructive" });
-                    if (t - mark.in > 180) return toast({ title: "That's over 3 minutes", description: "Move the playhead back: a clip can be 3 minutes at most.", variant: "destructive" });
+                    if (t - mark.in > 180) return toast({ title: "Clips are 3 minutes at most", description: "That's the longest YouTube Shorts and Instagram Reels allow. Move the playhead back, or use Edit episode for a longer piece." });
                     setMark((m) => ({ in: m.in, out: t }));
                   }}
                   testid="mark-out"
