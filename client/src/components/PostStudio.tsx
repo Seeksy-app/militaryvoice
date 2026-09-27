@@ -1179,7 +1179,7 @@ interface Plan { key: PlanKey; name: string; interval?: "month" | "year"; credit
  * the folded rail), opening the plan and credits dialog. Test accounts read
  * Unlimited.
  */
-export function NavCredits({ variant }: { variant: "column" | "rail" }) {
+export function NavCredits({ variant }: { variant: "column" | "rail" | "chip" }) {
   const [open, setOpen] = useState(false);
   const features = useQuery<{ post: boolean; beta?: Beta; plan?: Plan | null }>({ queryKey: ["/api/host/features"], queryFn: async () => (await apiRequest("GET", "/api/host/features")).json(), staleTime: 60_000 });
   const beta = features.data?.beta;
@@ -1188,7 +1188,12 @@ export function NavCredits({ variant }: { variant: "column" | "rail" }) {
   const n = beta.unlimited ? "Unlimited" : `${beta.tokens.toLocaleString()} credit${beta.tokens === 1 ? "" : "s"}`;
   return (
     <>
-      {variant === "rail" ? (
+      {variant === "chip" ? (
+        // The phone's header: the coin and the number, so it says what it is.
+        <button type="button" onClick={() => setOpen(true)} aria-label={`${n}. Get more`} className="inline-flex items-center gap-1.5 rounded-full border border-[#F0A71F]/40 bg-[#F0A71F]/10 px-2.5 py-1 text-xs font-bold tabular-nums text-white" data-testid="phone-credits">
+          <Coins className="h-3.5 w-3.5 text-[#F0A71F]" /> {beta.unlimited ? "Unlimited" : beta.tokens.toLocaleString()}
+        </button>
+      ) : variant === "rail" ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <button type="button" onClick={() => setOpen(true)} aria-label={n} className="relative flex h-10 w-10 items-center justify-center rounded-lg text-[#F0A71F] hover:bg-white/10" data-testid="nav-rail-credits">

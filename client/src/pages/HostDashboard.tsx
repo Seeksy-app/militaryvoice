@@ -75,7 +75,7 @@ import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
 import { MyAnalytics } from "@/components/MyAnalytics";
 import { PodcastListens } from "@/components/PodcastStats";
-import { GetTheApp } from "@/components/GetTheApp";
+import { GetTheApp, AppInstallCard } from "@/components/GetTheApp";
 import { isPodcaster } from "@shared/schema";
 import { StudioIcon } from "@/components/GreenRoomButton";
 import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
@@ -1030,7 +1030,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
       {!data && <NavBar />}
       {/* Wide, like the admin: with a column of nav on the left, 1152px left
           the page itself narrower than a phone in landscape. */}
-      <div className={`mx-auto max-w-[1560px] px-4 sm:px-6 ${workspace ? "py-5" : "py-10"}`}>
+      {/* On a phone the tab bar sits at the bottom: room under the page so it never hides the end of it. */}
+      <div className={`mx-auto max-w-[1560px] px-4 sm:px-6 ${workspace ? "pt-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-5" : "py-10"}`}>
         {workspace ? (
           /* One line: the mark, who you are, and the way out. The page title
              is gone because the highlighted tab below already says
@@ -1050,7 +1051,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             {/* As on a computer: credits, and the account menu (Profile, Integrations,
                 Notifications, Appearance, Sign out, and View as for an admin). */}
             <div className="flex min-w-0 items-center gap-1">
-              {hasProfile && !inSetup && <NavCredits variant="rail" />}
+              {hasProfile && !inSetup && <NavCredits variant="chip" />}
               {account ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -1393,7 +1394,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 : null;
               return (
                 <>
-                  <GetTheApp variant="banner" />
                   <CommandCenter
                     firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || "there"}
                     photoUrl={profile?.photoUrl ?? ""}
@@ -1462,18 +1462,22 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                           </DropdownMenuContent>
                         </DropdownMenu>
                         {[
-                          { key: "analytics", label: "Your analytics", icon: BarChart3, go: () => goTo("analytics") },
-                          { key: "discovery", label: "Discovery", icon: Compass, go: () => goTo("discovery") },
-                          { key: "recordings", label: "Library", icon: Film, go: () => goTo("recordings") },
-                          { key: "promotion", label: "Promote your show", icon: Megaphone, go: () => goTo("promotion") },
+                          // Short names on a phone, where the long ones were cut ("Your anal…").
+                          { key: "analytics", label: "Your analytics", short: "Analytics", icon: BarChart3, go: () => goTo("analytics") },
+                          { key: "discovery", label: "Discovery", short: "Discovery", icon: Compass, go: () => goTo("discovery") },
+                          // On a phone Library is a tab at the bottom already.
+                          { key: "recordings", label: "Library", short: "Library", icon: Film, go: () => goTo("recordings"), desktopOnly: true },
+                          { key: "promotion", label: "Promote your show", short: "Promote", icon: Megaphone, go: () => goTo("promotion") },
                         ].map((d) => (
-                          <button key={d.key} type="button" onClick={d.go} className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]" data-testid={`door-${d.key}`}>
-                            <d.icon className="h-4 w-4 shrink-0 text-[#053877] dark:text-[#8ab4f8]" /> <span className="truncate">{d.label}</span>
+                          <button key={d.key} type="button" onClick={d.go} className={`${d.desktopOnly ? "hidden lg:flex" : "flex"} items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]`} data-testid={`door-${d.key}`}>
+                            <d.icon className="h-4 w-4 shrink-0 text-[#053877] dark:text-[#8ab4f8]" /> <span className="truncate sm:hidden">{d.short}</span><span className="hidden truncate sm:inline">{d.label}</span>
                           </button>
                         ))}
                       </div>
                     </div>
                   </div>
+                  {/* How to put the app on their phone, until they have. */}
+                  <div className="mt-4"><AppInstallCard /></div>
                   {/* Three cards: your events (the Marathon is one of them),
                       your audience, and what's left to do. The co-host hours
                       live on the event's own page, with the event. */}

@@ -35,14 +35,15 @@ export function ConnectedAccountsStrip({
         )}
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      {/* On a phone: one row that scrolls sideways, each account its picture and followers. */}
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
         {accounts.map((a) => (
           <a
             key={`${a.platform}-${a.username}`}
             href={a.url || undefined}
             target={a.url ? "_blank" : undefined}
             rel="noopener noreferrer"
-            className="group flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2 transition-colors hover:border-primary/40 hover:shadow-sm"
+            className="group flex shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-2.5 py-1.5 transition-colors hover:border-primary/40 hover:shadow-sm sm:gap-2.5 sm:px-3 sm:py-2"
             data-testid={`chip-social-${a.platform}`}
           >
             <span className="relative shrink-0">
@@ -64,11 +65,11 @@ export function ConnectedAccountsStrip({
             </span>
 
             <span className="min-w-0">
-              <span className="block max-w-[13rem] truncate text-sm font-medium leading-tight text-foreground">
+              <span className="hidden max-w-[13rem] truncate text-sm font-medium leading-tight text-foreground sm:block">
                 {a.displayName || a.username}
               </span>
-              <span className="block truncate text-xs leading-tight text-muted-foreground">
-                {a.followers != null ? `${formatFollowers(a.followers)} followers` : a.username ? `@${a.username.replace(/^@/, "")}` : "Connected"}
+              <span className="block truncate text-xs font-semibold leading-tight text-foreground sm:font-normal sm:text-muted-foreground">
+                {a.followers != null ? <>{formatFollowers(a.followers)}<span className="hidden sm:inline"> followers</span></> : a.username ? `@${a.username.replace(/^@/, "")}` : "Connected"}
               </span>
             </span>
 

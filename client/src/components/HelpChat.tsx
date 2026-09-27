@@ -64,6 +64,8 @@ const OPENER: Msg = {
 
 export function HelpChat() {
   const [location] = useLocation();
+  // The podcaster's dashboard has a tab bar at the bottom on a phone.
+  const inApp = location.startsWith("/host/dashboard");
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([OPENER]);
   const [draft, setDraft] = useState("");
@@ -150,12 +152,13 @@ export function HelpChat() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-50 inline-flex items-center gap-2 rounded-full bg-[#053877] px-4 py-3 text-sm font-semibold text-white shadow-lg transition-transform hover:scale-[1.03]"
+          className={`fixed right-4 z-50 inline-flex items-center gap-2 rounded-full bg-[#053877] text-sm font-semibold text-white shadow-lg transition-transform hover:scale-[1.03] lg:right-5 lg:px-4 lg:py-3 ${inApp ? "bottom-[calc(4.75rem+env(safe-area-inset-bottom))] p-1.5 lg:bottom-5" : "bottom-5 px-4 py-3"}`}
           aria-label="Open help"
           data-testid="button-help-open"
         >
-          <img src="/alex.jpg" alt="" className="-ml-1.5 h-8 w-8 rounded-full object-cover ring-2 ring-white/30" />
-          Ask Alex
+          <img src="/alex.jpg" alt="" className={`h-8 w-8 rounded-full object-cover ring-2 ring-white/30 ${inApp ? "lg:-ml-1.5" : "-ml-1.5"}`} />
+          {/* On the phone's dashboard: just Alex's face, above the tab bar. */}
+          <span className={inApp ? "hidden lg:inline" : ""}>Ask Alex</span>
         </button>
       )}
 

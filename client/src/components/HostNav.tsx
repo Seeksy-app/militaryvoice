@@ -1,8 +1,9 @@
-import type { ComponentType, ReactNode } from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockupOnDark } from "@/components/Logo";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check } from "lucide-react";
+import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
@@ -211,12 +212,16 @@ export function HostNav({
 
   return (
     <>
-      {/* Phone: one scrolling strip. */}
-      <nav className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Dashboard sections">
-        {/* No account card on a phone: Profile and Integrations join the strip. */}
-        {/* Right after Events on a phone: the Events tabs are a scroll away there, and on the day this is the door. */}
-        {[...groups.flatMap((g) => g.items).flatMap((it) => (it.key === "events" ? [it, greenRoomItem] : [it])), ...accountItems].map((it) => link(it, true))}
-      </nav>
+      {/* Phone: a tab bar at the bottom, as phone apps have it. The four things
+          used most, and More for the rest (a sheet from the bottom). */}
+      <PhoneTabs
+        screen={screen}
+        onGo={onGo}
+        pathFor={pathFor}
+        more={[...groups.flatMap((g) => g.items).flatMap((it) => (it.key === "events" ? [it, greenRoomItem] : [it]))].filter((it) => it.href || !PHONE_TABS.some((t) => t.key === it.key))}
+        badge={eventsCount}
+        proOpen={proOpen}
+      />
       {/* Desktop, folded: a rail of the same icons, names on hover, and the button that opens it. */}
       {collapsed ? (
         <nav key="rail" className="sticky top-6 hidden self-start lg:block" aria-label="Dashboard sections">
@@ -304,6 +309,58 @@ export function HostNav({
         </div>
       </nav>
       )}
+    </>
+  );
+}
+
+const PHONE_TABS: { key: HostScreen; label: string; icon: ComponentType<{ className?: string }> }[] = [
+  { key: "dashboard", label: "Home", icon: LayoutDashboard },
+  { key: "recordings", label: "Library", icon: Library },
+  { key: "postify", label: "Pōstify", icon: Wand2 },
+  { key: "social", label: "Social", icon: Share2 },
+];
+
+/** The phone's tab bar, fixed to the bottom above the home indicator, and its More sheet. */
+function PhoneTabs({ screen, onGo, pathFor, more, badge, proOpen }: { screen: HostScreen; onGo: (s: HostScreen, feature?: string) => void; pathFor: (s: HostScreen) => string; more: Item[]; badge: number; proOpen: boolean }) {
+  const [open, setOpen] = useState(false);
+  const inTabs = PHONE_TABS.some((t) => t.key === screen);
+  const tab = (active: boolean) => `flex flex-col items-center justify-center gap-0.5 py-2 text-[10.5px] font-semibold ${active ? "text-[#F0A71F]" : "text-white/70"}`;
+  return (
+    <>
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-[#04102b] pb-[env(safe-area-inset-bottom)] lg:hidden" aria-label="Dashboard sections" data-testid="phone-tabs">
+        <div className="mx-auto grid max-w-lg grid-cols-5">
+          {PHONE_TABS.map((t) => (
+            <a key={t.key} href={pathFor(t.key)} onClick={(e) => { e.preventDefault(); onGo(t.key); }} aria-current={screen === t.key ? "page" : undefined} className={tab(screen === t.key)} data-testid={`phone-tab-${t.key}`}>
+              <t.icon className="h-5 w-5" /> {t.label}
+            </a>
+          ))}
+          <button type="button" onClick={() => setOpen(true)} className={`relative ${tab(!inTabs)}`} data-testid="phone-tab-more">
+            <MoreHorizontal className="h-5 w-5" /> More
+            {badge > 0 && <span className="absolute right-[calc(50%-18px)] top-1.5 h-2 w-2 rounded-full bg-[#F0A71F]" aria-hidden />}
+          </button>
+        </div>
+      </nav>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto rounded-t-2xl px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-5">
+          <SheetTitle className="px-2 text-base">More</SheetTitle>
+          <div className="mt-2 grid grid-cols-1 gap-0.5">
+            {more.map((it) => {
+              const inert = !!it.locked && !proOpen;
+              const go = () => { if (inert) return; setOpen(false); if (it.href) window.location.href = it.href; else onGo(it.key, it.feature); };
+              return (
+                <button key={`${it.key}-${it.feature ?? it.href ?? ""}`} type="button" onClick={go} disabled={inert} className={`flex items-center gap-3 rounded-xl px-3 py-3 text-left ${screen === it.key ? "bg-[#053877]/[0.08]" : "hover:bg-muted"} disabled:opacity-50`} data-testid={`phone-more-${it.key}${it.feature ? `-${it.feature}` : ""}`}>
+                  <it.icon className="h-5 w-5 shrink-0 text-[#053877] dark:text-[#8fb5e8]" />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 text-[15px] font-medium">{it.label}{it.badge != null && <span className="rounded-full bg-[#F0A71F] px-1.5 text-[11px] font-bold text-[#1a1200]">{it.badge}</span>}{it.locked && <Lock className="h-3.5 w-3.5 opacity-60" />}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{inert ? "Coming after the Marathon" : it.hint}</span>
+                  </span>
+                </button>
+              );
+            })}
+            <div className="px-3"><GetTheApp variant="sheet" /></div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }

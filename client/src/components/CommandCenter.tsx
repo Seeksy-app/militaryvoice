@@ -45,32 +45,32 @@ export function CommandCenter({
 }) {
   const now = new Date();
   return (
-    <section className="relative overflow-hidden rounded-2xl bg-[#04102b] px-5 pb-12 pt-5 text-white sm:px-7 sm:pt-6" data-testid="command-center">
+    <section className="relative overflow-hidden rounded-2xl bg-[#04102b] px-4 pb-11 pt-4 text-white sm:px-7 sm:pb-12 sm:pt-6" data-testid="command-center">
       <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
       <div className="pointer-events-none absolute -right-8 -top-8 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
       {actions && <div className="relative z-10 mb-3 flex flex-wrap items-center justify-end gap-2 sm:absolute sm:right-5 sm:top-5 sm:mb-0">{actions}</div>}
       <div className="relative flex flex-wrap items-end justify-between gap-5">
         {/* Who this is, once: the avatar and the show up here beside the
             greeting, so the page below can get on with the slot. */}
-        <div className="flex min-w-0 items-center gap-4">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           {photoUrl ? (
-            <img src={resolveUploadUrl(photoUrl)} alt={podcastName} className="h-20 w-20 shrink-0 rounded-full object-cover ring-4 ring-white/15 sm:h-24 sm:w-24" />
+            <img src={resolveUploadUrl(photoUrl)} alt={podcastName} className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-white/15 sm:h-24 sm:w-24 sm:ring-4" />
           ) : (
-            <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-white/10 text-2xl font-bold sm:h-24 sm:w-24">{(podcastName || firstName).slice(0, 1)}</span>
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/10 text-xl font-bold sm:h-24 sm:w-24 sm:text-2xl">{(podcastName || firstName).slice(0, 1)}</span>
           )}
           <div className="min-w-0">
-            <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#F0A71F]">
+            {/* On a phone: the greeting and the show, one glance; the rest is for the big screen. */}
+            <p className="hidden items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#F0A71F] sm:flex">
               <span className="h-1.5 w-1.5 rounded-full bg-[#F0A71F]" /> Your command center
             </p>
-            <h2 className="mt-1 text-3xl font-bold tracking-tight text-white sm:text-4xl" style={HEADLINE_FONT}>
+            <h2 className="text-xl font-bold leading-tight tracking-tight text-white sm:mt-1 sm:text-4xl" style={HEADLINE_FONT}>
               {greeting(now)}, {firstName} 👋
             </h2>
-            <p className="mt-1 text-sm text-white/85">
+            <p className="mt-0.5 truncate text-sm text-white/85 sm:mt-1">
               <span className="font-semibold text-white">{podcastName}</span>
-              {" · "}
-              {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+              <span className="hidden sm:inline">{" · "}{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</span>
             </p>
-            <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/75">
+            <p className="mt-1.5 hidden flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/75 sm:flex">
               <span className="inline-flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-white/80" /> {email}</span>
               {serviceLine && <span className="inline-flex items-center gap-1.5"><Shield className="h-3.5 w-3.5 text-white/80" /> {serviceLine}</span>}
             </p>

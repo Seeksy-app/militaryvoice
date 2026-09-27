@@ -17,7 +17,8 @@ import { buildSteps, goToStep, type StepState, type StepNav } from "@/components
 // somebody actually posted their link. A checklist that refuses to let you
 // finish it is one you learn to ignore.
 
-const HIDDEN_KEY = "mv_checklist_collapsed";
+// A new key: the old one was written "open" on every first visit, not chosen.
+const HIDDEN_KEY = "mv_checklist_folded";
 const TICKED_KEY = "mv_checklist_ticked";
 
 function readTicked(): string[] {
@@ -30,7 +31,13 @@ function readTicked(): string[] {
 }
 
 export function FloatingChecklist({ state, ...nav }: { state: StepState } & StepNav) {
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(HIDDEN_KEY) === "1");
+  // Folded unless they've opened it: on a phone the open list covers half the screen.
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      const v = localStorage.getItem(HIDDEN_KEY);
+      return v === null ? window.innerWidth < 1024 : v === "1";
+    } catch { return true; }
+  });
   const [ticked, setTicked] = useState<string[]>(readTicked);
 
   useEffect(() => {
@@ -64,18 +71,18 @@ export function FloatingChecklist({ state, ...nav }: { state: StepState } & Step
       <button
         type="button"
         onClick={() => setCollapsed(false)}
-        className="fixed bottom-20 right-4 z-40 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3.5 py-2.5 text-sm font-semibold shadow-lg transition-transform hover:scale-[1.03] sm:bottom-24 sm:right-5"
+        className="fixed bottom-[calc(8.75rem+env(safe-area-inset-bottom))] right-4 z-40 inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-2 text-sm font-semibold shadow-lg transition-transform hover:scale-[1.03] lg:bottom-24 lg:right-5 lg:gap-2 lg:px-3.5 lg:py-2.5"
         data-testid="button-checklist-open"
       >
         <ListChecks className="h-4 w-4 text-[#F0A71F]" />
-        {left} to do
+        {left}<span className="hidden lg:inline"> to do</span>
       </button>
     );
   }
 
   return (
     <aside
-      className="fixed bottom-20 right-4 z-40 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:bottom-24 sm:right-5"
+      className="fixed bottom-[calc(8.75rem+env(safe-area-inset-bottom))] right-4 z-40 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl lg:bottom-24 lg:right-5"
       aria-label="What's left before you're on air"
       data-testid="panel-checklist"
     >
