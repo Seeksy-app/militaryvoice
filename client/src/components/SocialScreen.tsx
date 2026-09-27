@@ -211,7 +211,7 @@ function Grid({ children }: { children: React.ReactNode }) {
 function Tile({ src, wide, title, badge, onPlay, testId, children }: { src: string; wide: boolean; title: string; badge?: React.ReactNode; onPlay: () => void; testId?: string; children?: React.ReactNode }) {
   return (
     <div className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      <button type="button" onClick={onPlay} className={`relative block w-full bg-black ${wide ? "aspect-video" : "aspect-[9/16]"}`} aria-label={`Play ${title}`} data-testid={testId}>
+      <button type="button" onClick={onPlay} className={`relative block w-full bg-black ${wide ? "aspect-video" : "aspect-[4/5]"}`} aria-label={`Play ${title}`} data-testid={testId}>
         {src && <video src={`${src}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />}
         <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-[#000741] shadow"><Play className="h-3.5 w-3.5 fill-current" /></span>
