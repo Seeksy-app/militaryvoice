@@ -117,12 +117,19 @@ Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other
   };
 }
 
-/** Podcasters and sponsors: anyone we already hold a record for. */
-export async function isKnownSender(email: string): Promise<boolean> {
+/**
+ * Podcasters and sponsors: anyone we already hold a record for, or a
+ * podcaster answering one of our emails about their show from another
+ * address (Dr. Brown signed up with one and replied from his business one).
+ */
+export async function isKnownSender(email: string, subject = ""): Promise<boolean> {
   const e = email.trim().toLowerCase();
   if (!e.includes("@")) return false;
   const ev = await storage.getFeaturedEvent();
-  if ((await storage.listSignups(ev.id)).some((s) => s.email.trim().toLowerCase() === e)) return true;
+  const signups = await storage.listSignups(ev.id);
+  if (signups.some((s) => s.email.trim().toLowerCase() === e)) return true;
+  const subj = subject.toLowerCase();
+  if (/^\s*re\s*:/.test(subj) && signups.some((s) => (s.podcastName ?? "").trim().length >= 6 && subj.includes((s.podcastName ?? "").trim().toLowerCase()))) return true;
   if (await storage.getProfileByEmail(e)) return true;
   if ((await storage.listSponsorInquiries()).some((s) => s.email.trim().toLowerCase() === e)) return true;
   if ((await storage.listContacts()).some((c) => c.email.trim().toLowerCase() === e)) return true;

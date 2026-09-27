@@ -7062,7 +7062,7 @@ export function registerRoutes(app: Express): void {
       // person if that did not cover it. Never to a machine, never twice in a
       // day to the same thread, and never to a mail filed by hand.
       try {
-        if (looksAutomatic(row) || !(await isKnownSender(row.fromEmail))) return;
+        if (looksAutomatic(row) || !(await isKnownSender(row.fromEmail, row.subject))) return;
         // Once per conversation, not once per day: three questions in an
         // afternoon are three answers, but a second mail in the same thread
         // an hour later is someone adding a line, not asking again.
