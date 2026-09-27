@@ -2177,11 +2177,18 @@ export const hostPosts = pgTable("host_posts", {
   platforms: text("platforms").notNull().default(""),
   /** Empty when it went out straight away. */
   scheduledAt: text("scheduled_at").notNull().default(""),
-  /** sent | scheduled | failed */
+  /** sending | sent | scheduled | failed */
   status: text("status").notNull().default("sent"),
   error: text("error").notNull().default(""),
   createdAt: text("created_at").notNull(),
+  /** Upload-Post's job (a scheduled or queued post): what reschedule and cancel act on. */
+  jobId: text("job_id").notNull().default(""),
+  requestId: text("request_id").notNull().default(""),
+  /** Per platform once it's out, from Upload-Post's history: JSON PostResult[]. */
+  results: text("results").notNull().default(""),
 }, (t) => [index("host_posts_email_idx").on(t.email)]);
+/** How one post did on one platform: live, with its link, or why not. */
+export interface PostResult { platform: string; ok: boolean; url: string; error: string; at: string; inbox?: boolean }
 export type HostPostRow = typeof hostPosts.$inferSelect;
 
 export const socialPosts = pgTable("social_posts", {

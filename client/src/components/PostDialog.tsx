@@ -125,7 +125,7 @@ function inAnHour(): string {
  * Library, Pōstify and the Social page, so posting works the same wherever
  * you start it. Scheduled posts are held by Upload-Post and go out then.
  */
-export function PostDialog({ target, onClose }: { target: PostTarget | null; onClose: () => void }) {
+export function PostDialog({ target, onClose, at }: { target: PostTarget | null; onClose: () => void; /** A time already chosen (an open slot on the calendar): datetime-local. */ at?: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const social = useQuery<{ configured: boolean; accounts: { platform: SocialPlatform }[] }>({
@@ -139,7 +139,9 @@ export function PostDialog({ target, onClose }: { target: PostTarget | null; onC
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [picked, setPicked] = useState<SocialPlatform[]>([]);
-  const [later, setLater] = useState(false);
+  // When: the next open slot in their queue (the usual), now, or a time they pick.
+  const [mode, setMode] = useState<"queue" | "now" | "later">("queue");
+  const later = mode === "later";
   const blankYt: YouTubeSettings = { title: "", description: "", privacyStatus: "public", tags: "", thumbnailKey: "", thumbnailName: "", madeForKids: false, notifySubscribers: true };
   const [yt, setYt] = useState<YouTubeSettings>(blankYt);
   const [when, setWhen] = useState(inAnHour);
@@ -151,8 +153,8 @@ export function PostDialog({ target, onClose }: { target: PostTarget | null; onC
     setTitle(target.title);
     setDescription(target.kind === "clip" ? target.caption ?? "" : "");
     setShape(target.kind === "clip" ? target.shapes[0] ?? "vertical" : "vertical");
-    setLater(false);
-    setWhen(inAnHour());
+    setMode(at ? "later" : "queue");
+    setWhen(at || inAnHour());
     setYt(blankYt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
@@ -167,17 +169,20 @@ export function PostDialog({ target, onClose }: { target: PostTarget | null; onC
         description: description.trim(),
         ...(target.kind === "clip" ? { shape } : {}),
         ...(later ? { scheduledAt: new Date(when).toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } : {}),
+        ...(mode === "queue" ? { queue: true } : {}),
         ...(picked.includes("youtube" as SocialPlatform)
           ? { youtube: { ...yt, title: yt.title.trim() || title.trim(), tags: yt.tags.split(",").map((t) => t.trim()).filter(Boolean) } }
           : {}),
       };
       return (await apiRequest("POST", `/api/host/${target.kind === "clip" ? "clips" : "recordings"}/${target.id}/publish`, body)).json();
     },
-    onSuccess: () => {
+    onSuccess: (r: { scheduledAt?: string } | null) => {
       void qc.invalidateQueries({ queryKey: ["/api/host/posts"] });
+      void qc.invalidateQueries({ queryKey: ["/api/host/social/queue"] });
+      const fmt = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
       toast(
-        later
-          ? { title: "Scheduled", description: `It goes out ${new Date(when).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}. You'll find it under Social.` }
+        mode !== "now" && r?.scheduledAt
+          ? { title: mode === "queue" ? "In your queue" : "Scheduled", description: `It goes out ${fmt(r.scheduledAt)}. It's on your Social calendar.` }
           : { title: "On its way", description: "Handed to your accounts. A long video can take a few minutes to appear." },
       );
       onClose();
@@ -247,8 +252,8 @@ export function PostDialog({ target, onClose }: { target: PostTarget | null; onC
             <div>
               <p className="text-sm font-medium">When</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                {[{ v: false, l: "Now" }, { v: true, l: "Later" }].map((o) => (
-                  <button key={o.l} type="button" onClick={() => setLater(o.v)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${later === o.v ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:border-[#053877]/40"}`} data-testid={`post-when-${o.l.toLowerCase()}`}>
+                {([{ v: "queue", l: "Next open slot" }, { v: "now", l: "Now" }, { v: "later", l: "Pick a time" }] as const).map((o) => (
+                  <button key={o.v} type="button" onClick={() => setMode(o.v)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${mode === o.v ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:border-[#053877]/40"}`} data-testid={`post-when-${o.v}`}>
                     {o.l}
                   </button>
                 ))}
@@ -261,8 +266,8 @@ export function PostDialog({ target, onClose }: { target: PostTarget | null; onC
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={send.isPending}>Cancel</Button>
           <Button onClick={() => send.mutate()} disabled={send.isPending || picked.length === 0 || !title.trim()} className="gap-2" data-testid="button-publish-confirm">
-            {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : later ? <CalendarClock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-            {later ? "Schedule" : "Post now"}
+            {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === "now" ? <Send className="h-4 w-4" /> : <CalendarClock className="h-4 w-4" />}
+            {mode === "queue" ? "Add to queue" : later ? "Schedule" : "Post now"}
           </Button>
         </DialogFooter>
       </DialogContent>

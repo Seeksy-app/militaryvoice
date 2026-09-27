@@ -138,7 +138,14 @@ import {
   enrichWithFollowers,
   parseSocialAccounts,
   publishVideo,
+  editScheduledPost,
+  queueSettings,
+  saveQueueSettings,
+  queuePreview,
+  postHistory,
+  type PublishResult,
 } from "./uploadPost.js";
+import type { HostPostRow, PostResult } from "../shared/schema.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -2974,6 +2981,29 @@ export function registerRoutes(app: Express): void {
     return new Date(t).toISOString();
   }
 
+  /**
+   * Post and keep a row of it. The row is made first so its id can go to
+   * Upload-Post as our external id: its history then gives back each
+   * platform's live link and status. "queue": the next open slot in their
+   * posting queue, and the reply says which.
+   */
+  async function publishAndRecord(o: {
+    email: string; kind: string; refId: number; shape: string; title: string; description: string; platforms: string[]; when: string; queue: boolean;
+    publish: (x: { externalId: string; addToQueue: boolean; scheduledDate?: string }) => Promise<PublishResult>;
+  }): Promise<{ scheduled: boolean; scheduledAt: string }> {
+    const row = await storage.addHostPost({ email: o.email, kind: o.kind, refId: o.refId, shape: o.shape, title: o.title, description: o.description, platforms: o.platforms.join(","), scheduledAt: o.when || "", status: "sending", error: "", jobId: "", requestId: "", results: "" });
+    try {
+      const r = await o.publish({ externalId: `hp-${row.id}`, addToQueue: o.queue && !o.when, scheduledDate: o.when || undefined });
+      const raw = o.when || (o.queue ? r.scheduledDate ?? "" : "");
+      const at = raw && Number.isFinite(Date.parse(raw)) ? new Date(raw).toISOString() : "";
+      await storage.updateHostPost(row.id, { status: at ? "scheduled" : "sent", scheduledAt: at, jobId: r.jobId ?? "", requestId: r.requestId ?? `hp-${row.id}` });
+      return { scheduled: Boolean(at), scheduledAt: at };
+    } catch (err) {
+      await storage.deleteHostPost(row.id);
+      throw err;
+    }
+  }
+
   /** One clip, in one shape, to their connected accounts — now or later. */
   app.post("/api/host/clips/:id/publish", requireHostSession, async (req, res) => {
     if (!isUploadPostConfigured()) return res.status(503).json({ message: "Posting to socials isn't switched on yet." });
@@ -2992,19 +3022,107 @@ export function registerRoutes(app: Express): void {
     const title = String(req.body?.title ?? clip.title).trim() || clip.title;
     const description = String(req.body?.description ?? "").trim();
     try {
-      await publishVideo({ username: profile.uploadPostUsername, platforms, videoUrl, title, description: description || undefined, scheduledDate: when || undefined, timezone: when ? String(req.body?.timezone ?? "") || undefined : undefined, youtube: await youtubeFrom(req.body) });
-      await storage.addHostPost({ email, kind: "clip", refId: clip.id, shape, title, description, platforms: platforms.join(","), scheduledAt: when || "", status: when ? "scheduled" : "sent", error: "" });
-      res.json({ ok: true, scheduled: Boolean(when) });
+      const youtube = await youtubeFrom(req.body);
+      const out = await publishAndRecord({
+        email, kind: "clip", refId: clip.id, shape, title, description, platforms, when: when || "", queue: req.body?.queue === true,
+        publish: (x) => publishVideo({ username: profile.uploadPostUsername!, platforms, videoUrl, title, description: description || undefined, scheduledDate: x.scheduledDate, timezone: x.scheduledDate ? String(req.body?.timezone ?? "") || undefined : undefined, youtube, addToQueue: x.addToQueue, externalId: x.externalId }),
+      });
+      res.json({ ok: true, ...out });
     } catch (err: any) {
       console.error("Publishing a clip failed:", err);
       res.status(502).json({ message: err?.message ?? "Couldn't post that right now." });
     }
   });
 
-  /** What they've posted and scheduled, newest first. */
+  /**
+   * What they've posted and scheduled, newest first. Posts that have gone out
+   * (or were due to) and don't yet have every platform's outcome are looked
+   * up in Upload-Post's history by our external id, a few per call, and the
+   * live links and failures kept on the row.
+   */
   app.get("/api/host/posts", requireHostSession, async (req, res) => {
     noStore(res);
-    res.json(await storage.listHostPosts((getSessionEmail(req) ?? "").toLowerCase().trim()));
+    const rows = await storage.listHostPosts((getSessionEmail(req) ?? "").toLowerCase().trim());
+    const known = (r: HostPostRow) => { try { return r.results ? (JSON.parse(r.results) as PostResult[]) : []; } catch { return []; } };
+    const due = rows.filter((r) => r.requestId && (r.status === "sent" || (r.status === "scheduled" && Date.parse(r.scheduledAt) < Date.now() - 60_000))
+      && r.platforms.split(",").filter(Boolean).some((p) => !known(r).some((k) => k.platform === p))
+      && Date.now() - Date.parse(r.scheduledAt || r.createdAt) < 14 * 86400_000).slice(0, 6);
+    await Promise.all(due.map(async (r) => {
+      try {
+        const { history } = await postHistory(`hp-${r.id}`);
+        if (!history.length) return;
+        const results: PostResult[] = history.map((h) => ({ platform: h.platform, ok: !!h.success, url: h.success && h.post_url && /^https?:/.test(h.post_url) ? h.post_url : "", error: h.error_message ?? "", at: h.upload_timestamp, inbox: h.fallback_to_inbox || undefined }));
+        const failed = results.every((x) => !x.ok);
+        const patch = { results: JSON.stringify(results), status: failed ? "failed" : "sent", error: failed ? results[0]?.error ?? "" : "" };
+        await storage.updateHostPost(r.id, patch);
+        Object.assign(r, patch);
+      } catch (err) {
+        console.warn(`Post history for hp-${r.id}:`, (err as Error).message);
+      }
+    }));
+    res.json(rows);
+  });
+
+  /** Move a scheduled post (or change its words) before it goes out. */
+  app.patch("/api/host/posts/:id", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const row = await storage.getHostPost(Number(req.params.id));
+    if (!row || row.email !== email) return res.status(404).json({ message: "No such post." });
+    if (row.status !== "scheduled" || !row.jobId) return res.status(409).json({ message: "Only a scheduled post can be moved." });
+    const at = req.body?.scheduledAt ? scheduleFrom(req.body) : "";
+    if (at === "past") return res.status(400).json({ message: "Pick a time in the future." });
+    const title = typeof req.body?.title === "string" ? req.body.title.trim().slice(0, 300) : undefined;
+    const description = typeof req.body?.description === "string" ? req.body.description.trim().slice(0, 4000) : undefined;
+    try {
+      await editScheduledPost(row.jobId, { scheduledDate: at || undefined, title, caption: description });
+      await storage.updateHostPost(row.id, { ...(at ? { scheduledAt: at } : {}), ...(title !== undefined ? { title } : {}), ...(description !== undefined ? { description } : {}) });
+      res.json({ ok: true, scheduledAt: at || row.scheduledAt });
+    } catch (err) {
+      res.status(502).json({ message: `Couldn't move it: ${(err as Error).message}` });
+    }
+  });
+
+  /** Take a scheduled post back before it goes out. */
+  app.delete("/api/host/posts/:id", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const row = await storage.getHostPost(Number(req.params.id));
+    if (!row || row.email !== email) return res.status(404).json({ message: "No such post." });
+    if (row.status !== "scheduled") return res.status(409).json({ message: "It's already gone out." });
+    try {
+      if (row.jobId) await cancelScheduledPost(row.jobId);
+      await storage.deleteHostPost(row.id);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(502).json({ message: `Couldn't cancel it: ${(err as Error).message}` });
+    }
+  });
+
+  /** Their posting queue: the times it posts at, and the next slots, open or taken. */
+  app.get("/api/host/social/queue", requireHostSession, async (req, res) => {
+    noStore(res);
+    const profile = await storage.getProfileByEmail((getSessionEmail(req) ?? "").toLowerCase().trim());
+    if (!profile?.uploadPostUsername || !isUploadPostConfigured()) return res.json({ settings: null, slots: [] });
+    try {
+      const [settings, preview] = await Promise.all([queueSettings(profile.uploadPostUsername), queuePreview(profile.uploadPostUsername, 28)]);
+      res.json({ settings, slots: preview.slots ?? [], next: preview.next_available ?? "" });
+    } catch (err) {
+      res.status(502).json({ message: (err as Error).message });
+    }
+  });
+
+  app.post("/api/host/social/queue", requireHostSession, async (req, res) => {
+    const profile = await storage.getProfileByEmail((getSessionEmail(req) ?? "").toLowerCase().trim());
+    if (!profile?.uploadPostUsername) return res.status(400).json({ message: "Connect your social accounts first." });
+    const b = req.body ?? {};
+    const slots = (Array.isArray(b.slots) ? b.slots : []).map((x: any) => ({ hour: Math.max(0, Math.min(23, Math.round(Number(x?.hour)))), minute: Math.max(0, Math.min(59, Math.round(Number(x?.minute) || 0))) })).filter((x: any) => Number.isFinite(x.hour)).slice(0, 24);
+    const days = (Array.isArray(b.days) ? b.days : []).map(Number).filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6);
+    if (!slots.length || !days.length) return res.status(400).json({ message: "Pick at least one day and one time." });
+    try {
+      const settings = await saveQueueSettings(profile.uploadPostUsername, { slots, days_of_week: days, ...(typeof b.timezone === "string" && b.timezone ? { timezone: b.timezone } : {}) });
+      res.json({ settings });
+    } catch (err) {
+      res.status(502).json({ message: (err as Error).message });
+    }
   });
 
   /** Send a finished session to the podcaster's own connected accounts. */
@@ -3038,12 +3156,15 @@ export function registerRoutes(app: Express): void {
       const when = scheduleFrom(req.body);
       if (when === "past") return res.status(400).json({ message: "Pick a time in the future." });
       // Six hours is enough for posting now; a scheduled post is fetched then, so the link has to last.
-      const videoUrl = await signedRecordingUrl(row.url, when ? 7 * 24 * 3600 : 21_600);
+      const videoUrl = await signedRecordingUrl(row.url, when || req.body?.queue === true ? 7 * 24 * 3600 : 21_600);
       const title = String(req.body?.title ?? row.title ?? "").trim() || row.title || "My session";
       const description = String(req.body?.description ?? "").trim();
-      await publishVideo({ username, platforms, videoUrl, title, description: description || undefined, scheduledDate: when || undefined, timezone: when ? String(req.body?.timezone ?? "") || undefined : undefined, youtube: await youtubeFrom(req.body) });
-      await storage.addHostPost({ email, kind: "recording", refId: row.id, shape: "", title, description, platforms: platforms.join(","), scheduledAt: when || "", status: when ? "scheduled" : "sent", error: "" });
-      res.json({ ok: true, scheduled: Boolean(when) });
+      const youtube = await youtubeFrom(req.body);
+      const out = await publishAndRecord({
+        email, kind: "recording", refId: row.id, shape: "", title, description, platforms, when: when || "", queue: req.body?.queue === true,
+        publish: (x) => publishVideo({ username, platforms, videoUrl, title, description: description || undefined, scheduledDate: x.scheduledDate, timezone: x.scheduledDate ? String(req.body?.timezone ?? "") || undefined : undefined, youtube, addToQueue: x.addToQueue, externalId: x.externalId }),
+      });
+      res.json({ ok: true, ...out });
     } catch (err: any) {
       console.error("Publishing a recording failed:", err);
       res.status(502).json({ message: err?.message ?? "Couldn't post that right now." });

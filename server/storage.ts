@@ -885,6 +885,9 @@ export interface IStorage {
   deleteRecordingAndClips(id: number): Promise<void>;
   addHostPost(v: Omit<HostPostRow, "id" | "createdAt">): Promise<HostPostRow>;
   listHostPosts(email: string): Promise<HostPostRow[]>;
+  getHostPost(id: number): Promise<HostPostRow | undefined>;
+  updateHostPost(id: number, patch: Partial<Omit<HostPostRow, "id" | "email" | "createdAt">>): Promise<void>;
+  deleteHostPost(id: number): Promise<void>;
   updateClip(id: number, patch: Partial<ClipRow>): Promise<ClipRow | undefined>;
   /** The next "Edit text" remake, or one whose worker went quiet for 15 minutes. */
   claimClipEdit(): Promise<ClipRow | undefined>;
@@ -2624,6 +2627,22 @@ class DatabaseStorage implements IStorage {
     await ready();
     const [row] = await db.insert(hostPosts).values({ ...v, email: v.email.trim().toLowerCase(), createdAt: new Date().toISOString() }).returning();
     return row;
+  }
+
+  async getHostPost(id: number): Promise<HostPostRow | undefined> {
+    await ready();
+    const [row] = await db.select().from(hostPosts).where(eq(hostPosts.id, id));
+    return row;
+  }
+
+  async updateHostPost(id: number, patch: Partial<Omit<HostPostRow, "id" | "email" | "createdAt">>): Promise<void> {
+    await ready();
+    await db.update(hostPosts).set(patch).where(eq(hostPosts.id, id));
+  }
+
+  async deleteHostPost(id: number): Promise<void> {
+    await ready();
+    await db.delete(hostPosts).where(eq(hostPosts.id, id));
   }
 
   async listHostPosts(email: string): Promise<HostPostRow[]> {

@@ -267,6 +267,18 @@ export async function enrichWithFollowers(username: string, accounts: SocialAcco
 export interface PublishResult {
   ok: boolean;
   raw: unknown;
+  /** A scheduled or queued post's job: reschedule and cancel use it. */
+  jobId?: string;
+  requestId?: string;
+  /** When it goes out: the time asked for, or the slot the queue gave it. */
+  scheduledDate?: string;
+}
+
+/** The ids and time out of an upload's reply. */
+function publishIds(json: unknown): Pick<PublishResult, "jobId" | "requestId" | "scheduledDate"> {
+  const j = (json ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
+  return { jobId: str(j.job_id), requestId: str(j.request_id), scheduledDate: str(j.scheduled_date) ?? str(j.queue_slot) };
 }
 
 /**
@@ -287,6 +299,10 @@ export async function publishVideo(input: {
   timezone?: string;
   /** YouTube's own settings, used when YouTube is one of the platforms. */
   youtube?: { title?: string; description?: string; privacyStatus?: "public" | "unlisted" | "private"; tags?: string[]; thumbnailUrl?: string; madeForKids?: boolean; notifySubscribers?: boolean };
+  /** The next open slot in their posting queue, instead of a time. */
+  addToQueue?: boolean;
+  /** Our own id for it, read back from Upload-Post's history (live links, status). */
+  externalId?: string;
 }): Promise<PublishResult> {
   if (!API_KEY) throw new Error("Upload-Post is not configured (UPLOAD_POST_API_KEY missing).");
   if (input.platforms.length === 0) throw new Error("Pick at least one account to post to.");
@@ -309,6 +325,8 @@ export async function publishVideo(input: {
     if (yt.notifySubscribers !== undefined) form.set("youtube_notify_subscribers", yt.notifySubscribers ? "true" : "false");
   }
   if (input.timezone) form.set("timezone", input.timezone);
+  if (input.addToQueue && !input.scheduledDate) form.set("add_to_queue", "true");
+  if (input.externalId) form.set("external_id", input.externalId);
   // A full session can take a while to fetch and transcode; don't hold the
   // request open waiting for it.
   form.set("async_upload", "true");
@@ -329,7 +347,7 @@ export async function publishVideo(input: {
     const msg = (json as any)?.message || (json as any)?.error || text || res.statusText;
     throw new Error(`Upload-Post couldn't post that (${res.status}): ${msg}`);
   }
-  return { ok: true, raw: json };
+  return { ok: true, raw: json, ...publishIds(json) };
 }
 
 /**
@@ -345,6 +363,8 @@ export async function publishPhoto(input: {
   /** Post later: an ISO date, read in `timezone` (default UTC). Returns 202 and a job. */
   scheduledDate?: string;
   timezone?: string;
+  addToQueue?: boolean;
+  externalId?: string;
 }): Promise<PublishResult> {
   if (!API_KEY) throw new Error("Upload-Post is not configured (UPLOAD_POST_API_KEY missing).");
   if (input.platforms.length === 0) throw new Error("Pick at least one account to post to.");
@@ -353,6 +373,8 @@ export async function publishPhoto(input: {
   form.set("user", input.username);
   for (const p of input.platforms) form.append("platform[]", p);
   form.append("photos[]", input.photoUrl);
+  if (input.addToQueue && !input.scheduledDate) form.set("add_to_queue", "true");
+  if (input.externalId) form.set("external_id", input.externalId);
   // Several networks use the title as the caption, so it carries the post.
   form.set("title", input.title.slice(0, 300));
   if (input.description) form.set("description", input.description.slice(0, 4000));
@@ -377,7 +399,7 @@ export async function publishPhoto(input: {
     const msg = (json as any)?.message || (json as any)?.error || text || res.statusText;
     throw new Error(String(msg));
   }
-  return (json ?? { success: true }) as PublishResult;
+  return { ok: true, raw: json, ...publishIds(json) };
 }
 
 /** The posts waiting to go out, optionally for one profile. */
@@ -395,4 +417,49 @@ export async function cancelScheduledPost(jobId: string): Promise<void> {
   if (!API_KEY) throw new Error("Upload-Post is not configured (UPLOAD_POST_API_KEY missing).");
   const res = await fetch(`${BASE}/uploadposts/schedule/${encodeURIComponent(jobId)}`, { method: "DELETE", headers: { Authorization: `Apikey ${API_KEY}` } });
   if (!res.ok) throw new Error(await res.text());
+}
+
+/** Upload-Post's reply as JSON, or a readable error. */
+async function upCall<T>(path: string, init: RequestInit = {}): Promise<T> {
+  if (!API_KEY) throw new Error("Upload-Post is not configured (UPLOAD_POST_API_KEY missing).");
+  const res = await fetch(`${BASE}${path}`, { ...init, headers: { Authorization: `Apikey ${API_KEY}`, ...(init.body ? { "Content-Type": "application/json" } : {}), ...(init.headers ?? {}) } });
+  const text = await res.text();
+  let json: any = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
+  if (!res.ok) throw new Error(String(json?.error || json?.message || text || res.statusText));
+  return json as T;
+}
+
+/** Move a scheduled post (or change its words) before it goes out. */
+export async function editScheduledPost(jobId: string, v: { scheduledDate?: string; timezone?: string; title?: string; caption?: string }): Promise<{ scheduled_date?: string }> {
+  const body: Record<string, string> = {};
+  if (v.scheduledDate) body.scheduled_date = v.scheduledDate;
+  if (v.timezone) body.timezone = v.timezone;
+  if (v.title !== undefined) body.title = v.title;
+  if (v.caption !== undefined) body.caption = v.caption;
+  return upCall(`/uploadposts/schedule/${encodeURIComponent(jobId)}`, { method: "PATCH", body: JSON.stringify(body) });
+}
+
+export interface QueueSettings { timezone: string; slots: { hour: number; minute: number }[]; days_of_week: number[]; max_posts_per_slot: number }
+export interface QueueSlot { datetime_utc: string; datetime_local: string; available: boolean; post_count: number; is_full: boolean; scheduled_posts?: { job_id: string; title: string; platforms: string[] }[] }
+
+/** When their queue posts: the times of day and the days of the week. */
+export async function queueSettings(username: string): Promise<QueueSettings> {
+  const j = await upCall<{ queue_settings: QueueSettings }>(`/uploadposts/queue/settings?profile_username=${encodeURIComponent(username)}`);
+  return j.queue_settings;
+}
+export async function saveQueueSettings(username: string, v: Partial<QueueSettings>): Promise<QueueSettings> {
+  const j = await upCall<{ queue_settings: QueueSettings }>(`/uploadposts/queue/settings`, { method: "POST", body: JSON.stringify({ profile_username: username, ...v }) });
+  return j.queue_settings;
+}
+/** The next slots, open or taken. */
+export async function queuePreview(username: string, count = 21): Promise<{ timezone: string; slots: QueueSlot[]; next_available?: string }> {
+  return upCall(`/uploadposts/queue/preview?profile_username=${encodeURIComponent(username)}&count=${Math.min(50, count)}`);
+}
+
+export interface HistoryItem { platform: string; success: boolean; post_url: string | null; error_message: string | null; upload_timestamp: string; job_id?: string | null; request_id?: string | null; external_id?: string | null; fallback_to_inbox?: boolean }
+/** What happened to one post of ours (by the external id we gave it), a row per platform. */
+export async function postHistory(externalId: string): Promise<{ history: HistoryItem[]; in_progress: unknown[] }> {
+  const j = await upCall<{ history?: HistoryItem[]; in_progress?: unknown[] }>(`/uploadposts/history?external_id=${encodeURIComponent(externalId)}&limit=20`);
+  return { history: j.history ?? [], in_progress: j.in_progress ?? [] };
 }
