@@ -712,44 +712,57 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
     },
     onError: (e: Error) => toast({ title: "Couldn't start that", description: e.message, variant: "destructive" }),
   });
-  // Cut a section, in two presses: where it starts, then (after playing or dragging) where it ends.
-  const [cutFrom, setCutFrom] = useState<number | null>(null);
-  const pendingCut: Cut | null = cutFrom !== null ? [Math.min(cutFrom, pos.t), Math.max(cutFrom, pos.t)] : null;
-  const inKept = (t: number) => Math.min(Math.max(t, trim.start), keepEnd);
-  const cutBefore = () => { const t = inKept(pos.t); setTrim((tr) => ({ start: t < 0.25 ? 0 : t, end: tr.end && tr.end < t + 5 ? 0 : tr.end })); setCutFrom(null); };
-  const cutAfter = () => { const t = inKept(pos.t); setTrim((tr) => ({ start: tr.start > t - 5 ? 0 : tr.start, end: t >= pos.d - 0.25 ? 0 : t })); setCutFrom(null); };
-  const finishCut = () => { if (pendingCut && pendingCut[1] - pendingCut[0] >= 0.5) setCuts((c) => mergeCuts([...c, pendingCut])); setCutFrom(null); };
+  // Canva's way, on the timeline where the eye already is: Trim drags the
+  // two ends; Split cuts the episode at the playhead into pieces, and a piece
+  // that's clicked can be deleted (the first or last trims that end; one in
+  // the middle becomes a cut).
+  const [trimming, setTrimming] = useState(false);
+  const [splits, setSplits] = useState<number[]>([]);
+  const [sel, setSel] = useState<Cut | null>(null);
+  const inCut = (t: number) => cuts.some(([a, b]) => t > a && t < b);
+  const bounds = [trim.start, ...splits.filter((t) => t > trim.start + 0.25 && t < keepEnd - 0.25 && !inCut(t)).sort((a, b) => a - b), keepEnd];
+  const canSplit = pos.d > 0 && pos.t > trim.start + 0.5 && pos.t < keepEnd - 0.5 && !inCut(pos.t) && !bounds.some((b) => Math.abs(b - pos.t) < 0.5);
+  const split = () => { if (!canSplit) return; setSplits((sp) => [...sp, pos.t]); setSel(null); };
+  const pick = (t: number) => {
+    const i = bounds.findIndex((b, k) => k < bounds.length - 1 && t >= b && t < bounds[k + 1]);
+    // One piece is the whole episode: nothing to pick until it's split.
+    setSel(bounds.length > 2 && i >= 0 && !inCut(t) ? [bounds[i], bounds[i + 1]] : null);
+  };
+  const del = () => {
+    if (!sel) return;
+    const [a, b] = sel;
+    if (a <= trim.start + 0.01) setTrim((tr) => ({ ...tr, start: b }));
+    else if (b >= keepEnd - 0.01) setTrim((tr) => ({ ...tr, end: a }));
+    else setCuts((c) => mergeCuts([...c, [a, b]]));
+    setSel(null);
+  };
+  // S splits, Delete deletes, as in Canva; not while typing.
+  const keysRef = useRef({ split, del });
+  keysRef.current = { split, del };
+  useEffect(() => {
+    if (tab !== "edit") return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (e.metaKey || e.ctrlKey || e.altKey || el?.closest?.("input, textarea, select, [contenteditable=true]")) return;
+      if (e.key === "s" || e.key === "S") { e.preventDefault(); keysRef.current.split(); }
+      else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); keysRef.current.del(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tab]);
   const summary = [trim.start > 0 && `${hms(trim.start)} from the start`, cuts.length > 0 && `${cuts.length === 1 ? "a section" : `${cuts.length} sections`} (${hms(cutTotal)})`, trim.end > 0 && `${hms(pos.d - trim.end)} from the end`].filter(Boolean) as string[];
   const tip = (text: string, el: React.ReactElement) => (
     <Tooltip><TooltipTrigger asChild>{el}</TooltipTrigger><TooltipContent side="left" className="max-w-[15rem] text-xs">{text}</TooltipContent></Tooltip>
   );
   // Panel buttons: full width, icon first, the words saying exactly what happens.
   const act = "flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors";
-  const gold = `${act} border-[#F0A71F] text-[#7a4b00] hover:bg-[#F0A71F]/10 dark:text-[#F0A71F]`;
-  const red = `${act} border-red-300 text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950`;
-  const violet = `${act} border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950`;
 
   const editPanel = (
     <>
-      <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">At the playhead</p>
-        {tip("Removes everything before the playhead", <button type="button" onClick={cutBefore} className={gold} data-testid="cut-before"><ArrowLeftToLine className="h-4 w-4" /> Cut before here</button>)}
-        {cutFrom === null
-          ? tip("Press here, play or drag to where the cut should end, then press …to here", <button type="button" onClick={() => setCutFrom(inKept(pos.t))} className={red} data-testid="cut-from"><Scissors className="h-4 w-4" /> Cut from here</button>)
-          : (
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={finishCut} className={`${act} flex-1 border-red-600 bg-red-600 text-white hover:bg-red-700`} data-testid="cut-to"><Scissors className="h-4 w-4" /> …to here{pendingCut ? ` · ${Math.round(pendingCut[1] - pendingCut[0])}s` : ""}</button>
-              <button type="button" onClick={() => setCutFrom(null)} className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground">Cancel</button>
-            </div>
-          )}
-        {tip("Removes everything after the playhead", <button type="button" onClick={cutAfter} className={gold} data-testid="cut-after"><ArrowRightToLine className="h-4 w-4" /> Cut after here</button>)}
-      </div>
       <p className={`text-sm ${shortKeep ? "font-semibold text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`} data-testid="trim-summary">
-        {cutFrom !== null
-          ? "Now play or drag to where the cut should end, then press …to here."
-          : summary.length
-            ? <><span className="text-foreground">Cuts {summary.join(", ").replace(/, ([^,]*)$/, " and $1")}.</span>{shortKeep && " That's most of the episode."} <button type="button" onClick={() => { setTrim({ start: 0, end: 0 }); setCuts([]); }} className="text-xs underline underline-offset-2 hover:text-foreground">Undo all</button></>
-            : "Play or drag to a spot, then press a cut button."}
+        {summary.length
+          ? <><span className="text-foreground">Cuts {summary.join(", ").replace(/, ([^,]*)$/, " and $1")}.</span>{shortKeep && " That's most of the episode."} <button type="button" onClick={() => { setTrim({ start: 0, end: 0 }); setCuts([]); setSplits([]); setSel(null); }} className="text-xs underline underline-offset-2 hover:text-foreground" data-testid="trim-undo">Undo all</button></>
+          : "Edit on the timeline below: Trim the ends, or Split and delete a piece."}
       </p>
       <div className="flex flex-wrap gap-2">
         <BookendPicker label="Intro" value={intro} onChange={setIntro} />
@@ -768,16 +781,8 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
 
   const clipPanel = (
     <>
-      <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">At the playhead</p>
-        {tip("The clip begins where the playhead is", <button type="button" onClick={() => { const t = now(); setMark((m) => ({ in: t, out: m.out !== null && m.out >= t + 5 && m.out - t <= 180 ? m.out : Math.min(pos.d, t + 30) })); }} className={violet} data-testid="mark-in"><ArrowLeftToLine className="h-4 w-4" /> Clip starts here</button>)}
-        {tip("The clip ends where the playhead is", <button type="button" onClick={() => { const t = now(); setMark((m) => ({ in: m.in !== null && m.in <= t - 5 && t - m.in <= 180 ? m.in : Math.max(0, t - 30), out: t })); }} className={violet} data-testid="mark-out"><ArrowRightToLine className="h-4 w-4" /> Clip ends here</button>)}
-        {mark.in !== null && mark.out !== null && (
-          <button type="button" onClick={preview} className={`${act} border-border hover:bg-muted`} data-testid="mark-preview"><Play className="h-4 w-4" /> Play the clip</button>
-        )}
-      </div>
       <p className={`text-sm ${len && (len < 5 || len > 180) ? "font-semibold text-destructive" : "text-muted-foreground"}`}>
-        {mark.in === null ? "Play or drag to where the clip should start, then press Clip starts here." : lengthNote ? `${lengthNote}.` : ""}
+        {mark.in === null ? "Pick the moment on the timeline below: Start here, then End here." : lengthNote ? `${lengthNote}.` : ""}
         {(mark.in !== null || title || formats.length > 0) && <button type="button" onClick={reset} className="ml-2 text-xs underline underline-offset-2 hover:text-foreground" data-testid="mark-reset">Start over</button>}
       </p>
       <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={90} placeholder="Name the clip" className="h-10" data-testid="mark-title" />
@@ -844,6 +849,22 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
             maxLen={180}
             ghost={mark.in === null}
             tone="violet"
+            actions={
+              <>
+                <TimelineButton tip="The clip starts where the playhead is" onClick={() => { const t = now(); setMark((m) => ({ in: t, out: m.out !== null && m.out >= t + 5 && m.out - t <= 180 ? m.out : Math.min(pos.d, t + 30) })); }} testid="mark-in" tone="violet">
+                  <ArrowLeftToLine className="h-4 w-4" /> Start here
+                </TimelineButton>
+                <TimelineButton tip="The clip ends where the playhead is" onClick={() => { const t = now(); setMark((m) => ({ in: m.in !== null && m.in <= t - 5 && t - m.in <= 180 ? m.in : Math.max(0, t - 30), out: t })); }} testid="mark-out" tone="violet">
+                  <ArrowRightToLine className="h-4 w-4" /> End here
+                </TimelineButton>
+                {mark.in !== null && mark.out !== null && (
+                  <TimelineButton tip="Play just the clip" onClick={preview} testid="mark-preview">
+                    <Play className="h-4 w-4" /> Play clip
+                  </TimelineButton>
+                )}
+                <span className="hidden text-xs text-muted-foreground sm:inline">{mark.in === null ? "Move the playhead to where the clip starts." : "Or drag the violet ends."}</span>
+              </>
+            }
             onChange={(st, en) => setMark({ in: st, out: en })}
           />
         ) : (
@@ -858,7 +879,27 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
             cuts={cuts}
             onCuts={(c) => setCuts(mergeCuts(c))}
             suggestions={pending}
-            pendingCut={pendingCut}
+            trimming={trimming}
+            onTrimming={() => { setTrimming(true); setSel(null); }}
+            splits={bounds.slice(1, -1)}
+            selected={sel}
+            onPick={trimming ? undefined : pick}
+            onDelete={del}
+            actions={
+              <>
+                <TimelineButton tip="Drag the two ends to cut dead air from the start and end" on={trimming} onClick={() => { setTrimming((v) => !v); setSel(null); }} testid="tool-trim">
+                  <Scissors className="h-4 w-4" /> {trimming ? "Done" : `Trim · ${hms(Math.max(0, keepLen - cutTotal))}`}
+                </TimelineButton>
+                {!trimming && (
+                  <TimelineButton tip="Split the episode at the playhead (S), then click a piece to delete it" onClick={split} disabled={!canSplit} testid="tool-split">
+                    <SplitIcon /> Split
+                  </TimelineButton>
+                )}
+                <span className="hidden text-xs text-muted-foreground sm:inline" data-testid="tool-hint">
+                  {trimming ? "Drag the gold ends. Press Done when it starts and ends where you want." : sel ? "Press Delete to take this piece out." : bounds.length > 2 ? "Click a piece to delete it." : "Move the playhead to a spot, then Split."}
+                </span>
+              </>
+            }
             onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
           />
         )}
@@ -890,6 +931,29 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
         </div>
       )}
     </div>
+  );
+}
+
+/** A timeline tool, like Canva's: icon and word, pressed while it's on. */
+function TimelineButton({ tip, on, onClick, disabled, testid, tone, children }: { tip: string; on?: boolean; onClick: () => void; disabled?: boolean; testid: string; tone?: "violet"; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" aria-pressed={on} onClick={onClick} disabled={disabled} className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold tabular-nums transition-colors disabled:opacity-40 ${on ? "border-[#F0A71F] bg-[#F0A71F] text-[#1a1200]" : tone === "violet" ? "border-violet-300 bg-background text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950" : "border-border bg-background hover:bg-muted"}`} data-testid={testid}>
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-[16rem] text-xs">{tip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Canva's split mark: a frame parted down the middle. */
+function SplitIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M9 6H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h4M15 6h4a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-4M12 3v18" />
+    </svg>
   );
 }
 
@@ -1482,7 +1546,7 @@ export function PostStudio() {
   const eta = (() => {
     if (!running) return "";
     const n = Math.max(1, moments.length || clipsN);
-    const perClip = 120; // seconds a clip, two cut at once
+    const perClip = 60; // seconds a clip on our own renderer (4 CPUs), before any are done to measure
     const st = rec.clipStatus === "queued" ? "queued" : p?.stage ?? "download";
     let left: number;
     if ((st === "render" || st === "upload") && p?.renderAt) {
