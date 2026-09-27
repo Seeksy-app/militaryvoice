@@ -860,6 +860,8 @@ export interface IStorage {
   /** Marks it Ready. Returns the row only when this call moved it from Importing to Ready, so a caller acts on that once. */
   finishImport(id: number, v: { url: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow | undefined>;
   failImport(id: number, error: string): Promise<void>;
+  /** Point a recording at a new copy of its file (the same video, rewritten to stream). */
+  setRecordingFile(id: number, url: string, sizeBytes: number): Promise<void>;
   upsertAddon(v: Partial<AddonSubscriptionRow> & { email: string; addon: string }): Promise<AddonSubscriptionRow>;
   getSubscriptionById(subscriptionId: string): Promise<PostifySubscriptionRow | undefined>;
   upsertSubscription(v: Partial<PostifySubscriptionRow> & { email: string }): Promise<PostifySubscriptionRow>;
@@ -2234,6 +2236,11 @@ class DatabaseStorage implements IStorage {
   async releaseImport(id: number): Promise<void> {
     await ready();
     await db.update(recordings).set({ importClaimedAt: "" }).where(and(eq(recordings.id, id), eq(recordings.status, "Importing")));
+  }
+
+  async setRecordingFile(id: number, url: string, sizeBytes: number): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ url, sizeBytes: String(sizeBytes) }).where(eq(recordings.id, id));
   }
 
   async finishImport(id: number, v: { url: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow | undefined> {
