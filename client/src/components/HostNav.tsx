@@ -46,7 +46,10 @@ export function HostNav({
   admin,
   collapsed = false,
   onToggle,
+  credits,
 }: {
+  /** Their credit balance: the column's version and the rail's. */
+  credits?: { column: ReactNode; rail: ReactNode };
   /** Folded to a rail of icons (names on hover), with the button that opens it again. */
   collapsed?: boolean;
   onToggle?: () => void;
@@ -222,6 +225,7 @@ export function HostNav({
         <nav key="rail" className="sticky top-6 hidden self-start lg:block" aria-label="Dashboard sections">
           <div className="flex min-h-[calc(100vh-3rem)] w-14 flex-col items-center gap-1 rounded-2xl bg-[#04102b] py-3 shadow-sm">
             <RailButton tip="Expand menu" onClick={onToggle} testid="nav-expand"><PanelLeftOpen className="h-4 w-4" /></RailButton>
+            {credits?.rail}
             <span className="my-1.5 h-px w-7 bg-white/10" aria-hidden />
             {groups.filter((g) => g.title !== "Coming soon").flatMap((g) => g.items).map((it) => {
               const Icon = it.icon;
@@ -266,6 +270,7 @@ export function HostNav({
               )}
             </div>
             {admin && <div className="mt-3 [&_a]:!border-white/20 [&_button]:!border-white/20">{admin}</div>}
+            {credits && <div className="mt-3">{credits.column}</div>}
           </div>
           {groups.map((g) => {
             const items = g.items;

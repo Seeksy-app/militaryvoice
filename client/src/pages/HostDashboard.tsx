@@ -63,7 +63,7 @@ import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
 import { ShowMaterials } from "@/components/ShowMaterials";
 import { EventSettings } from "@/components/EventSettings";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
-import { PostStudio } from "@/components/PostStudio";
+import { PostStudio, NavCredits } from "@/components/PostStudio";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
@@ -1102,6 +1102,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <HostNav
             collapsed={navTucked}
             onToggle={toggleNav}
+            credits={{ column: <NavCredits variant="column" />, rail: <NavCredits variant="rail" /> }}
             screen={screen === "claim" ? "dashboard" : screen}
             eventsCount={hostEvents?.length ?? 0}
             contactsCount={data?.contacts?.length ?? 0}

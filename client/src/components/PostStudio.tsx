@@ -1172,21 +1172,39 @@ interface Beta { unlimited: boolean; used: number; limit: number; left: number |
 interface Plan { key: PlanKey; name: string; interval?: "month" | "year"; credits: number; overageCents: number; capCents: number; extraCents: number; periodEnd: string; status: string }
 
 /** Always in Pōstify's header: credits left (and the plan), and the way to more. */
-function CreditBalance({ beta, plan }: { beta?: Beta; plan?: Plan | null }) {
+/**
+ * Their credits, on every page: at the top of the side menu (and as a coin on
+ * the folded rail), opening the plan and credits dialog. Test accounts read
+ * Unlimited.
+ */
+export function NavCredits({ variant }: { variant: "column" | "rail" }) {
   const [open, setOpen] = useState(false);
+  const features = useQuery<{ post: boolean; beta?: Beta; plan?: Plan | null }>({ queryKey: ["/api/host/features"], queryFn: async () => (await apiRequest("GET", "/api/host/features")).json(), staleTime: 60_000 });
+  const beta = features.data?.beta;
+  const plan = features.data?.plan;
   if (!beta) return null;
+  const n = beta.unlimited ? "Unlimited" : `${beta.tokens.toLocaleString()} credit${beta.tokens === 1 ? "" : "s"}`;
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/50 bg-[#F0A71F]/10 py-1.5 pl-3 pr-1.5 text-sm font-semibold text-foreground transition-colors hover:bg-[#F0A71F]/20"
-        data-testid="post-token-balance"
-      >
-        <Coins className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" />
-        <span className="tabular-nums">{beta.tokens} credit{beta.tokens === 1 ? "" : "s"}</span>
-        <span className="rounded-full bg-[#053877] px-2.5 py-0.5 text-xs font-semibold text-white">{plan ? plan.name : "Get more"}</span>
-      </button>
+      {variant === "rail" ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button type="button" onClick={() => setOpen(true)} aria-label={n} className="relative flex h-10 w-10 items-center justify-center rounded-lg text-[#F0A71F] hover:bg-white/10" data-testid="nav-rail-credits">
+              <Coins className="h-4 w-4" />
+              {!beta.unlimited && <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-[#F0A71F] px-1 text-center text-[9px] font-bold leading-[16px] text-[#1a1200]">{beta.tokens > 999 ? "999+" : beta.tokens}</span>}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="text-xs">{n}</TooltipContent>
+        </Tooltip>
+      ) : (
+        <button type="button" onClick={() => setOpen(true)} className="flex w-full items-center gap-2 rounded-xl border border-[#F0A71F]/30 bg-[#F0A71F]/10 px-3 py-2 text-left transition-colors hover:bg-[#F0A71F]/20" data-testid="nav-credits">
+          <Coins className="h-5 w-5 shrink-0 text-[#F0A71F]" />
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className="block truncate text-[13px] font-semibold tabular-nums text-white">{n}</span>
+            <span className="block truncate text-[11px] font-semibold text-[#F0A71F]">{plan ? `${plan.name} plan · Get more` : "Get more"}</span>
+          </span>
+        </button>
+      )}
       <PlanDialog open={open} onOpenChange={setOpen} beta={beta} plan={plan} />
     </>
   );
@@ -1462,7 +1480,7 @@ export function PostStudio() {
         {paidBanner}
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-bold text-foreground">Pick an episode</h2>
-          <CreditBalance beta={beta} plan={plan} />
+          {betaBadge}
         </div>
         {/* Episodes as the Library shows them: the picture, how long, when, and what's been done. */}
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" data-testid="post-episode-grid">
@@ -1759,7 +1777,7 @@ export function PostStudio() {
             </DropdownMenu>
             )}
             {/* Credits matter before a run, not after it. */}
-            {!done && <div className="ml-auto flex items-center gap-2">{betaBadge}<CreditBalance beta={beta} plan={plan} /></div>}
+            {!done && betaBadge && <div className="ml-auto flex items-center gap-2">{betaBadge}</div>}
             {editing && statusEl}
           </div>
         </div>
