@@ -1287,11 +1287,13 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
         {updating && (
           <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#000741]/75 text-white backdrop-blur-[2px]">
             <Loader2 className="h-6 w-6 animate-spin text-[#F0A71F]" />
-            <span className="text-xs font-semibold">{making ? "Making your clip…" : "Updating the text…"}</span>
+            <span className="text-xs font-semibold">{making ? (() => { const n = (c.editShapes || "vertical").split(",").filter(Boolean).length; return n > 1 ? `Making your clip in ${n} sizes…` : "Making your clip…"; })() : "Updating the text…"}</span>
           </span>
         )}
       </button>
       <div className="flex flex-1 flex-col p-2">
+        {/* Which sizes this clip has: only what was made, never a size that isn't there. */}
+        {files.length > 0 && <p className="mb-1 flex flex-wrap gap-1">{files.map((f) => <span key={f.label} className="rounded bg-muted px-1 py-px text-[10px] font-semibold tabular-nums text-muted-foreground">{f.label === "Vertical" ? "9:16" : f.label === "Square" ? "1:1" : "16:9"}</span>)}</p>}
         <p className="mb-0.5 inline-flex items-center gap-1 text-[10px] font-medium tabular-nums text-muted-foreground"><Clock3 className="h-3 w-3" /> {stamp(c.startSec)}–{stamp(c.endSec)}</p>
         <p className="line-clamp-2 text-xs font-semibold leading-snug text-foreground" title={c.reason || undefined}>{updating && c.editTitle ? c.editTitle : c.title}</p>
         {c.editStatus === "failed" && <p className="mt-1 text-xs text-destructive">Couldn't update the text. Try again.</p>}
