@@ -301,7 +301,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
       } catch {
         /* storage full or blocked — connect anyway */
       }
-      const res = await apiRequest("POST", "/api/host/social/connect");
+      const res = await apiRequest("POST", "/api/host/social/connect", { returnTo: window.location.pathname });
       return (await res.json()) as { url: string };
     },
     onSuccess: ({ url }) => {

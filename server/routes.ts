@@ -9025,9 +9025,12 @@ export function registerRoutes(app: Express): void {
         await storage.upsertProfile(email, { uploadPostUsername: username });
       }
       const origin = `${req.protocol}://${req.get("host")}`;
+      // Back to the page they connected from (Integrations, the setup form), not always the Dashboard.
+      const from = String(req.body?.returnTo ?? "");
+      const back = /^\/host\/dashboard(\/[a-zA-Z-]+)?$/.test(from) ? from : "/host/dashboard/integrations";
       const url = await createConnectUrl({
         username,
-        redirectUrl: `${origin}/host/dashboard?social=connected`,
+        redirectUrl: `${origin}${back}?social=connected`,
         logoUrl: `${origin}/favicon.png`,
       });
       res.json({ url });

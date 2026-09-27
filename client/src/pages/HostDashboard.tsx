@@ -773,7 +773,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
 
   const connectSocial = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/host/social/connect");
+      const res = await apiRequest("POST", "/api/host/social/connect", { returnTo: window.location.pathname });
       return (await res.json()) as { url: string };
     },
     onSuccess: ({ url }) => {
