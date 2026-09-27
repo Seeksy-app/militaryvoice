@@ -1218,6 +1218,50 @@ export function EditTextDialog({ c, open, onOpenChange }: { c: ClipRow; open: bo
   );
 }
 
+/** A clip in each of its sizes: a tab per shape, the video at that shape, and a download for it. */
+function ClipPreview({ c, onClose }: { c: ClipRow | null; onClose: () => void }) {
+  const shapes = c ? ([
+    { key: "vertical", label: "Vertical", ratio: "9:16", href: c.verticalUrl, box: "aspect-[9/16] h-[min(70vh,640px)]", tip: "Reels, TikTok and Shorts" },
+    { key: "square", label: "Square", ratio: "1:1", href: c.squareUrl, box: "aspect-square h-[min(60vh,520px)]", tip: "the Instagram and Facebook feed, and LinkedIn" },
+    { key: "wide", label: "Wide", ratio: "16:9", href: c.url, box: "aspect-video w-[min(80vw,760px)]", tip: "YouTube, LinkedIn and X" },
+  ] as const).filter((x) => x.href) : [];
+  const [pick, setPick] = useState<string>("vertical");
+  useEffect(() => { if (c) setPick(shapes[0]?.key ?? "vertical"); }, [c?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cur = shapes.find((x) => x.key === pick) ?? shapes[0];
+  return (
+    <Dialog open={!!c} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="w-auto max-w-[95vw] p-4">
+        <DialogHeader>
+          <DialogTitle className="line-clamp-2 pr-8 text-base">{c?.title}</DialogTitle>
+          <DialogDescription className="sr-only">The clip in each of its sizes</DialogDescription>
+        </DialogHeader>
+        {shapes.length > 1 && (
+          <div className="flex gap-1 rounded-xl bg-muted/60 p-1" role="tablist" aria-label="Sizes">
+            {shapes.map((x) => (
+              <button key={x.key} type="button" role="tab" aria-selected={cur?.key === x.key} onClick={() => setPick(x.key)} className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors ${cur?.key === x.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`} data-testid={`clip-preview-${x.key}`}>
+                {x.label} <span className="font-normal text-muted-foreground">{x.ratio}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {cur && (
+          <>
+            <div className="flex justify-center">
+              <video key={cur.href} src={cur.href} controls autoPlay playsInline className={`${cur.box} max-w-full rounded-xl bg-black object-contain`} />
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs text-muted-foreground">Best for {cur.tip}</span>
+              <Button asChild size="sm" variant="outline" className="gap-1.5 rounded-full">
+                <a href={downloadHref(cur.href!, `${c!.title} ${cur.key}`)} download data-testid="clip-preview-download"><Download className="h-4 w-4" /> Download {cur.label.toLowerCase()}</a>
+              </Button>
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
@@ -1266,6 +1310,8 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
               <TooltipContent side="top" className="text-xs">Download, copy the caption, edit the text, or delete</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem className="gap-2" onSelect={onPreview}><Play className="h-3.5 w-3.5" /> Preview {files.length > 1 ? "each size" : "it"}</DropdownMenuItem>
+              <DropdownMenuSeparator />
               {files.map((f) => (
                 <DropdownMenuItem key={f.label} asChild className="flex-col items-start gap-0">
                   <a href={downloadHref(f.href, `${c.title} ${f.label.toLowerCase()}`)} download>
@@ -1496,7 +1542,7 @@ export function PostStudio() {
     const t = setInterval(() => setNowTick(Date.now()), 15000);
     return () => clearInterval(t);
   }, [busyNow]);
-  const [clipPlay, setClipPlay] = useState<string | null>(null);
+  const [clipPlay, setClipPlay] = useState<ClipRow | null>(null);
   // Editing folds the dashboard's menu to its rail, for room (HostDashboard listens).
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("mv:editing", { detail: editingNow }));
@@ -1971,12 +2017,7 @@ export function PostStudio() {
         </DialogContent>
       </Dialog>
       {/* A clip plays here, not in the editor's player. */}
-      <Dialog open={!!clipPlay} onOpenChange={(o) => !o && setClipPlay(null)}>
-        <DialogContent className="max-w-sm p-2">
-          <DialogHeader className="sr-only"><DialogTitle>Clip</DialogTitle><DialogDescription>Playing a clip</DialogDescription></DialogHeader>
-          {clipPlay && <video key={clipPlay} src={clipPlay} controls autoPlay playsInline className="max-h-[80vh] w-full rounded-xl bg-black" />}
-        </DialogContent>
-      </Dialog>
+      <ClipPreview c={clipPlay} onClose={() => setClipPlay(null)} />
 
       {clean && (
         <CleanCard
@@ -1999,13 +2040,13 @@ export function PostStudio() {
             {done
               ? [
                   // A clip plays in its own pop-up; the editor's player stays on the episode.
-                  ...mine.map((c) => <ClipCard key={c.id} c={c} onPreview={() => setClipPlay(c.verticalUrl || c.url)} />),
+                  ...mine.map((c) => <ClipCard key={c.id} c={c} onPreview={() => setClipPlay(c)} />),
                   <GenerateMore key="more" rec={rec} beta={beta} plan={plan} count={clipsN} captions={parseClipOptions(rec.clipOptions).captions} />,
                 ]
               : moments.map((m, i) => {
                   // A clip shows the moment it's saved, playable, while the rest are cut.
                   const saved = mine.find((c) => Math.abs(c.startSec - m.startSec) < 1 && Math.abs(c.endSec - m.endSec) < 1);
-                  if (saved) return <ClipCard key={`saved-${saved.id}`} c={saved} onPreview={() => setClipPlay(saved.verticalUrl || saved.url)} />;
+                  if (saved) return <ClipCard key={`saved-${saved.id}`} c={saved} onPreview={() => setClipPlay(saved)} />;
                   // Two are cut at once: the first two not yet saved are both in hand.
                   const waiting = moments.filter((x) => !mine.some((c) => Math.abs(c.startSec - x.startSec) < 1));
                   const working = waiting.indexOf(m) > -1 && waiting.indexOf(m) < 2;
