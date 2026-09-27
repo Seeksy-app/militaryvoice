@@ -1978,16 +1978,28 @@ async function handle(job: Job): Promise<void> {
  * queue was broken rather than like the last worker had been killed.
  */
 const holding = new Set<number>();
+/** Episode edits in hand: a redeploy mid-edit hands those back too. */
+const editing = new Set<number>();
 
 async function release(): Promise<void> {
   const ids = [...holding];
+  const edits = [...editing];
   holding.clear();
-  await Promise.all(ids.map(async (id) => {
-    console.log(`\nhanding #${id} back to the queue…`);
-    await api("POST", `/api/agent/clip-jobs/${id}/failed`, { requeue: true }).catch((err) =>
-      console.error(`could not release #${id}: ${(err as Error).message} — it will be reclaimed in 10 minutes`),
-    );
-  }));
+  editing.clear();
+  await Promise.all([
+    ...ids.map(async (id) => {
+      console.log(`\nhanding #${id} back to the queue…`);
+      await api("POST", `/api/agent/clip-jobs/${id}/failed`, { requeue: true }).catch((err) =>
+        console.error(`could not release #${id}: ${(err as Error).message} — it will be reclaimed in 10 minutes`),
+      );
+    }),
+    ...edits.map(async (id) => {
+      console.log(`\nhanding #${id}'s edit back to the queue…`);
+      await api("POST", `/api/agent/episode-edits/${id}/failed`, { requeue: true }).catch((err) =>
+        console.error(`could not release #${id}'s edit: ${(err as Error).message} — it will be reclaimed in 30 minutes`),
+      );
+    }),
+  ]);
 }
 
 // SIGHUP included: closing a terminal window sends that, not SIGINT, and a
@@ -2007,6 +2019,7 @@ async function tick(): Promise<boolean> {
   // the 15-minute reclaim rather than requeuing the whole episode.
   const clipJob = !(job.clipEdit || job.episodeEdit || job.importFrom || job.musicMix || job.suggestEdits);
   if (clipJob) holding.add(job.recordingId);
+  if (job.episodeEdit) editing.add(job.recordingId);
   // "Still on it", every minute: a long quiet stretch (waiting on Creatomate)
   // must not look like a dead worker, or another lane claims the same job.
   const beat = clipJob ? setInterval(() => { api("POST", `/api/agent/clip-jobs/${job.recordingId}/heartbeat`).catch(() => {}); }, 60_000) : undefined;
@@ -2014,9 +2027,11 @@ async function tick(): Promise<boolean> {
     await handle(job);
     clearInterval(beat);
     holding.delete(job.recordingId);
+    editing.delete(job.recordingId);
   } catch (err) {
     clearInterval(beat);
     holding.delete(job.recordingId);
+    editing.delete(job.recordingId);
     const message = (err as Error).message ?? String(err);
     console.error(`[${job.recordingId}] failed: ${message}`);
     await api("POST", `/api/agent/clip-jobs/${job.recordingId}/failed`, { error: message }).catch(() => {});
