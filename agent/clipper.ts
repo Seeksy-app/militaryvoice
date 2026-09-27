@@ -1803,6 +1803,16 @@ async function handle(job: Job): Promise<void> {
     progress(job.recordingId, { stage: "download", pct: 0, detail: total ? `${(total / 1048576).toFixed(0)}MB` : "" });
     await pipeline(Readable.fromWeb(res.body as never), meter, createWriteStream(source));
     console.log(`[${job.recordingId}] downloaded in ${Math.round((Date.now() - started) / 1000)}s`);
+    // Saved with no length (the browser's check timed out on the upload): the
+    // moment picker was being told the episode was 0 seconds long.
+    if (!(job.durationSec > 0)) {
+      const d = Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", source]).catch(() => "")).trim());
+      if (d > 0) {
+        job.durationSec = d;
+        console.log(`[${job.recordingId}] it's ${Math.round(d)}s long (saved without a length)`);
+        await api("POST", `/api/agent/clip-jobs/${job.recordingId}/duration`, { durationSec: d }).catch(() => {});
+      }
+    }
 
     let lines = job.transcript;
     const live = transcriptCovers(lines, job.durationSec);

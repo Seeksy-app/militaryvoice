@@ -5656,6 +5656,14 @@ export function registerRoutes(app: Express): void {
   /** Where a running job has got to: the processing screen reads it, and it keeps the claim alive. */
   // The worker's "still on it" (every minute while it holds a job), so a long
   // wait on Creatomate never looks like a dead worker to the stale-claim rule.
+  /** An upload saved with no length (the browser's check timed out): the worker measured it. Only fills a zero. */
+  app.post("/api/agent/clip-jobs/:id/duration", requireAgent, async (req, res) => {
+    const sec = Number(req.body?.durationSec);
+    if (!Number.isFinite(sec) || sec <= 0 || sec > 24 * 3600) return res.status(400).json({ message: "No length." });
+    await storage.setRecordingDuration(Number(req.params.id), sec);
+    res.json({ ok: true });
+  });
+
   app.post("/api/agent/clip-jobs/:id/heartbeat", requireAgent, async (req, res) => {
     await storage.touchClipClaim(Number(req.params.id));
     res.json({ ok: true });

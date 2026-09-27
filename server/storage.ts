@@ -860,6 +860,8 @@ export interface IStorage {
   /** Marks it Ready. Returns the row only when this call moved it from Importing to Ready, so a caller acts on that once. */
   finishImport(id: number, v: { url: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow | undefined>;
   failImport(id: number, error: string): Promise<void>;
+  /** The real length, measured by the worker, for a recording saved without one. */
+  setRecordingDuration(id: number, durationSec: number): Promise<void>;
   upsertAddon(v: Partial<AddonSubscriptionRow> & { email: string; addon: string }): Promise<AddonSubscriptionRow>;
   getSubscriptionById(subscriptionId: string): Promise<PostifySubscriptionRow | undefined>;
   upsertSubscription(v: Partial<PostifySubscriptionRow> & { email: string }): Promise<PostifySubscriptionRow>;
@@ -2236,6 +2238,11 @@ class DatabaseStorage implements IStorage {
   async releaseImport(id: number): Promise<void> {
     await ready();
     await db.update(recordings).set({ importClaimedAt: "" }).where(and(eq(recordings.id, id), eq(recordings.status, "Importing")));
+  }
+
+  async setRecordingDuration(id: number, durationSec: number): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ durationSec: Math.round(durationSec) }).where(and(eq(recordings.id, id), lt(recordings.durationSec, 1)));
   }
 
   async finishImport(id: number, v: { url: string; durationSec: number; sizeBytes: number }): Promise<RecordingRow | undefined> {
