@@ -79,27 +79,27 @@ export function HostNav({
     {
       title: "Your show",
       items: [
-        { key: "dashboard", label: "Dashboard", hint: "Your card and slot", icon: LayoutDashboard },
-        { key: "events", label: "Events", hint: "Your show, your time, and promoting it", icon: CalendarDays, badge: eventsCount || undefined },
-        ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `Your ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} at the desk`, icon: Mic2 }] : []),
+        { key: "dashboard", label: "Dashboard", hint: "Your home base: your events, your audience and what to do next", icon: LayoutDashboard },
+        { key: "events", label: "Events", hint: "The events you're part of: your show, your time slot and how to promote it", icon: CalendarDays, badge: eventsCount || undefined },
+        ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `The ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} you're co-hosting at the desk, and who's on with you`, icon: Mic2 }] : []),
       ],
     },
     {
       title: "Content",
       items: [
-        { key: "recordings", label: "Library", hint: "Your episodes: studio sessions, uploads and clean episodes", icon: Library },
-        { key: "postify", label: "Pōstify", hint: "Clips and a clean episode, from any episode", icon: Wand2, tag: "Beta" },
-        { key: "social", label: "Social", hint: "Post and schedule to your accounts", icon: Share2 },
+        { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },
+        { key: "postify", label: "Pōstify", hint: "Create short clips from your video podcast, and clean up the full episode", icon: Wand2, tag: "Beta" },
+        { key: "social", label: "Social", hint: "Post and schedule your clips to all your social accounts from one calendar", icon: Share2 },
         // In the column, not only in the account card: that's where people look for it.
-        { key: "integrations", label: "Integrations", hint: "Zoom, YouTube and your social accounts", icon: Link2 },
+        { key: "integrations", label: "Integrations", hint: "Connect Zoom, YouTube and your social accounts so everything flows in and out", icon: Link2 },
       ],
     },
     {
       title: "Audience",
       items: [
-        { key: "analytics", label: "Your analytics", hint: "What a sponsor sees about you", icon: BarChart3 },
-        { key: "discovery", label: "Discovery", hint: "Find military and veteran creators, guests and sponsors", icon: Compass },
-        ...(contactsCount > 0 ? [{ key: "contacts" as const, label: "Contacts", hint: `${contactsCount} asked for a reminder`, icon: Users }] : []),
+        { key: "analytics", label: "Your analytics", hint: "Your followers, reach and engagement as sponsors see them, and what to charge", icon: BarChart3 },
+        { key: "discovery", label: "Discovery", hint: "Search military and veteran creators to find guests, partners and sponsors", icon: Compass },
+        ...(contactsCount > 0 ? [{ key: "contacts" as const, label: "Contacts", hint: `${contactsCount} ${contactsCount === 1 ? "listener" : "listeners"} asked to be reminded about your show`, icon: Users }] : []),
       ],
     },
     // Pro is one quiet line until it opens. Three greyed doors with locks were
@@ -108,23 +108,23 @@ export function HostNav({
       title: "Coming soon",
       items: proOpen
         ? [
-            { key: "pro", label: "Email campaigns", hint: "Write to your listeners", icon: Mail, locked: true, feature: "campaigns" },
-            { key: "pro", label: "Contacts CRM", hint: "Everyone who found you", icon: Contact, locked: true, feature: "crm" },
-            { key: "pro", label: "Your own studio", hint: "Stream and record, any day", icon: MonitorPlay, locked: true, feature: "studio" },
+            { key: "pro", label: "Email campaigns", hint: "Email your listeners about new episodes and events", icon: Mail, locked: true, feature: "campaigns" },
+            { key: "pro", label: "Contacts CRM", hint: "Everyone who has found your show, in one list", icon: Contact, locked: true, feature: "crm" },
+            { key: "pro", label: "Your own studio", hint: "Stream and record your show any day, not only at events", icon: MonitorPlay, locked: true, feature: "studio" },
           ]
         : [{ key: "pro", label: "Pro tools", hint: "Email campaigns, a contacts CRM and your own studio — after the Marathon", icon: Lock, locked: true, feature: "campaigns" }],
     },
     {
       title: "Help",
       items: [
-        { key: "dashboard", label: "Help", hint: "Search the help, or ask Alex", icon: LifeBuoy, href: "/help" },
+        { key: "dashboard", label: "Help", hint: "Search the help articles, or ask Alex, our assistant", icon: LifeBuoy, href: "/help" },
       ],
     },
   ];
 
-  const greenRoomItem: Item = { key: "greenroom", label: "Green room", hint: "Into the studio, and what to check first", icon: Headphones };
+  const greenRoomItem: Item = { key: "greenroom", label: "Green room", hint: "Join the studio for your slot, and check your camera and mic first", icon: Headphones };
   const accountItems: Item[] = [
-    { key: "editProfile", label: "Profile", hint: "About you", icon: UserRound },
+    { key: "editProfile", label: "Profile", hint: "Your photo, bio and service details that listeners and sponsors see", icon: UserRound },
   ];
 
   const rawLink = (it: Item, compact: boolean) => {
@@ -197,7 +197,7 @@ export function HostNav({
     return (
       <Tooltip key={`tip-${it.key}-${it.feature ?? it.href ?? ""}`} delayDuration={350}>
         <TooltipTrigger asChild>{el}</TooltipTrigger>
-        <TooltipContent side="right" sideOffset={10} className="max-w-[15rem] text-xs">{tip}</TooltipContent>
+        <TooltipContent side="right" sideOffset={10} className="max-w-[16rem] text-balance text-xs">{tip}</TooltipContent>
       </Tooltip>
     );
   };
@@ -352,7 +352,7 @@ function PhoneTabs({ screen, onGo, pathFor, more, badge, proOpen }: { screen: Ho
                   <it.icon className="h-5 w-5 shrink-0 text-[#053877] dark:text-[#8fb5e8]" />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2 text-[15px] font-medium">{it.label}{it.badge != null && <span className="rounded-full bg-[#F0A71F] px-1.5 text-[11px] font-bold text-[#1a1200]">{it.badge}</span>}{it.locked && <Lock className="h-3.5 w-3.5 opacity-60" />}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{inert ? "Coming after the Marathon" : it.hint}</span>
+                    <span className="line-clamp-2 block text-xs text-muted-foreground">{inert ? "Coming after the Marathon" : it.hint}</span>
                   </span>
                 </button>
               );
@@ -423,7 +423,7 @@ function RailButton({ tip, onClick, href, active, testid, children }: { tip: str
       <TooltipTrigger asChild>
         {href ? <Link href={href} aria-label={tip} className={cls} data-testid={testid}>{children}</Link> : <button type="button" onClick={onClick} aria-label={tip} aria-current={active ? "page" : undefined} className={cls} data-testid={testid}>{children}</button>}
       </TooltipTrigger>
-      <TooltipContent side="right" className="text-xs">{tip}</TooltipContent>
+      <TooltipContent side="right" className="max-w-[16rem] text-balance text-xs">{tip}</TooltipContent>
     </Tooltip>
   );
 }
