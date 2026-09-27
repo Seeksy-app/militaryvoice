@@ -549,12 +549,12 @@ function GenerateMore({ rec, beta, plan, count, captions }: { rec: Rec; beta?: B
         type="button"
         onClick={() => (canPay ? more.mutate() : setOpen(true))}
         disabled={more.isPending}
-        className="flex min-h-[18rem] flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] p-6 text-center transition-colors hover:border-[#053877]/50 hover:bg-[#053877]/[0.06] disabled:opacity-60"
+        className="flex min-h-[14rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] p-4 text-center transition-colors hover:border-[#053877]/50 hover:bg-[#053877]/[0.06] disabled:opacity-60"
         data-testid="post-generate-more"
       >
-        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]">{more.isPending ? <Loader2 className="h-6 w-6 animate-spin" /> : <Sparkles className="h-6 w-6" />}</span>
-        <span className="text-base font-semibold text-foreground">{count} more clips</span>
-        <span className="max-w-[14rem] text-sm text-muted-foreground">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#053877] text-[#F0A71F]">{more.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}</span>
+        <span className="text-sm font-semibold text-foreground">{count} more clips</span>
+        <span className="max-w-[14rem] text-balance text-xs text-muted-foreground">
           Different moments from this episode, in all three shapes.{" "}
           {beta?.unlimited ? "Included." : `${credits} credits${beta?.tokens != null ? ` · you have ${beta.tokens}` : ""}.`}
         </span>
@@ -1870,7 +1870,7 @@ export function PostStudio() {
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">{done ? mine.length : `${readyN} of ${moments.length || clipsN}`}</span>
             {!done && eta && <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-[#b36b00] dark:text-[#F0A71F]"><Clock3 className="h-3.5 w-3.5" /> {eta}</span>}
           </p>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-2.5 sm:grid-cols-[repeat(auto-fill,minmax(128px,1fr))]">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(180px,1fr))]">
             {done
               ? [
                   // A clip plays in its own pop-up; the editor's player stays on the episode.
