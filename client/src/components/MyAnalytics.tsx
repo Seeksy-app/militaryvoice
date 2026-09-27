@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BadgeCheck, Share2, BarChart3, Link2 } from "lucide-react";
 import { CreatorProfileSections, type Profile } from "@/components/CreatorProfileSections";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { KnowYourWorth } from "@/components/KnowYourWorth";
 
 /**
  * A podcaster's own analytics, in their dashboard: the same profile panel a
@@ -33,6 +34,10 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
     staleTime: 10 * 60_000,
     retry: false,
   });
+  // Their connected accounts (followers per platform) for Know your worth, and their own photo as the fallback picture.
+  const social = useQuery<{ accounts?: { platform: string; username?: string; followers?: number }[] }>({ queryKey: ["/api/host/social"], queryFn: async () => (await apiRequest("GET", "/api/host/social")).json(), staleTime: 5 * 60_000 });
+  const mine = useQuery<{ photoUrl?: string }>({ queryKey: ["/api/host/profile"], queryFn: async () => (await apiRequest("GET", "/api/host/profile")).json(), staleTime: 5 * 60_000 });
+  const [picFailed, setPicFailed] = useState<string[]>([]);
 
   if (q.isLoading) {
     return (
@@ -77,11 +82,17 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
       </Button>
     </div>
   );
-  const picture = id.picture || d.card?.picture || "";
+  // The index's picture links expire after a day or so; when it won't load, their own MilitaryVoices photo stands in.
+  const pictures = [id.picture, d.card?.picture, mine.data?.photoUrl].filter((u): u is string => !!u).map((u) => (u.startsWith("/api/") ? u : resolveUploadUrl(u)));
+  const picture = pictures.find((u) => !picFailed.includes(u)) ?? "";
   const header = (
     <div className="border-b-8 border-muted/60 bg-card px-6 py-6 sm:px-8">
       <div className="flex items-start gap-5">
-        {picture && <img src={picture.startsWith("/api/") ? picture : resolveUploadUrl(picture)} alt="" className="h-20 w-20 rounded-full object-cover ring-2 ring-[#F0A71F] ring-offset-2 ring-offset-background" />}
+        {picture ? (
+          <img key={picture} src={picture} alt="" onError={() => setPicFailed((f) => [...f, picture])} className="h-20 w-20 shrink-0 rounded-full object-cover ring-2 ring-[#F0A71F] ring-offset-2 ring-offset-background" />
+        ) : (
+          <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[#053877] text-2xl font-bold text-white ring-2 ring-[#F0A71F] ring-offset-2 ring-offset-background">{(id.name || d.handle || "?").slice(0, 1).toUpperCase()}</span>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-2xl font-semibold tracking-tight text-balance">{id.name || d.card?.name || d.handle}</span>
@@ -101,13 +112,20 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
     </div>
   );
 
+  // Every connected account, with the full audience data on the one the index read.
+  const s = p.signals as { engagementRate?: number | null; realPct?: number | null; topCountry?: { name: string; pct: number } | null };
+  const usPct = s.topCountry?.name === "United States" ? s.topCountry.pct : (p.audiences?.followers?.countries ?? []).find((c: { name: string }) => c.name === "United States")?.pct ?? null;
+  const main = { platform: d.platform ?? "", handle: d.handle, followers: id.followers ?? 0, engagementRate: s.engagementRate ?? null, medianViews: p.content?.reelsMedianViews ?? null, realPct: s.realPct ?? null, usPct, likesPerPost: p.content?.likesMedian ?? null };
+  const others = (social.data?.accounts ?? []).filter((x) => x.platform !== main.platform && (x.followers ?? 0) > 0).map((x) => ({ platform: x.platform, handle: x.username, followers: x.followers ?? 0 }));
+  const worth = <KnowYourWorth accounts={[main, ...others]} />;
+
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm" data-testid="my-analytics">
       <div ref={scroller} className="max-h-[calc(100vh-9rem)] overflow-y-auto">
         <CreatorProfileSections
           profile={p}
           toolbar={toolbar}
-          header={header}
+          header={<>{header}{worth}</>}
           cardEngagement={null}
           scrollRoot={scroller}
           onOpenCreator={() => {}}

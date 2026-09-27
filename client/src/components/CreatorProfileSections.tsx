@@ -290,7 +290,8 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
             <Tile keep label="Most recent post" value={last?.value ?? "–"} sub={last?.sub} tone={!s.lastPostAt ? undefined : Date.now() - Date.parse(s.lastPostAt) < 30 * 86_400_000 ? "good" : "warn"} />
             <Tile label="Follower change · 6 mo" value={s.growth6m == null ? "–" : `${s.growth6m > 0 ? "+" : ""}${s.growth6m.toFixed(1)}%`} sub="as reported by the index" />
             <Tile label="Posting cadence" value={s.postsPerWeek == null ? "–" : <>{s.postsPerWeek}<span className="text-sm font-medium text-muted-foreground"> / wk</span></>} />
-            <Tile label="Est. income" value={s.incomeMin == null ? "–" : s.incomeMax && s.incomeMax !== s.incomeMin ? `${money(s.incomeMin)}–${money(s.incomeMax)}` : money(s.incomeMin)} sub="from sponsored posts, a month" />
+            {/* Was "Est. income": a guess at their earnings that read as a fact. Likes per post is what a sponsor weighs. */}
+            <Tile label="Likes per post" value={compact(profile.content?.likesMedian ?? null)} sub={profile.content?.commentsMedian != null ? `${compact(profile.content.commentsMedian)} comments, typical post` : "typical post"} />
             <Tile label="Creator type" value={profile.identity.creatorType || "–"} sub={profile.identity.category || (profile.identity.verified ? "verified account" : undefined)} />
             <Tile label="Top audience country" value={s.topCountry ? pctText(s.topCountry.pct) : "–"} sub={s.topCountry?.name} />
             <Tile label="Audience gender" value={s.femalePct == null ? "–" : `${Math.round(s.femalePct)}% F · ${100 - Math.round(s.femalePct)}% M`} />
