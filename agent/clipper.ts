@@ -1160,7 +1160,7 @@ async function renderWithCreatomate(
     const cut = path.join(path.dirname(files.wide), `source-${Math.round(m.startSec)}.mp4`);
     await run("ffmpeg", ["-y", "-v", "error", "-ss", String(m.startSec), "-i", source, "-t", String(m.endSec - m.startSec), "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", cut]);
     const signed = await api<{ uploadUrl: string; readUrl: string }>("POST", "/api/agent/clean-files/upload-url", { name: `clip-source-${job.recordingId}-${Math.round(m.startSec)}.mp4` });
-    await run("curl", ["-s", "-f", "--retry", "5", "--retry-all-errors", "--retry-delay", "3", "-X", "PUT", signed.uploadUrl, "-H", "content-type: video/mp4", "--data-binary", `@${cut}`]);
+    await run("curl", ["-s", "-f", "--retry", "5", "--retry-all-errors", "--retry-delay", "3", "-X", "PUT", "-T", cut, signed.uploadUrl, "-H", "content-type: video/mp4"]);
     const { renders } = await api<{ renders: { shape: "wide" | "vertical" | "square"; id: string }[] }>("POST", "/api/agent/clip-renders", {
       videoUrl: signed.readUrl || job.downloadUrl,
       start: signed.readUrl ? 0 : m.startSec,
@@ -1179,8 +1179,9 @@ async function renderWithCreatomate(
         if (s.status === "failed") throw new Error(`Creatomate ${shape}: ${s.error || "failed"}`);
         if (s.status === "succeeded" && s.url) {
           const got = await fetch(s.url);
-          if (!got.ok) throw new Error(`couldn't fetch the ${shape} render: ${got.status}`);
-          await fs.writeFile(files[shape], new Uint8Array(await got.arrayBuffer()));
+          if (!got.ok || !got.body) throw new Error(`couldn't fetch the ${shape} render: ${got.status}`);
+          // Straight to disk, not through memory.
+          await pipeline(Readable.fromWeb(got.body as never), createWriteStream(files[shape]));
           pending.delete(id);
         }
       }
