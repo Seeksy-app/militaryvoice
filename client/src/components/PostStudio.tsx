@@ -1782,17 +1782,21 @@ export function PostStudio() {
                   <GenerateMore key="more" rec={rec} beta={beta} plan={plan} count={clipsN} captions={parseClipOptions(rec.clipOptions).captions} />,
                 ]
               : moments.map((m, i) => {
-                  const ready = i < readyN;
-                  const working = !ready && i === readyN;
+                  // A clip shows the moment it's saved, playable, while the rest are cut.
+                  const saved = mine.find((c) => Math.abs(c.startSec - m.startSec) < 1 && Math.abs(c.endSec - m.endSec) < 1);
+                  if (saved) return <ClipCard key={`saved-${saved.id}`} c={saved} onPreview={() => setClipPlay(saved.verticalUrl || saved.url)} />;
+                  // Two are cut at once: the first two not yet saved are both in hand.
+                  const waiting = moments.filter((x) => !mine.some((c) => Math.abs(c.startSec - x.startSec) < 1));
+                  const working = waiting.indexOf(m) > -1 && waiting.indexOf(m) < 2;
                   return (
-                    <div key={i} className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border ${ready ? "border-emerald-400/60" : "border-border"}`}>
+                    <div key={i} className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border">
                       <div className="relative flex aspect-[3/4] items-center justify-center bg-gradient-to-b from-muted/60 to-muted">
                         <span className="absolute left-2 top-2 rounded-md bg-black/60 px-1.5 py-0.5 text-[11px] text-white">{stamp(m.startSec)}–{stamp(m.endSec)}</span>
-                        {ready ? <Check className="h-8 w-8 text-emerald-500" /> : working ? <Loader2 className="h-8 w-8 animate-spin text-[#b36b00]" /> : <Clock3 className="h-7 w-7 text-muted-foreground" />}
+                        {working ? <Loader2 className="h-8 w-8 animate-spin text-[#b36b00]" /> : <Clock3 className="h-7 w-7 text-muted-foreground" />}
                       </div>
                       <div className="p-3">
                         <p className="line-clamp-2 text-sm font-semibold leading-snug">{m.title}</p>
-                        <p className={`mt-1 text-xs ${ready ? "text-emerald-600" : working ? "text-[#b36b00]" : "text-muted-foreground"}`}>{ready ? "Ready" : working ? p?.detail ?? "Cutting…" : "Up next"}</p>
+                        <p className={`mt-1 text-xs ${working ? "text-[#b36b00]" : "text-muted-foreground"}`}>{working ? "Cutting, all three shapes" : "Up next"}</p>
                       </div>
                     </div>
                   );

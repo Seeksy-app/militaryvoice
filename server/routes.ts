@@ -5497,6 +5497,34 @@ export function registerRoutes(app: Express): void {
   );
 
   /** The worker is done: here are the clips, in order. */
+  // One clip, the moment it's finished, so the podcaster sees it while the rest are cut.
+  // A run's first clip replaces an earlier run's set (a re-clip); Generate more only ever adds.
+  app.post("/api/agent/clip-jobs/:id/clip", requireAgent, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec) return res.status(404).json({ message: "No such recording." });
+    const parsed = clipResultSchema.safeParse(req.body?.clip);
+    if (!parsed.success || parsed.data.endSec <= parsed.data.startSec) return res.status(400).json({ message: "Not a clip." });
+    const c = parsed.data;
+    const row = {
+      eventId: rec.eventId, signupId: rec.signupId ?? null, email: rec.email,
+      title: c.title, caption: c.caption, reason: c.reason, startSec: c.startSec, endSec: c.endSec, transcript: c.transcript,
+      url: c.url, verticalUrl: c.verticalUrl, squareUrl: c.squareUrl, subtitlesUrl: c.subtitlesUrl,
+      sourceAssetId: 0, cutAssetId: 0, subtitle: await showNameFor(rec),
+    };
+    const opts = parseClipOptions(rec.clipOptions);
+    let prog: Record<string, unknown> = {};
+    try { prog = rec.clipProgress ? JSON.parse(rec.clipProgress) : {}; } catch { prog = {}; }
+    const streamed = Number(prog.streamed) || 0;
+    if (!opts.more && streamed === 0) await storage.replaceClips(rec.id, [row]);
+    else {
+      const have = new Set((await storage.listClips(rec.id)).map((x) => `${x.startSec}-${x.endSec}`));
+      if (!have.has(`${row.startSec}-${row.endSec}`)) await storage.appendClips(rec.id, [row]);
+    }
+    await storage.setClipProgress(rec.id, JSON.stringify({ ...prog, streamed: streamed + 1, at: new Date().toISOString() }));
+    await storage.touchClipClaim(rec.id);
+    res.json({ ok: true });
+  });
+
   app.post("/api/agent/clip-jobs/:id/done", requireAgent, async (req, res) => {
     const rec = await storage.getRecording(Number(req.params.id));
     if (!rec) {
@@ -5531,15 +5559,21 @@ export function registerRoutes(app: Express): void {
       }));
     // "Generate more" adds to the clips already made; a first run is the set.
     const opts = parseClipOptions(rec.clipOptions);
+    // A worker that sent each clip as it finished: only what didn't arrive then is added now.
+    if (req.body?.streamed === true) {
+      const have = new Set((await storage.listClips(rec.id)).map((c) => `${c.startSec}-${c.endSec}`));
+      const missing = rows.filter((r) => !have.has(`${r.startSec}-${r.endSec}`));
+      if (missing.length) await storage.appendClips(rec.id, missing);
+    }
     if (opts.more) {
-      await storage.appendClips(rec.id, rows);
+      if (req.body?.streamed !== true) await storage.appendClips(rec.id, rows);
       const { more: _done, ...rest } = opts;
       await storage.setClipOptions(rec.id, JSON.stringify(rest));
       // Music already on the others goes on the new ones too.
       const mix = parseMusicMix(rec.musicMix);
       if (mix?.status === "done") await storage.setMusicMix(rec.id, JSON.stringify({ ...mix, status: "queued", at: new Date().toISOString() }));
     }
-    const saved = opts.more ? await storage.listClips(rec.id) : await storage.replaceClips(rec.id, rows);
+    const saved = opts.more || req.body?.streamed === true ? await storage.listClips(rec.id) : await storage.replaceClips(rec.id, rows);
     await storage.setClipStatus(rec.id, "done", "");
     try {
       const prev = rec.clipProgress ? JSON.parse(rec.clipProgress) : {};
