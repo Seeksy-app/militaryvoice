@@ -26,4 +26,6 @@ COPY server/assets ./server/assets
 COPY tsconfig.json ./tsconfig.json
 
 ENV NODE_ENV=production
-CMD ["npx", "tsx", "agent/clipper.ts"]
+# Node itself, not npx: npx runs it through sh, which never passes Render's
+# SIGTERM on, so a redeploy killed the worker before it could hand its job back.
+CMD ["node", "--import", "tsx", "agent/clipper.ts"]
