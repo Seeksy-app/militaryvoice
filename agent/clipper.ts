@@ -1351,16 +1351,23 @@ async function handleSuggest(job: Job): Promise<void> {
   try {
     const key = process.env.ANTHROPIC_API_KEY;
     if (!key) throw new Error("The AI isn't set up on the worker.");
-    const file = path.join(dir, "episode.mp4");
-    const res = await fetch(job.downloadUrl);
-    if (!res.ok || !res.body) throw new Error(`Couldn't fetch the episode (${res.status}).`);
-    await pipeline(Readable.fromWeb(res.body as never), createWriteStream(file));
-    const lines = await transcribeWithScribe(file, dir).catch(async (err) => {
-      console.warn(`${tag}: Scribe failed: ${err.message} — falling back`);
-      if (process.env.DEEPGRAM_API_KEY) return transcribeWithDeepgram(file, dir);
-      return transcribeLocally(file, dir);
-    });
-    const dur = Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]).catch(() => "0")).trim()) || job.durationSec;
+    // A transcript kept from the first run covers the original: no download, no transcribing.
+    let lines = job.transcript ?? [];
+    let dur = job.durationSec;
+    if (!transcriptCovers(lines, job.durationSec)) {
+      const file = path.join(dir, "episode.mp4");
+      const res = await fetch(job.downloadUrl);
+      if (!res.ok || !res.body) throw new Error(`Couldn't fetch the episode (${res.status}).`);
+      await pipeline(Readable.fromWeb(res.body as never), createWriteStream(file));
+      lines = await transcribeWithScribe(file, dir).catch(async (err) => {
+        console.warn(`${tag}: Scribe failed: ${err.message} — falling back`);
+        if (process.env.DEEPGRAM_API_KEY) return transcribeWithDeepgram(file, dir);
+        return transcribeLocally(file, dir);
+      });
+      dur = Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]).catch(() => "0")).trim()) || job.durationSec;
+    } else {
+      console.log(`${tag}: using the kept transcript (${lines.length} lines)`);
+    }
     if (!lines.length) {
       await api("POST", `/api/agent/suggest-edits/${job.recordingId}/done`, { items: [] });
       return;
@@ -1643,6 +1650,10 @@ async function handle(job: Job): Promise<void> {
         console.warn(`[${job.recordingId}] local transcription failed: ${err.message}`);
         return job.transcript;
       });
+    }
+    // Keep what we transcribed, so Generate more and Suggest edits needn't transcribe it again.
+    if (!live && lines.length) {
+      api("POST", `/api/agent/clip-jobs/${job.recordingId}/transcript`, { lines }).catch((err) => console.warn(`[${job.recordingId}] couldn't keep the transcript: ${(err as Error).message}`));
     }
     // Nothing said (a demo over music, a silent screen share): clips by the clock; music can go on after.
     const silent = lines.length === 0;
