@@ -1421,7 +1421,7 @@ function ChoosePlan({ beta, plan }: { beta?: Beta; plan?: Plan | null }) {
  * Play any track first; picking one mixes it into every clip (a few seconds
  * a clip, no credits). Skip leaves them as they are; either can be changed.
  */
-function PipelineMusic({ rec, onChange }: { rec: Rec; onChange: () => void }) {
+function PipelineMusic({ rec, onChange, tall }: { rec: Rec; onChange: () => void; tall?: boolean }) {
   const { toast } = useToast();
   const tracks = useQuery<{ key: string; name: string; mood: string; durationSec: number }[]>({ queryKey: ["/api/music"], queryFn: async () => (await apiRequest("GET", "/api/music")).json(), staleTime: 300_000 });
   const [playing, setPlaying] = useState<string | null>(null);
@@ -1453,7 +1453,7 @@ function PipelineMusic({ rec, onChange }: { rec: Rec; onChange: () => void }) {
   };
   return (
     <div className="mt-2 rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/[0.06] p-2" data-testid="pipeline-music">
-      <ul className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+      <ul className={`flex flex-col gap-0.5 overflow-y-auto ${tall ? "max-h-[min(52vh,26rem)]" : "max-h-64"}`}>
         {(tracks.data ?? []).map((t) => (
           <li key={t.key} className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-background/70">
             <button type="button" onClick={() => play(t.key)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#053877] text-white" aria-label={playing === t.key ? `Stop ${t.name}` : `Play ${t.name}`}>
@@ -1853,7 +1853,11 @@ export function PostStudio() {
             )}
           </div>
   );
-  const pipelineCard = (
+  // The track picker: inline in the side panel, or its own column in the wide window.
+  const mixParsed = parseMusicMix(rec.musicMix);
+  const askingMusic = done && (!mixParsed || mixParsed.status === "failed" || musicOpen) && !(mixParsed?.status === "queued" || mixParsed?.status === "running");
+  const musicPicker = askingMusic ? <PipelineMusic rec={rec} tall onChange={() => { setMusicOpen(false); void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] }); }} /> : null;
+  const pipeline = (inlineMusic: boolean) => (
         <div className="rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center justify-between pb-1">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Pipeline</p>
@@ -1868,7 +1872,6 @@ export function PostStudio() {
             {(() => {
               const mix = parseMusicMix(rec.musicMix);
               const track = mix?.key ? musicList.data?.find((t) => t.key === mix.key)?.name ?? "the track" : "";
-              const asking = done && (!mix || mix.status === "failed" || musicOpen);
               return (
                 <li className="py-0">
                   <ul>
@@ -1882,9 +1885,8 @@ export function PostStudio() {
                   {done && (mix?.status === "done" || mix?.status === "skipped") && !musicOpen && (
                     <button type="button" onClick={() => setMusicOpen(true)} className="-mt-1 mb-1 ml-10 text-xs font-medium text-primary hover:underline" data-testid="music-change">{mix?.status === "done" ? "Change the music" : "Add music"}</button>
                   )}
-                  {asking && !(mix?.status === "queued" || mix?.status === "running") && (
-                    <PipelineMusic rec={rec} onChange={() => { setMusicOpen(false); void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] }); }} />
-                  )}
+                  {inlineMusic && musicPicker}
+                  {!inlineMusic && askingMusic && <p className="-mt-1 mb-1 ml-10 text-xs font-medium text-[#b36b00] dark:text-[#F0A71F]">Pick one on the right →</p>}
                 </li>
               );
             })()}
@@ -1898,6 +1900,7 @@ export function PostStudio() {
           </ul>
         </div>
   );
+  const pipelineCard = pipeline(true);
   const statsGrid = (
     <div className="grid grid-cols-2 gap-2" data-testid="post-stats">
       {stats.map((st) => (
@@ -2007,13 +2010,24 @@ export function PostStudio() {
 
       {/* The pipeline and every number, from the panel's status line. */}
       <Dialog open={pipeDialog} onOpenChange={setPipeDialog}>
-        <DialogContent className="max-h-[88vh] max-w-md overflow-y-auto">
+        <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{pipelineDone ? "All done" : "Almost there"}</DialogTitle>
             <DialogDescription>{rec.title || "This episode"}</DialogDescription>
           </DialogHeader>
-          {pipelineCard}
-          {statsGrid}
+          {/* Wide: the steps on the left; the music to pick (when it's asked for) and the numbers on the right. */}
+          <div className="grid gap-4 md:grid-cols-2">
+            {pipeline(false)}
+            <div className="flex min-w-0 flex-col gap-3">
+              {musicPicker && (
+                <div>
+                  <p className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold"><Music2 className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" /> Music for your clips</p>
+                  {musicPicker}
+                </div>
+              )}
+              {statsGrid}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
       {/* A clip plays here, not in the editor's player. */}
