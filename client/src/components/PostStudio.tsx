@@ -976,7 +976,13 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
                     const t = now();
                     if (mark.in === null) return;
                     if (t - mark.in < 5) return toast({ title: "Move the playhead further on", description: "The end has to be at least 5 seconds after the start.", variant: "destructive" });
-                    if (t - mark.in > 180) return toast({ title: "Clips are 3 minutes at most", description: "That's the longest YouTube Shorts and Instagram Reels allow. Move the playhead back, or use Edit episode for a longer piece." });
+                    if (t - mark.in > 180) {
+                      // Past the limit: end it at 3 minutes, and show that spot, rather than refuse.
+                      const end = mark.in + 180;
+                      setMark((m) => ({ in: m.in, out: end }));
+                      seek(end);
+                      return toast({ title: `Ended at ${hms(end)}: clips are 3 minutes at most`, description: "That's the longest Shorts and Reels allow. To end it earlier, move the playhead back and press End here again." });
+                    }
                     setMark((m) => ({ in: m.in, out: t }));
                   }}
                   testid="mark-out"
@@ -989,7 +995,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
                     {mark.in === null
                       ? "1. Move the playhead to where the clip starts, then press Start here."
                       : pos.t - mark.in > 180
-                        ? <span className="font-semibold text-destructive">That's {hms(pos.t - mark.in)}: a clip is 3 minutes at most. Move the playhead back to {hms(mark.in + 180)} or before, or <button type="button" onClick={() => setMark((m) => ({ in: m.in, out: (m.in ?? 0) + 180 }))} className="underline underline-offset-2" data-testid="mark-use-max">end it at {hms(mark.in + 180)}</button>.</span>
+                        ? <span className="font-semibold text-destructive">That's {hms(pos.t - mark.in)}. A clip is 3 minutes at most: End here ends it at {hms(mark.in + 180)}.</span>
                         : pos.t < mark.in + 5
                           ? `2. Move the playhead past ${hms(mark.in + 5)}, to where the clip ends, then press End here.`
                           : `2. ${hms(pos.t - mark.in)} so far. Press End here when the playhead is where it ends.`}
