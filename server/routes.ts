@@ -2989,10 +2989,10 @@ export function registerRoutes(app: Express): void {
    * posting queue, and the reply says which.
    */
   async function publishAndRecord(o: {
-    email: string; kind: string; refId: number; shape: string; title: string; description: string; platforms: string[]; when: string; queue: boolean;
+    email: string; kind: string; refId: number; shape: string; title: string; description: string; platforms: string[]; when: string; queue: boolean; mediaKey?: string;
     publish: (x: { externalId: string; addToQueue: boolean; scheduledDate?: string }) => Promise<PublishResult>;
   }): Promise<{ scheduled: boolean; scheduledAt: string }> {
-    const row = await storage.addHostPost({ email: o.email, kind: o.kind, refId: o.refId, shape: o.shape, title: o.title, description: o.description, platforms: o.platforms.join(","), scheduledAt: o.when || "", status: "sending", error: "", jobId: "", requestId: "", results: "" });
+    const row = await storage.addHostPost({ email: o.email, kind: o.kind, refId: o.refId, shape: o.shape, title: o.title, description: o.description, platforms: o.platforms.join(","), scheduledAt: o.when || "", status: "sending", error: "", jobId: "", requestId: "", results: "", mediaKey: o.mediaKey ?? "" });
     try {
       const r = await o.publish({ externalId: `hp-${row.id}`, addToQueue: o.queue && !o.when, scheduledDate: o.when || undefined });
       const raw = o.when || (o.queue ? r.scheduledDate ?? "" : "");
@@ -3004,6 +3004,43 @@ export function registerRoutes(app: Express): void {
       throw err;
     }
   }
+
+  /** A picture uploaded just for this post, to their accounts: now, a time, or the next open slot. */
+  app.post("/api/host/posts/photo", requireHostSession, async (req, res) => {
+    if (!isUploadPostConfigured()) return res.status(503).json({ message: "Posting to socials isn't switched on yet." });
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const key = String(req.body?.storageKey ?? "");
+    if (!/^show-assets\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "Upload the picture first." });
+    const profile = await storage.getProfileByEmail(email);
+    if (!profile?.uploadPostUsername) return res.status(400).json({ message: "Connect your social accounts first." });
+    const platforms = (Array.isArray(req.body?.platforms) ? req.body.platforms : []).map((p: unknown) => String(p).toLowerCase().trim()).filter((p: string) => p && p !== "youtube");
+    if (platforms.length === 0) return res.status(400).json({ message: "Pick at least one account to post to." });
+    const when = scheduleFrom(req.body);
+    if (when === "past") return res.status(400).json({ message: "Pick a time in the future." });
+    const title = String(req.body?.title ?? "").trim().slice(0, 300) || "Photo";
+    const description = String(req.body?.description ?? "").trim();
+    try {
+      // Fetched when it goes out, which for a queued or scheduled post can be days away.
+      const photoUrl = await signedRecordingUrl(key, 7 * 24 * 3600);
+      const out = await publishAndRecord({
+        email, kind: "photo", refId: 0, shape: "", title, description, platforms, when: when || "", queue: req.body?.queue === true, mediaKey: key,
+        publish: (x) => publishPhoto({ username: profile.uploadPostUsername!, platforms, photoUrl, title, description: description || undefined, scheduledDate: x.scheduledDate, timezone: x.scheduledDate ? String(req.body?.timezone ?? "") || undefined : undefined, addToQueue: x.addToQueue, externalId: x.externalId }),
+      });
+      res.json({ ok: true, ...out });
+    } catch (err: any) {
+      console.error("Publishing a photo failed:", err);
+      res.status(502).json({ message: err?.message ?? "Couldn't post that right now." });
+    }
+  });
+
+  /** A photo post's picture, for its thumbnail: a redirect to a fresh signed link. */
+  app.get("/api/host/posts/:id/media", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const row = await storage.getHostPost(Number(req.params.id));
+    if (!row || row.email !== email || !row.mediaKey) return res.status(404).end();
+    res.redirect(302, await signedRecordingUrl(row.mediaKey, 3600));
+  });
 
   /** One clip, in one shape, to their connected accounts — now or later. */
   app.post("/api/host/clips/:id/publish", requireHostSession, async (req, res) => {

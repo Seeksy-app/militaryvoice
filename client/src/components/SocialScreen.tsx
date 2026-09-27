@@ -6,11 +6,13 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { PostDialog, type PostTarget } from "@/components/PostDialog";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
+import { UploadRecording } from "@/components/UploadRecording";
+import { uploadToStorage } from "@/lib/upload";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ClipRow, HostPostRow, PostResult, RecordingRow, SocialPlatform } from "@shared/schema";
-import { AlertTriangle, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, ListPlus, Loader2, Play, Plus, Send, Settings2, Target, Trash2, X } from "lucide-react";
+import { AlertTriangle, ImagePlus, Upload, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, ListPlus, Loader2, Play, Plus, Send, Settings2, Target, Trash2, X } from "lucide-react";
 
 /**
  * Social: the podcaster's own social desk, the way Later or Buffer lay it out.
@@ -64,7 +66,7 @@ export function SocialScreen() {
       ...p,
       at: Date.parse(p.scheduledAt || p.createdAt),
       results_,
-      thumb: clip ? (p.shape === "square" ? clip.squareUrl : p.shape === "wide" ? clip.url : clip.verticalUrl) || clip.verticalUrl || clip.squareUrl || clip.url : p.kind === "recording" ? `/api/host/recordings/${p.refId}/video` : "",
+      thumb: p.kind === "photo" ? `/api/host/posts/${p.id}/media` : clip ? (p.shape === "square" ? clip.squareUrl : p.shape === "wide" ? clip.url : clip.verticalUrl) || clip.verticalUrl || clip.squareUrl || clip.url : p.kind === "recording" ? `/api/host/recordings/${p.refId}/video` : "",
       wide: p.kind === "recording" || p.shape === "wide",
     };
   }), [postsQ.data, clipList]);
@@ -235,7 +237,7 @@ export function SocialScreen() {
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Create post</DialogTitle>
-            <DialogDescription>{picking ? `For ${fmtWhen(new Date(picking).getTime())}. ` : ""}Pick a clip or an episode from your Library.</DialogDescription>
+            <DialogDescription>{picking ? `For ${fmtWhen(new Date(picking).getTime())}. ` : ""}Pick a clip or an episode from your Library, or upload something new.</DialogDescription>
           </DialogHeader>
           <LibraryPicker
             clips={clipList}
@@ -243,6 +245,16 @@ export function SocialScreen() {
             used={usedClips}
             onClip={(c) => { const at = picking || undefined; setPicking(null); postClip(c, at); }}
             onEpisode={(r) => { const at = picking || undefined; setPicking(null); postEpisode(r, at); }}
+            onPhoto={(ph) => { const at = picking || undefined; setPicking(null); setTargetAt(at); setTarget({ kind: "photo", id: 0, title: ph.title, storageKey: ph.storageKey, preview: ph.preview }); }}
+            onVideo={async (id) => {
+              const at = picking || undefined;
+              // Filed in the Library: read its title back, then post it like any episode.
+              const list = (await (await apiRequest("GET", "/api/host/recordings")).json()) as RecordingRow[];
+              void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
+              setPicking(null);
+              setTargetAt(at);
+              setTarget({ kind: "recording", id, title: list.find((r) => r.id === id)?.title || "New video" });
+            }}
           />
         </DialogContent>
       </Dialog>
@@ -300,7 +312,7 @@ function Card({ title, icon: I, note, children }: { title: string; icon: typeof 
 function Thumb({ p, className = "h-12 w-9" }: { p: Post; className?: string }) {
   return (
     <span className={`relative block shrink-0 overflow-hidden rounded-md bg-black ${p.wide ? "w-16" : ""} ${className}`}>
-      {p.thumb && <video src={`${p.thumb}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />}
+      {p.thumb && (p.kind === "photo" ? <img src={p.thumb} alt="" className="h-full w-full object-cover" /> : <video src={`${p.thumb}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />)}
     </span>
   );
 }
@@ -425,16 +437,44 @@ function Calendar({ posts, slots, onOpen, onSlot, onMove, onRemove }: { posts: P
   );
 }
 
-function LibraryPicker({ clips, episodes, used, onClip, onEpisode }: { clips: ClipRow[]; episodes: RecordingRow[]; used: Set<number>; onClip: (c: ClipRow) => void; onEpisode: (r: RecordingRow) => void }) {
-  const [kind, setKind] = useState<"clips" | "episodes">("clips");
+function LibraryPicker({ clips, episodes, used, onClip, onEpisode, onPhoto, onVideo }: { clips: ClipRow[]; episodes: RecordingRow[]; used: Set<number>; onClip: (c: ClipRow) => void; onEpisode: (r: RecordingRow) => void; onPhoto: (p: { storageKey: string; preview: string; title: string }) => void; onVideo: (id: number) => void }) {
+  const [kind, setKind] = useState<"clips" | "episodes" | "upload">("clips");
+  const { toast } = useToast();
+  const [pct, setPct] = useState<number | null>(null);
+  const photo = async (file: File) => {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return toast({ title: "A JPG, PNG or WebP, please", variant: "destructive" });
+    if (file.size > 8 * 1024 ** 2) return toast({ title: "Keep it under 8MB", description: "Instagram and others turn larger pictures down.", variant: "destructive" });
+    try {
+      setPct(0);
+      const storageKey = await uploadToStorage(file, setPct);
+      onPhoto({ storageKey, preview: URL.createObjectURL(file), title: file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim() });
+    } catch (e) {
+      toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setPct(null);
+    }
+  };
   return (
     <div>
       <div className="mb-3 inline-flex rounded-full border border-border p-0.5 text-xs">
-        {(["clips", "episodes"] as const).map((k) => (
-          <button key={k} type="button" onClick={() => setKind(k)} className={`rounded-full px-3 py-1 font-semibold capitalize ${kind === k ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`}>{k} <span className="opacity-70">{k === "clips" ? clips.length : episodes.length}</span></button>
+        {(["clips", "episodes", "upload"] as const).map((k) => (
+          <button key={k} type="button" onClick={() => setKind(k)} className={`rounded-full px-3 py-1 font-semibold ${kind === k ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`social-pick-tab-${k}`}>{k === "upload" ? "Upload new" : k === "clips" ? "Clips" : "Episodes"}{k !== "upload" && <span className="ml-1 opacity-70">{k === "clips" ? clips.length : episodes.length}</span>}</button>
         ))}
       </div>
-      {kind === "clips" ? (
+      {kind === "upload" ? (
+        // Something new to post: a picture for this post, or a video (kept in the Library, where Pōstify can clip it too).
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className={`flex min-h-[12rem] cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border p-6 text-center transition-colors hover:border-[#053877]/50 ${pct !== null ? "pointer-events-none opacity-70" : ""}`} data-testid="social-upload-photo">
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void photo(e.target.files[0])} />
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]">{pct === null ? <ImagePlus className="h-5 w-5" /> : <Loader2 className="h-5 w-5 animate-spin" />}</span>
+            <span className="text-sm font-semibold">{pct === null ? "A picture" : `Uploading ${pct}%`}</span>
+            <span className="text-xs text-muted-foreground">JPG, PNG or WebP. Posts to everything but YouTube.</span>
+          </label>
+          <div className="min-h-[12rem]" data-testid="social-upload-video">
+            <UploadRecording tall title="A video" note="Drop it here or click. It's saved to your Library too, so Pōstify can clip it." onDone={onVideo} />
+          </div>
+        </div>
+      ) : kind === "clips" ? (
         clips.length ? (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-3">
             {clips.map((c) => (

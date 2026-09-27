@@ -108,7 +108,9 @@ function YouTubeFields({ target, yt, onChange }: { target: PostTarget; yt: YouTu
 /** What's being posted: a whole recording from the Library, or one clip in one shape. */
 export type PostTarget =
   | { kind: "recording"; id: number; title: string }
-  | { kind: "clip"; id: number; title: string; caption?: string; shapes: ("vertical" | "square" | "wide")[] };
+  | { kind: "clip"; id: number; title: string; caption?: string; shapes: ("vertical" | "square" | "wide")[] }
+  /** A picture uploaded just for this post (not kept in the Library). */
+  | { kind: "photo"; id: 0; title: string; storageKey: string; preview: string };
 
 const SHAPE_LABEL = { vertical: "Vertical 9:16", square: "Square 1:1", wide: "Wide 16:9" } as const;
 
@@ -133,7 +135,8 @@ export function PostDialog({ target, onClose, at }: { target: PostTarget | null;
     queryFn: async () => (await apiRequest("GET", "/api/host/social")).json(),
     enabled: !!target,
   });
-  const platforms = Array.from(new Set((social.data?.accounts ?? []).map((a) => a.platform)));
+  // YouTube takes video only: a picture goes everywhere else.
+  const platforms = Array.from(new Set((social.data?.accounts ?? []).map((a) => a.platform))).filter((p) => target?.kind !== "photo" || p !== ("youtube" as SocialPlatform));
 
   const [shape, setShape] = useState<"vertical" | "square" | "wide">("vertical");
   const [title, setTitle] = useState("");
@@ -147,7 +150,7 @@ export function PostDialog({ target, onClose, at }: { target: PostTarget | null;
   const [when, setWhen] = useState(inAnHour);
 
   // Fresh each time a different thing is opened.
-  const key = target ? `${target.kind}-${target.id}` : "";
+  const key = target ? `${target.kind}-${target.id}-${target.kind === "photo" ? target.storageKey : ""}` : "";
   useEffect(() => {
     if (!target) return;
     setTitle(target.title);
@@ -174,6 +177,7 @@ export function PostDialog({ target, onClose, at }: { target: PostTarget | null;
           ? { youtube: { ...yt, title: yt.title.trim() || title.trim(), tags: yt.tags.split(",").map((t) => t.trim()).filter(Boolean) } }
           : {}),
       };
+      if (target.kind === "photo") return (await apiRequest("POST", "/api/host/posts/photo", { ...body, storageKey: target.storageKey })).json();
       return (await apiRequest("POST", `/api/host/${target.kind === "clip" ? "clips" : "recordings"}/${target.id}/publish`, body)).json();
     },
     onSuccess: (r: { scheduledAt?: string } | null) => {
@@ -207,6 +211,7 @@ export function PostDialog({ target, onClose, at }: { target: PostTarget | null;
           </div>
         ) : (
           <div className="flex flex-col gap-4">
+            {target?.kind === "photo" && <img src={target.preview} alt="" className="max-h-56 w-full rounded-xl bg-muted object-contain" />}
             {target?.kind === "clip" && target.shapes.length > 1 && (
               <div>
                 <p className="text-sm font-medium">Which shape</p>
