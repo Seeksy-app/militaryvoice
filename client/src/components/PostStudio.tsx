@@ -52,6 +52,11 @@ function CleanCard({ rec, clean, saved, onSaved }: { rec: Rec; clean: CleanResul
     clean.pauses ? `${clean.pauses} long pauses` : "",
   ].filter(Boolean);
   const ready = clean.status === "done" && Boolean(clean.videoKey || clean.audioKey);
+  // "Ready" is news once, when it finishes: after ten minutes, or once closed,
+  // the bar goes (the clean episode is in the Library, and Clean/Original is in the toolbar).
+  const seenKey = `mv_clean_seen_${rec.id}`;
+  const [closed, setClosed] = useState(() => { try { return localStorage.getItem(seenKey) === clean.at; } catch { return false; } });
+  const close = () => { setClosed(true); try { localStorage.setItem(seenKey, clean.at); } catch { /* fine */ } };
   const save = async () => {
     setSaving(true);
     try {
@@ -64,6 +69,7 @@ function CleanCard({ rec, clean, saved, onSaved }: { rec: Rec; clean: CleanResul
       setSaving(false);
     }
   };
+  if (clean.status === "done" && (closed || Date.now() - Date.parse(clean.at) > 10 * 60_000)) return null;
   return (
     <div className={`mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-4 ${ready ? "border-emerald-400/50 bg-emerald-500/[0.04]" : "border-border bg-card"}`} data-testid="post-clean">
       <div className="flex min-w-0 items-center gap-3">
@@ -107,6 +113,9 @@ function CleanCard({ rec, clean, saved, onSaved }: { rec: Rec; clean: CleanResul
         ))}
         {clean.status === "running" && !clean.videoKey && (
           <Button variant="outline" size="sm" disabled className="gap-1.5 rounded-full"><Loader2 className="h-4 w-4 animate-spin" /> {clean.audioKey ? "Video" : "Audio and video"}</Button>
+        )}
+        {clean.status === "done" && (
+          <button type="button" onClick={close} aria-label="Close" className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" data-testid="post-clean-close"><X className="h-4 w-4" /></button>
         )}
       </div>
     </div>
