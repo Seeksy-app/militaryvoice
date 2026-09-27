@@ -11,7 +11,7 @@ services:
     # 2GB on two caption renders at once (27 Sep). Clips render here since
     # then, and encoding is CPU-bound: more CPUs is what makes them faster.
     # Keep this in step with the dashboard, or a sync puts it back.
-    plan: 2c-8g
+    plan: 4c-8g
     branch: main
     autoDeploy: true
     buildFilter:
