@@ -6204,8 +6204,10 @@ export function registerRoutes(app: Express): void {
   /**
    * Postify is open to every podcaster as a beta: one episode each (an upload,
    * or "Make clips" on one of their recordings), up to an hour long. The event's
-   * own slot recordings are clipped anyway and don't count. Testers and admins
-   * have no limit. POSTIFY_BETA_EPISODES / POSTIFY_BETA_MAX_MIN adjust it.
+   * own slot recordings are clipped anyway and don't count. The test accounts
+   * (POST_TESTERS) have no limit. Admins don't: an admin who's also a
+   * podcaster (Riccoh) pays from their credits like anyone, or the balance
+   * on their screen never moves. POSTIFY_BETA_EPISODES / POSTIFY_BETA_MAX_MIN adjust it.
    */
   const postTesters = () =>
     new Set((process.env.POST_TESTERS || "marineocsblog@gmail.com").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
@@ -6213,7 +6215,7 @@ export function registerRoutes(app: Express): void {
   const BETA_MAX_SEC = () => Number(process.env.POSTIFY_BETA_MAX_MIN || 90) * 60;
   async function postifyAllowance(email: string) {
     const e = email.trim().toLowerCase();
-    const unlimited = postTesters().has(e) || (await storage.isAdminEmail(e));
+    const unlimited = postTesters().has(e);
     const used = (await storage.listRecordingsByEmail(e)).filter((r) => r.postifyBeta).length;
     const tokens = await storage.tokenBalance(e);
     const sub = await storage.getSubscription(e);
