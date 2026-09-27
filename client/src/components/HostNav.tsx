@@ -1,8 +1,8 @@
 import type { ComponentType, ReactNode } from "react";
 import { LogoLockupOnDark } from "@/components/Logo";
-import { ThemeSwitch } from "@/components/ThemeSwitch";
+import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -198,7 +198,7 @@ export function HostNav({
       </nav>
       {/* Desktop, folded: a rail of the same icons, names on hover, and the button that opens it. */}
       {collapsed ? (
-        <nav className="sticky top-6 hidden self-start lg:block" aria-label="Dashboard sections">
+        <nav key="rail" className="sticky top-6 hidden self-start lg:block" aria-label="Dashboard sections">
           <div className="flex min-h-[calc(100vh-3rem)] w-14 flex-col items-center gap-1 rounded-2xl bg-[#04102b] py-3 shadow-sm">
             <RailButton tip="Expand menu" onClick={onToggle} testid="nav-expand"><PanelLeftOpen className="h-4 w-4" /></RailButton>
             <span className="my-1.5 h-px w-7 bg-white/10" aria-hidden />
@@ -214,27 +214,26 @@ export function HostNav({
           </div>
         </nav>
       ) : (
-      /* Desktop: the column. */
-      <nav className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-3rem)]" aria-label="Dashboard sections">
+      /* Desktop: the column. Keyed apart from the rail: sharing DOM left a rail icon behind in it. */
+      <nav key="column" className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-3rem)]" aria-label="Dashboard sections">
         {/* Navy, the same as the command card beside it, so the page reads
             as one dark frame with the work in the middle. */}
-        <div className="relative flex min-h-[calc(100vh-3rem)] flex-col gap-5 rounded-2xl bg-[#04102b] p-3 shadow-sm">
-          {/* Fold it away: a tab on the column's edge, clear of the mark and the theme switch. */}
-          {onToggle && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" onClick={onToggle} aria-label="Collapse menu" className="absolute -right-3.5 top-16 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-md hover:bg-muted" data-testid="nav-collapse">
-                  <PanelLeftClose className="h-3.5 w-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="text-xs">Collapse menu</TooltipContent>
-            </Tooltip>
-          )}
+        <div className="flex min-h-[calc(100vh-3rem)] flex-col gap-5 rounded-2xl bg-[#04102b] p-3 shadow-sm">
           {/* The mark heads the column now that there's no header bar. */}
           <div className="px-3 pb-1 pt-2">
             <div className="flex items-center justify-between gap-2">
               <Link href="/host/dashboard" data-testid="link-workspace-home-nav"><LogoLockupOnDark className="h-9 w-auto" /></Link>
-              <ThemeSwitch />
+              {/* Fold it away (the light/dark choice lives in the account menu below). */}
+              {onToggle && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" onClick={onToggle} aria-label="Collapse menu" className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white" data-testid="nav-collapse">
+                      <PanelLeftClose className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="text-xs">Collapse menu</TooltipContent>
+                </Tooltip>
+              )}
             </div>
             {admin && <div className="mt-3 [&_a]:!border-white/20 [&_button]:!border-white/20">{admin}</div>}
           </div>
@@ -277,6 +276,8 @@ export function HostNav({
                 <DropdownMenuItem onSelect={() => onGo("editProfile")} className="gap-2" data-testid="account-profile"><UserRound className="h-4 w-4" /> Profile</DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => onGo("integrations")} className="gap-2" data-testid="account-integrations"><Link2 className="h-4 w-4" /> Integrations</DropdownMenuItem>
                 <DropdownMenuSeparator />
+                <Appearance />
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={account.onSignOut} className="gap-2" data-testid="account-signout"><LogOut className="h-4 w-4" /> Sign out</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -284,6 +285,27 @@ export function HostNav({
         </div>
       </nav>
       )}
+    </>
+  );
+}
+
+/** Light, dark, or whatever this device is set to: in the account menu, out of the column's way. */
+function Appearance() {
+  const { mode, setMode } = useTheme();
+  const opts: { m: ThemeMode; icon: typeof Sun; label: string }[] = [
+    { m: "light", icon: Sun, label: "Light" },
+    { m: "dark", icon: Moon, label: "Dark" },
+    { m: "auto", icon: Monitor, label: "Match this device" },
+  ];
+  return (
+    <>
+      <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Appearance</DropdownMenuLabel>
+      {opts.map(({ m, icon: Icon, label }) => (
+        <DropdownMenuItem key={m} onSelect={(e) => { e.preventDefault(); setMode(m); }} className="gap-2" data-testid={`theme-${m}`}>
+          <Icon className="h-4 w-4" /> {label}
+          {mode === m && <Check className="ml-auto h-4 w-4" />}
+        </DropdownMenuItem>
+      ))}
     </>
   );
 }
