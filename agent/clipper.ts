@@ -187,8 +187,18 @@ async function uploadFile(file: string, contentType: string): Promise<string> {
 // (two jobs × two clips × frame grabs) ran the 2GB worker out of memory.
 // One on the 2GB worker: two caption renders at once (each holds every
 // caption image) still ran it out of memory on 27 Sep. So the default follows
-// the machine: one per ~2GB of the container's limit (Pro, 4GB: two).
-const FFMPEG_SLOTS = Math.max(1, Number(process.env.FFMPEG_SLOTS || Math.floor(memoryLimit() / 1.9e9)));
+// the machine: one per ~2GB of the container's limit, and never more than its
+// CPUs, since encoding is CPU-bound (2 CPU / 8GB: two, not four).
+const FFMPEG_SLOTS = Math.max(1, Number(process.env.FFMPEG_SLOTS || Math.min(Math.floor(memoryLimit() / 1.9e9), cpuLimit())));
+
+/** The container's CPUs (cgroup quota), not the host's. */
+function cpuLimit(): number {
+  try {
+    const [quota, period] = readFileSync("/sys/fs/cgroup/cpu.max", "utf8").trim().split(/\s+/);
+    if (quota !== "max" && Number(period) > 0) return Math.max(1, Math.round(Number(quota) / Number(period)));
+  } catch { /* cgroup v1 or not Linux */ }
+  return os.availableParallelism?.() ?? os.cpus().length;
+}
 
 /** The container's memory limit (cgroup), not the host's, which os.totalmem() reports. */
 function memoryLimit(): number {
@@ -2020,7 +2030,7 @@ async function main(): Promise<void> {
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn("No ANTHROPIC_API_KEY — falling back to speech density, which picks worse moments.");
   }
-  console.log(`${LANES} jobs at a time, ${FFMPEG_SLOTS} ffmpeg at a time (${(memoryLimit() / 1e9).toFixed(1)}GB)`);
+  console.log(`${LANES} jobs at a time, ${FFMPEG_SLOTS} ffmpeg at a time (${cpuLimit()} CPU, ${(memoryLimit() / 1e9).toFixed(1)}GB)`);
   // Each lane claims its own jobs (claims are atomic on the server), so a long
   // episode in one lane doesn't hold up a short one behind it.
   const lane = async (n: number) => {
