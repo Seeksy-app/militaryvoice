@@ -169,27 +169,11 @@ async function uploadFile(file: string, contentType: string): Promise<string> {
     "/api/agent/clip-files/upload-url",
     { name },
   );
-  const body = await fs.readFile(file);
-  // Three tries: one dropped connection shouldn't throw away a whole job's renders.
-  let res: Response | null = null;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      res = await fetch(signed.uploadUrl, { method: "PUT", headers: { "content-type": contentType }, body: new Uint8Array(body) });
-      if (res.ok || res.status < 500) break;
-    } catch (err) {
-      // Some machines' Node TLS can't hold a connection to storage that curl
-      // manages fine. Last try goes through curl before giving up.
-      if (attempt === 3) {
-        await run("curl", ["-s", "-f", "--retry", "4", "--retry-all-errors", "--retry-delay", "2", "-X", "PUT", signed.uploadUrl, "-H", `content-type: ${contentType}`, "--data-binary", `@${file}`]);
-        console.log(`   uploaded ${name} via curl (${(body.length / 1048576).toFixed(1)}MB)`);
-        return signed.publicUrl;
-      }
-    }
-    console.warn(`   upload of ${name} didn't go through — trying again (${attempt}/3)`);
-    await new Promise((z) => setTimeout(z, 3000 * attempt));
-  }
-  if (!res || !res.ok) throw new Error(`upload failed: ${res?.status} ${res ? (await res.text()).slice(0, 200) : ""}`);
-  console.log(`   uploaded ${name} (${(body.length / 1048576).toFixed(1)}MB)`);
+  // Streamed from disk (curl -T), never read into memory: three shapes of two
+  // clips at once, held whole, ran the 2GB worker out of memory (27 Sep 2026).
+  const size = (await fs.stat(file)).size;
+  await run("curl", ["-s", "-f", "--retry", "4", "--retry-all-errors", "--retry-delay", "3", "-X", "PUT", "-T", file, signed.uploadUrl, "-H", `content-type: ${contentType}`]);
+  console.log(`   uploaded ${name} (${(size / 1048576).toFixed(1)}MB)`);
   return signed.publicUrl;
 }
 
@@ -197,7 +181,28 @@ async function uploadFile(file: string, contentType: string): Promise<string> {
 // ffmpeg
 // ---------------------------------------------------------------------------
 
+// At most this many ffmpeg processes at once, whatever the lanes and clips in
+// flight: each decodes video and holds hundreds of MB, and eight together
+// (two jobs × two clips × frame grabs) ran the 2GB worker out of memory.
+const FFMPEG_SLOTS = Math.max(1, Number(process.env.FFMPEG_SLOTS || 2));
+let ffmpegBusy = 0;
+const ffmpegWaiting: (() => void)[] = [];
+async function slot<T>(work: () => Promise<T>): Promise<T> {
+  if (ffmpegBusy >= FFMPEG_SLOTS) await new Promise<void>((r) => ffmpegWaiting.push(r));
+  ffmpegBusy++;
+  try {
+    return await work();
+  } finally {
+    ffmpegBusy--;
+    ffmpegWaiting.shift()?.();
+  }
+}
+
 function run(bin: string, args: string[]): Promise<string> {
+  return bin === "ffmpeg" ? slot(() => runNow(bin, args)) : runNow(bin, args);
+}
+
+function runNow(bin: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     const p = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
     let out = "";
@@ -1053,7 +1058,8 @@ export function sane(moments: Moment[], durationSec: number, n = WANTED): Moment
 /** PUT a big file with curl (streams from disk; Node would hold it all in memory). */
 async function uploadBig(file: string, contentType: string): Promise<string> {
   const signed = await api<{ uploadUrl: string; storageKey: string }>("POST", "/api/agent/clean-files/upload-url", { name: path.basename(file) });
-  await run("curl", ["-s", "-f", "--retry", "5", "--retry-all-errors", "--retry-delay", "3", "-X", "PUT", signed.uploadUrl, "-H", `content-type: ${contentType}`, "--data-binary", `@${file}`]);
+  // -T streams the file; --data-binary @file read the whole episode into memory first.
+  await run("curl", ["-s", "-f", "--retry", "5", "--retry-all-errors", "--retry-delay", "3", "-X", "PUT", "-T", file, signed.uploadUrl, "-H", `content-type: ${contentType}`]);
   return signed.storageKey;
 }
 
