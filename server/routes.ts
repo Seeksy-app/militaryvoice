@@ -9827,8 +9827,9 @@ The ${eventName} team`;
     const body = from === "alex" ? paragraphs.replace(/<p>Alex<\/p>\s*$/, "") + alexSignatureHtml() : paragraphs;
     const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: subject.replace(/^re:\s*/i, ""), body });
     const named = from === "michael" ? { from: "Michael <michael@militaryvoices.ai>", replyTo: "michael@militaryvoices.ai" } : {};
-    // Threads under their latest message to us, when there is one.
-    const latest = (await storage.listInboundByEmail(to))[0];
+    // Threads under their latest message to us, when there is one. A copy
+    // (`standalone`) stands on its own and leaves their messages waiting.
+    const latest = req.body?.standalone ? undefined : (await storage.listInboundByEmail(to))[0];
     const headers: Record<string, string> = {};
     if (latest?.messageId) { headers["In-Reply-To"] = latest.messageId; headers["References"] = latest.messageId; }
     const id = await sendOneOffEmail({ to, subject, html, text, headers, ...named, bcc: bccFor(from, to) });
