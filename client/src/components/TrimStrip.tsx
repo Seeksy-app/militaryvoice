@@ -78,6 +78,12 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
   const [drag, setDrag] = useState<Drag | null>(null);
   const [playing, setPlaying] = useState(false);
   const [hint, setHint] = useState<"" | "start" | "end">("");
+  // Where the playhead is being dragged to. The line follows the hand at once;
+  // the player catches up (on a long episode each seek takes a moment, and a
+  // line drawn at the player's time trailed the mouse and snapped back).
+  const [scrub, setScrub] = useState<number | null>(null);
+  const seeking = useRef(false);
+  const wanted = useRef<number | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   useEffect(() => {
     if (!menu) return;
@@ -203,16 +209,42 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     const r = track.current!.getBoundingClientRect();
     return Math.min(d, Math.max(0, ((clientX - r.left) / r.width) * d));
   };
-  // The player follows whatever you're dragging, a frame at a time.
-  const show = (t: number) => {
-    cancelAnimationFrame(frame.current);
-    frame.current = requestAnimationFrame(() => {
-      const vid = videoRef.current;
-      if (!vid) return;
-      if (!vid.paused) vid.pause();
-      vid.currentTime = t;
-    });
+  // The player follows whatever you're dragging: one seek at a time, always to
+  // the latest spot. Seeks asked for every mouse move queued up behind each
+  // other and the picture fell further and further behind.
+  const seekNext = () => {
+    const vid = videoRef.current;
+    const t = wanted.current;
+    wanted.current = null;
+    if (!vid || t === null) { seeking.current = false; return; }
+    seeking.current = true;
+    vid.currentTime = t;
+    window.clearTimeout(frame.current);
+    frame.current = window.setTimeout(seekNext, 1500); // a seek that never reports back
   };
+  const show = (t: number) => {
+    const vid = videoRef.current;
+    if (!vid) return;
+    if (!vid.paused) vid.pause();
+    wanted.current = t;
+    if (!seeking.current) seekNext();
+  };
+  useEffect(() => {
+    const vid = videoRef.current;
+    if (!vid) return;
+    const done = () => { window.clearTimeout(frame.current); seekNext(); };
+    vid.addEventListener("seeked", done);
+    return () => vid.removeEventListener("seeked", done);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoRef, d]);
+  // Let go: the line hands back to the player once it has caught up.
+  useEffect(() => {
+    if (scrub === null || drag) return;
+    if (Math.abs(time - scrub) < 0.35) { setScrub(null); return; }
+    const t = setTimeout(() => setScrub(null), 2500);
+    return () => clearTimeout(t);
+  }, [scrub, drag, time]);
+  const head = scrub ?? time;
 
   const apply = (kind: Drag["kind"], s: number, e: number) => {
     if (kind === "start") {
@@ -241,7 +273,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
     setDrag({ kind, x0: ev.clientX, s0: start, e0: end, pick: kind === "head" && (ev.currentTarget as HTMLElement).dataset.pick === "1" });
     if (kind === "start" || kind === "end") setHint("");
-    if (kind === "head") show(timeAt(ev.clientX));
+    if (kind === "head") { const t = timeAt(ev.clientX); setScrub(t); show(t); }
   };
   const downCut = (kind: "cs" | "ce" | "cm", i: number) => (ev: React.PointerEvent) => {
     ev.stopPropagation();
@@ -258,7 +290,8 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     ev.stopPropagation();
     ev.preventDefault();
     (ev.currentTarget as HTMLElement).setPointerCapture(ev.pointerId);
-    setDrag({ kind: "head", x0: ev.clientX, s0: start, e0: end, t0: time, knob: true });
+    setDrag({ kind: "head", x0: ev.clientX, s0: start, e0: end, t0: head, knob: true });
+    setScrub(head);
   };
   const move = (ev: React.PointerEvent) => {
     if (!drag) return;
@@ -272,7 +305,7 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     const t = drag.knob && drag.t0 != null
       ? Math.min(d, Math.max(0, drag.t0 + ((ev.clientX - drag.x0) / track.current!.getBoundingClientRect().width) * d))
       : timeAt(ev.clientX);
-    if (drag.kind === "head") show(t);
+    if (drag.kind === "head") { setScrub(t); show(t); }
     else if (drag.kind === "cs" && drag.i != null) { const a = Math.max(start, Math.min(t, drag.e0 - 0.5)); setCut(drag.i, a, drag.e0); show(a); }
     else if (drag.kind === "ce" && drag.i != null) { const b = Math.min(end, Math.max(t, drag.s0 + 0.5)); setCut(drag.i, drag.s0, b); show(b); }
     else if (drag.kind === "cm" && drag.i != null) {
@@ -304,7 +337,9 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
     const dir = ev.key === "ArrowLeft" ? -1 : ev.key === "ArrowRight" ? 1 : 0;
     if (!dir || (ev.target as HTMLElement).getAttribute("role") === "slider") return;
     ev.preventDefault();
-    show(Math.min(d, Math.max(0, time + dir * (ev.shiftKey ? 5 : 1))));
+    const t = Math.min(d, Math.max(0, head + dir * (ev.shiftKey ? 5 : 1)));
+    setScrub(t);
+    show(t);
   };
   const nudge = (kind: "start" | "end") => (ev: React.KeyboardEvent) => {
     const step = ev.shiftKey ? 5 : 1;
@@ -465,7 +500,9 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
           </div>
 
           {/* The playhead, over the ruler and the frames; its knob can be dragged. */}
-          <div className="pointer-events-none absolute bottom-0 top-0 z-30" style={{ left: x(time) }}>
+          <div className="pointer-events-none absolute bottom-0 top-0 z-30" style={{ left: x(head) }}>
+            {/* The whole line can be grabbed, not just the knob: a wide, invisible handle along it. */}
+            <div onPointerDown={downKnob} className="pointer-events-auto absolute -left-2.5 bottom-0 top-0 w-5 cursor-ew-resize touch-none" data-testid="trim-playhead-grab" />
             {cut ? (
               <button
                 type="button"
@@ -477,9 +514,9 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
                 <Scissors className="h-3 w-3" />
               </button>
             ) : (
-              <div onPointerDown={down("head")} className="pointer-events-auto absolute -left-[7px] top-0 h-3.5 w-3.5 cursor-ew-resize touch-none rounded-full border-2 border-white bg-[#053877] shadow dark:border-[#053877] dark:bg-white" data-testid="trim-playhead" />
+              <div onPointerDown={downKnob} className="pointer-events-auto absolute -left-[10px] -top-0.5 h-5 w-5 cursor-grab touch-none rounded-full border-2 border-white bg-[#053877] shadow-md transition-transform hover:scale-110 active:cursor-grabbing dark:border-[#053877] dark:bg-white" data-testid="trim-playhead" />
             )}
-            <div className={`absolute -left-px bottom-0 w-0.5 bg-[#053877] dark:bg-white ${cut ? "top-6" : "top-3"}`} />
+            <div className={`absolute -left-px bottom-0 w-0.5 bg-[#053877] dark:bg-white ${cut ? "top-6" : "top-4"}`} />
           </div>
         </div>
       </div>
