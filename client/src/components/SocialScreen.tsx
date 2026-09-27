@@ -203,9 +203,9 @@ export function SocialScreen() {
 
 type Item = { key: string; posts: HostPostRow[]; title: string; src: string; wide: boolean; clip?: ClipRow; rec?: RecordingRow; platforms: SocialPlatform[]; at: number };
 
-/** Small tiles: the clip's own picture, a quarter the size of Pōstify's cards. */
+/** Tiles of the clip's own picture, about 190px across: big enough to see what the clip is. */
 function Grid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] items-start gap-3">{children}</div>;
+  return <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] items-start gap-3">{children}</div>;
 }
 
 function Tile({ src, wide, title, badge, onPlay, testId, children }: { src: string; wide: boolean; title: string; badge?: React.ReactNode; onPlay: () => void; testId?: string; children?: React.ReactNode }) {
