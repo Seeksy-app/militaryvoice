@@ -25,7 +25,7 @@ export default function BioPublicPage({ handle }: { handle: string }) {
   if (q.isLoading) return <div className="min-h-screen bg-[#0b1020]" />;
   if (!q.data) return <NotFound />;
   return (
-    <div className="min-h-screen" style={{ background: q.data.theme.shade === "dark" ? "#0b1020" : "#f5f6fa" }}>
+    <div data-bio-public className="min-h-screen" style={{ background: q.data.theme.shade === "dark" ? "#0b1020" : "#f5f6fa" }}>
       <BioPageView
         data={q.data}
         shareBase={`${window.location.origin}/${q.data.handle}`}

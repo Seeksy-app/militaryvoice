@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { RESERVED_HANDLES } from "@shared/bio";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -130,6 +131,9 @@ export function HelpChat() {
   });
 
   if (HIDDEN_ON.some((p) => location.startsWith(p))) return null;
+  // A podcaster's own page (militaryvoices.ai/<handle>) is theirs: no MilitaryVoices help bubble on it.
+  const seg = location.split(/[?#]/)[0].split("/").filter(Boolean);
+  if (seg.length === 1 && !RESERVED_HANDLES.has(seg[0].toLowerCase())) return null;
 
   function send() {
     const text = draft.trim();
