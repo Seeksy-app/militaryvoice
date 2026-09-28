@@ -2316,3 +2316,80 @@ export const discoveryIntros = pgTable("discovery_intros", {
   note: text("note").notNull().default(""),
   createdAt: text("created_at").notNull(),
 });
+
+// ---------------------------------------------------------------------------
+// Podcast hosting: a podcaster's show, its episodes and its downloads, served
+// as an RSS feed at /feed/<slug> with every play counted through /e/<id>.
+// ---------------------------------------------------------------------------
+export const hostedShows = pgTable("hosted_shows", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  /** The feed's address: /feed/<slug>. */
+  slug: text("slug").notNull(),
+  title: text("title").notNull().default(""),
+  description: text("description").notNull().default(""),
+  author: text("author").notNull().default(""),
+  ownerName: text("owner_name").notNull().default(""),
+  ownerEmail: text("owner_email").notNull().default(""),
+  /** Square, 1400–3000px (Apple's rule), public. */
+  artworkUrl: text("artwork_url").notNull().default(""),
+  category: text("category").notNull().default("Government"),
+  subcategory: text("subcategory").notNull().default(""),
+  language: text("language").notNull().default("en-us"),
+  explicit: boolean("explicit").notNull().default(false),
+  /** episodic | serial */
+  showType: text("show_type").notNull().default("episodic"),
+  website: text("website").notNull().default(""),
+  copyright: text("copyright").notNull().default(""),
+  /** podcast:guid: the show's permanent ID, whatever its address. */
+  guid: text("guid").notNull().default(""),
+  /** The feed it came from, when it moved here from another host. */
+  importedFrom: text("imported_from").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull().default(""),
+}, (t) => [uniqueIndex("hosted_shows_slug").on(t.slug), index("hosted_shows_email").on(t.email)]);
+export type HostedShowRow = typeof hostedShows.$inferSelect;
+
+export const hostedEpisodes = pgTable("hosted_episodes", {
+  id: serial("id").primaryKey(),
+  showId: integer("show_id").notNull(),
+  title: text("title").notNull().default(""),
+  /** Show notes; plain text with line breaks. */
+  description: text("description").notNull().default(""),
+  /** Our copy of the audio (R2), or… */
+  audioKey: text("audio_key").notNull().default(""),
+  /** …the file at the old host, for an episode that came with an imported show. */
+  audioUrl: text("audio_url").notNull().default(""),
+  mime: text("mime").notNull().default("audio/mpeg"),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  durationSec: integer("duration_sec").notNull().default(0),
+  episodeNumber: integer("episode_number"),
+  season: integer("season"),
+  /** full | trailer | bonus */
+  episodeType: text("episode_type").notNull().default("full"),
+  explicit: boolean("explicit").notNull().default(false),
+  artworkUrl: text("artwork_url").notNull().default(""),
+  guid: text("guid").notNull().default(""),
+  /** draft | published */
+  status: text("status").notNull().default("draft"),
+  publishedAt: text("published_at").notNull().default(""),
+  /** The Library recording it was made from, if any. */
+  recordingId: integer("recording_id"),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("hosted_episodes_show").on(t.showId)]);
+export type HostedEpisodeRow = typeof hostedEpisodes.$inferSelect;
+
+/** One row per listener per episode per day: a download the way sponsors count one (IAB-style). */
+export const hostedDownloads = pgTable("hosted_downloads", {
+  id: serial("id").primaryKey(),
+  showId: integer("show_id").notNull(),
+  episodeId: integer("episode_id").notNull(),
+  /** UTC yyyy-mm-dd. */
+  day: text("day").notNull(),
+  /** sha256 of IP, user agent and the day: counts a listener once without keeping who they are. */
+  listenerHash: text("listener_hash").notNull(),
+  /** Apple Podcasts, Spotify, Overcast… from the user agent. */
+  app: text("app").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [uniqueIndex("hosted_downloads_once").on(t.episodeId, t.listenerHash, t.day), index("hosted_downloads_show_day").on(t.showId, t.day)]);
+export type HostedDownloadRow = typeof hostedDownloads.$inferSelect;

@@ -27,11 +27,19 @@
       "destination": "/api"
     },
     {
+      "source": "/feed/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/e/(.*)",
+      "destination": "/api"
+    },
+    {
       "source": "/og/(.*)",
       "destination": "/api"
     },
     {
-      "source": "/((?!api/|assets/|s/|og/|go/).*)",
+      "source": "/((?!api/|assets/|s/|og/|go/|feed/|e/).*)",
       "destination": "/index.html"
     }
   ],

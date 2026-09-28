@@ -7,20 +7,21 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { PodcastStatsData } from "@shared/schema";
 
-type Source = "buzzsprout" | "podbean" | "transistor" | "spotify";
+type Source = "militaryvoices" | "buzzsprout" | "podbean" | "transistor" | "spotify";
 interface SourceView { source: Source; showName: string; status: string; error: string; fetchedAt: string; data: PodcastStatsData | null }
 interface StatsResponse { sources: SourceView[]; benchmark: { unit: string; avg: number; percentile: number; peers: number }[] }
 
 const KEY = ["/api/host/podcast-stats"];
-const NAME: Record<Source, string> = { buzzsprout: "Buzzsprout", podbean: "Podbean", transistor: "Transistor", spotify: "Spotify" };
+const NAME: Record<Source, string> = { militaryvoices: "MilitaryVoices", buzzsprout: "Buzzsprout", podbean: "Podbean", transistor: "Transistor", spotify: "Spotify" };
 /** Each host's own mark, as a small badge (their site icon). */
 const MARK: Record<Source, string> = {
+  militaryvoices: "/icons/icon-192.png",
   buzzsprout: "https://www.google.com/s2/favicons?domain=buzzsprout.com&sz=64",
   podbean: "https://www.google.com/s2/favicons?domain=podbean.com&sz=64",
   transistor: "https://www.google.com/s2/favicons?domain=transistor.fm&sz=64",
   spotify: "https://www.google.com/s2/favicons?domain=podcasters.spotify.com&sz=64",
 };
-const COLOR: Record<Source, string> = { buzzsprout: "#1B1B1B", podbean: "#7ACB2F", transistor: "#2C3E50", spotify: "#1DB954" };
+const COLOR: Record<Source, string> = { militaryvoices: "#053877", buzzsprout: "#1B1B1B", podbean: "#7ACB2F", transistor: "#2C3E50", spotify: "#1DB954" };
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(Math.round(n)));
 const when = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "");
 const MONTH = 30 * 86400000;
@@ -272,7 +273,7 @@ export function PodcastListens({ onConnect }: { onConnect: () => void }) {
                   {s.status === "failed" && <span className="text-destructive"> · {s.error}</span>}
                 </p>
               </div>
-              {s.source !== "spotify" && (
+              {s.source !== "spotify" && s.source !== "militaryvoices" && (
                 <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => void refresh(s.source)} disabled={refreshing === s.source}>
                   <RefreshCw className={`h-3.5 w-3.5 ${refreshing === s.source ? "animate-spin" : ""}`} /> Refresh
                 </Button>

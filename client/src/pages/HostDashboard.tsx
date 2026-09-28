@@ -75,6 +75,7 @@ import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
 import { MyAnalytics } from "@/components/MyAnalytics";
 import { PodcastListens, PodcastChips, usePodcastSources } from "@/components/PodcastStats";
+import { PodcastHosting } from "@/components/PodcastHosting";
 import { GetTheApp, AppInstallCard } from "@/components/GetTheApp";
 import { isPodcaster } from "@shared/schema";
 import { StudioIcon } from "@/components/GreenRoomButton";
@@ -580,7 +581,7 @@ function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -589,6 +590,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   analytics: "analytics",
   postify: "postify",
   social: "social",
+  podcast: "podcast",
   greenroom: "green-room",
   discovery: "discovery",
   dashboard: "",
@@ -1245,6 +1247,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <PostStudio />
         ) : screen === "social" ? (
           <SocialScreen />
+        ) : screen === "podcast" ? (
+          <PodcastHosting />
         ) : screen === "analytics" ? (
           <section className="mt-6">
             <PodcastListens onConnect={() => { window.location.hash = "section-podcast-stats"; goTo("integrations"); }} />

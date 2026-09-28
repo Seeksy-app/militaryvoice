@@ -3,6 +3,7 @@ import { storage } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
 import { seal, unseal } from "./secretBox.js";
 import type { PodcastStatsData, PodcastStatsRow } from "../shared/schema.js";
+import { hostedAsStats } from "./hosting.js";
 
 /**
  * A podcaster's listening numbers, from where the show is hosted or heard:
@@ -311,7 +312,9 @@ export function registerPodcastStats(app: Express) {
     let rows = await storage.listPodcastStats(email(req));
     // Connected sources refresh themselves when they're half a day old.
     rows = await Promise.all(rows.map((r) => (r.source !== "spotify" && (!r.fetchedAt || Date.now() - Date.parse(r.fetchedAt) > STALE_MS) ? refresh(r) : r)));
-    res.json({ sources: rows.map(view), benchmark: await benchmark(rows) });
+    // Hosted here: counted by us, always current, first in the list.
+    const hosted = await hostedAsStats(email(req)).catch((err) => { console.warn("Hosted stats failed:", (err as Error).message); return []; });
+    res.json({ sources: [...hosted, ...rows.map(view)], benchmark: await benchmark(rows) });
   });
 
   app.post("/api/host/podcast-stats/buzzsprout", requireHostSession, async (req, res) => {
