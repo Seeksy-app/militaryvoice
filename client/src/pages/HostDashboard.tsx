@@ -1038,7 +1038,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
       {!data && <NavBar />}
       {/* On a computer, a bar across the top like Search Console's: the menu button and the mark on the left, credits, help and the account on the right. */}
       {workspace && (
-        <header className="sticky top-0 z-40 hidden h-16 items-center gap-2 border-b border-border bg-background/95 px-3 backdrop-blur lg:flex" data-testid="topbar">
+        <header className="sticky top-0 z-40 hidden h-16 items-center gap-2 border-b border-border bg-card px-3 lg:flex" data-testid="topbar">
           <Tooltip>
             <TooltipTrigger asChild>
               <button type="button" onClick={toggleNav} aria-label={navTucked ? "Expand menu" : "Collapse menu"} className="flex h-11 w-11 items-center justify-center rounded-full text-foreground/70 hover:bg-muted hover:text-foreground" data-testid="nav-toggle"><Menu className="h-5 w-5" /></button>

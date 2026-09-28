@@ -225,7 +225,7 @@ export function HostNav({
       />
       {/* Desktop, folded: a rail of the same icons, names on hover, and the button that opens it. */}
       {collapsed ? (
-        <nav key="rail" className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start overflow-y-auto lg:block" aria-label="Dashboard sections">
+        <nav key="rail" className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start overflow-y-auto border-r border-border bg-card lg:block" aria-label="Dashboard sections">
           <div className="flex min-h-full w-[72px] flex-col items-center gap-1 py-3">
             {groups.flatMap((g) => g.items).map((it) => {
               const Icon = it.icon;
@@ -240,7 +240,7 @@ export function HostNav({
         </nav>
       ) : (
       /* Desktop: the column. Keyed apart from the rail: sharing DOM left a rail icon behind in it. */
-      <nav key="column" className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start overflow-y-auto lg:block" aria-label="Dashboard sections">
+      <nav key="column" className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start overflow-y-auto border-r border-border bg-card lg:block" aria-label="Dashboard sections">
         {/* Like Search Console: flush to the edge, no card; what you're working on at the top; the page you're on as a pill. */}
         <div className="flex min-h-full flex-col px-3 py-3">
           {account && (
