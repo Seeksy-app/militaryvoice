@@ -76,7 +76,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   // Their name, handle, bio and socials: on the page, or in white over their photo (hero).
   const who = (onPhoto: boolean, hideName = false) => (
     <>
-      {!hideName && !noName && <h1 className={`text-balance font-bold leading-tight tracking-tight ${onPhoto ? "text-[34px]" : "text-[26px]"}`}>{data.displayName || "Your name"}</h1>}
+      {!hideName && !noName && <h1 className="text-balance font-bold leading-tight tracking-tight" style={{ fontSize: Math.round((onPhoto ? 34 : 26) * (t.nameSize ?? 100) / 100) }}>{data.displayName || "Your name"}</h1>}
       <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>@{data.handle}{data.branch ? ` · ${data.branch}` : ""}</p>
       {data.bio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{styled(data.bio)}</p>}
       <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} />
@@ -127,7 +127,8 @@ export function PageTop({ t, avatar, hero, cutoutUrl, name, handle, latest, chil
   const Y = Number.isFinite(t.imageY) ? t.imageY : 50;
   const photo = hero || avatar;
   const longest = Math.max(4, ...(name || "Your name").split(/\s+/).map((w) => w.length));
-  const bigName = Math.round(Math.min(104, Math.max(46, 380 / (longest * 0.62)))); // the cutout's name, filling the width behind them
+  // The cutout's name, filling the width behind them, then their own size on top.
+  const bigName = Math.round(Math.min(104, Math.max(46, 380 / (longest * 0.62))) * (t.nameSize ?? 100) / 100);
   return (
     <>
       {CUTOUT_LAYOUTS.includes(t.layout) && cutoutUrl ? (

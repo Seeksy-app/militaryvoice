@@ -780,6 +780,12 @@ function DesignTab({ d, change, view, cutting = false, cutError = "" }: { d: Pag
             <div><p className="text-sm font-semibold">Show my name</p><p className="text-xs text-muted-foreground">Turn it off when your photo or logo already says it.</p></div>
             <Switch checked={!(t.hideName ?? false)} onCheckedChange={(v) => set({ hideName: !v })} data-testid="bio-show-name" />
           </div>
+          {!t.hideName && (
+            <div className="mt-3 space-y-2 rounded-xl bg-muted/40 p-3">
+              <RangeRow label="Name size" hint="Smaller or bigger" value={t.nameSize ?? 100} min={60} max={150} onChange={(v) => set({ nameSize: v })} unit="%" testid="bio-name-size" />
+              {(t.nameSize ?? 100) !== 100 && <button type="button" onClick={() => set({ nameSize: 100 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
+            </div>
+          )}
           {CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && (
             <div className="mt-4 space-y-3 rounded-xl bg-muted/40 p-3" data-testid="bio-cutout-adjust">
               <RangeRow label="Photo position" hint="Up or down" value={t.cutoutY ?? 0} min={-160} max={160} onChange={(v) => set({ cutoutY: v })} testid="bio-cutout-y" />

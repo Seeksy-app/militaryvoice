@@ -35,6 +35,8 @@ export interface BioTheme {
   podcast: BioPodcastOptions;
   /** The link buttons' colour ("" = the theme colour). */
   linkColor: string;
+  /** Their name's size at the top, percent (100 = as drawn). */
+  nameSize?: number;
   /** The Sticker top's stripes ("" = their colour). */
   stickerColor?: string;
   background: BioBackground;
