@@ -159,7 +159,7 @@ export function HostNav({
             ? `flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${
                 active ? "bg-[#053877] text-white" : it.locked ? "bg-muted text-muted-foreground" : "bg-[#053877]/[0.06] text-foreground"
               }`
-            : `relative flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
+            : `relative flex items-center gap-3 rounded-lg px-3 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#053877]/30 ${
                 active
                   ? "bg-[#053877]/[0.08] font-semibold text-[#053877] dark:bg-white/10 dark:text-white"
                   : it.locked
