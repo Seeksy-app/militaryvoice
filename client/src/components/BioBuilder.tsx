@@ -13,10 +13,10 @@ import { BioBrandsView } from "@/components/BioBrandsView";
 import { BioFamilyView } from "@/components/BioFamilyView";
 import { podcastWorthFor } from "@/lib/worth";
 import { useBioFont } from "@/lib/bioFont";
-import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
-import { SWATCHES, TEMPLATES, FONTS, bioPalette, onColor, type BioBackground, type BioFont, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
+import { SWATCHES, TEMPLATES, FONTS, bioPalette, onColor, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
+import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
 /**
  * SmartLink (was "My page", then "Rally Point"): the podcaster's bio page builder. Profile, Design, Content and
@@ -26,7 +26,7 @@ import { X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headph
 
 type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; welcome: string; aiEnabled: boolean; published: boolean; brands: BioBrands; family: BioFamily; cutoutUrl: string; cutoutFrom: string };
 type Resp = { page: Page; url: string; preview: BioPublic; brandsPreview?: BioBrandsPublic | null; familyPreview?: BioFamilyPublic | null; stats: Record<string, number>; questions: ListenerQuestionRow[]; knowledge?: { done: number; total: number } };
-type Tab = "profile" | "design" | "content" | "share" | "brands" | "family" | "questions";
+type Tab = "profile" | "design" | "content" | "social" | "share" | "brands" | "family" | "questions";
 
 const KEY = ["/api/host/bio"];
 
@@ -189,6 +189,7 @@ export function BioBuilder() {
   } : null, [draft, preview]);
   // Cutout: made from their profile photo when they pick it, and again when the photo changes.
   const [cutting, setCutting] = useState(false);
+  const [cutError, setCutError] = useState("");
   const cutFailed = useRef("");
   useEffect(() => {
     if (!draft || draft.theme.layout !== "cutout" || !draft.avatarUrl || draft.cutoutFrom === draft.avatarUrl || cutting || cutFailed.current === draft.avatarUrl) return;
@@ -198,9 +199,12 @@ export function BioBuilder() {
         const r = await again(() => apiRequest("POST", "/api/host/bio/cutout", {}));
         const j = (await r.json()) as { cutoutUrl: string; preview: BioPublic };
         setDraft((d) => (d ? { ...d, cutoutUrl: j.cutoutUrl, cutoutFrom: d.avatarUrl } : d));
+        setCutError("");
         setPreview(j.preview);
       } catch (e) {
         cutFailed.current = draft.avatarUrl;
+        const msg = (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "");
+        setCutError(/switched on/i.test(msg) ? "Cutout isn't switched on yet on the server, so your page shows your round photo for now." : `Couldn't cut out your photo: ${msg} Try a clearer photo of just you.`);
         toast({ title: "Couldn't make your cutout", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
       } finally { setCutting(false); }
     })();
@@ -249,18 +253,19 @@ export function BioBuilder() {
         </div>
       </div>
       <div className="mb-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-card p-1 shadow-sm" role="tablist">
-        {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["share", "Share", Share2], ["brands", "Brands", Handshake], ["family", "Family", Heart], ["questions", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
+        {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["social", "Social", AtSign], ["share", "Share", Share2], ["brands", "Brands", Handshake], ["family", "Family", Heart], ["questions", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} data-testid={`bio-tab-${k}`}>
             <I className="h-4 w-4" /> {l}{k === "questions" && newQs > 0 && <span className="rounded-full bg-[#F0A71F] px-1.5 text-[11px] font-bold text-[#1a1200]">{newQs}</span>}
           </button>
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
         <div className="min-w-0">
           {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} />}
-          {tab === "design" && <DesignTab d={draft} change={change} cutting={cutting} />}
+          {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} />}
           {tab === "content" && <ContentTab d={draft} change={change} />}
+          {tab === "social" && <SocialTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} />}
           {tab === "brands" && <BrandsTab d={draft} change={change} url={url} kit={kitView} />}
           {tab === "family" && <FamilyTab d={draft} change={change} flush={flush} url={url} episodes={q.data?.familyPreview?.podcast?.episodes ?? []} />}
@@ -332,7 +337,6 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
   const done = steps.filter((s) => s.done).length;
   const [hideSteps, setHideSteps] = useState(() => { try { return localStorage.getItem("mv_bio_steps_hidden") === "1"; } catch { return false; } });
   const dismissSteps = () => { setHideSteps(true); try { localStorage.setItem("mv_bio_steps_hidden", "1"); } catch { /* this visit */ } };
-  const move = (i: number, dir: -1 | 1) => { const s = [...d.socials]; const j = i + dir; if (j < 0 || j >= s.length) return; [s[i], s[j]] = [s[j], s[i]]; change({ socials: s }); };
   const hosted = /\/feed\//.test(view.podcast?.feedUrl ?? "");
   const { toast } = useToast();
   const [drafting, setDrafting] = useState(false);
@@ -365,7 +369,7 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
       <Card icon={ImagePlus} tone="gold" title="Photos">
       <div className="grid grid-cols-2 gap-3">
         <ImagePick label="Profile photo" kind="avatar" url={d.avatarUrl} round onDone={(u, p) => { change({ avatarUrl: u }); setPreview(p); }} onClear={() => change({ avatarUrl: "" }, true)} />
-        <ImagePick label="Cover photo" kind="hero" url={d.heroUrl} note={d.theme.layout === "portrait" ? "Shown with the Banner or Cover layouts" : undefined} onDone={(u, p) => { change({ heroUrl: u }); setPreview(p); }} onClear={() => change({ heroUrl: "" }, true)} />
+        <ImagePick label="Cover photo" kind="hero" url={d.heroUrl} note="Used by the Hero, Cover photo and Banner tops. Without one, they use your profile photo." onDone={(u, p) => { change({ heroUrl: u }); setPreview(p); }} onClear={() => change({ heroUrl: "" }, true)} />
       </div>
       </Card>
       <Card icon={User} tone="blue" title="About you">
@@ -409,22 +413,32 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
         <Switch checked={d.aiEnabled} onCheckedChange={(v) => change({ aiEnabled: v }, true)} />
       </div>
       </Card>
-      <Card icon={Share2} tone="violet" title="Social icons">
-      <div>
+    </div>
+  );
+}
+
+// ---- Social (the icons under their name) ----------------------------------------------
+
+function SocialTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void }) {
+  const move = (i: number, dir: -1 | 1) => { const s = [...d.socials]; const j = i + dir; if (j < 0 || j >= s.length) return; [s[i], s[j]] = [s[j], s[i]]; change({ socials: s }, true); };
+  const shown = d.socials.filter((s) => s.on).length;
+  return (
+    <div className="space-y-4">
+      <Card icon={Share2} tone="violet" title="Your social icons">
+        <p className="-mt-1 text-xs text-muted-foreground">They sit under your name{shown ? `: ${shown} showing` : ""}. Move them into the order you like; switch off any you'd rather not show.</p>
         {d.socials.length ? (
           <ul className="space-y-2">
             {d.socials.map((s, i) => (
-              <li key={s.platform} className="flex items-center gap-3 rounded-xl border border-border bg-card p-2.5">
-                <span className="flex flex-col"><button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-muted-foreground disabled:opacity-30" aria-label="Up"><ArrowUp className="h-3.5 w-3.5" /></button><button type="button" onClick={() => move(i, 1)} disabled={i === d.socials.length - 1} className="text-muted-foreground disabled:opacity-30" aria-label="Down"><ArrowDown className="h-3.5 w-3.5" /></button></span>
-                <PlatformIcon platform={s.platform as SocialPlatform} className="h-5 w-5" />
-                <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{platformLabel(s.platform as SocialPlatform)}</span><span className="block truncate text-xs text-muted-foreground">{s.username ? `@${s.username.replace(/^@/, "")}` : s.url}</span></span>
-                <Switch checked={s.on} onCheckedChange={(v) => change({ socials: d.socials.map((x, j) => (j === i ? { ...x, on: v } : x)) })} />
+              <li key={s.platform} className={`flex items-center gap-3 rounded-2xl border-2 bg-background p-2.5 transition-opacity ${s.on ? "border-border" : "border-dashed border-border opacity-60"}`} data-testid={`bio-social-${s.platform}`}>
+                <span className="flex flex-col"><button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label="Up"><ArrowUp className="h-3.5 w-3.5" /></button><button type="button" onClick={() => move(i, 1)} disabled={i === d.socials.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label="Down"><ArrowDown className="h-3.5 w-3.5" /></button></span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white" style={{ background: platformBackground(s.platform as SocialPlatform) }}><PlatformIcon platform={s.platform as SocialPlatform} className="h-[18px] w-[18px]" /></span>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{platformLabel(s.platform as SocialPlatform)}</span><span className="block truncate text-xs text-muted-foreground">{s.username ? `@${s.username.replace(/^@/, "")}` : s.url}</span></span>
+                <Switch checked={s.on} onCheckedChange={(v) => change({ socials: d.socials.map((x, j) => (j === i ? { ...x, on: v } : x)) }, true)} />
               </li>
             ))}
           </ul>
-        ) : <p className="text-sm text-muted-foreground">Connect your accounts in Integrations and they appear here.</p>}
-        <a href="/host/dashboard/integrations" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]"><Link2 className="h-3.5 w-3.5" /> Manage connections</a>
-      </div>
+        ) : <p className="rounded-2xl border-2 border-dashed border-border p-4 text-center text-sm text-muted-foreground">Connect your accounts and they appear here, and on your page.</p>}
+        <Button asChild variant="outline" className="w-full gap-1.5 rounded-full"><a href="/host/dashboard/integrations"><Link2 className="h-4 w-4" /> {d.socials.length ? "Connect more accounts" : "Connect your accounts"}</a></Button>
       </Card>
     </div>
   );
@@ -449,6 +463,16 @@ function Card({ icon: I, tone, title, children }: { icon: typeof User; tone: key
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return <label className="block"><span className="mb-1 block text-sm font-semibold">{label}</span>{children}{hint && <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>}</label>;
+}
+
+/** On or off, readable on a dark card: the word, and a gold switch when it's on. */
+function OnOff({ on, onChange, testid }: { on: boolean; onChange: (v: boolean) => void; testid?: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} onClick={() => onChange(!on)} className={`flex shrink-0 items-center gap-2 rounded-full py-1 pl-3 pr-1 text-xs font-bold transition-colors ${on ? "bg-[#F0A71F] text-[#1a1200]" : "bg-white/15 text-white ring-1 ring-white/30"}`} data-testid={testid}>
+      {on ? "On" : "Off"}
+      <span className={`flex h-6 w-10 items-center rounded-full p-0.5 transition-colors ${on ? "bg-[#1a1200]/20" : "bg-black/30"}`}><span className={`h-5 w-5 rounded-full bg-white shadow transition-transform ${on ? "translate-x-4" : ""}`} /></span>
+    </button>
+  );
 }
 
 /** A photo for one view only (Brands, Family): uploaded, then saved on that view. */
@@ -525,7 +549,23 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear }: { label: 
 
 // ---- Design ------------------------------------------------------------------------
 
-function DesignTab({ d, change, cutting = false }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; cutting?: boolean }) {
+const DESIGN_RAIL = [
+  { id: "layout", label: "Layout", icon: LayoutTemplate },
+  { id: "color", label: "Color", icon: Palette },
+  { id: "shade", label: "Shade", icon: Contrast },
+  { id: "font", label: "Font", icon: Type },
+  { id: "shape", label: "Shape", icon: Shapes },
+  { id: "style", label: "Style", icon: Paintbrush },
+  { id: "link", label: "Link", icon: Droplets },
+  { id: "bg", label: "BG", icon: ImagePlus },
+  { id: "brand", label: "Brand", icon: QrCode },
+] as const;
+
+/**
+ * Design, as MilCrunch lays it out: a rail of sections on the left (it follows
+ * you as you scroll, and jumps when clicked) and every setting in one column.
+ */
+function DesignTab({ d, change, view, cutting = false, cutError = "" }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic; cutting?: boolean; cutError?: string }) {
   const t = d.theme;
   const set = (p: Partial<BioTheme>) => change({ theme: { ...t, ...p } });
   const c = t.color;
@@ -535,13 +575,19 @@ function DesignTab({ d, change, cutting = false }: { d: Page; change: (p: Partia
   const ink = pal.ink;
   const bgv = t.background ?? { mode: "solid" as const, color: "", image: "" };
   const setBg = (p: Partial<BioBackground>) => set({ background: { ...bgv, ...p } });
-  const r = (shape: string) => (shape === "pill" ? 999 : shape === "rounded" ? 5 : shape === "squircle" ? 7 : 1);
-  const mini = (style: string, shape: string, w = "w-14") => (
-    <span className={`block h-3 ${w}`} style={style === "fill" ? { background: c, borderRadius: r(shape) } : style === "outline" ? { border: `1.5px solid ${c}`, borderRadius: r(shape) } : { background: dark ? "rgba(255,255,255,0.14)" : "#fff", border: "1px solid rgba(11,16,32,0.12)", borderRadius: r(shape) }} />
-  );
+  const r = (shape: string) => (shape === "pill" ? 999 : shape === "rounded" ? 7 : shape === "squircle" ? 10 : 2);
   const bgIn = useRef<HTMLInputElement>(null);
   const [bgBusy, setBgBusy] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
   const { toast } = useToast();
+  const refs = useRef<Record<string, HTMLElement | null>>({});
+  const [here, setHere] = useState<string>("layout");
+  useEffect(() => {
+    const io = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) setHere((e.target as HTMLElement).dataset.section ?? "layout"); }, { rootMargin: "-25% 0px -65% 0px" });
+    Object.values(refs.current).forEach((el) => el && io.observe(el));
+    return () => io.disconnect();
+  }, []);
+  const jump = (id: string) => { setHere(id); refs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" }); };
   const uploadBg = async (f: File) => {
     setBgBusy(true);
     try {
@@ -556,37 +602,32 @@ function DesignTab({ d, change, cutting = false }: { d: Page; change: (p: Partia
     } finally { setBgBusy(false); if (bgIn.current) bgIn.current.value = ""; }
   };
   const seg = (on: boolean) => `flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${on ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`;
-  const label = (text: string, hint?: string) => <div><p className="text-sm font-semibold">{text}</p>{hint && <p className="text-xs text-muted-foreground">{hint}</p>}</div>;
+  const hasPhoto = Boolean(d.avatarUrl || d.heroUrl);
   return (
-    <div className="space-y-4">
-      <Card icon={Palette} tone="gold" title="Template">
-        <div className="grid grid-cols-2 gap-3">
-          {(Object.keys(TEMPLATES) as (keyof typeof TEMPLATES)[]).map((k) => {
-            const tp = TEMPLATES[k].theme;
-            const tdark = tp.shade === "dark";
-            const bg = k === "vibrant" ? `linear-gradient(180deg, ${c}, #0b1020 75%)` : tdark ? "#0b1020" : "#f5f6fa";
+    <div className="flex rounded-2xl border border-border bg-card shadow-sm" data-testid="design-panel">
+      {/* The rail: every section, the one you're in lit. */}
+      <nav className="w-[76px] shrink-0 border-r border-border bg-muted/30 py-2" aria-label="Design sections">
+        <div className="sticky top-20 flex flex-col items-center gap-0.5">
+          {DESIGN_RAIL.map((it) => {
+            const on = here === it.id;
             return (
-              <Tile key={k} on={t.template === k} onClick={() => set({ ...tp, template: k })} label={TEMPLATES[k].label} note={TEMPLATES[k].note} testid={`bio-template-${k}`}>
-                {/* A tiny phone in that template: photo, name, the show, two buttons. */}
-                <span className="mx-auto flex h-36 w-[5.5rem] flex-col items-center overflow-hidden rounded-[14px] border-[3px] border-[#111] pb-2" style={{ background: bg }}>
-                  {tp.layout === "blend" ? (
-                    <span className="h-12 w-full" style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : c, maskImage: "linear-gradient(to bottom, #000 55%, transparent)" }} />
-                  ) : tp.layout === "landscape" ? (
-                    <span className="relative mb-3 block h-6 w-full" style={{ background: `linear-gradient(135deg, ${c}, #000741)` }}><span className="absolute -bottom-3 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full ring-2" style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888", boxShadow: `0 0 0 2px ${tdark ? "#0b1020" : "#f5f6fa"}` }} /></span>
-                  ) : (
-                    <span className="mt-2 h-8 w-8 rounded-full" style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888", boxShadow: `0 0 0 2px ${c}` }} />
-                  )}
-                  <span className="mt-1.5 h-1.5 w-12 rounded" style={{ background: tdark ? "#fff" : "#0b1020" }} />
-                  <span className="mt-2 h-6 w-16 rounded-md" style={{ background: tdark ? "rgba(255,255,255,0.1)" : "#fff", border: tdark ? "none" : "1px solid rgba(11,16,32,0.08)" }} />
-                  <span className="mt-1.5 flex flex-col items-center gap-1">{mini(tp.linkStyle ?? "fill", tp.linkShape ?? "pill")}{mini(tp.linkStyle ?? "fill", tp.linkShape ?? "pill")}</span>
-                </span>
-              </Tile>
+              <button key={it.id} type="button" onClick={() => jump(it.id)} className={`flex h-[64px] w-[68px] flex-col items-center justify-center gap-1 rounded-xl transition-colors ${on ? "text-[#053877] dark:text-[#8fb5e8]" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} data-testid={`design-rail-${it.id}`}>
+                <span className={`flex h-7 w-7 items-center justify-center rounded-full transition-colors ${on ? "bg-[#053877]/15" : ""}`}><it.icon className="h-[15px] w-[15px]" /></span>
+                <span className="text-[11px] font-medium leading-none">{it.label}</span>
+              </button>
             );
           })}
         </div>
-      </Card>
+      </nav>
 
-      <Card icon={ImagePlus} tone="violet" title="Top of the page">
+      <div className="min-w-0 flex-1">
+        <DesignSection bind={refs} id="layout" title="Layout">
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Choose a template</p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setBrowsing(true)} className="h-9 gap-1.5 rounded-full border-[#053877]/40 text-[#053877] dark:text-[#8fb5e8]" data-testid="design-browse"><Palette className="h-4 w-4" /> Browse templates</Button>
+            <span className="text-xs text-muted-foreground">Current: <b className="font-semibold text-foreground">{TEMPLATES[t.template]?.label ?? "Custom"}</b></span>
+          </div>
+          <p className="mb-1.5 mt-5 text-xs font-medium text-muted-foreground">Top of the page</p>
         <div className="grid grid-cols-3 gap-3">
           {([["portrait", "Classic"], ["hero", "Hero"], ["cutout", "Cutout"], ["blend", "Cover photo"], ["landscape", "Banner"], ["shape", "Shape"]] as const).map(([v, l]) => {
             const face = d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888";
@@ -605,116 +646,238 @@ function DesignTab({ d, change, cutting = false }: { d: Page; change: (p: Partia
             );
           })}
         </div>
-        {(t.layout === "blend" || t.layout === "hero" || t.layout === "landscape") && (
-          <div>
-            {label("Image position", "Move the crop up or down if it cuts off a head.")}
-            <div className="mt-2 flex items-center gap-3">
-              <span className="text-[11px] text-muted-foreground">Top</span>
-              <input type="range" min={0} max={100} step={1} value={t.imageY ?? 50} onChange={(e) => set({ imageY: Number(e.target.value) })} className="h-2 flex-1 cursor-pointer accent-[#053877]" data-testid="bio-image-y" />
-              <span className="text-[11px] text-muted-foreground">Bottom</span>
+          {cutError && t.layout === "cutout" && <p className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{cutError}</p>}
+          {hasPhoto && t.layout !== "cutout" && (
+            <div className="mt-5">
+              <p className="text-xs font-medium text-muted-foreground">Image position</p>
+              <p className="text-[11px] text-muted-foreground/80">Shift the crop if the photo cuts off a head or an important detail.</p>
+              <input type="range" min={0} max={100} step={1} value={t.imageY ?? 50} onChange={(e) => set({ imageY: Number(e.target.value) })} className="mt-2 h-2 w-full cursor-pointer accent-[#053877]" data-testid="bio-image-y" />
             </div>
-          </div>
-        )}
-        {(t.layout === "portrait" || t.layout === "shape") && (
-          <div>
-            {label("Photo size")}
-            <div className="mt-2 flex gap-1 rounded-full border border-border p-1">
-              {([["s", "Small"], ["m", "Medium"], ["l", "Large"]] as const).map(([v, l]) => <button key={v} type="button" onClick={() => set({ avatarSize: v })} className={seg((t.avatarSize ?? "m") === v)} data-testid={`bio-avatar-${v}`}>{l}</button>)}
+          )}
+          {(t.layout === "portrait" || t.layout === "shape") && (
+            <div className="mt-5">
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">Profile image size</p>
+              <div className="flex gap-1 rounded-full border border-border p-1">
+                {(["s", "m", "l"] as const).map((v) => <button key={v} type="button" onClick={() => set({ avatarSize: v })} className={seg((t.avatarSize ?? "m") === v)} data-testid={`bio-avatar-${v}`}>{v.toUpperCase()}</button>)}
+              </div>
             </div>
+          )}
+        </DesignSection>
+
+        <DesignSection bind={refs} id="color" title="Theme colour" sub="Accent for headings, badges and buttons.">
+          <ColourPick value={t.color} onPick={(v) => set({ color: v })} testid="bio-colour" />
+        </DesignSection>
+
+        <DesignSection bind={refs} id="shade" title="Shade" sub="Overall page brightness tone.">
+          <div className="space-y-2">
+            {([["none", "None", "#ffffff", "#111827"], ["minimal", "Minimal", "#f9fafb", "#111827"], ["light", "Light", "#f3f4f6", "#111827"], ["tint", "Colour tint", `${c}26`, "#111827"], ["dark", "Dark", "#0b1020", "#ffffff"]] as const).map(([v, l, bgc, tx]) => {
+              const on = (t.shade as string) === v;
+              return (
+                <button key={v} type="button" onClick={() => set({ shade: v, ...(bgv.mode === "solid" && bgv.color ? { background: { ...bgv, color: "" } } : {}) })} className={`flex w-full items-center gap-3 rounded-xl border-2 p-2.5 text-left transition-all ${on ? "border-[#053877] ring-2 ring-[#053877]/15 dark:border-[#8fb5e8]" : "border-border hover:border-[#053877]/30"}`} data-testid={`bio-shade-${v}`}>
+                  <span className="flex h-10 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-black/5" style={{ background: bgc }}>
+                    <span className="h-1 w-7 rounded-full" style={{ background: tx, opacity: 0.7 }} /><span className="h-1 w-4 rounded-full" style={{ background: tx, opacity: 0.4 }} />
+                  </span>
+                  <span className="flex-1 text-sm font-medium">{l}</span>
+                  {on && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#053877] text-white"><Check className="h-3 w-3" /></span>}
+                </button>
+              );
+            })}
           </div>
-        )}
-      </Card>
+        </DesignSection>
 
-      <Card icon={Droplet} tone="blue" title="Colours">
-        {label("Theme colour", "Headings, badges and buttons.")}
-        <ColourPick value={t.color} onPick={(v) => set({ color: v })} testid="bio-colour" />
-        <div className="border-t border-border pt-3">
-          {label("Link colour", "Your link buttons.")}
-        </div>
-        <ColourPick value={t.linkColor || t.color} onPick={(v) => set({ linkColor: v })} testid="bio-link-colour" />
-        {t.linkColor && <button type="button" onClick={() => set({ linkColor: "" })} className="w-fit rounded-full border border-[#053877]/40 px-3 py-1.5 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]">Reset to theme colour</button>}
-      </Card>
+        <DesignSection bind={refs} id="font" title="Font" sub="Choose a typeface for your page.">
+          <div className="space-y-2">{(Object.keys(FONTS) as BioFont[]).map((f) => <FontRow key={f} font={f} on={t.font === f} onPick={() => set({ font: f })} />)}</div>
+        </DesignSection>
 
-      <Card icon={dark ? Moon : Sun} tone="gold" title="Page">
-        {label("Shade", "How light or dark the page is.")}
-        <div className="grid grid-cols-5 gap-2">
-          {([["none", "None", "#ffffff"], ["minimal", "Minimal", "#f9fafb"], ["light", "Light", "#f3f4f6"], ["tint", "Tint", `${c}22`], ["dark", "Dark", "#0b1020"]] as const).map(([v, l, bgc]) => (
-            <Tile key={v} on={(t.shade as string) === v} onClick={() => set({ shade: v, ...(bgv.mode === "solid" && bgv.color ? { background: { ...bgv, color: "" } } : {}) })} label={l} testid={`bio-shade-${v}`}>
-              <span className="flex h-10 flex-col items-center justify-center gap-1 rounded-lg border border-black/5" style={{ background: bgc }}>
-                <span className="h-1 w-7 rounded" style={{ background: v === "dark" ? "#fff" : "#0b1020", opacity: 0.7 }} />
-                <span className="h-1 w-5 rounded" style={{ background: v === "dark" ? "#fff" : "#0b1020", opacity: 0.4 }} />
-              </span>
-            </Tile>
-          ))}
-        </div>
-        <div className="border-t border-border pt-3">{label("Background")}</div>
-        <div className="flex gap-1 rounded-full border border-border p-1">
-          {(["solid", "gradient", "image"] as const).map((m) => <button key={m} type="button" onClick={() => setBg({ mode: m })} className={`${seg(bgv.mode === m)} capitalize`} data-testid={`bio-bg-${m}`}>{m}</button>)}
-        </div>
-        {bgv.mode === "solid" && (
-          <>
-            <ColourPick value={bgv.color || pal.paper} onPick={(v) => setBg({ color: v })} testid="bio-bg-colour" />
-            {bgv.color && <button type="button" onClick={() => setBg({ color: "" })} className="w-fit rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">Use the shade's colour</button>}
-          </>
-        )}
-        {bgv.mode === "gradient" && (
-          <>
-            <div className="h-16 w-full rounded-xl border border-border" style={{ background: pal.background }} />
-            <p className="text-[11px] text-muted-foreground">From your theme colour at the top, down to:</p>
-            <ColourPick value={bgv.color || pal.paper} onPick={(v) => setBg({ color: v })} testid="bio-bg-gradient" />
-          </>
-        )}
-        {bgv.mode === "image" && (
-          <>
-            <input ref={bgIn} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void uploadBg(e.target.files[0])} />
-            <button type="button" onClick={() => bgIn.current?.click()} className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border p-4 transition-colors hover:border-[#053877]" data-testid="bio-bg-upload">
-              {bgv.image ? <img src={bgv.image} alt="" className="h-24 w-full rounded-lg object-cover" /> : bgBusy ? <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /> : <ImagePlus className="h-7 w-7 text-muted-foreground" />}
-              <span className="text-xs font-semibold text-muted-foreground">{bgv.image ? "Change image" : "Upload an image"}</span>
-            </button>
-            <p className="text-[11px] text-muted-foreground">Dark shade puts a dark wash over it; the others, a light one, so your words stay readable.</p>
-            {bgv.image && <button type="button" onClick={() => setBg({ image: "", mode: "solid" })} className="w-fit text-xs font-semibold text-destructive">Remove image</button>}
-          </>
-        )}
-      </Card>
-
-      <Card icon={Type} tone="green" title="Font">
-        <div className="space-y-2">
-          {(Object.keys(FONTS) as BioFont[]).map((f) => (
-            <FontRow key={f} font={f} on={t.font === f} onPick={() => set({ font: f })} />
-          ))}
-        </div>
-      </Card>
-
-      <Card icon={Layers} tone="blue" title="Buttons">
-        {label("Shape")}
-        <div className="grid grid-cols-4 gap-2">
-          {([["pill", "Pill"], ["rounded", "Rounded"], ["square", "Square"], ["squircle", "Squircle"]] as const).map(([v, l]) => (
-            <Tile key={v} on={t.linkShape === v} onClick={() => set({ linkShape: v })} label={l} testid={`bio-shape-${v}`}>
-              <span className="flex h-12 items-center justify-center rounded-lg bg-muted/60"><span className="h-6 w-14" style={{ background: t.linkColor || c, borderRadius: r(v) }} /></span>
-            </Tile>
-          ))}
-        </div>
-        {label("Style")}
-        <div className="grid grid-cols-2 gap-2">
-          {([["fill", "Fill"], ["outline", "Outline"], ["soft", "Soft shadow"], ["hard", "Hard shadow"]] as const).map(([v, l]) => {
-            const lc = t.linkColor || c;
-            return (
-              <Tile key={v} on={t.linkStyle === v} onClick={() => set({ linkStyle: v })} label={l} testid={`bio-style-${v}`}>
-                <span className="flex h-14 items-center justify-center rounded-lg" style={{ background: ground }}>
-                  <span className="flex h-8 w-28 items-center justify-center text-[11px] font-semibold" style={v === "fill" ? { background: lc, color: onColor(lc), borderRadius: r(t.linkShape) } : v === "outline" ? { border: `2px solid ${lc}`, color: ink, borderRadius: r(t.linkShape) } : v === "hard" ? { background: dark ? "#141a2c" : "#fff", border: `2px solid ${dark ? "#fff" : "#0b1020"}`, boxShadow: `3px 3px 0 ${lc}`, color: ink, borderRadius: r(t.linkShape) } : { background: dark ? "rgba(255,255,255,0.1)" : "#fff", boxShadow: "0 4px 12px rgba(11,16,32,0.14)", color: ink, borderRadius: r(t.linkShape) }}>Sample</span>
-                </span>
+        <DesignSection bind={refs} id="shape" title="Link shape" sub="Corner style for your link buttons.">
+          <div className="grid grid-cols-2 gap-2">
+            {([["pill", "Pill"], ["rounded", "Rounded"], ["square", "Square"], ["squircle", "Squircle"]] as const).map(([v, l]) => (
+              <Tile key={v} on={t.linkShape === v} onClick={() => set({ linkShape: v })} label={l} testid={`bio-shape-${v}`}>
+                <span className="flex h-12 items-center justify-center rounded-lg bg-muted/40 px-3"><span className="h-7 w-full bg-[#e2e5ea] dark:bg-white/15" style={{ borderRadius: r(v) }} /></span>
               </Tile>
-            );
-          })}
-        </div>
-      </Card>
+            ))}
+          </div>
+        </DesignSection>
 
-      <Card icon={Sparkles} tone="violet" title="Branding">
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
-          <div><p className="text-sm font-semibold">Show "Made with MilitaryVoices.ai"</p><p className="text-xs text-muted-foreground">A small line at the foot of your page.</p></div>
-          <Switch checked={t.branding ?? true} onCheckedChange={(v) => set({ branding: v })} data-testid="bio-branding" />
+        <DesignSection bind={refs} id="style" title="Link style" sub="How your link buttons are styled.">
+          <div className="grid grid-cols-2 gap-2">
+            {([["fill", "Fill"], ["outline", "Outline"], ["soft", "Soft shadow"], ["hard", "Hard shadow"]] as const).map(([v, l]) => {
+              const lc = t.linkColor || c;
+              return (
+                <Tile key={v} on={t.linkStyle === v} onClick={() => set({ linkStyle: v })} label={l} testid={`bio-style-${v}`}>
+                  <span className="flex h-14 items-center justify-center rounded-lg px-3" style={{ background: ground }}>
+                    <span className="flex h-8 w-full items-center justify-center text-[11px] font-semibold" style={v === "fill" ? { background: lc, color: onColor(lc), borderRadius: r(t.linkShape) } : v === "outline" ? { border: `2px solid ${lc}`, color: ink, borderRadius: r(t.linkShape) } : v === "hard" ? { background: dark ? "#141a2c" : "#fff", border: `2px solid ${dark ? "#fff" : "#0b1020"}`, boxShadow: `3px 3px 0 ${lc}`, color: ink, borderRadius: r(t.linkShape) } : { background: dark ? "rgba(255,255,255,0.1)" : "#fff", boxShadow: "0 4px 12px rgba(11,16,32,0.14)", color: ink, borderRadius: r(t.linkShape) }}>Sample</span>
+                  </span>
+                </Tile>
+              );
+            })}
+          </div>
+        </DesignSection>
+
+        <DesignSection bind={refs} id="link" title="Link colour" sub="Colour for your link buttons.">
+          <ColourPick value={t.linkColor || t.color} onPick={(v) => set({ linkColor: v })} testid="bio-link-colour" />
+          {t.linkColor && <button type="button" onClick={() => set({ linkColor: "" })} className="mt-3 rounded-full border border-[#053877]/40 px-3 py-1.5 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]">Reset to theme colour</button>}
+        </DesignSection>
+
+        <DesignSection bind={refs} id="bg" title="Background" sub="Set your page background style.">
+          <div className="mb-3 flex gap-1 rounded-full border border-border p-1">
+            {(["solid", "gradient", "image"] as const).map((m) => <button key={m} type="button" onClick={() => setBg({ mode: m })} className={`${seg(bgv.mode === m)} capitalize`} data-testid={`bio-bg-${m}`}>{m}</button>)}
+          </div>
+          {bgv.mode === "solid" && (
+            <>
+              <ColourPick value={bgv.color || pal.paper} onPick={(v) => setBg({ color: v })} testid="bio-bg-colour" />
+              {bgv.color && <button type="button" onClick={() => setBg({ color: "" })} className="mt-2 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">Use the shade's colour</button>}
+            </>
+          )}
+          {bgv.mode === "gradient" && (
+            <>
+              <div className="h-16 w-full rounded-xl border border-border" style={{ background: pal.background }} />
+              <p className="my-2 text-[11px] text-muted-foreground">From your theme colour at the top, down to:</p>
+              <ColourPick value={bgv.color || pal.paper} onPick={(v) => setBg({ color: v })} testid="bio-bg-gradient" />
+            </>
+          )}
+          {bgv.mode === "image" && (
+            <>
+              <input ref={bgIn} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void uploadBg(e.target.files[0])} />
+              <button type="button" onClick={() => bgIn.current?.click()} className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border p-4 transition-colors hover:border-[#053877]" data-testid="bio-bg-upload">
+                {bgv.image ? <img src={bgv.image} alt="" className="h-24 w-full rounded-lg object-cover" /> : bgBusy ? <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /> : <ImagePlus className="h-7 w-7 text-muted-foreground" />}
+                <span className="text-xs font-semibold text-muted-foreground">{bgv.image ? "Change image" : "Upload an image"}</span>
+                <span className="text-[10px] text-muted-foreground/70">PNG or JPG, up to 12MB</span>
+              </button>
+              {bgv.image && <button type="button" onClick={() => setBg({ image: "", mode: "solid" })} className="mt-2 text-xs font-semibold text-destructive">Remove image</button>}
+            </>
+          )}
+          {/* Fine-tuning: how much of their colour, how light or dark, and how strong the wash over a photo is. */}
+          <div className="mt-4 space-y-3 rounded-xl bg-muted/40 p-3">
+            <RangeRow label="Tint" hint="How much of your colour" value={t.bgTint ?? 0} min={0} max={100} onChange={(v) => set({ bgTint: v })} unit="%" testid="bio-bg-tint" track={`linear-gradient(90deg, ${pal.paper}, ${c})`} />
+            <RangeRow label="Brightness" hint="Darker or lighter" value={t.bgBrightness ?? 0} min={-100} max={100} onChange={(v) => set({ bgBrightness: v })} testid="bio-bg-brightness" track="linear-gradient(90deg, #000000, #ffffff)" />
+            {bgv.mode === "image" && <RangeRow label="Wash" hint="Over your photo, so the words read" value={t.bgWash ?? 65} min={0} max={100} onChange={(v) => set({ bgWash: v })} unit="%" testid="bio-bg-wash" />}
+            {((t.bgTint ?? 0) !== 0 || (t.bgBrightness ?? 0) !== 0) && <button type="button" onClick={() => set({ bgTint: 0, bgBrightness: 0 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
+          </div>
+        </DesignSection>
+
+        <DesignSection bind={refs} id="brand" title="Branding" sub="Control visible branding on your page.">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+            <div><p className="text-sm font-semibold">Show "Made with MilitaryVoices.ai"</p><p className="text-xs text-muted-foreground">A small line at the foot of your page.</p></div>
+            <Switch checked={t.branding ?? true} onCheckedChange={(v) => set({ branding: v })} data-testid="bio-branding" />
+          </div>
+        </DesignSection>
+      </div>
+      {browsing && <TemplatePicker view={view} theme={t} onClose={() => setBrowsing(false)} onApply={(p) => { set(p); setBrowsing(false); toast({ title: `${TEMPLATES[p.template as BioTemplate]?.label ?? "Template"} applied` }); }} />}
+    </div>
+  );
+}
+
+/** One section of Design: its title, what it's for, and a place the rail can jump to. */
+function DesignSection({ id, title, sub, bind, children }: { id: string; title: string; sub?: string; bind: React.MutableRefObject<Record<string, HTMLElement | null>>; children: React.ReactNode }) {
+  return (
+    <section ref={(el) => { bind.current[id] = el; }} data-section={id} className="scroll-mt-24 border-b border-border px-5 py-5 last:border-b-0" data-testid={`design-${id}`}>
+      <h3 className="text-sm font-bold">{title}</h3>
+      {sub && <p className="mb-3 mt-0.5 text-xs text-muted-foreground">{sub}</p>}
+      <div className={sub ? "" : "mt-3"}>{children}</div>
+    </section>
+  );
+}
+
+/** A slider with its label and value. */
+function RangeRow({ label, hint, value, min, max, onChange, unit = "", track, testid }: { label: string; hint: string; value: number; min: number; max: number; onChange: (v: number) => void; unit?: string; track?: string; testid?: string }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between"><span className="text-xs font-semibold">{label} <span className="font-normal text-muted-foreground">{hint}</span></span><span className="text-[11px] tabular-nums text-muted-foreground">{value > 0 && min < 0 ? "+" : ""}{value}{unit}</span></div>
+      <input type="range" min={min} max={max} step={1} value={value} onChange={(e) => onChange(Number(e.target.value))} className="mt-1.5 h-2 w-full cursor-pointer appearance-none rounded-full accent-[#053877]" style={track ? { background: track } : undefined} data-testid={testid} />
+    </div>
+  );
+}
+
+/**
+ * Browse templates: a carousel of phones, each your own page in that template,
+ * with the colours and font to try on it before applying.
+ */
+function TemplatePicker({ view, theme, onClose, onApply }: { view: BioPublic; theme: BioTheme; onClose: () => void; onApply: (p: Partial<BioTheme>) => void }) {
+  const keys = Object.keys(TEMPLATES) as BioTemplate[];
+  const [i, setI] = useState(() => Math.max(0, keys.indexOf(theme.template)));
+  const [accent, setAccent] = useState<string | null>(null);
+  const [bgc, setBgc] = useState<string | null>(null);
+  const [font, setFont] = useState<BioFont | null>(null);
+  const n = keys.length;
+  const shift = (dir: -1 | 1) => setI((x) => (x + dir + n) % n);
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === "ArrowLeft") shift(-1); else if (e.key === "ArrowRight") shift(1); else if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const themed = (k: BioTemplate, centre: boolean): BioTheme => ({
+    ...theme, ...TEMPLATES[k].theme, template: k,
+    color: centre && accent ? accent : theme.color,
+    font: centre && font ? font : (TEMPLATES[k].theme.font ?? theme.font),
+    background: centre && bgc ? { mode: "solid", color: bgc, image: "" } : { mode: "solid", color: "", image: "" },
+    bgTint: 0, bgBrightness: 0,
+  });
+  const cur = keys[i];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose} role="dialog" aria-label="Choose a template">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="relative mx-4 flex h-[88vh] w-full max-w-6xl flex-col rounded-2xl bg-background shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between border-b border-border px-6 py-4">
+          <h2 className="text-lg font-semibold">Choose a template</h2>
+          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-muted" aria-label="Close"><X className="h-4 w-4" /></button>
         </div>
-      </Card>
+        <div className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-4">
+          <button type="button" onClick={() => shift(-1)} className="absolute left-4 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-background shadow-lg ring-1 ring-border hover:bg-muted" aria-label="Previous"><ChevronLeft className="h-5 w-5" /></button>
+          <button type="button" onClick={() => shift(1)} className="absolute right-4 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-background shadow-lg ring-1 ring-border hover:bg-muted" aria-label="Next"><ChevronRight className="h-5 w-5" /></button>
+          <div className="relative h-[560px] w-full">
+            {keys.map((k, j) => {
+              const dist = ((j - i + n + Math.floor(n / 2)) % n) - Math.floor(n / 2);
+              const ad = Math.abs(dist);
+              const W = 280, H = 560;
+              const scale = ad === 0 ? 1 : ad === 1 ? 0.8 : 0.62;
+              const screenW = W - 18;
+              const k2 = screenW / 402;
+              return (
+                <button key={k} type="button" onClick={() => setI(j)} className="absolute top-0 cursor-pointer text-left" style={{ width: W, height: H, left: "50%", marginLeft: -W / 2, transform: `translateX(${dist * 230}px) scale(${scale})`, opacity: ad === 0 ? 1 : ad === 1 ? 0.72 : 0.45, zIndex: 10 - ad, transition: "all 0.45s cubic-bezier(0.4,0,0.2,1)" }} aria-label={TEMPLATES[k].label} data-testid={`template-card-${k}`}>
+                  <div className="relative h-full w-full rounded-[40px] bg-[#0a0a0c] p-[9px] shadow-2xl ring-1 ring-[#4a4a52]">
+                    <span className="absolute left-1/2 top-[16px] z-10 h-[18px] w-[76px] -translate-x-1/2 rounded-full bg-black" />
+                    <div className="h-full w-full overflow-hidden rounded-[32px]" style={{ background: bioPalette(themed(k, ad === 0)).paper }}>
+                      <div style={{ width: 402, transform: `scale(${k2})`, transformOrigin: "top left", pointerEvents: "none" }}>
+                        <BioPageView data={{ ...view, theme: themed(k, ad === 0) }} preview shareBase="" />
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <button type="button" onClick={() => shift(-1)} className="text-muted-foreground hover:text-foreground" aria-label="Previous"><ChevronLeft className="h-4 w-4" /></button>
+            <span className="min-w-[140px] text-center"><span className="block text-sm font-bold">{TEMPLATES[cur].label}</span><span className="block text-[11px] text-muted-foreground">{TEMPLATES[cur].note}</span></span>
+            <button type="button" onClick={() => shift(1)} className="text-muted-foreground hover:text-foreground" aria-label="Next"><ChevronRight className="h-4 w-4" /></button>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 border-t border-border px-6 py-4">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Colours:</span>
+            <label className="relative cursor-pointer" title="Background">
+              <span className="block h-8 w-8 rounded-lg border border-border" style={{ background: bgc ?? bioPalette(themed(cur, false)).paper }} />
+              <input type="color" value={bgc ?? "#0b1020"} onChange={(e) => setBgc(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" />
+            </label>
+            <label className="relative cursor-pointer" title="Accent">
+              <span className="block h-8 w-8 rounded-lg border border-border" style={{ background: accent ?? theme.color }} />
+              <input type="color" value={accent ?? theme.color} onChange={(e) => setAccent(e.target.value)} className="absolute inset-0 cursor-pointer opacity-0" />
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Font:</span>
+            <select value={font ?? (TEMPLATES[cur].theme.font ?? theme.font)} onChange={(e) => setFont(e.target.value as BioFont)} className="h-9 rounded-lg border border-border bg-card px-2 text-sm">
+              {(Object.keys(FONTS) as BioFont[]).map((f) => <option key={f} value={f}>{FONTS[f].label}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={onClose} className="rounded-full">Cancel</Button>
+            <Button onClick={() => { const th = themed(cur, true); onApply({ ...TEMPLATES[cur].theme, template: cur, color: th.color, font: th.font, background: th.background, bgTint: 0, bgBrightness: 0 }); }} className="rounded-full bg-[#053877] hover:bg-[#0a4a99]" data-testid="template-apply">Apply template</Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1008,7 +1171,7 @@ function BrandsTab({ d, change, url, kit }: { d: Page; change: (p: Partial<Page>
             <p className="truncate text-base font-bold">{link.replace(/^https?:\/\/(www\.)?/, "")}</p>
             <p className="text-xs text-white/70">{b.on ? "Send it to any brand. They can ask to sponsor you right from it." : "Off: brands can't open it."}</p>
           </div>
-          <Switch checked={b.on} onCheckedChange={(v) => set({ on: v }, true)} data-testid="brands-on" />
+          <OnOff on={b.on} onChange={(v) => set({ on: v }, true)} testid="brands-on" />
         </div>
         {b.on && (
           <div className="flex gap-2">
@@ -1154,12 +1317,12 @@ function FamilyTab({ d, change, flush, url, episodes }: { d: Page; change: (p: P
   return (
     <div className="space-y-4">
       <Card icon={Heart} tone="gold" title="Your family page">
-        <div className="flex items-center justify-between gap-3 rounded-2xl bg-gradient-to-br from-[#7a2e0e] via-[#b35a1f] to-[#F0A71F] p-4 text-white">
+        <div className="flex items-center justify-between gap-3 rounded-2xl bg-gradient-to-br from-[#2e2433] to-[#4d3a4a] p-4 text-white">
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-sm font-bold"><Lock className="h-3.5 w-3.5" /> Private link</p>
             <p className="text-xs text-white/80">{f.on ? "Only people you send it to can open it. It isn't listed or searchable." : "Off: the link doesn't open."}</p>
           </div>
-          <Switch checked={f.on} onCheckedChange={(v) => set({ on: v }, true)} data-testid="family-on" />
+          <OnOff on={f.on} onChange={(v) => set({ on: v }, true)} testid="family-on" />
         </div>
         {f.on && f.key && (
           <>

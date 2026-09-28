@@ -268,7 +268,7 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
   const x = (v ?? {}) as Record<string, unknown>;
   const pick = <T extends string>(k: string, ok: readonly T[], d: T): T => (ok.includes(x[k] as T) ? (x[k] as T) : d);
   return {
-    template: pick("template", ["classic", "bold", "minimal", "vibrant"] as const, prev.template),
+    template: pick("template", ["classic", "bold", "minimal", "vibrant", "portrait"] as const, prev.template),
     color: /^#[0-9a-f]{6}$/i.test(String(x.color)) ? String(x.color) : prev.color,
     shade: pick("shade", ["none", "minimal", "light", "tint", "dark"] as const, prev.shade),
     font: pick("font", ["sans", "serif", "mono", "playfair", "montserrat", "poppins"] as const, prev.font),
@@ -287,6 +287,9 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     imageY: Number.isFinite(Number(x.imageY)) && x.imageY !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.imageY)))) : prev.imageY ?? 50,
     avatarSize: pick("avatarSize", ["s", "m", "l"] as const, prev.avatarSize ?? "m"),
     branding: typeof x.branding === "boolean" ? x.branding : prev.branding ?? true,
+    bgTint: Number.isFinite(Number(x.bgTint)) && x.bgTint !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.bgTint)))) : prev.bgTint ?? 0,
+    bgBrightness: Number.isFinite(Number(x.bgBrightness)) && x.bgBrightness !== undefined ? Math.max(-100, Math.min(100, Math.round(Number(x.bgBrightness)))) : prev.bgBrightness ?? 0,
+    bgWash: Number.isFinite(Number(x.bgWash)) && x.bgWash !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.bgWash)))) : prev.bgWash ?? 65,
     layout: pick("layout", ["portrait", "landscape", "blend", "hero", "shape", "cutout"] as const, prev.layout),
     podcastStyle: pick("podcastStyle", ["spotlight", "list", "carousel"] as const, prev.podcastStyle),
     podcastFrame: pick("podcastFrame", ["full", "card"] as const, prev.podcastFrame),

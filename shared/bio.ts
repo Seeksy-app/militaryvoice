@@ -4,7 +4,7 @@
  * the preview is what a listener gets.
  */
 
-export type BioTemplate = "classic" | "bold" | "minimal" | "vibrant";
+export type BioTemplate = "classic" | "bold" | "minimal" | "vibrant" | "portrait";
 /** The page's tone: plain white, a hint of grey, light grey, a tint of their colour, or dark. */
 export type BioShade = "none" | "minimal" | "light" | "tint" | "dark";
 export type BioFont = "sans" | "serif" | "mono" | "playfair" | "montserrat" | "poppins";
@@ -40,6 +40,12 @@ export interface BioTheme {
   avatarSize: "s" | "m" | "l";
   /** "Made with MilitaryVoices.ai" at the foot. */
   branding: boolean;
+  /** How much of their colour washes into the background, 0–100. */
+  bgTint: number;
+  /** The background darker (−100) or lighter (+100). */
+  bgBrightness: number;
+  /** How strong the wash over a photo background is, 0–100 (so the words read). */
+  bgWash: number;
 }
 
 export interface BioPodcastOptions {
@@ -220,9 +226,10 @@ export const TEMPLATES: Record<BioTemplate, { label: string; note: string; theme
   bold: { label: "Bold", note: "Dark, your photo across the top", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend" } },
   minimal: { label: "Minimal", note: "White, outlines, no fuss", theme: { shade: "light", font: "sans", linkShape: "square", linkStyle: "outline", layout: "portrait" } },
   vibrant: { label: "Vibrant", note: "Your colour behind everything", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "landscape" } },
+  portrait: { label: "Portrait", note: "Your photo, full screen", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "hero" } },
 };
 
-export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight", podcastFrame: "full", podcast: DEFAULT_PODCAST, linkColor: "", background: { mode: "solid", color: "", image: "" }, imageY: 50, avatarSize: "m", branding: true };
+export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight", podcastFrame: "full", podcast: DEFAULT_PODCAST, linkColor: "", background: { mode: "solid", color: "", image: "" }, imageY: 50, avatarSize: "m", branding: true, bgTint: 0, bgBrightness: 0, bgWash: 65 };
 
 /** MilCrunch's fourteen (white, the greys, black, the reds, orange, gold, pink, purple, navy, teal, green) and our gold and navy. */
 export const SWATCHES = [
@@ -276,12 +283,22 @@ export function bioPalette(t: BioTheme) {
   const base = shade === "none" ? "#ffffff" : shade === "minimal" ? "#f9fafb" : shade === "tint" ? mix("#ffffff", theirs, 0.1) : shade === "dark" ? "#0b1020" : "#f5f6fa";
   const bg = t.background ?? { mode: "solid", color: "", image: "" };
   const chosen = HEX.test(bg.color) ? bg.color : "";
-  const paper = bg.mode !== "image" && chosen ? chosen : base;
+  // The sliders: a tint of their colour, then darker or lighter.
+  const tint = Math.max(0, Math.min(100, t.bgTint ?? 0)) / 100;
+  const bright = Math.max(-100, Math.min(100, t.bgBrightness ?? 0)) / 100;
+  let paper = bg.mode !== "image" && chosen ? chosen : base;
+  if (tint > 0) paper = mix(paper, theirs, tint * 0.7);
+  if (bright > 0) paper = mix(paper, "#ffffff", bright * 0.85);
+  else if (bright < 0) paper = mix(paper, "#000000", -bright * 0.85);
   const dark = bg.mode === "image" ? shade === "dark" : lum(paper) < 0.3;
   let background = paper;
   // A soft wash of their colour at the top, as MilCrunch does, so the words stay readable on it.
-  if (bg.mode === "gradient") background = `linear-gradient(180deg, ${mix(paper, theirs, dark ? 0.45 : 0.3)} 0%, ${paper} 65%)`;
-  else if (bg.mode === "image" && /^https?:\/\//.test(bg.image)) background = `linear-gradient(${dark ? "rgba(11,16,32,0.62)" : "rgba(255,255,255,0.7)"}, ${dark ? "rgba(11,16,32,0.62)" : "rgba(255,255,255,0.7)"}), center/cover no-repeat url(${bg.image})`;
+  if (bg.mode === "gradient") background = `linear-gradient(180deg, ${mix(paper, theirs, Math.min(0.9, (dark ? 0.45 : 0.3) + tint * 0.4))} 0%, ${paper} 65%)`;
+  else if (bg.mode === "image" && /^https?:\/\//.test(bg.image)) {
+    const a = Math.max(0, Math.min(100, t.bgWash ?? 65)) / 100;
+    const wash = dark ? `rgba(11,16,32,${a})` : `rgba(255,255,255,${a})`;
+    background = `linear-gradient(${wash}, ${wash}), center/cover no-repeat url(${bg.image})`;
+  }
   else if (t.template === "vibrant" && !chosen) background = `linear-gradient(180deg, ${theirs} 0%, ${dark ? "#0b1020" : "#f7f8fb"} 70%)`;
   const ink = dark ? "#ffffff" : "#0b1020";
   const accent = standOut(theirs === "#ffffff" && !dark ? "#053877" : theirs, paper, dark);

@@ -125,17 +125,17 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
           ) : t.layout === "landscape" ? (
             <div className="relative">
               <div className="h-40 w-full" style={{ background: data.heroUrl ? `center ${Y}%/cover url(${data.heroUrl})` : `linear-gradient(135deg, ${theirs}, #000741)` }} />
-              {data.avatarUrl && <img src={data.avatarUrl} alt="" className="absolute -bottom-12 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full object-cover" style={{ boxShadow: `0 0 0 4px ${paper}` }} />}
+              {data.avatarUrl && <img src={data.avatarUrl} alt="" className="absolute -bottom-12 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full object-cover" style={{ boxShadow: `0 0 0 4px ${paper}`, objectPosition: `center ${Y}%` }} />}
             </div>
           ) : t.layout === "shape" && data.avatarUrl ? (
             <div className="flex justify-center pt-12">
               <div className="relative" style={{ width: { s: 144, m: 176, l: 208 }[t.avatarSize ?? "m"], height: { s: 144, m: 176, l: 208 }[t.avatarSize ?? "m"] }}>
                 <span className="absolute -inset-3 rotate-12" style={{ background: accent, borderRadius: "58% 42% 38% 62% / 45% 55% 45% 55%", opacity: 0.9 }} />
-                <img src={data.avatarUrl} alt="" className="relative h-full w-full object-cover" style={{ borderRadius: "42% 58% 63% 37% / 52% 38% 62% 48%" }} />
+                <img src={data.avatarUrl} alt="" className="relative h-full w-full object-cover" style={{ borderRadius: "42% 58% 63% 37% / 52% 38% 62% 48%", objectPosition: `center ${Y}%` }} />
               </div>
             </div>
           ) : (
-            data.avatarUrl && <div className="flex justify-center pt-10"><img src={data.avatarUrl} alt="" className="rounded-full object-cover" style={{ width: { s: 88, m: 112, l: 144 }[t.avatarSize ?? "m"], height: { s: 88, m: 112, l: 144 }[t.avatarSize ?? "m"], boxShadow: `0 0 0 4px ${accent}` }} /></div>
+            data.avatarUrl && <div className="flex justify-center pt-10"><img src={data.avatarUrl} alt="" className="rounded-full object-cover" style={{ width: { s: 88, m: 112, l: 144 }[t.avatarSize ?? "m"], height: { s: 88, m: 112, l: 144 }[t.avatarSize ?? "m"], boxShadow: `0 0 0 4px ${accent}`, objectPosition: `center ${Y}%` }} /></div>
           )}
           <div className={`mx-auto max-w-[560px] px-5 text-center ${t.layout === "blend" && photo ? "-mt-12 relative" : t.layout === "landscape" ? "pt-14" : t.layout === "shape" ? "pt-7" : "pt-4"}`}>{who(false)}</div>
         </>
