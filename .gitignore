@@ -24,3 +24,7 @@ uploads/
 # pulled production key was one `git add -A` from being committed.
 .env*.local
 media/magazine/
+
+# Scratch: throwaway scripts and a stray shell-redirect file
+scripts/.*.tmp.ts
+/&1
