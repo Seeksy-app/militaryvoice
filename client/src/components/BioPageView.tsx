@@ -13,6 +13,9 @@ import type { SocialPlatform } from "@shared/schema";
  * message to them, and on each episode one to ask the show's AI about it.
  */
 
+/** The page's "For brands" link, off while the media kit is "Coming soon" in the builder. */
+const BRANDS_LIVE = false;
+
 type Ev = (kind: "view" | "click" | "play" | "share", label?: string) => void;
 
 const hms = (sec: number) => { const s = Math.round(sec); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
@@ -90,8 +93,8 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       <div className="mx-auto mt-6 flex max-w-[560px] flex-col gap-4 px-4">
         {data.podcast && (t.podcast?.on ?? true) && <PodcastCard p={data.podcast} onAsk={data.ai?.enabled ? setAskEp : undefined} opts={{ ...DEFAULT_PODCAST, ...(t.podcast ?? {}) }} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} />}
         {data.sections.map((s) => <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} />)}
-        {data.brandsOn && <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : `/${data.handle}/brands`} className="font-semibold hover:underline" data-testid="bio-for-brands">For brands: sponsor this show</a></p>}
-        {(t.branding ?? true) && <p className={`${data.brandsOn ? "mt-1" : "mt-4"} text-center text-xs`} style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>}
+        {BRANDS_LIVE && data.brandsOn && <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : `/${data.handle}/brands`} className="font-semibold hover:underline" data-testid="bio-for-brands">For brands: sponsor this show</a></p>}
+        {(t.branding ?? true) && <p className="mt-4 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>}
       </div>
       {/* Last on the page so they stick to the foot of the screen: the chat bubble, and the sheet for asking about an episode. */}
       {(chat || askEp) && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20 ${askEp ? "bg-black/40" : ""}`} onClick={() => { setChat(false); setAskEp(null); }} aria-hidden />}

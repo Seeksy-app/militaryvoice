@@ -12,6 +12,7 @@ import { BioPageView } from "@/components/BioPageView";
 import { BioBrandsView } from "@/components/BioBrandsView";
 import { BioFamilyView } from "@/components/BioFamilyView";
 import { uploadToStorage } from "@/lib/upload";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useBioFont } from "@/lib/bioFont";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
 import { ratesFor } from "@/components/BioBrandsView";
@@ -28,6 +29,8 @@ import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, Chevron
 type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; welcome: string; aiEnabled: boolean; published: boolean; brands: BioBrands; family: BioFamily; cutoutUrl: string; cutoutFrom: string };
 type Resp = { page: Page; url: string; preview: BioPublic; brandsPreview?: BioBrandsPublic | null; familyPreview?: BioFamilyPublic | null; stats: Record<string, number>; questions: ListenerQuestionRow[]; knowledge?: { done: number; total: number } };
 type Tab = "profile" | "design" | "content" | "social" | "share" | "brands" | "family" | "questions";
+/** Tabs shown greyed out, "Coming soon" on hover, until they launch. */
+const SOON: Tab[] = ["brands", "family"];
 
 const KEY = ["/api/host/bio"];
 
@@ -119,7 +122,12 @@ export function BioBuilder() {
   const qc = useQueryClient();
   const q = useQuery<Resp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/bio")).json() });
   const social = useQuery<{ accounts?: { platform: string; username?: string; url?: string }[] }>({ queryKey: ["/api/host/social"], queryFn: async () => (await apiRequest("GET", "/api/host/social")).json(), staleTime: 5 * 60_000 });
-  const [tab, setTab] = useState<Tab>(() => { try { return new URLSearchParams(window.location.search).get("tab") === "messages" ? "questions" : (localStorage.getItem("mv_bio_tab") as Tab) || "profile"; } catch { return "profile"; } });
+  const [tab, setTab] = useState<Tab>(() => {
+    try {
+      const t = new URLSearchParams(window.location.search).get("tab") === "messages" ? "questions" : (localStorage.getItem("mv_bio_tab") as Tab) || "profile";
+      return SOON.includes(t) ? "profile" : t;
+    } catch { return "profile"; }
+  });
   const go = (t: Tab) => { setTab(t); try { localStorage.setItem("mv_bio_tab", t); } catch { /* fine */ } };
   const [device, setDevice] = useState<"mobile" | "tablet" | "desktop">("mobile");
   const [phone, setPhone] = useState<string>(() => { try { const v = localStorage.getItem("mv_bio_phone") ?? ""; return PHONES.some((p) => p.id === v) ? v : PHONES[0].id; } catch { return PHONES[0].id; } });
@@ -265,7 +273,16 @@ export function BioBuilder() {
         </div>
       </div>
       <div className="mb-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-card p-1 shadow-sm" role="tablist">
-        {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["social", "Social", AtSign], ["share", "Share", Share2], ["brands", "Brands", Handshake], ["family", "Family", Heart], ["questions", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
+        {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["social", "Social", AtSign], ["share", "Share", Share2], ["brands", "Brands", Handshake], ["family", "Family", Heart], ["questions", "Messages", MessageCircle]] as const).map(([k, l, I]) => SOON.includes(k) ? (
+          <Tooltip key={k}>
+            <TooltipTrigger asChild>
+              <span role="tab" aria-disabled="true" aria-selected={false} tabIndex={0} className="inline-flex shrink-0 cursor-not-allowed select-none items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-muted-foreground/45" data-testid={`bio-tab-${k}`}>
+                <I className="h-4 w-4" /> {l}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="font-semibold">Coming soon</TooltipContent>
+          </Tooltip>
+        ) : (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} data-testid={`bio-tab-${k}`}>
             <I className="h-4 w-4" /> {l}{k === "questions" && newQs > 0 && <span className="rounded-full bg-[#F0A71F] px-1.5 text-[11px] font-bold text-[#1a1200]">{newQs}</span>}
           </button>
@@ -407,7 +424,7 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
         {hosted ? <p className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-emerald-600" /> {view.podcast?.title}</p> : <Input value={d.rssUrl} onChange={(e) => change({ rssUrl: e.target.value })} placeholder="https://feeds.yourhost.com/your-show" />}
       </Field>
       <div className="flex items-center justify-between rounded-xl border border-border p-3">
-        <div><p className="text-sm font-semibold">Let listeners message you</p><p className="text-xs text-muted-foreground">A chat button at the top of your page. You reply from Messages; they see it on your page, and by email if they left one.</p></div>
+        <div><p className="text-sm font-semibold">Let listeners message you</p><p className="text-xs text-muted-foreground">A chat button in the corner of your page. You reply from Messages; they see it on your page, and by email if they left one.</p></div>
         <Switch checked={d.askEnabled} onCheckedChange={(v) => change({ askEnabled: v }, true)} />
       </div>
       {d.askEnabled && (
