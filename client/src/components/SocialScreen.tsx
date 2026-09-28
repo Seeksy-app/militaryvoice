@@ -183,7 +183,7 @@ export function SocialScreen() {
               {fill.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Fill my week with {fillN} clip{fillN === 1 ? "" : "s"}
             </Button>
           )}
-          <Tip text="Queue times: the days and times your posts go out">
+          <Tip text="Your posting plan: your weekly goal, and the days and times posts go out">
             <button type="button" onClick={() => setQueueOpen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card hover:bg-muted" aria-label="Queue times" data-testid="social-queue-settings"><Settings2 className="h-4 w-4" /></button>
           </Tip>
         </div>
@@ -254,7 +254,7 @@ export function SocialScreen() {
         onDeleted={() => { setRemoving(null); setOpen(null); void qc.invalidateQueries({ queryKey: ["/api/host/social/queue"] }); }}
       />
 
-      <QueueDialog open={queueOpen} onClose={() => setQueueOpen(false)} settings={queue.data?.settings ?? null} onSaved={refresh} />
+      <QueueDialog open={queueOpen} onClose={() => setQueueOpen(false)} settings={queue.data?.settings ?? null} onSaved={refresh} goal={goal} setGoal={(g) => { setGoal(g); try { localStorage.setItem("mv_post_goal", String(g)); } catch { /* this visit */ } }} />
 
       <Dialog open={!!viewing} onOpenChange={(v) => !v && setViewing(null)}>
         <DialogContent className="max-w-md p-3">
@@ -550,7 +550,7 @@ function PostDetail({ p, onClose, onMove, onCancel, busy }: { p: Post | null; on
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /** The queue's times: which days, and what times of day, posts go out. */
-function QueueDialog({ open, onClose, settings, onSaved }: { open: boolean; onClose: () => void; settings: Queue["settings"]; onSaved: () => void }) {
+function QueueDialog({ open, onClose, settings, onSaved, goal, setGoal }: { open: boolean; onClose: () => void; settings: Queue["settings"]; onSaved: () => void; goal: number; setGoal: (g: number) => void }) {
   const { toast } = useToast();
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -572,10 +572,19 @@ function QueueDialog({ open, onClose, settings, onSaved }: { open: boolean; onCl
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Queue times</DialogTitle>
+          <DialogTitle>Your posting plan</DialogTitle>
           <DialogDescription>When your queue posts. Add to queue puts each post in the next open time.{settings?.timezone && settings.timezone !== tz ? ` Saving sets the time zone to ${tz}.` : ""}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
+          <div>
+            <p className="mb-1.5 text-sm font-medium">Your goal</p>
+            <div className="flex flex-wrap gap-1.5">
+              {[3, 5, 7, 14].map((g) => (
+                <button key={g} type="button" onClick={() => setGoal(g)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${goal === g ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:border-[#053877]/40"}`} data-testid={`queue-goal-${g}`}>{g} a week</button>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">Fill my week queues clips until you reach it.</p>
+          </div>
           <div>
             <p className="mb-1.5 text-sm font-medium">Days</p>
             <div className="flex flex-wrap gap-1.5">

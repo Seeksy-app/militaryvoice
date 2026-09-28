@@ -19,7 +19,7 @@ import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
 import { X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
 /**
- * Rally Point (was "My page"): the podcaster's bio page builder. Profile, Design, Content and
+ * SmartLink (was "My page", then "Rally Point"): the podcaster's bio page builder. Profile, Design, Content and
  * Share on the left; the page itself on the right, drawn by the very
  * component the public page uses. Everything saves as they go.
  */
@@ -230,7 +230,7 @@ export function BioBuilder() {
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden />
         <div className="pointer-events-none absolute -right-8 -top-8 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden />
         <div className="relative min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your Rally Point</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your SmartLink</p>
             <p className="mt-1 truncate text-2xl font-bold tracking-tight sm:text-3xl">{url.replace(/^https?:\/\/(www\.)?/, "")}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => void navigator.clipboard.writeText(url).then(() => toast({ title: "Link copied", description: "Paste it in your bio, your show notes, anywhere." }))} className="gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-copy"><Copy className="h-4 w-4" /> Copy link</Button>
@@ -998,7 +998,7 @@ function BrandsTab({ d, change, url, kit }: { d: Page; change: (p: Partial<Page>
     ["Downloads per episode", n?.perEpisode ? fmt(n.perEpisode) : null, "Host your show here, or connect your host in Integrations"],
     ["Downloads, last 30 days", n?.last30 ? fmt(n.last30) : null, "Comes with your downloads"],
     ["Social followers", n?.reach ? fmt(n.reach) : null, "Connect your social accounts in Integrations"],
-    ["Page views, last 30 days", n?.pageViews30 ? fmt(n.pageViews30) : null, "Share your Rally Point link"],
+    ["Page views, last 30 days", n?.pageViews30 ? fmt(n.pageViews30) : null, "Share your SmartLink"],
   ];
   return (
     <div className="space-y-4">

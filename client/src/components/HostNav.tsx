@@ -83,7 +83,7 @@ export function HostNav({
       title: "Your show",
       items: [
         { key: "dashboard", label: "Dashboard", hint: "Your home base: your events, your audience and what to do next", icon: LayoutDashboard },
-        { key: "page", label: "Rally Point", hint: "Your Rally Point at militaryvoices.ai/you: your podcast, links, messages from listeners, and a media kit for brands", icon: Globe },
+        { key: "page", label: "SmartLink", hint: "Your SmartLink at militaryvoices.ai/you: your podcast, links, messages from listeners, and a media kit for brands", icon: Globe },
         { key: "events", label: "Events", hint: "The events you're part of: your show, your time slot and how to promote it", icon: CalendarDays, badge: eventsCount || undefined },
         ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `The ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} you're co-hosting at the desk, and who's on with you`, icon: Mic2 }] : []),
       ],
@@ -258,7 +258,7 @@ export function HostNav({
               {avatar("h-8 w-8")}
               <span className="min-w-0 flex-1 leading-tight">
                 <span className="block truncate text-sm font-semibold text-foreground">{account.name}</span>
-                <span className="block truncate text-[11px] text-muted-foreground">Your Rally Point</span>
+                <span className="block truncate text-[11px] text-muted-foreground">Your SmartLink</span>
               </span>
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             </a>
