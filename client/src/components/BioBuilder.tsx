@@ -523,24 +523,29 @@ function Card({ icon: I, tone, title, action, fold, on, grip, testid, children }
   );
 }
 
-/** Which of a tab's cards are folded, kept in this browser. */
-function useFold(tab: string) {
+/**
+ * Which of a tab's cards are open, kept in this browser. Cards start open, or
+ * closed (openAtFirst false: the ones opened are what's kept).
+ */
+function useFold(tab: string, openAtFirst = true) {
   const key = `mv_bio_folded_${tab}`;
-  const [shut, setShut] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(key) || "[]") as string[]; } catch { return []; } });
-  const save = (x: string[]) => { setShut(x); try { localStorage.setItem(key, JSON.stringify(x)); } catch { /* this visit only */ } };
+  const [marked, setMarked] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(key) || "[]") as string[]; } catch { return []; } });
+  const save = (x: string[]) => { setMarked(x); try { localStorage.setItem(key, JSON.stringify(x)); } catch { /* this visit only */ } };
+  const isOpen = (id: string) => (openAtFirst ? !marked.includes(id) : marked.includes(id));
+  const set = (id: string, open: boolean) => save(open === openAtFirst ? marked.filter((x) => x !== id) : Array.from(new Set([...marked, id])));
   return {
-    of: (id: string) => ({ open: !shut.includes(id), toggle: () => save(shut.includes(id) ? shut.filter((x) => x !== id) : [...shut, id]) }),
-    all: (ids: string[], open: boolean) => save(open ? [] : ids),
-    any: shut.length > 0,
+    of: (id: string) => ({ open: isOpen(id), toggle: () => set(id, !isOpen(id)) }),
+    set,
+    all: (ids: string[], open: boolean) => save(open === openAtFirst ? [] : ids),
   };
 }
 
 /** Fold all or open all, at the top of a tab. */
-function FoldAll({ fold, ids }: { fold: ReturnType<typeof useFold>; ids: string[] }) {
+function FoldAll({ onAll }: { onAll: (open: boolean) => void }) {
   return (
     <div className="flex justify-end gap-3 text-xs font-semibold text-muted-foreground">
-      <button type="button" onClick={() => fold.all(ids, false)} className="hover:text-foreground" data-testid="fold-all">Collapse all</button>
-      {fold.any && <button type="button" onClick={() => fold.all(ids, true)} className="hover:text-foreground" data-testid="open-all">Expand all</button>}
+      <button type="button" onClick={() => onAll(false)} className="hover:text-foreground" data-testid="fold-all">Collapse all</button>
+      <button type="button" onClick={() => onAll(true)} className="hover:text-foreground" data-testid="open-all">Expand all</button>
     </div>
   );
 }
@@ -1091,14 +1096,17 @@ function blank(type: BioSectionType): BioSection {
 }
 
 function ContentTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void }) {
-  const [open, setOpen] = useState<string | null>(null);
-  const put = (s: BioSection[]) => change({ sections: s });
-  const upd = (id: string, patch: Partial<BioSection>) => put(d.sections.map((x) => (x.id === id ? ({ ...x, ...patch } as BioSection) : x)));
-  const move = (i: number, dir: -1 | 1) => { const s = [...d.sections]; const j = i + dir; if (j < 0 || j >= s.length) return; [s[i], s[j]] = [s[j], s[i]]; put(s); };
-  const add = (type: BioSectionType) => { const s = blank(type); put([...d.sections, s]); setOpen(s.id); };
+  // The two cards start open; each block's editor starts closed.
+  const fold = useFold("content");
+  const items = useFold("content-items", false);
+  const put = (s: BioSection[], now = false) => change({ sections: s }, now);
+  const upd = (id: string, patch: Partial<BioSection>, now = false) => put(d.sections.map((x) => (x.id === id ? ({ ...x, ...patch } as BioSection) : x)), now);
+  const add = (type: BioSectionType) => { const s = blank(type); put([...d.sections, s], true); items.set(s.id, true); fold.set("list", true); };
+  const all = (open: boolean) => { fold.all(["add", "list"], open); items.all(["podcast", ...d.sections.map((x) => x.id)], open); };
   return (
     <div className="space-y-4">
-      <Card icon={Plus} tone="gold" title="Add to your page">
+      <FoldAll onAll={all} />
+      <Card icon={Plus} tone="gold" title="Add to your page" fold={fold.of("add")}>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {KINDS.map((k) => (
             <button key={k.type} type="button" onClick={() => add(k.type)} className="group flex items-center gap-3 rounded-2xl border-2 border-border bg-background p-2.5 text-left transition-all hover:-translate-y-0.5 hover:border-[#053877]/40 hover:shadow-md" data-testid={`bio-add-${k.type}`}>
@@ -1108,25 +1116,27 @@ function ContentTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: b
           ))}
         </div>
       </Card>
-      <Card icon={Layers} tone="blue" title="On your page, in this order">
-        <PodcastBlock d={d} change={change} open={open === "podcast"} toggle={() => setOpen(open === "podcast" ? null : "podcast")} />
+      <Card icon={Layers} tone="blue" title="On your page · drag to reorder" fold={fold.of("list")}>
+        <PodcastBlock d={d} change={change} open={items.of("podcast").open} toggle={items.of("podcast").toggle} />
         {d.sections.length === 0 && <p className="rounded-2xl border-2 border-dashed border-border p-4 text-center text-sm text-muted-foreground">Nothing else yet. Pick something above and it goes here.</p>}
-        {d.sections.map((s, i) => {
+        <Sortable ids={d.sections.map((x) => x.id)} onMove={(ids) => put(ids.map((id) => d.sections.find((x) => x.id === id)!), true)} render={(id, grip) => {
+          const s = d.sections.find((x) => x.id === id)!;
           const k = KINDS.find((x) => x.type === s.type)!;
+          const f = items.of(s.id);
           return (
-            <div key={s.id} className={`rounded-2xl border-2 bg-background transition-colors ${open === s.id ? "border-[#053877]/50 shadow-sm dark:border-[#8fb5e8]/50" : "border-border"} ${s.visible ? "" : "opacity-60"}`} data-testid={`bio-section-${s.type}`}>
+            <div className={`rounded-2xl border-2 bg-background transition-colors ${f.open ? "border-[#053877]/50 shadow-sm dark:border-[#8fb5e8]/50" : "border-border"} ${s.visible ? "" : "opacity-60"}`} data-testid={`bio-section-${s.type}`}>
               <div className="flex items-center gap-2 p-2.5">
-                <span className="flex flex-col"><button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="rounded text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label="Up"><ArrowUp className="h-3.5 w-3.5" /></button><button type="button" onClick={() => move(i, 1)} disabled={i === d.sections.length - 1} className="rounded text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label="Down"><ArrowDown className="h-3.5 w-3.5" /></button></span>
+                {grip}
                 <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${k.tone}`}><k.icon className="h-[18px] w-[18px]" /></span>
-                <button type="button" onClick={() => setOpen(open === s.id ? null : s.id)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-semibold">{s.title || k.label}</span><span className="block text-xs text-muted-foreground">{k.label}{s.visible ? "" : " · hidden"}</span></button>
-                <button type="button" onClick={() => upd(s.id, { visible: !s.visible })} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted" aria-label={s.visible ? "Hide" : "Show"}>{s.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button>
-                <button type="button" onClick={() => put(d.sections.filter((x) => x.id !== s.id))} className="rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-destructive dark:hover:bg-red-950" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
-                <button type="button" onClick={() => setOpen(open === s.id ? null : s.id)} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted" aria-label={open === s.id ? "Close" : "Edit"}><ChevronDown className={`h-4 w-4 transition-transform ${open === s.id ? "rotate-180" : ""}`} /></button>
+                <button type="button" onClick={f.toggle} className="min-w-0 flex-1 text-left" aria-expanded={f.open}><span className="block truncate text-sm font-semibold">{s.title || k.label}</span><span className="block text-xs text-muted-foreground">{k.label}{s.visible ? "" : " · hidden"}</span></button>
+                <Switch checked={s.visible} onCheckedChange={(v) => upd(s.id, { visible: v }, true)} aria-label={`${s.title || k.label} ${s.visible ? "on" : "off"}`} />
+                <button type="button" onClick={() => put(d.sections.filter((x) => x.id !== s.id), true)} className="rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-destructive dark:hover:bg-red-950" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                <button type="button" onClick={f.toggle} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted" aria-label={f.open ? "Close" : "Edit"}><ChevronDown className={`h-4 w-4 transition-transform ${f.open ? "rotate-180" : ""}`} /></button>
               </div>
-              {open === s.id && <div className="space-y-2 border-t border-border p-3"><SectionEditor s={s} upd={(p) => upd(s.id, p)} /></div>}
+              {f.open && <div className="space-y-2 border-t border-border p-3"><SectionEditor s={s} upd={(p) => upd(s.id, p)} /></div>}
             </div>
           );
-        })}
+        }} />
       </Card>
     </div>
   );
@@ -1621,7 +1631,7 @@ function BrandsTab({ d, change, url, kit, episodes }: { d: Page; change: (p: Par
   };
   return (
     <div className="space-y-4">
-      <FoldAll fold={fold} ids={["kit", "top", "about", ...order]} />
+      <FoldAll onAll={(v) => fold.all(["kit", "top", "about", ...order], v)} />
       <Card icon={Handshake} tone="gold" title="Your media kit" fold={fold.of("kit")} on={{ checked: b.on, set: (v) => set({ on: v }, true) }} testid="brands-card-kit">
         {b.on ? <p className="-mt-1 truncate text-xs text-muted-foreground">{link.replace(/^https?:\/\/(www\.)?/, "")} · send it to any brand</p> : <p className="-mt-1 text-xs text-muted-foreground">Off: brands can't open it.</p>}
         {b.on && (
@@ -1791,7 +1801,7 @@ function FamilyTab({ d, change, flush, url, famPreview }: { d: Page; change: (p:
   };
   return (
     <div className="space-y-4">
-      <FoldAll fold={fold} ids={["page", "top", ...order]} />
+      <FoldAll onAll={(v) => fold.all(["page", "top", ...order], v)} />
       <Card icon={Heart} tone="gold" title="Your family private page" fold={fold.of("page")} on={{ checked: f.on, set: (v) => set({ on: v }, true) }} testid="family-card-page">
         {!f.on && <p className="-mt-1 text-xs text-muted-foreground">Off: the link doesn't open.</p>}
         {f.on && f.key && (
