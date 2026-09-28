@@ -10,18 +10,23 @@ export function ConnectedAccountsStrip({
   accounts,
   onManage,
   className = "",
+  extra,
+  extraCount = 0,
 }: {
   accounts: SocialAccount[];
   onManage?: () => void;
   className?: string;
+  /** More connections after the social accounts: the podcast host's downloads. */
+  extra?: React.ReactNode;
+  extraCount?: number;
 }) {
-  if (accounts.length === 0) return null;
+  if (accounts.length + extraCount === 0) return null;
 
   return (
     <div className={className}>
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
-          Connected accounts <span className="font-normal text-muted-foreground">({accounts.length})</span>
+          Connected accounts <span className="font-normal text-muted-foreground">({accounts.length + extraCount})</span>
         </p>
         {onManage && (
           <button
@@ -78,6 +83,7 @@ export function ConnectedAccountsStrip({
             )}
           </a>
         ))}
+        {extra}
       </div>
     </div>
   );

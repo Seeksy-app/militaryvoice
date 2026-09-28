@@ -74,7 +74,7 @@ import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
 import { MyAnalytics } from "@/components/MyAnalytics";
-import { PodcastListens } from "@/components/PodcastStats";
+import { PodcastListens, PodcastChips, usePodcastSources } from "@/components/PodcastStats";
 import { GetTheApp, AppInstallCard } from "@/components/GetTheApp";
 import { isPodcaster } from "@shared/schema";
 import { StudioIcon } from "@/components/GreenRoomButton";
@@ -702,6 +702,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     enabled: !!data,
   });
 
+  const podcastSources = usePodcastSources();
   const { data: social } = useQuery<SocialStatus>({
     queryKey: ["/api/host/social"],
     retry: false,
@@ -1423,7 +1424,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   <div className="relative z-10 -mt-8 px-3 sm:px-5">
                     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                       {social?.configured && (social.accounts?.length ?? 0) > 0 ? (
-                        <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} />
+                        <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} extra={<PodcastChips onOpen={() => goTo("analytics")} />} extraCount={podcastSources.length} />
                       ) : (
                         <button type="button" onClick={() => goTo("integrations")} className="flex w-full items-center gap-3 text-left text-sm text-muted-foreground hover:text-foreground" data-testid="button-connect-accounts">
                           <Link2 className="h-4 w-4 text-[#053877]" /> Connect the accounts you post from — they show as follow buttons on your card, and we post your promo cards for you.
@@ -1524,6 +1525,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                                   <PlatformIcon platform={a.platform} className="h-4 w-4" />
                                   <span className="min-w-0 flex-1 truncate text-foreground">{a.displayName || a.username}</span>
                                   <span className="tabular-nums text-foreground/70">{a.followers != null ? formatFollowers(a.followers) : "–"}</span>
+                                </div>
+                              ))}
+                              {/* The podcast itself, from its host: downloads alongside the followers. */}
+                              {podcastSources.filter((p) => p.data!.total > 0).map((p) => (
+                                <div key={p.source} className="flex items-center gap-2 border-t border-border pt-1.5 text-sm" data-testid={`audience-podcast-${p.source}`}>
+                                  <Headphones className="h-4 w-4 text-[#053877] dark:text-[#8ab4f8]" />
+                                  <span className="min-w-0 flex-1 truncate text-foreground">{p.showName || "Your podcast"} <span className="text-muted-foreground">· {p.data!.unit}</span></span>
+                                  <span className="tabular-nums text-foreground/70">{formatFollowers(p.data!.total)}</span>
                                 </div>
                               ))}
                             </div>

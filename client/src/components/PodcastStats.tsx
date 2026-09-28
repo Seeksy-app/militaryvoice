@@ -158,6 +158,32 @@ function Bars({ items, unit }: { items: [string, number][]; unit?: string }) {
 
 const top = (m: Record<string, number> | undefined, n = 5): [string, number][] => Object.entries(m ?? {}).sort((a, b) => b[1] - a[1]).slice(0, n);
 
+/** The connected podcast hosts with numbers, for the Dashboard. */
+export function usePodcastSources() {
+  const q = usePodcastStats();
+  return (q.data?.sources ?? []).filter((s) => s.data);
+}
+
+/** A podcast host in the Dashboard's Connected accounts row: its mark, the show, and its downloads. */
+export function PodcastChips({ onOpen }: { onOpen: () => void }) {
+  const sources = usePodcastSources();
+  return (
+    <>
+      {sources.map((s) => (
+        <button key={s.source} type="button" onClick={onOpen} title={`${NAME[s.source]}: ${s.showName}. See your listens`} className="group flex shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-2.5 py-1.5 text-left transition-colors hover:border-primary/40 hover:shadow-sm sm:gap-2.5 sm:px-3 sm:py-2" data-testid={`chip-podcast-${s.source}`}>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black text-white" style={{ background: COLOR[s.source] }} aria-hidden>
+            {s.source === "spotify" ? <Headphones className="h-4 w-4" /> : NAME[s.source][0]}
+          </span>
+          <span className="min-w-0">
+            <span className="hidden max-w-[13rem] truncate text-sm font-medium leading-tight text-foreground sm:block">{s.showName || NAME[s.source]}</span>
+            <span className="block truncate text-xs font-semibold leading-tight text-foreground sm:font-normal sm:text-muted-foreground">{s.data!.total > 0 ? `${compact(s.data!.total)} ${s.data!.unit}` : "Connected"}<span className="hidden sm:inline"> · {NAME[s.source]}</span></span>
+          </span>
+        </button>
+      ))}
+    </>
+  );
+}
+
 /**
  * Your analytics → Podcast listens: downloads and streams from wherever the
  * show is connected, and where it fits among MilitaryVoices shows.

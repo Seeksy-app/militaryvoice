@@ -354,11 +354,12 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
             )}
             {aud.interests.length > 0 && (
               <Block title="Audience interests">
-                <div className="grid gap-x-10 gap-y-5 md:grid-cols-2">
+                {/* Columns, not a grid: an interest with no brands under it takes only its own line, with no hole beside it. */}
+                <div className="gap-x-10 md:columns-2">
                   {aud.interests.map((it, i) => {
                     const col = INTEREST_COLORS[i % INTEREST_COLORS.length];
                     return (
-                      <div key={it.name}>
+                      <div key={it.name} className="mb-5 break-inside-avoid">
                         <div className="flex items-baseline justify-between gap-3 border-b border-border pb-1.5">
                           <span className="inline-flex items-center gap-2 font-medium" style={{ color: col }}><span className="h-2 w-2 rounded-full" style={{ background: col }} />{it.name}</span>
                           <span className="font-semibold tabular-nums">{pctText(it.pct)}</span>
