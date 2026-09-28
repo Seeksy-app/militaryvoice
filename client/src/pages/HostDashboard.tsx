@@ -1114,7 +1114,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             collapsed={navTucked}
             onToggle={toggleNav}
             credits={{ column: <NavCredits variant="pill" />, rail: <NavCredits variant="rail" /> }}
-            create={(trigger) => <CreateMenu goTo={goTo}>{trigger}</CreateMenu>}
             screen={screen === "claim" ? "dashboard" : screen}
             eventsCount={hostEvents?.length ?? 0}
             contactsCount={data?.contacts?.length ?? 0}
@@ -1433,13 +1432,12 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       )}
                       {/* Four doors that are about the account, not any one
                           event: the event lives in its own card below. */}
-                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5 lg:grid-cols-4" data-testid="general-doors">
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5" data-testid="general-doors">
                         {/* + Create first, as on YouTube: the three things a
                             podcaster starts from here. The green room is Go
                             live, and still on the event card below. */}
-                        {/* On a computer, Create is at the top of the nav; here only below that width, where there's no nav column. */}
                         <CreateMenu goTo={goTo}>
-                            <button type="button" className="flex items-center gap-2.5 lg:hidden rounded-xl border border-[#053877] bg-[#053877] px-3.5 py-2.5 text-left text-sm font-semibold text-white transition-colors hover:bg-[#0a4a99] dark:border-[#8ab4f8]/40 dark:bg-[#0a4a99]" data-testid="door-create">
+                            <button type="button" className="flex items-center gap-2.5 rounded-xl border border-[#053877] bg-[#053877] px-3.5 py-2.5 text-left text-sm font-semibold text-white transition-colors hover:bg-[#0a4a99] dark:border-[#8ab4f8]/40 dark:bg-[#0a4a99]" data-testid="door-create">
                               <Plus className="h-4 w-4 shrink-0" /> <span className="truncate">Create</span>
                             </button>
                         </CreateMenu>
