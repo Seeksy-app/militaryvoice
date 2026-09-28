@@ -1,9 +1,9 @@
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { LogoLockupOnDark } from "@/components/Logo";
+import { LogoLockup } from "@/components/Logo";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal } from "lucide-react";
+import { LayoutDashboard, Plus, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
@@ -49,7 +49,10 @@ export function HostNav({
   collapsed = false,
   onToggle,
   credits,
+  create,
 }: {
+  /** + Create, at the top of the column: wraps the trigger in the Dashboard's Create menu. */
+  create?: (trigger: React.ReactElement) => ReactNode;
   /** Their credit balance: the column's version and the rail's. */
   credits?: { column: ReactNode; rail: ReactNode };
   /** Folded to a rail of icons (names on hover), with the button that opens it again. */
@@ -90,8 +93,6 @@ export function HostNav({
         { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },
         { key: "postify", label: "Pōstify", hint: "Create short clips from your video podcast, and clean up the full episode", icon: Wand2, tag: "Beta" },
         { key: "social", label: "Social", hint: "Post and schedule your clips to all your social accounts from one calendar", icon: Share2 },
-        // In the column, not only in the account card: that's where people look for it.
-        { key: "integrations", label: "Integrations", hint: "Connect Zoom, YouTube and your social accounts so everything flows in and out", icon: Link2 },
       ],
     },
     {
@@ -106,13 +107,8 @@ export function HostNav({
     // three more things to read on a page that already asked too much.
     {
       title: "Coming soon",
-      items: proOpen
-        ? [
-            { key: "pro", label: "Email campaigns", hint: "Email your listeners about new episodes and events", icon: Mail, locked: true, feature: "campaigns" },
-            { key: "pro", label: "Contacts CRM", hint: "Everyone who has found your show, in one list", icon: Contact, locked: true, feature: "crm" },
-            { key: "pro", label: "Your own studio", hint: "Stream and record your show any day, not only at events", icon: MonitorPlay, locked: true, feature: "studio" },
-          ]
-        : [{ key: "pro", label: "Pro tools", hint: "Email campaigns, a contacts CRM and your own studio — after the Marathon", icon: Lock, locked: true, feature: "campaigns" }],
+      // One quiet line: what's coming shouldn't take the space of what's here.
+      items: [{ key: "pro", label: "Pro tools", hint: "Email campaigns, a contacts CRM and your own studio, coming after the Marathon", icon: Lock, locked: true, feature: "campaigns", tag: "Soon" }],
     },
     {
       title: "Help",
@@ -136,11 +132,11 @@ export function HostNav({
           href={it.href}
           className={compact
             ? "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[#053877]/[0.06] px-3 py-1.5 text-sm font-medium text-foreground"
-            : "flex items-center gap-3 rounded-lg px-3 py-2 text-left text-white/75 transition-colors hover:bg-white/10 hover:text-white"}
+            : "flex items-center gap-3 rounded-lg px-3 py-2 text-left text-foreground/75 transition-colors hover:bg-muted hover:text-foreground"}
           data-testid={`nav-host-help`}
         >
-          <Icon className={`h-4 w-4 shrink-0 ${compact ? "text-[#053877]" : "text-white/60"}`} />
-          <span className="min-w-0 flex-1 text-[14.5px] font-medium">{it.label}</span>
+          <Icon className={`h-4 w-4 shrink-0 ${compact ? "text-[#053877]" : "text-muted-foreground"}`} />
+          <span className="min-w-0 flex-1 text-[14px] font-medium">{it.label}</span>
         </Link>
       );
     }
@@ -165,16 +161,16 @@ export function HostNav({
               }`
             : `relative flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors ${
                 active
-                  ? "bg-white/[0.12] text-white before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-[#F0A71F]"
+                  ? "bg-[#053877]/[0.08] font-semibold text-[#053877] dark:bg-white/10 dark:text-white"
                   : it.locked
-                    ? `text-white/40 ${proOpen ? "hover:bg-white/10" : "cursor-default"}`
-                    : "text-white/75 hover:bg-white/10 hover:text-white"
+                    ? `text-muted-foreground ${proOpen ? "hover:bg-muted" : "cursor-default"}`
+                    : "text-foreground/75 hover:bg-muted hover:text-foreground"
               }`
         }
         data-testid={`nav-host-${it.key}${it.feature ? `-${it.feature}` : ""}`}
       >
-        <Icon className={`h-4 w-4 shrink-0 ${compact ? (active ? "text-white" : it.locked ? "text-muted-foreground/70" : "text-[#053877]") : active ? "text-[#F0A71F]" : it.locked ? "text-white/35" : "text-white/60"}`} />
-        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[14.5px] font-medium">
+        <Icon className={`h-4 w-4 shrink-0 ${compact ? (active ? "text-white" : it.locked ? "text-muted-foreground/70" : "text-[#053877]") : active ? "text-[#053877] dark:text-white" : "text-muted-foreground"}`} />
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 text-[14px] font-medium">
           {it.label}
           {it.badge != null && (
             <span className={`inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-bold leading-none ${compact ? (active ? "bg-white text-[#053877]" : "bg-[#053877] text-white") : "bg-[#F0A71F] text-[#1a1200]"}`} data-testid="badge-host-events-count">
@@ -182,7 +178,7 @@ export function HostNav({
             </span>
           )}
           {it.tag && (
-            <span className={`rounded-full px-1.5 py-px text-[10px] font-bold uppercase leading-4 tracking-wide ${compact ? "bg-[#F0A71F]/20 text-[#8a5a00]" : "bg-[#F0A71F]/20 text-[#F0A71F]"}`}>{it.tag}</span>
+            <span className={`ml-auto rounded-full px-1.5 py-px text-[10px] font-semibold leading-4 ${it.locked ? "bg-muted text-muted-foreground" : "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]"}`}>{it.tag}</span>
           )}
           {it.locked && compact && <Lock className="h-3 w-3 opacity-60" />}
         </span>
@@ -205,9 +201,9 @@ export function HostNav({
   // The account menu: the admin's way back and View as first (only for an admin), then the person's own.
   const accountMenu = (side: "top" | "right") => account && <AccountMenuContent account={account} onGo={onGo} side={side} />;
   const avatar = (size: string) => account && (account.photo ? (
-    <img src={account.photo} alt="" className={`${size} shrink-0 rounded-full object-cover ring-1 ring-white/20`} />
+    <img src={account.photo} alt="" className={`${size} shrink-0 rounded-full object-cover ring-1 ring-border`} />
   ) : (
-    <span className={`flex ${size} shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white`}>{account.name.trim().charAt(0).toUpperCase()}</span>
+    <span className={`flex ${size} shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-foreground`}>{account.name.trim().charAt(0).toUpperCase()}</span>
   ));
 
   return (
@@ -225,10 +221,13 @@ export function HostNav({
       {/* Desktop, folded: a rail of the same icons, names on hover, and the button that opens it. */}
       {collapsed ? (
         <nav key="rail" className="sticky top-6 hidden self-start lg:block" aria-label="Dashboard sections">
-          <div className="flex min-h-[calc(100vh-3rem)] w-14 flex-col items-center gap-1 rounded-2xl bg-[#04102b] py-3 shadow-sm">
+          <div className="flex min-h-[calc(100vh-3rem)] w-14 flex-col items-center gap-1 rounded-2xl border border-border bg-card py-3 shadow-sm">
             <RailButton tip="Expand menu" onClick={onToggle} testid="nav-expand"><PanelLeftOpen className="h-4 w-4" /></RailButton>
             {credits?.rail}
-            <span className="my-1.5 h-px w-7 bg-white/10" aria-hidden />
+            {create && create(
+              <button type="button" aria-label="Create" className="my-1 flex h-10 w-10 items-center justify-center rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="nav-rail-create"><Plus className="h-4 w-4" /></button>,
+            )}
+            <span className="my-1.5 h-px w-7 bg-border" aria-hidden />
             {groups.filter((g) => g.title !== "Coming soon").flatMap((g) => g.items).map((it) => {
               const Icon = it.icon;
               const active = screen === it.key || (it.key === "events" && (screen === "promotion" || screen === "greenroom"));
@@ -242,7 +241,7 @@ export function HostNav({
             {account && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button type="button" aria-label="Account" className="mt-auto rounded-full p-0.5 hover:ring-2 hover:ring-white/30" data-testid="nav-rail-account">{avatar("h-9 w-9")}</button>
+                  <button type="button" aria-label="Account" className="mt-auto rounded-full p-0.5 hover:ring-2 hover:ring-border" data-testid="nav-rail-account">{avatar("h-9 w-9")}</button>
                 </DropdownMenuTrigger>
                 {accountMenu("right")}
               </DropdownMenu>
@@ -252,55 +251,57 @@ export function HostNav({
       ) : (
       /* Desktop: the column. Keyed apart from the rail: sharing DOM left a rail icon behind in it. */
       <nav key="column" className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-3rem)]" aria-label="Dashboard sections">
-        {/* Navy, the same as the command card beside it, so the page reads
-            as one dark frame with the work in the middle. */}
-        <div className="flex min-h-[calc(100vh-3rem)] flex-col gap-5 rounded-2xl bg-[#04102b] p-3 shadow-sm">
-          {/* The mark heads the column now that there's no header bar. */}
-          <div className="px-3 pb-1 pt-2">
-            <div className="flex items-center justify-between gap-2">
-              <Link href="/host/dashboard" data-testid="link-workspace-home-nav"><LogoLockupOnDark className="h-9 w-auto" /></Link>
-              {/* Fold it away (the light/dark choice lives in the account menu below). */}
-              {onToggle && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" onClick={onToggle} aria-label="Collapse menu" className="flex h-8 w-8 items-center justify-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white" data-testid="nav-collapse">
-                      <PanelLeftClose className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="text-xs">Collapse menu</TooltipContent>
-                </Tooltip>
+        {/* Light and quiet: white, a navy highlight on where you are, so the navy command card beside it leads. */}
+        <div className="flex min-h-[calc(100vh-3rem)] flex-col gap-1 rounded-2xl border border-border bg-card p-3 shadow-sm">
+          <div className="flex items-center gap-2 px-2 pb-2 pt-1">
+            <Link href="/host/dashboard" data-testid="link-workspace-home-nav"><LogoLockup className="h-8 w-auto" /></Link>
+            <span className="ml-auto" />
+            {credits?.column}
+            {onToggle && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" onClick={onToggle} aria-label="Collapse menu" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" data-testid="nav-collapse">
+                    <PanelLeftClose className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="text-xs">Collapse menu</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+          {admin && <div className="mb-1 px-1">{admin}</div>}
+          {create && (
+            <div className="mb-2">
+              {create(
+                <button type="button" className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#053877] px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0a4a99] dark:bg-[#0a4a99] dark:hover:bg-[#1257a8]" data-testid="nav-create">
+                  <Plus className="h-4 w-4" /> Create
+                </button>,
               )}
             </div>
-            {admin && <div className="mt-3 [&_a]:!border-white/20 [&_button]:!border-white/20">{admin}</div>}
-            {credits && <div className="mt-3">{credits.column}</div>}
-          </div>
-          {groups.map((g) => {
-            const items = g.items;
-            return (
-              // What isn't live yet sits apart from what is: a gap and a rule above it.
-              <div key={g.title} className={g.title === "Help" ? "mt-auto" : g.title === "Coming soon" ? "mt-6 border-t border-white/10 pt-6" : undefined}>
-                <p className="mb-1.5 px-3 text-xs font-extrabold uppercase tracking-[0.14em] text-white">{g.title}</p>
-                <div className="flex flex-col gap-0.5">
-                  {items.map((it) => link(it, false))}
-                  {g.title === "Help" && <GetTheApp variant="nav" />}
-                </div>
+          )}
+          {groups.map((g) => (
+            // The first group needs no heading; the rest get a quiet one. Pro tools and Help sit at the foot.
+            <div key={g.title} className={g.title === "Coming soon" ? "mt-auto pt-4" : g.title === "Help" ? "" : g.title === "Your show" ? "" : "pt-3"}>
+              {g.title !== "Your show" && g.title !== "Coming soon" && g.title !== "Help" && <p className="px-3 pb-1 text-[11px] font-medium text-muted-foreground">{g.title}</p>}
+              <div className="flex flex-col gap-0.5">
+                {g.items.map((it) => link(it, false))}
+                {g.title === "Help" && <GetTheApp variant="navLight" />}
               </div>
-            );
-          })}
+            </div>
+          ))}
           {account && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className={`-mt-2 flex w-full items-center gap-2.5 rounded-xl border border-white/10 p-2 text-left transition-colors hover:bg-white/10 ${screen === "editProfile" || screen === "integrations" ? "bg-white/[0.12]" : ""}`}
+                  className={`mt-2 flex w-full items-center gap-2.5 rounded-xl border-t border-border p-2 pt-3 text-left transition-colors hover:bg-muted ${screen === "editProfile" || screen === "integrations" ? "bg-[#053877]/[0.06]" : ""}`}
                   data-testid="nav-host-account"
                 >
-                  {avatar("h-9 w-9")}
+                  {avatar("h-8 w-8")}
                   <span className="min-w-0 flex-1 leading-tight">
-                    <span className="block truncate text-[13px] font-semibold text-white">{account.name}</span>
-                    <span className="block truncate text-[11px] text-white/50">Account settings</span>
+                    <span className="block truncate text-[13px] font-semibold text-foreground">{account.name}</span>
+                    <span className="block truncate text-[11px] text-muted-foreground">Settings and integrations</span>
                   </span>
-                  <ChevronsUpDown className="h-4 w-4 shrink-0 text-white/40" />
+                  <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
                 </button>
               </DropdownMenuTrigger>
               {accountMenu("top")}
@@ -417,7 +418,7 @@ function Appearance() {
 
 /** One icon on the folded menu, its name on hover. */
 function RailButton({ tip, onClick, href, active, testid, children }: { tip: string; onClick?: () => void; href?: string; active?: boolean; testid: string; children: ReactNode }) {
-  const cls = `flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${active ? "bg-white/[0.14] text-[#F0A71F]" : "text-white/65 hover:bg-white/10 hover:text-white"}`;
+  const cls = `flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${active ? "bg-[#053877]/[0.08] text-[#053877] dark:bg-white/10 dark:text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`;
   return (
     <Tooltip>
       <TooltipTrigger asChild>

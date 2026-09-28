@@ -13,7 +13,7 @@ const APP_URL = "https://www.militaryvoices.ai/host/dashboard?source=app";
  * computer a code to scan so it lands on the phone, where it's most use.
  * Hidden once they're in the app.
  */
-export function GetTheApp({ variant }: { variant: "nav" | "banner" | "sheet" }) {
+export function GetTheApp({ variant }: { variant: "nav" | "navLight" | "banner" | "sheet" }) {
   const app = useInstall();
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState(() => {
@@ -33,6 +33,11 @@ export function GetTheApp({ variant }: { variant: "nav" | "banner" | "sheet" }) 
         <span className="block text-[15px] font-medium">Get the app</span>
         <span className="block truncate text-xs text-muted-foreground">On your Home Screen, with notifications</span>
       </span>
+    </button>
+  ) : variant === "navLight" ? (
+    <button type="button" onClick={() => void go()} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-foreground/75 transition-colors hover:bg-muted hover:text-foreground" data-testid="nav-get-app">
+      <Smartphone className="h-4 w-4 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 text-[14px] font-medium">Get the app</span>
     </button>
   ) : variant === "nav" ? (
     <button type="button" onClick={() => void go()} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-white/75 transition-colors hover:bg-white/10 hover:text-white" data-testid="nav-get-app">

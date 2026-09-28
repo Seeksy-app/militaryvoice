@@ -1367,7 +1367,7 @@ interface Plan { key: PlanKey; name: string; interval?: "month" | "year"; credit
  * the folded rail), opening the plan and credits dialog. Test accounts read
  * Unlimited.
  */
-export function NavCredits({ variant }: { variant: "column" | "rail" | "chip" }) {
+export function NavCredits({ variant }: { variant: "column" | "rail" | "chip" | "pill" }) {
   const [open, setOpen] = useState(false);
   const features = useQuery<{ post: boolean; beta?: Beta; plan?: Plan | null }>({ queryKey: ["/api/host/features"], queryFn: async () => (await apiRequest("GET", "/api/host/features")).json(), staleTime: 60_000 });
   const beta = features.data?.beta;
@@ -1381,10 +1381,20 @@ export function NavCredits({ variant }: { variant: "column" | "rail" | "chip" })
         <button type="button" onClick={() => setOpen(true)} aria-label={`${n}. Get more`} className="inline-flex items-center gap-1.5 rounded-full border border-[#F0A71F]/40 bg-[#F0A71F]/10 px-2.5 py-1 text-xs font-bold tabular-nums text-white" data-testid="phone-credits">
           <Coins className="h-3.5 w-3.5 text-[#F0A71F]" /> {beta.unlimited ? "Unlimited" : beta.tokens.toLocaleString()}
         </button>
+      ) : variant === "pill" ? (
+        // The light column's: a small gold chip beside the mark.
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button type="button" onClick={() => setOpen(true)} className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#F0A71F]/15 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[#8a5a00] transition-colors hover:bg-[#F0A71F]/25 dark:text-[#F0A71F]" data-testid="nav-credits">
+              <Coins className="h-3 w-3" /> {beta.unlimited ? "Unlimited" : beta.tokens.toLocaleString()}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="text-xs">{n}{plan ? ` · ${plan.name} plan` : ""}. Get more</TooltipContent>
+        </Tooltip>
       ) : variant === "rail" ? (
         <Tooltip>
           <TooltipTrigger asChild>
-            <button type="button" onClick={() => setOpen(true)} aria-label={n} className="relative flex h-10 w-10 items-center justify-center rounded-lg text-[#F0A71F] hover:bg-white/10" data-testid="nav-rail-credits">
+            <button type="button" onClick={() => setOpen(true)} aria-label={n} className="relative flex h-10 w-10 items-center justify-center rounded-lg text-[#b36b00] hover:bg-muted dark:text-[#F0A71F]" data-testid="nav-rail-credits">
               <Coins className="h-4 w-4" />
               {!beta.unlimited && <span className="absolute -right-0.5 -top-0.5 min-w-[18px] rounded-full bg-[#F0A71F] px-1 text-center text-[9px] font-bold leading-[16px] text-[#1a1200]">{beta.tokens > 999 ? "999+" : beta.tokens}</span>}
             </button>

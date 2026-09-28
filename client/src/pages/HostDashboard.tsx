@@ -1113,7 +1113,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <HostNav
             collapsed={navTucked}
             onToggle={toggleNav}
-            credits={{ column: <NavCredits variant="column" />, rail: <NavCredits variant="rail" /> }}
+            credits={{ column: <NavCredits variant="pill" />, rail: <NavCredits variant="rail" /> }}
+            create={(trigger) => <CreateMenu goTo={goTo}>{trigger}</CreateMenu>}
             screen={screen === "claim" ? "dashboard" : screen}
             eventsCount={hostEvents?.length ?? 0}
             contactsCount={data?.contacts?.length ?? 0}
@@ -1436,31 +1437,11 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                         {/* + Create first, as on YouTube: the three things a
                             podcaster starts from here. The green room is Go
                             live, and still on the event card below. */}
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
+                        <CreateMenu goTo={goTo}>
                             <button type="button" className="flex items-center gap-2.5 rounded-xl border border-[#053877] bg-[#053877] px-3.5 py-2.5 text-left text-sm font-semibold text-white transition-colors hover:bg-[#0a4a99] dark:border-[#8ab4f8]/40 dark:bg-[#0a4a99]" data-testid="door-create">
                               <Plus className="h-4 w-4 shrink-0" /> <span className="truncate">Create</span>
                             </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-56 rounded-xl p-1.5">
-                            <DropdownMenuItem
-                              className="gap-3 rounded-lg px-3 py-2.5 text-sm"
-                              onSelect={() => {
-                                try { sessionStorage.setItem("mv_open_upload", "1"); } catch { /* the Library still opens */ }
-                                goTo("recordings");
-                              }}
-                              data-testid="create-upload"
-                            >
-                              <SquarePlay className="h-5 w-5" /> Upload video
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="gap-3 rounded-lg px-3 py-2.5 text-sm" onSelect={() => goTo("greenroom")} data-testid="create-live">
-                              <Radio className="h-5 w-5" /> Go live
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="gap-3 rounded-lg px-3 py-2.5 text-sm" onSelect={() => goTo("social")} data-testid="create-post">
-                              <SquarePen className="h-5 w-5" /> Create post
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        </CreateMenu>
                         {[
                           // Short names on a phone, where the long ones were cut ("Your anal…").
                           { key: "analytics", label: "Your analytics", short: "Analytics", icon: BarChart3, go: () => goTo("analytics") },
@@ -1627,5 +1608,32 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/** + Create: the three things a podcaster starts from, as on YouTube. On the Dashboard and at the top of the nav. */
+function CreateMenu({ goTo, children }: { goTo: (s: Screen) => void; children: React.ReactElement }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56 rounded-xl p-1.5">
+        <DropdownMenuItem
+          className="gap-3 rounded-lg px-3 py-2.5 text-sm"
+          onSelect={() => {
+            try { sessionStorage.setItem("mv_open_upload", "1"); } catch { /* the Library still opens */ }
+            goTo("recordings");
+          }}
+          data-testid="create-upload"
+        >
+          <SquarePlay className="h-5 w-5" /> Upload video
+        </DropdownMenuItem>
+        <DropdownMenuItem className="gap-3 rounded-lg px-3 py-2.5 text-sm" onSelect={() => goTo("greenroom")} data-testid="create-live">
+          <Radio className="h-5 w-5" /> Go live
+        </DropdownMenuItem>
+        <DropdownMenuItem className="gap-3 rounded-lg px-3 py-2.5 text-sm" onSelect={() => goTo("social")} data-testid="create-post">
+          <SquarePen className="h-5 w-5" /> Create post
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
