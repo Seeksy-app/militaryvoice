@@ -26,7 +26,22 @@ export interface BioTheme {
   layout: BioLayout;
   podcastStyle: BioPodcastStyle;
   podcastFrame: BioPodcastFrame;
+  /** The podcast section's own options. */
+  podcast: BioPodcastOptions;
 }
+
+export interface BioPodcastOptions {
+  on: boolean;
+  /** "" = the show's title. */
+  heading: string;
+  /** Episodes shown: 3, 5 or 10. */
+  count: number;
+  apple: boolean;
+  spotify: boolean;
+  all: boolean;
+  rss: boolean;
+}
+export const DEFAULT_PODCAST: BioPodcastOptions = { on: true, heading: "", count: 5, apple: true, spotify: true, all: true, rss: true };
 
 export type BioSection =
   | { id: string; type: "links"; visible: boolean; title: string; links: { id: string; label: string; url: string }[] }
@@ -49,8 +64,10 @@ export interface BioBrands {
   showRates: boolean;
   /** Brands they've worked with. */
   partners: { id: string; name: string; url: string }[];
+  /** A photo just for brands ("" = their profile photo). */
+  photo: string;
 }
-export const DEFAULT_BRANDS: BioBrands = { on: true, pitch: "", audience: "", showRates: false, partners: [] };
+export const DEFAULT_BRANDS: BioBrands = { on: true, pitch: "", audience: "", showRates: false, partners: [], photo: "" };
 export function parseBrands(raw: string | null | undefined): BioBrands {
   try {
     const v = raw ? JSON.parse(raw) : {};
@@ -72,8 +89,10 @@ export interface BioFamily {
   photos: { id: string; url: string; caption: string }[];
   /** Episode ids to start with. */
   favorites: string[];
+  /** A photo just for family ("" = their cover or profile photo). */
+  photo: string;
 }
-export const DEFAULT_FAMILY: BioFamily = { on: true, key: "", note: "", story: "", milestones: [], photos: [], favorites: [] };
+export const DEFAULT_FAMILY: BioFamily = { on: true, key: "", note: "", story: "", milestones: [], photos: [], favorites: [], photo: "" };
 export function parseFamily(raw: string | null | undefined): BioFamily {
   try {
     const v = raw ? JSON.parse(raw) : {};
@@ -189,14 +208,14 @@ export const TEMPLATES: Record<BioTemplate, { label: string; note: string; theme
   vibrant: { label: "Vibrant", note: "Your colour behind everything", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "landscape" } },
 };
 
-export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight", podcastFrame: "full" };
+export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight", podcastFrame: "full", podcast: DEFAULT_PODCAST };
 
 export const SWATCHES = ["#F0A71F", "#053877", "#0A4A99", "#DC2626", "#991B1B", "#EA580C", "#CA8A04", "#16A34A", "#0D9488", "#7C3AED", "#DB2777", "#111827", "#6B7280", "#FFFFFF"];
 
 export function parseTheme(raw: string | null | undefined): BioTheme {
   let v: Partial<BioTheme> = {};
   try { v = raw ? JSON.parse(raw) : {}; } catch { v = {}; }
-  const t = { ...DEFAULT_THEME, ...v };
+  const t = { ...DEFAULT_THEME, ...v, podcast: { ...DEFAULT_PODCAST, ...(v.podcast ?? {}) } };
   if (!/^#[0-9a-f]{6}$/i.test(t.color)) t.color = DEFAULT_THEME.color;
   return t;
 }

@@ -14,7 +14,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFeed, hostedAsStats } from "./hosting.js";
 import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
 import { bioPages, bioEvents, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
-import { parseTheme, parseSections, parseSocials, parseBrands, parseFamily, type BioFamily, type BioFamilyPublic, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic } from "../shared/bio.js";
+import { DEFAULT_PODCAST, parseTheme, parseSections, parseSocials, parseBrands, parseFamily, type BioFamily, type BioFamilyPublic, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic } from "../shared/bio.js";
 import type { PodcastStatsData } from "../shared/schema.js";
 
 /**
@@ -224,6 +224,7 @@ function cleanFamily(v: unknown, prev: BioFamily): BioFamily {
       ? x.photos.slice(0, 24).map((p: Record<string, unknown>) => ({ id: id(p), url: httpUrl(p?.url), caption: str(p?.caption, 160) })).filter((p) => p.url)
       : prev.photos,
     favorites: Array.isArray(x.favorites) ? x.favorites.filter((f: unknown): f is string => typeof f === "string").slice(0, 6).map((f) => f.slice(0, 40)) : prev.favorites,
+    photo: typeof x.photo === "string" ? httpUrl(x.photo) : prev.photo,
   };
 }
 
@@ -237,6 +238,7 @@ function cleanBrands(v: unknown, prev: BioBrands): BioBrands {
     partners: Array.isArray(x.partners)
       ? x.partners.slice(0, 24).map((p: Record<string, unknown>) => ({ id: str(p?.id, 20) || crypto.randomBytes(4).toString("hex"), name: str(p?.name, 60).trim(), url: httpUrl(p?.url) })).filter((p) => p.name || p.url)
       : prev.partners,
+    photo: typeof x.photo === "string" ? httpUrl(x.photo) : prev.photo,
   };
 }
 
@@ -274,6 +276,12 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     layout: pick("layout", ["portrait", "landscape", "blend", "hero", "shape"] as const, prev.layout),
     podcastStyle: pick("podcastStyle", ["spotlight", "list", "carousel"] as const, prev.podcastStyle),
     podcastFrame: pick("podcastFrame", ["full", "card"] as const, prev.podcastFrame),
+    podcast: (() => {
+      const o = (x.podcast ?? {}) as Record<string, unknown>;
+      const pv = prev.podcast ?? DEFAULT_PODCAST;
+      const b = (k: "on" | "apple" | "spotify" | "all" | "rss") => (typeof o[k] === "boolean" ? (o[k] as boolean) : pv[k]);
+      return { on: b("on"), heading: typeof o.heading === "string" ? o.heading.slice(0, 80) : pv.heading, count: [3, 5, 10].includes(Number(o.count)) ? Number(o.count) : pv.count, apple: b("apple"), spotify: b("spotify"), all: b("all"), rss: b("rss") };
+    })(),
   };
 }
 
@@ -340,7 +348,7 @@ export function registerBioPage(app: Express) {
   // The photo (square) and the cover (wide), sized for the page.
   app.post("/api/host/bio/image/:kind", requireHostSession, art.single("file"), async (req, res) => {
     const row = await pageFor(emailOf(req));
-    const kind = req.params.kind === "hero" ? "hero" : req.params.kind === "family" ? "family" : "avatar";
+    const kind = req.params.kind === "hero" ? "hero" : ["family", "brands"].includes(String(req.params.kind)) ? "family" : "avatar";
     if (!req.file) return res.status(400).json({ message: "Choose an image." });
     try {
       // A family photo: kept at its own unlisted address, added to the Family view by the builder.

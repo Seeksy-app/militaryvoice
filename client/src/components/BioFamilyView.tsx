@@ -32,7 +32,8 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
   const font = t.font === "serif" ? "Georgia, 'Times New Roman', serif" : t.font === "mono" ? "'JetBrains Mono', ui-monospace, monospace" : "var(--font-sans)";
   const f = data.family;
   const first = data.firstName || (data.displayName || "me").split(" ")[0];
-  const photo = data.heroUrl || data.avatarUrl;
+  const photo = data.family.photo || data.heroUrl || data.avatarUrl;
+  const face = data.family.photo || data.avatarUrl;
   const [playing, setPlaying] = useState<string | null>(null);
   const [big, setBig] = useState<number | null>(null);
   const [chat, setChat] = useState(false);
@@ -57,7 +58,7 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
       {data.askEnabled && (
         <>
           {chat && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20`} onClick={() => setChat(false)} aria-hidden />}
-          <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} welcome={`Leave ${first} a note. Only ${first} sees it.`} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat}
+          <Chat handle={data.handle} name={data.displayName} avatar={face} welcome={`Leave ${first} a note. Only ${first} sees it.`} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat}
             onAsk={onAsk ? (x) => onAsk({ ...x, episode: "From the family page" }) : undefined} onLoad={onLoadMessages} />
         </>
       )}
@@ -77,7 +78,7 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
           <section className="relative rounded-3xl p-6 text-left" style={{ background: dark ? "rgba(240,167,31,0.10)" : "#fff8ea", border: `1px solid ${dark ? "rgba(240,167,31,0.25)" : "#f3dfb3"}` }}>
             <p className="whitespace-pre-line text-[17px] leading-relaxed" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>{f.note}</p>
             <div className="mt-4 flex items-center gap-2.5">
-              {data.avatarUrl && <img src={data.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" />}
+              {face && <img src={face} alt="" className="h-9 w-9 rounded-full object-cover" />}
               <p className="text-sm font-semibold" style={{ fontFamily: "Georgia, serif", fontStyle: "italic" }}>{first}</p>
             </div>
           </section>

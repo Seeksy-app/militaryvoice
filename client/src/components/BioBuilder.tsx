@@ -13,7 +13,7 @@ import { BioBrandsView } from "@/components/BioBrandsView";
 import { BioFamilyView } from "@/components/BioFamilyView";
 import { podcastWorthFor } from "@/lib/worth";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
-import { SWATCHES, TEMPLATES, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { SWATCHES, TEMPLATES, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
 import { Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
@@ -31,18 +31,81 @@ const KEY = ["/api/host/bio"];
 
 /** Phones to preview on, at their screen size in CSS points (what a web page lays out to). */
 const PHONES = [
-  { id: "iphone-18-pro-max", name: "iPhone 18 Pro Max", w: 440, h: 956 },
-  { id: "iphone-18-pro", name: "iPhone 18 Pro", w: 402, h: 874 },
-  { id: "iphone-17-pro-max", name: "iPhone 17 Pro Max", w: 440, h: 956 },
-  { id: "iphone-air", name: "iPhone Air", w: 420, h: 912 },
-  { id: "iphone-17", name: "iPhone 17 / 17 Pro", w: 402, h: 874 },
-  { id: "iphone-16-plus", name: "iPhone 16 Plus", w: 430, h: 932 },
-  { id: "iphone-16e", name: "iPhone 16e", w: 390, h: 844 },
-  { id: "galaxy-s25-ultra", name: "Galaxy S25 Ultra", w: 412, h: 891 },
-  { id: "pixel-10-pro-xl", name: "Pixel 10 Pro XL", w: 412, h: 915 },
-  { id: "small", name: "Small phone", w: 360, h: 780 },
+  { id: "iphone-18-pro-max", name: "iPhone 18 Pro Max", w: 440, h: 956, cam: "island", r: 62, maker: "apple", control: true },
+  { id: "iphone-18-pro", name: "iPhone 18 Pro", w: 402, h: 874, cam: "island", r: 62, maker: "apple", control: true },
+  { id: "iphone-17-pro-max", name: "iPhone 17 Pro Max", w: 440, h: 956, cam: "island", r: 62, maker: "apple", control: true },
+  { id: "iphone-air", name: "iPhone Air", w: 420, h: 912, cam: "island", r: 62, maker: "apple", control: true },
+  { id: "iphone-17", name: "iPhone 17 / 17 Pro", w: 402, h: 874, cam: "island", r: 62, maker: "apple", control: true },
+  { id: "iphone-16-plus", name: "iPhone 16 Plus", w: 430, h: 932, cam: "island", r: 55, maker: "apple", control: true },
+  { id: "iphone-16e", name: "iPhone 16e", w: 390, h: 844, cam: "notch", r: 47, maker: "apple", control: false },
+  { id: "galaxy-s25-ultra", name: "Galaxy S25 Ultra", w: 412, h: 891, cam: "hole", r: 26, maker: "android", control: false },
+  { id: "pixel-10-pro-xl", name: "Pixel 10 Pro XL", w: 412, h: 915, cam: "hole", r: 44, maker: "android", control: false },
+  { id: "small", name: "Small phone", w: 360, h: 780, cam: "hole", r: 36, maker: "android", control: false },
 ] as const;
+type Phone = (typeof PHONES)[number];
+
+/**
+ * A phone as it really is: its screen at its size in points (what the page
+ * lays out to), its bezel and corners, the Dynamic Island (or notch, or
+ * hole-punch camera), the side buttons, the status bar and Safari's address
+ * bar. The whole device is scaled to fit, never cropped, so it keeps its shape.
+ */
+function PhoneFrame({ ph, scale, dark, url, children }: { ph: Phone; scale: number; dark: boolean; url: string; children: React.ReactNode }) {
+  const bezel = ph.maker === "apple" ? 13 : 10;
+  const W = ph.w + bezel * 2, H = ph.h + bezel * 2;
+  const k = ph.h / 874; // button positions, from an iPhone 17 Pro
+  const statusH = ph.cam === "island" ? 54 : ph.cam === "notch" ? 47 : 34;
+  const barH = ph.maker === "apple" ? 82 : 56;
+  const paper = dark ? "#0b1020" : "#f5f6fa";
+  const ink = dark ? "#ffffff" : "#0b1020";
+  const btn = (side: "l" | "r", top: number, h: number) => (
+    <span key={`${side}${top}`} className="absolute w-[5px] rounded-sm" style={{ [side === "l" ? "left" : "right"]: -3, top: top * k, height: h * k, background: "linear-gradient(90deg,#3b3b40,#6b6b72,#3b3b40)" }} />
+  );
+  const buttons = ph.maker === "apple"
+    ? [btn("l", 170, 34), btn("l", 230, 62), btn("l", 305, 62), btn("r", 250, 100), ...(ph.control ? [btn("r", 560, 64)] : [])]
+    : [btn("r", 200, 110), btn("r", 340, 64)];
+  return (
+    <div style={{ width: W * scale, height: H * scale }} className="relative shrink-0" data-testid="bio-frame">
+      <div style={{ width: W, height: H, transform: `scale(${scale})`, transformOrigin: "top left" }} className="relative">
+        {buttons}
+        <div className="absolute inset-0" style={{ borderRadius: ph.r + bezel, padding: bezel, background: "#0a0a0c", boxShadow: "0 0 0 1.5px #4a4a52, 0 0 0 3px #1d1d22, 0 40px 80px -30px rgba(11,16,32,0.55)" }}>
+          <div className="relative h-full w-full overflow-hidden" style={{ borderRadius: ph.r, background: paper }}>
+            {/* Status bar: the time, and signal, wifi and battery, over the page's own colour (as Safari tints it). */}
+            <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-between px-8 text-[15px] font-semibold" style={{ height: statusH, background: paper, color: ink, paddingTop: ph.cam === "hole" ? 0 : 6 }}>
+              <span className={ph.cam === "hole" ? "text-[13px]" : ""}>9:41</span>
+              <span className="flex items-center gap-1.5">
+                <svg width="18" height="11" viewBox="0 0 18 11" fill="currentColor" aria-hidden><rect x="0" y="7" width="3" height="4" rx="1" /><rect x="5" y="5" width="3" height="6" rx="1" /><rect x="10" y="2.5" width="3" height="8.5" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg>
+                <svg width="16" height="11" viewBox="0 0 16 11" fill="currentColor" aria-hidden><path d="M8 2.2c2.3 0 4.4.9 6 2.4l1.2-1.3A10.3 10.3 0 0 0 8 .4C5.2.4 2.7 1.5.8 3.3L2 4.6a8.5 8.5 0 0 1 6-2.4Zm0 3.4c1.4 0 2.6.5 3.6 1.4l1.2-1.3A7 7 0 0 0 8 3.8a7 7 0 0 0-4.8 1.9L4.4 7c1-.9 2.2-1.4 3.6-1.4Zm0 3.3c.6 0 1.1.2 1.5.6L8 11 6.5 9.5c.4-.4.9-.6 1.5-.6Z" /></svg>
+                <span className="relative flex h-[12px] w-[25px] items-center rounded-[4px] border border-current p-[1.5px] opacity-90"><span className="h-full w-[75%] rounded-[2px] bg-current" /><span className="absolute -right-[3px] h-[4px] w-[1.5px] rounded-r bg-current" /></span>
+              </span>
+            </div>
+            {ph.cam === "island" && <span className="absolute left-1/2 top-[11px] z-50 h-[37px] w-[126px] -translate-x-1/2 rounded-full bg-black" />}
+            {ph.cam === "notch" && <span className="absolute left-1/2 top-0 z-50 h-[32px] w-[160px] -translate-x-1/2 rounded-b-[20px] bg-black" />}
+            {ph.cam === "hole" && <span className="absolute left-1/2 top-[10px] z-50 h-[14px] w-[14px] -translate-x-1/2 rounded-full bg-black ring-2 ring-[#1a1a1a]" />}
+            <div className="absolute inset-x-0 overflow-y-auto overflow-x-hidden" style={{ top: statusH, bottom: barH }}>{children}</div>
+            {/* The browser's address bar, at the foot as on iPhone Safari (and Chrome on Android). */}
+            <div className="absolute inset-x-0 bottom-0 z-40 flex flex-col items-center justify-start px-4 pt-2 backdrop-blur-md" style={{ height: barH, background: dark ? "rgba(22,26,40,0.92)" : "rgba(246,246,248,0.92)", borderTop: `1px solid ${dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}` }}>
+              <div className="flex h-[38px] w-full items-center justify-center gap-1.5 rounded-xl text-[14px]" style={{ background: dark ? "rgba(255,255,255,0.12)" : "#ffffff", color: ink, boxShadow: dark ? "none" : "0 1px 2px rgba(0,0,0,0.08)" }}>
+                <svg width="10" height="12" viewBox="0 0 10 12" fill="currentColor" className="opacity-60" aria-hidden><path d="M2 5V3.5a3 3 0 1 1 6 0V5h.5A1.5 1.5 0 0 1 10 6.5v4A1.5 1.5 0 0 1 8.5 12h-7A1.5 1.5 0 0 1 0 10.5v-4A1.5 1.5 0 0 1 1.5 5H2Zm1.5 0h3V3.5a1.5 1.5 0 0 0-3 0V5Z" /></svg>
+                <span className="truncate">{url.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]}</span>
+              </div>
+              {ph.maker === "apple" && <span className="mt-auto mb-2 h-[5px] w-[134px] rounded-full" style={{ background: ink, opacity: 0.85 }} />}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 const newId = () => Math.random().toString(36).slice(2, 10);
+/** Once more after a moment when the network drops the request (a deploy switching over, a blip): "Failed to fetch". */
+async function again<T>(go: () => Promise<T>): Promise<T> {
+  try { return await go(); } catch (e) {
+    if (!(e instanceof TypeError)) throw e;
+    await new Promise((ok) => setTimeout(ok, 1500));
+    return go();
+  }
+}
 
 export function BioBuilder() {
   const { toast } = useToast();
@@ -201,19 +264,24 @@ export function BioBuilder() {
           <div ref={stage} className="flex justify-center">
             {(() => {
               const ph = PHONES.find((p) => p.id === phone) ?? PHONES[0];
-              const size = device === "mobile" ? { w: ph.w, h: ph.h, edge: 10 } : device === "tablet" ? { w: 768, h: 1024, edge: 12 } : null;
-              if (!size) return (
+              const avail = { w: room.w - 16, h: Math.max(520, room.h - 170) };
+              if (device === "desktop") return (
                 <div className="w-full rounded-xl border border-border shadow-xl"><div className="h-[680px] overflow-y-auto overflow-x-hidden rounded-xl">{page()}</div></div>
               );
-              const zoom = Math.min(1, room.w / (size.w + size.edge * 2));
-              const tall = Math.min(size.h, Math.max(480, (room.h - 190) / zoom));
-              return (
-                <div style={{ zoom, width: size.w + size.edge * 2, borderWidth: size.edge }} className={`shrink-0 border-[#111] bg-[#111] shadow-xl ${device === "mobile" ? "rounded-[52px]" : "rounded-[28px]"}`} data-testid="bio-frame">
-                  <div style={{ height: tall }} className={`overflow-y-auto overflow-x-hidden ${device === "mobile" ? "rounded-[42px]" : "rounded-[16px]"}`}>
-                    {page()}
+              if (device === "tablet") {
+                const W = 768 + 28, H = 1024 + 28;
+                const sc = Math.min(1, avail.w / W, avail.h / H);
+                return (
+                  <div style={{ width: W * sc, height: H * sc }} className="shrink-0" data-testid="bio-frame">
+                    <div style={{ width: W, height: H, transform: `scale(${sc})`, transformOrigin: "top left" }} className="rounded-[36px] bg-[#0a0a0c] p-[14px] shadow-xl ring-1 ring-[#4a4a52]">
+                      <div className="h-full overflow-y-auto overflow-x-hidden rounded-[22px]">{page()}</div>
+                    </div>
                   </div>
-                </div>
-              );
+                );
+              }
+              const bezel = ph.maker === "apple" ? 13 : 10;
+              const sc = Math.min(1, avail.w / (ph.w + bezel * 2 + 8), avail.h / (ph.h + bezel * 2));
+              return <PhoneFrame ph={ph} scale={sc} dark={(draft.theme.shade ?? "dark") === "dark"} url={url}>{page()}</PhoneFrame>;
             })()}
           </div>
         </div>
@@ -242,7 +310,7 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
   const draftBio = async () => {
     setDrafting(true);
     try {
-      const r = (await (await apiRequest("POST", "/api/host/bio/draft-bio", {})).json()) as { bio: string };
+      const r = (await (await again(() => apiRequest("POST", "/api/host/bio/draft-bio", {}))).json()) as { bio: string };
       if (r.bio) change({ bio: r.bio });
     } catch (e) {
       toast({ title: "Couldn't write one", description: (e as Error).message.replace(/^\d+:\s*/, ""), variant: "destructive" });
@@ -350,6 +418,44 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   return <label className="block"><span className="mb-1 block text-sm font-semibold">{label}</span>{children}{hint && <span className="mt-1 block text-xs text-muted-foreground">{hint}</span>}</label>;
 }
 
+/** A photo for one view only (Brands, Family): uploaded, then saved on that view. */
+function ViewPhoto({ kind, url, fallback, note, onChange }: { kind: "brands" | "family"; url: string; fallback: string; note: string; onChange: (url: string) => void }) {
+  const { toast } = useToast();
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const go = async (f: File) => {
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const r = await again(() => fetch(`/api/host/bio/image/${kind}`, { method: "POST", body: fd, credentials: "include" }));
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.message || "Couldn't use that photo.");
+      onChange(j.url);
+    } catch (e) {
+      toast({ title: "Photo not changed", description: (e as Error).message, variant: "destructive" });
+    } finally { setBusy(false); if (input.current) input.current.value = ""; }
+  };
+  const shown = url || fallback;
+  return (
+    <div className="flex items-center gap-4">
+      <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} />
+      <button type="button" onClick={() => input.current?.click()} className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-full border-2 border-dashed border-border bg-muted/40" data-testid={`${kind}-photo`}>
+        {shown ? <img src={shown} alt="" className="h-full w-full object-cover" /> : <ImagePlus className="m-auto h-5 w-5 text-muted-foreground" />}
+        <span className={`absolute inset-0 flex items-center justify-center bg-black/45 text-[11px] font-semibold text-white ${busy ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Change"}</span>
+      </button>
+      <div className="min-w-0 text-sm">
+        <p className="font-semibold">{url ? "Its own photo" : "Your profile photo"}</p>
+        <p className="text-xs text-muted-foreground">{note}</p>
+        <div className="mt-1 flex gap-3 text-xs font-semibold">
+          <button type="button" onClick={() => input.current?.click()} className="text-[#053877] dark:text-[#8fb5e8]">{url ? "Change" : "Use a different photo"}</button>
+          {url && <button type="button" onClick={() => onChange("")} className="text-muted-foreground hover:text-foreground">Use my profile photo</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ImagePick({ label, kind, url, round, note, onDone, onClear }: { label: string; kind: "avatar" | "hero"; url: string; round?: boolean; note?: string; onDone: (url: string, preview: BioPublic) => void; onClear: () => void }) {
   const { toast } = useToast();
   const input = useRef<HTMLInputElement>(null);
@@ -359,7 +465,7 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear }: { label: 
     try {
       const fd = new FormData();
       fd.append("file", f);
-      const r = await fetch(`/api/host/bio/image/${kind}`, { method: "POST", body: fd, credentials: "include" });
+      const r = await again(() => fetch(`/api/host/bio/image/${kind}`, { method: "POST", body: fd, credentials: "include" }));
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.message || "Couldn't use that image.");
       onDone(j.url, j.preview);
@@ -590,10 +696,7 @@ function ContentTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: b
         </div>
       </Card>
       <Card icon={Layers} tone="blue" title="On your page, in this order">
-        <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-[#053877] to-[#0a4a99] p-3 text-white">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F0A71F] text-[#1a1200]"><Headphones className="h-[18px] w-[18px]" /></span>
-          <span className="min-w-0 flex-1"><span className="block text-sm font-bold">Your podcast</span><span className="block text-[11px] text-white/70">Always first, under your name</span></span>
-        </div>
+        <PodcastBlock d={d} change={change} open={open === "podcast"} toggle={() => setOpen(open === "podcast" ? null : "podcast")} />
         {d.sections.length === 0 && <p className="rounded-2xl border-2 border-dashed border-border p-4 text-center text-sm text-muted-foreground">Nothing else yet. Pick something above and it goes here.</p>}
         {d.sections.map((s, i) => {
           const k = KINDS.find((x) => x.type === s.type)!;
@@ -612,6 +715,44 @@ function ContentTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: b
           );
         })}
       </Card>
+    </div>
+  );
+}
+
+/** Your podcast, always first: its options (the look, Spotlight, List or Cards, is in Design). */
+function PodcastBlock({ d, change, open, toggle }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; open: boolean; toggle: () => void }) {
+  const o = { ...DEFAULT_PODCAST, ...(d.theme.podcast ?? {}) };
+  const set = (p: Partial<BioPodcastOptions>, now = false) => change({ theme: { ...d.theme, podcast: { ...o, ...p } } }, now);
+  const pill = (on: boolean) => `rounded-full border-2 px-3 py-1.5 text-xs font-semibold transition-colors ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border text-muted-foreground hover:border-[#053877]/40"}`;
+  return (
+    <div className={`overflow-hidden rounded-2xl ${o.on ? "" : "opacity-70"}`} data-testid="bio-podcast-block">
+      <div className="flex items-center gap-3 bg-gradient-to-r from-[#053877] to-[#0a4a99] p-3 text-white">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F0A71F] text-[#1a1200]"><Headphones className="h-[18px] w-[18px]" /></span>
+        <button type="button" onClick={toggle} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-bold">{o.heading.trim() || "Your podcast"}</span><span className="block text-[11px] text-white/70">{o.on ? `First, under your name · ${o.count} episodes` : "Hidden"}</span></button>
+        <button type="button" onClick={() => set({ on: !o.on }, true)} className="rounded-full p-1.5 text-white/80 hover:bg-white/10" aria-label={o.on ? "Hide" : "Show"}>{o.on ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button>
+        <button type="button" onClick={toggle} className="rounded-full p-1.5 text-white/80 hover:bg-white/10" aria-label={open ? "Close" : "Options"} data-testid="bio-podcast-options"><ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} /></button>
+      </div>
+      {open && (
+        <div className="space-y-3 border-2 border-t-0 border-[#053877]/30 bg-background p-3">
+          <Field label="Heading" hint="Leave it empty to use your show's name.">
+            <Input value={o.heading} onChange={(e) => set({ heading: e.target.value })} maxLength={80} placeholder="Latest from the show" />
+          </Field>
+          <div>
+            <p className="mb-1.5 text-sm font-semibold">Episodes to show</p>
+            <div className="flex gap-2">{[3, 5, 10].map((n) => <button key={n} type="button" onClick={() => set({ count: n }, true)} className={pill(o.count === n)}>{n}</button>)}</div>
+          </div>
+          <div>
+            <p className="mb-1.5 text-sm font-semibold">Buttons under it</p>
+            <div className="flex flex-wrap gap-2">
+              {([["apple", "Apple Podcasts"], ["spotify", "Spotify"], ["all", "All episodes"], ["rss", "RSS"]] as const).map(([k, l]) => (
+                <button key={k} type="button" onClick={() => set({ [k]: !o[k] } as Partial<BioPodcastOptions>, true)} className={pill(o[k])}>{o[k] && <Check className="mr-1 inline h-3 w-3" />}{l}</button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">Apple and Spotify show once you add your show's links on the Podcast screen.</p>
+          </div>
+          <p className="text-[11px] text-muted-foreground">Spotlight, List or Cards, and edge to edge, are in Design.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -732,6 +873,7 @@ function BrandsTab({ d, change, url, kit }: { d: Page; change: (p: Partial<Page>
             <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={link} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open</a></Button>
           </div>
         )}
+        <ViewPhoto kind="brands" url={b.photo ?? ""} fallback={d.avatarUrl} note="A professional headshot works best for brands." onChange={(u) => set({ photo: u }, true)} />
         <p className="text-xs text-muted-foreground">When a brand asks to sponsor you, our partnerships team gets it and helps you close the deal.</p>
       </Card>
 
@@ -845,7 +987,7 @@ function FamilyTab({ d, change, flush, url, episodes }: { d: Page; change: (p: P
       try {
         const fd = new FormData();
         fd.append("file", file);
-        const r = await fetch("/api/host/bio/image/family", { method: "POST", body: fd, credentials: "include" });
+        const r = await again(() => fetch("/api/host/bio/image/family", { method: "POST", body: fd, credentials: "include" }));
         const j = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(j.message || "Couldn't use that photo.");
         added.push({ id: newId(), url: j.url, caption: "" });
@@ -886,6 +1028,7 @@ function FamilyTab({ d, change, flush, url, episodes }: { d: Page; change: (p: P
             <button type="button" onClick={() => void newLink()} className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="family-reset"><RefreshCw className="h-3 w-3" /> Make a new link (the old one stops working)</button>
           </>
         )}
+        <ViewPhoto kind="family" url={f.photo ?? ""} fallback={d.heroUrl || d.avatarUrl} note="The big photo at the top. One with family, or in uniform." onChange={(u) => set({ photo: u }, true)} />
       </Card>
 
       <Card icon={Sparkles} tone="green" title="In your words">

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Calendar, Check, Copy, MessageCircle, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
-import type { BioPublic, BioSection, BioTheme } from "@shared/bio";
+import { DEFAULT_PODCAST, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
 import type { SocialPlatform } from "@shared/schema";
 
 /**
@@ -145,7 +145,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       )}
 
       <div className="mx-auto mt-6 flex max-w-[560px] flex-col gap-4 px-4">
-        {data.podcast && <PodcastCard p={data.podcast} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} />}
+        {data.podcast && (t.podcast?.on ?? true) && <PodcastCard p={data.podcast} opts={{ ...DEFAULT_PODCAST, ...(t.podcast ?? {}) }} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} />}
         {data.ai?.enabled && <AskShow name={data.displayName} episodes={data.ai.episodes} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} onAskAi={onAskAi} onMessage={data.askEnabled ? () => setChat(true) : undefined} />}
         {data.sections.map((s) => <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} />)}
         {data.brandsOn && <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : `/${data.handle}/brands`} className="font-semibold hover:underline" data-testid="bio-for-brands">For brands: sponsor this show</a></p>}
@@ -155,8 +155,8 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   );
 }
 
-function PodcastCard({ p, style, full, fallbackArt, accent, ink, sub, card, line, radius, preview, ev, share, copied }: {
-  p: NonNullable<BioPublic["podcast"]>; style: BioTheme["podcastStyle"]; full: boolean; fallbackArt: string; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; ev: Ev; share: (title: string, id: string) => void; copied: string | null;
+function PodcastCard({ p, opts, style, full, fallbackArt, accent, ink, sub, card, line, radius, preview, ev, share, copied }: {
+  p: NonNullable<BioPublic["podcast"]>; opts: BioPodcastOptions; style: BioTheme["podcastStyle"]; full: boolean; fallbackArt: string; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; ev: Ev; share: (title: string, id: string) => void; copied: string | null;
 }) {
   const [playing, setPlaying] = useState<string | null>(null);
   const [first, ...rest] = p.episodes;
@@ -200,7 +200,7 @@ function PodcastCard({ p, style, full, fallbackArt, accent, ink, sub, card, line
       <div className="flex items-center gap-3 p-4 pb-3">
         {(p.artworkUrl || fallbackArt) && <img src={p.artworkUrl || fallbackArt} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-bold">{p.title}</p>
+          <p className="truncate text-base font-bold">{opts.heading.trim() || p.title}</p>
           <p className="text-xs" style={{ color: sub }}>{p.episodeCount} episode{p.episodeCount === 1 ? "" : "s"}</p>
         </div>
       </div>
@@ -217,13 +217,13 @@ function PodcastCard({ p, style, full, fallbackArt, accent, ink, sub, card, line
               {shareBtn(first)}
             </div>
           </div>
-          {rest.length > 0 && <div className={`mt-2 ${full ? "mx-4" : ""}`} style={{ borderTop: `1px solid ${line}` }}>{rest.slice(0, 4).map((e, i) => row(e, i))}</div>}
+          {rest.length > 0 && <div className={`mt-2 ${full ? "mx-4" : ""}`} style={{ borderTop: `1px solid ${line}` }}>{rest.slice(0, Math.max(0, opts.count - 1)).map((e, i) => row(e, i))}</div>}
         </div>
       )}
-      {first && style === "list" && <div className="px-4">{p.episodes.slice(0, 6).map((e, i) => row(e, i))}</div>}
+      {first && style === "list" && <div className="px-4">{p.episodes.slice(0, opts.count).map((e, i) => row(e, i))}</div>}
       {first && style === "carousel" && (
         <div className="flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
-          {p.episodes.slice(0, 10).map((e, i) => (
+          {p.episodes.slice(0, opts.count).map((e, i) => (
             <div key={e.id} id={`ep-${e.id}`} className="w-[70%] shrink-0 snap-start">
               {thumb(e, "aspect-square w-full rounded-2xl", "lg")}
               <div className="mt-2 flex items-start gap-1">
@@ -245,10 +245,10 @@ function PodcastCard({ p, style, full, fallbackArt, accent, ink, sub, card, line
         </div>
       )}
       <div className="flex flex-wrap gap-2 p-4 pt-2">
-        {p.appleUrl && <a href={preview ? undefined : p.appleUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "Apple Podcasts")} className="px-3.5 py-2 text-xs font-semibold text-white" style={{ background: "#872EC4", borderRadius: radius }}>Apple Podcasts</a>}
-        {p.spotifyUrl && <a href={preview ? undefined : p.spotifyUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "Spotify")} className="px-3.5 py-2 text-xs font-semibold text-black" style={{ background: "#1DB954", borderRadius: radius }}>Spotify</a>}
-        {p.pageUrl && <a href={preview ? undefined : p.pageUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "All episodes")} className="px-3.5 py-2 text-xs font-semibold" style={{ border: `1px solid ${line}`, borderRadius: radius }}>All episodes</a>}
-        <button type="button" onClick={() => { void navigator.clipboard?.writeText(p.feedUrl); ev("click", "RSS"); }} className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-semibold" style={{ border: `1px solid ${line}`, borderRadius: radius }}><Radio className="h-3.5 w-3.5" /> RSS <Copy className="h-3 w-3" style={{ color: sub }} /></button>
+        {opts.apple && p.appleUrl && <a href={preview ? undefined : p.appleUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "Apple Podcasts")} className="px-3.5 py-2 text-xs font-semibold text-white" style={{ background: "#872EC4", borderRadius: radius }}>Apple Podcasts</a>}
+        {opts.spotify && p.spotifyUrl && <a href={preview ? undefined : p.spotifyUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "Spotify")} className="px-3.5 py-2 text-xs font-semibold text-black" style={{ background: "#1DB954", borderRadius: radius }}>Spotify</a>}
+        {opts.all && p.pageUrl && <a href={preview ? undefined : p.pageUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "All episodes")} className="px-3.5 py-2 text-xs font-semibold" style={{ border: `1px solid ${line}`, borderRadius: radius }}>All episodes</a>}
+        {opts.rss && <button type="button" onClick={() => { void navigator.clipboard?.writeText(p.feedUrl); ev("click", "RSS"); }} className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-semibold" style={{ border: `1px solid ${line}`, borderRadius: radius }}><Radio className="h-3.5 w-3.5" /> RSS <Copy className="h-3 w-3" style={{ color: sub }} /></button>}
       </div>
     </section>
   );

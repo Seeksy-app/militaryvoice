@@ -78,7 +78,7 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
       <div className="relative overflow-hidden px-5 pb-8 pt-10 text-center text-white" style={{ background: `linear-gradient(145deg, ${theirs} 0%, #000741 85%)` }}>
         <span className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full border border-white/10" aria-hidden />
         <span className="pointer-events-none absolute -right-4 -top-4 h-56 w-56 rounded-full border border-white/10" aria-hidden />
-        {data.avatarUrl && <img src={data.avatarUrl} alt="" className="relative mx-auto h-24 w-24 rounded-full object-cover ring-4 ring-white/25" />}
+        {(data.kit.photo || data.avatarUrl) && <img src={data.kit.photo || data.avatarUrl} alt="" className="relative mx-auto h-24 w-24 rounded-full object-cover ring-4 ring-white/25" />}
         <p className="relative mx-auto mt-4 w-fit rounded-full bg-black/25 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white">Media kit</p>
         <h1 className="relative mt-1 text-balance text-[28px] font-bold leading-tight tracking-tight">{data.displayName || "Your name"}</h1>
         <p className="relative mt-1 text-sm text-white/75">{[data.podcast ? `Host of ${data.podcast.title}` : "", data.branch].filter(Boolean).join(" · ")}</p>
