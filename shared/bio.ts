@@ -38,6 +38,51 @@ export type BioSectionType = BioSection["type"];
 
 export interface BioSocial { platform: string; username: string; url: string; on: boolean }
 
+/** The Brands view (a media kit at /<handle>/brands): what the podcaster writes for it. */
+export interface BioBrands {
+  on: boolean;
+  /** One or two lines: why brands work with them. */
+  pitch: string;
+  /** Who listens, in their words ("Officer candidates and their families, 22–35"). */
+  audience: string;
+  /** Show the rate card worked out from their downloads (Know Your Worth). */
+  showRates: boolean;
+  /** Brands they've worked with. */
+  partners: { id: string; name: string; url: string }[];
+}
+export const DEFAULT_BRANDS: BioBrands = { on: true, pitch: "", audience: "", showRates: false, partners: [] };
+export function parseBrands(raw: string | null | undefined): BioBrands {
+  try {
+    const v = raw ? JSON.parse(raw) : {};
+    return { ...DEFAULT_BRANDS, ...v, partners: Array.isArray(v?.partners) ? v.partners.filter((x: { name?: unknown }) => typeof x?.name === "string") : [] };
+  } catch { return { ...DEFAULT_BRANDS }; }
+}
+
+/** What the public Brands view gets: the kit, and the numbers behind it (ours, never typed in). */
+export interface BioBrandsPublic {
+  handle: string;
+  displayName: string;
+  bio: string;
+  avatarUrl: string;
+  branch: string;
+  theme: BioTheme;
+  kit: BioBrands;
+  podcast: null | { title: string; artworkUrl: string; pageUrl: string; episodeCount: number; latest: { title: string; publishedAt: string; artworkUrl: string }[] };
+  numbers: {
+    /** Downloads for a typical recent episode (the median of the last ten). */
+    perEpisode: number | null;
+    last30: number | null;
+    total: number | null;
+    unit: "downloads" | "streams";
+    /** Where the downloads come from ("MilitaryVoices hosting", "Buzzsprout"…). */
+    source: string;
+    followers: { platform: string; username: string; followers: number }[];
+    reach: number;
+    pageViews30: number;
+    plays30: number;
+  };
+}
+
 /** What the public page gets. */
 export interface BioPublic {
   handle: string;
@@ -63,6 +108,8 @@ export interface BioPublic {
   };
   /** The first thing the chat says, from them. */
   welcome: string;
+  /** Their media kit is on (a "For brands" link at the foot of the page). */
+  brandsOn?: boolean;
   /** Listeners can send a question (it goes to the podcaster's inbox). */
   askEnabled: boolean;
   /** Ask my show: the AI answers from the episodes it has learned (how many). */

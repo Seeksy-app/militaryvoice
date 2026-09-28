@@ -336,7 +336,7 @@ export async function sendLoginCodeEmail(input: LoginCodeEmailInput): Promise<bo
 export async function sendListenerQuestionEmail(input: { to: string; show: string; name: string; fromEmail: string; question: string; episode: string; dashboardUrl: string }): Promise<boolean> {
   const who = input.name || (input.fromEmail ? input.fromEmail : "A listener");
   const quote = `<div style="background:#f5f7fb;border-left:4px solid #f0a71f;border-radius:0 12px 12px 0;padding:14px 18px;margin:0 0 16px;color:#1f2937;font-size:15px;line-height:1.55;white-space:pre-wrap;">${escapeHtml(input.question)}</div>`;
-  const reply = input.fromEmail ? `Reply on your page and they'll see it there and by email.` : "Reply on your page and they'll see it there next time they visit.";
+  const reply = input.fromEmail ? `Reply from your Rally Point and they'll see it on your page and by email.` : "Reply from your Rally Point and they'll see it next time they visit your page.";
   return sendRawEmail({
     to: input.to,
     ...(input.fromEmail ? { replyTo: input.fromEmail } : {}),
@@ -344,12 +344,12 @@ export async function sendListenerQuestionEmail(input: { to: string; show: strin
     html: emailShell({
       banner: EMAIL_BANNERS.podcasters,
       bannerAlt: "MilitaryVoices.ai",
-      eyebrow: "From your page",
+      eyebrow: "From your Rally Point",
       heading: `${escapeHtml(who)} sent you a message`,
       body: `${input.episode ? `<p style="margin:0 0 10px;color:#6b7280;font-size:13px;">About: ${escapeHtml(input.episode)}</p>` : ""}${quote}<p style="margin:0 0 16px;">${reply}</p><p style="margin:0;"><a href="${input.dashboardUrl}" style="display:inline-block;background:#053877;color:#ffffff;font-weight:600;text-decoration:none;padding:10px 18px;border-radius:999px;">Reply</a></p>`,
-      footerNote: `Sent because someone messaged you from your MilitaryVoices page${input.show ? ` for ${escapeHtml(input.show)}` : ""}.`,
+      footerNote: `Sent because someone messaged you from your Rally Point${input.show ? ` for ${escapeHtml(input.show)}` : ""}.`,
     }),
-    text: `${who} sent you a message${input.episode ? ` (about ${input.episode})` : ""}:\n\n${input.question}\n\nReply on your page: ${input.dashboardUrl}\n`,
+    text: `${who} sent you a message${input.episode ? ` (about ${input.episode})` : ""}:\n\n${input.question}\n\nReply from your Rally Point: ${input.dashboardUrl}\n`,
   }).then((id) => Boolean(id));
 }
 

@@ -2438,6 +2438,8 @@ export const bioPages = pgTable("bio_pages", {
   askEnabled: boolean("ask_enabled").notNull().default(true),
   /** The chat's opening line, from them ("" = the default). */
   welcome: text("welcome").notNull().default(""),
+  /** The Brands view (media kit): BioBrands as JSON. */
+  brands: text("brands").notNull().default(""),
   /** Ask my show: the AI that answers listeners from every episode. */
   aiEnabled: boolean("ai_enabled").notNull().default(true),
   published: boolean("published").notNull().default(true),

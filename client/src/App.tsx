@@ -23,6 +23,7 @@ import Discover from "@/pages/Discover";
 import Directory from "@/pages/Directory";
 import PodcastPage from "@/pages/PodcastPage";
 import BioPublicPage from "@/pages/BioPublicPage";
+import BioBrandsPage from "@/pages/BioBrandsPage";
 import PromoDiscovery from "@/pages/PromoDiscovery";
 import Prepare from "@/pages/Prepare";
 import Platform from "@/pages/Platform";
@@ -126,6 +127,7 @@ function AppRouter() {
       <Route path="/host/dashboard">{() => <HostDashboard />}</Route>
       <Route path="/host/dashboard/:tab">{(p) => <HostDashboard tab={p.tab} />}</Route>
       {/* A podcaster's page: militaryvoices.ai/<handle>. Last, so every real address wins; an unknown handle is the 404. */}
+      <Route path="/:handle/brands">{(p) => <BioBrandsPage handle={p.handle} />}</Route>
       <Route path="/:handle">{(p) => <BioPublicPage handle={p.handle} />}</Route>
       <Route component={NotFound} />
     </Switch>

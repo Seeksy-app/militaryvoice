@@ -9,20 +9,22 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { BioPageView } from "@/components/BioPageView";
+import { BioBrandsView } from "@/components/BioBrandsView";
+import { podcastWorthFor } from "@/lib/worth";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
-import { SWATCHES, TEMPLATES, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { SWATCHES, TEMPLATES, DEFAULT_BRANDS, type BioBrands, type BioBrandsPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
+import { Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
 /**
- * My page: the podcaster's bio page builder. Profile, Design, Content and
+ * Rally Point (was "My page"): the podcaster's bio page builder. Profile, Design, Content and
  * Share on the left; the page itself on the right, drawn by the very
  * component the public page uses. Everything saves as they go.
  */
 
-type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; welcome: string; aiEnabled: boolean; published: boolean };
-type Resp = { page: Page; url: string; preview: BioPublic; stats: Record<string, number>; questions: ListenerQuestionRow[]; knowledge?: { done: number; total: number } };
-type Tab = "profile" | "design" | "content" | "share" | "questions";
+type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; welcome: string; aiEnabled: boolean; published: boolean; brands: BioBrands };
+type Resp = { page: Page; url: string; preview: BioPublic; brandsPreview?: BioBrandsPublic | null; stats: Record<string, number>; questions: ListenerQuestionRow[]; knowledge?: { done: number; total: number } };
+type Tab = "profile" | "design" | "content" | "share" | "brands" | "questions";
 
 const KEY = ["/api/host/bio"];
 
@@ -110,10 +112,15 @@ export function BioBuilder() {
 
   const view: BioPublic | null = useMemo(() => draft && preview ? {
     ...preview, handle: draft.handle, displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl,
-    theme: draft.theme, askEnabled: draft.askEnabled, welcome: draft.welcome?.trim() || preview.welcome,
+    theme: draft.theme, askEnabled: draft.askEnabled, welcome: draft.welcome?.trim() || preview.welcome, brandsOn: draft.brands?.on ?? true,
     ai: { enabled: draft.aiEnabled && (preview.ai?.episodes ?? 0) > 0, episodes: preview.ai?.episodes ?? 0 },
     socials: draft.socials.filter((s) => s.on && s.url), sections: draft.sections.filter((s) => s.visible),
   } : null, [draft, preview]);
+  // The Brands view: the numbers from the server, what they write from the draft.
+  const kitView: BioBrandsPublic | null = useMemo(() => draft && q.data?.brandsPreview ? {
+    ...q.data.brandsPreview, displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, theme: draft.theme, kit: draft.brands ?? DEFAULT_BRANDS,
+  } : null, [draft, q.data?.brandsPreview]);
+  const page = (id?: string) => tab === "brands" && kitView ? <BioBrandsView data={kitView} preview listenUrl={url} /> : <BioPageView data={view!} preview shareBase={url} />;
 
   if (q.isLoading || !draft || !view) return <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   const newQs = (q.data?.questions ?? []).filter((x) => x.status === "new").length;
@@ -125,7 +132,7 @@ export function BioBuilder() {
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden />
         <div className="pointer-events-none absolute -right-8 -top-8 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden />
         <div className="relative min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">My page</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your Rally Point</p>
             <p className="mt-1 truncate text-2xl font-bold tracking-tight sm:text-3xl">{url.replace(/^https?:\/\/(www\.)?/, "")}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Button size="sm" onClick={() => void navigator.clipboard.writeText(url).then(() => toast({ title: "Link copied", description: "Paste it in your bio, your show notes, anywhere." }))} className="gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-copy"><Copy className="h-4 w-4" /> Copy link</Button>
@@ -144,7 +151,7 @@ export function BioBuilder() {
         </div>
       </div>
       <div className="mb-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-card p-1 shadow-sm" role="tablist">
-        {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["share", "Share", Share2], ["questions", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
+        {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["share", "Share", Share2], ["brands", "Brands", Handshake], ["questions", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} data-testid={`bio-tab-${k}`}>
             <I className="h-4 w-4" /> {l}{k === "questions" && newQs > 0 && <span className="rounded-full bg-[#F0A71F] px-1.5 text-[11px] font-bold text-[#1a1200]">{newQs}</span>}
           </button>
@@ -157,6 +164,7 @@ export function BioBuilder() {
           {tab === "design" && <DesignTab d={draft} change={change} />}
           {tab === "content" && <ContentTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} />}
+          {tab === "brands" && <BrandsTab d={draft} change={change} url={url} kit={kitView} />}
           {tab === "questions" && <QuestionsTab items={q.data?.questions ?? []} onChange={() => void qc.invalidateQueries({ queryKey: KEY })} />}
         </div>
         {/* The page, as listeners will see it. */}
@@ -186,14 +194,14 @@ export function BioBuilder() {
               const ph = PHONES.find((p) => p.id === phone) ?? PHONES[0];
               const size = device === "mobile" ? { w: ph.w, h: ph.h, edge: 10 } : device === "tablet" ? { w: 768, h: 1024, edge: 12 } : null;
               if (!size) return (
-                <div className="w-full rounded-xl border border-border shadow-xl"><div className="h-[680px] overflow-y-auto overflow-x-hidden rounded-xl"><BioPageView data={view} preview shareBase={url} /></div></div>
+                <div className="w-full rounded-xl border border-border shadow-xl"><div className="h-[680px] overflow-y-auto overflow-x-hidden rounded-xl">{page()}</div></div>
               );
               const zoom = Math.min(1, room.w / (size.w + size.edge * 2));
               const tall = Math.min(size.h, Math.max(480, (room.h - 190) / zoom));
               return (
                 <div style={{ zoom, width: size.w + size.edge * 2, borderWidth: size.edge }} className={`shrink-0 border-[#111] bg-[#111] shadow-xl ${device === "mobile" ? "rounded-[52px]" : "rounded-[28px]"}`} data-testid="bio-frame">
                   <div style={{ height: tall }} className={`overflow-y-auto overflow-x-hidden ${device === "mobile" ? "rounded-[42px]" : "rounded-[16px]"}`}>
-                    <BioPageView data={view} preview shareBase={url} />
+                    {page()}
                   </div>
                 </div>
               );
@@ -679,6 +687,91 @@ function ShareTab({ url }: { url: string }) {
         </Card>
       )}
 
+    </div>
+  );
+}
+
+// ---- Brands (the media kit) --------------------------------------------------------
+
+function BrandsTab({ d, change, url, kit }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; url: string; kit: BioBrandsPublic | null }) {
+  const { toast } = useToast();
+  const b = d.brands ?? DEFAULT_BRANDS;
+  const set = (p: Partial<BioBrands>, now = false) => change({ brands: { ...b, ...p } }, now);
+  const link = `${url}/brands`;
+  const n = kit?.numbers;
+  const rates = n?.perEpisode ? podcastWorthFor(n.perEpisode) : null;
+  const fmt = (v: number) => (v >= 10_000 ? `${Math.round(v / 1000)}K` : v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v));
+  const rows: [string, string | null, string][] = [
+    ["Downloads per episode", n?.perEpisode ? fmt(n.perEpisode) : null, "Host your show here, or connect your host in Integrations"],
+    ["Downloads, last 30 days", n?.last30 ? fmt(n.last30) : null, "Comes with your downloads"],
+    ["Social followers", n?.reach ? fmt(n.reach) : null, "Connect your social accounts in Integrations"],
+    ["Page views, last 30 days", n?.pageViews30 ? fmt(n.pageViews30) : null, "Share your Rally Point link"],
+  ];
+  return (
+    <div className="space-y-4">
+      <Card icon={Handshake} tone="gold" title="Your media kit">
+        <div className="flex items-center justify-between gap-3 rounded-2xl bg-gradient-to-br from-[#000741] via-[#053877] to-[#0a4a99] p-4 text-white">
+          <div className="min-w-0">
+            <p className="truncate text-base font-bold">{link.replace(/^https?:\/\/(www\.)?/, "")}</p>
+            <p className="text-xs text-white/70">{b.on ? "Send it to any brand. They can ask to sponsor you right from it." : "Off: brands can't open it."}</p>
+          </div>
+          <Switch checked={b.on} onCheckedChange={(v) => set({ on: v }, true)} data-testid="brands-on" />
+        </div>
+        {b.on && (
+          <div className="flex gap-2">
+            <Button onClick={() => void navigator.clipboard.writeText(link).then(() => toast({ title: "Media kit link copied" }))} className="flex-1 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="brands-copy"><Copy className="h-4 w-4" /> Copy link</Button>
+            <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={link} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open</a></Button>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">When a brand asks to sponsor you, our partnerships team gets it and helps you close the deal.</p>
+      </Card>
+
+      <Card icon={Eye} tone="blue" title="Your numbers, measured by us">
+        <div className="grid grid-cols-2 gap-2">
+          {rows.map(([label, v, how]) => (
+            <div key={label} className={`rounded-2xl border p-3 ${v ? "border-border bg-background" : "border-dashed border-border"}`}>
+              <p className={`text-xl font-bold tabular-nums ${v ? "" : "text-muted-foreground"}`}>{v ?? "—"}</p>
+              <p className="text-[11px] text-muted-foreground">{label}</p>
+              {!v && <p className="mt-1 text-[11px] leading-snug text-[#b36b00] dark:text-[#F0A71F]">{how}</p>}
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">Brands trust these because we measure them. Only the ones we have show on your kit.</p>
+      </Card>
+
+      <Card icon={Sparkles} tone="green" title="Your pitch">
+        <Field label="Why brands work with you" hint="One or two lines. Leave it empty to use your bio.">
+          <Textarea value={b.pitch} onChange={(e) => set({ pitch: e.target.value })} rows={3} maxLength={400} placeholder="I help officer candidates get through OCS. Brands reach them the month before they ship." data-testid="brands-pitch" />
+        </Field>
+        <Field label="Who listens">
+          <Textarea value={b.audience} onChange={(e) => set({ audience: e.target.value })} rows={2} maxLength={400} placeholder="Officer candidates, their families and recent veterans, mostly 22–35, across the US." />
+        </Field>
+      </Card>
+
+      <Card icon={Tag} tone="violet" title="Sponsorship rates">
+        <div className="flex items-center justify-between gap-3">
+          <div><p className="text-sm font-semibold">Show my rates</p><p className="text-xs text-muted-foreground">Worked out from your downloads per episode, like Know Your Worth.</p></div>
+          <Switch checked={b.showRates} onCheckedChange={(v) => set({ showRates: v }, true)} disabled={!rates} data-testid="brands-rates" />
+        </div>
+        {rates ? (
+          <div className="divide-y divide-border rounded-2xl border border-border">
+            {rates.deliverables.map((x) => (
+              <div key={x.key} className="flex items-center justify-between gap-3 px-3 py-2 text-sm"><span>{x.label}</span><span className="font-semibold tabular-nums">{Math.round(x.low) === Math.round(x.high) ? `$${Math.round(x.mid).toLocaleString()}` : `$${Math.round(x.low).toLocaleString()}–$${Math.round(x.high).toLocaleString()}`}</span></div>
+            ))}
+          </div>
+        ) : <p className="rounded-2xl border border-dashed border-border p-3 text-xs text-muted-foreground">Your rates appear here once we can see your downloads.</p>}
+      </Card>
+
+      <Card icon={Handshake} tone="gold" title="Brands you've worked with">
+        {b.partners.map((p, i) => (
+          <div key={p.id} className="flex gap-2">
+            <Input value={p.name} onChange={(e) => set({ partners: b.partners.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} placeholder="Brand" className="w-2/5" />
+            <Input value={p.url} onChange={(e) => set({ partners: b.partners.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)) })} placeholder="https:// (optional)" className="flex-1" />
+            <button type="button" onClick={() => set({ partners: b.partners.filter((_, j) => j !== i) }, true)} className="px-1 text-muted-foreground hover:text-destructive" aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
+          </div>
+        ))}
+        <button type="button" onClick={() => set({ partners: [...b.partners, { id: newId(), name: "", url: "" }] })} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] dark:text-[#8fb5e8]" data-testid="brands-add-partner"><Plus className="h-3.5 w-3.5" /> Add a brand</button>
+      </Card>
     </div>
   );
 }

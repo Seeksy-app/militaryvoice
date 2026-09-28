@@ -21,11 +21,11 @@ function lum(hex: string): number {
   const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
-function onColor(hex: string): string {
+export function onColor(hex: string): string {
   return lum(hex) > 0.45 ? "#0b1020" : "#ffffff";
 }
 /** Their colour, unless it would vanish into the page behind it (navy on a dark page): then white, or navy on a light one. */
-function standOut(color: string, page: string, dark: boolean): string {
+export function standOut(color: string, page: string, dark: boolean): string {
   const [a, b] = [lum(color), lum(page)];
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 2.4 ? color : dark ? "#ffffff" : "#053877";
 }
@@ -148,7 +148,8 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
         {data.podcast && <PodcastCard p={data.podcast} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} />}
         {data.ai?.enabled && <AskShow name={data.displayName} episodes={data.ai.episodes} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} onAskAi={onAskAi} onMessage={data.askEnabled ? () => setChat(true) : undefined} />}
         {data.sections.map((s) => <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} />)}
-        <p className="mt-4 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>
+        {data.brandsOn && <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : `/${data.handle}/brands`} className="font-semibold hover:underline" data-testid="bio-for-brands">For brands: sponsor this show</a></p>}
+        <p className={`${data.brandsOn ? "mt-1" : "mt-4"} text-center text-xs`} style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>
       </div>
     </div>
   );

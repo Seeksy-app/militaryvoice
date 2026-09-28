@@ -6,13 +6,15 @@ import { and, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
 import { uploadPhoto } from "./photoStorage.js";
-import { sendListenerQuestionEmail, sendListenerReplyEmail } from "./email.js";
+import { sendListenerQuestionEmail, sendListenerReplyEmail, sendSponsorInquiryEmail } from "./email.js";
+import { parseSocialAccounts } from "./uploadPost.js";
 import { buildShareCard } from "./shareCard.js";
 import Anthropic from "@anthropic-ai/sdk";
-import { readFeed } from "./hosting.js";
+import { readFeed, hostedAsStats } from "./hosting.js";
 import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
 import { bioPages, bioEvents, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
-import { parseTheme, parseSections, parseSocials, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme } from "../shared/bio.js";
+import { parseTheme, parseSections, parseSocials, parseBrands, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic } from "../shared/bio.js";
+import type { PodcastStatsData } from "../shared/schema.js";
 
 /**
  * The bio page: militaryvoices.ai/<handle>. The podcast top and centre (the
@@ -103,7 +105,79 @@ async function publicOf(row: BioPageRow): Promise<BioPublic> {
     podcast: await podcastFor(row).catch(() => null),
     askEnabled: row.askEnabled,
     welcome: row.welcome.trim() || `Hi! Thanks for listening. What's on your mind?`,
+    brandsOn: parseBrands(row.brands).on,
     ai: await aiFor(row),
+  };
+}
+
+// ---- The Brands view (media kit) ----------------------------------------------------
+
+const SOURCE_NAMES: Record<string, string> = { militaryvoices: "MilitaryVoices hosting", buzzsprout: "Buzzsprout", podbean: "Podbean", transistor: "Transistor", spotify: "Spotify" };
+
+/** A show's numbers from one source: a typical recent episode (median of the last ten), the last 30 days, all time. */
+function numbersOf(d: PodcastStatsData) {
+  const counts = d.episodes.slice().sort((x, y) => y.published.localeCompare(x.published)).slice(0, 10).map((e) => e.count).filter((n) => n > 0).sort((x, y) => x - y);
+  const since = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+  const daily = (d.series ?? []).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.date));
+  return {
+    perEpisode: counts.length ? counts[Math.floor(counts.length / 2)] : null,
+    last30: daily.length ? daily.filter((x) => x.date >= since).reduce((a, x) => a + x.count, 0) : null,
+    total: d.total > 0 ? d.total : null,
+    unit: d.unit,
+  };
+}
+
+/** Everything a brand sees: the kit they wrote, and numbers we measured (never typed in by them). */
+async function brandsOf(row: BioPageRow): Promise<BioBrandsPublic> {
+  const [hosted, stats, profile, pod] = await Promise.all([
+    hostedAsStats(row.email).catch(() => []),
+    storage.listPodcastStats(row.email).catch(() => []),
+    storage.getProfileByEmail(row.email).catch(() => undefined),
+    podcastFor(row).catch(() => null),
+  ]);
+  const sources = [
+    ...hosted.map((h) => ({ source: "militaryvoices", data: h.data })),
+    ...stats.map((r) => { try { return { source: r.source, data: JSON.parse(r.data) as PodcastStatsData }; } catch { return null; } }).filter((x): x is { source: string; data: PodcastStatsData } => Boolean(x?.data?.episodes)),
+  ].map((x) => ({ source: x.source, ...numbersOf(x.data) }));
+  // The source with the most per episode is the show's real audience (a moved show's old host keeps its history).
+  const best = sources.sort((a, b) => (b.perEpisode ?? 0) - (a.perEpisode ?? 0) || (b.total ?? 0) - (a.total ?? 0))[0];
+  const followers = parseSocialAccounts(profile?.socialAccounts).filter((a) => (a.followers ?? 0) > 0).map((a) => ({ platform: a.platform, username: a.username, followers: a.followers ?? 0 })).sort((a, b) => b.followers - a.followers);
+  const since = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
+  const ev = await db.select({ kind: bioEvents.kind, n: sql<number>`count(*)::int` }).from(bioEvents).where(and(eq(bioEvents.pageId, row.id), gte(bioEvents.day, since))).groupBy(bioEvents.kind);
+  const count = (k: string) => ev.find((e) => e.kind === k)?.n ?? 0;
+  return {
+    handle: row.handle,
+    displayName: row.displayName,
+    bio: row.bio,
+    avatarUrl: row.avatarUrl,
+    branch: profile?.branch && profile.branch !== "Not applicable" ? profile.branch : "",
+    theme: parseTheme(row.theme),
+    kit: parseBrands(row.brands),
+    podcast: pod ? { title: pod.title, artworkUrl: pod.artworkUrl, pageUrl: pod.pageUrl, episodeCount: pod.episodeCount, latest: pod.episodes.slice(0, 3).map((e) => ({ title: e.title, publishedAt: e.publishedAt, artworkUrl: e.artworkUrl || pod.artworkUrl })) } : null,
+    numbers: {
+      perEpisode: best?.perEpisode ?? null,
+      last30: best?.last30 ?? null,
+      total: best?.total ?? null,
+      unit: best?.unit ?? "downloads",
+      source: best ? SOURCE_NAMES[best.source] ?? best.source : "",
+      followers,
+      reach: followers.reduce((a, f) => a + f.followers, 0),
+      pageViews30: count("view"),
+      plays30: count("play"),
+    },
+  };
+}
+
+function cleanBrands(v: unknown, prev: BioBrands): BioBrands {
+  const x = (v ?? {}) as Record<string, unknown>;
+  return {
+    on: typeof x.on === "boolean" ? x.on : prev.on,
+    pitch: typeof x.pitch === "string" ? x.pitch.slice(0, 400) : prev.pitch,
+    audience: typeof x.audience === "string" ? x.audience.slice(0, 400) : prev.audience,
+    showRates: typeof x.showRates === "boolean" ? x.showRates : prev.showRates,
+    partners: Array.isArray(x.partners)
+      ? x.partners.slice(0, 24).map((p: Record<string, unknown>) => ({ id: str(p?.id, 20) || crypto.randomBytes(4).toString("hex"), name: str(p?.name, 60).trim(), url: httpUrl(p?.url) })).filter((p) => p.name || p.url)
+      : prev.partners,
   };
 }
 
@@ -164,7 +238,8 @@ export function registerBioPage(app: Express) {
     const counts = await db.select({ kind: bioEvents.kind, n: sql<number>`count(*)::int` }).from(bioEvents).where(and(eq(bioEvents.pageId, row.id), gte(bioEvents.day, since))).groupBy(bioEvents.kind);
     const questions = await db.select().from(listenerQuestions).where(eq(listenerQuestions.pageId, row.id)).orderBy(desc(listenerQuestions.id)).limit(50);
     res.json({
-      page: { ...row, theme: parseTheme(row.theme), sections: parseSections(row.sections), socials: parseSocials(row.socials) },
+      page: { ...row, theme: parseTheme(row.theme), sections: parseSections(row.sections), socials: parseSocials(row.socials), brands: parseBrands(row.brands) },
+      brandsPreview: await brandsOf(row).catch((err) => { console.warn("Brands preview failed:", (err as Error).message); return null; }),
       url: `${ORIGIN}/${row.handle}`,
       preview: await publicOf(row),
       stats: Object.fromEntries(counts.map((c) => [c.kind, c.n])),
@@ -189,6 +264,7 @@ export function registerBioPage(app: Express) {
     if (typeof b.rssUrl === "string") patch.rssUrl = httpUrl(b.rssUrl);
     if (typeof b.askEnabled === "boolean") patch.askEnabled = b.askEnabled;
     if (typeof b.welcome === "string") patch.welcome = b.welcome.trim().slice(0, 280);
+    if (b.brands && typeof b.brands === "object") patch.brands = JSON.stringify(cleanBrands(b.brands, parseBrands(row.brands)));
     if (typeof b.aiEnabled === "boolean") patch.aiEnabled = b.aiEnabled;
     if (typeof b.published === "boolean") patch.published = b.published;
     if (b.avatarUrl === "" || b.heroUrl === "") { if (b.avatarUrl === "") patch.avatarUrl = ""; if (b.heroUrl === "") patch.heroUrl = ""; }
@@ -289,6 +365,24 @@ export function registerBioPage(app: Express) {
   });
 
   const PREVIEW_BOT = /facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|applebot|redditbot|pinterest|embedly|skypeuripreview|mastodon|bluesky|iframely|vkshare|quora link preview/i;
+  app.get("/:handle/brands", async (req, res, next) => {
+    const ua = String(req.get("user-agent") ?? "");
+    const h = String(req.params.handle).toLowerCase();
+    if (!PREVIEW_BOT.test(ua) || !handleOk(h)) return next();
+    const [row] = await db.select().from(bioPages).where(eq(bioPages.handle, h)).limit(1);
+    if (!row || !row.published) return next();
+    const origin = `https://${req.get("host")}`;
+    const kit = parseBrands(row.brands);
+    const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const title = `Sponsor ${row.displayName || row.handle}`;
+    const desc = (kit.pitch || row.bio || `Media kit for ${row.displayName || row.handle}: downloads, reach and rates.`).replace(/\s+/g, " ").slice(0, 280);
+    const url = `${origin}/${row.handle}/brands`;
+    const img = `${origin}/og/bio/${row.handle}.jpg?v=${encodeURIComponent((row.updatedAt || row.createdAt).slice(0, 16))}`;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
+    res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>${esc(title)}</title><meta name="description" content="${esc(desc)}" /><meta property="og:type" content="profile" /><meta property="og:site_name" content="MilitaryVoices.ai" /><meta property="og:title" content="${esc(title)}" /><meta property="og:description" content="${esc(desc)}" /><meta property="og:url" content="${url}" /><meta property="og:image" content="${img}" /><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="${esc(title)}" /><meta name="twitter:description" content="${esc(desc)}" /><meta name="twitter:image" content="${img}" /><link rel="canonical" href="${url}" /></head><body><h1>${esc(title)}</h1><p>${esc(desc)}</p></body></html>`);
+  });
+
   app.get("/:handle", async (req, res, next) => {
     const ua = String(req.get("user-agent") ?? "");
     const h = String(req.params.handle).toLowerCase();
@@ -334,6 +428,45 @@ export function registerBioPage(app: Express) {
   });
 
   // ---- The public page ----
+
+  // The Brands view: the media kit, with the numbers we measure.
+  app.get("/api/public/bio/:handle/brands", async (req, res) => {
+    await schemaIsReady();
+    const [row] = await db.select().from(bioPages).where(eq(bioPages.handle, String(req.params.handle).toLowerCase())).limit(1);
+    if (!row || !row.published || !parseBrands(row.brands).on) return res.status(404).json({ message: "No media kit here." });
+    res.setHeader("Cache-Control", "public, max-age=120, s-maxage=300");
+    res.json(await brandsOf(row));
+  });
+
+  // A brand asks to sponsor the show: into the sponsor inquiries, and to our partnerships team.
+  const sponsorHits = new Map<string, number[]>();
+  app.post("/api/public/bio/:handle/sponsor", async (req, res) => {
+    const [row] = await db.select().from(bioPages).where(eq(bioPages.handle, String(req.params.handle).toLowerCase())).limit(1);
+    if (!row || !row.published || !parseBrands(row.brands).on) return res.status(404).json({ message: "No media kit here." });
+    const ip = String(req.ip ?? "");
+    const hits = (sponsorHits.get(ip) ?? []).filter((t) => Date.now() - t < 3600_000);
+    if (hits.length >= 5) return res.status(429).json({ message: "Thanks, we have your note. Try again later if you need to add something." });
+    sponsorHits.set(ip, [...hits, Date.now()]);
+    if (str(req.body?.website, 100)) return res.json({ ok: true }); // a bot filled the hidden field
+    const name = str(req.body?.name, 80).trim();
+    const company = str(req.body?.company, 120).trim();
+    const email = str(req.body?.email, 200).trim();
+    const budget = str(req.body?.budget, 40).trim();
+    const message = str(req.body?.message, 2000).trim();
+    if (!name) return res.status(400).json({ message: "Tell us your name." });
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ message: "That email doesn't look right." });
+    const show = row.displayName || row.handle;
+    const body = [`Wants to sponsor: ${show} (${ORIGIN}/${row.handle})`, budget ? `Budget: ${budget}` : "", message].filter(Boolean).join("\n\n");
+    await storage.createSponsorInquiry({ name, company, title: "", email, phone: "", message: body, packageId: 0, packageName: `Show: ${show}` });
+    await db.insert(bioEvents).values({ pageId: row.id, kind: "sponsor", label: company || name, day: now().slice(0, 10), createdAt: now() }).catch(() => {});
+    try {
+      const admins = await storage.listAdmins();
+      await sendSponsorInquiryEmail({ to: admins.map((a) => a.email), name, company, email, phone: "", message: body });
+    } catch (err) {
+      console.error("Brand inquiry email failed:", (err as Error).message);
+    }
+    res.json({ ok: true });
+  });
 
   app.get("/api/public/bio/:handle", async (req, res) => {
     await schemaIsReady();

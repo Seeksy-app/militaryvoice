@@ -1521,7 +1521,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                           ) : (
                             <Button variant="outline" onClick={() => goTo("analytics")} className="gap-1.5 rounded-full"><BarChart3 className="h-4 w-4" /> Your listens</Button>
                           )}
-                          <Button variant="outline" onClick={() => goTo("page")} className="gap-1.5 rounded-full" data-testid="dashboard-podcast-page"><Globe className="h-4 w-4" /> Your page</Button>
+                          <Button variant="outline" onClick={() => goTo("page")} className="gap-1.5 rounded-full" data-testid="dashboard-podcast-page"><Globe className="h-4 w-4" /> Your Rally Point</Button>
                         </div>
                       </div>
                     );
