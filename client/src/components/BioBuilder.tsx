@@ -12,7 +12,7 @@ import { BioPageView } from "@/components/BioPageView";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import { SWATCHES, TEMPLATES, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircleQuestion, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
+import { Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
 /**
  * My page: the podcaster's bio page builder. Profile, Design, Content and
@@ -32,7 +32,7 @@ export function BioBuilder() {
   const qc = useQueryClient();
   const q = useQuery<Resp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/bio")).json() });
   const social = useQuery<{ accounts?: { platform: string; username?: string; url?: string }[] }>({ queryKey: ["/api/host/social"], queryFn: async () => (await apiRequest("GET", "/api/host/social")).json(), staleTime: 5 * 60_000 });
-  const [tab, setTab] = useState<Tab>(() => { try { return (localStorage.getItem("mv_bio_tab") as Tab) || "profile"; } catch { return "profile"; } });
+  const [tab, setTab] = useState<Tab>(() => { try { return new URLSearchParams(window.location.search).get("tab") === "messages" ? "questions" : (localStorage.getItem("mv_bio_tab") as Tab) || "profile"; } catch { return "profile"; } });
   const go = (t: Tab) => { setTab(t); try { localStorage.setItem("mv_bio_tab", t); } catch { /* fine */ } };
   const [device, setDevice] = useState<"mobile" | "tablet" | "desktop">("mobile");
   const [draft, setDraft] = useState<Page | null>(null);
@@ -106,7 +106,7 @@ export function BioBuilder() {
             </div>
           </div>
           <div className="flex gap-2">
-            {([["view", "Views", Eye], ["play", "Plays", Play], ["ask", "Questions", MessageCircleQuestion]] as const).map(([k, l, I]) => (
+            {([["view", "Views", Eye], ["play", "Plays", Play], ["ask", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
               <div key={k} className="min-w-[5.5rem] rounded-2xl bg-white/10 px-3 py-2.5 text-center ring-1 ring-white/15">
                 <p className="text-2xl font-bold tabular-nums">{q.data?.stats?.[k] ?? 0}</p>
                 <p className="flex items-center justify-center gap-1 text-[11px] text-white/70"><I className="h-3 w-3" /> {l}</p>
@@ -117,7 +117,7 @@ export function BioBuilder() {
         <p className="relative mt-3 text-[11px] text-white/50">Last 30 days</p>
       </div>
       <div className="mb-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-card p-1 shadow-sm" role="tablist">
-        {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["share", "Share", Share2], ["questions", "Questions", MessageCircleQuestion]] as const).map(([k, l, I]) => (
+        {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["share", "Share", Share2], ["questions", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} data-testid={`bio-tab-${k}`}>
             <I className="h-4 w-4" /> {l}{k === "questions" && newQs > 0 && <span className="rounded-full bg-[#F0A71F] px-1.5 text-[11px] font-bold text-[#1a1200]">{newQs}</span>}
           </button>
@@ -222,7 +222,7 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
         {hosted ? <p className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-emerald-600" /> {view.podcast?.title}</p> : <Input value={d.rssUrl} onChange={(e) => change({ rssUrl: e.target.value })} placeholder="https://feeds.yourhost.com/your-show" />}
       </Field>
       <div className="flex items-center justify-between rounded-xl border border-border p-3">
-        <div><p className="text-sm font-semibold">Let listeners ask you questions</p><p className="text-xs text-muted-foreground">They land in your inbox, and your reply goes straight back.</p></div>
+        <div><p className="text-sm font-semibold">Let listeners message you</p><p className="text-xs text-muted-foreground">A chat button at the top of your page. You reply from Messages; they see it on your page, and by email if they left one.</p></div>
         <Switch checked={d.askEnabled} onCheckedChange={(v) => change({ askEnabled: v }, true)} />
       </div>
       <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3" data-testid="bio-ai">
@@ -533,7 +533,7 @@ function ShareTab({ url, stats }: { url: string; stats: Record<string, number> }
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {([["view", "Views", Eye], ["click", "Link taps", Link2], ["play", "Plays", Play], ["share", "Shares", Share2], ["ask", "Questions", MessageCircleQuestion]] as const).map(([k, l, I]) => (
+        {([["view", "Views", Eye], ["click", "Link taps", Link2], ["play", "Plays", Play], ["share", "Shares", Share2], ["ask", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
           <div key={k} className="rounded-xl border border-border bg-card p-3"><p className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground"><I className="h-3 w-3" /> {l}</p><p className="mt-0.5 text-xl font-bold tabular-nums">{stats[k] ?? 0}</p></div>
         ))}
       </div>
@@ -560,20 +560,49 @@ function ShareTab({ url, stats }: { url: string; stats: Record<string, number> }
 function QuestionsTab({ items, onChange }: { items: ListenerQuestionRow[]; onChange: () => void }) {
   const mark = async (id: number, status: string) => { await apiRequest("PATCH", `/api/host/bio/questions/${id}`, { status }); onChange(); };
   const list = items.filter((x) => x.status !== "archived");
-  if (!list.length) return <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No questions yet. When a listener uses the Ask box on your page, it lands here and in your email.</p>;
+  if (!list.length) return <p className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">No messages yet. When a listener taps the chat button on your page, their message lands here and in your email.</p>;
   return (
     <ul className="space-y-3">
-      {list.map((x) => (
-        <li key={x.id} className={`rounded-2xl border p-4 ${x.status === "new" ? "border-[#F0A71F]/50 bg-[#F0A71F]/[0.05]" : "border-border bg-card"}`} data-testid={`bio-question-${x.id}`}>
-          <p className="text-xs text-muted-foreground">{x.name || "A listener"}{x.fromEmail ? ` · ${x.fromEmail}` : ""} · {new Date(x.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}{x.episode ? ` · about "${x.episode}"` : ""}</p>
-          <p className="mt-1 whitespace-pre-line text-sm">{x.question}</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {x.fromEmail && <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-full"><a href={`mailto:${x.fromEmail}?subject=${encodeURIComponent("Re: your question")}&body=${encodeURIComponent(`\n\n> ${x.question}`)}`}><Mail className="h-3.5 w-3.5" /> Reply</a></Button>}
-            {x.status === "new" && <Button size="sm" variant="outline" className="h-8 rounded-full" onClick={() => void mark(x.id, "answered")}>Mark answered</Button>}
-            <Button size="sm" variant="ghost" className="h-8 rounded-full text-muted-foreground" onClick={() => void mark(x.id, "archived")}>Archive</Button>
-          </div>
-        </li>
-      ))}
+      {list.map((x) => <Message key={x.id} x={x} onChange={onChange} archive={() => void mark(x.id, "archived")} />)}
     </ul>
+  );
+}
+
+/** One listener's message, and the podcaster's reply (it shows in their chat on the page). */
+function Message({ x, onChange, archive }: { x: ListenerQuestionRow; onChange: () => void; archive: () => void }) {
+  const { toast } = useToast();
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    try {
+      const r = (await (await apiRequest("POST", `/api/host/bio/questions/${x.id}/reply`, { reply: text })).json()) as { emailed: boolean };
+      toast({ title: "Reply sent", description: r.emailed ? "They'll see it on your page and in their email." : "They'll see it on your page." });
+      setText("");
+      onChange();
+    } catch (err) {
+      toast({ title: "Couldn't send that", description: (err as Error).message, variant: "destructive" });
+    } finally { setBusy(false); }
+  };
+  return (
+    <li className={`rounded-2xl border p-4 ${x.status === "new" ? "border-[#F0A71F]/50 bg-[#F0A71F]/[0.05]" : "border-border bg-card"}`} data-testid={`bio-question-${x.id}`}>
+      <p className="text-xs text-muted-foreground">{x.name || "A listener"}{x.fromEmail ? ` · ${x.fromEmail}` : ""} · {new Date(x.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}{x.episode ? ` · about "${x.episode}"` : ""}</p>
+      <p className="mt-1 whitespace-pre-line text-sm">{x.question}</p>
+      {x.reply ? (
+        <div className="mt-3 rounded-2xl rounded-tl-sm bg-[#053877] px-3 py-2 text-sm text-white">
+          <p className="whitespace-pre-line">{x.reply}</p>
+          <p className="mt-1 text-[11px] text-white/60">You replied {new Date(x.repliedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+        </div>
+      ) : (
+        <div className="mt-3 flex items-end gap-2">
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send(); }} rows={2} maxLength={3000} placeholder={x.fromEmail ? "Write a reply. They'll see it on your page and by email." : "Write a reply. They'll see it on your page."} className="min-h-[2.75rem] flex-1 resize-none" data-testid={`bio-reply-${x.id}`} />
+          <Button size="sm" onClick={() => void send()} disabled={!text.trim() || busy} className="h-10 gap-1.5 rounded-full bg-[#053877] hover:bg-[#0a4a99]">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Reply</Button>
+        </div>
+      )}
+      <div className="mt-2 flex justify-end">
+        <Button size="sm" variant="ghost" className="h-7 rounded-full text-xs text-muted-foreground" onClick={archive}>Archive</Button>
+      </div>
+    </li>
   );
 }

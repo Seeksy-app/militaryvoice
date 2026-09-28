@@ -2,11 +2,11 @@ import type { Express, Request } from "express";
 import crypto from "node:crypto";
 import multer from "multer";
 import sharp from "sharp";
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
 import { uploadPhoto } from "./photoStorage.js";
-import { sendListenerQuestionEmail } from "./email.js";
+import { sendListenerQuestionEmail, sendListenerReplyEmail } from "./email.js";
 import { buildShareCard } from "./shareCard.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { readFeed } from "./hosting.js";
@@ -163,7 +163,7 @@ export function registerBioPage(app: Express) {
       url: `${ORIGIN}/${row.handle}`,
       preview: await publicOf(row),
       stats: Object.fromEntries(counts.map((c) => [c.kind, c.n])),
-      questions,
+      questions: questions.map(({ token: _t, ...q }) => q),
       knowledge: await knowledgeOf(row.email),
     });
   });
@@ -243,6 +243,18 @@ export function registerBioPage(app: Express) {
     const status = ["new", "answered", "archived"].includes(req.body?.status) ? req.body.status : "answered";
     await db.update(listenerQuestions).set({ status }).where(and(eq(listenerQuestions.id, Number(req.params.id)), eq(listenerQuestions.pageId, row.id)));
     res.json({ ok: true });
+  });
+
+  // The podcaster answers: it shows in the listener's chat on the page, and by email when they left one.
+  app.post("/api/host/bio/questions/:id/reply", requireHostSession, async (req, res) => {
+    const row = await pageFor(emailOf(req));
+    const reply = str(req.body?.reply, 3000).trim();
+    if (reply.length < 1) return res.status(400).json({ message: "Write your reply first." });
+    const [q] = await db.update(listenerQuestions).set({ reply, repliedAt: now(), status: "answered" })
+      .where(and(eq(listenerQuestions.id, Number(req.params.id)), eq(listenerQuestions.pageId, row.id))).returning();
+    if (!q) return res.status(404).json({ message: "That message is gone." });
+    const emailed = q.fromEmail ? await sendListenerReplyEmail({ to: q.fromEmail, show: row.displayName || row.handle, question: q.question, reply, pageUrl: `${ORIGIN}/${row.handle}#chat=${q.token}` }).catch(() => false) : false;
+    res.json({ ok: true, emailed });
   });
 
   // ---- Link previews: Slack, iMessage, Facebook, LinkedIn, X ----
@@ -349,9 +361,21 @@ export function registerBioPage(app: Express) {
     if (question.length < 5) return res.status(400).json({ message: "Write your question first." });
     if (fromEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fromEmail)) return res.status(400).json({ message: "That email doesn't look right." });
     if (str(req.body?.website, 100)) return res.json({ ok: true }); // a bot filled the hidden field
-    const [q] = await db.insert(listenerQuestions).values({ pageId: row.id, email: row.email, name, fromEmail, question, episode: str(req.body?.episode, 200), createdAt: now() }).returning();
+    const token = crypto.randomBytes(18).toString("base64url");
+    const [q] = await db.insert(listenerQuestions).values({ pageId: row.id, email: row.email, name, fromEmail, question, episode: str(req.body?.episode, 200), token, createdAt: now() }).returning();
     await db.insert(bioEvents).values({ pageId: row.id, kind: "ask", label: "", day: now().slice(0, 10), createdAt: now() }).catch(() => {});
-    void sendListenerQuestionEmail({ to: row.email, show: row.displayName, name, fromEmail, question, episode: q.episode, dashboardUrl: `${ORIGIN}/host/dashboard/page` }).catch(() => {});
-    res.json({ ok: true });
+    void sendListenerQuestionEmail({ to: row.email, show: row.displayName, name, fromEmail, question, episode: q.episode, dashboardUrl: `${ORIGIN}/host/dashboard/page?tab=messages` }).catch(() => {});
+    res.json({ ok: true, token, createdAt: q.createdAt });
+  });
+
+  // A listener's conversation: the messages their browser holds keys for, with any replies.
+  app.post("/api/public/bio/:handle/messages", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const tokens = (Array.isArray(req.body?.tokens) ? req.body.tokens : []).filter((t: unknown): t is string => typeof t === "string" && /^[A-Za-z0-9_-]{20,40}$/.test(t)).slice(0, 30);
+    if (!tokens.length) return res.json({ messages: [] });
+    const [row] = await db.select({ id: bioPages.id }).from(bioPages).where(eq(bioPages.handle, String(req.params.handle).toLowerCase())).limit(1);
+    if (!row) return res.json({ messages: [] });
+    const rows = await db.select().from(listenerQuestions).where(and(eq(listenerQuestions.pageId, row.id), inArray(listenerQuestions.token, tokens), ne(listenerQuestions.status, "archived"))).orderBy(listenerQuestions.id);
+    res.json({ messages: rows.map((q) => ({ token: q.token, question: q.question, reply: q.reply, repliedAt: q.repliedAt, createdAt: q.createdAt })) });
   });
 }

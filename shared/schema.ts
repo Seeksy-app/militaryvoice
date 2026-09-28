@@ -2464,8 +2464,13 @@ export const listenerQuestions = pgTable("listener_questions", {
   episode: text("episode").notNull().default(""),
   /** new | answered | archived */
   status: text("status").notNull().default("new"),
+  /** The listener's key to the conversation: their browser keeps it, and the reply email carries it. */
+  token: text("token").notNull().default(""),
+  /** The podcaster's answer, shown back on their page (and emailed, when the listener left an address). */
+  reply: text("reply").notNull().default(""),
+  repliedAt: text("replied_at").notNull().default(""),
   createdAt: text("created_at").notNull(),
-}, (t) => [index("listener_questions_email").on(t.email)]);
+}, (t) => [index("listener_questions_email").on(t.email), index("listener_questions_token").on(t.token)]);
 export type ListenerQuestionRow = typeof listenerQuestions.$inferSelect;
 
 // ---------------------------------------------------------------------------

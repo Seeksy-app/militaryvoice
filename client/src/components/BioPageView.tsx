@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { Calendar, Check, Copy, MessageCircleQuestion, Pause, Play, Radio, Send, Share2, Sparkles, Tag } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Calendar, Check, Copy, MessageCircle, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
 import type { BioPublic, BioSection } from "@shared/bio";
 import type { SocialPlatform } from "@shared/schema";
@@ -8,7 +8,7 @@ import type { SocialPlatform } from "@shared/schema";
  * A podcaster's bio page, drawn from its data alone: the builder's preview
  * and the public page are this same component, so they can never disagree.
  * The show sits top and centre: the latest episode to play and share, the
- * rest below it, then their links, then a box for a listener's question.
+ * rest below it, then their links; a chat button at the top for a message to them.
  */
 
 type Ev = (kind: "view" | "click" | "play" | "share", label?: string) => void;
@@ -30,12 +30,18 @@ const youtubeEmbed = (u: string) => {
 
 export type AiAnswer = { answer: string; sources: { n: number; title: string; startSec: number; audio: string; at: string }[]; unanswered: boolean };
 
-export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, shareBase }: {
+export type ChatMsg = { token: string; question: string; reply: string; repliedAt: string; createdAt: string };
+type AskInput = { name: string; email: string; question: string; episode: string; website: string };
+
+export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, onLoadMessages, shareBase }: {
   data: BioPublic;
   /** In the builder: nothing is counted, nothing is sent. */
   preview?: boolean;
   onEvent?: Ev;
-  onAsk?: (q: { name: string; email: string; question: string; episode: string; website: string }) => Promise<void>;
+  /** A message to the podcaster; the token is the listener's key to the conversation. */
+  onAsk?: (q: AskInput) => Promise<{ token?: string; createdAt?: string }>;
+  /** The listener's messages (by the keys their browser keeps) with any replies. */
+  onLoadMessages?: (tokens: string[]) => Promise<ChatMsg[]>;
   /** Ask my show: the AI's answer from the episodes. */
   onAskAi?: (question: string, history: { role: "user" | "assistant"; content: string }[]) => Promise<AiAnswer>;
   /** The page's own address, for sharing an episode. */
@@ -58,6 +64,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, sh
   const photo = data.heroUrl || data.avatarUrl;
   const [copied, setCopied] = useState<string | null>(null);
   const ev: Ev = (k, l) => { if (!preview) onEvent?.(k, l); };
+  const [chat, setChat] = useState(false);
 
   const share = async (title: string, id: string) => {
     const url = `${shareBase}#ep-${id}`;
@@ -69,7 +76,13 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, sh
   };
 
   return (
-    <div style={{ background: bg, color: ink, fontFamily: font, minHeight: "100%" }} className="pb-10" data-testid="bio-page">
+    <div style={{ background: bg, color: ink, fontFamily: font, minHeight: "100%" }} className="relative pb-10" data-testid="bio-page">
+      {data.askEnabled && (
+        <>
+          {chat && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20`} onClick={() => setChat(false)} aria-hidden />}
+          <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat} onAsk={onAsk} onLoad={onLoadMessages} />
+        </>
+      )}
       {/* The header: their photo as a wide cover (blend), a banner with the photo over it (landscape), or a round photo (portrait). */}
       {t.layout === "blend" && photo ? (
         <div className="relative">
@@ -102,9 +115,8 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, sh
 
       <div className="mx-auto mt-6 flex max-w-[560px] flex-col gap-4 px-4">
         {data.podcast && <PodcastCard p={data.podcast} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} />}
-        {data.ai?.enabled && <AskShow name={data.displayName} episodes={data.ai.episodes} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} onAskAi={onAskAi} />}
+        {data.ai?.enabled && <AskShow name={data.displayName} episodes={data.ai.episodes} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} onAskAi={onAskAi} onMessage={data.askEnabled ? () => setChat(true) : undefined} />}
         {data.sections.map((s) => <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} />)}
-        {data.askEnabled && <AskBox name={data.displayName} episodes={data.podcast?.episodes.map((e) => e.title) ?? []} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} onAsk={onAsk} />}
         <p className="mt-4 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>
       </div>
     </div>
@@ -209,52 +221,143 @@ function Section({ s, btn, ink, sub, card, line, accent, preview, ev }: { s: Bio
   return null;
 }
 
-/** A question for the podcaster: it lands in their inbox (and their reply comes straight back). */
-function AskBox({ name, episodes, accent, ink, sub, card, line, radius, preview, onAsk }: { name: string; episodes: string[]; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; onAsk?: (q: { name: string; email: string; question: string; episode: string; website: string }) => Promise<void> }) {
-  const [q, setQ] = useState({ name: "", email: "", question: "", episode: "", website: "" });
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+/**
+ * The chat button at the top of the page: a message to the podcaster, and
+ * their reply back here (a badge on the button when one comes). The listener's
+ * browser keeps the keys to their messages; the reply email carries one too.
+ */
+function Chat({ handle, name, avatar, accent, ink, sub, line, dark, preview, open, setOpen, onAsk, onLoad }: {
+  handle: string; name: string; avatar: string; accent: string; ink: string; sub: string; line: string; dark: boolean; preview: boolean;
+  open: boolean; setOpen: (v: boolean) => void; onAsk?: (q: AskInput) => Promise<{ token?: string; createdAt?: string }>; onLoad?: (tokens: string[]) => Promise<ChatMsg[]>;
+}) {
+  type Kept = { tokens?: string[]; seen?: string; name?: string; email?: string };
+  const key = `mv_chat_${handle}`;
+  const [kept, setKept] = useState<Kept>(() => { if (preview) return {}; try { return JSON.parse(localStorage.getItem(key) || "{}") as Kept; } catch { return {}; } });
+  const keep = (x: Kept) => setKept((k) => { const n = { ...k, ...x }; try { localStorage.setItem(key, JSON.stringify(n)); } catch { /* this visit only */ } return n; });
+  const [msgs, setMsgs] = useState<ChatMsg[]>([]);
+  const [text, setText] = useState("");
+  const [who, setWho] = useState({ name: kept.name ?? "", email: kept.email ?? "", website: "" });
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const field = { background: "transparent", border: `1px solid ${line}`, color: ink, borderRadius: 12 };
+  const end = useRef<HTMLDivElement | null>(null);
+  const them = name || "They";
+
+  // From the reply email: #chat=<key> adds the conversation and opens it.
+  useEffect(() => {
+    if (preview) return;
+    const m = window.location.hash.match(/^#chat=([A-Za-z0-9_-]{20,40})$/);
+    if (!m) return;
+    setKept((k) => { const n = { ...k, tokens: Array.from(new Set([...(k.tokens ?? []), m[1]])).slice(-30) }; try { localStorage.setItem(key, JSON.stringify(n)); } catch { /* fine */ } return n; });
+    setOpen(true);
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const tokens = (kept.tokens ?? []).join(",");
+  const load = useCallback(async () => {
+    if (preview || !onLoad || !tokens) return;
+    try { setMsgs(await onLoad(tokens.split(","))); } catch { /* try again later */ }
+  }, [preview, onLoad, tokens]);
+  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (!open) return;
+    void load();
+    const t = setInterval(() => void load(), 20000);
+    return () => clearInterval(t);
+  }, [open, load]);
+  const latest = msgs.reduce((m, x) => (x.repliedAt > m ? x.repliedAt : m), "");
+  const unread = msgs.filter((x) => x.repliedAt && x.repliedAt > (kept.seen ?? "")).length;
+  useEffect(() => { if (open && latest && latest > (kept.seen ?? "")) keep({ seen: latest }); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [open, latest]);
+  useEffect(() => { if (open) end.current?.scrollIntoView({ block: "end" }); }, [open, msgs.length]);
+  useEffect(() => {
+    if (!open) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [open, setOpen]);
+
   const send = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (preview || !onAsk) return;
-    if (q.question.trim().length < 5) { setErr("Write your question first."); return; }
-    setState("sending"); setErr("");
-    try { await onAsk(q); setState("sent"); } catch (x) { setState("error"); setErr((x as Error).message); }
+    if (preview || !onAsk || busy) return;
+    const q = text.trim();
+    if (q.length < 5) { setErr("Write a little more first."); return; }
+    setBusy(true); setErr("");
+    try {
+      const r = await onAsk({ name: who.name, email: who.email, question: q, episode: "", website: who.website });
+      if (r.token) {
+        setMsgs((m) => [...m, { token: r.token!, question: q, reply: "", repliedAt: "", createdAt: r.createdAt ?? new Date().toISOString() }]);
+        keep({ tokens: [...(kept.tokens ?? []), r.token].slice(-30), name: who.name, email: who.email });
+      }
+      setText("");
+    } catch (x) {
+      setErr((x as Error).message);
+    } finally { setBusy(false); }
   };
+
+  const panel = dark ? "#151b2f" : "#ffffff";
+  const field = { background: "transparent", border: `1px solid ${line}`, color: ink, borderRadius: 12 };
+  const face = (size: string) => avatar
+    ? <img src={avatar} alt="" className={`${size} shrink-0 rounded-full object-cover`} />
+    : <span className={`${size} flex shrink-0 items-center justify-center rounded-full text-xs font-bold`} style={{ background: accent, color: onColor(accent) }}>{(name || "?").slice(0, 1)}</span>;
   return (
-    <section className="rounded-3xl p-4 text-left" style={{ background: card, border: `1px solid ${line}` }} data-testid="bio-ask">
-      <p className="flex items-center gap-2 text-base font-bold"><MessageCircleQuestion className="h-5 w-5" style={{ color: accent }} /> Ask {name || "me"} a question</p>
-      {state === "sent" ? (
-        <p className="mt-2 text-sm" style={{ color: sub }}>Sent. {q.email ? "You'll get the answer by email." : "Listen out for it on the show."}</p>
-      ) : (
-        <form onSubmit={send} className="mt-3 flex flex-col gap-2">
-          <textarea value={q.question} onChange={(e) => { setQ({ ...q, question: e.target.value }); setErr(""); }} rows={3} maxLength={1500} placeholder="What would you like to know?" className="w-full resize-none px-3 py-2 text-sm outline-none" style={field} />
-          {episodes.length > 0 && (
-            <select value={q.episode} onChange={(e) => setQ({ ...q, episode: e.target.value })} className="h-10 w-full px-3 text-sm outline-none" style={field}>
-              <option value="">About the show in general</option>
-              {episodes.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          )}
-          <div className="grid grid-cols-2 gap-2">
-            <input value={q.name} onChange={(e) => setQ({ ...q, name: e.target.value })} placeholder="Your name (optional)" className="h-10 px-3 text-sm outline-none" style={field} />
-            <input value={q.email} onChange={(e) => setQ({ ...q, email: e.target.value })} type="email" placeholder="Email, for a reply" className="h-10 px-3 text-sm outline-none" style={field} />
+    <div className="sticky top-0 z-30 h-0">
+      <div className="relative mx-auto flex max-w-[560px] justify-end p-3">
+        <button type="button" onClick={() => setOpen(!open)} aria-label={unread ? `${unread} new ${unread === 1 ? "reply" : "replies"}` : "Send message"} aria-expanded={open}
+          className="group relative flex h-11 w-11 items-center justify-center rounded-full text-white shadow-lg ring-1 ring-white/25 backdrop-blur-md transition-transform hover:scale-105"
+          style={{ background: open ? accent : "rgba(11,16,32,0.55)", color: open ? onColor(accent) : "#ffffff" }} data-testid="bio-chat">
+          {open ? <X className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
+          {unread > 0 && !open && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ef4444] px-1 text-[11px] font-bold text-white ring-2 ring-white" data-testid="bio-chat-badge">{unread}</span>}
+          {!open && <span className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[#0b1020] px-2.5 py-1 text-xs font-semibold text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100">{unread ? `${unread} new ${unread === 1 ? "reply" : "replies"}` : "Send message"}</span>}
+        </button>
+        {open && (
+          <div className="absolute left-3 right-3 top-16 ml-auto flex max-h-[70vh] max-w-[22rem] flex-col overflow-hidden rounded-3xl text-left shadow-2xl" style={{ background: panel, color: ink, border: `1px solid ${line}` }} role="dialog" aria-label={`Message ${name}`} data-testid="bio-chat-panel">
+            <div className="flex items-center gap-2.5 px-4 py-3" style={{ borderBottom: `1px solid ${line}` }}>
+              {face("h-9 w-9")}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold">Message {name || "me"}</p>
+                <p className="truncate text-[11px]" style={{ color: sub }}>Replies show up right here</p>
+              </div>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-3">
+              {msgs.length === 0 ? (
+                <p className="py-2 text-sm leading-relaxed" style={{ color: sub }}>Ask a question or say hello. {them} will see it, and the reply shows up here (and by email, if you leave yours).</p>
+              ) : msgs.map((m) => (
+                <div key={m.token} className="flex flex-col gap-2">
+                  <p className="ml-10 self-end whitespace-pre-line rounded-2xl rounded-br-md px-3 py-2 text-sm" style={{ background: accent, color: onColor(accent) }}>{m.question}</p>
+                  {m.reply ? (
+                    <div className="mr-8 flex items-end gap-2">
+                      {face("h-6 w-6")}
+                      <p className="whitespace-pre-line rounded-2xl rounded-bl-md px-3 py-2 text-sm" style={{ background: dark ? "rgba(255,255,255,0.08)" : "#f1f3f8" }}>{m.reply}</p>
+                    </div>
+                  ) : <p className="self-end text-[11px]" style={{ color: sub }}>Sent. The reply shows up here.</p>}
+                </div>
+              ))}
+              <div ref={end} />
+            </div>
+            <form onSubmit={send} className="flex flex-col gap-2 px-4 pb-4 pt-3" style={{ borderTop: `1px solid ${line}` }}>
+              <textarea value={text} onChange={(e) => { setText(e.target.value); setErr(""); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(e); } }} rows={2} maxLength={1500} placeholder={msgs.length ? "Write another message" : "Write your message"} className="w-full resize-none px-3 py-2 text-sm outline-none" style={field} data-testid="bio-chat-text" />
+              {!(kept.tokens?.length) && (
+                <div className="grid grid-cols-2 gap-2">
+                  <input value={who.name} onChange={(e) => setWho({ ...who, name: e.target.value })} placeholder="Your name" autoComplete="name" className="h-10 min-w-0 px-3 text-sm outline-none" style={field} />
+                  <input value={who.email} onChange={(e) => setWho({ ...who, email: e.target.value })} type="email" placeholder="Email (optional)" autoComplete="email" className="h-10 min-w-0 px-3 text-sm outline-none" style={field} />
+                </div>
+              )}
+              <input value={who.website} onChange={(e) => setWho({ ...who, website: e.target.value })} tabIndex={-1} autoComplete="off" aria-hidden className="hidden" name="website" />
+              {err && <p className="text-xs text-red-500">{err}</p>}
+              <button type="submit" disabled={busy} className="inline-flex h-11 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold disabled:opacity-60" style={{ background: accent, color: onColor(accent) }} data-testid="bio-chat-send"><Send className="h-4 w-4" /> {busy ? "Sending…" : "Send"}</button>
+            </form>
           </div>
-          <input value={q.website} onChange={(e) => setQ({ ...q, website: e.target.value })} tabIndex={-1} autoComplete="off" aria-hidden className="hidden" name="website" />
-          {err && <p className="text-xs text-red-500">{err}</p>}
-          <button type="submit" disabled={state === "sending"} className="mt-1 inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold" style={{ background: accent, color: onColor(accent), borderRadius: radius }}><Send className="h-4 w-4" /> {state === "sending" ? "Sending…" : "Send question"}</button>
-        </form>
-      )}
-    </section>
+        )}
+      </div>
+    </div>
   );
 }
 
 /**
  * Ask my show: listeners ask, the show's AI answers from what was said on it,
  * with the episode and minute to press play on. What it can't find, it points
- * to the question box, which goes to the host.
+ * to the chat button, which goes to the host.
  */
-function AskShow({ name, episodes, accent, ink, sub, card, line, radius, preview, onAskAi }: { name: string; episodes: number; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; onAskAi?: (q: string, h: { role: "user" | "assistant"; content: string }[]) => Promise<AiAnswer> }) {
+function AskShow({ name, episodes, accent, ink, sub, card, line, radius, preview, onAskAi, onMessage }: { name: string; episodes: number; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; onAskAi?: (q: string, h: { role: "user" | "assistant"; content: string }[]) => Promise<AiAnswer>; onMessage?: () => void }) {
   const [q, setQ] = useState("");
   const [turns, setTurns] = useState<({ role: "user"; content: string } | ({ role: "assistant"; content: string } & Partial<AiAnswer>))[]>([]);
   const [busy, setBusy] = useState(false);
@@ -293,6 +396,9 @@ function AskShow({ name, episodes, accent, ink, sub, card, line, radius, preview
           ) : (
             <div key={i} className="mr-4 rounded-2xl px-3 py-2 text-sm leading-relaxed" style={{ border: `1px solid ${line}` }}>
               <p className="whitespace-pre-line">{clean(t.content)}</p>
+              {t.unanswered && onMessage && (
+                <button type="button" onClick={onMessage} className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold" style={{ background: accent, color: onColor(accent) }}><MessageCircle className="h-3.5 w-3.5" /> Send {name || "them"} a message</button>
+              )}
               {(t.sources?.length ?? 0) > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {t.sources!.map((s) => (

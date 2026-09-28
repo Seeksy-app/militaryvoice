@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BioPageView } from "@/components/BioPageView";
+import { BioPageView, type ChatMsg } from "@/components/BioPageView";
 import NotFound from "@/pages/not-found";
 import type { BioPublic } from "@shared/bio";
 
@@ -38,7 +38,14 @@ export default function BioPublicPage({ handle }: { handle: string }) {
         }}
         onAsk={async (x) => {
           const r = await fetch(`/api/public/bio/${encodeURIComponent(h)}/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(x) });
-          if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message || "Couldn't send that. Try again.");
+          const j = (await r.json().catch(() => ({}))) as { message?: string; token?: string; createdAt?: string };
+          if (!r.ok) throw new Error(j.message || "Couldn't send that. Try again.");
+          return j;
+        }}
+        onLoadMessages={async (tokens) => {
+          const r = await fetch(`/api/public/bio/${encodeURIComponent(h)}/messages`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tokens }) });
+          if (!r.ok) throw new Error("Couldn't load your messages.");
+          return ((await r.json()) as { messages: ChatMsg[] }).messages;
         }}
       />
     </div>
