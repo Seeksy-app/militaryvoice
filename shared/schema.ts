@@ -2084,6 +2084,8 @@ export interface PodcastStatsData {
   /** The span the numbers cover, for "as of". */
   from?: string;
   to?: string;
+  /** The show's cover art, from the host. */
+  artwork?: string;
 }
 
 /**

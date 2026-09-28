@@ -34,7 +34,7 @@ async function bz<T>(token: string, path: string): Promise<T> {
 }
 
 async function buzzsprout(creds: { token: string; podcastId?: string }): Promise<{ showName: string; podcastId: string; data: PodcastStatsData }> {
-  const shows = await bz<{ id: number; title: string }[]>(creds.token, "podcasts.json");
+  const shows = await bz<{ id: number; title: string; artwork_url?: string }[]>(creds.token, "podcasts.json");
   const show = creds.podcastId ? shows.find((s) => String(s.id) === String(creds.podcastId)) : shows[0];
   if (!show) throw new StatsError(shows.length ? "That podcast ID isn't on this Buzzsprout account." : "No podcasts on this Buzzsprout account.");
   const eps = await bz<{ id: number; title: string; published_at: string; total_plays?: number; private?: boolean }[]>(creds.token, `${show.id}/episodes.json`);
@@ -56,7 +56,7 @@ async function buzzsprout(creds: { token: string; podcastId?: string }): Promise
   return {
     showName: show.title,
     podcastId: String(show.id),
-    data: { total: episodes.reduce((a, e) => a + e.count, 0), unit: "downloads", episodes, series, from: days[0], to: days[days.length - 1] },
+    data: { total: episodes.reduce((a, e) => a + e.count, 0), unit: "downloads", episodes, series, from: days[0], to: days[days.length - 1], artwork: /^https:\/\//.test(show.artwork_url ?? "") ? show.artwork_url : undefined },
   };
 }
 
@@ -82,7 +82,7 @@ async function pb<T>(token: string, path: string, params: Record<string, string>
 
 async function podbean(creds: { clientId: string; secret: string }): Promise<{ showName: string; data: PodcastStatsData }> {
   const token = await podbeanToken(creds.clientId, creds.secret);
-  const { podcast } = await pb<{ podcast?: { title?: string } }>(token, "podcast").catch(() => ({ podcast: undefined }));
+  const { podcast } = await pb<{ podcast?: { title?: string; logo?: string } }>(token, "podcast").catch(() => ({ podcast: undefined }));
   const end = new Date(Date.now() - 86400000);
   const start = new Date(end.getFullYear() - 2, end.getMonth(), 1);
   const range = { start: day(start), end: day(end) };
@@ -113,6 +113,7 @@ async function podbean(creds: { clientId: string; secret: string }): Promise<{ s
       audience: { countries: countries as Record<string, number>, apps: sources as Record<string, number> },
       from: range.start,
       to: range.end,
+      artwork: /^https:\/\//.test(podcast?.logo ?? "") ? podcast!.logo : undefined,
     },
   };
 }

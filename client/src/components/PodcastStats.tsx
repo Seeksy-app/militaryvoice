@@ -13,6 +13,12 @@ interface StatsResponse { sources: SourceView[]; benchmark: { unit: string; avg:
 
 const KEY = ["/api/host/podcast-stats"];
 const NAME: Record<Source, string> = { buzzsprout: "Buzzsprout", podbean: "Podbean", spotify: "Spotify" };
+/** Each host's own mark, as a small badge (their site icon). */
+const MARK: Record<Source, string> = {
+  buzzsprout: "https://www.google.com/s2/favicons?domain=buzzsprout.com&sz=64",
+  podbean: "https://www.google.com/s2/favicons?domain=podbean.com&sz=64",
+  spotify: "https://www.google.com/s2/favicons?domain=podcasters.spotify.com&sz=64",
+};
 const COLOR: Record<Source, string> = { buzzsprout: "#1B1B1B", podbean: "#7ACB2F", spotify: "#1DB954" };
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(Math.round(n)));
 const when = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "");
@@ -171,12 +177,18 @@ export function PodcastChips({ onOpen }: { onOpen: () => void }) {
     <>
       {sources.map((s) => (
         <button key={s.source} type="button" onClick={onOpen} title={`${NAME[s.source]}: ${s.showName}. See your listens`} className="group flex shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-2.5 py-1.5 text-left transition-colors hover:border-primary/40 hover:shadow-sm sm:gap-2.5 sm:px-3 sm:py-2" data-testid={`chip-podcast-${s.source}`}>
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black text-white" style={{ background: COLOR[s.source] }} aria-hidden>
-            {s.source === "spotify" ? <Headphones className="h-4 w-4" /> : NAME[s.source][0]}
+          {/* The show's cover, with the host's mark riding it, as the social accounts have theirs. */}
+          <span className="relative shrink-0">
+            {s.data!.artwork ? (
+              <img src={s.data!.artwork} alt="" className="h-8 w-8 rounded-full object-cover" />
+            ) : (
+              <span className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-black text-white" style={{ background: COLOR[s.source] }} aria-hidden>{(s.showName || NAME[s.source])[0]}</span>
+            )}
+            <img src={MARK[s.source]} alt="" className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-white object-contain p-px ring-2 ring-card" />
           </span>
           <span className="min-w-0">
-            <span className="hidden max-w-[13rem] truncate text-sm font-medium leading-tight text-foreground sm:block">{s.showName || NAME[s.source]}</span>
-            <span className="block truncate text-xs font-semibold leading-tight text-foreground sm:font-normal sm:text-muted-foreground">{s.data!.total > 0 ? `${compact(s.data!.total)} ${s.data!.unit}` : "Connected"}<span className="hidden sm:inline"> · {NAME[s.source]}</span></span>
+            <span className="hidden max-w-[9.5rem] truncate text-sm font-medium leading-tight text-foreground sm:block">{s.showName || NAME[s.source]}</span>
+            <span className="block truncate text-xs font-semibold leading-tight text-foreground sm:font-normal sm:text-muted-foreground">{s.data!.total > 0 ? `${compact(s.data!.total)} ${s.data!.unit}` : NAME[s.source]}</span>
           </span>
         </button>
       ))}
