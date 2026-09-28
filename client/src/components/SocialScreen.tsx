@@ -42,8 +42,8 @@ const local = (t: number) => { const d = new Date(t); const p = (n: number) => S
 export function SocialScreen() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  type Tab = "home" | "calendar" | "analytics";
-  const [tab, setTab] = useState<Tab>(() => { try { const v = localStorage.getItem("mv_social_tab"); return v === "calendar" || v === "analytics" ? v : "home"; } catch { return "home"; } });
+  type Tab = "calendar" | "analytics";
+  const [tab, setTab] = useState<Tab>(() => { try { return localStorage.getItem("mv_social_tab") === "analytics" ? "analytics" : "calendar"; } catch { return "calendar"; } });
   const go = (t: Tab) => { setTab(t); try { localStorage.setItem("mv_social_tab", t); } catch { /* fine */ } };
   const [target, setTarget] = useState<PostTarget | null>(null);
   const [targetAt, setTargetAt] = useState<string | undefined>(undefined);
@@ -135,7 +135,7 @@ export function SocialScreen() {
     onError: (e: Error) => { refresh(); toast({ title: "Couldn't fill all of it", description: e.message, variant: "destructive" }); },
   });
   const followersTotal = accounts.reduce((n, x) => n + (x.followers ?? 0), 0);
-  const week7 = useQuery<Analytics>({ queryKey: ["/api/host/social/analytics", 7], queryFn: async () => (await apiRequest("GET", "/api/host/social/analytics?days=7")).json(), enabled: tab === "home" && connected.length > 0, retry: false });
+  const week7 = useQuery<Analytics>({ queryKey: ["/api/host/social/analytics", 7], queryFn: async () => (await apiRequest("GET", "/api/host/social/analytics?days=7")).json(), enabled: connected.length > 0, retry: false });
   const reach7 = trend(week7.data?.views?.per_day);
 
   return (
@@ -161,12 +161,28 @@ export function SocialScreen() {
 
       {/* The two views, and on the same line the queue's times and the way to make a post. */}
       <div className="mb-4 flex items-end gap-1 border-b border-border" role="tablist">
-        {([["home", "Home", Home], ["calendar", "Calendar", CalendarDays], ["analytics", "Analytics", BarChart3]] as const).map(([k, label, I]) => (
+        {/* + Create first: what to post from. Then the calendar (where you land) and how it's doing. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" disabled={noAccounts} className="mb-1.5 mr-2 inline-flex items-center gap-1.5 rounded-full bg-[#053877] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#0a4a99] disabled:opacity-50" data-testid="social-create"><Plus className="h-4 w-4" /> Create <ChevronDown className="h-3.5 w-3.5 opacity-80" /></button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56 rounded-xl p-1.5">
+            <DropdownMenuItem onSelect={() => create("upload")} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="social-create-upload"><Upload className="h-5 w-5" /> Upload new</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => create("clips")} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="social-create-clip"><Clapperboard className="h-5 w-5" /> Choose a clip</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => create("episodes")} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="social-create-episode"><Film className="h-5 w-5" /> Choose an episode</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {([["calendar", "Calendar", CalendarDays], ["analytics", "Analytics", BarChart3]] as const).map(([k, label, I]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-[#F0A71F] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`social-tab-${k}`}>
             <I className="h-4 w-4" /> {label}
           </button>
         ))}
         <div className="mb-1.5 ml-auto flex items-center gap-2">
+          {fillN > 0 && (
+            <Button onClick={() => fill.mutate()} disabled={fill.isPending || noAccounts} className="h-9 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="social-fill-week">
+              {fill.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Fill my week with {fillN} clip{fillN === 1 ? "" : "s"}
+            </Button>
+          )}
           <Tip text="Queue times: the days and times your posts go out">
             <button type="button" onClick={() => setQueueOpen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card hover:bg-muted" aria-label="Queue times" data-testid="social-queue-settings"><Settings2 className="h-4 w-4" /></button>
           </Tip>
@@ -181,85 +197,7 @@ export function SocialScreen() {
         </div>
       )}
 
-      {tab === "home" ? (
-        <div className="flex flex-col gap-4">
-          {/* One box for anything they want to share: drop it, or pick from the Library. */}
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => !noAccounts && create("upload")}
-            onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !noAccounts) create("upload"); }}
-            onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-            onDragLeave={() => setOver(false)}
-            onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files?.[0]; if (f && !noAccounts) create("upload", f); }}
-            className={`cursor-pointer rounded-2xl border-2 border-dashed p-6 text-center transition-colors ${over ? "border-[#053877] bg-[#053877]/[0.06]" : "border-border bg-card hover:border-[#053877]/50"} ${noAccounts ? "pointer-events-none opacity-50" : ""}`}
-            data-testid="social-compose"
-          >
-            <Upload className="mx-auto h-6 w-6 text-[#053877] dark:text-[#8fb5e8]" />
-            <p className="mt-2 text-base font-semibold">Drop a photo or video to post</p>
-            <p className="text-sm text-muted-foreground">It goes to {connected.length === 1 ? "your channel" : `all ${connected.length} of your channels`}, in your next open slot. Or click to choose one.</p>
-            <div className="mt-3 flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
-              <Button variant="outline" size="sm" onClick={() => create("clips")} disabled={noAccounts} className="gap-1.5 rounded-full" data-testid="social-compose-clips"><Clapperboard className="h-4 w-4" /> Use a clip</Button>
-              <Button variant="outline" size="sm" onClick={() => create("episodes")} disabled={noAccounts} className="gap-1.5 rounded-full" data-testid="social-compose-episodes"><Film className="h-4 w-4" /> Use an episode</Button>
-            </div>
-          </div>
-
-          {/* The week: what's going out, the open slots to fill, the goal, and one button to fill it. */}
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="social-week">
-            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <h2 className="text-sm font-semibold">Your week</h2>
-              <span className="text-xs text-muted-foreground"><b className="tabular-nums text-foreground">{thisWeek}</b> of {goal} posts</span>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild><button type="button" className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Change goal</button></DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  {[3, 5, 7, 14].map((g) => <DropdownMenuItem key={g} onSelect={() => { setGoal(g); try { localStorage.setItem("mv_post_goal", String(g)); } catch { /* fine */ } }}>{g} posts a week {goal === g && <Check className="ml-auto h-3.5 w-3.5" />}</DropdownMenuItem>)}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              {fillN > 0 ? (
-                <Button onClick={() => fill.mutate()} disabled={fill.isPending || noAccounts} className="ml-auto h-9 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="social-fill-week">
-                  {fill.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Fill my week with {fillN} clip{fillN === 1 ? "" : "s"}
-                </Button>
-              ) : openSlots.length > 0 && !ready.length ? (
-                <span className="ml-auto text-xs text-muted-foreground">{openSlots.length} open slot{openSlots.length === 1 ? "" : "s"} left this week</span>
-              ) : null}
-            </div>
-            <div className="grid gap-1.5 sm:grid-cols-7">
-              {weekDays.map((d) => {
-                const dayPosts = posts.filter((p) => p.status !== "failed" && sameDay(p.at, d)).sort((x, y) => x.at - y.at);
-                const daySlots = openSlots.filter((t) => sameDay(t, d));
-                const today = sameDay(d, now);
-                return (
-                  <div key={d} className={`flex min-h-[7.5rem] flex-col gap-1.5 rounded-xl border p-1.5 ${today ? "border-[#F0A71F]/60 bg-[#F0A71F]/[0.05]" : "border-border"}`} data-testid={`social-day-${new Date(d).getDay()}`}>
-                    <span className={`px-1 text-[11px] font-semibold ${today ? "text-[#b36b00]" : "text-muted-foreground"}`}>{new Date(d).toLocaleDateString(undefined, { weekday: "short" })} {new Date(d).getDate()}</span>
-                    {dayPosts.map((p) => (
-                      <button key={p.id} type="button" onClick={() => setOpen(p)} className="flex min-w-0 items-center gap-1.5 rounded-lg border border-border bg-background p-1 text-left hover:border-[#053877]/40" title={`${p.title} · ${fmtWhen(p.at)}`}>
-                        <Thumb p={p} className="h-8 w-6" />
-                        <span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-medium leading-tight">{p.title || "Post"}</span><span className="block text-[10px] text-muted-foreground">{p.at > now ? fmtTime(p.at) : "Posted"}</span></span>
-                      </button>
-                    ))}
-                    {daySlots.map((t) => (
-                      <button key={t} type="button" onClick={() => { setPickKind("clips"); setPicking(local(t)); }} className="rounded-lg border border-dashed border-border px-1 py-2 text-[11px] font-medium text-muted-foreground hover:border-[#053877]/50 hover:text-foreground" title="Fill this slot">
-                        + {fmtTime(t)}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-            {later > 0 && <button type="button" onClick={() => go("calendar")} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">{later} more scheduled after this week <ChevronRight className="h-3 w-3" /></button>}
-          </div>
-
-          {/* How the last few landed. */}
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-semibold">Recently posted</h2>{gone.length > 5 && <button type="button" onClick={() => go("analytics")} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">See how they did</button>}</div>
-            {gone.length ? (
-              <ul className="divide-y divide-border">{gone.slice(0, 5).map((p) => <PostRow key={p.id} p={p} onOpen={() => setOpen(p)} />)}</ul>
-            ) : (
-              <p className="py-2 text-sm text-muted-foreground">Nothing yet. What goes out shows here, with a link to it on each channel.</p>
-            )}
-          </div>
-        </div>
-      ) : tab === "analytics" ? (
+      {tab === "analytics" ? (
         <Analytics clips={clipList} onOpen={(id) => { const p = posts.find((x) => x.id === id); if (p) setOpen(p); }} />
       ) : (
         <Calendar
