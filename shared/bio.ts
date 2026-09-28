@@ -35,6 +35,8 @@ export interface BioTheme {
   podcast: BioPodcastOptions;
   /** The link buttons' colour ("" = the theme colour). */
   linkColor: string;
+  /** The Sticker top's stripes ("" = their colour). */
+  stickerColor?: string;
   background: BioBackground;
   /** Where the cover, hero or banner photo is cropped, top (0) to bottom (100). */
   imageY: number;

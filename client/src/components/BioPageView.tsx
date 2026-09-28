@@ -132,7 +132,7 @@ export function PageTop({ t, avatar, hero, cutoutUrl, name, handle, latest, chil
     <>
       {CUTOUT_LAYOUTS.includes(t.layout) && cutoutUrl ? (
         <>
-          <CutoutTop kind={t.layout} src={cutoutUrl} name={name} theirs={theirs} paper={paper} dark={dark} bigName={bigName} dy={t.cutoutY ?? 0} size={(t.cutoutSize ?? 100) / 100} latest={latest} handle={handle} />
+          <CutoutTop kind={t.layout} src={cutoutUrl} name={name} theirs={theirs} stripe={/^#[0-9a-f]{6}$/i.test(t.stickerColor ?? "") ? t.stickerColor! : theirs} paper={paper} dark={dark} bigName={bigName} dy={t.cutoutY ?? 0} size={(t.cutoutSize ?? 100) / 100} latest={latest} handle={handle} />
           <div className={`relative z-30 mx-auto max-w-[560px] px-5 text-center ${t.layout === "popout" ? "pt-5" : "-mt-4"}`}>{children(false, t.layout !== "popout")}</div>
         </>
       ) : t.layout === "hero" && photo ? (
@@ -174,7 +174,7 @@ export function PageTop({ t, avatar, hero, cutoutUrl, name, handle, latest, chil
  * breaking out of a circle (popout), a sticker on stripes (sticker), or on a
  * magazine cover under a masthead (magazine). dy and size are their adjusters.
  */
-function CutoutTop({ kind, src, name, theirs, paper, dark, bigName, dy, size, latest, handle }: { kind: string; src: string; name: string; theirs: string; paper: string; dark: boolean; bigName: number; dy: number; size: number; latest?: string; handle: string }) {
+function CutoutTop({ kind, src, name, theirs, stripe, paper, dark, bigName, dy, size, latest, handle }: { kind: string; src: string; name: string; theirs: string; stripe: string; paper: string; dark: boolean; bigName: number; dy: number; size: number; latest?: string; handle: string }) {
   const move: React.CSSProperties = { transform: `translateY(${dy}px) scale(${size})`, transformOrigin: "bottom center" };
   const fade = <div className="absolute inset-x-0 bottom-0 z-20 h-24" style={{ background: `linear-gradient(to bottom, transparent, ${paper})` }} />;
   if (kind === "popout") {
@@ -194,8 +194,8 @@ function CutoutTop({ kind, src, name, theirs, paper, dark, bigName, dy, size, la
   if (kind === "sticker") {
     const edge = "drop-shadow(4px 0 0 #fff) drop-shadow(-4px 0 0 #fff) drop-shadow(0 4px 0 #fff) drop-shadow(0 -4px 0 #fff) drop-shadow(0 14px 18px rgba(0,0,0,0.35))";
     return (
-      <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `repeating-linear-gradient(135deg, ${theirs} 0 26px, ${theirs}d9 26px 52px)` }} data-testid="bio-sticker-header">
-        {name && <h1 className="absolute inset-x-0 top-14 z-0 -rotate-6 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName * 0.9, color: "#ffffff", textShadow: "0 4px 0 rgba(0,0,0,0.25)" }}>{name}</h1>}
+      <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `repeating-linear-gradient(135deg, ${stripe} 0 26px, ${stripe}d9 26px 52px)` }} data-testid="bio-sticker-header">
+        {name && <h1 className="absolute inset-x-0 top-14 z-0 -rotate-6 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName * 0.9, color: onColor(stripe), textShadow: onColor(stripe) === "#ffffff" ? "0 4px 0 rgba(0,0,0,0.25)" : "0 3px 0 rgba(255,255,255,0.5)" }}>{name}</h1>}
         <img src={src} alt="" className="relative z-10 mx-auto block h-[380px] w-auto max-w-[90%] object-contain object-bottom" style={{ ...move, filter: edge }} />
         {fade}
       </div>

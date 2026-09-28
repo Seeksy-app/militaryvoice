@@ -341,6 +341,7 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     linkShape: pick("linkShape", ["pill", "rounded", "square", "squircle"] as const, prev.linkShape),
     linkStyle: pick("linkStyle", ["fill", "outline", "soft", "hard"] as const, prev.linkStyle),
     linkColor: typeof x.linkColor === "string" ? (/^#[0-9a-f]{6}$/i.test(x.linkColor) ? x.linkColor : "") : prev.linkColor ?? "",
+    stickerColor: typeof x.stickerColor === "string" ? (/^#[0-9a-f]{6}$/i.test(x.stickerColor) ? x.stickerColor : "") : prev.stickerColor ?? "",
     background: (() => {
       const o = (x.background ?? {}) as Record<string, unknown>;
       const pv = prev.background ?? { mode: "solid" as const, color: "", image: "" };
