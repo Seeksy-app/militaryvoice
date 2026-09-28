@@ -133,7 +133,7 @@ export function HelpChat() {
   if (HIDDEN_ON.some((p) => location.startsWith(p))) return null;
   // A podcaster's own page (militaryvoices.ai/<handle>) is theirs: no MilitaryVoices help bubble on it.
   const seg = location.split(/[?#]/)[0].split("/").filter(Boolean);
-  if ((seg.length === 1 || (seg.length === 2 && seg[1] === "brands")) && !RESERVED_HANDLES.has(seg[0].toLowerCase())) return null;
+  if ((seg.length === 1 || (seg.length === 2 && seg[1] === "brands") || (seg.length === 3 && seg[1] === "family")) && !RESERVED_HANDLES.has(seg[0].toLowerCase())) return null;
 
   function send() {
     const text = draft.trim();

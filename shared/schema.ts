@@ -2440,6 +2440,8 @@ export const bioPages = pgTable("bio_pages", {
   welcome: text("welcome").notNull().default(""),
   /** The Brands view (media kit): BioBrands as JSON. */
   brands: text("brands").notNull().default(""),
+  /** The Family view (private link): BioFamily as JSON. */
+  family: text("family").notNull().default(""),
   /** Ask my show: the AI that answers listeners from every episode. */
   aiEnabled: boolean("ai_enabled").notNull().default(true),
   published: boolean("published").notNull().default(true),

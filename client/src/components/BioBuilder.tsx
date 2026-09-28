@@ -10,11 +10,12 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { BioPageView } from "@/components/BioPageView";
 import { BioBrandsView } from "@/components/BioBrandsView";
+import { BioFamilyView } from "@/components/BioFamilyView";
 import { podcastWorthFor } from "@/lib/worth";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
-import { SWATCHES, TEMPLATES, DEFAULT_BRANDS, type BioBrands, type BioBrandsPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { SWATCHES, TEMPLATES, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
+import { Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
 /**
  * Rally Point (was "My page"): the podcaster's bio page builder. Profile, Design, Content and
@@ -22,9 +23,9 @@ import { Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp
  * component the public page uses. Everything saves as they go.
  */
 
-type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; welcome: string; aiEnabled: boolean; published: boolean; brands: BioBrands };
-type Resp = { page: Page; url: string; preview: BioPublic; brandsPreview?: BioBrandsPublic | null; stats: Record<string, number>; questions: ListenerQuestionRow[]; knowledge?: { done: number; total: number } };
-type Tab = "profile" | "design" | "content" | "share" | "brands" | "questions";
+type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; welcome: string; aiEnabled: boolean; published: boolean; brands: BioBrands; family: BioFamily };
+type Resp = { page: Page; url: string; preview: BioPublic; brandsPreview?: BioBrandsPublic | null; familyPreview?: BioFamilyPublic | null; stats: Record<string, number>; questions: ListenerQuestionRow[]; knowledge?: { done: number; total: number } };
+type Tab = "profile" | "design" | "content" | "share" | "brands" | "family" | "questions";
 
 const KEY = ["/api/host/bio"];
 
@@ -120,7 +121,14 @@ export function BioBuilder() {
   const kitView: BioBrandsPublic | null = useMemo(() => draft && q.data?.brandsPreview ? {
     ...q.data.brandsPreview, displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, theme: draft.theme, kit: draft.brands ?? DEFAULT_BRANDS,
   } : null, [draft, q.data?.brandsPreview]);
-  const page = (id?: string) => tab === "brands" && kitView ? <BioBrandsView data={kitView} preview listenUrl={url} /> : <BioPageView data={view!} preview shareBase={url} />;
+  const famView: BioFamilyPublic | null = useMemo(() => {
+    if (!draft || !q.data?.familyPreview) return null;
+    const { key: _k, ...family } = draft.family ?? DEFAULT_FAMILY;
+    return { ...q.data.familyPreview, displayName: draft.displayName, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl, theme: draft.theme, askEnabled: draft.askEnabled, family };
+  }, [draft, q.data?.familyPreview]);
+  const page = () => tab === "brands" && kitView ? <BioBrandsView data={kitView} preview listenUrl={url} />
+    : tab === "family" && famView ? <BioFamilyView data={famView} preview />
+    : <BioPageView data={view!} preview shareBase={url} />;
 
   if (q.isLoading || !draft || !view) return <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   const newQs = (q.data?.questions ?? []).filter((x) => x.status === "new").length;
@@ -151,7 +159,7 @@ export function BioBuilder() {
         </div>
       </div>
       <div className="mb-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-card p-1 shadow-sm" role="tablist">
-        {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["share", "Share", Share2], ["brands", "Brands", Handshake], ["questions", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
+        {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["share", "Share", Share2], ["brands", "Brands", Handshake], ["family", "Family", Heart], ["questions", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} data-testid={`bio-tab-${k}`}>
             <I className="h-4 w-4" /> {l}{k === "questions" && newQs > 0 && <span className="rounded-full bg-[#F0A71F] px-1.5 text-[11px] font-bold text-[#1a1200]">{newQs}</span>}
           </button>
@@ -165,6 +173,7 @@ export function BioBuilder() {
           {tab === "content" && <ContentTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} />}
           {tab === "brands" && <BrandsTab d={draft} change={change} url={url} kit={kitView} />}
+          {tab === "family" && <FamilyTab d={draft} change={change} flush={flush} url={url} episodes={q.data?.familyPreview?.podcast?.episodes ?? []} />}
           {tab === "questions" && <QuestionsTab items={q.data?.questions ?? []} onChange={() => void qc.invalidateQueries({ queryKey: KEY })} />}
         </div>
         {/* The page, as listeners will see it. */}
@@ -772,6 +781,131 @@ function BrandsTab({ d, change, url, kit }: { d: Page; change: (p: Partial<Page>
         ))}
         <button type="button" onClick={() => set({ partners: [...b.partners, { id: newId(), name: "", url: "" }] })} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] dark:text-[#8fb5e8]" data-testid="brands-add-partner"><Plus className="h-3.5 w-3.5" /> Add a brand</button>
       </Card>
+    </div>
+  );
+}
+
+// ---- Family (a private page) --------------------------------------------------------
+
+function FamilyTab({ d, change, flush, url, episodes }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; flush: () => Promise<void>; url: string; episodes: { id: string; title: string }[] }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const f = d.family ?? DEFAULT_FAMILY;
+  const set = (p: Partial<BioFamily>, now = false) => change({ family: { ...f, ...p } }, now);
+  const link = `${url}/family/${f.key}`;
+  const photoIn = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(0);
+  const addPhotos = async (files: FileList) => {
+    const list = Array.from(files).slice(0, Math.max(0, 24 - f.photos.length));
+    setUploading(list.length);
+    const added: BioFamily["photos"] = [];
+    for (const file of list) {
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const r = await fetch("/api/host/bio/image/family", { method: "POST", body: fd, credentials: "include" });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.message || "Couldn't use that photo.");
+        added.push({ id: newId(), url: j.url, caption: "" });
+      } catch (e) {
+        toast({ title: "A photo didn't upload", description: (e as Error).message, variant: "destructive" });
+      }
+      setUploading((n) => n - 1);
+    }
+    if (added.length) set({ photos: [...f.photos, ...added] }, true);
+    if (photoIn.current) photoIn.current.value = "";
+  };
+  const newLink = async () => {
+    if (!window.confirm("Make a new family link? The old one stops working, so you'll need to send the new one to your family.")) return;
+    await flush();
+    await apiRequest("PATCH", "/api/host/bio", { family: { resetKey: true } });
+    await qc.invalidateQueries({ queryKey: KEY });
+    const r = (await (await apiRequest("GET", "/api/host/bio")).json()) as Resp;
+    change({ family: { ...f, key: r.page.family.key } });
+    toast({ title: "New family link made", description: "The old link no longer works." });
+  };
+  return (
+    <div className="space-y-4">
+      <Card icon={Heart} tone="gold" title="Your family page">
+        <div className="flex items-center justify-between gap-3 rounded-2xl bg-gradient-to-br from-[#7a2e0e] via-[#b35a1f] to-[#F0A71F] p-4 text-white">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-sm font-bold"><Lock className="h-3.5 w-3.5" /> Private link</p>
+            <p className="text-xs text-white/80">{f.on ? "Only people you send it to can open it. It isn't listed or searchable." : "Off: the link doesn't open."}</p>
+          </div>
+          <Switch checked={f.on} onCheckedChange={(v) => set({ on: v }, true)} data-testid="family-on" />
+        </div>
+        {f.on && f.key && (
+          <>
+            <div className="flex gap-2">
+              <Button onClick={() => void navigator.clipboard.writeText(link).then(() => toast({ title: "Family link copied", description: "Send it by text or email to the people you love." }))} className="flex-1 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="family-copy"><Copy className="h-4 w-4" /> Copy link</Button>
+              <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={link} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open</a></Button>
+              <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={`sms:?&body=${encodeURIComponent(`I made a page for you: ${link}`)}`}><MessageSquare className="h-4 w-4" /> Text</a></Button>
+            </div>
+            <button type="button" onClick={() => void newLink()} className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="family-reset"><RefreshCw className="h-3 w-3" /> Make a new link (the old one stops working)</button>
+          </>
+        )}
+      </Card>
+
+      <Card icon={Sparkles} tone="green" title="In your words">
+        <Field label="A note to your family" hint="It sits at the top, like a letter.">
+          <Textarea value={f.note} onChange={(e) => set({ note: e.target.value })} rows={4} maxLength={1000} placeholder="Mom, Dad: this is what I've been working on. Thank you for always being in my corner." data-testid="family-note-input" />
+        </Field>
+        <Field label="Your story">
+          <Textarea value={f.story} onChange={(e) => set({ story: e.target.value })} rows={5} maxLength={4000} placeholder="Why you served, what it taught you, and why you started the show." />
+        </Field>
+      </Card>
+
+      <Card icon={Calendar} tone="blue" title="Along the way">
+        {f.milestones.map((m, i) => (
+          <div key={m.id} className="space-y-2 rounded-2xl border border-border p-3">
+            <div className="flex gap-2">
+              <Input value={m.when} onChange={(e) => set({ milestones: f.milestones.map((x, j) => (j === i ? { ...x, when: e.target.value } : x)) })} placeholder="When (2014)" className="w-1/3" />
+              <Input value={m.title} onChange={(e) => set({ milestones: f.milestones.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)) })} placeholder="What happened" className="flex-1" />
+              <button type="button" onClick={() => set({ milestones: f.milestones.filter((_, j) => j !== i) }, true)} className="px-1 text-muted-foreground hover:text-destructive" aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
+            </div>
+            <Input value={m.note} onChange={(e) => set({ milestones: f.milestones.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)) })} placeholder="A line about it (optional)" />
+          </div>
+        ))}
+        <button type="button" onClick={() => set({ milestones: [...f.milestones, { id: newId(), when: "", title: "", note: "" }] })} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] dark:text-[#8fb5e8]" data-testid="family-add-milestone"><Plus className="h-3.5 w-3.5" /> Add a moment</button>
+        {!f.milestones.length && <p className="text-xs text-muted-foreground">Enlisting, graduating OCS, a deployment, coming home, your first episode.</p>}
+      </Card>
+
+      <Card icon={ImagePlus} tone="violet" title="Photos">
+        <input ref={photoIn} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={(e) => e.target.files?.length && void addPhotos(e.target.files)} />
+        {f.photos.length > 0 && (
+          <div className="grid grid-cols-3 gap-2">
+            {f.photos.map((p, i) => (
+              <div key={p.id} className="space-y-1">
+                <div className="group relative aspect-square overflow-hidden rounded-xl border border-border">
+                  <img src={p.url} alt="" className="h-full w-full object-cover" />
+                  <button type="button" onClick={() => set({ photos: f.photos.filter((_, j) => j !== i) }, true)} className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100" aria-label="Remove photo"><Trash2 className="h-3 w-3" /></button>
+                </div>
+                <input value={p.caption} onChange={(e) => set({ photos: f.photos.map((x, j) => (j === i ? { ...x, caption: e.target.value } : x)) })} placeholder="Caption" maxLength={160} className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring" />
+              </div>
+            ))}
+          </div>
+        )}
+        <Button variant="outline" onClick={() => photoIn.current?.click()} disabled={uploading > 0 || f.photos.length >= 24} className="w-full gap-1.5 rounded-xl border-dashed" data-testid="family-add-photos">
+          {uploading > 0 ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading {uploading}…</> : <><ImagePlus className="h-4 w-4" /> Add photos</>}
+        </Button>
+      </Card>
+
+      {episodes.length > 0 && (
+        <Card icon={Headphones} tone="gold" title="Episodes to start with">
+          <p className="-mt-1 text-xs text-muted-foreground">Pick up to three for your family. If you pick none, they see your latest.</p>
+          <div className="space-y-1.5">
+            {episodes.slice(0, 12).map((e) => {
+              const on = f.favorites.includes(e.id);
+              return (
+                <button key={e.id} type="button" onClick={() => set({ favorites: on ? f.favorites.filter((x) => x !== e.id) : [...f.favorites, e.id].slice(-3) }, true)} className={`flex w-full items-center gap-2.5 rounded-xl border-2 px-3 py-2 text-left text-sm transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.05] dark:border-[#8fb5e8]" : "border-border hover:border-[#053877]/40"}`}>
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${on ? "bg-[#053877] text-white" : "border border-border"}`}>{on && <Check className="h-3 w-3" />}</span>
+                  <span className="min-w-0 flex-1 truncate">{e.title}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

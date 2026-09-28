@@ -13,7 +13,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFeed, hostedAsStats } from "./hosting.js";
 import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
 import { bioPages, bioEvents, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
-import { parseTheme, parseSections, parseSocials, parseBrands, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic } from "../shared/bio.js";
+import { parseTheme, parseSections, parseSocials, parseBrands, parseFamily, type BioFamily, type BioFamilyPublic, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic } from "../shared/bio.js";
 import type { PodcastStatsData } from "../shared/schema.js";
 
 /**
@@ -168,6 +168,62 @@ async function brandsOf(row: BioPageRow): Promise<BioBrandsPublic> {
   };
 }
 
+// ---- The Family view (private link) ---------------------------------------------------
+
+const newKey = () => crypto.randomBytes(12).toString("base64url");
+
+/** Their family settings, with a private key made the first time. */
+async function familyOf(row: BioPageRow): Promise<BioFamily> {
+  const f = parseFamily(row.family);
+  if (f.key) return f;
+  const out = { ...f, key: newKey() };
+  await db.update(bioPages).set({ family: JSON.stringify(out) }).where(eq(bioPages.id, row.id));
+  return out;
+}
+
+async function familyPublicOf(row: BioPageRow, f: BioFamily): Promise<BioFamilyPublic> {
+  const [profile, pod, hosted, stats] = await Promise.all([
+    storage.getProfileByEmail(row.email).catch(() => undefined),
+    podcastFor(row).catch(() => null),
+    hostedAsStats(row.email).catch(() => []),
+    storage.listPodcastStats(row.email).catch(() => []),
+  ]);
+  const totals = [...hosted.map((h) => h.data.total), ...stats.map((r) => { try { return (JSON.parse(r.data) as PodcastStatsData).total ?? 0; } catch { return 0; } })];
+  const followers = parseSocialAccounts(profile?.socialAccounts).reduce((a, x) => a + (x.followers ?? 0), 0);
+  const { key: _key, ...family } = f;
+  return {
+    handle: row.handle,
+    displayName: row.displayName,
+    avatarUrl: row.avatarUrl,
+    heroUrl: row.heroUrl,
+    branch: profile?.branch && profile.branch !== "Not applicable" ? profile.branch : "",
+    theme: parseTheme(row.theme),
+    family,
+    podcast: pod ? { title: pod.title, artworkUrl: pod.artworkUrl, episodeCount: pod.episodeCount, episodes: pod.episodes.map((e) => ({ id: e.id, title: e.title, publishedAt: e.publishedAt, durationSec: e.durationSec, audio: e.audio, artworkUrl: e.artworkUrl || pod.artworkUrl })) } : null,
+    numbers: { episodes: pod?.episodeCount ?? 0, listens: Math.max(0, ...totals), followers },
+    askEnabled: row.askEnabled,
+    firstName: (profile?.hostName || "").trim().split(/\s+/)[0] || "",
+  };
+}
+
+function cleanFamily(v: unknown, prev: BioFamily): BioFamily {
+  const x = (v ?? {}) as Record<string, unknown>;
+  const id = (p: Record<string, unknown>) => str(p?.id, 20) || crypto.randomBytes(4).toString("hex");
+  return {
+    on: typeof x.on === "boolean" ? x.on : prev.on,
+    key: x.resetKey === true ? newKey() : prev.key || newKey(),
+    note: typeof x.note === "string" ? x.note.slice(0, 1000) : prev.note,
+    story: typeof x.story === "string" ? x.story.slice(0, 4000) : prev.story,
+    milestones: Array.isArray(x.milestones)
+      ? x.milestones.slice(0, 30).map((m: Record<string, unknown>) => ({ id: id(m), when: str(m?.when, 40), title: str(m?.title, 120), note: str(m?.note, 400) })).filter((m) => m.when || m.title || m.note)
+      : prev.milestones,
+    photos: Array.isArray(x.photos)
+      ? x.photos.slice(0, 24).map((p: Record<string, unknown>) => ({ id: id(p), url: httpUrl(p?.url), caption: str(p?.caption, 160) })).filter((p) => p.url)
+      : prev.photos,
+    favorites: Array.isArray(x.favorites) ? x.favorites.filter((f: unknown): f is string => typeof f === "string").slice(0, 6).map((f) => f.slice(0, 40)) : prev.favorites,
+  };
+}
+
 function cleanBrands(v: unknown, prev: BioBrands): BioBrands {
   const x = (v ?? {}) as Record<string, unknown>;
   return {
@@ -237,8 +293,10 @@ export function registerBioPage(app: Express) {
     const since = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
     const counts = await db.select({ kind: bioEvents.kind, n: sql<number>`count(*)::int` }).from(bioEvents).where(and(eq(bioEvents.pageId, row.id), gte(bioEvents.day, since))).groupBy(bioEvents.kind);
     const questions = await db.select().from(listenerQuestions).where(eq(listenerQuestions.pageId, row.id)).orderBy(desc(listenerQuestions.id)).limit(50);
+    const fam = await familyOf(row);
     res.json({
-      page: { ...row, theme: parseTheme(row.theme), sections: parseSections(row.sections), socials: parseSocials(row.socials), brands: parseBrands(row.brands) },
+      page: { ...row, theme: parseTheme(row.theme), sections: parseSections(row.sections), socials: parseSocials(row.socials), brands: parseBrands(row.brands), family: fam },
+      familyPreview: await familyPublicOf(row, fam).catch((err) => { console.warn("Family preview failed:", (err as Error).message); return null; }),
       brandsPreview: await brandsOf(row).catch((err) => { console.warn("Brands preview failed:", (err as Error).message); return null; }),
       url: `${ORIGIN}/${row.handle}`,
       preview: await publicOf(row),
@@ -265,6 +323,7 @@ export function registerBioPage(app: Express) {
     if (typeof b.askEnabled === "boolean") patch.askEnabled = b.askEnabled;
     if (typeof b.welcome === "string") patch.welcome = b.welcome.trim().slice(0, 280);
     if (b.brands && typeof b.brands === "object") patch.brands = JSON.stringify(cleanBrands(b.brands, parseBrands(row.brands)));
+    if (b.family && typeof b.family === "object") patch.family = JSON.stringify(cleanFamily(b.family, await familyOf(row)));
     if (typeof b.aiEnabled === "boolean") patch.aiEnabled = b.aiEnabled;
     if (typeof b.published === "boolean") patch.published = b.published;
     if (b.avatarUrl === "" || b.heroUrl === "") { if (b.avatarUrl === "") patch.avatarUrl = ""; if (b.heroUrl === "") patch.heroUrl = ""; }
@@ -278,9 +337,14 @@ export function registerBioPage(app: Express) {
   // The photo (square) and the cover (wide), sized for the page.
   app.post("/api/host/bio/image/:kind", requireHostSession, art.single("file"), async (req, res) => {
     const row = await pageFor(emailOf(req));
-    const kind = req.params.kind === "hero" ? "hero" : "avatar";
+    const kind = req.params.kind === "hero" ? "hero" : req.params.kind === "family" ? "family" : "avatar";
     if (!req.file) return res.status(400).json({ message: "Choose an image." });
     try {
+      // A family photo: kept at its own unlisted address, added to the Family view by the builder.
+      if (kind === "family") {
+        const img = await sharp(req.file.buffer).rotate().resize(1600, 1600, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 86 }).toBuffer();
+        return res.json({ url: await uploadPhoto(`bio/${row.id}-family-${crypto.randomBytes(8).toString("hex")}.jpg`, img, "image/jpeg") });
+      }
       const img = kind === "avatar"
         ? await sharp(req.file.buffer).rotate().resize(800, 800, { fit: "cover", position: "attention" }).jpeg({ quality: 88 }).toBuffer()
         : await sharp(req.file.buffer).rotate().resize(1600, 1600, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 86 }).toBuffer();
@@ -428,6 +492,19 @@ export function registerBioPage(app: Express) {
   });
 
   // ---- The public page ----
+
+  // The Family view: only with the private key, never cached by anyone in between, never indexed.
+  app.get("/api/public/bio/:handle/family/:key", async (req, res) => {
+    await schemaIsReady();
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    const [row] = await db.select().from(bioPages).where(eq(bioPages.handle, String(req.params.handle).toLowerCase())).limit(1);
+    const f = row ? parseFamily(row.family) : null;
+    const given = Buffer.from(String(req.params.key));
+    const ok = Boolean(row && row.published && f?.on && f.key && given.length === Buffer.from(f.key).length && crypto.timingSafeEqual(given, Buffer.from(f.key)));
+    if (!ok) return res.status(404).json({ message: "This link isn't working. Ask for a new one." });
+    res.json(await familyPublicOf(row!, f!));
+  });
 
   // The Brands view: the media kit, with the numbers we measure.
   app.get("/api/public/bio/:handle/brands", async (req, res) => {

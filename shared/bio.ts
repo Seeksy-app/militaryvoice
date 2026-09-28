@@ -58,6 +58,48 @@ export function parseBrands(raw: string | null | undefined): BioBrands {
   } catch { return { ...DEFAULT_BRANDS }; }
 }
 
+/** The Family view: a private page at /<handle>/family/<key>, for the people closest to them. */
+export interface BioFamily {
+  on: boolean;
+  /** The private part of the link. New key = the old link stops working. */
+  key: string;
+  /** A note to their family, at the top. */
+  note: string;
+  /** Their story, in their words. */
+  story: string;
+  /** Moments that matter: enlisting, deployments, the first episode… */
+  milestones: { id: string; when: string; title: string; note: string }[];
+  photos: { id: string; url: string; caption: string }[];
+  /** Episode ids to start with. */
+  favorites: string[];
+}
+export const DEFAULT_FAMILY: BioFamily = { on: true, key: "", note: "", story: "", milestones: [], photos: [], favorites: [] };
+export function parseFamily(raw: string | null | undefined): BioFamily {
+  try {
+    const v = raw ? JSON.parse(raw) : {};
+    const arr = (x: unknown) => (Array.isArray(x) ? x : []);
+    return { ...DEFAULT_FAMILY, ...v, milestones: arr(v?.milestones), photos: arr(v?.photos), favorites: arr(v?.favorites).filter((x: unknown) => typeof x === "string") };
+  } catch { return { ...DEFAULT_FAMILY }; }
+}
+
+/** What the Family view gets (never the key, never sponsor talk). */
+export interface BioFamilyPublic {
+  handle: string;
+  displayName: string;
+  avatarUrl: string;
+  heroUrl: string;
+  branch: string;
+  theme: BioTheme;
+  family: Omit<BioFamily, "key">;
+  podcast: null | { title: string; artworkUrl: string; episodeCount: number; episodes: { id: string; title: string; publishedAt: string; durationSec: number; audio: string; artworkUrl: string }[] };
+  /** Proud numbers, in plain words. */
+  numbers: { episodes: number; listens: number; followers: number };
+  /** They take messages (the family's notes go to the same Messages). */
+  askEnabled: boolean;
+  /** Their own first name (the page's name is often the show's). */
+  firstName: string;
+}
+
 /** What the public Brands view gets: the kit, and the numbers behind it (ours, never typed in). */
 export interface BioBrandsPublic {
   handle: string;
