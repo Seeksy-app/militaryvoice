@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import { ArrowRight, Check, Eye, Handshake, Headphones, Pause, Play, Send, Sparkles, Users } from "lucide-react";
 import { PlatformIcon, platformBackground, platformLabel } from "@/components/SocialIcons";
-import { PageTop, SocialRow, onColor } from "@/components/BioPageView";
+import { PageTop, SocialRow, onColor, styled } from "@/components/BioPageView";
 import { useBioFont } from "@/lib/bioFont";
 import { podcastWorthFor, worthFor, type Deliverable } from "@/lib/worth";
 import { BRANDS_SECTIONS, DEFAULT_BRANDS, arrange, bioPalette, videoEmbed, type BioBrandsPublic, type BrandsSectionId } from "@shared/bio";
@@ -107,7 +107,7 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
       <p className="relative mx-auto mt-4 w-fit rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em]" style={onPhoto ? { background: "rgba(0,0,0,0.25)", color: "#fff" } : { background: `${accent}22`, color: accent }}>Media kit</p>
       {!hideName && <h1 className="relative mt-1 text-balance text-[28px] font-bold leading-tight tracking-tight">{name}</h1>}
       <p className="relative mt-1 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.75)" : sub }}>{[data.podcast ? `Host of ${data.podcast.title}` : "", data.branch].filter(Boolean).join(" · ")}</p>
-      {kit.pitch && <p className="relative mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.9)" : ink }}>{kit.pitch}</p>}
+      {kit.pitch && <p className="relative mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.9)" : ink }}>{styled(kit.pitch)}</p>}
       <SocialRow socials={socials} onPhoto={onPhoto} preview={preview} />
       {sponsorOn && (
         <button type="button" onClick={ask} className="relative mt-5 inline-flex items-center gap-2 rounded-full bg-[#F0A71F] px-6 py-3 text-sm font-bold text-[#1a1200] shadow-lg transition-transform hover:scale-[1.03]" data-testid="brands-cta-top">
@@ -160,7 +160,7 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
     )),
     audience: (kit.audience || a) && section("Who listens", (
       <div className="flex flex-col gap-5">
-        {kit.audience && <p className="whitespace-pre-line text-[15px] leading-relaxed">{kit.audience}</p>}
+        {kit.audience && <p className="whitespace-pre-line text-[15px] leading-relaxed">{styled(kit.audience)}</p>}
         {a && (a.femalePct != null || a.malePct != null) && (
           <div>
             <div className="flex h-4 overflow-hidden rounded-full"><div style={{ width: `${a.malePct ?? 0}%`, background: MEN }} /><div style={{ width: `${a.femalePct ?? 0}%`, background: WOMEN }} /></div>

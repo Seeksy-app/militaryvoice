@@ -1,17 +1,16 @@
 import { Fragment, useRef, useState } from "react";
 import { Heart, Lock, Pause, Play, X } from "lucide-react";
-import { Chat, PageTop, SocialRow, onColor, styled, type ChatMsg } from "@/components/BioPageView";
+import { Chat, PageTop, onColor, styled, type ChatMsg } from "@/components/BioPageView";
 import { useBioFont } from "@/lib/bioFont";
 import { FAMILY_SECTIONS, arrange, bioPalette, videoEmbed, type BioFamilyPublic, type FamilySectionId } from "@shared/bio";
 
 /**
  * The Family view (militaryvoices.ai/<handle>/family/<key>): a private page for
  * the people closest to them. Their note, a voice message and a video from
- * them, the milestones along the way, photos, and a way to leave a note. No
+ * them, the moments along the way, photos, and a way to leave a note. No
  * podcast, no stats for brands, no sponsor talk.
  */
 
-const compact = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 10_000 ? `${Math.round(n / 1000)}K` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(Math.round(n)));
 
 type AskInput = { name: string; email: string; question: string; episode: string; website: string };
 
@@ -39,10 +38,6 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
   const [heard, setHeard] = useState(0);
   const fv = f.video ?? "";
   const video = fv.startsWith("r2:") ? (data.media?.video?.from === fv ? { kind: "file" as const, src: data.media.video.url, tall: false } : null) : videoEmbed(fv);
-  const n = data.numbers;
-  const proud = [
-    n.followers ? { big: compact(n.followers), label: "people following along" } : null,
-  ].filter(Boolean) as { big: string; label: string }[];
 
   const section = (title: string, body: React.ReactNode) => (
     <section className="rounded-3xl p-5 text-left" style={{ background: card, border: `1px solid ${line}` }}>
@@ -81,16 +76,6 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
               : <iframe src={video.src} title="Video" loading="lazy" className={`w-full ${video.tall ? "h-[620px]" : "aspect-video"}`} style={{ border: 0 }} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />}
           </section>
         ),
-    numbers: proud.length > 0 && (
-          <div className={`grid gap-3 ${proud.length === 3 ? "grid-cols-3" : proud.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
-            {proud.map((p) => (
-              <div key={p.label} className="rounded-3xl p-4 text-center" style={{ background: card, border: `1px solid ${line}` }}>
-                <p className="text-[26px] font-bold leading-none tabular-nums" style={{ color: accent }}>{p.big}</p>
-                <p className="mt-1.5 text-[11px] leading-snug" style={{ color: sub }}>{p.label}</p>
-              </div>
-            ))}
-          </div>
-        ),
     milestones: f.milestones.length > 0 && section("Along the way", (
           <ol className="relative ml-2 border-l-2 pl-5" style={{ borderColor: `${accent}55` }}>
             {f.milestones.map((m) => (
@@ -98,7 +83,7 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
                 <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full ring-4" style={{ background: accent, ["--tw-ring-color" as string]: dark ? "#141a2c" : "#ffffff" }} />
                 {m.when && <p className="text-xs font-bold uppercase tracking-wider" style={{ color: accent }}>{m.when}</p>}
                 {m.title && <p className="text-[15px] font-semibold leading-snug">{m.title}</p>}
-                {m.note && <p className="mt-0.5 whitespace-pre-line text-sm leading-relaxed" style={{ color: sub }}>{m.note}</p>}
+                {m.note && <p className="mt-0.5 whitespace-pre-line text-sm leading-relaxed" style={{ color: sub }}>{styled(m.note)}</p>}
               </li>
             ))}
           </ol>
@@ -113,9 +98,6 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
             ))}
           </div>
         )),
-    leave: data.askEnabled && (
-          <button type="button" onClick={() => setChat(true)} className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3.5 text-sm font-bold" style={{ background: accent, color: onColor(accent) }} data-testid="family-note"><Heart className="h-4 w-4" /> Leave {first} a note</button>
-        ),
   };
   const order = arrange(FAMILY_SECTIONS, f.order).filter((id) => !(f.hidden ?? []).includes(id));
 
@@ -130,7 +112,6 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
               <p className="mx-auto mt-4 flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em]" style={onPhoto ? { background: "rgba(0,0,0,0.3)" } : { background: `${accent}22`, color: accent }}><Heart className="h-3 w-3 fill-current" /> For family</p>
               {!hideName && <h1 className="mt-2 text-balance text-[32px] font-bold leading-tight tracking-tight">{name}</h1>}
               {data.branch && <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>{data.branch}</p>}
-              <SocialRow socials={data.socials ?? []} onPhoto={onPhoto} preview={preview} />
             </div>
           )}
         </PageTop>
@@ -142,7 +123,6 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
           <p className="mx-auto flex w-fit items-center gap-1.5 rounded-full bg-black/30 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em]"><Heart className="h-3 w-3 fill-current" /> For family</p>
           <h1 className="mt-2 text-balance text-[32px] font-bold leading-tight tracking-tight">{name}</h1>
           {data.branch && <p className="mt-0.5 text-sm text-white/80">{data.branch}</p>}
-          <SocialRow socials={data.socials ?? []} onPhoto preview={preview} />
         </div>
       </div>
       )}

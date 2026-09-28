@@ -78,7 +78,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
     <>
       {!hideName && !noName && <h1 className={`text-balance font-bold leading-tight tracking-tight ${onPhoto ? "text-[34px]" : "text-[26px]"}`}>{data.displayName || "Your name"}</h1>}
       <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>@{data.handle}{data.branch ? ` · ${data.branch}` : ""}</p>
-      {data.bio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{data.bio}</p>}
+      {data.bio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{styled(data.bio)}</p>}
       <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} />
     </>
   );

@@ -141,13 +141,11 @@ export const BRANDS_SECTIONS = [
 ] as const;
 export type BrandsSectionId = (typeof BRANDS_SECTIONS)[number]["id"];
 export const FAMILY_SECTIONS = [
-  { id: "note", label: "Your note" },
-  { id: "voice", label: "Your voice message" },
-  { id: "video", label: "Your video" },
-  { id: "numbers", label: "People following along" },
+  { id: "note", label: "A note to your family" },
+  { id: "voice", label: "A voice message" },
+  { id: "video", label: "A video for them" },
   { id: "milestones", label: "Along the way" },
   { id: "photos", label: "Photos" },
-  { id: "leave", label: "Leave a note button" },
 ] as const;
 export type FamilySectionId = (typeof FAMILY_SECTIONS)[number]["id"];
 /** Sections in their saved order, any new ones after, in the default order. */

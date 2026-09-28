@@ -611,7 +611,7 @@ export function registerBioPage(app: Express) {
     const kit = parseBrands(row.brands);
     const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const title = `Sponsor ${row.displayName || row.handle}`;
-    const desc = (kit.pitch || row.bio || `Media kit for ${row.displayName || row.handle}: downloads, reach and rates.`).replace(/\s+/g, " ").slice(0, 280);
+    const desc = (kit.pitch || row.bio || `Media kit for ${row.displayName || row.handle}: downloads, reach and rates.`).replace(/\s+/g, " ").replace(/\*\*|__|\*/g, "").slice(0, 280);
     const url = `${origin}/${row.handle}/brands`;
     const img = `${origin}/og/bio/${row.handle}.jpg?v=${encodeURIComponent((row.updatedAt || row.createdAt).slice(0, 16))}`;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -634,7 +634,7 @@ export function registerBioPage(app: Express) {
     const pod = await podcastFor(row).catch(() => null);
     const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const title = row.displayName || row.handle;
-    const desc = (row.bio || (pod ? `Listen to ${pod.title}: the latest episodes, and ask the show a question.` : `${title} on MilitaryVoices.ai.`)).replace(/\s+/g, " ").slice(0, 280);
+    const desc = (row.bio || (pod ? `Listen to ${pod.title}: the latest episodes, and ask the show a question.` : `${title} on MilitaryVoices.ai.`)).replace(/\s+/g, " ").replace(/\*\*|__|\*/g, "").slice(0, 280);
     const url = `${origin}/${row.handle}`;
     const img = `${origin}/og/bio/${row.handle}.jpg?v=${encodeURIComponent((row.updatedAt || row.createdAt).slice(0, 16))}`;
     res.setHeader("Content-Type", "text/html; charset=utf-8");

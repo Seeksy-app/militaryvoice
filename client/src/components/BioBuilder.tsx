@@ -15,9 +15,9 @@ import { uploadToStorage } from "@/lib/upload";
 import { useBioFont } from "@/lib/bioFont";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
 import { ratesFor } from "@/components/BioBrandsView";
-import { BRANDS_SECTIONS, FAMILY_SECTIONS, arrange, type BioLayout, CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { BRANDS_SECTIONS, FAMILY_SECTIONS, arrange, type BioLayout, type BrandsSectionId, type FamilySectionId, CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, Mic, Square, Smile, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music } from "lucide-react";
+import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, Mic, Square, Smile, GripVertical, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music } from "lucide-react";
 
 /**
  * SmartLink (was "My page", then "Rally Point"): the podcaster's bio page builder. Profile, Design, Content and
@@ -399,7 +399,7 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
             {drafting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {d.bio.trim() ? "Rewrite it for me" : "Write it for me"}
           </button>
         </div>
-        <Textarea value={d.bio} onChange={(e) => change({ bio: e.target.value })} maxLength={500} rows={3} placeholder="Who you are, what the show is about, who it's for." />
+        <TextEditor body={d.bio} onBody={(bio) => change({ bio })} maxLength={500} rows={3} placeholder="Who you are, what the show is about, who it's for." testid="bio-bio" />
       </div>
       </Card>
       <Card icon={Headphones} tone="green" title="Your podcast and listeners">
@@ -503,12 +503,103 @@ function LayoutTiles({ d, value, onPick, cutting = false, own, photo }: { d: Pag
   );
 }
 
-function Card({ icon: I, tone, title, action, children }: { icon: typeof User; tone: keyof typeof TONES; title: string; action?: React.ReactNode; children: React.ReactNode }) {
+/**
+ * A card of the builder. It can fold (the title or the arrow), carry a switch
+ * for its section right in its header (on), and a handle to drag it (grip).
+ */
+function Card({ icon: I, tone, title, action, fold, on, grip, testid, children }: { icon: typeof User; tone: keyof typeof TONES; title: string; action?: React.ReactNode; fold?: { open: boolean; toggle: () => void }; on?: { checked: boolean; set: (v: boolean) => void }; grip?: React.ReactNode; testid?: string; children: React.ReactNode }) {
+  const open = fold ? fold.open : true;
   return (
-    <section className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
-      <div className="flex items-center gap-2"><p className="flex min-w-0 flex-1 items-center gap-2 text-sm font-bold"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONES[tone]}`}><I className="h-4 w-4" /></span> {title}</p>{action}</div>
-      {children}
+    <section className={`rounded-2xl border border-border bg-card p-4 shadow-sm ${open ? "space-y-3" : ""} ${on && !on.checked ? "opacity-70" : ""}`} data-testid={testid}>
+      <div className="flex items-center gap-2">
+        {grip}
+        <button type="button" onClick={fold?.toggle} disabled={!fold} className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-bold disabled:cursor-default" aria-expanded={fold ? open : undefined}><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONES[tone]}`}><I className="h-4 w-4" /></span> <span className="truncate">{title}</span></button>
+        {action}
+        {on && <Switch checked={on.checked} onCheckedChange={on.set} aria-label={`${title} ${on.checked ? "on" : "off"}`} />}
+        {fold && <button type="button" onClick={fold.toggle} className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={open ? `Fold ${title}` : `Open ${title}`}><ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} /></button>}
+      </div>
+      {open && children}
     </section>
+  );
+}
+
+/** Which of a tab's cards are folded, kept in this browser. */
+function useFold(tab: string) {
+  const key = `mv_bio_folded_${tab}`;
+  const [shut, setShut] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(key) || "[]") as string[]; } catch { return []; } });
+  const save = (x: string[]) => { setShut(x); try { localStorage.setItem(key, JSON.stringify(x)); } catch { /* this visit only */ } };
+  return {
+    of: (id: string) => ({ open: !shut.includes(id), toggle: () => save(shut.includes(id) ? shut.filter((x) => x !== id) : [...shut, id]) }),
+    all: (ids: string[], open: boolean) => save(open ? [] : ids),
+    any: shut.length > 0,
+  };
+}
+
+/** Fold all or open all, at the top of a tab. */
+function FoldAll({ fold, ids }: { fold: ReturnType<typeof useFold>; ids: string[] }) {
+  return (
+    <div className="flex justify-end gap-3 text-xs font-semibold text-muted-foreground">
+      <button type="button" onClick={() => fold.all(ids, false)} className="hover:text-foreground" data-testid="fold-all">Collapse all</button>
+      {fold.any && <button type="button" onClick={() => fold.all(ids, true)} className="hover:text-foreground" data-testid="open-all">Expand all</button>}
+    </div>
+  );
+}
+
+/**
+ * Cards to put in order by dragging their handle (mouse or finger), or with
+ * the arrow keys on it. The card follows the pointer and the others make room;
+ * the new order is saved when it's let go. render gets the handle for the card's header.
+ */
+function Sortable<T extends string>({ ids, onMove, render }: { ids: T[]; onMove: (ids: T[]) => void; render: (id: T, grip: React.ReactNode) => React.ReactNode }) {
+  const [live, setLive] = useState<T[] | null>(null);
+  const [drag, setDrag] = useState<{ id: T; offY: number; dy: number } | null>(null);
+  const els = useRef(new Map<T, HTMLDivElement>());
+  const list = live ?? ids;
+  const start = (id: T, e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    const r = els.current.get(id)!.getBoundingClientRect();
+    setLive(ids);
+    setDrag({ id, offY: e.clientY - r.top, dy: 0 });
+  };
+  const move = (e: React.PointerEvent) => {
+    if (!drag || !live) return;
+    const el = els.current.get(drag.id)!;
+    const natural = el.getBoundingClientRect().top - drag.dy;
+    // Where the pointer is among the other cards: before the first whose middle is below it.
+    const others = live.filter((x) => x !== drag.id);
+    let at = others.length;
+    for (let k = 0; k < others.length; k++) { const r = els.current.get(others[k])!.getBoundingClientRect(); if (e.clientY < r.top + r.height / 2) { at = k; break; } }
+    const next = [...others.slice(0, at), drag.id, ...others.slice(at)];
+    if (next.join() !== live.join()) setLive(next);
+    setDrag({ ...drag, dy: e.clientY - drag.offY - natural });
+  };
+  const end = () => {
+    if (live && live.join() !== ids.join()) onMove(live);
+    setLive(null);
+    setDrag(null);
+  };
+  const step = (id: T, dir: -1 | 1) => { const i = ids.indexOf(id); const j = i + dir; if (j < 0 || j >= ids.length) return; const x = [...ids]; [x[i], x[j]] = [x[j], x[i]]; onMove(x); };
+  return (
+    <>
+      {list.map((id) => {
+        const on = drag?.id === id;
+        return (
+          <div key={id} ref={(el) => { if (el) els.current.set(id, el); else els.current.delete(id); }}
+            className={`relative rounded-2xl ${on ? "z-20 shadow-2xl ring-2 ring-[#053877]/40" : "transition-transform"}`}
+            style={on ? { transform: `translateY(${drag!.dy}px)` } : undefined} data-testid={`sortable-${id}`}>
+            {render(id, (
+              <button type="button" onPointerDown={(e) => start(id, e)} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
+                onKeyDown={(e) => { if (e.key === "ArrowUp") { e.preventDefault(); step(id, -1); } if (e.key === "ArrowDown") { e.preventDefault(); step(id, 1); } }}
+                className="-ml-1 cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing" aria-label="Drag to move (or use the arrow keys)" title="Drag to move" data-testid={`grip-${id}`}>
+                <GripVertical className="h-4 w-4" />
+              </button>
+            ))}
+          </div>
+        );
+      })}
+    </>
   );
 }
 
@@ -1179,7 +1270,7 @@ function SectionEditor({ s, upd }: { s: BioSection; upd: (p: Partial<BioSection>
  */
 const EMOJIS = ["❤️", "🥰", "😊", "😂", "🥹", "😍", "🙏", "👏", "💪", "🎉", "🎂", "🎁", "🏠", "👨‍👩‍👧‍👦", "👪", "🤗", "😢", "✨", "⭐", "🌟", "🇺🇸", "🦅", "🎖️", "🪖", "⚓", "✈️", "🫡", "💙", "💛", "🧡", "💚", "💜", "🌻", "🌹", "☀️", "🙌", "👍", "🎙️", "🎧", "📸"];
 
-function TextEditor({ body, align, onBody, onAlign, rows = 5, maxLength = 2000, placeholder = "Write something. Select words, then B, I or U.", emoji = false, testid = "bio-text-body" }: { body: string; align: BioAlign; onBody: (v: string) => void; onAlign: (v: BioAlign) => void; rows?: number; maxLength?: number; placeholder?: string; emoji?: boolean; testid?: string }) {
+function TextEditor({ body, align = "left", onBody, onAlign, rows = 5, maxLength = 2000, placeholder = "Write something. Select words, then B, I or U.", emoji = true, testid = "bio-text-body" }: { body: string; align?: BioAlign; onBody: (v: string) => void; onAlign?: (v: BioAlign) => void; rows?: number; maxLength?: number; placeholder?: string; emoji?: boolean; testid?: string }) {
   const box = useRef<HTMLTextAreaElement>(null);
   const [emojis, setEmojis] = useState(false);
   const insert = (text: string) => {
@@ -1204,10 +1295,12 @@ function TextEditor({ body, align, onBody, onAlign, rows = 5, maxLength = 2000, 
   return (
     <div className="overflow-hidden rounded-xl border border-input bg-background focus-within:ring-2 focus-within:ring-ring">
       <div className="flex items-center gap-0.5 border-b border-border bg-muted/40 px-1.5 py-1" role="toolbar" aria-label="Text tools">
-        {([["left", AlignLeft, "Align left"], ["center", AlignCenter, "Centre"], ["right", AlignRight, "Align right"]] as const).map(([v, Icon, l]) => (
-          <button key={v} type="button" onClick={() => onAlign(v)} className={tool(align === v)} aria-label={l} title={l} aria-pressed={align === v} data-testid={`bio-text-${v}`}><Icon className="h-4 w-4" /></button>
-        ))}
-        <span className="mx-1 h-5 w-px bg-border" />
+        {onAlign && <>
+          {([["left", AlignLeft, "Align left"], ["center", AlignCenter, "Centre"], ["right", AlignRight, "Align right"]] as const).map(([v, Icon, l]) => (
+            <button key={v} type="button" onClick={() => onAlign(v)} className={tool(align === v)} aria-label={l} title={l} aria-pressed={align === v} data-testid={`bio-text-${v}`}><Icon className="h-4 w-4" /></button>
+          ))}
+          <span className="mx-1 h-5 w-px bg-border" />
+        </>}
         {([["**", Bold, "Bold"], ["*", Italic, "Italic"], ["__", Underline, "Underline"]] as const).map(([m, Icon, l]) => (
           <button key={l} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap(m)} className={tool(false)} aria-label={l} title={l} data-testid={`bio-text-${l.toLowerCase()}`}><Icon className="h-4 w-4" /></button>
         ))}
@@ -1380,32 +1473,6 @@ function VoiceRecorder({ value, preview, onChange }: { value: string; preview: s
   );
 }
 
-/**
- * A view's sections, in their order: move one up or down, switch it off or on.
- * One with nothing in it yet says so (it shows once it has something).
- */
-function SectionsCard<T extends string>({ title, all, order, hidden, empty, onChange }: { title: string; all: readonly { id: T; label: string }[]; order: T[]; hidden: T[]; empty: Partial<Record<T, boolean>>; onChange: (order: T[], hidden: T[]) => void }) {
-  const list = arrange(all, order);
-  const move = (i: number, dir: -1 | 1) => { const x = [...list]; const j = i + dir; if (j < 0 || j >= x.length) return; [x[i], x[j]] = [x[j], x[i]]; onChange(x, hidden); };
-  return (
-    <Card icon={Layers} tone="blue" title={title}>
-      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border">
-        {list.map((id, i) => {
-          const off = hidden.includes(id);
-          const label = all.find((x) => x.id === id)?.label ?? id;
-          return (
-            <div key={id} className={`flex items-center gap-2 px-2.5 py-2 ${off ? "bg-muted/40" : ""}`} data-testid={`section-row-${id}`}>
-              <span className="flex flex-col"><button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="rounded text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label={`Move ${label} up`}><ArrowUp className="h-3.5 w-3.5" /></button><button type="button" onClick={() => move(i, 1)} disabled={i === list.length - 1} className="rounded text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label={`Move ${label} down`}><ArrowDown className="h-3.5 w-3.5" /></button></span>
-              <span className={`min-w-0 flex-1 text-sm ${off ? "text-muted-foreground line-through" : "font-medium"}`}>{label}{!off && empty[id] && <span className="ml-1.5 text-[11px] font-normal text-muted-foreground no-underline">· nothing in it yet</span>}</span>
-              <Switch checked={!off} onCheckedChange={(v) => onChange(list, v ? hidden.filter((x) => x !== id) : [...hidden, id])} aria-label={`${label} ${off ? "off" : "on"}`} />
-            </div>
-          );
-        })}
-      </div>
-    </Card>
-  );
-}
-
 /** A video: paste a link (YouTube, Vimeo, Instagram, TikTok), or upload one from the computer or phone. */
 function VideoPick({ value, onChange, testid }: { value: string; onChange: (v: string) => void; testid: string }) {
   const { toast } = useToast();
@@ -1464,52 +1531,20 @@ function BrandsTab({ d, change, url, kit, episodes }: { d: Page; change: (p: Par
     ["Social followers", n?.reach ? fmt(n.reach) : null, "Connect your social accounts in Integrations"],
     ["Page views, last 30 days", n?.pageViews30 ? fmt(n.pageViews30) : null, "Share your SmartLink"],
   ];
-  return (
-    <div className="space-y-4">
-      <Card icon={Handshake} tone="gold" title="Your media kit" action={<Switch checked={b.on} onCheckedChange={(v) => set({ on: v }, true)} aria-label="Media kit on" data-testid="brands-on" />}>
-        {b.on ? <p className="-mt-1 truncate text-xs text-muted-foreground">{link.replace(/^https?:\/\/(www\.)?/, "")} · send it to any brand</p> : <p className="-mt-1 text-xs text-muted-foreground">Off: brands can't open it.</p>}
-        {b.on && (
-          <div className="flex gap-2">
-            <Button onClick={() => void navigator.clipboard.writeText(link).then(() => toast({ title: "Media kit link copied" }))} className="flex-1 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="brands-copy"><Copy className="h-4 w-4" /> Copy link</Button>
-            <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={link} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open</a></Button>
-          </div>
-        )}
-        <ViewPhoto kind="brands" url={b.photo ?? ""} fallback={d.avatarUrl} note="A professional headshot works best for brands." onChange={(u) => set({ photo: u }, true)} />
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
-          <div><p className="text-sm font-semibold">{kit?.podcast ? "Sponsor this show" : "Work with me"} button</p><p className="text-xs text-muted-foreground">Brands ask to sponsor you from it. Our partnerships team helps you close the deal.</p></div>
-          <Switch checked={b2.sponsorOn} onCheckedChange={(v) => set({ sponsorOn: v }, true)} data-testid="brands-sponsor-on" />
-        </div>
-      </Card>
-
-      <Card icon={LayoutTemplate} tone="violet" title="Top of your kit">
-        <LayoutTiles d={d} value={b2.layout} onPick={(v) => set({ layout: v }, true)} photo={b2.photo || d.avatarUrl} own={{ label: "Media kit", art: <span className="relative flex h-16 flex-col items-center overflow-hidden rounded-lg" style={{ background: `linear-gradient(145deg, ${d.theme.color}, #000741)` }}><span className="mt-2 h-7 w-7 rounded-full ring-2 ring-white/40" style={{ background: (b2.photo || d.avatarUrl) ? `center/cover url(${b2.photo || d.avatarUrl})` : "#888" }} /><span className="mt-1.5 h-1 w-10 rounded bg-white/90" /><span className="mt-1 h-1.5 w-8 rounded-full bg-[#F0A71F]" /></span> }} />
-      </Card>
-
-      <SectionsCard title="On your kit, in this order" all={BRANDS_SECTIONS} order={b2.order} hidden={b2.hidden} empty={{ video: !b2.video, sample: !b2.sample, rates: !b2.showRates, partners: !b2.partners.length, episodes: !kit?.podcast, sponsor: !b2.sponsorOn }} onChange={(order, hidden) => set({ order, hidden }, true)} />
-
-      <Card icon={User} tone="blue" title="About you, for brands">
-        <Field label="Name brands see" hint="Your own name usually works best here, even if your page uses the show's.">
-          <Input value={b2.name} onChange={(e) => set({ name: e.target.value })} maxLength={80} placeholder={d.displayName || "Your name"} data-testid="brands-name" />
-        </Field>
-        <div>
-          <div className="mb-1 flex items-end justify-between gap-2">
-            <span className="text-sm font-semibold">Bio for brands</span>
-            {d.bio && !b2.pitch && <button type="button" onClick={() => set({ pitch: d.bio.slice(0, 400) })} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Start from my page's bio</button>}
-          </div>
-          <Textarea value={b2.pitch} onChange={(e) => set({ pitch: e.target.value })} rows={4} maxLength={400} placeholder="Marine veteran and host of Marine OCS Blog. I help officer candidates get through OCS, and brands reach them the month before they ship." data-testid="brands-pitch" />
-          <p className="mt-1 text-xs text-muted-foreground">Written for brands: who you are, who you reach, why it works. Only this shows on your kit.</p>
-        </div>
-        <Field label="Who listens and follows">
-          <Textarea value={b2.audience} onChange={(e) => set({ audience: e.target.value })} rows={2} maxLength={400} placeholder="Officer candidates, their families and recent veterans, mostly 22–35, across the US." />
-        </Field>
-      </Card>
-
-      <Card icon={Video} tone="violet" title="Your reel">
-        <p className="-mt-1 text-xs text-muted-foreground">A video brands can watch right on your kit: your best reel, a past sponsored spot, or a short intro.</p>
-        <VideoPick value={b2.video} onChange={(v) => set({ video: v }, true)} testid="brands-video" />
-      </Card>
-
-      <Card icon={Headphones} tone="gold" title="A sample to hear">
+  const fold = useFold("brands");
+  // A section's switch: most just show or hide; rates and the sponsor form have their own switch too.
+  const shown = (id: BrandsSectionId) => !b2.hidden.includes(id) && (id === "rates" ? b2.showRates : id === "sponsor" ? b2.sponsorOn : true);
+  const show = (id: BrandsSectionId, v: boolean) => set({ hidden: v ? b2.hidden.filter((x) => x !== id) : [...b2.hidden, id], ...(id === "rates" ? { showRates: v } : id === "sponsor" ? { sponsorOn: v } : {}) }, true);
+  const order = arrange(BRANDS_SECTIONS, b2.order);
+  const card = (id: BrandsSectionId, grip: React.ReactNode, icon: typeof User, tone: keyof typeof TONES, title: string, body: React.ReactNode) => (
+    <Card icon={icon} tone={tone} title={title} fold={fold.of(id)} on={{ checked: shown(id), set: (v) => show(id, v) }} grip={grip} testid={`brands-card-${id}`}>{body}</Card>
+  );
+  const sections: Record<BrandsSectionId, (grip: React.ReactNode) => React.ReactNode> = {
+    video: (g) => card("video", g, Video, "violet", "Your reel", <>
+      <p className="-mt-1 text-xs text-muted-foreground">A video brands can watch right on your kit: your best reel, a past sponsored spot, or a short intro.</p>
+      <VideoPick value={b2.video} onChange={(v) => set({ video: v }, true)} testid="brands-video" />
+    </>),
+    sample: (g) => card("sample", g, Headphones, "gold", "A sample to hear", <>
         <p className="-mt-1 text-xs text-muted-foreground">An episode brands can press play on. Pick one of yours, or paste a link to an episode (or a feed, for its latest).</p>
         {episodes.length > 0 && (
           <select value={b2.sample.startsWith("ep:") ? b2.sample : ""} onChange={(e) => set({ sample: e.target.value }, true)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" data-testid="brands-sample-ep">
@@ -1519,9 +1554,8 @@ function BrandsTab({ d, change, url, kit, episodes }: { d: Page; change: (p: Par
         )}
         <Input key={b2.sample.startsWith("ep:") ? "ep" : `u-${b2.sample}`} defaultValue={b2.sample.startsWith("ep:") ? "" : b2.sample} onBlur={(e) => { const v = e.target.value.trim(); if (v !== b2.sample && (v || !b2.sample.startsWith("ep:"))) set({ sample: v }, true); }} placeholder={episodes.length ? "Or paste a link (https://…mp3, or an RSS feed)" : "Paste a link (https://…mp3, or an RSS feed)"} data-testid="brands-sample-url" />
         {b2.sample && !b2.sample.startsWith("ep:") && kit?.media?.sample?.from !== b2.sample && <p className="text-[11px] text-muted-foreground">We read the link when it saves. If nothing shows on your kit, check it's an audio file or a podcast feed.</p>}
-      </Card>
-
-      <Card icon={Eye} tone="blue" title="Your numbers, measured by us">
+    </>),
+    stats: (g) => card("stats", g, Eye, "blue", "Your numbers, measured by us", <>
         {rows.some(([, v]) => v) && (
           <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-border">
             {rows.filter(([, v]) => v).map(([label, v], i) => (
@@ -1533,15 +1567,18 @@ function BrandsTab({ d, change, url, kit, episodes }: { d: Page; change: (p: Par
           </div>
         )}
         {rows.some(([, v]) => !v) && <p className="text-xs text-muted-foreground">More to show: {Array.from(new Set(rows.filter(([, v]) => !v).map(([, , how]) => how))).join(" · ")}.</p>}
-      </Card>
-
-      <AudienceCard kit={kit} />
-
-      <Card icon={Tag} tone="violet" title="Sponsorship rates">
-        <div className="flex items-center justify-between gap-3">
-          <div><p className="text-sm font-semibold">Show my rates</p><p className="text-xs text-muted-foreground">Worked out from your social following and, if you have a show, its downloads, like Know Your Worth.</p></div>
-          <Switch checked={b.showRates} onCheckedChange={(v) => set({ showRates: v }, true)} disabled={!rates.length} data-testid="brands-rates" />
-        </div>
+    </>),
+    reach: (g) => card("reach", g, AtSign, "violet", "Social reach", n?.followers.length ? (
+      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border">
+        {n.followers.map((x) => <div key={x.platform} className="flex items-center justify-between px-3 py-2 text-sm"><span>{platformLabel(x.platform as SocialPlatform)}{x.username && !/^\d+$/.test(x.username) ? <span className="text-muted-foreground"> @{x.username.replace(/^@/, "")}</span> : null}</span><span className="font-semibold tabular-nums">{fmt(x.followers)}</span></div>)}
+      </div>
+    ) : <p className="text-xs text-muted-foreground">Connect your social accounts in Integrations and your followers show here.</p>),
+    audience: (g) => card("audience", g, Users, "violet", "Who listens", <>
+      <TextEditor body={b2.audience} onBody={(audience) => set({ audience })} rows={3} maxLength={400} placeholder="Officer candidates, their families and recent veterans, mostly 22–35, across the US." testid="brands-audience" />
+      <AudienceData kit={kit} />
+    </>),
+    rates: (g) => card("rates", g, Tag, "violet", "Sponsorship rates", <>
+      <p className="-mt-1 text-xs text-muted-foreground">Worked out from your social following and, if you have a show, its downloads, like Know Your Worth.</p>
         {rates.length ? rates.map((g) => (
           <div key={g.key}>
             <p className="mb-1 text-xs font-bold">{g.title}</p>
@@ -1553,9 +1590,8 @@ function BrandsTab({ d, change, url, kit, episodes }: { d: Page; change: (p: Par
             <p className="mt-1 text-[11px] text-muted-foreground">{g.note}</p>
           </div>
         )) : <p className="rounded-2xl border border-dashed border-border p-3 text-xs text-muted-foreground">Your rates appear here once you connect a social account in Integrations, or we can see your show's downloads.</p>}
-      </Card>
-
-      <Card icon={Handshake} tone="gold" title="Brands you've worked with">
+    </>),
+    partners: (g) => card("partners", g, Handshake, "gold", "Brands you've worked with", <>
         <p className="-mt-1 text-xs text-muted-foreground">Add their home page and we'll put their logo on your kit. Or just type the name.</p>
         {b.partners.map((p, i) => {
           const edit = (x: Partial<BioBrands["partners"][number]>, now = false) => set({ partners: b.partners.map((y, j) => (j === i ? { ...y, ...x } : y)) }, now);
@@ -1579,13 +1615,50 @@ function BrandsTab({ d, change, url, kit, episodes }: { d: Page; change: (p: Par
           );
         })}
         <button type="button" onClick={() => set({ partners: [...b.partners, { id: newId(), name: "", url: "" }] })} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] dark:text-[#8fb5e8]" data-testid="brands-add-partner"><Plus className="h-3.5 w-3.5" /> Add a brand</button>
+    </>),
+    episodes: (g) => card("episodes", g, Headphones, "blue", "Latest episodes", <p className="-mt-1 text-xs text-muted-foreground">{kit?.podcast ? `Your latest three from ${kit.podcast.title}, with a link to listen.` : "Shows once you have a podcast here or connected."}</p>),
+    sponsor: (g) => card("sponsor", g, Handshake, "gold", kit?.podcast ? "Sponsor this show" : "Work with me", <p className="-mt-1 text-xs text-muted-foreground">The button at the top and a form at the end. Brands ask to sponsor you, and our partnerships team helps you close the deal.</p>),
+  };
+  return (
+    <div className="space-y-4">
+      <FoldAll fold={fold} ids={["kit", "top", "about", ...order]} />
+      <Card icon={Handshake} tone="gold" title="Your media kit" fold={fold.of("kit")} on={{ checked: b.on, set: (v) => set({ on: v }, true) }} testid="brands-card-kit">
+        {b.on ? <p className="-mt-1 truncate text-xs text-muted-foreground">{link.replace(/^https?:\/\/(www\.)?/, "")} · send it to any brand</p> : <p className="-mt-1 text-xs text-muted-foreground">Off: brands can't open it.</p>}
+        {b.on && (
+          <div className="flex gap-2">
+            <Button onClick={() => void navigator.clipboard.writeText(link).then(() => toast({ title: "Media kit link copied" }))} className="flex-1 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="brands-copy"><Copy className="h-4 w-4" /> Copy link</Button>
+            <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={link} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open</a></Button>
+          </div>
+        )}
       </Card>
+
+      <Card icon={LayoutTemplate} tone="violet" title="Top of your kit" fold={fold.of("top")}>
+        <LayoutTiles d={d} value={b2.layout} onPick={(v) => set({ layout: v }, true)} photo={b2.photo || d.avatarUrl} own={{ label: "Media kit", art: <span className="relative flex h-16 flex-col items-center overflow-hidden rounded-lg" style={{ background: `linear-gradient(145deg, ${d.theme.color}, #000741)` }}><span className="mt-2 h-7 w-7 rounded-full ring-2 ring-white/40" style={{ background: (b2.photo || d.avatarUrl) ? `center/cover url(${b2.photo || d.avatarUrl})` : "#888" }} /><span className="mt-1.5 h-1 w-10 rounded bg-white/90" /><span className="mt-1 h-1.5 w-8 rounded-full bg-[#F0A71F]" /></span> }} />
+      </Card>
+
+      <Card icon={User} tone="blue" title="About you, for brands" fold={fold.of("about")}>
+        <ViewPhoto kind="brands" url={b.photo ?? ""} fallback={d.avatarUrl} note="A professional headshot works best for brands." onChange={(u) => set({ photo: u }, true)} />
+        <Field label="Name brands see" hint="Your own name usually works best here, even if your page uses the show's.">
+          <Input value={b2.name} onChange={(e) => set({ name: e.target.value })} maxLength={80} placeholder={d.displayName || "Your name"} data-testid="brands-name" />
+        </Field>
+        <div>
+          <div className="mb-1 flex items-end justify-between gap-2">
+            <span className="text-sm font-semibold">Bio for brands</span>
+            {d.bio && !b2.pitch && <button type="button" onClick={() => set({ pitch: d.bio.slice(0, 400) })} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Start from my page's bio</button>}
+          </div>
+          <TextEditor body={b2.pitch} onBody={(pitch) => set({ pitch })} rows={4} maxLength={400} placeholder="Marine veteran and host of Marine OCS Blog. I help officer candidates get through OCS, and brands reach them the month before they ship." testid="brands-pitch" />
+          <p className="mt-1 text-xs text-muted-foreground">Written for brands: who you are, who you reach, why it works. Only this shows on your kit.</p>
+        </div>
+      </Card>
+
+      <p className="px-1 pt-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">On your kit · drag to reorder</p>
+      <Sortable ids={order} onMove={(x) => set({ order: x }, true)} render={(id, grip) => sections[id](grip)} />
     </div>
   );
 }
 
-/** The audience data behind the kit: read from Discovery (once a month at most), shown to brands from our copy. */
-function AudienceCard({ kit }: { kit: BioBrandsPublic | null }) {
+/** The audience data behind the kit (inside Who listens): read from Discovery (once a month at most), shown to brands from our copy. */
+function AudienceData({ kit }: { kit: BioBrandsPublic | null }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
@@ -1603,7 +1676,7 @@ function AudienceCard({ kit }: { kit: BioBrandsPublic | null }) {
     } finally { setBusy(false); }
   };
   return (
-    <Card icon={Users} tone="violet" title="Your audience">
+    <div className="space-y-3 rounded-xl bg-muted/40 p-3">
       {a ? (
         <>
           <p className="text-sm">From <b>@{a.handle}</b> on {platformLabel(a.platform as SocialPlatform)}{a.asOf ? `, measured ${new Date(a.asOf).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}.</p>
@@ -1620,7 +1693,7 @@ function AudienceCard({ kit }: { kit: BioBrandsPublic | null }) {
           <Button onClick={() => void load()} disabled={busy} className="w-full gap-1.5 rounded-full bg-[#053877] hover:bg-[#0a4a99]" data-testid="brands-load-audience">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />} Add my audience data</Button>
         </>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -1663,49 +1736,26 @@ function FamilyTab({ d, change, flush, url, famPreview }: { d: Page; change: (p:
     change({ family: { ...f, key: r.page.family.key } });
     toast({ title: "New family link made", description: "The old link no longer works." });
   };
-  return (
-    <div className="space-y-4">
-      <Card icon={Heart} tone="gold" title="Your family private page" action={<Switch checked={f.on} onCheckedChange={(v) => set({ on: v }, true)} aria-label="Family page on" data-testid="family-on" />}>
-        {!f.on && <p className="-mt-1 text-xs text-muted-foreground">Off: the link doesn't open.</p>}
-        {f.on && f.key && (
-          <>
-            <div className="flex gap-2">
-              <Button onClick={() => void navigator.clipboard.writeText(link).then(() => toast({ title: "Family link copied", description: "Send it by text or email to the people you love." }))} className="flex-1 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="family-copy"><Copy className="h-4 w-4" /> Copy link</Button>
-              <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={link} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open</a></Button>
-              <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={`sms:?&body=${encodeURIComponent(`I made a page for you: ${link}`)}`}><MessageSquare className="h-4 w-4" /> Text</a></Button>
-            </div>
-            <button type="button" onClick={() => void newLink()} className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="family-reset"><RefreshCw className="h-3 w-3" /> Make a new link (the old one stops working)</button>
-          </>
-        )}
-        <ViewPhoto kind="family" url={f.photo ?? ""} fallback={d.heroUrl || d.avatarUrl} note="The big photo at the top. One with family, or in uniform." onChange={(u) => set({ photo: u }, true)} />
-      </Card>
-
-      <Card icon={LayoutTemplate} tone="violet" title="Top of the page">
-        <LayoutTiles d={d} value={f.layout ?? ""} onPick={(v) => set({ layout: v }, true)} photo={f.photo || d.avatarUrl} own={{ label: "Family", art: <span className="relative flex h-16 flex-col items-center justify-end overflow-hidden rounded-lg" style={{ background: (f.photo || d.heroUrl || d.avatarUrl) ? `center 25%/cover url(${f.photo || d.heroUrl || d.avatarUrl})` : `linear-gradient(145deg, ${d.theme.color}, #000741)` }}><span className="absolute inset-0 bg-gradient-to-b from-transparent to-black/80" /><span className="relative mb-2 h-1.5 w-10 rounded bg-white" /></span> }} />
-      </Card>
-
-      <SectionsCard title="On the page, in this order" all={FAMILY_SECTIONS} order={f.order ?? []} hidden={f.hidden ?? []} empty={{ note: !f.note.trim(), voice: !f.audio, video: !f.video, milestones: !f.milestones.length, photos: !f.photos.length, leave: !d.askEnabled }} onChange={(order, hidden) => set({ order, hidden }, true)} />
-
-      <Card icon={Sparkles} tone="green" title="In your words">
-        <Field label="Your name, for family" hint="What they call you. It's at the top and signs your note.">
-          <Input value={f.name ?? ""} onChange={(e) => set({ name: e.target.value })} maxLength={80} placeholder={d.displayName || "Your name"} data-testid="family-name" />
-        </Field>
-        <Field label="A note to your family" hint="It sits at the top, like a letter.">
-          <TextEditor body={f.note} align={f.noteAlign ?? "left"} onBody={(note) => set({ note })} onAlign={(noteAlign) => set({ noteAlign }, true)} rows={4} maxLength={1000} emoji placeholder="Mom, Dad: this is what I've been working on. Thank you for always being in my corner." testid="family-note-input" />
-        </Field>
-      </Card>
-
-      <Card icon={Mic} tone="gold" title="A voice message">
+  const fold = useFold("family");
+  const hidden = f.hidden ?? [];
+  const order = arrange(FAMILY_SECTIONS, f.order);
+  const card = (id: FamilySectionId, grip: React.ReactNode, icon: typeof User, tone: keyof typeof TONES, title: string, body: React.ReactNode) => (
+    <Card icon={icon} tone={tone} title={title} fold={fold.of(id)} on={{ checked: !hidden.includes(id), set: (v) => set({ hidden: v ? hidden.filter((x) => x !== id) : [...hidden, id] }, true) }} grip={grip} testid={`family-card-${id}`}>{body}</Card>
+  );
+  const sections: Record<FamilySectionId, (grip: React.ReactNode) => React.ReactNode> = {
+    note: (g) => card("note", g, Sparkles, "green", "A note to your family", <>
+      <TextEditor body={f.note} align={f.noteAlign ?? "left"} onBody={(note) => set({ note })} onAlign={(noteAlign) => set({ noteAlign }, true)} rows={4} maxLength={1000} placeholder="Mom, Dad: this is what I've been working on. Thank you for always being in my corner." testid="family-note-input" />
+      <p className="text-xs text-muted-foreground">Like a letter, signed with your name.</p>
+    </>),
+    voice: (g) => card("voice", g, Mic, "gold", "A voice message", <>
         <p className="-mt-1 text-xs text-muted-foreground">Record a message in your own voice. It plays near the top of their page.</p>
         <VoiceRecorder value={f.audio ?? ""} preview={famPreview?.media?.audio?.from === f.audio ? famPreview.media.audio.url : ""} onChange={(v) => set({ audio: v }, true)} />
-      </Card>
-
-      <Card icon={Video} tone="violet" title="A video for them">
+    </>),
+    video: (g) => card("video", g, Video, "violet", "A video for them", <>
         <p className="-mt-1 text-xs text-muted-foreground">A message from you, a homecoming, a moment from the show. It plays near the top.</p>
         <VideoPick value={f.video ?? ""} onChange={(v) => set({ video: v }, true)} testid="family-video" />
-      </Card>
-
-      <Card icon={Calendar} tone="blue" title="Along the way">
+    </>),
+    milestones: (g) => card("milestones", g, Calendar, "blue", "Along the way", <>
         {f.milestones.map((m, i) => (
           <div key={m.id} className="space-y-2 rounded-2xl border border-border p-3">
             <div className="flex gap-2">
@@ -1713,14 +1763,13 @@ function FamilyTab({ d, change, flush, url, famPreview }: { d: Page; change: (p:
               <Input value={m.title} onChange={(e) => set({ milestones: f.milestones.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)) })} placeholder="What happened" className="flex-1" />
               <button type="button" onClick={() => set({ milestones: f.milestones.filter((_, j) => j !== i) }, true)} className="px-1 text-muted-foreground hover:text-destructive" aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
             </div>
-            <Input value={m.note} onChange={(e) => set({ milestones: f.milestones.map((x, j) => (j === i ? { ...x, note: e.target.value } : x)) })} placeholder="A line about it (optional)" />
+            <TextEditor body={m.note} onBody={(note) => set({ milestones: f.milestones.map((x, j) => (j === i ? { ...x, note } : x)) })} rows={2} maxLength={400} placeholder="A line about it (optional)" testid="family-moment-note" />
           </div>
         ))}
         <button type="button" onClick={() => set({ milestones: [...f.milestones, { id: newId(), when: "", title: "", note: "" }] })} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] dark:text-[#8fb5e8]" data-testid="family-add-milestone"><Plus className="h-3.5 w-3.5" /> Add a moment</button>
         {!f.milestones.length && <p className="text-xs text-muted-foreground">Enlisting, graduating OCS, a deployment, coming home, your first episode.</p>}
-      </Card>
-
-      <Card icon={ImagePlus} tone="violet" title="Photos">
+    </>),
+    photos: (g) => card("photos", g, ImagePlus, "violet", "Photos", <>
         <input ref={photoIn} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={(e) => e.target.files?.length && void addPhotos(e.target.files)} />
         {f.photos.length > 0 && (
           <div className="grid grid-cols-3 gap-2">
@@ -1738,8 +1787,35 @@ function FamilyTab({ d, change, flush, url, famPreview }: { d: Page; change: (p:
         <Button variant="outline" onClick={() => photoIn.current?.click()} disabled={uploading > 0 || f.photos.length >= 24} className="w-full gap-1.5 rounded-xl border-dashed" data-testid="family-add-photos">
           {uploading > 0 ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading {uploading}…</> : <><ImagePlus className="h-4 w-4" /> Add photos</>}
         </Button>
+    </>),
+  };
+  return (
+    <div className="space-y-4">
+      <FoldAll fold={fold} ids={["page", "top", ...order]} />
+      <Card icon={Heart} tone="gold" title="Your family private page" fold={fold.of("page")} on={{ checked: f.on, set: (v) => set({ on: v }, true) }} testid="family-card-page">
+        {!f.on && <p className="-mt-1 text-xs text-muted-foreground">Off: the link doesn't open.</p>}
+        {f.on && f.key && (
+          <>
+            <div className="flex gap-2">
+              <Button onClick={() => void navigator.clipboard.writeText(link).then(() => toast({ title: "Family link copied", description: "Send it by text or email to the people you love." }))} className="flex-1 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="family-copy"><Copy className="h-4 w-4" /> Copy link</Button>
+              <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={link} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open</a></Button>
+              <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={`sms:?&body=${encodeURIComponent(`I made a page for you: ${link}`)}`}><MessageSquare className="h-4 w-4" /> Text</a></Button>
+            </div>
+            <button type="button" onClick={() => void newLink()} className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="family-reset"><RefreshCw className="h-3 w-3" /> Make a new link (the old one stops working)</button>
+          </>
+        )}
+        <Field label="Your name, for family" hint="What they call you. It's at the top and signs your note.">
+          <Input value={f.name ?? ""} onChange={(e) => set({ name: e.target.value })} maxLength={80} placeholder={d.displayName || "Your name"} data-testid="family-name" />
+        </Field>
+        <ViewPhoto kind="family" url={f.photo ?? ""} fallback={d.heroUrl || d.avatarUrl} note="The big photo at the top. One with family, or in uniform." onChange={(u) => set({ photo: u }, true)} />
       </Card>
 
+      <Card icon={LayoutTemplate} tone="violet" title="Top of the page" fold={fold.of("top")}>
+        <LayoutTiles d={d} value={f.layout ?? ""} onPick={(v) => set({ layout: v }, true)} photo={f.photo || d.avatarUrl} own={{ label: "Family", art: <span className="relative flex h-16 flex-col items-center justify-end overflow-hidden rounded-lg" style={{ background: (f.photo || d.heroUrl || d.avatarUrl) ? `center 25%/cover url(${f.photo || d.heroUrl || d.avatarUrl})` : `linear-gradient(145deg, ${d.theme.color}, #000741)` }}><span className="absolute inset-0 bg-gradient-to-b from-transparent to-black/80" /><span className="relative mb-2 h-1.5 w-10 rounded bg-white" /></span> }} />
+      </Card>
+
+      <p className="px-1 pt-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">On the page · drag to reorder</p>
+      <Sortable ids={order} onMove={(x) => set({ order: x }, true)} render={(id, grip) => sections[id](grip)} />
     </div>
   );
 }
