@@ -9,7 +9,7 @@ import { signedRecordingUrl } from "./recordingStorage.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { sendPodcastOwnerCodeEmail } from "./email.js";
 import { XMLParser } from "fast-xml-parser";
-import { hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
+import { bioPages, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
 
 /**
  * Podcast hosting, all MilitaryVoices: a podcaster's show and its episodes,
@@ -380,8 +380,11 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     const [s] = await db.select().from(hostedShows).where(eq(hostedShows.slug, String(req.params.slug))).limit(1);
     if (!s || s.newFeedUrl) return res.status(404).json({ message: "No such show." });
     const eps = (await episodesOf(s.id)).filter(live);
+    // A message to the host goes through their page's chat (the same conversation, the same Messages).
+    const [page] = await db.select({ handle: bioPages.handle, published: bioPages.published, askEnabled: bioPages.askEnabled }).from(bioPages).where(eq(bioPages.email, s.email)).limit(1);
     res.setHeader("Cache-Control", "public, max-age=120, s-maxage=120");
     res.json({
+      chat: page?.published && page.askEnabled ? page.handle : null,
       show: { title: s.title, description: s.description, author: s.author || s.ownerName, artworkUrl: s.artworkUrl, category: s.category, website: s.website, appleUrl: s.appleUrl, spotifyUrl: s.spotifyUrl, feedUrl: feedUrl(s.slug) },
       episodes: eps.map((e) => ({ id: e.id, title: e.title, notes: e.notesFormat === "html" ? notesText(e.description) : e.description, publishedAt: e.publishedAt, durationSec: e.durationSec, episodeNumber: e.episodeNumber, season: e.season, artworkUrl: e.artworkUrl, audio: `${ORIGIN}/e/${e.id}.${extOf(e.mime)}` })),
     });

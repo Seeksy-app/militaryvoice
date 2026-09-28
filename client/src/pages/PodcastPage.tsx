@@ -4,6 +4,7 @@ import { Check, Copy, Pause, Play, Radio } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { useToast } from "@/hooks/use-toast";
+import { Chat, type ChatMsg } from "@/components/BioPageView";
 
 /**
  * A show hosted on MilitaryVoices, in public: its art and story, where to
@@ -12,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
  */
 
 type Ep = { id: number; title: string; notes: string; publishedAt: string; durationSec: number; episodeNumber: number | null; season: number | null; artworkUrl: string; audio: string };
-type Data = { show: { title: string; description: string; author: string; artworkUrl: string; category: string; website: string; appleUrl: string; spotifyUrl: string; feedUrl: string }; episodes: Ep[] };
+type Data = { chat: string | null; show: { title: string; description: string; author: string; artworkUrl: string; category: string; website: string; appleUrl: string; spotifyUrl: string; feedUrl: string }; episodes: Ep[] };
 
 const hms = (sec: number) => { const s = Math.round(sec); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
 const dateOf = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -25,8 +26,28 @@ export default function PodcastPage({ slug }: { slug: string }) {
   useEffect(() => { if (q.data?.show.title) document.title = `${q.data.show.title} · MilitaryVoices.ai`; }, [q.data?.show.title]);
 
   const s = q.data?.show;
+  const [chat, setChat] = useState(false);
+  const dark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
+  const handle = q.data?.chat;
   return (
     <div className="min-h-screen bg-background">
+      {s && handle && (
+        <>
+          {chat && <div className="fixed inset-0 z-30" onClick={() => setChat(false)} aria-hidden />}
+          <Chat corner handle={handle} name={s.title} avatar={s.artworkUrl} accent={dark ? "#F0A71F" : "#053877"} ink={dark ? "#ffffff" : "#0b1020"} sub={dark ? "rgba(255,255,255,0.68)" : "rgba(11,16,32,0.62)"} line={dark ? "rgba(255,255,255,0.12)" : "rgba(11,16,32,0.10)"} dark={dark} preview={false} open={chat} setOpen={setChat}
+            onAsk={async (x) => {
+              const r = await fetch(`/api/public/bio/${encodeURIComponent(handle)}/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(x) });
+              const j = (await r.json().catch(() => ({}))) as { message?: string; token?: string; createdAt?: string };
+              if (!r.ok) throw new Error(j.message || "Couldn't send that. Try again.");
+              return j;
+            }}
+            onLoad={async (tokens) => {
+              const r = await fetch(`/api/public/bio/${encodeURIComponent(handle)}/messages`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tokens }) });
+              if (!r.ok) throw new Error("Couldn't load your messages.");
+              return ((await r.json()) as { messages: ChatMsg[] }).messages;
+            }} />
+        </>
+      )}
       <NavBar />
       <main className="mx-auto max-w-4xl px-4 pb-16 pt-8 sm:px-6">
         {q.isLoading ? (

@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { BioPageView } from "@/components/BioPageView";
@@ -445,12 +444,12 @@ function Tile({ on, onClick, label, note, testid, children }: { on: boolean; onC
 
 // ---- Content -----------------------------------------------------------------------
 
-const KINDS: { type: BioSectionType; label: string; hint: string; icon: typeof Link2 }[] = [
-  { type: "links", label: "Links", hint: "Buttons to your site, store, anything", icon: Link2 },
-  { type: "video", label: "Video", hint: "A YouTube or Vimeo video", icon: Video },
-  { type: "promo", label: "Promo code", hint: "A sponsor's code, with a tap to copy", icon: Tag },
-  { type: "meeting", label: "Book a meeting", hint: "Your Calendly or booking link", icon: Calendar },
-  { type: "text", label: "Text", hint: "A few words of your own", icon: Type },
+const KINDS: { type: BioSectionType; label: string; hint: string; icon: typeof Link2; tone: string }[] = [
+  { type: "links", label: "Links", hint: "Buttons to your site, store, anything", icon: Link2, tone: "bg-[#053877]/10 text-[#053877] dark:bg-[#8fb5e8]/15 dark:text-[#8fb5e8]" },
+  { type: "video", label: "Video", hint: "A YouTube or Vimeo video", icon: Video, tone: "bg-red-500/12 text-red-600 dark:text-red-400" },
+  { type: "promo", label: "Promo code", hint: "A sponsor's code, tap to copy", icon: Tag, tone: "bg-[#F0A71F]/15 text-[#b36b00] dark:text-[#F0A71F]" },
+  { type: "meeting", label: "Book a meeting", hint: "Your Calendly or booking link", icon: Calendar, tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
+  { type: "text", label: "Text", hint: "A few words of your own", icon: Type, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-300" },
 ];
 function blank(type: BioSectionType): BioSection {
   const base = { id: newId(), visible: true, title: "" };
@@ -468,35 +467,42 @@ function ContentTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: b
   const put = (s: BioSection[]) => change({ sections: s });
   const upd = (id: string, patch: Partial<BioSection>) => put(d.sections.map((x) => (x.id === id ? ({ ...x, ...patch } as BioSection) : x)));
   const move = (i: number, dir: -1 | 1) => { const s = [...d.sections]; const j = i + dir; if (j < 0 || j >= s.length) return; [s[i], s[j]] = [s[j], s[i]]; put(s); };
+  const add = (type: BioSectionType) => { const s = blank(type); put([...d.sections, s]); setOpen(s.id); };
   return (
-    <div className="space-y-3">
-      <p className="rounded-xl bg-muted/50 p-3 text-xs text-muted-foreground">Your podcast always sits first, under your name. What you add here goes below it, in this order.</p>
-      {d.sections.map((s, i) => {
-        const k = KINDS.find((x) => x.type === s.type)!;
-        return (
-          <div key={s.id} className="rounded-2xl border border-border bg-card" data-testid={`bio-section-${s.type}`}>
-            <div className="flex items-center gap-2 p-3">
-              <span className="flex flex-col"><button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-muted-foreground disabled:opacity-30" aria-label="Up"><ArrowUp className="h-3.5 w-3.5" /></button><button type="button" onClick={() => move(i, 1)} disabled={i === d.sections.length - 1} className="text-muted-foreground disabled:opacity-30" aria-label="Down"><ArrowDown className="h-3.5 w-3.5" /></button></span>
-              <k.icon className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" />
-              <button type="button" onClick={() => setOpen(open === s.id ? null : s.id)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-semibold">{s.title || k.label}</span><span className="block text-xs text-muted-foreground">{k.label}</span></button>
-              <button type="button" onClick={() => upd(s.id, { visible: !s.visible })} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted" aria-label={s.visible ? "Hide" : "Show"}>{s.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button>
-              <button type="button" onClick={() => put(d.sections.filter((x) => x.id !== s.id))} className="rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-destructive dark:hover:bg-red-950" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
-              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open === s.id ? "rotate-180" : ""}`} />
-            </div>
-            {open === s.id && <div className="space-y-2 border-t border-border p-3"><SectionEditor s={s} upd={(p) => upd(s.id, p)} /></div>}
-          </div>
-        );
-      })}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild><Button className="w-full gap-1.5 rounded-xl bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="bio-add"><Plus className="h-4 w-4" /> Add to your page</Button></DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-72">
+    <div className="space-y-4">
+      <Card icon={Plus} tone="gold" title="Add to your page">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {KINDS.map((k) => (
-            <DropdownMenuItem key={k.type} onSelect={() => { const s = blank(k.type); put([...d.sections, s]); setOpen(s.id); }} className="gap-3 py-2">
-              <k.icon className="h-4 w-4" /><span><span className="block text-sm font-medium">{k.label}</span><span className="block text-xs text-muted-foreground">{k.hint}</span></span>
-            </DropdownMenuItem>
+            <button key={k.type} type="button" onClick={() => add(k.type)} className="group flex items-center gap-3 rounded-2xl border-2 border-border bg-background p-2.5 text-left transition-all hover:-translate-y-0.5 hover:border-[#053877]/40 hover:shadow-md" data-testid={`bio-add-${k.type}`}>
+              <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${k.tone}`}><k.icon className="h-[18px] w-[18px]" /></span>
+              <span className="min-w-0"><span className="block text-sm font-bold">{k.label}</span><span className="block text-[11px] leading-snug text-muted-foreground">{k.hint}</span></span>
+            </button>
           ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+        </div>
+      </Card>
+      <Card icon={Layers} tone="blue" title="On your page, in this order">
+        <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-r from-[#053877] to-[#0a4a99] p-3 text-white">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F0A71F] text-[#1a1200]"><Headphones className="h-[18px] w-[18px]" /></span>
+          <span className="min-w-0 flex-1"><span className="block text-sm font-bold">Your podcast</span><span className="block text-[11px] text-white/70">Always first, under your name</span></span>
+        </div>
+        {d.sections.length === 0 && <p className="rounded-2xl border-2 border-dashed border-border p-4 text-center text-sm text-muted-foreground">Nothing else yet. Pick something above and it goes here.</p>}
+        {d.sections.map((s, i) => {
+          const k = KINDS.find((x) => x.type === s.type)!;
+          return (
+            <div key={s.id} className={`rounded-2xl border-2 bg-background transition-colors ${open === s.id ? "border-[#053877]/50 shadow-sm dark:border-[#8fb5e8]/50" : "border-border"} ${s.visible ? "" : "opacity-60"}`} data-testid={`bio-section-${s.type}`}>
+              <div className="flex items-center gap-2 p-2.5">
+                <span className="flex flex-col"><button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="rounded text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label="Up"><ArrowUp className="h-3.5 w-3.5" /></button><button type="button" onClick={() => move(i, 1)} disabled={i === d.sections.length - 1} className="rounded text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label="Down"><ArrowDown className="h-3.5 w-3.5" /></button></span>
+                <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${k.tone}`}><k.icon className="h-[18px] w-[18px]" /></span>
+                <button type="button" onClick={() => setOpen(open === s.id ? null : s.id)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-semibold">{s.title || k.label}</span><span className="block text-xs text-muted-foreground">{k.label}{s.visible ? "" : " · hidden"}</span></button>
+                <button type="button" onClick={() => upd(s.id, { visible: !s.visible })} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted" aria-label={s.visible ? "Hide" : "Show"}>{s.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button>
+                <button type="button" onClick={() => put(d.sections.filter((x) => x.id !== s.id))} className="rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-destructive dark:hover:bg-red-950" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
+                <button type="button" onClick={() => setOpen(open === s.id ? null : s.id)} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted" aria-label={open === s.id ? "Close" : "Edit"}><ChevronDown className={`h-4 w-4 transition-transform ${open === s.id ? "rotate-180" : ""}`} /></button>
+              </div>
+              {open === s.id && <div className="space-y-2 border-t border-border p-3"><SectionEditor s={s} upd={(p) => upd(s.id, p)} /></div>}
+            </div>
+          );
+        })}
+      </Card>
     </div>
   );
 }

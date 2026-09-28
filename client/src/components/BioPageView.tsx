@@ -16,10 +16,18 @@ type Ev = (kind: "view" | "click" | "play" | "share", label?: string) => void;
 const hms = (sec: number) => { const s = Math.round(sec); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
 const dateOf = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "");
 /** Black or white text, whichever reads on this colour. */
-function onColor(hex: string): string {
+function lum(hex: string): number {
   const n = parseInt(hex.slice(1), 16);
   const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.45 ? "#0b1020" : "#ffffff";
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function onColor(hex: string): string {
+  return lum(hex) > 0.45 ? "#0b1020" : "#ffffff";
+}
+/** Their colour, unless it would vanish into the page behind it (navy on a dark page): then white, or navy on a light one. */
+function standOut(color: string, page: string, dark: boolean): string {
+  const [a, b] = [lum(color), lum(page)];
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 2.4 ? color : dark ? "#ffffff" : "#053877";
 }
 const youtubeEmbed = (u: string) => {
   const m = u.match(/(?:youtu\.be\/|v=|shorts\/|embed\/|live\/)([\w-]{11})/);
@@ -49,12 +57,14 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
 }) {
   const t = data.theme;
   const dark = t.shade === "dark";
-  const accent = t.color.toLowerCase() === "#ffffff" && !dark ? "#053877" : t.color;
+  const theirs = t.color.toLowerCase() === "#ffffff" && !dark ? "#053877" : t.color;
+  // Buttons, bubbles and marks sit on the page, so they take a colour that shows on it.
+  const accent = standOut(theirs, dark ? "#0b1020" : "#f5f6fa", dark);
   const ink = dark ? "#ffffff" : "#0b1020";
   const sub = dark ? "rgba(255,255,255,0.68)" : "rgba(11,16,32,0.62)";
   const card = dark ? "rgba(255,255,255,0.07)" : "#ffffff";
   const line = dark ? "rgba(255,255,255,0.12)" : "rgba(11,16,32,0.10)";
-  const bg = t.template === "vibrant" ? `linear-gradient(180deg, ${accent} 0%, ${dark ? "#0b1020" : "#f7f8fb"} 70%)` : dark ? "#0b1020" : "#f5f6fa";
+  const bg = t.template === "vibrant" ? `linear-gradient(180deg, ${theirs} 0%, ${dark ? "#0b1020" : "#f7f8fb"} 70%)` : dark ? "#0b1020" : "#f5f6fa";
   const radius = t.linkShape === "pill" ? 9999 : t.linkShape === "rounded" ? 14 : 4;
   const font = t.font === "serif" ? "Georgia, 'Times New Roman', serif" : t.font === "mono" ? "'JetBrains Mono', ui-monospace, monospace" : "var(--font-sans)";
   const btn = (primary = true): React.CSSProperties => t.linkStyle === "fill" && primary
@@ -87,11 +97,11 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       {t.layout === "blend" && photo ? (
         <div className="relative">
           <img src={photo} alt="" className="h-[340px] w-full object-cover" />
-          <div className="absolute inset-x-0 bottom-0 h-40" style={{ background: `linear-gradient(to bottom, transparent, ${t.template === "vibrant" ? accent : dark ? "#0b1020" : "#f5f6fa"})` }} />
+          <div className="absolute inset-x-0 bottom-0 h-40" style={{ background: `linear-gradient(to bottom, transparent, ${t.template === "vibrant" ? theirs : dark ? "#0b1020" : "#f5f6fa"})` }} />
         </div>
       ) : t.layout === "landscape" ? (
         <div className="relative">
-          <div className="h-36 w-full" style={{ background: data.heroUrl ? `center/cover url(${data.heroUrl})` : `linear-gradient(135deg, ${accent}, #000741)` }} />
+          <div className="h-36 w-full" style={{ background: data.heroUrl ? `center/cover url(${data.heroUrl})` : `linear-gradient(135deg, ${theirs}, #000741)` }} />
           {data.avatarUrl && <img src={data.avatarUrl} alt="" className="absolute -bottom-12 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full object-cover" style={{ boxShadow: `0 0 0 4px ${dark ? "#0b1020" : "#f5f6fa"}` }} />}
         </div>
       ) : (
@@ -226,8 +236,10 @@ function Section({ s, btn, ink, sub, card, line, accent, preview, ev }: { s: Bio
  * their reply back here (a badge on the button when one comes). The listener's
  * browser keeps the keys to their messages; the reply email carries one too.
  */
-function Chat({ handle, name, avatar, accent, ink, sub, line, dark, preview, open, setOpen, onAsk, onLoad }: {
+export function Chat({ handle, name, avatar, accent, ink, sub, line, dark, preview, open, setOpen, onAsk, onLoad, corner = false }: {
   handle: string; name: string; avatar: string; accent: string; ink: string; sub: string; line: string; dark: boolean; preview: boolean;
+  /** A bubble in the bottom corner (a page with its own top bar), not at the top. */
+  corner?: boolean;
   open: boolean; setOpen: (v: boolean) => void; onAsk?: (q: AskInput) => Promise<{ token?: string; createdAt?: string }>; onLoad?: (tokens: string[]) => Promise<ChatMsg[]>;
 }) {
   type Kept = { tokens?: string[]; seen?: string; name?: string; email?: string };
@@ -253,10 +265,12 @@ function Chat({ handle, name, avatar, accent, ink, sub, line, dark, preview, ope
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const tokens = (kept.tokens ?? []).join(",");
+  const loader = useRef(onLoad);
+  loader.current = onLoad;
   const load = useCallback(async () => {
-    if (preview || !onLoad || !tokens) return;
-    try { setMsgs(await onLoad(tokens.split(","))); } catch { /* try again later */ }
-  }, [preview, onLoad, tokens]);
+    if (preview || !loader.current || !tokens) return;
+    try { setMsgs(await loader.current(tokens.split(","))); } catch { /* try again later */ }
+  }, [preview, tokens]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (!open) return;
@@ -299,17 +313,17 @@ function Chat({ handle, name, avatar, accent, ink, sub, line, dark, preview, ope
     ? <img src={avatar} alt="" className={`${size} shrink-0 rounded-full object-cover`} />
     : <span className={`${size} flex shrink-0 items-center justify-center rounded-full text-xs font-bold`} style={{ background: accent, color: onColor(accent) }}>{(name || "?").slice(0, 1)}</span>;
   return (
-    <div className="sticky top-0 z-30 h-0">
-      <div className="relative mx-auto flex max-w-[560px] justify-end p-3">
+    <div className={corner ? "fixed bottom-5 right-5 z-40" : "sticky top-0 z-30 h-0"}>
+      <div className={corner ? "relative" : "relative mx-auto flex max-w-[560px] justify-end p-3"}>
         <button type="button" onClick={() => setOpen(!open)} aria-label={unread ? `${unread} new ${unread === 1 ? "reply" : "replies"}` : "Send message"} aria-expanded={open}
-          className="group relative flex h-11 w-11 items-center justify-center rounded-full text-white shadow-lg ring-1 ring-white/25 backdrop-blur-md transition-transform hover:scale-105"
-          style={{ background: open ? accent : "rgba(11,16,32,0.55)", color: open ? onColor(accent) : "#ffffff" }} data-testid="bio-chat">
-          {open ? <X className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}
+          className={`group relative flex items-center justify-center rounded-full shadow-lg ring-2 transition-transform hover:scale-105 ${corner ? "h-14 w-14" : "h-11 w-11"}`}
+          style={{ background: accent, color: onColor(accent), ["--tw-ring-color" as string]: dark ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.9)" }} data-testid="bio-chat">
+          {open ? <X className={corner ? "h-6 w-6" : "h-5 w-5"} /> : <MessageCircle className={corner ? "h-6 w-6" : "h-5 w-5"} />}
           {unread > 0 && !open && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ef4444] px-1 text-[11px] font-bold text-white ring-2 ring-white" data-testid="bio-chat-badge">{unread}</span>}
           {!open && <span className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[#0b1020] px-2.5 py-1 text-xs font-semibold text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100">{unread ? `${unread} new ${unread === 1 ? "reply" : "replies"}` : "Send message"}</span>}
         </button>
         {open && (
-          <div className="absolute left-3 right-3 top-16 ml-auto flex max-h-[70vh] max-w-[22rem] flex-col overflow-hidden rounded-3xl text-left shadow-2xl" style={{ background: panel, color: ink, border: `1px solid ${line}` }} role="dialog" aria-label={`Message ${name}`} data-testid="bio-chat-panel">
+          <div className={`absolute flex max-h-[70vh] flex-col ${corner ? "bottom-[4.5rem] right-0 w-[min(22rem,calc(100vw-2.5rem))]" : "left-3 right-3 top-16 ml-auto max-w-[22rem]"} overflow-hidden rounded-3xl text-left shadow-2xl`} style={{ background: panel, color: ink, border: `1px solid ${line}` }} role="dialog" aria-label={`Message ${name}`} data-testid="bio-chat-panel">
             <div className="flex items-center gap-2.5 px-4 py-3" style={{ borderBottom: `1px solid ${line}` }}>
               {face("h-9 w-9")}
               <div className="min-w-0 flex-1">
