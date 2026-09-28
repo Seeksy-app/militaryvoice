@@ -92,7 +92,7 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
             {n.followers.map((f, i) => (
               <div key={f.platform} className="flex items-center gap-3 py-2.5" style={i ? { borderTop: `1px solid ${line}` } : {}}>
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white" style={{ background: platformBackground(f.platform as SocialPlatform) }}><PlatformIcon platform={f.platform as SocialPlatform} className="h-[18px] w-[18px]" /></span>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{platformLabel(f.platform as SocialPlatform)}</span>{f.username && <span className="block truncate text-xs" style={{ color: sub }}>@{f.username.replace(/^@/, "")}</span>}</span>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{platformLabel(f.platform as SocialPlatform)}</span>{f.username && !/^\d+$/.test(f.username) && <span className="block truncate text-xs" style={{ color: sub }}>@{f.username.replace(/^@/, "")}</span>}</span>
                 <span className="text-base font-bold tabular-nums">{compact(f.followers)}</span>
               </div>
             ))}
