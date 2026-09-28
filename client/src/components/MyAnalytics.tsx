@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { KnowYourWorth } from "@/components/KnowYourWorth";
-import { usePodcastSources, PodcastSection } from "@/components/PodcastStats";
+import { usePodcastSources, PodcastListens } from "@/components/PodcastStats";
 
 /**
  * A podcaster's own analytics, in their dashboard: the same profile panel a
@@ -138,7 +138,7 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
           onOpenCreator={() => {}}
           similar={null}
           own
-          lead={[{ key: "podcast", title: "Podcast", sub: "your downloads, from every host", body: <PodcastSection onConnect={onConnect} /> }]}
+          media={{ title: "Media", sections: [{ key: "podcast", title: "Podcast", sub: "your downloads and listens, from every host", body: <PodcastListens bare onConnect={() => { window.location.hash = "section-podcast-stats"; onConnect(); }} /> }] }}
         />
       </div>
     </div>

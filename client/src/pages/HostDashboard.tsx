@@ -77,7 +77,7 @@ import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
 import { MyAnalytics } from "@/components/MyAnalytics";
-import { PodcastListens, PodcastChips, usePodcastSources } from "@/components/PodcastStats";
+import { PodcastChips, usePodcastSources } from "@/components/PodcastStats";
 import { PodcastHosting } from "@/components/PodcastHosting";
 import { BioBuilder } from "@/components/BioBuilder";
 import { GetTheApp, AppInstallCard } from "@/components/GetTheApp";
@@ -1284,7 +1284,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <BioBuilder />
         ) : screen === "analytics" ? (
           <section className="mt-6">
-            <PodcastListens onConnect={() => { window.location.hash = "section-podcast-stats"; goTo("integrations"); }} />
             <MyAnalytics onConnect={() => goTo("integrations")} />
           </section>
         ) : screen === "pro" ? (
