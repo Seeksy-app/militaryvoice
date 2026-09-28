@@ -14,7 +14,7 @@ import { BioFamilyView } from "@/components/BioFamilyView";
 import { podcastWorthFor } from "@/lib/worth";
 import { useBioFont } from "@/lib/bioFont";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
-import { SWATCHES, TEMPLATES, FONTS, bioPalette, onColor, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, onColor, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
 import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
@@ -192,7 +192,7 @@ export function BioBuilder() {
   const [cutError, setCutError] = useState("");
   const cutFailed = useRef("");
   useEffect(() => {
-    if (!draft || draft.theme.layout !== "cutout" || !draft.avatarUrl || draft.cutoutFrom === draft.avatarUrl || cutting || cutFailed.current === draft.avatarUrl) return;
+    if (!draft || !CUTOUT_LAYOUTS.includes(draft.theme.layout) || !draft.avatarUrl || draft.cutoutFrom === draft.avatarUrl || cutting || cutFailed.current === draft.avatarUrl) return;
     setCutting(true);
     void (async () => {
       try {
@@ -628,25 +628,35 @@ function DesignTab({ d, change, view, cutting = false, cutError = "" }: { d: Pag
           </div>
           <p className="mb-1.5 mt-5 text-xs font-medium text-muted-foreground">Top of the page</p>
         <div className="grid grid-cols-3 gap-3">
-          {([["portrait", "Classic"], ["hero", "Hero"], ["cutout", "Cutout"], ["blend", "Cover photo"], ["landscape", "Banner"], ["shape", "Shape"]] as const).map(([v, l]) => {
+          {([["portrait", "Classic"], ["hero", "Hero"], ["cutout", "Cutout"], ["popout", "Pop-out"], ["sticker", "Sticker"], ["magazine", "Magazine"], ["blend", "Cover photo"], ["landscape", "Banner"], ["shape", "Shape"]] as const).map(([v, l]) => {
             const face = d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888";
             return (
-              <Tile key={v} on={t.layout === v} onClick={() => set({ layout: v })} label={l} note={v === "cutout" && cutting ? "Cutting you out…" : undefined} testid={`bio-layout-${v}`}>
+              <Tile key={v} on={t.layout === v} onClick={() => set({ layout: v })} label={l} note={CUTOUT_LAYOUTS.includes(v) && cutting && t.layout === v ? "Cutting you out…" : undefined} testid={`bio-layout-${v}`}>
                 <span className="relative flex h-16 flex-col items-center overflow-hidden rounded-lg" style={{ background: ground }}>
-                  {v === "cutout" ? <><span className="absolute inset-0" style={{ background: `radial-gradient(circle at 50% 35%, ${c}, ${ground})` }} /><span className="absolute left-1/2 top-2 -translate-x-1/2 text-[13px] font-black uppercase leading-none" style={{ color: ink, opacity: 0.8 }}>{(d.displayName || "Name").split(" ")[0].slice(0, 7)}</span>{d.cutoutUrl && d.cutoutFrom === d.avatarUrl ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</>
+                  {v === "popout" ? <><span className="absolute bottom-0 left-1/2 h-11 w-11 -translate-x-1/2 translate-y-1/3 rounded-full" style={{ background: c }} />{d.cutoutUrl && d.cutoutFrom === d.avatarUrl ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</>
+                    : v === "sticker" ? <><span className="absolute inset-0" style={{ background: `repeating-linear-gradient(135deg, ${c} 0 6px, ${c}cc 6px 12px)` }} /><span className="absolute left-1/2 top-1.5 -translate-x-1/2 -rotate-6 text-[12px] font-black uppercase leading-none text-white">{(d.displayName || "Name").split(" ")[0].slice(0, 7)}</span><span className="absolute inset-0" style={{ filter: "drop-shadow(1.5px 0 0 #fff) drop-shadow(-1.5px 0 0 #fff) drop-shadow(0 1.5px 0 #fff) drop-shadow(0 -1.5px 0 #fff)" }}>{d.cutoutUrl && d.cutoutFrom === d.avatarUrl ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</span></>
+                    : v === "magazine" ? <><span className="absolute inset-0" style={{ background: c }} /><span className="absolute left-1/2 top-1 -translate-x-1/2 text-[14px] font-black uppercase leading-none" style={{ color: onColor(c), fontFamily: "Georgia, serif" }}>{(d.displayName || "Name").split(" ")[0].slice(0, 6)}</span>{d.cutoutUrl && d.cutoutFrom === d.avatarUrl ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}<span className="absolute bottom-1 left-1 h-1 w-6 rounded bg-white/90" /></>
+                    : v === "cutout" ? <><span className="absolute inset-0" style={{ background: `radial-gradient(circle at 50% 35%, ${c}, ${ground})` }} /><span className="absolute left-1/2 top-2 -translate-x-1/2 text-[13px] font-black uppercase leading-none" style={{ color: ink, opacity: 0.8 }}>{(d.displayName || "Name").split(" ")[0].slice(0, 7)}</span>{d.cutoutUrl && d.cutoutFrom === d.avatarUrl ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</>
                     : v === "hero" ? <><span className="absolute inset-0" style={{ background: face }} /><span className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" /><span className="absolute bottom-2 h-1.5 w-12 rounded bg-white" /></>
                     : v === "blend" ? <span className="h-11 w-full" style={{ background: d.avatarUrl ? face : c, maskImage: "linear-gradient(to bottom, #000 50%, transparent)" }} />
                     : v === "landscape" ? <><span className="h-6 w-full" style={{ background: `linear-gradient(135deg, ${c}, #000741)` }} /><span className="-mt-3 h-6 w-6 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${ground}` }} /></>
                     : v === "shape" ? <span className="relative mt-2 h-9 w-9"><span className="absolute -inset-1 rotate-12" style={{ background: c, borderRadius: "58% 42% 38% 62% / 45% 55% 45% 55%" }} /><span className="absolute inset-0" style={{ background: face, borderRadius: "42% 58% 63% 37% / 52% 38% 62% 48%" }} /></span>
                     : <span className="mt-2.5 h-8 w-8 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${c}` }} />}
-                  {v !== "hero" && v !== "cutout" && <span className="absolute bottom-1.5 h-1 w-10 rounded" style={{ background: ink, opacity: 0.8 }} />}
+                  {v !== "hero" && !CUTOUT_LAYOUTS.includes(v) && <span className="absolute bottom-1.5 h-1 w-10 rounded" style={{ background: ink, opacity: 0.8 }} />}
                 </span>
               </Tile>
             );
           })}
         </div>
-          {cutError && t.layout === "cutout" && <p className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{cutError}</p>}
-          {hasPhoto && t.layout !== "cutout" && (
+          {CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && (
+            <div className="mt-4 space-y-3 rounded-xl bg-muted/40 p-3" data-testid="bio-cutout-adjust">
+              <RangeRow label="Photo position" hint="Up or down" value={t.cutoutY ?? 0} min={-160} max={160} onChange={(v) => set({ cutoutY: v })} testid="bio-cutout-y" />
+              <RangeRow label="Photo size" hint="Smaller or bigger" value={t.cutoutSize ?? 100} min={60} max={150} onChange={(v) => set({ cutoutSize: v })} unit="%" testid="bio-cutout-size" />
+              {((t.cutoutY ?? 0) !== 0 || (t.cutoutSize ?? 100) !== 100) && <button type="button" onClick={() => set({ cutoutY: 0, cutoutSize: 100 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
+            </div>
+          )}
+          {cutError && CUTOUT_LAYOUTS.includes(t.layout) && <p className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{cutError}</p>}
+          {hasPhoto && !CUTOUT_LAYOUTS.includes(t.layout) && (
             <div className="mt-5">
               <p className="text-xs font-medium text-muted-foreground">Image position</p>
               <p className="text-[11px] text-muted-foreground/80">Shift the crop if the photo cuts off a head or an important detail.</p>

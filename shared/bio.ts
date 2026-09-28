@@ -12,7 +12,9 @@ export type BioLinkShape = "pill" | "rounded" | "square" | "squircle";
 /** soft = a white card with a soft shadow; hard = a card with a solid offset shadow in the link colour. */
 export type BioLinkStyle = "fill" | "outline" | "soft" | "hard";
 export interface BioBackground { mode: "solid" | "gradient" | "image"; /** "" = the shade's own */ color: string; image: string }
-export type BioLayout = "portrait" | "landscape" | "blend" | "hero" | "shape" | "cutout";
+export type BioLayout = "portrait" | "landscape" | "blend" | "hero" | "shape" | "cutout" | "popout" | "sticker" | "magazine";
+/** The tops that stand their cut-out photo on the page. */
+export const CUTOUT_LAYOUTS: BioLayout[] = ["cutout", "popout", "sticker", "magazine"];
 /** The podcast edge to edge (full) or in a card with a margin (card). */
 export type BioPodcastFrame = "full" | "card";
 /** How the podcast shows: the latest big (spotlight), a list, or cards to swipe. */
@@ -46,6 +48,9 @@ export interface BioTheme {
   bgBrightness: number;
   /** How strong the wash over a photo background is, 0–100 (so the words read). */
   bgWash: number;
+  /** The cut-out photo moved up (−) or down (+), in points, and its size in percent. */
+  cutoutY: number;
+  cutoutSize: number;
 }
 
 export interface BioPodcastOptions {
@@ -229,7 +234,7 @@ export const TEMPLATES: Record<BioTemplate, { label: string; note: string; theme
   portrait: { label: "Portrait", note: "Your photo, full screen", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "hero" } },
 };
 
-export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight", podcastFrame: "full", podcast: DEFAULT_PODCAST, linkColor: "", background: { mode: "solid", color: "", image: "" }, imageY: 50, avatarSize: "m", branding: true, bgTint: 0, bgBrightness: 0, bgWash: 65 };
+export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight", podcastFrame: "full", podcast: DEFAULT_PODCAST, linkColor: "", background: { mode: "solid", color: "", image: "" }, imageY: 50, avatarSize: "m", branding: true, bgTint: 0, bgBrightness: 0, bgWash: 65, cutoutY: 0, cutoutSize: 100 };
 
 /** MilCrunch's fourteen (white, the greys, black, the reds, orange, gold, pink, purple, navy, teal, green) and our gold and navy. */
 export const SWATCHES = [

@@ -289,8 +289,10 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     branding: typeof x.branding === "boolean" ? x.branding : prev.branding ?? true,
     bgTint: Number.isFinite(Number(x.bgTint)) && x.bgTint !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.bgTint)))) : prev.bgTint ?? 0,
     bgBrightness: Number.isFinite(Number(x.bgBrightness)) && x.bgBrightness !== undefined ? Math.max(-100, Math.min(100, Math.round(Number(x.bgBrightness)))) : prev.bgBrightness ?? 0,
+    cutoutY: Number.isFinite(Number(x.cutoutY)) && x.cutoutY !== undefined ? Math.max(-160, Math.min(160, Math.round(Number(x.cutoutY)))) : prev.cutoutY ?? 0,
+    cutoutSize: Number.isFinite(Number(x.cutoutSize)) && x.cutoutSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.cutoutSize)))) : prev.cutoutSize ?? 100,
     bgWash: Number.isFinite(Number(x.bgWash)) && x.bgWash !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.bgWash)))) : prev.bgWash ?? 65,
-    layout: pick("layout", ["portrait", "landscape", "blend", "hero", "shape", "cutout"] as const, prev.layout),
+    layout: pick("layout", ["portrait", "landscape", "blend", "hero", "shape", "cutout", "popout", "sticker", "magazine"] as const, prev.layout),
     podcastStyle: pick("podcastStyle", ["spotlight", "list", "carousel"] as const, prev.podcastStyle),
     podcastFrame: pick("podcastFrame", ["full", "card"] as const, prev.podcastFrame),
     podcast: (() => {

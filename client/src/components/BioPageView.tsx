@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Calendar, Check, Copy, MessageCircle, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
-import { DEFAULT_PODCAST, bioPalette, onColor, standOut, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
+import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, onColor, standOut, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
 import { useBioFont } from "@/lib/bioFont";
 import type { SocialPlatform } from "@shared/schema";
 
@@ -49,6 +49,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   const { theirs, paper, dark, ink, sub, card, line, accent, link, font, radius } = pal;
   const bg = pal.background;
   useBioFont(t.font);
+  useBioFont(t.layout === "magazine" ? "playfair" : t.font);
   const Y = Number.isFinite(t.imageY) ? t.imageY : 50;
   const btn = (primary = true): React.CSSProperties => t.linkStyle === "fill" && primary
     ? { background: link, color: onColor(link), borderRadius: radius }
@@ -101,14 +102,10 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       )}
       {/* The header: a wide cover photo (blend), full-screen photo with their name on it (hero),
           a banner with the photo over it (landscape), a shaped photo (shape) or a round one (portrait). */}
-      {t.layout === "cutout" && data.cutoutUrl ? (
+      {CUTOUT_LAYOUTS.includes(t.layout) && data.cutoutUrl ? (
         <>
-          <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `radial-gradient(120% 80% at 50% 30%, ${theirs} 0%, ${theirs} 45%, ${paper} 100%)` }} data-testid="bio-cutout-header">
-            <h1 className="absolute inset-x-0 top-16 z-0 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName, color: onColor(theirs), opacity: 0.92 }}>{data.displayName || "Your name"}</h1>
-            <img src={data.cutoutUrl} alt="" className="relative z-10 mx-auto block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" />
-            <div className="absolute inset-x-0 bottom-0 z-20 h-24" style={{ background: `linear-gradient(to bottom, transparent, ${paper})` }} />
-          </div>
-          <div className="relative z-30 mx-auto -mt-4 max-w-[560px] px-5 text-center">{who(false, true)}</div>
+          <CutoutTop kind={t.layout} src={data.cutoutUrl} name={data.displayName || "Your name"} theirs={theirs} paper={paper} dark={dark} bigName={bigName} dy={t.cutoutY ?? 0} size={(t.cutoutSize ?? 100) / 100} latest={data.podcast?.episodes[0]?.title} handle={data.handle} />
+          <div className={`relative z-30 mx-auto max-w-[560px] px-5 text-center ${t.layout === "popout" ? "pt-5" : "-mt-4"}`}>{who(false, t.layout !== "popout")}</div>
         </>
       ) : t.layout === "hero" && photo ? (
         <div className="relative flex min-h-[600px] flex-col justify-end" style={{ background: `center ${Y}%/cover url(${photo})` }} data-testid="bio-hero-header">
@@ -148,6 +145,64 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
         {data.brandsOn && <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : `/${data.handle}/brands`} className="font-semibold hover:underline" data-testid="bio-for-brands">For brands: sponsor this show</a></p>}
         {(t.branding ?? true) && <p className={`${data.brandsOn ? "mt-1" : "mt-4"} text-center text-xs`} style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The tops made from their cut-out photo: in front of their name (cutout),
+ * breaking out of a circle (popout), a sticker on stripes (sticker), or on a
+ * magazine cover under a masthead (magazine). dy and size are their adjusters.
+ */
+function CutoutTop({ kind, src, name, theirs, paper, dark, bigName, dy, size, latest, handle }: { kind: string; src: string; name: string; theirs: string; paper: string; dark: boolean; bigName: number; dy: number; size: number; latest?: string; handle: string }) {
+  const move: React.CSSProperties = { transform: `translateY(${dy}px) scale(${size})`, transformOrigin: "bottom center" };
+  const fade = <div className="absolute inset-x-0 bottom-0 z-20 h-24" style={{ background: `linear-gradient(to bottom, transparent, ${paper})` }} />;
+  if (kind === "popout") {
+    // The head breaks out: below the circle's top the photo shows only inside the circle.
+    const mask = "linear-gradient(#000, #000) top / 100% 280px no-repeat, radial-gradient(circle 140px at 50% calc(100% - 140px), #000 99%, transparent 100%)";
+    return (
+      <div className="flex justify-center pt-12" data-testid="bio-popout-header">
+        <div className="relative h-[420px] w-[280px]">
+          <div className="absolute bottom-0 left-0 h-[280px] w-[280px] rounded-full" style={{ background: `radial-gradient(circle at 35% 30%, ${theirs}cc, ${theirs})`, boxShadow: `0 20px 50px -20px ${theirs}` }} />
+          <div className="absolute inset-0" style={{ WebkitMask: mask, mask }}>
+            <img src={src} alt="" className="absolute bottom-0 left-1/2 h-[400px] max-w-none -translate-x-1/2 object-contain object-bottom" style={{ ...move, transform: `translateX(-50%) ${move.transform}` }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (kind === "sticker") {
+    const edge = "drop-shadow(4px 0 0 #fff) drop-shadow(-4px 0 0 #fff) drop-shadow(0 4px 0 #fff) drop-shadow(0 -4px 0 #fff) drop-shadow(0 14px 18px rgba(0,0,0,0.35))";
+    return (
+      <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `repeating-linear-gradient(135deg, ${theirs} 0 26px, ${theirs}d9 26px 52px)` }} data-testid="bio-sticker-header">
+        <h1 className="absolute inset-x-0 top-14 z-0 -rotate-6 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName * 0.9, color: "#ffffff", textShadow: "0 4px 0 rgba(0,0,0,0.25)" }}>{name}</h1>
+        <img src={src} alt="" className="relative z-10 mx-auto block h-[380px] w-auto max-w-[90%] object-contain object-bottom" style={{ ...move, filter: edge }} />
+        {fade}
+      </div>
+    );
+  }
+  if (kind === "magazine") {
+    const ink = onColor(theirs);
+    return (
+      <div className="relative flex min-h-[520px] flex-col overflow-hidden" style={{ background: `linear-gradient(180deg, ${theirs} 0%, ${theirs} 70%, ${paper} 100%)` }} data-testid="bio-magazine-header">
+        <h1 className="z-0 break-words px-3 pt-7 text-center font-black uppercase leading-[0.82] tracking-tight" style={{ fontSize: bigName * 1.05, color: ink, fontFamily: FONTS.playfair.css }}>{name}</h1>
+        <img src={src} alt="" className="relative z-10 mx-auto -mt-12 block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={move} />
+        {latest && (
+          <div className="absolute bottom-10 left-4 z-20 max-w-[48%] text-left" style={{ color: "#fff", textShadow: "0 2px 10px rgba(0,0,0,0.6)" }}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: theirs === "#000000" ? "#F0A71F" : "#ffffff" }}>New episode</p>
+            <p className="text-[15px] font-black uppercase leading-tight">{latest}</p>
+          </div>
+        )}
+        <p className="absolute right-4 top-3 z-20 text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: ink, opacity: 0.8 }}>@{handle}</p>
+        {fade}
+      </div>
+    );
+  }
+  return (
+    <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `radial-gradient(120% 80% at 50% 30%, ${theirs} 0%, ${theirs} 45%, ${paper} 100%)` }} data-testid="bio-cutout-header">
+      <h1 className="absolute inset-x-0 top-16 z-0 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName, color: onColor(theirs), opacity: 0.92 }}>{name}</h1>
+      <img src={src} alt="" className="relative z-10 mx-auto block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={move} />
+      {fade}
     </div>
   );
 }
