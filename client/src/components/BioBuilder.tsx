@@ -30,17 +30,18 @@ type Tab = "profile" | "design" | "content" | "share" | "brands" | "family" | "q
 const KEY = ["/api/host/bio"];
 
 /** Phones to preview on, at their screen size in CSS points (what a web page lays out to). */
+// Screens in CSS points (the 3x panels are 1320 × 2868 and so on); status is the top safe area.
 const PHONES = [
-  { id: "iphone-18-pro-max", name: "iPhone 18 Pro Max", w: 440, h: 956, cam: "island", r: 62, maker: "apple", control: true },
-  { id: "iphone-18-pro", name: "iPhone 18 Pro", w: 402, h: 874, cam: "island", r: 62, maker: "apple", control: true },
-  { id: "iphone-17-pro-max", name: "iPhone 17 Pro Max", w: 440, h: 956, cam: "island", r: 62, maker: "apple", control: true },
-  { id: "iphone-air", name: "iPhone Air", w: 420, h: 912, cam: "island", r: 62, maker: "apple", control: true },
-  { id: "iphone-17", name: "iPhone 17 / 17 Pro", w: 402, h: 874, cam: "island", r: 62, maker: "apple", control: true },
-  { id: "iphone-16-plus", name: "iPhone 16 Plus", w: 430, h: 932, cam: "island", r: 55, maker: "apple", control: true },
-  { id: "iphone-16e", name: "iPhone 16e", w: 390, h: 844, cam: "notch", r: 47, maker: "apple", control: false },
-  { id: "galaxy-s25-ultra", name: "Galaxy S25 Ultra", w: 412, h: 891, cam: "hole", r: 26, maker: "android", control: false },
-  { id: "pixel-10-pro-xl", name: "Pixel 10 Pro XL", w: 412, h: 915, cam: "hole", r: 44, maker: "android", control: false },
-  { id: "small", name: "Small phone", w: 360, h: 780, cam: "hole", r: 36, maker: "android", control: false },
+  { id: "iphone-18-pro-max", name: "iPhone 18 Pro Max", w: 440, h: 956, cam: "island", r: 62, status: 62, maker: "apple", control: true },
+  { id: "iphone-18-pro", name: "iPhone 18 Pro", w: 402, h: 874, cam: "island", r: 62, status: 62, maker: "apple", control: true },
+  { id: "iphone-17-pro-max", name: "iPhone 17 Pro Max", w: 440, h: 956, cam: "island", r: 62, status: 62, maker: "apple", control: true },
+  { id: "iphone-air", name: "iPhone Air", w: 420, h: 912, cam: "island", r: 62, status: 62, maker: "apple", control: true },
+  { id: "iphone-17", name: "iPhone 17 / 17 Pro", w: 402, h: 874, cam: "island", r: 62, status: 62, maker: "apple", control: true },
+  { id: "iphone-16-plus", name: "iPhone 16 Plus", w: 430, h: 932, cam: "island", r: 55, status: 59, maker: "apple", control: true },
+  { id: "iphone-16e", name: "iPhone 16e", w: 390, h: 844, cam: "notch", r: 47, status: 47, maker: "apple", control: false },
+  { id: "galaxy-s25-ultra", name: "Galaxy S25 Ultra", w: 412, h: 891, cam: "hole", r: 26, status: 34, maker: "android", control: false },
+  { id: "pixel-10-pro-xl", name: "Pixel 10 Pro XL", w: 412, h: 915, cam: "hole", r: 44, status: 34, maker: "android", control: false },
+  { id: "small", name: "Small phone", w: 360, h: 780, cam: "hole", r: 36, status: 34, maker: "android", control: false },
 ] as const;
 type Phone = (typeof PHONES)[number];
 
@@ -51,19 +52,23 @@ type Phone = (typeof PHONES)[number];
  * bar. The whole device is scaled to fit, never cropped, so it keeps its shape.
  */
 function PhoneFrame({ ph, scale, dark, url, children }: { ph: Phone; scale: number; dark: boolean; url: string; children: React.ReactNode }) {
-  const bezel = ph.maker === "apple" ? 13 : 10;
+  // From Apple's iPhone 17 Pro Max drawing: a 72.86 × 158.31 mm active area is the 440 × 956 pt screen,
+  // so 6.04 pt a millimetre; the housing is 2.56 mm past it all round (77.98 × 163.43 mm), buttons stand 0.45 mm proud.
+  const MM = 440 / 72.86;
+  const bezel = ph.maker === "apple" ? 2.56 * MM : 11;
   const W = ph.w + bezel * 2, H = ph.h + bezel * 2;
-  const k = ph.h / 874; // button positions, from an iPhone 17 Pro
-  const statusH = ph.cam === "island" ? 54 : ph.cam === "notch" ? 47 : 34;
-  const barH = ph.maker === "apple" ? 82 : 56;
+  const k = H / (163.43 * MM); // the Pro Max's button spots, for the others in proportion
+  const statusH = ph.status;
+  const barH = ph.maker === "apple" ? 84 : 56;
   const paper = dark ? "#0b1020" : "#f5f6fa";
   const ink = dark ? "#ffffff" : "#0b1020";
-  const btn = (side: "l" | "r", top: number, h: number) => (
-    <span key={`${side}${top}`} className="absolute w-[5px] rounded-sm" style={{ [side === "l" ? "left" : "right"]: -3, top: top * k, height: h * k, background: "linear-gradient(90deg,#3b3b40,#6b6b72,#3b3b40)" }} />
+  // A button by its centre and length in millimetres from the top of the phone.
+  const btn = (side: "l" | "r", centre: number, len: number) => (
+    <span key={`${side}${centre}`} className="absolute w-[4px] rounded-[2px]" style={{ [side === "l" ? "left" : "right"]: -0.45 * MM, top: (centre - len / 2) * MM * k, height: len * MM * k, background: "linear-gradient(90deg,#3b3b40,#6b6b72,#3b3b40)" }} />
   );
   const buttons = ph.maker === "apple"
-    ? [btn("l", 170, 34), btn("l", 230, 62), btn("l", 305, 62), btn("r", 250, 100), ...(ph.control ? [btn("r", 560, 64)] : [])]
-    : [btn("r", 200, 110), btn("r", 340, 64)];
+    ? [btn("l", 34.28, 6.9), btn("l", 48.43, 11.2), btn("l", 62.63, 11.2), btn("r", 55.53, 17.7), ...(ph.control ? [btn("r", 111.82, 17.1)] : [])]
+    : [btn("r", 38, 18), btn("r", 62, 10)];
   return (
     <div style={{ width: W * scale, height: H * scale }} className="relative shrink-0" data-testid="bio-frame">
       <div style={{ width: W, height: H, transform: `scale(${scale})`, transformOrigin: "top left" }} className="relative">
@@ -79,7 +84,7 @@ function PhoneFrame({ ph, scale, dark, url, children }: { ph: Phone; scale: numb
                 <span className="relative flex h-[12px] w-[25px] items-center rounded-[4px] border border-current p-[1.5px] opacity-90"><span className="h-full w-[75%] rounded-[2px] bg-current" /><span className="absolute -right-[3px] h-[4px] w-[1.5px] rounded-r bg-current" /></span>
               </span>
             </div>
-            {ph.cam === "island" && <span className="absolute left-1/2 top-[11px] z-50 h-[37px] w-[126px] -translate-x-1/2 rounded-full bg-black" />}
+            {ph.cam === "island" && <span className="absolute left-1/2 z-50 -translate-x-1/2 rounded-full bg-black" style={{ top: 14, height: 37, width: 20.76 * MM }} />}
             {ph.cam === "notch" && <span className="absolute left-1/2 top-0 z-50 h-[32px] w-[160px] -translate-x-1/2 rounded-b-[20px] bg-black" />}
             {ph.cam === "hole" && <span className="absolute left-1/2 top-[10px] z-50 h-[14px] w-[14px] -translate-x-1/2 rounded-full bg-black ring-2 ring-[#1a1a1a]" />}
             <div className="absolute inset-x-0 overflow-y-auto overflow-x-hidden" style={{ top: statusH, bottom: barH }}>{children}</div>
@@ -279,7 +284,7 @@ export function BioBuilder() {
                   </div>
                 );
               }
-              const bezel = ph.maker === "apple" ? 13 : 10;
+              const bezel = ph.maker === "apple" ? 2.56 * (440 / 72.86) : 11;
               const sc = Math.min(1, avail.w / (ph.w + bezel * 2 + 8), avail.h / (ph.h + bezel * 2));
               return <PhoneFrame ph={ph} scale={sc} dark={(draft.theme.shade ?? "dark") === "dark"} url={url}>{page()}</PhoneFrame>;
             })()}
