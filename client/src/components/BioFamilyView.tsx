@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { Heart, Lock, Pause, Play, X } from "lucide-react";
-import { Chat, onColor, styled, type ChatMsg } from "@/components/BioPageView";
+import { Chat, PageTop, SocialRow, onColor, styled, type ChatMsg } from "@/components/BioPageView";
 import { useBioFont } from "@/lib/bioFont";
-import { bioPalette, videoEmbed, type BioFamilyPublic } from "@shared/bio";
+import { FAMILY_SECTIONS, arrange, bioPalette, videoEmbed, type BioFamilyPublic, type FamilySectionId } from "@shared/bio";
 
 /**
  * The Family view (militaryvoices.ai/<handle>/family/<key>): a private page for
@@ -51,21 +51,8 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
     </section>
   );
 
-  return (
-    <div style={{ background: pal.background, color: ink, fontFamily: font, minHeight: "100%" }} className="relative pb-10" data-testid="bio-family">
-
-      {/* The top: their photo, warm, and who it's for. */}
-      <div className="relative flex min-h-[420px] flex-col justify-end text-center text-white" style={{ background: photo ? `center 25%/cover url(${photo})` : `linear-gradient(145deg, ${theirs}, #000741)` }}>
-        <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 75%, ${dark ? "#0b1020" : "rgba(0,0,0,0.85)"} 100%)` }} />
-        <div className="relative px-5 pb-8">
-          <p className="mx-auto flex w-fit items-center gap-1.5 rounded-full bg-black/30 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em]"><Heart className="h-3 w-3 fill-current" /> For family</p>
-          <h1 className="mt-2 text-balance text-[32px] font-bold leading-tight tracking-tight">{name}</h1>
-          {data.branch && <p className="mt-0.5 text-sm text-white/80">{data.branch}</p>}
-        </div>
-      </div>
-
-      <div className="mx-auto flex max-w-[560px] flex-col gap-4 px-4 pt-5">
-        {f.note && (
+  const parts: Record<FamilySectionId, React.ReactNode> = {
+    note: f.note && (
           <section className="relative rounded-3xl p-6 text-left" style={{ background: dark ? "rgba(240,167,31,0.10)" : "#fff8ea", border: `1px solid ${dark ? "rgba(240,167,31,0.25)" : "#f3dfb3"}` }}>
             <p className="whitespace-pre-line text-[17px] leading-relaxed" style={{ fontFamily: "Georgia, 'Times New Roman', serif", textAlign: f.noteAlign ?? "left" }}>{styled(f.note)}</p>
             <div className="mt-4 flex items-center gap-2.5">
@@ -73,9 +60,8 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
               <p className="text-sm font-semibold" style={{ fontFamily: "Georgia, serif", fontStyle: "italic" }}>{first}</p>
             </div>
           </section>
-        )}
-
-        {voice && (
+        ),
+    voice: voice && (
           <section className="flex items-center gap-3 rounded-3xl p-4 text-left" style={{ background: card, border: `1px solid ${line}` }} data-testid="family-voice">
             <button type="button" onClick={() => { const a = voiceEl.current; if (!a || preview) return; if (a.paused) void a.play(); else a.pause(); }} aria-label={hearing ? "Pause the message" : "Play the message"} className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full shadow-lg" style={{ background: accent, color: onColor(accent) }}>
               {face && <img src={face} alt="" className="absolute inset-0 h-full w-full rounded-full object-cover opacity-25" />}
@@ -87,17 +73,15 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
             </div>
             <audio ref={voiceEl} src={voice} preload="none" onPlay={() => setHearing(true)} onPause={() => setHearing(false)} onEnded={() => { setHearing(false); setHeard(0); }} onTimeUpdate={(e) => { const a = e.currentTarget; setHeard(a.duration ? a.currentTime / a.duration : 0); }} />
           </section>
-        )}
-
-        {video && (
+        ),
+    video: video && (
           <section className="overflow-hidden rounded-3xl bg-black" style={{ border: `1px solid ${line}` }} data-testid="family-video">
             {video.kind === "file"
               ? <video src={video.src} controls playsInline preload="metadata" className="max-h-[640px] w-full bg-black" />
               : <iframe src={video.src} title="Video" loading="lazy" className={`w-full ${video.tall ? "h-[620px]" : "aspect-video"}`} style={{ border: 0 }} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />}
           </section>
-        )}
-
-        {proud.length > 0 && (
+        ),
+    numbers: proud.length > 0 && (
           <div className={`grid gap-3 ${proud.length === 3 ? "grid-cols-3" : proud.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
             {proud.map((p) => (
               <div key={p.label} className="rounded-3xl p-4 text-center" style={{ background: card, border: `1px solid ${line}` }}>
@@ -106,9 +90,8 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
               </div>
             ))}
           </div>
-        )}
-
-        {f.milestones.length > 0 && section("Along the way", (
+        ),
+    milestones: f.milestones.length > 0 && section("Along the way", (
           <ol className="relative ml-2 border-l-2 pl-5" style={{ borderColor: `${accent}55` }}>
             {f.milestones.map((m) => (
               <li key={m.id} className="relative pb-5 last:pb-0">
@@ -119,9 +102,8 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
               </li>
             ))}
           </ol>
-        ))}
-
-        {f.photos.length > 0 && section("Photos", (
+        )),
+    photos: f.photos.length > 0 && section("Photos", (
           <div className="grid grid-cols-2 gap-2">
             {f.photos.map((p, i) => (
               <button key={p.id} type="button" onClick={() => setBig(i)} className={`group relative overflow-hidden rounded-2xl ${i === 0 && f.photos.length % 2 === 1 ? "col-span-2 aspect-[16/10]" : "aspect-square"}`}>
@@ -130,11 +112,43 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
               </button>
             ))}
           </div>
-        ))}
-
-        {data.askEnabled && (
+        )),
+    leave: data.askEnabled && (
           <button type="button" onClick={() => setChat(true)} className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3.5 text-sm font-bold" style={{ background: accent, color: onColor(accent) }} data-testid="family-note"><Heart className="h-4 w-4" /> Leave {first} a note</button>
-        )}
+        ),
+  };
+  const order = arrange(FAMILY_SECTIONS, f.order).filter((id) => !(f.hidden ?? []).includes(id));
+
+  return (
+    <div style={{ background: pal.background, color: ink, fontFamily: font, minHeight: "100%" }} className="relative pb-10" data-testid="bio-family">
+
+      {f.layout ? (
+        // One of the page's layouts, with the family photo (a cutout only when it's the page's photo).
+        <PageTop t={{ ...t, layout: f.layout, hideName: false }} avatar={face} hero={f.photo ? "" : data.heroUrl} cutoutUrl={f.photo ? "" : data.cutoutUrl} name={name} handle={data.handle}>
+          {(onPhoto, hideName) => (
+            <div className={onPhoto ? "text-white" : ""}>
+              <p className="mx-auto mt-4 flex w-fit items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em]" style={onPhoto ? { background: "rgba(0,0,0,0.3)" } : { background: `${accent}22`, color: accent }}><Heart className="h-3 w-3 fill-current" /> For family</p>
+              {!hideName && <h1 className="mt-2 text-balance text-[32px] font-bold leading-tight tracking-tight">{name}</h1>}
+              {data.branch && <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>{data.branch}</p>}
+              <SocialRow socials={data.socials ?? []} onPhoto={onPhoto} preview={preview} />
+            </div>
+          )}
+        </PageTop>
+      ) : (
+        // The family page's own top: their photo, big and warm, and who it's for.
+      <div className="relative flex min-h-[420px] flex-col justify-end text-center text-white" style={{ background: photo ? `center 25%/cover url(${photo})` : `linear-gradient(145deg, ${theirs}, #000741)` }}>
+        <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 75%, ${dark ? "#0b1020" : "rgba(0,0,0,0.85)"} 100%)` }} />
+        <div className="relative px-5 pb-8">
+          <p className="mx-auto flex w-fit items-center gap-1.5 rounded-full bg-black/30 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em]"><Heart className="h-3 w-3 fill-current" /> For family</p>
+          <h1 className="mt-2 text-balance text-[32px] font-bold leading-tight tracking-tight">{name}</h1>
+          {data.branch && <p className="mt-0.5 text-sm text-white/80">{data.branch}</p>}
+          <SocialRow socials={data.socials ?? []} onPhoto preview={preview} />
+        </div>
+      </div>
+      )}
+
+      <div className="mx-auto flex max-w-[560px] flex-col gap-4 px-4 pt-5">
+        {order.map((id) => parts[id] ? <Fragment key={id}>{parts[id]}</Fragment> : null)}
 
         <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-xs" style={{ color: sub }}><Lock className="h-3 w-3" /> A private page for family. Please keep this link to yourselves.</p>
       </div>

@@ -108,8 +108,8 @@ export interface BioBrands {
   audience: string;
   /** Show the rate card worked out from their downloads (Know Your Worth). */
   showRates: boolean;
-  /** Brands they've worked with. */
-  partners: { id: string; name: string; url: string }[];
+  /** Brands they've worked with (the logo read from their home page). */
+  partners: { id: string; name: string; url: string; logo?: string }[];
   /** A photo just for brands ("" = their profile photo). */
   photo: string;
   /** The name brands see ("" = the page's name). */
@@ -122,8 +122,41 @@ export interface BioBrands {
   sample: string;
   /** The sample link as read when it was saved (the server's, never typed in). */
   sampleInfo?: { title: string; audio: string; artworkUrl: string };
+  /** The top of the kit: "" is the kit's own (a band in their colour), or any of the page's layouts. */
+  layout: BioLayout | "";
+  /** Its sections in their order, and the ones switched off. */
+  order: BrandsSectionId[];
+  hidden: BrandsSectionId[];
 }
-export const DEFAULT_BRANDS: BioBrands = { on: true, pitch: "", audience: "", showRates: false, partners: [], photo: "", name: "", sponsorOn: true, video: "", sample: "" };
+export const BRANDS_SECTIONS = [
+  { id: "video", label: "Your reel" },
+  { id: "sample", label: "A sample to hear" },
+  { id: "stats", label: "Your numbers" },
+  { id: "reach", label: "Social reach" },
+  { id: "audience", label: "Who listens" },
+  { id: "rates", label: "Sponsorship rates" },
+  { id: "partners", label: "Brands I've worked with" },
+  { id: "episodes", label: "Latest episodes" },
+  { id: "sponsor", label: "Sponsor form" },
+] as const;
+export type BrandsSectionId = (typeof BRANDS_SECTIONS)[number]["id"];
+export const FAMILY_SECTIONS = [
+  { id: "note", label: "Your note" },
+  { id: "voice", label: "Your voice message" },
+  { id: "video", label: "Your video" },
+  { id: "numbers", label: "People following along" },
+  { id: "milestones", label: "Along the way" },
+  { id: "photos", label: "Photos" },
+  { id: "leave", label: "Leave a note button" },
+] as const;
+export type FamilySectionId = (typeof FAMILY_SECTIONS)[number]["id"];
+/** Sections in their saved order, any new ones after, in the default order. */
+export function arrange<T extends string>(all: readonly { id: T }[], order: readonly string[] | undefined): T[] {
+  const ids = all.map((x) => x.id);
+  const kept = (order ?? []).filter((x): x is T => ids.includes(x as T));
+  return [...Array.from(new Set(kept)), ...ids.filter((x) => !kept.includes(x))];
+}
+export const DEFAULT_BRANDS: BioBrands = { on: true, pitch: "", audience: "", showRates: false, partners: [], photo: "", name: "", sponsorOn: true, video: "", sample: "", layout: "", order: [], hidden: [] };
 
 /** A video link as a player: an embed (wide or tall), a file to play, or null. */
 export function videoEmbed(u: string): { kind: "frame" | "file"; src: string; tall: boolean } | null {
@@ -177,8 +210,12 @@ export interface BioFamily {
   video: string;
   /** A voice message they recorded in the app ("r2:<key>"). */
   audio: string;
+  /** The top: "" is the family page's own (their photo, big), or any of the page's layouts. */
+  layout: BioLayout | "";
+  order: FamilySectionId[];
+  hidden: FamilySectionId[];
 }
-export const DEFAULT_FAMILY: BioFamily = { on: true, key: "", note: "", story: "", milestones: [], photos: [], favorites: [], photo: "", name: "", video: "", audio: "" };
+export const DEFAULT_FAMILY: BioFamily = { on: true, key: "", note: "", story: "", milestones: [], photos: [], favorites: [], photo: "", name: "", video: "", audio: "", layout: "", order: [], hidden: [] };
 export function parseFamily(raw: string | null | undefined): BioFamily {
   try {
     const v = raw ? JSON.parse(raw) : {};
@@ -204,6 +241,9 @@ export interface BioFamilyPublic {
   /** Their own first name (the page's name is often the show's). */
   firstName: string;
   media?: BioViewMedia;
+  socials?: BioSocial[];
+  /** Their cut-out photo (when it's of the page's photo), for a cutout top. */
+  cutoutUrl?: string;
 }
 
 /** Independent audience data for the media kit: the podcaster's biggest account, as the index measured it. */
@@ -254,6 +294,9 @@ export interface BioBrandsPublic {
   /** From our Discovery index (cached, never bought for a visitor). */
   audience: BioAudience | null;
   media?: BioViewMedia;
+  heroUrl?: string;
+  socials?: BioSocial[];
+  cutoutUrl?: string;
 }
 
 /** What the public page gets. */

@@ -47,17 +47,15 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   const t = data.theme;
   // The page's colours, from the theme (shade, background, their colour, the link colour); see bioPalette.
   const pal = bioPalette(t);
-  const { theirs, paper, dark, ink, sub, card, line, accent, link, font, radius } = pal;
+  const { dark, ink, sub, card, line, accent, link, font, radius } = pal;
   const bg = pal.background;
   useBioFont(t.font);
   useBioFont(t.layout === "magazine" ? "playfair" : t.font);
-  const Y = Number.isFinite(t.imageY) ? t.imageY : 50;
   const btn = (primary = true): React.CSSProperties => t.linkStyle === "fill" && primary
     ? { background: link, color: onColor(link), borderRadius: radius }
     : t.linkStyle === "outline" ? { border: `2px solid ${link}`, color: ink, borderRadius: radius, background: "transparent" }
     : t.linkStyle === "hard" ? { background: dark ? "#141a2c" : "#ffffff", color: ink, borderRadius: radius, border: `2px solid ${dark ? "rgba(255,255,255,0.85)" : "#0b1020"}`, boxShadow: `4px 4px 0 ${link}` }
     : { background: card, color: ink, borderRadius: radius, border: `1px solid ${line}`, boxShadow: dark ? "0 6px 18px rgba(0,0,0,0.35)" : "0 6px 18px rgba(11,16,32,0.10)" };
-  const photo = data.heroUrl || data.avatarUrl;
   const [copied, setCopied] = useState<string | null>(null);
   const ev: Ev = (k, l) => { if (!preview) onEvent?.(k, l); };
   const [chat, setChat] = useState(false);
@@ -75,66 +73,19 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   };
 
 
-  // Cutout: the name big enough to fill the width behind them, by its longest word.
-  const longest = Math.max(4, ...(data.displayName || "Your name").split(/\s+/).map((w) => w.length));
-  const bigName = Math.round(Math.min(104, Math.max(46, 380 / (longest * 0.62))));
   // Their name, handle, bio and socials: on the page, or in white over their photo (hero).
   const who = (onPhoto: boolean, hideName = false) => (
     <>
       {!hideName && !noName && <h1 className={`text-balance font-bold leading-tight tracking-tight ${onPhoto ? "text-[34px]" : "text-[26px]"}`}>{data.displayName || "Your name"}</h1>}
       <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>@{data.handle}{data.branch ? ` · ${data.branch}` : ""}</p>
       {data.bio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{data.bio}</p>}
-      {data.socials.length > 0 && (
-        <div className="mt-4 flex flex-wrap justify-center gap-2.5">
-          {data.socials.map((s) => (
-            <a key={s.platform} href={preview ? undefined : s.url} target="_blank" rel="noreferrer" onClick={() => ev("click", s.platform)} aria-label={s.platform} className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-transform hover:scale-110" style={{ background: platformBackground(s.platform as SocialPlatform), boxShadow: onPhoto ? "0 0 0 2px rgba(255,255,255,0.85)" : undefined }}>
-              <PlatformIcon platform={s.platform as SocialPlatform} className="h-5 w-5" />
-            </a>
-          ))}
-        </div>
-      )}
+      <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} />
     </>
   );
 
   return (
     <div style={{ background: bg, color: ink, fontFamily: font, minHeight: "100%" }} className="relative pb-10" data-testid="bio-page">
-      {/* The header: a wide cover photo (blend), full-screen photo with their name on it (hero),
-          a banner with the photo over it (landscape), a shaped photo (shape) or a round one (portrait). */}
-      {CUTOUT_LAYOUTS.includes(t.layout) && data.cutoutUrl ? (
-        <>
-          <CutoutTop kind={t.layout} src={data.cutoutUrl} name={noName ? "" : data.displayName || "Your name"} theirs={theirs} paper={paper} dark={dark} bigName={bigName} dy={t.cutoutY ?? 0} size={(t.cutoutSize ?? 100) / 100} latest={data.podcast?.episodes[0]?.title} handle={data.handle} />
-          <div className={`relative z-30 mx-auto max-w-[560px] px-5 text-center ${t.layout === "popout" ? "pt-5" : "-mt-4"}`}>{who(false, t.layout !== "popout")}</div>
-        </>
-      ) : t.layout === "hero" && photo ? (
-        <div className="relative flex min-h-[600px] flex-col justify-end" style={{ background: `center ${Y}%/cover url(${photo})` }} data-testid="bio-hero-header">
-          <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.55) 70%, ${t.template === "vibrant" ? theirs : dark ? "#0b1020" : "rgba(0,0,0,0.85)"} 100%)` }} />
-          <div className="relative mx-auto w-full max-w-[560px] px-5 pb-8 text-center text-white">{who(true)}</div>
-        </div>
-      ) : (
-        <>
-          {t.layout === "blend" && photo ? (
-            <div className="relative">
-              <img src={photo} alt="" className="h-[340px] w-full object-cover" style={{ objectPosition: `center ${Y}%` }} />
-              <div className="absolute inset-x-0 bottom-0 h-40" style={{ background: `linear-gradient(to bottom, transparent, ${t.template === "vibrant" && !t.background?.color ? theirs : paper})` }} />
-            </div>
-          ) : t.layout === "landscape" ? (
-            <div className="relative">
-              <div className="h-40 w-full" style={{ background: data.heroUrl ? `center ${Y}%/cover url(${data.heroUrl})` : `linear-gradient(135deg, ${theirs}, #000741)` }} />
-              {data.avatarUrl && <img src={data.avatarUrl} alt="" className="absolute -bottom-12 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full object-cover" style={{ boxShadow: `0 0 0 4px ${paper}`, objectPosition: `center ${Y}%` }} />}
-            </div>
-          ) : t.layout === "shape" && data.avatarUrl ? (
-            <div className="flex justify-center pt-12">
-              <div className="relative" style={{ width: { s: 144, m: 176, l: 208 }[t.avatarSize ?? "m"], height: { s: 144, m: 176, l: 208 }[t.avatarSize ?? "m"] }}>
-                <span className="absolute -inset-3 rotate-12" style={{ background: accent, borderRadius: "58% 42% 38% 62% / 45% 55% 45% 55%", opacity: 0.9 }} />
-                <img src={data.avatarUrl} alt="" className="relative h-full w-full object-cover" style={{ borderRadius: "42% 58% 63% 37% / 52% 38% 62% 48%", objectPosition: `center ${Y}%` }} />
-              </div>
-            </div>
-          ) : (
-            data.avatarUrl && <div className="flex justify-center pt-10"><img src={data.avatarUrl} alt="" className="rounded-full object-cover" style={{ width: { s: 88, m: 112, l: 144 }[t.avatarSize ?? "m"], height: { s: 88, m: 112, l: 144 }[t.avatarSize ?? "m"], boxShadow: `0 0 0 4px ${accent}`, objectPosition: `center ${Y}%` }} /></div>
-          )}
-          <div className={`mx-auto max-w-[560px] px-5 text-center ${t.layout === "blend" && photo ? "-mt-12 relative" : t.layout === "landscape" ? "pt-14" : t.layout === "shape" ? "pt-7" : "pt-4"}`}>{who(false)}</div>
-        </>
-      )}
+      <PageTop t={t} avatar={data.avatarUrl} hero={data.heroUrl} cutoutUrl={data.cutoutUrl} name={noName ? "" : data.displayName || "Your name"} handle={data.handle} latest={data.podcast?.episodes[0]?.title}>{who}</PageTop>
 
       <div className="mx-auto mt-6 flex max-w-[560px] flex-col gap-4 px-4">
         {data.podcast && (t.podcast?.on ?? true) && <PodcastCard p={data.podcast} onAsk={data.ai?.enabled ? setAskEp : undefined} opts={{ ...DEFAULT_PODCAST, ...(t.podcast ?? {}) }} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} />}
@@ -147,6 +98,74 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       {data.askEnabled && !askEp && <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} welcome={data.welcome} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat} onAsk={onAsk} onLoad={onLoadMessages} />}
       {askEp && <AskSheet key={askEp.id} ep={askEp} name={data.displayName} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} onAskAi={onAskAi} onClose={() => setAskEp(null)} onMessage={data.askEnabled ? () => { setAskEp(null); setChat(true); } : undefined} />}
     </div>
+  );
+}
+
+/** Their social accounts, a row of round icons (a white ring over a photo). */
+export function SocialRow({ socials, onPhoto = false, preview, onTap }: { socials: { platform: string; url: string }[]; onPhoto?: boolean; preview: boolean; onTap?: (platform: string) => void }) {
+  if (!socials.length) return null;
+  return (
+    <div className="mt-4 flex flex-wrap justify-center gap-2.5" data-testid="social-row">
+      {socials.map((s) => (
+        <a key={s.platform} href={preview ? undefined : s.url} target="_blank" rel="noreferrer" onClick={() => onTap?.(s.platform)} aria-label={s.platform} className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-transform hover:scale-110" style={{ background: platformBackground(s.platform as SocialPlatform), boxShadow: onPhoto ? "0 0 0 2px rgba(255,255,255,0.85)" : undefined }}>
+          <PlatformIcon platform={s.platform as SocialPlatform} className="h-5 w-5" />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The top of a page in any of the layouts: a wide cover photo (blend), a
+ * full-screen photo with their name on it (hero), a banner with the photo over
+ * it (landscape), a shaped photo (shape), a round one (portrait), or one of the
+ * cut-out tops. What goes under or over the photo (their name, and the rest) is
+ * the caller's: children(onPhoto, hideName). The Brands and Family views use it too.
+ */
+export function PageTop({ t, avatar, hero, cutoutUrl, name, handle, latest, children }: { t: BioTheme; avatar: string; hero: string; cutoutUrl?: string; name: string; handle: string; latest?: string; children: (onPhoto: boolean, hideName?: boolean) => React.ReactNode }) {
+  const { theirs, paper, dark, accent } = bioPalette(t);
+  const Y = Number.isFinite(t.imageY) ? t.imageY : 50;
+  const photo = hero || avatar;
+  const longest = Math.max(4, ...(name || "Your name").split(/\s+/).map((w) => w.length));
+  const bigName = Math.round(Math.min(104, Math.max(46, 380 / (longest * 0.62)))); // the cutout's name, filling the width behind them
+  return (
+    <>
+      {CUTOUT_LAYOUTS.includes(t.layout) && cutoutUrl ? (
+        <>
+          <CutoutTop kind={t.layout} src={cutoutUrl} name={name} theirs={theirs} paper={paper} dark={dark} bigName={bigName} dy={t.cutoutY ?? 0} size={(t.cutoutSize ?? 100) / 100} latest={latest} handle={handle} />
+          <div className={`relative z-30 mx-auto max-w-[560px] px-5 text-center ${t.layout === "popout" ? "pt-5" : "-mt-4"}`}>{children(false, t.layout !== "popout")}</div>
+        </>
+      ) : t.layout === "hero" && photo ? (
+        <div className="relative flex min-h-[600px] flex-col justify-end" style={{ background: `center ${Y}%/cover url(${photo})` }} data-testid="bio-hero-header">
+          <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.55) 70%, ${t.template === "vibrant" ? theirs : dark ? "#0b1020" : "rgba(0,0,0,0.85)"} 100%)` }} />
+          <div className="relative mx-auto w-full max-w-[560px] px-5 pb-8 text-center text-white">{children(true)}</div>
+        </div>
+      ) : (
+        <>
+          {t.layout === "blend" && photo ? (
+            <div className="relative">
+              <img src={photo} alt="" className="h-[340px] w-full object-cover" style={{ objectPosition: `center ${Y}%` }} />
+              <div className="absolute inset-x-0 bottom-0 h-40" style={{ background: `linear-gradient(to bottom, transparent, ${t.template === "vibrant" && !t.background?.color ? theirs : paper})` }} />
+            </div>
+          ) : t.layout === "landscape" ? (
+            <div className="relative">
+              <div className="h-40 w-full" style={{ background: hero ? `center ${Y}%/cover url(${hero})` : `linear-gradient(135deg, ${theirs}, #000741)` }} />
+              {avatar && <img src={avatar} alt="" className="absolute -bottom-12 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full object-cover" style={{ boxShadow: `0 0 0 4px ${paper}`, objectPosition: `center ${Y}%` }} />}
+            </div>
+          ) : t.layout === "shape" && avatar ? (
+            <div className="flex justify-center pt-12">
+              <div className="relative" style={{ width: { s: 144, m: 176, l: 208 }[t.avatarSize ?? "m"], height: { s: 144, m: 176, l: 208 }[t.avatarSize ?? "m"] }}>
+                <span className="absolute -inset-3 rotate-12" style={{ background: accent, borderRadius: "58% 42% 38% 62% / 45% 55% 45% 55%", opacity: 0.9 }} />
+                <img src={avatar} alt="" className="relative h-full w-full object-cover" style={{ borderRadius: "42% 58% 63% 37% / 52% 38% 62% 48%", objectPosition: `center ${Y}%` }} />
+              </div>
+            </div>
+          ) : (
+            avatar && <div className="flex justify-center pt-10"><img src={avatar} alt="" className="rounded-full object-cover" style={{ width: { s: 88, m: 112, l: 144 }[t.avatarSize ?? "m"], height: { s: 88, m: 112, l: 144 }[t.avatarSize ?? "m"], boxShadow: `0 0 0 4px ${accent}`, objectPosition: `center ${Y}%` }} /></div>
+          )}
+          <div className={`mx-auto max-w-[560px] px-5 text-center ${t.layout === "blend" && photo ? "-mt-12 relative" : t.layout === "landscape" ? "pt-14" : t.layout === "shape" ? "pt-7" : "pt-4"}`}>{children(false)}</div>
+        </>
+      )}
+    </>
   );
 }
 

@@ -15,7 +15,7 @@ import { uploadToStorage } from "@/lib/upload";
 import { useBioFont } from "@/lib/bioFont";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
 import { ratesFor } from "@/components/BioBrandsView";
-import { CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { BRANDS_SECTIONS, FAMILY_SECTIONS, arrange, type BioLayout, CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
 import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, Mic, Square, Smile, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music } from "lucide-react";
 
@@ -198,7 +198,11 @@ export function BioBuilder() {
   const [cutError, setCutError] = useState("");
   const cutFailed = useRef("");
   useEffect(() => {
-    if (!draft || !CUTOUT_LAYOUTS.includes(draft.theme.layout) || !draft.avatarUrl || draft.cutoutFrom === draft.avatarUrl || cutting || cutFailed.current === draft.avatarUrl) return;
+    // Wanted when the page, or Brands or Family on the page's photo, has a cut-out top.
+    const wants = CUTOUT_LAYOUTS.includes(draft?.theme.layout as BioLayout)
+      || (CUTOUT_LAYOUTS.includes(draft?.brands?.layout as BioLayout) && !draft?.brands?.photo)
+      || (CUTOUT_LAYOUTS.includes(draft?.family?.layout as BioLayout) && !draft?.family?.photo);
+    if (!draft || !wants || !draft.avatarUrl || draft.cutoutFrom === draft.avatarUrl || cutting || cutFailed.current === draft.avatarUrl) return;
     setCutting(true);
     void (async () => {
       try {
@@ -215,17 +219,19 @@ export function BioBuilder() {
       } finally { setCutting(false); }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft?.theme.layout, draft?.avatarUrl, draft?.cutoutFrom]);
+  }, [draft?.theme.layout, draft?.brands?.layout, draft?.family?.layout, draft?.avatarUrl, draft?.cutoutFrom]);
 
   // The Brands view: the numbers from the server, what they write from the draft.
   const kitView: BioBrandsPublic | null = useMemo(() => draft && (kitSrv ?? q.data?.brandsPreview) ? {
-    ...(kitSrv ?? q.data!.brandsPreview!), displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, theme: draft.theme, kit: draft.brands ?? DEFAULT_BRANDS,
+    ...(kitSrv ?? q.data!.brandsPreview!), displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl, theme: draft.theme, kit: { ...DEFAULT_BRANDS, ...(draft.brands ?? {}) },
+    socials: draft.socials.filter((s) => s.on && s.url), cutoutUrl: draft.cutoutFrom && draft.cutoutFrom === draft.avatarUrl ? draft.cutoutUrl : "",
   } : null, [draft, q.data?.brandsPreview, kitSrv]);
   const famView: BioFamilyPublic | null = useMemo(() => {
     const srv = famSrv ?? q.data?.familyPreview;
     if (!draft || !srv) return null;
     const { key: _k, ...family } = draft.family ?? DEFAULT_FAMILY;
-    return { ...srv, displayName: draft.displayName, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl, theme: draft.theme, askEnabled: draft.askEnabled, family };
+    return { ...srv, displayName: draft.displayName, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl, theme: draft.theme, askEnabled: draft.askEnabled, family: { ...DEFAULT_FAMILY, ...family },
+      socials: draft.socials.filter((s) => s.on && s.url), cutoutUrl: draft.cutoutFrom && draft.cutoutFrom === draft.avatarUrl ? draft.cutoutUrl : "" };
   }, [draft, q.data?.familyPreview, famSrv]);
   const page = () => tab === "brands" && kitView ? <BioBrandsView data={kitView} preview listenUrl={url} />
     : tab === "family" && famView ? <BioFamilyView data={famView} preview />
@@ -458,6 +464,45 @@ const TONES = {
 } as const;
 
 /** A group of settings in its own card, with a coloured mark. */
+/**
+ * The tops of the page as tiles, each drawn in their colours and photo. The
+ * Brands and Family views add their own look first (own), picked as "".
+ */
+function LayoutTiles({ d, value, onPick, cutting = false, own, photo }: { d: Page; value: BioLayout | ""; onPick: (v: BioLayout | "") => void; cutting?: boolean; own?: { label: string; art: React.ReactNode }; photo?: string }) {
+  const t = d.theme;
+  const pal = bioPalette(t);
+  const c = t.color;
+  const ground = pal.paper;
+  const ink = pal.ink;
+  const avatar = photo || d.avatarUrl;
+  // A cutout is of the page's own photo.
+  const cut = !photo || photo === d.avatarUrl ? d.cutoutUrl && d.cutoutFrom === d.avatarUrl : false;
+  return (
+        <div className="grid grid-cols-3 gap-3">
+          {own && <Tile on={value === ""} onClick={() => onPick("")} label={own.label} testid="bio-layout-own">{own.art}</Tile>}
+          {([["portrait", "Classic"], ["hero", "Hero"], ["cutout", "Cutout"], ["popout", "Pop-out"], ["sticker", "Sticker"], ["magazine", "Magazine"], ["blend", "Cover photo"], ["landscape", "Banner"], ["shape", "Shape"]] as const).map(([v, l]) => {
+            const face = avatar ? `center/cover url(${d.avatarUrl})` : "#888";
+            return (
+              <Tile key={v} on={value === v} onClick={() => onPick(v)} label={l} note={CUTOUT_LAYOUTS.includes(v) && cutting && value === v ? "Cutting you out…" : undefined} testid={`bio-layout-${v}`}>
+                <span className="relative flex h-16 flex-col items-center overflow-hidden rounded-lg" style={{ background: ground }}>
+                  {v === "popout" ? <><span className="absolute bottom-0 left-1/2 h-11 w-11 -translate-x-1/2 translate-y-1/3 rounded-full" style={{ background: c }} />{cut ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</>
+                    : v === "sticker" ? <><span className="absolute inset-0" style={{ background: `repeating-linear-gradient(135deg, ${c} 0 6px, ${c}cc 6px 12px)` }} /><span className="absolute left-1/2 top-1.5 -translate-x-1/2 -rotate-6 text-[12px] font-black uppercase leading-none text-white">{(d.displayName || "Name").split(" ")[0].slice(0, 7)}</span><span className="absolute inset-0" style={{ filter: "drop-shadow(1.5px 0 0 #fff) drop-shadow(-1.5px 0 0 #fff) drop-shadow(0 1.5px 0 #fff) drop-shadow(0 -1.5px 0 #fff)" }}>{cut ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</span></>
+                    : v === "magazine" ? <><span className="absolute inset-0" style={{ background: c }} /><span className="absolute left-1/2 top-1 -translate-x-1/2 text-[14px] font-black uppercase leading-none" style={{ color: onColor(c), fontFamily: "Georgia, serif" }}>{(d.displayName || "Name").split(" ")[0].slice(0, 6)}</span>{cut ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}<span className="absolute bottom-1 left-1 h-1 w-6 rounded bg-white/90" /></>
+                    : v === "cutout" ? <><span className="absolute inset-0" style={{ background: `radial-gradient(circle at 50% 35%, ${c}, ${ground})` }} /><span className="absolute left-1/2 top-2 -translate-x-1/2 text-[13px] font-black uppercase leading-none" style={{ color: ink, opacity: 0.8 }}>{(d.displayName || "Name").split(" ")[0].slice(0, 7)}</span>{cut ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</>
+                    : v === "hero" ? <><span className="absolute inset-0" style={{ background: face }} /><span className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" /><span className="absolute bottom-2 h-1.5 w-12 rounded bg-white" /></>
+                    : v === "blend" ? <span className="h-11 w-full" style={{ background: avatar ? face : c, maskImage: "linear-gradient(to bottom, #000 50%, transparent)" }} />
+                    : v === "landscape" ? <><span className="h-6 w-full" style={{ background: `linear-gradient(135deg, ${c}, #000741)` }} /><span className="-mt-3 h-6 w-6 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${ground}` }} /></>
+                    : v === "shape" ? <span className="relative mt-2 h-9 w-9"><span className="absolute -inset-1 rotate-12" style={{ background: c, borderRadius: "58% 42% 38% 62% / 45% 55% 45% 55%" }} /><span className="absolute inset-0" style={{ background: face, borderRadius: "42% 58% 63% 37% / 52% 38% 62% 48%" }} /></span>
+                    : <span className="mt-2.5 h-8 w-8 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${c}` }} />}
+                  {v !== "hero" && !CUTOUT_LAYOUTS.includes(v) && <span className="absolute bottom-1.5 h-1 w-10 rounded" style={{ background: ink, opacity: 0.8 }} />}
+                </span>
+              </Tile>
+            );
+          })}
+        </div>
+  );
+}
+
 function Card({ icon: I, tone, title, action, children }: { icon: typeof User; tone: keyof typeof TONES; title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -634,27 +679,7 @@ function DesignTab({ d, change, view, cutting = false, cutError = "" }: { d: Pag
             <span className="text-xs text-muted-foreground">Current: <b className="font-semibold text-foreground">{TEMPLATES[t.template]?.label ?? "Custom"}</b></span>
           </div>
           <p className="mb-1.5 mt-5 text-xs font-medium text-muted-foreground">Top of the page</p>
-        <div className="grid grid-cols-3 gap-3">
-          {([["portrait", "Classic"], ["hero", "Hero"], ["cutout", "Cutout"], ["popout", "Pop-out"], ["sticker", "Sticker"], ["magazine", "Magazine"], ["blend", "Cover photo"], ["landscape", "Banner"], ["shape", "Shape"]] as const).map(([v, l]) => {
-            const face = d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888";
-            return (
-              <Tile key={v} on={t.layout === v} onClick={() => set({ layout: v })} label={l} note={CUTOUT_LAYOUTS.includes(v) && cutting && t.layout === v ? "Cutting you out…" : undefined} testid={`bio-layout-${v}`}>
-                <span className="relative flex h-16 flex-col items-center overflow-hidden rounded-lg" style={{ background: ground }}>
-                  {v === "popout" ? <><span className="absolute bottom-0 left-1/2 h-11 w-11 -translate-x-1/2 translate-y-1/3 rounded-full" style={{ background: c }} />{d.cutoutUrl && d.cutoutFrom === d.avatarUrl ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</>
-                    : v === "sticker" ? <><span className="absolute inset-0" style={{ background: `repeating-linear-gradient(135deg, ${c} 0 6px, ${c}cc 6px 12px)` }} /><span className="absolute left-1/2 top-1.5 -translate-x-1/2 -rotate-6 text-[12px] font-black uppercase leading-none text-white">{(d.displayName || "Name").split(" ")[0].slice(0, 7)}</span><span className="absolute inset-0" style={{ filter: "drop-shadow(1.5px 0 0 #fff) drop-shadow(-1.5px 0 0 #fff) drop-shadow(0 1.5px 0 #fff) drop-shadow(0 -1.5px 0 #fff)" }}>{d.cutoutUrl && d.cutoutFrom === d.avatarUrl ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</span></>
-                    : v === "magazine" ? <><span className="absolute inset-0" style={{ background: c }} /><span className="absolute left-1/2 top-1 -translate-x-1/2 text-[14px] font-black uppercase leading-none" style={{ color: onColor(c), fontFamily: "Georgia, serif" }}>{(d.displayName || "Name").split(" ")[0].slice(0, 6)}</span>{d.cutoutUrl && d.cutoutFrom === d.avatarUrl ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}<span className="absolute bottom-1 left-1 h-1 w-6 rounded bg-white/90" /></>
-                    : v === "cutout" ? <><span className="absolute inset-0" style={{ background: `radial-gradient(circle at 50% 35%, ${c}, ${ground})` }} /><span className="absolute left-1/2 top-2 -translate-x-1/2 text-[13px] font-black uppercase leading-none" style={{ color: ink, opacity: 0.8 }}>{(d.displayName || "Name").split(" ")[0].slice(0, 7)}</span>{d.cutoutUrl && d.cutoutFrom === d.avatarUrl ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</>
-                    : v === "hero" ? <><span className="absolute inset-0" style={{ background: face }} /><span className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" /><span className="absolute bottom-2 h-1.5 w-12 rounded bg-white" /></>
-                    : v === "blend" ? <span className="h-11 w-full" style={{ background: d.avatarUrl ? face : c, maskImage: "linear-gradient(to bottom, #000 50%, transparent)" }} />
-                    : v === "landscape" ? <><span className="h-6 w-full" style={{ background: `linear-gradient(135deg, ${c}, #000741)` }} /><span className="-mt-3 h-6 w-6 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${ground}` }} /></>
-                    : v === "shape" ? <span className="relative mt-2 h-9 w-9"><span className="absolute -inset-1 rotate-12" style={{ background: c, borderRadius: "58% 42% 38% 62% / 45% 55% 45% 55%" }} /><span className="absolute inset-0" style={{ background: face, borderRadius: "42% 58% 63% 37% / 52% 38% 62% 48%" }} /></span>
-                    : <span className="mt-2.5 h-8 w-8 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${c}` }} />}
-                  {v !== "hero" && !CUTOUT_LAYOUTS.includes(v) && <span className="absolute bottom-1.5 h-1 w-10 rounded" style={{ background: ink, opacity: 0.8 }} />}
-                </span>
-              </Tile>
-            );
-          })}
-        </div>
+        <LayoutTiles d={d} value={t.layout} onPick={(v) => v && set({ layout: v })} cutting={cutting} />
           <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-border p-3">
             <div><p className="text-sm font-semibold">Show my name</p><p className="text-xs text-muted-foreground">Turn it off when your photo or logo already says it.</p></div>
             <Switch checked={!(t.hideName ?? false)} onCheckedChange={(v) => set({ hideName: !v })} data-testid="bio-show-name" />
@@ -1355,6 +1380,32 @@ function VoiceRecorder({ value, preview, onChange }: { value: string; preview: s
   );
 }
 
+/**
+ * A view's sections, in their order: move one up or down, switch it off or on.
+ * One with nothing in it yet says so (it shows once it has something).
+ */
+function SectionsCard<T extends string>({ title, all, order, hidden, empty, onChange }: { title: string; all: readonly { id: T; label: string }[]; order: T[]; hidden: T[]; empty: Partial<Record<T, boolean>>; onChange: (order: T[], hidden: T[]) => void }) {
+  const list = arrange(all, order);
+  const move = (i: number, dir: -1 | 1) => { const x = [...list]; const j = i + dir; if (j < 0 || j >= x.length) return; [x[i], x[j]] = [x[j], x[i]]; onChange(x, hidden); };
+  return (
+    <Card icon={Layers} tone="blue" title={title}>
+      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border">
+        {list.map((id, i) => {
+          const off = hidden.includes(id);
+          const label = all.find((x) => x.id === id)?.label ?? id;
+          return (
+            <div key={id} className={`flex items-center gap-2 px-2.5 py-2 ${off ? "bg-muted/40" : ""}`} data-testid={`section-row-${id}`}>
+              <span className="flex flex-col"><button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="rounded text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label={`Move ${label} up`}><ArrowUp className="h-3.5 w-3.5" /></button><button type="button" onClick={() => move(i, 1)} disabled={i === list.length - 1} className="rounded text-muted-foreground hover:text-foreground disabled:opacity-30" aria-label={`Move ${label} down`}><ArrowDown className="h-3.5 w-3.5" /></button></span>
+              <span className={`min-w-0 flex-1 text-sm ${off ? "text-muted-foreground line-through" : "font-medium"}`}>{label}{!off && empty[id] && <span className="ml-1.5 text-[11px] font-normal text-muted-foreground no-underline">· nothing in it yet</span>}</span>
+              <Switch checked={!off} onCheckedChange={(v) => onChange(list, v ? hidden.filter((x) => x !== id) : [...hidden, id])} aria-label={`${label} ${off ? "off" : "on"}`} />
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
 /** A video: paste a link (YouTube, Vimeo, Instagram, TikTok), or upload one from the computer or phone. */
 function VideoPick({ value, onChange, testid }: { value: string; onChange: (v: string) => void; testid: string }) {
   const { toast } = useToast();
@@ -1415,14 +1466,8 @@ function BrandsTab({ d, change, url, kit, episodes }: { d: Page; change: (p: Par
   ];
   return (
     <div className="space-y-4">
-      <Card icon={Handshake} tone="gold" title="Your media kit">
-        <div className="flex items-center justify-between gap-3 rounded-2xl bg-gradient-to-br from-[#000741] via-[#053877] to-[#0a4a99] p-4 text-white">
-          <div className="min-w-0">
-            <p className="truncate text-base font-bold">{link.replace(/^https?:\/\/(www\.)?/, "")}</p>
-            <p className="text-xs text-white/70">{b.on ? "Send it to any brand. They can ask to sponsor you right from it." : "Off: brands can't open it."}</p>
-          </div>
-          <OnOff on={b.on} onChange={(v) => set({ on: v }, true)} testid="brands-on" />
-        </div>
+      <Card icon={Handshake} tone="gold" title="Your media kit" action={<Switch checked={b.on} onCheckedChange={(v) => set({ on: v }, true)} aria-label="Media kit on" data-testid="brands-on" />}>
+        {b.on ? <p className="-mt-1 truncate text-xs text-muted-foreground">{link.replace(/^https?:\/\/(www\.)?/, "")} · send it to any brand</p> : <p className="-mt-1 text-xs text-muted-foreground">Off: brands can't open it.</p>}
         {b.on && (
           <div className="flex gap-2">
             <Button onClick={() => void navigator.clipboard.writeText(link).then(() => toast({ title: "Media kit link copied" }))} className="flex-1 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="brands-copy"><Copy className="h-4 w-4" /> Copy link</Button>
@@ -1435,6 +1480,12 @@ function BrandsTab({ d, change, url, kit, episodes }: { d: Page; change: (p: Par
           <Switch checked={b2.sponsorOn} onCheckedChange={(v) => set({ sponsorOn: v }, true)} data-testid="brands-sponsor-on" />
         </div>
       </Card>
+
+      <Card icon={LayoutTemplate} tone="violet" title="Top of your kit">
+        <LayoutTiles d={d} value={b2.layout} onPick={(v) => set({ layout: v }, true)} photo={b2.photo || d.avatarUrl} own={{ label: "Media kit", art: <span className="relative flex h-16 flex-col items-center overflow-hidden rounded-lg" style={{ background: `linear-gradient(145deg, ${d.theme.color}, #000741)` }}><span className="mt-2 h-7 w-7 rounded-full ring-2 ring-white/40" style={{ background: (b2.photo || d.avatarUrl) ? `center/cover url(${b2.photo || d.avatarUrl})` : "#888" }} /><span className="mt-1.5 h-1 w-10 rounded bg-white/90" /><span className="mt-1 h-1.5 w-8 rounded-full bg-[#F0A71F]" /></span> }} />
+      </Card>
+
+      <SectionsCard title="On your kit, in this order" all={BRANDS_SECTIONS} order={b2.order} hidden={b2.hidden} empty={{ video: !b2.video, sample: !b2.sample, rates: !b2.showRates, partners: !b2.partners.length, episodes: !kit?.podcast, sponsor: !b2.sponsorOn }} onChange={(order, hidden) => set({ order, hidden }, true)} />
 
       <Card icon={User} tone="blue" title="About you, for brands">
         <Field label="Name brands see" hint="Your own name usually works best here, even if your page uses the show's.">
@@ -1471,16 +1522,17 @@ function BrandsTab({ d, change, url, kit, episodes }: { d: Page; change: (p: Par
       </Card>
 
       <Card icon={Eye} tone="blue" title="Your numbers, measured by us">
-        <div className="grid grid-cols-2 gap-2">
-          {rows.map(([label, v, how]) => (
-            <div key={label} className={`rounded-2xl border p-3 ${v ? "border-border bg-background" : "border-dashed border-border"}`}>
-              <p className={`text-xl font-bold tabular-nums ${v ? "" : "text-muted-foreground"}`}>{v ?? "—"}</p>
-              <p className="text-[11px] text-muted-foreground">{label}</p>
-              {!v && <p className="mt-1 text-[11px] leading-snug text-[#b36b00] dark:text-[#F0A71F]">{how}</p>}
-            </div>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground">Brands trust these because we measure them. Only the ones we have show on your kit.</p>
+        {rows.some(([, v]) => v) && (
+          <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-border">
+            {rows.filter(([, v]) => v).map(([label, v], i) => (
+              <div key={label} className="px-3 py-2.5" style={{ borderTop: i > 1 ? "1px solid hsl(var(--border))" : undefined, borderLeft: i % 2 ? "1px solid hsl(var(--border))" : undefined }}>
+                <p className="text-xl font-bold tabular-nums">{v}</p>
+                <p className="text-[11px] text-muted-foreground">{label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        {rows.some(([, v]) => !v) && <p className="text-xs text-muted-foreground">More to show: {Array.from(new Set(rows.filter(([, v]) => !v).map(([, , how]) => how))).join(" · ")}.</p>}
       </Card>
 
       <AudienceCard kit={kit} />
@@ -1504,13 +1556,28 @@ function BrandsTab({ d, change, url, kit, episodes }: { d: Page; change: (p: Par
       </Card>
 
       <Card icon={Handshake} tone="gold" title="Brands you've worked with">
-        {b.partners.map((p, i) => (
-          <div key={p.id} className="flex gap-2">
-            <Input value={p.name} onChange={(e) => set({ partners: b.partners.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} placeholder="Brand" className="w-2/5" />
-            <Input value={p.url} onChange={(e) => set({ partners: b.partners.map((x, j) => (j === i ? { ...x, url: e.target.value } : x)) })} placeholder="https:// (optional)" className="flex-1" />
-            <button type="button" onClick={() => set({ partners: b.partners.filter((_, j) => j !== i) }, true)} className="px-1 text-muted-foreground hover:text-destructive" aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
-          </div>
-        ))}
+        <p className="-mt-1 text-xs text-muted-foreground">Add their home page and we'll put their logo on your kit. Or just type the name.</p>
+        {b.partners.map((p, i) => {
+          const edit = (x: Partial<BioBrands["partners"][number]>, now = false) => set({ partners: b.partners.map((y, j) => (j === i ? { ...y, ...x } : y)) }, now);
+          const findLogo = async (url: string) => {
+            const u = url.trim();
+            if (!u) { edit({ logo: "" }, true); return; }
+            const site = /^https?:\/\//i.test(u) ? u : `https://${u}`;
+            try {
+              const r = await apiRequest("GET", `/api/host/bio/logo?url=${encodeURIComponent(site)}`);
+              const j = (await r.json()) as { logo?: string };
+              edit({ url: site, logo: j.logo ?? "", name: p.name || new URL(site).hostname.replace(/^www\./, "").split(".")[0].replace(/^./, (c) => c.toUpperCase()) }, true);
+            } catch { edit({ url: site }, true); }
+          };
+          return (
+            <div key={p.id} className="flex items-center gap-2" data-testid="brands-partner">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-white p-1">{p.logo ? <img src={p.logo} alt="" className="max-h-full max-w-full object-contain" /> : <Handshake className="h-4 w-4 text-muted-foreground" />}</span>
+              <Input value={p.name} onChange={(e) => edit({ name: e.target.value })} placeholder="Brand name" className="w-[38%]" />
+              <Input defaultValue={p.url} onBlur={(e) => e.target.value.trim() !== p.url && void findLogo(e.target.value)} placeholder="Their website (for the logo)" className="flex-1" data-testid="brands-partner-url" />
+              <button type="button" onClick={() => set({ partners: b.partners.filter((_, j) => j !== i) }, true)} className="px-1 text-muted-foreground hover:text-destructive" aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
+            </div>
+          );
+        })}
         <button type="button" onClick={() => set({ partners: [...b.partners, { id: newId(), name: "", url: "" }] })} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] dark:text-[#8fb5e8]" data-testid="brands-add-partner"><Plus className="h-3.5 w-3.5" /> Add a brand</button>
       </Card>
     </div>
@@ -1612,6 +1679,12 @@ function FamilyTab({ d, change, flush, url, famPreview }: { d: Page; change: (p:
         )}
         <ViewPhoto kind="family" url={f.photo ?? ""} fallback={d.heroUrl || d.avatarUrl} note="The big photo at the top. One with family, or in uniform." onChange={(u) => set({ photo: u }, true)} />
       </Card>
+
+      <Card icon={LayoutTemplate} tone="violet" title="Top of the page">
+        <LayoutTiles d={d} value={f.layout ?? ""} onPick={(v) => set({ layout: v }, true)} photo={f.photo || d.avatarUrl} own={{ label: "Family", art: <span className="relative flex h-16 flex-col items-center justify-end overflow-hidden rounded-lg" style={{ background: (f.photo || d.heroUrl || d.avatarUrl) ? `center 25%/cover url(${f.photo || d.heroUrl || d.avatarUrl})` : `linear-gradient(145deg, ${d.theme.color}, #000741)` }}><span className="absolute inset-0 bg-gradient-to-b from-transparent to-black/80" /><span className="relative mb-2 h-1.5 w-10 rounded bg-white" /></span> }} />
+      </Card>
+
+      <SectionsCard title="On the page, in this order" all={FAMILY_SECTIONS} order={f.order ?? []} hidden={f.hidden ?? []} empty={{ note: !f.note.trim(), voice: !f.audio, video: !f.video, milestones: !f.milestones.length, photos: !f.photos.length, leave: !d.askEnabled }} onChange={(order, hidden) => set({ order, hidden }, true)} />
 
       <Card icon={Sparkles} tone="green" title="In your words">
         <Field label="Your name, for family" hint="What they call you. It's at the top and signs your note.">

@@ -15,7 +15,7 @@ import { readFeed, hostedAsStats } from "./hosting.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
 import { bioPages, bioEvents, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
-import { DEFAULT_PODCAST, parseTheme, parseSections, parseSocials, parseBrands, parseFamily, type BioFamily, type BioFamilyPublic, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic, type BioViewMedia } from "../shared/bio.js";
+import { DEFAULT_PODCAST, parseTheme, parseSections, parseSocials, parseBrands, parseFamily, type BioFamily, type BioFamilyPublic, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic, type BioViewMedia, type BioLayout, BRANDS_SECTIONS, FAMILY_SECTIONS } from "../shared/bio.js";
 import type { PodcastStatsData } from "../shared/schema.js";
 
 /**
@@ -158,6 +158,9 @@ async function brandsOf(row: BioPageRow): Promise<BioBrandsPublic> {
     branch: profile?.branch && profile.branch !== "Not applicable" ? profile.branch : "",
     theme: parseTheme(row.theme),
     kit,
+    heroUrl: row.heroUrl,
+    socials: parseSocials(row.socials).filter((x) => x.on && /^https?:\/\//.test(x.url)),
+    cutoutUrl: row.cutoutFrom && row.cutoutFrom === row.avatarUrl ? row.cutoutUrl : "",
     podcast: pod ? { title: pod.title, artworkUrl: pod.artworkUrl, pageUrl: pod.pageUrl, episodeCount: pod.episodeCount, latest: pod.episodes.slice(0, 3).map((e) => ({ title: e.title, publishedAt: e.publishedAt, artworkUrl: e.artworkUrl || pod.artworkUrl })) } : null,
     numbers: {
       perEpisode: best?.perEpisode ?? null,
@@ -242,6 +245,8 @@ async function familyPublicOf(row: BioPageRow, f: BioFamily): Promise<BioFamilyP
     askEnabled: row.askEnabled,
     firstName: (profile?.hostName || "").trim().split(/\s+/)[0] || "",
     media: { video, audio, sample: null },
+    socials: parseSocials(row.socials).filter((x) => x.on && /^https?:\/\//.test(x.url)),
+    cutoutUrl: row.cutoutFrom && row.cutoutFrom === row.avatarUrl ? row.cutoutUrl : "",
   };
 }
 
@@ -265,8 +270,17 @@ function cleanFamily(v: unknown, prev: BioFamily): BioFamily {
     name: typeof x.name === "string" ? x.name.slice(0, 80) : prev.name ?? "",
     video: typeof x.video === "string" ? videoRef(x.video) : prev.video ?? "",
     audio: typeof x.audio === "string" ? (/^r2:show-assets\/[\w.-]+$/.test(x.audio) ? x.audio : "") : prev.audio ?? "",
+    layout: layoutOf(x.layout, prev.layout),
+    order: idsOf(x.order, FAMILY_SECTIONS, prev.order),
+    hidden: idsOf(x.hidden, FAMILY_SECTIONS, prev.hidden),
   };
 }
+
+const LAYOUTS: BioLayout[] = ["portrait", "landscape", "blend", "hero", "shape", "cutout", "popout", "sticker", "magazine"];
+const layoutOf = (v: unknown, prev: BioLayout | "" | undefined): BioLayout | "" => (v === "" || LAYOUTS.includes(v as BioLayout) ? (v as BioLayout | "") : prev ?? "");
+/** A list of section ids, only known ones, once each. */
+const idsOf = <T extends string>(v: unknown, all: readonly { id: T }[], prev: T[] | undefined): T[] =>
+  Array.isArray(v) ? Array.from(new Set(v.filter((x): x is T => all.some((a) => a.id === x)))) : prev ?? [];
 
 /** A video link (https) or one they uploaded to us. */
 const videoRef = (v: string) => (/^r2:show-assets\/[\w.-]+$/.test(v) ? v : httpUrl(v));
@@ -279,7 +293,7 @@ function cleanBrands(v: unknown, prev: BioBrands): BioBrands {
     audience: typeof x.audience === "string" ? x.audience.slice(0, 400) : prev.audience,
     showRates: typeof x.showRates === "boolean" ? x.showRates : prev.showRates,
     partners: Array.isArray(x.partners)
-      ? x.partners.slice(0, 24).map((p: Record<string, unknown>) => ({ id: str(p?.id, 20) || crypto.randomBytes(4).toString("hex"), name: str(p?.name, 60).trim(), url: httpUrl(p?.url) })).filter((p) => p.name || p.url)
+      ? x.partners.slice(0, 24).map((p: Record<string, unknown>) => ({ id: str(p?.id, 20) || crypto.randomBytes(4).toString("hex"), name: str(p?.name, 60).trim(), url: httpUrl(p?.url), logo: httpUrl(p?.logo) })).filter((p) => p.name || p.url)
       : prev.partners,
     photo: typeof x.photo === "string" ? httpUrl(x.photo) : prev.photo,
     name: typeof x.name === "string" ? x.name.slice(0, 80) : prev.name ?? "",
@@ -287,6 +301,9 @@ function cleanBrands(v: unknown, prev: BioBrands): BioBrands {
     video: typeof x.video === "string" ? videoRef(x.video) : prev.video ?? "",
     sample: typeof x.sample === "string" ? (/^ep:[\w:.-]{1,200}$/.test(x.sample) ? x.sample : httpUrl(x.sample)) : prev.sample ?? "",
     sampleInfo: prev.sampleInfo,
+    layout: layoutOf(x.layout, prev.layout),
+    order: idsOf(x.order, BRANDS_SECTIONS, prev.order),
+    hidden: idsOf(x.hidden, BRANDS_SECTIONS, prev.hidden),
   };
 }
 
@@ -449,6 +466,39 @@ export function registerBioPage(app: Express) {
 
   // Cutout: their profile photo with the background taken out (BiRefNet on fal, portrait model), kept as a PNG.
   const cutting = new Map<number, number[]>();
+  // A brand's logo from its home page: its app icon (apple-touch-icon, the biggest there is), or its site icon.
+  app.get("/api/host/bio/logo", requireHostSession, async (req, res) => {
+    let u: URL;
+    try { u = new URL(/^https?:\/\//i.test(String(req.query.url ?? "")) ? String(req.query.url) : `https://${String(req.query.url ?? "")}`); } catch { return res.status(400).json({ message: "That isn't a web address." }); }
+    const host = u.hostname.toLowerCase();
+    if (!/\.[a-z]{2,}$/.test(host) || /^(localhost|.*\.local|.*\.internal)$/.test(host) || /^[\d.]+$/.test(host)) return res.status(400).json({ message: "That isn't a web address." });
+    const fallback = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=128`;
+    try {
+      const r = await fetch(`https://${host}/`, { redirect: "follow", signal: AbortSignal.timeout(6000), headers: { "User-Agent": "Mozilla/5.0 (compatible; MilitaryVoices logo finder)", Accept: "text/html" } });
+      const html = (await r.text()).slice(0, 400_000);
+      const links = Array.from(html.matchAll(/<link\b[^>]*>/gi)).map((m) => m[0]);
+      const attr = (tag: string, k: string) => tag.match(new RegExp(`${k}\\s*=\\s*["']([^"']+)["']`, "i"))?.[1] ?? "";
+      const icons = links
+        .filter((l) => /rel\s*=\s*["'][^"']*(apple-touch-icon|icon)[^"']*["']/i.test(l) && attr(l, "href") && !/\.svg(\?|$)/i.test(attr(l, "href")))
+        // Its size from sizes="180x180", or from the file's name (favicon_32x32.png).
+        .map((l) => ({ href: attr(l, "href"), apple: /apple-touch-icon/i.test(attr(l, "rel")), size: Number(attr(l, "sizes").split("x")[0]) || Number(attr(l, "href").match(/(\d{2,3})x\d{2,3}/)?.[1]) || 0 }))
+        .sort((a, b) => Number(b.apple) - Number(a.apple) || b.size - a.size);
+      const base = r.url || `https://${host}/`;
+      let best = icons[0]?.apple ? new URL(icons[0].href, base).toString() : "";
+      // Most sites keep an app icon at the usual address even when the page doesn't link it.
+      if (!best) {
+        const touch = new URL("/apple-touch-icon.png", base).toString();
+        const t = await fetch(touch, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(4000) }).catch(() => null);
+        if (t?.ok && /^image\//.test(t.headers.get("content-type") ?? "")) best = touch;
+      }
+      // A big site icon will do; a tiny one looks worse than Google's copy of it at 128.
+      if (!best && icons[0] && (icons[0].size >= 64 || (!icons[0].size && !/favicon\.ico/i.test(icons[0].href)))) best = new URL(icons[0].href, base).toString();
+      res.json({ logo: /^https:\/\//.test(best) ? best : fallback });
+    } catch {
+      res.json({ logo: fallback });
+    }
+  });
+
   app.post("/api/host/bio/cutout", requireHostSession, async (req, res) => {
     const row = await pageFor(emailOf(req));
     if (!process.env.FAL_KEY) return res.status(503).json({ message: "Cutout isn't switched on yet." });
