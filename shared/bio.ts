@@ -100,6 +100,28 @@ export interface BioFamilyPublic {
   firstName: string;
 }
 
+/** Independent audience data for the media kit: the podcaster's biggest account, as the index measured it. */
+export interface BioAudience {
+  platform: string;
+  handle: string;
+  /** When it was measured. */
+  asOf: string;
+  followers: number | null;
+  engagementRate: number | null;
+  realPct: number | null;
+  medianViews: number | null;
+  femalePct: number | null;
+  malePct: number | null;
+  ages: { name: string; pct: number }[];
+  countries: { name: string; pct: number }[];
+  states: { name: string; pct: number }[];
+  interests: string[];
+  /** Brands their audience follows. */
+  affinity: string[];
+  /** Brands seen in their sponsored posts. */
+  pastSponsors: string[];
+}
+
 /** What the public Brands view gets: the kit, and the numbers behind it (ours, never typed in). */
 export interface BioBrandsPublic {
   handle: string;
@@ -123,6 +145,8 @@ export interface BioBrandsPublic {
     pageViews30: number;
     plays30: number;
   };
+  /** From our Discovery index (cached, never bought for a visitor). */
+  audience: BioAudience | null;
 }
 
 /** What the public page gets. */

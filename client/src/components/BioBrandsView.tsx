@@ -40,14 +40,31 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
   const rates = data.kit.showRates && n.perEpisode ? podcastWorthFor(n.perEpisode) : null;
   const [asking, setAsking] = useState(false);
 
+  const a = data.audience;
   const stats = [
     n.perEpisode ? { k: "per", big: compact(n.perEpisode), label: `${unit[0].toUpperCase()}${unit.slice(1)} per episode`, icon: Headphones } : null,
     n.last30 ? { k: "30", big: compact(n.last30), label: `${unit[0].toUpperCase()}${unit.slice(1)}, last 30 days`, icon: Play } : null,
     n.reach ? { k: "reach", big: compact(n.reach), label: "Social followers", icon: Users } : null,
     n.pageViews30 ? { k: "views", big: compact(n.pageViews30), label: "Page views, last 30 days", icon: Eye } : null,
+    // Their strengths only: engagement and real followers show when they help (the kit is theirs to put forward).
+    a?.engagementRate != null && a.engagementRate >= 1 ? { k: "eng", big: `${a.engagementRate.toFixed(1)}%`, label: `Engagement on ${platformLabel(a.platform as SocialPlatform)}`, icon: Sparkles } : null,
+    a?.medianViews ? { k: "views2", big: compact(a.medianViews), label: `Typical ${a.platform === "youtube" ? "video" : a.platform === "tiktok" ? "TikTok" : "Reel"} views`, icon: Eye } : null,
+    a?.realPct != null && a.realPct >= 60 ? { k: "real", big: `${Math.round(a.realPct)}%`, label: "Real followers", icon: Check } : null,
     !n.last30 && n.total ? { k: "total", big: compact(n.total), label: `${unit[0].toUpperCase()}${unit.slice(1)}, all time`, icon: Play } : null,
-  ].filter(Boolean).slice(0, 4) as { k: string; big: string; label: string; icon: typeof Eye }[];
+  ].filter(Boolean).slice(0, 6) as { k: string; big: string; label: string; icon: typeof Eye }[];
 
+
+  const bars = (rows: { name: string; pct: number }[]) => (
+    <div className="flex flex-col gap-2">
+      {rows.map((r) => (
+        <div key={r.name}>
+          <div className="flex justify-between text-sm"><span>{r.name}</span><span className="font-semibold tabular-nums">{Math.round(r.pct)}%</span></div>
+          <div className="mt-1 h-2 overflow-hidden rounded-full" style={{ background: line }}><div className="h-full rounded-full" style={{ width: `${Math.min(100, r.pct)}%`, background: accent }} /></div>
+        </div>
+      ))}
+    </div>
+  );
+  const chips = (xs: string[]) => <div className="flex flex-wrap gap-1.5">{xs.map((x) => <span key={x} className="rounded-full px-3 py-1.5 text-xs font-semibold" style={{ border: `1px solid ${line}`, background: dark ? "rgba(255,255,255,0.04)" : "#f7f8fb" }}>{x}</span>)}</div>;
   const section = (title: string, body: React.ReactNode) => (
     <section className="rounded-3xl p-5 text-left" style={{ background: card, border: `1px solid ${line}` }}>
       <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em]" style={{ color: sub }}>{title}</p>
@@ -99,7 +116,23 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
           </div>
         ))}
 
-        {data.kit.audience && section("Who listens", <p className="whitespace-pre-line text-[15px] leading-relaxed">{data.kit.audience}</p>)}
+        {(data.kit.audience || a) && section("Who listens", (
+          <div className="flex flex-col gap-5">
+            {data.kit.audience && <p className="whitespace-pre-line text-[15px] leading-relaxed">{data.kit.audience}</p>}
+            {a && (a.femalePct != null || a.malePct != null) && (
+              <div>
+                <div className="flex h-3 overflow-hidden rounded-full"><div style={{ width: `${a.malePct ?? 0}%`, background: accent }} /><div style={{ width: `${a.femalePct ?? 0}%`, background: dark ? "rgba(255,255,255,0.35)" : "rgba(11,16,32,0.25)" }} /></div>
+                <div className="mt-1.5 flex justify-between text-xs" style={{ color: sub }}><span><b style={{ color: ink }}>{Math.round(a.malePct ?? 0)}%</b> men</span><span><b style={{ color: ink }}>{Math.round(a.femalePct ?? 0)}%</b> women</span></div>
+              </div>
+            )}
+            {a && a.ages.length > 0 && <div><p className="mb-2 text-xs font-semibold" style={{ color: sub }}>Ages</p>{bars(a.ages.filter((x) => x.pct >= 1).map((x) => ({ ...x, name: x.name.replace(/-$/, "+") })))}</div>}
+            {a && a.countries.length > 0 && <div><p className="mb-2 text-xs font-semibold" style={{ color: sub }}>Top countries</p>{bars(a.countries.slice(0, 4))}</div>}
+            {a && a.states.length > 0 && <div><p className="mb-2 text-xs font-semibold" style={{ color: sub }}>Top US states</p>{bars(a.states.slice(0, 4))}</div>}
+            {a && a.interests.length > 0 && <div><p className="mb-2 text-xs font-semibold" style={{ color: sub }}>What they're into</p>{chips(a.interests)}</div>}
+            {a && a.affinity.length > 0 && <div><p className="mb-2 text-xs font-semibold" style={{ color: sub }}>Brands they follow</p>{chips(a.affinity)}</div>}
+            {a && <p className="text-[11px] leading-snug" style={{ color: sub }}>Audience of @{a.handle} on {platformLabel(a.platform as SocialPlatform)}, measured independently{a.asOf ? ` as of ${new Date(a.asOf).toLocaleDateString(undefined, { month: "short", year: "numeric" })}` : ""}.</p>}
+          </div>
+        ))}
 
         {rates && section("Sponsorship rates", (
           <div className="flex flex-col">
@@ -113,12 +146,15 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
           </div>
         ))}
 
-        {data.kit.partners.length > 0 && section("Brands I've worked with", (
+        {(data.kit.partners.length > 0 || (a?.pastSponsors.length ?? 0) > 0) && section("Brands I've worked with", (
           <div className="flex flex-wrap gap-2">
             {data.kit.partners.map((p) => {
               const chip = <span className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold" style={{ border: `1px solid ${line}`, background: dark ? "rgba(255,255,255,0.04)" : "#f7f8fb" }}><Sparkles className="h-3.5 w-3.5" style={{ color: accent }} />{p.name || p.url.replace(/^https?:\/\/(www\.)?/, "")}</span>;
               return p.url && !preview ? <a key={p.id} href={p.url} target="_blank" rel="noreferrer">{chip}</a> : <span key={p.id}>{chip}</span>;
             })}
+            {(a?.pastSponsors ?? []).filter((h) => !data.kit.partners.some((p) => p.name.toLowerCase().replace(/\W/g, "") === h.toLowerCase().replace(/\W/g, ""))).map((h) => (
+              <span key={h} className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-semibold" style={{ border: `1px solid ${line}`, background: dark ? "rgba(255,255,255,0.04)" : "#f7f8fb" }}>@{h.replace(/^@/, "")}</span>
+            ))}
           </div>
         ))}
 

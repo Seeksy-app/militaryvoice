@@ -15,7 +15,7 @@ import { podcastWorthFor } from "@/lib/worth";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import { SWATCHES, TEMPLATES, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
+import { Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
 /**
  * Rally Point (was "My page"): the podcaster's bio page builder. Profile, Design, Content and
@@ -748,6 +748,8 @@ function BrandsTab({ d, change, url, kit }: { d: Page; change: (p: Partial<Page>
         <p className="text-xs text-muted-foreground">Brands trust these because we measure them. Only the ones we have show on your kit.</p>
       </Card>
 
+      <AudienceCard kit={kit} />
+
       <Card icon={Sparkles} tone="green" title="Your pitch">
         <Field label="Why brands work with you" hint="One or two lines. Leave it empty to use your bio.">
           <Textarea value={b.pitch} onChange={(e) => set({ pitch: e.target.value })} rows={3} maxLength={400} placeholder="I help officer candidates get through OCS. Brands reach them the month before they ship." data-testid="brands-pitch" />
@@ -782,6 +784,46 @@ function BrandsTab({ d, change, url, kit }: { d: Page; change: (p: Partial<Page>
         <button type="button" onClick={() => set({ partners: [...b.partners, { id: newId(), name: "", url: "" }] })} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] dark:text-[#8fb5e8]" data-testid="brands-add-partner"><Plus className="h-3.5 w-3.5" /> Add a brand</button>
       </Card>
     </div>
+  );
+}
+
+/** The audience data behind the kit: read from Discovery (once a month at most), shown to brands from our copy. */
+function AudienceCard({ kit }: { kit: BioBrandsPublic | null }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const a = kit?.audience;
+  const load = async () => {
+    setBusy(true);
+    try {
+      const r = await apiRequest("GET", "/api/host/my-analytics");
+      const j = (await r.json()) as { none?: boolean };
+      if (j.none) throw new Error("Connect Instagram, YouTube or TikTok in Integrations first.");
+      await qc.invalidateQueries({ queryKey: KEY });
+      toast({ title: "Audience data added", description: "It's on your media kit now." });
+    } catch (e) {
+      toast({ title: "Couldn't load your audience", description: (e as Error).message.replace(/^\d+:\s*/, ""), variant: "destructive" });
+    } finally { setBusy(false); }
+  };
+  return (
+    <Card icon={Users} tone="violet" title="Your audience">
+      {a ? (
+        <>
+          <p className="text-sm">From <b>@{a.handle}</b> on {platformLabel(a.platform as SocialPlatform)}{a.asOf ? `, measured ${new Date(a.asOf).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}.</p>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[["Engagement", a.engagementRate != null ? `${a.engagementRate.toFixed(1)}%` : "—"], ["Real followers", a.realPct != null ? `${Math.round(a.realPct)}%` : "—"], ["Men / women", a.malePct != null ? `${Math.round(a.malePct)} / ${Math.round(a.femalePct ?? 0)}` : "—"]].map(([l, v]) => (
+              <div key={l} className="rounded-xl border border-border p-2"><p className="text-base font-bold tabular-nums">{v}</p><p className="text-[10px] text-muted-foreground">{l}</p></div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Ages, countries, interests and the brands your audience follows show on your kit. It refreshes each month when you open My analytics.</p>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">Add who your audience really is: ages, men and women, countries, interests and the brands they follow. Brands decide on this.</p>
+          <Button onClick={() => void load()} disabled={busy} className="w-full gap-1.5 rounded-full bg-[#053877] hover:bg-[#0a4a99]" data-testid="brands-load-audience">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />} Add my audience data</Button>
+        </>
+      )}
+    </Card>
   );
 }
 

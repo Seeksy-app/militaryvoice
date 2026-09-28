@@ -8,6 +8,7 @@ import { requireHostSession, getSessionEmail } from "./session.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { sendListenerQuestionEmail, sendListenerReplyEmail, sendSponsorInquiryEmail } from "./email.js";
 import { parseSocialAccounts } from "./uploadPost.js";
+import { audienceFor } from "./discovery.js";
 import { buildShareCard } from "./shareCard.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { readFeed, hostedAsStats } from "./hosting.js";
@@ -129,11 +130,12 @@ function numbersOf(d: PodcastStatsData) {
 
 /** Everything a brand sees: the kit they wrote, and numbers we measured (never typed in by them). */
 async function brandsOf(row: BioPageRow): Promise<BioBrandsPublic> {
-  const [hosted, stats, profile, pod] = await Promise.all([
+  const [hosted, stats, profile, pod, audience] = await Promise.all([
     hostedAsStats(row.email).catch(() => []),
     storage.listPodcastStats(row.email).catch(() => []),
     storage.getProfileByEmail(row.email).catch(() => undefined),
     podcastFor(row).catch(() => null),
+    audienceFor(row.email).catch((err) => { console.warn("Kit audience failed:", (err as Error).message); return null; }),
   ]);
   const sources = [
     ...hosted.map((h) => ({ source: "militaryvoices", data: h.data })),
@@ -165,6 +167,7 @@ async function brandsOf(row: BioPageRow): Promise<BioBrandsPublic> {
       pageViews30: count("view"),
       plays30: count("play"),
     },
+    audience,
   };
 }
 

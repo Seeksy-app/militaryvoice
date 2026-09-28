@@ -397,6 +397,50 @@ function toCard(platform: string, a: any): CreatorCard {
 // Our own creators: verified, free, first
 // ---------------------------------------------------------------------------
 
+/**
+ * A podcaster's audience for their media kit, from what we already hold: the
+ * account My analytics reads (their lineup match, or their biggest connected
+ * Instagram, YouTube or TikTok). Never buys anything; null when we hold nothing.
+ */
+export async function audienceFor(email: string): Promise<import("../shared/bio.js").BioAudience | null> {
+  email = email.trim().toLowerCase();
+  const ev = await storage.getFeaturedEvent().catch(() => null);
+  const mine = ev ? (await storage.listSignups(ev.id)).filter((x) => x.status !== "cancelled" && x.email.trim().toLowerCase() === email) : [];
+  const card = mine.length ? (await verifiedCreators()).find((c) => mine.some((x) => x.id === c.signupId) && c.handle) : undefined;
+  const tries: { platform: string; handle: string }[] = card ? [{ platform: card.platform, handle: card.handle }] : [];
+  const [prof] = await db.select().from(podcasterProfiles).where(eq(podcasterProfiles.email, email));
+  let accounts: { platform: string; username: string; followers?: number }[] = [];
+  try { accounts = JSON.parse(prof?.socialAccounts || "[]"); } catch { /* none */ }
+  accounts.filter((a) => ["instagram", "youtube", "tiktok"].includes(String(a.platform)) && a.username).sort((x, y) => (y.followers ?? 0) - (x.followers ?? 0)).forEach((a) => tries.push({ platform: a.platform, handle: a.username }));
+  for (const t of tries) {
+    const h = t.handle.replace(/^@/, "").toLowerCase();
+    const [an] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, `analytics:${t.platform}:${h}`));
+    if (!an) continue;
+    const [rw] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, `raw:${t.platform}:${h}`));
+    const full = JSON.parse(an.payload);
+    const p = buildProfile(t.platform, h, full.raw ?? full, rw ? JSON.parse(rw.payload) : null, full.fetchedAt ?? an.createdAt);
+    const aud = (p.audiences.followers ?? p.audiences.likers ?? p.audiences.commenters) as any;
+    return {
+      platform: t.platform,
+      handle: t.handle.replace(/^@/, ""),
+      asOf: full.fetchedAt ?? an.createdAt,
+      followers: p.identity.followers ?? null,
+      engagementRate: p.signals.engagementRate ?? null,
+      realPct: p.signals.realPct ?? null,
+      medianViews: p.content.reelsMedianViews ?? p.content.medianViewsLong ?? null,
+      femalePct: p.signals.femalePct ?? null,
+      malePct: p.signals.malePct ?? null,
+      ages: (aud?.ages ?? []).slice(0, 6),
+      countries: (aud?.countries ?? []).slice(0, 5),
+      states: (aud?.states ?? []).slice(0, 5),
+      interests: (aud?.interests ?? []).slice(0, 8).map((i: { name: string }) => i.name),
+      affinity: (aud?.brandAffinity ?? []).slice(0, 8).map((b: { name: string }) => b.name),
+      pastSponsors: (p.brands?.pastSponsors ?? []).slice(0, 8).map((b: { handle: string }) => b.handle),
+    };
+  }
+  return null;
+}
+
 async function verifiedCreators(): Promise<(CreatorCard & { match: string })[]> {
   const ev = await storage.getFeaturedEvent();
   const signups = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled" && s.email !== "hello@militaryvoice.ai" && s.email !== "andrew@smartloads.io");
