@@ -318,3 +318,81 @@ export function PodcastListens({ onConnect }: { onConnect: () => void }) {
   );
 }
 
+
+/**
+ * Analytics → Podcast: the show's downloads from each connected source (hosted
+ * here, Buzzsprout, Podbean, Transistor, Spotify): a typical episode, the last
+ * 30 days, all time, and the recent episodes side by side.
+ */
+export function PodcastSection({ onConnect }: { onConnect: () => void }) {
+  const q = usePodcastStats();
+  const sources = (q.data?.sources ?? []).filter((s) => s.data);
+  if (q.isLoading) return <div className="h-40 animate-pulse rounded-2xl bg-muted" />;
+  if (!sources.length) return (
+    <div className="flex flex-col items-start gap-3 rounded-2xl border border-dashed border-border p-5">
+      <p className="text-sm text-muted-foreground">Host your podcast here, or connect Buzzsprout, Podbean, Transistor or Spotify, and your downloads show here.</p>
+      <Button onClick={onConnect} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="analytics-podcast-connect"><Link2 className="h-4 w-4" /> Connect your podcast</Button>
+    </div>
+  );
+  return (
+    <div className="space-y-6" data-testid="analytics-podcast">
+      {sources.map((s) => {
+        const d = s.data!;
+        const unit = d.unit === "streams" ? "streams" : "downloads";
+        const recent = d.episodes.slice().sort((a, b) => b.published.localeCompare(a.published)).slice(0, 10);
+        const counts = recent.map((e) => e.count).filter((n) => n > 0).sort((a, b) => a - b);
+        const perEpisode = counts.length ? counts[Math.floor(counts.length / 2)] : null;
+        const since = new Date(Date.now() - MONTH).toISOString().slice(0, 10);
+        const daily = (d.series ?? []).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.date));
+        const last30 = daily.length ? daily.filter((x) => x.date >= since).reduce((a, x) => a + x.count, 0) : null;
+        const max = Math.max(1, ...recent.map((e) => e.count));
+        const bench = q.data?.benchmark.find((b) => b.unit === d.unit);
+        const tiles: [string, string][] = [
+          [`${unit[0].toUpperCase()}${unit.slice(1)} per episode`, perEpisode != null ? compact(perEpisode) : "–"],
+          ["Last 30 days", last30 != null ? compact(last30) : "–"],
+          ["All time", compact(d.total)],
+          ["Episodes", String(d.episodes.length)],
+        ];
+        return (
+          <div key={s.source} className="space-y-4">
+            <div className="flex items-center gap-3">
+              <span className="relative shrink-0">
+                {d.artwork ? <img src={d.artwork} alt="" className="h-12 w-12 rounded-xl object-cover" /> : <Badge source={s.source} />}
+                <img src={MARK[s.source]} alt="" className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-white object-contain p-px ring-2 ring-card" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{s.showName || "Your podcast"}</p>
+                <p className="text-xs text-muted-foreground">{s.source === "militaryvoices" ? "Hosted on MilitaryVoices, counted by us" : `From ${NAME[s.source]}`}{s.fetchedAt ? ` · updated ${when(s.fetchedAt)}` : ""}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {tiles.map(([l, v]) => (
+                <div key={l} className="rounded-2xl border border-border bg-background p-4">
+                  <p className="text-2xl font-bold tabular-nums">{v}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{l}</p>
+                </div>
+              ))}
+            </div>
+            {bench && bench.peers >= 3 && <p className="flex items-center gap-1.5 text-sm"><Trophy className="h-4 w-4 text-[#b36b00]" /> More {unit} per episode than {bench.percentile}% of shows on MilitaryVoices.</p>}
+            {recent.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Recent episodes</p>
+                <div className="space-y-2">
+                  {recent.map((e, i) => (
+                    <div key={`${e.title}-${i}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm">{e.title}</p>
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[#053877] dark:bg-[#8fb5e8]" style={{ width: `${Math.max(2, (e.count / max) * 100)}%` }} /></div>
+                      </div>
+                      <span className="text-sm font-semibold tabular-nums">{compact(e.count)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}

@@ -3,7 +3,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, Plus, Podcast, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal } from "lucide-react";
+import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
@@ -227,6 +227,11 @@ export function HostNav({
       {collapsed ? (
         <nav key="rail" className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start overflow-y-auto border-r border-border bg-card lg:block" aria-label="Dashboard sections">
           <div className="flex min-h-full w-[72px] flex-col items-center gap-1 py-3">
+            {account && (
+              <CreatePostMenu onGo={onGo}>
+                <button type="button" aria-label="Create post" title="Create post" className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#053877] text-white shadow-md hover:bg-[#0a4a99]" data-testid="nav-rail-create-post"><Plus className="h-5 w-5" /></button>
+              </CreatePostMenu>
+            )}
             {groups.flatMap((g) => g.items).map((it) => {
               const Icon = it.icon;
               const active = screen === it.key || (it.key === "events" && (screen === "promotion" || screen === "greenroom"));
@@ -257,6 +262,11 @@ export function HostNav({
               </span>
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             </a>
+          )}
+          {account && (
+            <CreatePostMenu onGo={onGo}>
+              <button type="button" className="mb-3 inline-flex w-fit items-center gap-2 self-start rounded-2xl bg-[#053877] py-3 pl-4 pr-5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[#0a4a99] hover:shadow-lg" data-testid="nav-create-post"><Plus className="h-5 w-5" /> Create post</button>
+            </CreatePostMenu>
           )}
           {admin && <div className="mb-1 px-1">{admin}</div>}
           {groups.filter((g) => g.title !== "Coming soon" && g.title !== "Help").map((g, i) => {
@@ -400,5 +410,24 @@ function RailButton({ tip, onClick, href, active, testid, children }: { tip: str
       </TooltipTrigger>
       <TooltipContent side="right" className="max-w-[16rem] text-balance text-xs">{tip}</TooltipContent>
     </Tooltip>
+  );
+}
+
+/** + Create post, at the top of the nav (like Compose): what to post from, then Social opens with it started. */
+function CreatePostMenu({ onGo, children }: { onGo: (s: HostScreen) => void; children: React.ReactElement }) {
+  const start = (kind: "clips" | "episodes" | "upload") => {
+    try { sessionStorage.setItem("mv_social_create", kind); } catch { /* Social still opens */ }
+    window.dispatchEvent(new CustomEvent("mv-social-create", { detail: kind }));
+    onGo("social");
+  };
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56 rounded-xl p-1.5">
+        <DropdownMenuItem onSelect={() => start("clips")} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="nav-create-clip"><Clapperboard className="h-5 w-5" /> Choose a clip</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => start("episodes")} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="nav-create-episode"><Film className="h-5 w-5" /> Choose an episode</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => start("upload")} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="nav-create-upload"><Upload className="h-5 w-5" /> Upload new</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

@@ -51,6 +51,15 @@ export function SocialScreen() {
   const [pickKind, setPickKind] = useState<"clips" | "episodes" | "upload">("clips");
   const [dropped, setDropped] = useState<File | null>(null);
   const create = (k: "clips" | "episodes" | "upload", file?: File) => { setPickKind(k); setDropped(file ?? null); setPicking(""); };
+  // + Create post from the nav: arrive with it started (or start it here, if Social is already open).
+  useEffect(() => {
+    const go = (k: unknown) => { if (k === "clips" || k === "episodes" || k === "upload") create(k); };
+    try { const k = sessionStorage.getItem("mv_social_create"); if (k) { sessionStorage.removeItem("mv_social_create"); go(k); } } catch { /* fine */ }
+    const on = (e: Event) => { try { sessionStorage.removeItem("mv_social_create"); } catch { /* fine */ } go((e as CustomEvent).detail); };
+    window.addEventListener("mv-social-create", on);
+    return () => window.removeEventListener("mv-social-create", on);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [open, setOpen] = useState<Post | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
   const [viewing, setViewing] = useState<{ src: string; title: string } | null>(null);
@@ -161,16 +170,6 @@ export function SocialScreen() {
           <Tip text="Queue times: the days and times your posts go out">
             <button type="button" onClick={() => setQueueOpen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card hover:bg-muted" aria-label="Queue times" data-testid="social-queue-settings"><Settings2 className="h-4 w-4" /></button>
           </Tip>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild className={tab === "home" ? "hidden" : ""}>
-              <Button disabled={noAccounts} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="social-create"><Plus className="h-4 w-4" /> Create post <ChevronDown className="h-3.5 w-3.5 opacity-70" /></Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onSelect={() => create("clips")} className="gap-2" data-testid="social-create-clip"><Clapperboard className="h-4 w-4" /> Choose a clip</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => create("episodes")} className="gap-2" data-testid="social-create-episode"><Film className="h-4 w-4" /> Choose an episode</DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => create("upload")} className="gap-2" data-testid="social-create-upload"><Upload className="h-4 w-4" /> Upload new</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
 

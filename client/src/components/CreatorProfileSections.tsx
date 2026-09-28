@@ -66,7 +66,9 @@ const SECTIONS = [
   ["brands", "Brand collaborations", "who has paid them, and who they mention"],
   ["lookalikes", "Lookalikes", "creators with an audience like this one"],
 ] as const;
-type SectionKey = (typeof SECTIONS)[number][0];
+type SectionKey = string;
+/** A section of the page's own, ahead of the profile's (their podcast, on their own analytics). */
+export type LeadSection = { key: string; title: string; sub: string; body: ReactNode };
 
 function Img({ src, className, alt = "" }: { src: string; className?: string; alt?: string }) {
   const [broken, setBroken] = useState(false);
@@ -171,6 +173,8 @@ export function CreatorProfileSections(props: {
   similar: ReactNode;
   /** Their own analytics (say "you"), not a brand looking at someone else ("them"). */
   own?: boolean;
+  /** Sections of the page's own, first in the list. */
+  lead?: LeadSection[];
 }) {
   const { profile, toolbar, header, placeholder } = props;
   if (!profile) {
@@ -178,13 +182,14 @@ export function CreatorProfileSections(props: {
       <div className="min-h-full lg:grid lg:grid-cols-[14rem_minmax(0,1fr)]">
         <nav aria-label="Profile sections" className="hidden border-r border-border bg-muted/30 px-4 py-6 lg:block">
           <div className="px-2 pb-2 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Sections</div>
-          {SECTIONS.map(([k, title], i) => (
+          {[...(props.lead ?? []).map((l) => [l.key, l.title] as const), ...SECTIONS.map(([k, t]) => [k, t] as const)].map(([k, title], i) => (
             <div key={k} className="flex items-center gap-2.5 px-2.5 py-1.5 text-sm text-muted-foreground/60"><span className="text-xs tabular-nums">{String(i + 1).padStart(2, "0")}</span>{title}</div>
           ))}
         </nav>
         <div className="min-w-0">
           {toolbar}
           {header}
+          {(props.lead ?? []).map((l) => <section key={l.key} className="border-b-8 border-muted/60 bg-card px-5 py-7 sm:px-8"><h3 className="mb-5 text-lg font-semibold tracking-tight">{l.title} <span className="text-sm font-normal text-muted-foreground">{l.sub}</span></h3>{l.body}</section>)}
           {placeholder}
         </div>
       </div>
@@ -193,7 +198,7 @@ export function CreatorProfileSections(props: {
   return <ProfileBody {...props} profile={profile} />;
 }
 
-function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onOpenCreator, similar, own }: {
+function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onOpenCreator, similar, own, lead = [] }: {
   profile: Profile;
   toolbar: ReactNode;
   header: ReactNode;
@@ -204,12 +209,16 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
   /** The paid "more like this" search, run only when asked. */
   similar: ReactNode;
   own?: boolean;
+  lead?: LeadSection[];
 }) {
+  // The page's own sections first, then the profile's, numbered as one list.
+  const ALL: (readonly [string, string, string])[] = [...lead.map((l) => [l.key, l.title, l.sub] as const), ...SECTIONS];
+  const off = lead.length;
   const sources = (["followers", "likers", "commenters"] as const).filter((k) => profile.audiences[k]);
   const [source, setSource] = useState<(typeof sources)[number] | undefined>(sources[0]);
   useEffect(() => setSource(sources[0]), [profile.handle]); // eslint-disable-line react-hooks/exhaustive-deps
   const aud = (source && profile.audiences[source]) || null;
-  const [active, setActive] = useState<SectionKey>("signals");
+  const [active, setActive] = useState<SectionKey>(ALL[0][0]);
   const refs = useRef<Partial<Record<SectionKey, HTMLElement | null>>>({});
 
   // Scroll-spy: the section whose heading last crossed the top third is "here".
@@ -218,8 +227,8 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
     if (!root) return;
     const onScroll = () => {
       const top = root.getBoundingClientRect().top + root.clientHeight * 0.3;
-      let here: SectionKey = "signals";
-      for (const [k] of SECTIONS) {
+      let here: SectionKey = ALL[0][0];
+      for (const [k] of ALL) {
         const el = refs.current[k];
         if (el && el.getBoundingClientRect().top <= top) here = k;
       }
@@ -241,8 +250,9 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
   const credLabel = cls === "high" ? "High" : cls === "normal" ? "Normal" : cls === "bad" || cls === "low" ? "Low" : "";
   const credTone = aud?.credibility == null ? undefined : aud.credibility >= 80 ? "good" : aud.credibility >= 60 ? "warn" : "bad";
 
-  const section = (k: SectionKey, i: number, body: ReactNode) => {
-    const [, title, sub] = SECTIONS[i];
+  const section = (k: SectionKey, idx: number, body: ReactNode) => {
+    const i = idx + off;
+    const [, title, sub] = ALL[i];
     return (
       <section key={k} ref={(el) => { refs.current[k] = el; }} className="scroll-mt-16 border-b-8 border-muted/60 bg-card px-5 py-7 last:border-b-0 sm:px-8" data-testid={`profile-section-${k}`}>
         <h3 className="mb-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
@@ -278,7 +288,7 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
       <nav aria-label="Profile sections" className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur lg:h-[100dvh] lg:border-b-0 lg:border-r lg:bg-muted/30 lg:backdrop-blur-0">
         <div className="flex gap-1 overflow-x-auto px-3 py-2 [scrollbar-width:none] lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-4 lg:py-6 [&::-webkit-scrollbar]:hidden">
           <div className="hidden px-2 pb-2 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground lg:block">Sections</div>
-          {SECTIONS.map(([k, title], i) => (
+          {ALL.map(([k, title], i) => (
             <button key={k} type="button" onClick={() => jump(k)} className={`flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors ${active === k ? "bg-[#053877]/[0.08] font-medium text-[#053877] dark:bg-white/10 dark:text-white" : "text-foreground/70 hover:text-foreground"}`} data-testid={`toc-${k}`}>
               <span className="text-xs tabular-nums opacity-70">{String(i + 1).padStart(2, "0")}</span>
               <span className="whitespace-nowrap">{title}</span>
@@ -296,6 +306,7 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
       <div className="min-w-0 bg-muted/40">
         {toolbar}
         {header}
+        {lead.map((l, i) => section(l.key, i - off, l.body))}
         {section("signals", 0, (
           <TileGrid>
             <Tile keep label="Engagement rate" value={pctText(engagement, 2)} sub={cardEngagement != null ? "as the index measures it" : s.engagementBasis || "per post"} tone={engagement == null ? undefined : engagement >= 3 ? "good" : engagement >= 1 ? undefined : "warn"} />
