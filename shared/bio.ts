@@ -9,7 +9,9 @@ export type BioShade = "light" | "dark";
 export type BioFont = "sans" | "serif" | "mono";
 export type BioLinkShape = "pill" | "rounded" | "square";
 export type BioLinkStyle = "fill" | "outline" | "soft";
-export type BioLayout = "portrait" | "landscape" | "blend";
+export type BioLayout = "portrait" | "landscape" | "blend" | "hero" | "shape";
+/** The podcast edge to edge (full) or in a card with a margin (card). */
+export type BioPodcastFrame = "full" | "card";
 /** How the podcast shows: the latest big (spotlight), a list, or cards to swipe. */
 export type BioPodcastStyle = "spotlight" | "list" | "carousel";
 
@@ -23,6 +25,7 @@ export interface BioTheme {
   linkStyle: BioLinkStyle;
   layout: BioLayout;
   podcastStyle: BioPodcastStyle;
+  podcastFrame: BioPodcastFrame;
 }
 
 export type BioSection =
@@ -58,6 +61,8 @@ export interface BioPublic {
     /** artworkUrl: the episode's own art, else the show's. */
     episodes: { id: string; title: string; publishedAt: string; durationSec: number; audio: string; notes: string; artworkUrl: string }[];
   };
+  /** The first thing the chat says, from them. */
+  welcome: string;
   /** Listeners can send a question (it goes to the podcaster's inbox). */
   askEnabled: boolean;
   /** Ask my show: the AI answers from the episodes it has learned (how many). */
@@ -71,7 +76,7 @@ export const TEMPLATES: Record<BioTemplate, { label: string; note: string; theme
   vibrant: { label: "Vibrant", note: "Your colour behind everything", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "landscape" } },
 };
 
-export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight" };
+export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight", podcastFrame: "full" };
 
 export const SWATCHES = ["#F0A71F", "#053877", "#0A4A99", "#DC2626", "#991B1B", "#EA580C", "#CA8A04", "#16A34A", "#0D9488", "#7C3AED", "#DB2777", "#111827", "#6B7280", "#FFFFFF"];
 

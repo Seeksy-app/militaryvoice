@@ -20,7 +20,7 @@ import { Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar,
  * component the public page uses. Everything saves as they go.
  */
 
-type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; aiEnabled: boolean; published: boolean };
+type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; welcome: string; aiEnabled: boolean; published: boolean };
 type Resp = { page: Page; url: string; preview: BioPublic; stats: Record<string, number>; questions: ListenerQuestionRow[]; knowledge?: { done: number; total: number } };
 type Tab = "profile" | "design" | "content" | "share" | "questions";
 
@@ -110,7 +110,7 @@ export function BioBuilder() {
 
   const view: BioPublic | null = useMemo(() => draft && preview ? {
     ...preview, handle: draft.handle, displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl,
-    theme: draft.theme, askEnabled: draft.askEnabled,
+    theme: draft.theme, askEnabled: draft.askEnabled, welcome: draft.welcome?.trim() || preview.welcome,
     ai: { enabled: draft.aiEnabled && (preview.ai?.episodes ?? 0) > 0, episodes: preview.ai?.episodes ?? 0 },
     socials: draft.socials.filter((s) => s.on && s.url), sections: draft.sections.filter((s) => s.visible),
   } : null, [draft, preview]);
@@ -276,6 +276,11 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
         <div><p className="text-sm font-semibold">Let listeners message you</p><p className="text-xs text-muted-foreground">A chat button at the top of your page. You reply from Messages; they see it on your page, and by email if they left one.</p></div>
         <Switch checked={d.askEnabled} onCheckedChange={(v) => change({ askEnabled: v }, true)} />
       </div>
+      {d.askEnabled && (
+        <Field label="Your welcome message" hint="The first thing your chat says, from you.">
+          <Input value={d.welcome ?? ""} onChange={(e) => change({ welcome: e.target.value })} maxLength={280} placeholder="Hi! Thanks for listening. What's on your mind?" data-testid="bio-welcome" />
+        </Field>
+      )}
       <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3" data-testid="bio-ai">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-[#b36b00]" /> Ask my show (AI)</p>
@@ -442,6 +447,18 @@ function DesignTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: bo
             );
           })}
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          {([["full", "Edge to edge", "Fills the screen"], ["card", "In a card", "With a margin"]] as const).map(([v, l, n]) => (
+            <Tile key={v} on={(t.podcastFrame ?? "full") === v} onClick={() => set({ podcastFrame: v })} label={l} note={n} testid={`bio-podframe-${v}`}>
+              <span className="flex h-16 flex-col overflow-hidden rounded-lg" style={{ background: ground, padding: v === "card" ? 6 : 0 }}>
+                <span className={`flex flex-1 flex-col gap-1 ${v === "card" ? "rounded-md p-1" : ""}`} style={v === "card" ? { background: dark ? "rgba(255,255,255,0.1)" : "#fff" } : {}}>
+                  <span className={`block flex-1 ${v === "card" ? "rounded-sm" : ""}`} style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : `linear-gradient(135deg, ${c}, #000741)` }} />
+                  <span className={`block h-1 w-2/3 rounded ${v === "full" ? "mx-1 mb-1" : ""}`} style={{ background: ink, opacity: 0.7 }} />
+                </span>
+              </span>
+            </Tile>
+          ))}
+        </div>
       </Card>
 
       <Card icon={dark ? Moon : Sun} tone="violet" title="Page and photo">
@@ -458,16 +475,21 @@ function DesignTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: bo
         </div>
         <p className="pt-1 text-xs font-semibold text-muted-foreground">Top of the page</p>
         <div className="grid grid-cols-3 gap-3">
-          {([["blend", "Cover photo"], ["landscape", "Banner"], ["portrait", "Round photo"]] as const).map(([v, l]) => (
-            <Tile key={v} on={t.layout === v} onClick={() => set({ layout: v })} label={l}>
-              <span className="relative flex h-14 flex-col items-center overflow-hidden rounded-lg" style={{ background: ground }}>
-                {v === "blend" ? <span className="h-10 w-full" style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : c, maskImage: "linear-gradient(to bottom, #000 50%, transparent)" }} />
-                  : v === "landscape" ? <><span className="h-5 w-full" style={{ background: `linear-gradient(135deg, ${c}, #000741)` }} /><span className="-mt-2.5 h-5 w-5 rounded-full" style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888", boxShadow: `0 0 0 2px ${ground}` }} /></>
-                  : <span className="mt-2.5 h-7 w-7 rounded-full" style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888", boxShadow: `0 0 0 2px ${c}` }} />}
-                <span className="absolute bottom-1.5 h-1 w-10 rounded" style={{ background: ink, opacity: 0.8 }} />
-              </span>
-            </Tile>
-          ))}
+          {([["portrait", "Classic"], ["hero", "Hero"], ["blend", "Cover photo"], ["landscape", "Banner"], ["shape", "Shape"]] as const).map(([v, l]) => {
+            const face = d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888";
+            return (
+              <Tile key={v} on={t.layout === v} onClick={() => set({ layout: v })} label={l} testid={`bio-layout-${v}`}>
+                <span className="relative flex h-16 flex-col items-center overflow-hidden rounded-lg" style={{ background: ground }}>
+                  {v === "hero" ? <><span className="absolute inset-0" style={{ background: face }} /><span className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" /><span className="absolute bottom-2 h-1.5 w-12 rounded bg-white" /></>
+                    : v === "blend" ? <span className="h-11 w-full" style={{ background: d.avatarUrl ? face : c, maskImage: "linear-gradient(to bottom, #000 50%, transparent)" }} />
+                    : v === "landscape" ? <><span className="h-6 w-full" style={{ background: `linear-gradient(135deg, ${c}, #000741)` }} /><span className="-mt-3 h-6 w-6 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${ground}` }} /></>
+                    : v === "shape" ? <span className="relative mt-2 h-9 w-9"><span className="absolute -inset-1 rotate-12" style={{ background: c, borderRadius: "58% 42% 38% 62% / 45% 55% 45% 55%" }} /><span className="absolute inset-0" style={{ background: face, borderRadius: "42% 58% 63% 37% / 52% 38% 62% 48%" }} /></span>
+                    : <span className="mt-2.5 h-8 w-8 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${c}` }} />}
+                  {v !== "hero" && <span className="absolute bottom-1.5 h-1 w-10 rounded" style={{ background: ink, opacity: 0.8 }} />}
+                </span>
+              </Tile>
+            );
+          })}
         </div>
       </Card>
 
@@ -633,6 +655,14 @@ function ShareTab({ url }: { url: string }) {
             <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#F0A71F] to-[#e08a00] text-[#1a1200] shadow-sm transition-transform group-hover:scale-110"><Share2 className="h-5 w-5" /></span>
             <span className="text-[11px] font-semibold">More</span>
           </button>
+        </div>
+      </Card>
+
+      <Card icon={MessageCircle} tone="blue" title="Message me link">
+        <p className="-mt-1 text-xs text-muted-foreground">Opens your page with the chat already open. Put it in a post or your show notes: "Questions? Message me."</p>
+        <div className="flex gap-2">
+          <Input readOnly value={`${url.replace(/^https?:\/\/(www\.)?/, "")}#message`} className="font-mono text-sm" />
+          <Button onClick={() => void navigator.clipboard.writeText(`${url}#message`).then(() => toast({ title: "Message me link copied" }))} className="shrink-0 gap-1.5 rounded-full bg-[#053877] hover:bg-[#0a4a99]" data-testid="bio-message-link"><Copy className="h-4 w-4" /> Copy</Button>
         </div>
       </Card>
 

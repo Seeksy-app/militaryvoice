@@ -13,7 +13,7 @@ import { Chat, type ChatMsg } from "@/components/BioPageView";
  */
 
 type Ep = { id: number; title: string; notes: string; publishedAt: string; durationSec: number; episodeNumber: number | null; season: number | null; artworkUrl: string; audio: string };
-type Data = { chat: string | null; show: { title: string; description: string; author: string; artworkUrl: string; category: string; website: string; appleUrl: string; spotifyUrl: string; feedUrl: string }; episodes: Ep[] };
+type Data = { chat: string | null; chatWelcome?: string; show: { title: string; description: string; author: string; artworkUrl: string; category: string; website: string; appleUrl: string; spotifyUrl: string; feedUrl: string }; episodes: Ep[] };
 
 const hms = (sec: number) => { const s = Math.round(sec); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
 const dateOf = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -34,7 +34,7 @@ export default function PodcastPage({ slug }: { slug: string }) {
       {s && handle && (
         <>
           {chat && <div className="fixed inset-0 z-30" onClick={() => setChat(false)} aria-hidden />}
-          <Chat corner handle={handle} name={s.title} avatar={s.artworkUrl} accent={dark ? "#F0A71F" : "#053877"} ink={dark ? "#ffffff" : "#0b1020"} sub={dark ? "rgba(255,255,255,0.68)" : "rgba(11,16,32,0.62)"} line={dark ? "rgba(255,255,255,0.12)" : "rgba(11,16,32,0.10)"} dark={dark} preview={false} open={chat} setOpen={setChat}
+          <Chat corner handle={handle} name={s.title} avatar={s.artworkUrl} welcome={q.data?.chatWelcome} accent={dark ? "#F0A71F" : "#053877"} ink={dark ? "#ffffff" : "#0b1020"} sub={dark ? "rgba(255,255,255,0.68)" : "rgba(11,16,32,0.62)"} line={dark ? "rgba(255,255,255,0.12)" : "rgba(11,16,32,0.10)"} dark={dark} preview={false} open={chat} setOpen={setChat}
             onAsk={async (x) => {
               const r = await fetch(`/api/public/bio/${encodeURIComponent(handle)}/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(x) });
               const j = (await r.json().catch(() => ({}))) as { message?: string; token?: string; createdAt?: string };

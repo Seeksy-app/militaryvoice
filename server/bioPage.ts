@@ -102,6 +102,7 @@ async function publicOf(row: BioPageRow): Promise<BioPublic> {
     sections: parseSections(row.sections).filter((s) => s.visible),
     podcast: await podcastFor(row).catch(() => null),
     askEnabled: row.askEnabled,
+    welcome: row.welcome.trim() || `Hi! Thanks for listening. What's on your mind?`,
     ai: await aiFor(row),
   };
 }
@@ -137,8 +138,9 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     font: pick("font", ["sans", "serif", "mono"] as const, prev.font),
     linkShape: pick("linkShape", ["pill", "rounded", "square"] as const, prev.linkShape),
     linkStyle: pick("linkStyle", ["fill", "outline", "soft"] as const, prev.linkStyle),
-    layout: pick("layout", ["portrait", "landscape", "blend"] as const, prev.layout),
+    layout: pick("layout", ["portrait", "landscape", "blend", "hero", "shape"] as const, prev.layout),
     podcastStyle: pick("podcastStyle", ["spotlight", "list", "carousel"] as const, prev.podcastStyle),
+    podcastFrame: pick("podcastFrame", ["full", "card"] as const, prev.podcastFrame),
   };
 }
 
@@ -186,6 +188,7 @@ export function registerBioPage(app: Express) {
     if (typeof b.bio === "string") patch.bio = b.bio.slice(0, 500);
     if (typeof b.rssUrl === "string") patch.rssUrl = httpUrl(b.rssUrl);
     if (typeof b.askEnabled === "boolean") patch.askEnabled = b.askEnabled;
+    if (typeof b.welcome === "string") patch.welcome = b.welcome.trim().slice(0, 280);
     if (typeof b.aiEnabled === "boolean") patch.aiEnabled = b.aiEnabled;
     if (typeof b.published === "boolean") patch.published = b.published;
     if (b.avatarUrl === "" || b.heroUrl === "") { if (b.avatarUrl === "") patch.avatarUrl = ""; if (b.heroUrl === "") patch.heroUrl = ""; }

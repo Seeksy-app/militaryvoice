@@ -2436,6 +2436,8 @@ export const bioPages = pgTable("bio_pages", {
   /** The show when it isn't hosted here: its RSS feed. */
   rssUrl: text("rss_url").notNull().default(""),
   askEnabled: boolean("ask_enabled").notNull().default(true),
+  /** The chat's opening line, from them ("" = the default). */
+  welcome: text("welcome").notNull().default(""),
   /** Ask my show: the AI that answers listeners from every episode. */
   aiEnabled: boolean("ai_enabled").notNull().default(true),
   published: boolean("published").notNull().default(true),
