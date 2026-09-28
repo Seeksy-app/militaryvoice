@@ -230,26 +230,25 @@ export function BioBuilder() {
   return (
     <section className="mt-2" data-testid="bio-builder">
       {/* The page's own band: the address to share, front and centre, and how it's doing. */}
-      <div className="relative mb-5 overflow-hidden rounded-3xl bg-[#04102b] p-5 text-white shadow-md sm:p-6" data-testid="bio-hero">
-        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden />
-        <div className="pointer-events-none absolute -right-8 -top-8 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden />
-        <div className="relative min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your SmartLink</p>
-            <p className="mt-1 truncate text-2xl font-bold tracking-tight sm:text-3xl">{url.replace(/^https?:\/\/(www\.)?/, "")}</p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button size="sm" onClick={() => void navigator.clipboard.writeText(url).then(() => toast({ title: "Link copied", description: "Paste it in your bio, your show notes, anywhere." }))} className="gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-copy"><Copy className="h-4 w-4" /> Copy link</Button>
-              <Button asChild size="sm" variant="outline" className="gap-1.5 rounded-full border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"><a href={url} target="_blank" rel="noreferrer" data-testid="bio-open"><ExternalLink className="h-4 w-4" /> Open</a></Button>
-              <span className="text-xs text-white/60">{saving ? "Saving…" : "Saved"}</span>
-            </div>
+      {/* One slim bar: the link, copy and open, and the last 30 days as small chips. */}
+      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm" data-testid="bio-hero">
+        <div className="min-w-0">
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#b36b00] dark:text-[#F0A71F]">Your SmartLink</p>
+          <p className="truncate text-base font-bold tracking-tight">{url.replace(/^https?:\/\/(www\.)?/, "")}</p>
         </div>
-        <p className="relative mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">Last 30 days</p>
-        <div className="relative mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5" data-testid="bio-stats">
+        <div className="flex items-center gap-1.5">
+          <Button size="sm" onClick={() => void navigator.clipboard.writeText(url).then(() => toast({ title: "Link copied", description: "Paste it in your bio, your show notes, anywhere." }))} className="h-8 gap-1.5 rounded-full bg-[#F0A71F] px-3 font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-copy"><Copy className="h-3.5 w-3.5" /> Copy link</Button>
+          <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-full px-3"><a href={url} target="_blank" rel="noreferrer" data-testid="bio-open"><ExternalLink className="h-3.5 w-3.5" /> Open</a></Button>
+          <span className="pl-1 text-[11px] text-muted-foreground">{saving ? "Saving…" : "Saved"}</span>
+        </div>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5" data-testid="bio-stats" title="Last 30 days">
           {([["view", "Views", Eye, "#053877"], ["click", "Link taps", Link2, "#7c3aed"], ["play", "Plays", Play, "#059669"], ["share", "Shares", Share2, "#0284c7"], ["ask", "Messages", MessageCircle, "#b36b00"]] as const).map(([k, l, I, c]) => (
-            <div key={k} className="flex items-center gap-3 rounded-2xl border border-[#d9e0ea] bg-white p-3 text-[#0b1020] shadow-sm transition-shadow hover:shadow-md">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: `${c}14`, color: c }}><I className="h-5 w-5" /></span>
-              <span className="min-w-0"><span className="block text-2xl font-bold leading-none tabular-nums">{q.data?.stats?.[k] ?? 0}</span><span className="mt-1 block text-[11px] text-[#0b1020]/60">{l}</span></span>
-            </div>
+            <span key={k} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background py-1 pl-1 pr-2.5 text-xs">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full" style={{ background: `${c}14`, color: c }}><I className="h-3.5 w-3.5" /></span>
+              <b className="tabular-nums">{q.data?.stats?.[k] ?? 0}</b><span className="text-muted-foreground">{l}</span>
+            </span>
           ))}
+          <span className="pl-1 text-[10px] uppercase tracking-wider text-muted-foreground">30 days</span>
         </div>
       </div>
       <div className="mb-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-card p-1 shadow-sm" role="tablist">
