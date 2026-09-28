@@ -8,6 +8,7 @@ import { requireHostSession, getSessionEmail } from "./session.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { sendListenerQuestionEmail } from "./email.js";
 import { readFeed } from "./hosting.js";
+import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
 import { bioPages, bioEvents, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
 import { parseTheme, parseSections, parseSocials, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme } from "../shared/bio.js";
 
@@ -99,6 +100,7 @@ async function publicOf(row: BioPageRow): Promise<BioPublic> {
     sections: parseSections(row.sections).filter((s) => s.visible),
     podcast: await podcastFor(row).catch(() => null),
     askEnabled: row.askEnabled,
+    ai: await aiFor(row),
   };
 }
 
@@ -149,6 +151,8 @@ export function registerBioPage(app: Express) {
   app.get("/api/host/bio", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const row = await pageFor(emailOf(req));
+    // Line up any new episodes for Ask my show to learn (the worker transcribes them).
+    void syncKnowledge(row.email).catch((err) => console.warn("Ask my show sync failed:", (err as Error).message));
     const since = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
     const counts = await db.select({ kind: bioEvents.kind, n: sql<number>`count(*)::int` }).from(bioEvents).where(and(eq(bioEvents.pageId, row.id), gte(bioEvents.day, since))).groupBy(bioEvents.kind);
     const questions = await db.select().from(listenerQuestions).where(eq(listenerQuestions.pageId, row.id)).orderBy(desc(listenerQuestions.id)).limit(50);
@@ -158,6 +162,7 @@ export function registerBioPage(app: Express) {
       preview: await publicOf(row),
       stats: Object.fromEntries(counts.map((c) => [c.kind, c.n])),
       questions,
+      knowledge: await knowledgeOf(row.email),
     });
   });
 
@@ -176,6 +181,7 @@ export function registerBioPage(app: Express) {
     if (typeof b.bio === "string") patch.bio = b.bio.slice(0, 500);
     if (typeof b.rssUrl === "string") patch.rssUrl = httpUrl(b.rssUrl);
     if (typeof b.askEnabled === "boolean") patch.askEnabled = b.askEnabled;
+    if (typeof b.aiEnabled === "boolean") patch.aiEnabled = b.aiEnabled;
     if (typeof b.published === "boolean") patch.published = b.published;
     if (b.avatarUrl === "" || b.heroUrl === "") { if (b.avatarUrl === "") patch.avatarUrl = ""; if (b.heroUrl === "") patch.heroUrl = ""; }
     if (b.theme) patch.theme = JSON.stringify(cleanTheme(b.theme, parseTheme(row.theme)));

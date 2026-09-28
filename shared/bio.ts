@@ -56,6 +56,8 @@ export interface BioPublic {
   };
   /** Listeners can send a question (it goes to the podcaster's inbox). */
   askEnabled: boolean;
+  /** Ask my show: the AI answers from the episodes it has learned (how many). */
+  ai: { enabled: boolean; episodes: number };
 }
 
 export const TEMPLATES: Record<BioTemplate, { label: string; note: string; theme: Partial<BioTheme> }> = {

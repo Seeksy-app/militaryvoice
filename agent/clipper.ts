@@ -116,6 +116,8 @@ interface Job {
   /** "Edit episode": the source is downloadUrl; cut to trimStart–trimEnd (0 = the end), with an intro and outro. */
   /** A hosted podcast episode: the Library video (downloadUrl) as its MP3. recordingId is the episode's id. */
   episodeAudio?: { episodeId: number; copy?: boolean; mime?: string };
+  /** Ask my show: transcribe this episode (downloadUrl) so the AI can answer from it. recordingId is the transcript's id. */
+  transcriptJob?: { id: number };
   episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut" };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
@@ -1834,7 +1836,32 @@ async function handleEpisodeAudio(job: Job): Promise<void> {
   }
 }
 
+/** Ask my show: an episode's words, for the AI to answer listeners from. Never throws. */
+async function handleTranscript(job: Job): Promise<void> {
+  const id = job.transcriptJob!.id;
+  const tag = `[transcript ${id}]`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `tr-${id}-`));
+  try {
+    console.log(`${tag} ${job.title}`);
+    const file = path.join(dir, "episode");
+    await run("curl", ["-s", "-f", "-L", "--retry", "3", "--max-time", "1800", "-A", "MilitaryVoices.ai", "-o", file, job.downloadUrl]);
+    const lines = await transcribeWithScribe(file, dir).catch(async (err) => {
+      console.warn(`${tag} Scribe failed: ${err.message} — falling back`);
+      if (process.env.DEEPGRAM_API_KEY) return transcribeWithDeepgram(file, dir);
+      return transcribeLocally(file, dir);
+    });
+    await api("POST", `/api/agent/transcripts/${id}/done`, { lines });
+    console.log(`${tag} done (${lines.length} lines)`);
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/transcripts/${id}/failed`, { error: (err as Error).message }).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function handle(job: Job): Promise<void> {
+  if (job.transcriptJob) return handleTranscript(job);
   if (job.episodeAudio) return handleEpisodeAudio(job);
   if (job.musicMix) return handleMusic(job);
   if (job.importFrom) return handleImport(job);
@@ -2096,11 +2123,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 
 async function tick(): Promise<boolean> {
-  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "episode-audio", "episode-copy", "import", "music", "suggest"] });
+  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "episode-audio", "episode-copy", "transcript", "import", "music", "suggest"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  const clipJob = !(job.clipEdit || job.episodeEdit || job.episodeAudio || job.importFrom || job.musicMix || job.suggestEdits);
+  const clipJob = !(job.clipEdit || job.episodeEdit || job.episodeAudio || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits);
   if (clipJob) holding.add(job.recordingId);
   if (job.episodeEdit) editing.add(job.recordingId);
   // "Still on it", every minute: a long quiet stretch (waiting on Creatomate)

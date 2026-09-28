@@ -30,6 +30,12 @@ export default function BioPublicPage({ handle }: { handle: string }) {
         data={q.data}
         shareBase={`${window.location.origin}/${q.data.handle}`}
         onEvent={event}
+        onAskAi={async (question, history) => {
+          const r = await fetch(`/api/public/bio/${encodeURIComponent(h)}/ask-ai`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question, history }) });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error((j as { message?: string }).message || "Couldn't ask that. Try again.");
+          return j;
+        }}
         onAsk={async (x) => {
           const r = await fetch(`/api/public/bio/${encodeURIComponent(h)}/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(x) });
           if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message || "Couldn't send that. Try again.");

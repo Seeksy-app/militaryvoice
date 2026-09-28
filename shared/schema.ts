@@ -2433,6 +2433,8 @@ export const bioPages = pgTable("bio_pages", {
   /** The show when it isn't hosted here: its RSS feed. */
   rssUrl: text("rss_url").notNull().default(""),
   askEnabled: boolean("ask_enabled").notNull().default(true),
+  /** Ask my show: the AI that answers listeners from every episode. */
+  aiEnabled: boolean("ai_enabled").notNull().default(true),
   published: boolean("published").notNull().default(true),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull().default(""),
@@ -2465,3 +2467,35 @@ export const listenerQuestions = pgTable("listener_questions", {
   createdAt: text("created_at").notNull(),
 }, (t) => [index("listener_questions_email").on(t.email)]);
 export type ListenerQuestionRow = typeof listenerQuestions.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Ask my show: every episode's transcript, in passages the AI searches to
+// answer listeners on the podcaster's page, pointing to the episode and minute.
+// ---------------------------------------------------------------------------
+export const showTranscripts = pgTable("show_transcripts", {
+  id: serial("id").primaryKey(),
+  /** The podcaster. */
+  email: text("email").notNull(),
+  /** hosted:<episode id> or rss:<guid>. */
+  episodeKey: text("episode_key").notNull(),
+  title: text("title").notNull().default(""),
+  publishedAt: text("published_at").notNull().default(""),
+  /** Where a listener plays it (a hosted episode's /e/ link, or the feed's file). */
+  audioUrl: text("audio_url").notNull().default(""),
+  /** queued | running | done | failed */
+  status: text("status").notNull().default("queued"),
+  claimedAt: text("claimed_at").notNull().default(""),
+  error: text("error").notNull().default(""),
+  /** [startSec, endSec, speaker, text][] as JSON. */
+  lines: text("lines").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [uniqueIndex("show_transcripts_key").on(t.email, t.episodeKey), index("show_transcripts_status").on(t.status)]);
+export type ShowTranscriptRow = typeof showTranscripts.$inferSelect;
+
+export const transcriptChunks = pgTable("transcript_chunks", {
+  id: serial("id").primaryKey(),
+  transcriptId: integer("transcript_id").notNull(),
+  email: text("email").notNull(),
+  startSec: integer("start_sec").notNull().default(0),
+  text: text("text").notNull(),
+}, (t) => [index("transcript_chunks_email").on(t.email), index("transcript_chunks_transcript").on(t.transcriptId)]);

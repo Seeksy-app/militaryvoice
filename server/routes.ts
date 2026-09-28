@@ -130,6 +130,7 @@ import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerHosting, claimEpisodeAudio } from "./hosting.js";
 import { registerBioPage } from "./bioPage.js";
+import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
 import { episodeCredits, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -5524,6 +5525,7 @@ export function registerRoutes(app: Express): void {
   registerPodcastStats(app);
   registerHosting(app, requireAgent);
   registerBioPage(app);
+  registerAskShow(app, requireAgent);
 
   /** The worker has fetched an import (Zoom): the file is in storage now. */
   app.post("/api/agent/imports/:id/done", requireAgent, async (req, res) => {
@@ -5684,6 +5686,11 @@ export function registerRoutes(app: Express): void {
     if (!rec) {
       rec = await storage.claimCleanJob();
       cleanOnly = Boolean(rec);
+    }
+    // Nothing to clip: an episode for Ask my show to learn (transcribe).
+    if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("transcript")) {
+      const tr = await claimTranscript().catch((err) => { console.error("Transcript claim failed:", err); return null; });
+      if (tr) return res.json({ job: { recordingId: tr.id, title: tr.title, durationSec: 0, downloadUrl: tr.url, show: "", host: "", transcript: [], transcriptJob: { id: tr.id } } });
     }
     // Nothing else to do: copy a moved show's episode from the old host into our storage.
     if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("episode-copy")) {

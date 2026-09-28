@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Calendar, Check, Copy, MessageCircleQuestion, Pause, Play, Radio, Send, Share2, Tag } from "lucide-react";
+import { Calendar, Check, Copy, MessageCircleQuestion, Pause, Play, Radio, Send, Share2, Sparkles, Tag } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
 import type { BioPublic, BioSection } from "@shared/bio";
 import type { SocialPlatform } from "@shared/schema";
@@ -28,12 +28,16 @@ const youtubeEmbed = (u: string) => {
   return v ? `https://player.vimeo.com/video/${v[1]}` : "";
 };
 
-export function BioPageView({ data, preview = false, onEvent, onAsk, shareBase }: {
+export type AiAnswer = { answer: string; sources: { n: number; title: string; startSec: number; audio: string; at: string }[]; unanswered: boolean };
+
+export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, shareBase }: {
   data: BioPublic;
   /** In the builder: nothing is counted, nothing is sent. */
   preview?: boolean;
   onEvent?: Ev;
   onAsk?: (q: { name: string; email: string; question: string; episode: string; website: string }) => Promise<void>;
+  /** Ask my show: the AI's answer from the episodes. */
+  onAskAi?: (question: string, history: { role: "user" | "assistant"; content: string }[]) => Promise<AiAnswer>;
   /** The page's own address, for sharing an episode. */
   shareBase: string;
 }) {
@@ -98,6 +102,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, shareBase }
 
       <div className="mx-auto mt-6 flex max-w-[560px] flex-col gap-4 px-4">
         {data.podcast && <PodcastCard p={data.podcast} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} />}
+        {data.ai?.enabled && <AskShow name={data.displayName} episodes={data.ai.episodes} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} onAskAi={onAskAi} />}
         {data.sections.map((s) => <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} />)}
         {data.askEnabled && <AskBox name={data.displayName} episodes={data.podcast?.episodes.map((e) => e.title) ?? []} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} onAsk={onAsk} />}
         <p className="mt-4 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>
@@ -240,6 +245,79 @@ function AskBox({ name, episodes, accent, ink, sub, card, line, radius, preview,
           <button type="submit" disabled={state === "sending"} className="mt-1 inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold" style={{ background: accent, color: onColor(accent), borderRadius: radius }}><Send className="h-4 w-4" /> {state === "sending" ? "Sending…" : "Send question"}</button>
         </form>
       )}
+    </section>
+  );
+}
+
+/**
+ * Ask my show: listeners ask, the show's AI answers from what was said on it,
+ * with the episode and minute to press play on. What it can't find, it points
+ * to the question box, which goes to the host.
+ */
+function AskShow({ name, episodes, accent, ink, sub, card, line, radius, preview, onAskAi }: { name: string; episodes: number; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; onAskAi?: (q: string, h: { role: "user" | "assistant"; content: string }[]) => Promise<AiAnswer> }) {
+  const [q, setQ] = useState("");
+  const [turns, setTurns] = useState<({ role: "user"; content: string } | ({ role: "assistant"; content: string } & Partial<AiAnswer>))[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const player = useRef<HTMLAudioElement | null>(null);
+  const [src, setSrc] = useState<{ url: string; at: number; title: string } | null>(null);
+  const ask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = q.trim();
+    if (preview || !onAskAi || text.length < 4 || busy) return;
+    setBusy(true); setErr(""); setQ("");
+    const history = turns.map((t) => ({ role: t.role, content: t.content }));
+    setTurns((x) => [...x, { role: "user", content: text }]);
+    try {
+      const a = await onAskAi(text, history);
+      setTurns((x) => [...x, { role: "assistant", content: a.answer, ...a }]);
+    } catch (x) {
+      setErr((x as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const playAt = (url: string, at: number, title: string) => {
+    setSrc({ url, at, title });
+    setTimeout(() => { const a = player.current; if (!a) return; a.currentTime = at; void a.play().catch(() => {}); }, 150);
+  };
+  const clean = (s: string) => s.replace(/\s*\[\d+\]/g, "");
+  return (
+    <section className="rounded-3xl p-4 text-left" style={{ background: card, border: `1px solid ${line}` }} data-testid="bio-ask-ai">
+      <p className="flex items-center gap-2 text-base font-bold"><Sparkles className="h-5 w-5" style={{ color: accent }} /> Ask the show</p>
+      <p className="mt-0.5 text-xs" style={{ color: sub }}>An AI that has listened to {episodes} episode{episodes === 1 ? "" : "s"} of {name || "this show"}. It answers from what was said, and shows you where.</p>
+      {turns.length > 0 && (
+        <div className="mt-3 flex flex-col gap-2">
+          {turns.map((t, i) => t.role === "user" ? (
+            <p key={i} className="ml-8 self-end rounded-2xl px-3 py-2 text-sm" style={{ background: `${accent}26`, color: ink }}>{t.content}</p>
+          ) : (
+            <div key={i} className="mr-4 rounded-2xl px-3 py-2 text-sm leading-relaxed" style={{ border: `1px solid ${line}` }}>
+              <p className="whitespace-pre-line">{clean(t.content)}</p>
+              {(t.sources?.length ?? 0) > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {t.sources!.map((s) => (
+                    <button key={s.n} type="button" onClick={() => playAt(s.audio, s.startSec, s.title)} className="inline-flex max-w-full items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold" style={{ background: `${accent}22`, color: ink }}>
+                      <Play className="h-3 w-3 shrink-0 fill-current" /> <span className="truncate">{s.title}</span> <span style={{ color: sub }}>{s.at}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+          {busy && <p className="text-xs" style={{ color: sub }}>Listening back…</p>}
+        </div>
+      )}
+      {src && (
+        <div className="mt-3">
+          <p className="mb-1 truncate text-xs font-semibold">{src.title}</p>
+          <audio ref={player} src={src.url} controls preload="none" className="w-full" />
+        </div>
+      )}
+      <form onSubmit={ask} className="mt-3 flex gap-2">
+        <input value={q} onChange={(e) => { setQ(e.target.value); setErr(""); }} maxLength={500} placeholder={turns.length ? "Ask a follow-up" : "What did they say about…?"} className="h-11 min-w-0 flex-1 px-3 text-sm outline-none" style={{ background: "transparent", border: `1px solid ${line}`, color: ink, borderRadius: 12 }} />
+        <button type="submit" disabled={busy || q.trim().length < 4} aria-label="Ask" className="flex h-11 w-11 shrink-0 items-center justify-center disabled:opacity-50" style={{ background: accent, color: onColor(accent), borderRadius: Math.min(radius, 14) }}><Send className="h-4 w-4" /></button>
+      </form>
+      {err && <p className="mt-1 text-xs text-red-500">{err}</p>}
     </section>
   );
 }

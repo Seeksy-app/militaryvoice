@@ -12,7 +12,7 @@ import { BioPageView } from "@/components/BioPageView";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import { SWATCHES, TEMPLATES, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircleQuestion, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
+import { Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircleQuestion, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
 /**
  * My page: the podcaster's bio page builder. Profile, Design, Content and
@@ -20,8 +20,8 @@ import { ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle,
  * component the public page uses. Everything saves as they go.
  */
 
-type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; published: boolean };
-type Resp = { page: Page; url: string; preview: BioPublic; stats: Record<string, number>; questions: ListenerQuestionRow[] };
+type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; aiEnabled: boolean; published: boolean };
+type Resp = { page: Page; url: string; preview: BioPublic; stats: Record<string, number>; questions: ListenerQuestionRow[]; knowledge?: { done: number; total: number } };
 type Tab = "profile" | "design" | "content" | "share" | "questions";
 
 const KEY = ["/api/host/bio"];
@@ -82,6 +82,7 @@ export function BioBuilder() {
   const view: BioPublic | null = useMemo(() => draft && preview ? {
     ...preview, handle: draft.handle, displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl,
     theme: draft.theme, askEnabled: draft.askEnabled,
+    ai: { enabled: draft.aiEnabled && (preview.ai?.episodes ?? 0) > 0, episodes: preview.ai?.episodes ?? 0 },
     socials: draft.socials.filter((s) => s.on && s.url), sections: draft.sections.filter((s) => s.visible),
   } : null, [draft, preview]);
 
@@ -107,7 +108,7 @@ export function BioBuilder() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
         <div className="min-w-0">
-          {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} />}
+          {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} />}
           {tab === "design" && <DesignTab d={draft} change={change} />}
           {tab === "content" && <ContentTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} stats={q.data?.stats ?? {}} />}
@@ -137,7 +138,7 @@ export function BioBuilder() {
 
 // ---- Profile -----------------------------------------------------------------------
 
-function ProfileTab({ d, view, change, flush, setPreview }: { d: Page; view: BioPublic; change: (p: Partial<Page>, now?: boolean) => void; flush: () => Promise<void>; setPreview: (p: BioPublic) => void }) {
+function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page; view: BioPublic; change: (p: Partial<Page>, now?: boolean) => void; flush: () => Promise<void>; setPreview: (p: BioPublic) => void; knowledge?: { done: number; total: number } }) {
   const [handle, setHandle] = useState(d.handle);
   useEffect(() => setHandle(d.handle), [d.handle]);
   const steps = [
@@ -179,6 +180,15 @@ function ProfileTab({ d, view, change, flush, setPreview }: { d: Page; view: Bio
       <div className="flex items-center justify-between rounded-xl border border-border p-3">
         <div><p className="text-sm font-semibold">Let listeners ask you questions</p><p className="text-xs text-muted-foreground">They land in your inbox, and your reply goes straight back.</p></div>
         <Switch checked={d.askEnabled} onCheckedChange={(v) => change({ askEnabled: v }, true)} />
+      </div>
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3" data-testid="bio-ai">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-[#b36b00]" /> Ask my show (AI)</p>
+          <p className="text-xs text-muted-foreground">
+            {!view.podcast ? "Add your podcast first: it learns from your episodes." : !knowledge?.total ? "It starts learning your episodes as soon as your podcast is here." : knowledge.done < knowledge.total ? `Learning your episodes: ${knowledge.done} of ${knowledge.total} so far. It shows on your page once it knows one.` : `Knows all ${knowledge.done} of your episodes. Listeners ask; it answers from what you said, with the episode and minute.`}
+          </p>
+        </div>
+        <Switch checked={d.aiEnabled} onCheckedChange={(v) => change({ aiEnabled: v }, true)} />
       </div>
       <div>
         <p className="mb-2 text-sm font-semibold">Social icons</p>
