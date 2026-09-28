@@ -3,7 +3,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, Plus, Podcast, Globe, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal } from "lucide-react";
+import { LayoutDashboard, Plus, Podcast, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
@@ -125,6 +125,9 @@ export function HostNav({
     { key: "editProfile", label: "Profile", hint: "Your photo, bio and service details that listeners and sponsors see", icon: UserRound },
   ];
 
+  const [closed, setClosed] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("mv_nav_folded") || "[]"); } catch { return []; } });
+  const fold = (t: string) => setClosed((c) => { const n = c.includes(t) ? c.filter((x) => x !== t) : [...c, t]; try { localStorage.setItem("mv_nav_folded", JSON.stringify(n)); } catch { /* fine */ } return n; });
+
   const rawLink = (it: Item, compact: boolean) => {
     const Icon = it.icon;
     if (it.href) {
@@ -134,7 +137,7 @@ export function HostNav({
           href={it.href}
           className={compact
             ? "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[#053877]/[0.06] px-3 py-1.5 text-sm font-medium text-foreground"
-            : "flex items-center gap-3 rounded-lg px-3 py-2 text-left text-foreground/75 transition-colors hover:bg-muted hover:text-foreground"}
+            : "flex items-center gap-3 rounded-full px-4 py-2 text-left text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"}
           data-testid={`nav-host-help`}
         >
           <Icon className={`h-4 w-4 shrink-0 ${compact ? "text-[#053877]" : "text-muted-foreground"}`} />
@@ -161,9 +164,9 @@ export function HostNav({
             ? `flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${
                 active ? "bg-[#053877] text-white" : it.locked ? "bg-muted text-muted-foreground" : "bg-[#053877]/[0.06] text-foreground"
               }`
-            : `relative flex items-center gap-3 rounded-lg px-3 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#053877]/30 ${
+            : `relative flex items-center gap-3 rounded-full px-4 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#053877]/30 ${
                 active
-                  ? "bg-[#053877]/[0.08] font-semibold text-[#053877] dark:bg-white/10 dark:text-white"
+                  ? "bg-[#053877]/[0.12] font-semibold text-[#053877] dark:bg-white/[0.14] dark:text-white"
                   : it.locked
                     ? `text-muted-foreground ${proOpen ? "hover:bg-muted" : "cursor-default"}`
                     : "text-foreground/75 hover:bg-muted hover:text-foreground"
@@ -222,93 +225,61 @@ export function HostNav({
       />
       {/* Desktop, folded: a rail of the same icons, names on hover, and the button that opens it. */}
       {collapsed ? (
-        <nav key="rail" className="sticky top-6 hidden self-start lg:block" aria-label="Dashboard sections">
-          <div className="flex min-h-[calc(100vh-3rem)] w-14 flex-col items-center gap-1 rounded-2xl border border-border bg-card py-3 shadow-sm">
-            <RailButton tip="Expand menu" onClick={onToggle} testid="nav-expand"><PanelLeftOpen className="h-4 w-4" /></RailButton>
-            {credits?.rail}
-            {create && create(
-              <button type="button" aria-label="Create" className="my-1 flex h-10 w-10 items-center justify-center rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="nav-rail-create"><Plus className="h-4 w-4" /></button>,
-            )}
-            <span className="my-1.5 h-px w-7 bg-border" aria-hidden />
-            {groups.filter((g) => g.title !== "Coming soon").flatMap((g) => g.items).map((it) => {
+        <nav key="rail" className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start overflow-y-auto lg:block" aria-label="Dashboard sections">
+          <div className="flex min-h-full w-[72px] flex-col items-center gap-1 py-3">
+            {groups.flatMap((g) => g.items).map((it) => {
               const Icon = it.icon;
               const active = screen === it.key || (it.key === "events" && (screen === "promotion" || screen === "greenroom"));
               return (
                 <RailButton key={`r-${it.key}-${it.feature ?? ""}-${it.href ?? ""}`} tip={it.label} active={active} href={it.href} onClick={it.href ? undefined : () => onGo(it.key, it.feature)} testid={`nav-rail-${it.key}`}>
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-5 w-5" />
                 </RailButton>
               );
             })}
-            {/* The account, at the foot as in the open column. */}
-            {account && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" aria-label="Account" className="mt-auto rounded-full p-0.5 hover:ring-2 hover:ring-border" data-testid="nav-rail-account">{avatar("h-9 w-9")}</button>
-                </DropdownMenuTrigger>
-                {accountMenu("right")}
-              </DropdownMenu>
-            )}
           </div>
         </nav>
       ) : (
       /* Desktop: the column. Keyed apart from the rail: sharing DOM left a rail icon behind in it. */
-      <nav key="column" className="sticky top-6 hidden self-start lg:block lg:min-h-[calc(100vh-3rem)]" aria-label="Dashboard sections">
-        {/* Light and quiet: white, a navy highlight on where you are, so the navy command card beside it leads. */}
-        <div className="flex min-h-[calc(100vh-3rem)] flex-col gap-1 rounded-2xl border border-border bg-card p-3 shadow-sm">
-          <div className="flex items-center gap-2 px-2 pb-2 pt-1">
-            <Link href="/host/dashboard" data-testid="link-workspace-home-nav"><LogoLockup className="h-8 w-auto" /></Link>
-            <span className="ml-auto" />
-            {credits?.column}
-            {onToggle && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" onClick={onToggle} aria-label="Collapse menu" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" data-testid="nav-collapse">
-                    <PanelLeftClose className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="text-xs">Collapse menu</TooltipContent>
-              </Tooltip>
-            )}
-          </div>
-          {admin && <div className="mb-1 px-1">{admin}</div>}
-          {create && (
-            <div className="mb-2">
-              {create(
-                <button type="button" className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#053877] px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#0a4a99] dark:bg-[#0a4a99] dark:hover:bg-[#1257a8]" data-testid="nav-create">
-                  <Plus className="h-4 w-4" /> Create
-                </button>,
-              )}
-            </div>
-          )}
-          {groups.map((g) => (
-            // The first group needs no heading; the rest get a quiet one. Pro tools and Help sit at the foot.
-            <div key={g.title} className={g.title === "Coming soon" ? "mt-auto pt-4" : g.title === "Help" ? "" : g.title === "Your show" ? "" : "pt-3"}>
-              {g.title !== "Your show" && g.title !== "Coming soon" && g.title !== "Help" && <p className="px-3 pb-1 text-[11px] font-medium text-muted-foreground">{g.title}</p>}
-              <div className="flex flex-col gap-0.5">
-                {g.items.map((it) => link(it, false))}
-                {g.title === "Help" && <GetTheApp variant="navLight" />}
-              </div>
-            </div>
-          ))}
+      <nav key="column" className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start overflow-y-auto lg:block" aria-label="Dashboard sections">
+        {/* Like Search Console: flush to the edge, no card; what you're working on at the top; the page you're on as a pill. */}
+        <div className="flex min-h-full flex-col px-3 py-3">
           {account && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className={`mt-2 flex w-full items-center gap-2.5 rounded-xl border-t border-border p-2 pt-3 text-left transition-colors hover:bg-muted ${screen === "editProfile" || screen === "integrations" ? "bg-[#053877]/[0.06]" : ""}`}
-                  data-testid="nav-host-account"
-                >
-                  {avatar("h-8 w-8")}
-                  <span className="min-w-0 flex-1 leading-tight">
-                    <span className="block truncate text-[13px] font-semibold text-foreground">{account.name}</span>
-                    <span className="block truncate text-[11px] text-muted-foreground">Settings and integrations</span>
-                  </span>
-                  <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-                </button>
-              </DropdownMenuTrigger>
-              {accountMenu("top")}
-            </DropdownMenu>
+            <a
+              href={pathFor("page")}
+              onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); onGo("page"); }}
+              className="mb-2 flex items-center gap-3 rounded-2xl border border-border px-3 py-2.5 transition-colors hover:bg-muted"
+              data-testid="nav-show"
+            >
+              {avatar("h-8 w-8")}
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block truncate text-sm font-semibold text-foreground">{account.name}</span>
+                <span className="block truncate text-[11px] text-muted-foreground">Your page</span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </a>
           )}
+          {admin && <div className="mb-1 px-1">{admin}</div>}
+          {groups.filter((g) => g.title !== "Coming soon" && g.title !== "Help").map((g, i) => {
+            const foldable = g.title !== "Your show";
+            const folded = foldable && closed.includes(g.title);
+            return (
+              <div key={g.title} className={i ? "mt-2 border-t border-border pt-2" : ""}>
+                {foldable && (
+                  <button type="button" onClick={() => fold(g.title)} aria-expanded={!folded} className="flex w-full items-center justify-between rounded-full px-4 py-1.5 text-left text-[13px] font-medium text-foreground/80 hover:bg-muted" data-testid={`nav-group-${g.title.toLowerCase()}`}>
+                    {g.title} <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${folded ? "-rotate-90" : ""}`} />
+                  </button>
+                )}
+                {!folded && <div className="flex flex-col gap-0.5">{g.items.map((it) => link(it, false))}</div>}
+              </div>
+            );
+          })}
+          <div className="mt-auto border-t border-border pt-2">
+            <div className="flex flex-col gap-0.5">
+              {groups.filter((g) => g.title === "Coming soon" || g.title === "Help").flatMap((g) => g.items).map((it) => link(it, false))}
+              <GetTheApp variant="navLight" />
+            </div>
+            <p className="px-4 pb-1 pt-3 text-xs text-muted-foreground"><a href="/privacy" className="hover:text-foreground">Privacy</a><span className="mx-2">·</span><a href="/terms" className="hover:text-foreground">Terms</a></p>
+          </div>
         </div>
       </nav>
       )}
@@ -389,11 +360,12 @@ export function AccountMenuContent({ account, onGo, side = "top", align }: { acc
 }
 
 /** Their picture, or the first letter of their name. */
-export function AccountAvatar({ account, size = "h-9 w-9" }: { account: Account; size?: string }) {
+/** The person's picture (or initial). `light` for a light background (the computer's top bar); dark is the phone's navy header. */
+export function AccountAvatar({ account, size = "h-9 w-9", light = false }: { account: Account; size?: string; light?: boolean }) {
   return account.photo ? (
-    <img src={account.photo} alt="" className={`${size} shrink-0 rounded-full object-cover ring-1 ring-white/20`} />
+    <img src={account.photo} alt="" className={`${size} shrink-0 rounded-full object-cover ring-1 ${light ? "ring-border" : "ring-white/20"}`} />
   ) : (
-    <span className={`flex ${size} shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white`}>{account.name.trim().charAt(0).toUpperCase()}</span>
+    <span className={`flex ${size} shrink-0 items-center justify-center rounded-full text-xs font-bold ${light ? "bg-[#053877] text-white" : "bg-white/10 text-white"}`}>{account.name.trim().charAt(0).toUpperCase()}</span>
   );
 }
 
@@ -420,7 +392,7 @@ function Appearance() {
 
 /** One icon on the folded menu, its name on hover. */
 function RailButton({ tip, onClick, href, active, testid, children }: { tip: string; onClick?: () => void; href?: string; active?: boolean; testid: string; children: ReactNode }) {
-  const cls = `flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${active ? "bg-[#053877]/[0.08] text-[#053877] dark:bg-white/10 dark:text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`;
+  const cls = `flex h-10 w-12 items-center justify-center rounded-full transition-colors ${active ? "bg-[#053877]/[0.12] text-[#053877] dark:bg-white/[0.14] dark:text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`;
   return (
     <Tooltip>
       <TooltipTrigger asChild>

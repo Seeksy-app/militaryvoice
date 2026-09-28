@@ -34,7 +34,10 @@ import {
   Plus,
   SquarePlay,
   SquarePen,
+  Menu,
+  CircleHelp,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PlatformIcon, formatFollowers } from "@/components/SocialIcons";
 import {
@@ -1033,10 +1036,37 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           is no more a visitor deciding whether to take part than somebody with
           a slot, and the band of public links costs them the same screen. */}
       {!data && <NavBar />}
+      {/* On a computer, a bar across the top like Search Console's: the menu button and the mark on the left, credits, help and the account on the right. */}
+      {workspace && (
+        <header className="sticky top-0 z-40 hidden h-16 items-center gap-2 border-b border-border bg-background/95 px-3 backdrop-blur lg:flex" data-testid="topbar">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" onClick={toggleNav} aria-label={navTucked ? "Expand menu" : "Collapse menu"} className="flex h-11 w-11 items-center justify-center rounded-full text-foreground/70 hover:bg-muted hover:text-foreground" data-testid="nav-toggle"><Menu className="h-5 w-5" /></button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">{navTucked ? "Expand menu" : "Collapse menu"}</TooltipContent>
+          </Tooltip>
+          <Link href="/host/dashboard" className="ml-1 shrink-0" data-testid="link-workspace-home-nav"><LogoLockup className="h-8 w-auto" /></Link>
+          <div className="ml-auto flex items-center gap-1.5">
+            <NavCredits variant="pill" />
+            <Tooltip>
+              <TooltipTrigger asChild><a href="/help" aria-label="Help" className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 hover:bg-muted hover:text-foreground"><CircleHelp className="h-5 w-5" /></a></TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">Help</TooltipContent>
+            </Tooltip>
+            {account && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" aria-label="Your account" className="ml-1 rounded-full p-0.5 hover:ring-2 hover:ring-[#053877]/25" data-testid="topbar-account"><AccountAvatar account={account} light /></button>
+                </DropdownMenuTrigger>
+                <AccountMenuContent account={account} onGo={(sc) => goTo(sc)} side="bottom" align="end" />
+              </DropdownMenu>
+            )}
+          </div>
+        </header>
+      )}
       {/* Wide, like the admin: with a column of nav on the left, 1152px left
           the page itself narrower than a phone in landscape. */}
       {/* On a phone the tab bar sits at the bottom: room under the page so it never hides the end of it. */}
-      <div className={`mx-auto max-w-[1560px] px-4 sm:px-6 ${workspace ? "pt-5 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-5" : "py-10"}`}>
+      <div className={workspace ? "px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-5 sm:px-6 lg:p-0" : "mx-auto max-w-[1560px] px-4 py-10 sm:px-6"}>
         {workspace ? (
           /* One line: the mark, who you are, and the way out. The page title
              is gone because the highlighted tab below already says
@@ -1112,13 +1142,12 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         {/* The nav down the left, like the admin's, with the page beside it.
             Hidden during first-time setup, where there is only one thing to
             do. */}
-        <div className={data && hasProfile && !inSetup ? (navTucked ? "lg:grid lg:grid-cols-[56px_minmax(0,1fr)] lg:gap-4" : "lg:grid lg:grid-cols-[232px_minmax(0,1fr)] lg:gap-8") : ""}>
+        <div className={data && hasProfile && !inSetup ? (navTucked ? "lg:grid lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid lg:grid-cols-[264px_minmax(0,1fr)]") : ""}>
         {data && hasProfile && !inSetup && (
           <div className="contents">
           <HostNav
             collapsed={navTucked}
             onToggle={toggleNav}
-            credits={{ column: <NavCredits variant="pill" />, rail: <NavCredits variant="rail" /> }}
             screen={screen === "claim" ? "dashboard" : screen}
             eventsCount={hostEvents?.length ?? 0}
             contactsCount={data?.contacts?.length ?? 0}
@@ -1133,7 +1162,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         )}
         {/* Top-justified: whatever the screen is, it starts level with the
             top of the nav, not a band of white below it. */}
-        <div className="min-w-0 [&>*:first-child]:mt-0">
+        <div className={`min-w-0 [&>*:first-child]:mt-0 ${workspace ? "lg:mx-auto lg:w-full lg:max-w-[1440px] lg:px-8 lg:pb-12 lg:pt-6" : ""}`}>
         {/* Back to admin and View as, top right of the page (the dashboard
             has them on its own dark card). */}
 
