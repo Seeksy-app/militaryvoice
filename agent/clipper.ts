@@ -115,7 +115,7 @@ interface Job {
   cleanOnly?: boolean;
   /** "Edit episode": the source is downloadUrl; cut to trimStart–trimEnd (0 = the end), with an intro and outro. */
   /** A hosted podcast episode: the Library video (downloadUrl) as its MP3. recordingId is the episode's id. */
-  episodeAudio?: { episodeId: number };
+  episodeAudio?: { episodeId: number; copy?: boolean; mime?: string };
   episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut" };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
@@ -1806,7 +1806,19 @@ async function handleEpisodeAudio(job: Job): Promise<void> {
   const tag = `[episode ${id}] audio`;
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `epaudio-${id}-`));
   try {
-    console.log(`${tag}: ${job.title}`);
+    console.log(`${tag}: ${job.title}${job.episodeAudio!.copy ? " (copying from the old host)" : ""}`);
+    if (job.episodeAudio!.copy) {
+      // A moved show's episode: the file as it is, from the old host into our storage.
+      const mime = job.episodeAudio!.mime || "audio/mpeg";
+      const file = path.join(dir, `episode-${id}.${/mp4|m4a|aac/.test(mime) ? "m4a" : "mp3"}`);
+      await run("curl", ["-s", "-f", "-L", "--retry", "3", "--max-time", "1800", "-A", "MilitaryVoices.ai host transfer", "-o", file, job.downloadUrl]);
+      const sizeBytes = (await fs.stat(file)).size;
+      if (sizeBytes < 1024) throw new Error("the old host sent an empty file");
+      const audioKey = await uploadBig(file, mime);
+      await api("POST", `/api/agent/episode-audio/${id}/done`, { audioKey, sizeBytes, copy: true });
+      console.log(`${tag}: copied (${Math.round(sizeBytes / 1048576)}MB)`);
+      return;
+    }
     const out = path.join(dir, `episode-${id}.mp3`);
     await ffmpeg(["-i", job.downloadUrl, "-vn", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k", "-id3v2_version", "3", out]);
     const sizeBytes = (await fs.stat(out)).size;
@@ -2084,7 +2096,7 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 
 async function tick(): Promise<boolean> {
-  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "episode-audio", "import", "music", "suggest"] });
+  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "episode-audio", "episode-copy", "import", "music", "suggest"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.

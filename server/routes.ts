@@ -5683,6 +5683,11 @@ export function registerRoutes(app: Express): void {
       rec = await storage.claimCleanJob();
       cleanOnly = Boolean(rec);
     }
+    // Nothing else to do: copy a moved show's episode from the old host into our storage.
+    if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("episode-copy")) {
+      const cp = await claimEpisodeAudio("copy").catch((err) => { console.error("Episode copy claim failed:", err); return null; });
+      if (cp) return res.json({ job: { recordingId: cp.id, title: cp.title, durationSec: cp.durationSec, downloadUrl: cp.recordingUrl, show: "", host: "", transcript: [], episodeAudio: { episodeId: cp.id, copy: true, mime: cp.mime } } });
+    }
     if (!rec) {
       res.json({ job: null });
       return;

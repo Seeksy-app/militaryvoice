@@ -327,19 +327,25 @@ const emailOf = (req: Request) => (getSessionEmail(req) ?? "").trim().toLowerCas
 const num = (v: unknown) => (v === "" || v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Math.max(0, Math.round(Number(v))));
 
 /** The worker's next episode to turn from video into audio (a stuck one is taken back after 30 minutes). */
-export async function claimEpisodeAudio(): Promise<{ id: number; title: string; durationSec: number; recordingUrl: string } | null> {
+export async function claimEpisodeAudio(mode: "convert" | "copy" = "convert"): Promise<{ id: number; title: string; durationSec: number; recordingUrl: string; copy?: boolean; mime?: string } | null> {
   await schemaIsReady();
   const stale = new Date(Date.now() - 30 * 60_000).toISOString();
+  // Copies (a moved show's back catalogue, from the old host into our storage) wait behind everything else.
+  const [want, busy] = mode === "copy" ? ["copy", "copying"] : ["queued", "running"];
   const rows = await db.execute(sql`
-    UPDATE hosted_episodes SET audio_job = 'running', audio_job_at = ${now()}
+    UPDATE hosted_episodes SET audio_job = ${busy}, audio_job_at = ${now()}
     WHERE id = (
       SELECT id FROM hosted_episodes
-      WHERE audio_job = 'queued' OR (audio_job = 'running' AND audio_job_at < ${stale})
+      WHERE audio_job = ${want} OR (audio_job = ${busy} AND audio_job_at < ${stale})
       ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED
     )
-    RETURNING id, title, duration_sec, recording_id`);
-  const r = (rows as unknown as { id: number; title: string; duration_sec: number; recording_id: number | null }[])[0];
+    RETURNING id, title, duration_sec, recording_id, audio_url, mime`);
+  const r = (rows as unknown as { id: number; title: string; duration_sec: number; recording_id: number | null; audio_url: string; mime: string }[])[0];
   if (!r) return null;
+  if (mode === "copy") {
+    if (!/^https?:\/\//.test(r.audio_url)) { await db.update(hostedEpisodes).set({ audioJob: "" }).where(eq(hostedEpisodes.id, r.id)); return null; }
+    return { id: r.id, title: r.title, durationSec: r.duration_sec, recordingUrl: r.audio_url, copy: true, mime: r.mime };
+  }
   const rec = r.recording_id ? await storage.getRecording(r.recording_id) : undefined;
   if (!rec?.url) {
     await db.update(hostedEpisodes).set({ audioJob: "failed", audioError: "The recording couldn't be found." }).where(eq(hostedEpisodes.id, r.id));
@@ -353,12 +359,16 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
   app.post("/api/agent/episode-audio/:id/done", requireAgent, async (req, res) => {
     const key = String(req.body?.audioKey ?? "");
     if (!/^clean\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "No audio." });
-    await db.update(hostedEpisodes).set({ audioKey: key, mime: "audio/mpeg", sizeBytes: num(req.body?.sizeBytes) ?? 0, ...(num(req.body?.durationSec) ? { durationSec: num(req.body?.durationSec)! } : {}), audioJob: "", audioError: "" }).where(eq(hostedEpisodes.id, Number(req.params.id)));
+    const copied = req.body?.copy === true;
+    await db.update(hostedEpisodes).set({ audioKey: key, ...(copied ? {} : { mime: "audio/mpeg" }), ...(num(req.body?.sizeBytes) ? { sizeBytes: num(req.body?.sizeBytes)! } : {}), ...(num(req.body?.durationSec) ? { durationSec: num(req.body?.durationSec)! } : {}), audioJob: "", audioError: "" }).where(eq(hostedEpisodes.id, Number(req.params.id)));
     res.json({ ok: true });
   });
   app.post("/api/agent/episode-audio/:id/failed", requireAgent, async (req, res) => {
     const requeue = req.body?.requeue === true;
-    await db.update(hostedEpisodes).set(requeue ? { audioJob: "queued" } : { audioJob: "failed", audioError: String(req.body?.error ?? "").slice(0, 300) }).where(eq(hostedEpisodes.id, Number(req.params.id)));
+    const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
+    // A copy that fails leaves the episode playing from the old host: nothing for the podcaster to do.
+    const copying = e?.audioJob === "copying" || e?.audioJob === "copy";
+    await db.update(hostedEpisodes).set(requeue ? { audioJob: copying ? "copy" : "queued" } : { audioJob: copying ? "" : "failed", audioError: String(req.body?.error ?? "").slice(0, 300) }).where(eq(hostedEpisodes.id, Number(req.params.id)));
     res.json({ ok: true });
   });
 
@@ -615,6 +625,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       audioUrl: it.url, mime: it.mime, sizeBytes: Math.min(2_000_000_000, it.length), durationSec: it.duration,
       episodeNumber: it.episode, season: it.season, episodeType: it.episodeType, explicit: it.explicit, artworkUrl: it.image,
       guid: it.guid, status: "published", publishedAt: it.published || now(), createdAt: now(),
+      audioJob: "copy",
     }));
     for (let i = 0; i < rows.length; i += 200) await db.insert(hostedEpisodes).values(rows.slice(i, i + 200));
     res.status(201).json({ show, episodes: rows.length });

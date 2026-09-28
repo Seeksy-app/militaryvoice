@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { KnowYourWorth } from "@/components/KnowYourWorth";
+import { usePodcastSources } from "@/components/PodcastStats";
 
 /**
  * A podcaster's own analytics, in their dashboard: the same profile panel a
@@ -35,6 +36,7 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
     retry: false,
   });
   // Their connected accounts (followers per platform) for Know your worth, and their own photo as the fallback picture.
+  const podSources = usePodcastSources();
   const social = useQuery<{ accounts?: { platform: string; username?: string; followers?: number }[] }>({ queryKey: ["/api/host/social"], queryFn: async () => (await apiRequest("GET", "/api/host/social")).json(), staleTime: 5 * 60_000 });
   const mine = useQuery<{ photoUrl?: string }>({ queryKey: ["/api/host/profile"], queryFn: async () => (await apiRequest("GET", "/api/host/profile")).json(), staleTime: 5 * 60_000 });
   const [picFailed, setPicFailed] = useState<string[]>([]);
@@ -117,7 +119,12 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
   const usPct = s.topCountry?.name === "United States" ? s.topCountry.pct : (p.audiences?.followers?.countries ?? []).find((c: { name: string }) => c.name === "United States")?.pct ?? null;
   const main = { platform: d.platform ?? "", handle: d.handle, followers: id.followers ?? 0, engagementRate: s.engagementRate ?? null, medianViews: p.content?.reelsMedianViews ?? null, realPct: s.realPct ?? null, usPct, likesPerPost: p.content?.likesMedian ?? null };
   const others = (social.data?.accounts ?? []).filter((x) => x.platform !== main.platform && (x.followers ?? 0) > 0).map((x) => ({ platform: x.platform, handle: x.username, followers: x.followers ?? 0 }));
-  const worth = <KnowYourWorth accounts={[main, ...others]} />;
+  // The podcast's own rate: downloads for a typical recent episode (the median of the last ten that have any).
+  const pod = podSources.map((src) => {
+    const counts = (src.data?.episodes ?? []).slice().sort((x, y) => y.published.localeCompare(x.published)).slice(0, 10).map((e) => e.count).filter((n) => n > 0).sort((x, y) => x - y);
+    return counts.length ? { name: src.showName || "Your podcast", perEpisode: counts[Math.floor(counts.length / 2)] } : null;
+  }).filter(Boolean).sort((x, y) => y!.perEpisode - x!.perEpisode)[0] ?? null;
+  const worth = <KnowYourWorth accounts={[main, ...others]} podcast={pod} />;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm" data-testid="my-analytics">

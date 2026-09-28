@@ -72,6 +72,36 @@ const USUAL_VIEWS: Partial<Record<WorthPlatform, number>> = { instagram: 0.25, t
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const round5 = (v: number) => Math.max(25, Math.round(v / 5) * 5);
 
+/**
+ * A podcast's rates: sponsors buy host-read ads by CPM, dollars per 1,000
+ * downloads an episode gets (2025-26 rates for host-read ads), with the same
+ * premium for the military and veteran audience. The number that counts is
+ * downloads per episode, not the show's lifetime total.
+ */
+export interface PodcastWorth { perEpisode: number; deliverables: Deliverable[]; factors: Factor[] }
+const POD_RATES = [
+  { key: "pre", label: "Pre-roll", hint: "15–30 seconds, read by you before the show", cpm: 18 },
+  { key: "mid", label: "Mid-roll", hint: "60 seconds, read by you in the middle: the one sponsors want most", cpm: 25 },
+  { key: "post", label: "Post-roll", hint: "15–30 seconds at the end", cpm: 10 },
+  { key: "pack", label: "4-episode package", hint: "A mid-roll in four episodes in a row, at 10% off", cpm: 25 * 4 * 0.9 },
+];
+export function podcastWorthFor(perEpisode: number): PodcastWorth | null {
+  if (!(perEpisode > 0)) return null;
+  const niche = 1.1;
+  const deliverables = POD_RATES.map((r) => {
+    const mid = (perEpisode / 1000) * r.cpm * niche;
+    return { key: r.key, label: r.label, hint: r.hint, low: round5(mid * 0.8), mid: round5(mid), high: round5(mid * 1.2) };
+  });
+  return {
+    perEpisode,
+    deliverables,
+    factors: [
+      { label: "Downloads per episode", value: perEpisode, why: `about ${Math.round(perEpisode).toLocaleString()} for a typical recent episode` },
+      { label: "Military & veteran audience", value: niche, why: "a niche brands can't reach easily any other way" },
+    ],
+  };
+}
+
 export function tierOf(followers: number): string {
   return followers < 10_000 ? "Nano creator" : followers < 100_000 ? "Micro creator" : followers < 500_000 ? "Mid-tier creator" : followers < 1_000_000 ? "Macro creator" : "Mega creator";
 }
