@@ -129,6 +129,7 @@ import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerHosting, claimEpisodeAudio } from "./hosting.js";
+import { registerBioPage } from "./bioPage.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
 import { episodeCredits, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -5522,6 +5523,7 @@ export function registerRoutes(app: Express): void {
   registerSponsorFinder(app, requireAdmin);
   registerPodcastStats(app);
   registerHosting(app, requireAgent);
+  registerBioPage(app);
 
   /** The worker has fetched an import (Zoom): the file is in storage now. */
   app.post("/api/agent/imports/:id/done", requireAgent, async (req, res) => {

@@ -2411,3 +2411,57 @@ export const hostedDownloads = pgTable("hosted_downloads", {
   createdAt: text("created_at").notNull(),
 }, (t) => [uniqueIndex("hosted_downloads_once").on(t.episodeId, t.listenerHash, t.day), index("hosted_downloads_show_day").on(t.showId, t.day)]);
 export type HostedDownloadRow = typeof hostedDownloads.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Bio page: a podcaster's own page at militaryvoices.ai/<handle> (shared/bio.ts
+// has the shape of theme, sections and socials).
+// ---------------------------------------------------------------------------
+export const bioPages = pgTable("bio_pages", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  handle: text("handle").notNull(),
+  displayName: text("display_name").notNull().default(""),
+  bio: text("bio").notNull().default(""),
+  avatarUrl: text("avatar_url").notNull().default(""),
+  heroUrl: text("hero_url").notNull().default(""),
+  /** BioTheme as JSON. */
+  theme: text("theme").notNull().default(""),
+  /** BioSection[] as JSON. */
+  sections: text("sections").notNull().default("[]"),
+  /** BioSocial[] as JSON: order and on/off, synced from their connected accounts. */
+  socials: text("socials").notNull().default("[]"),
+  /** The show when it isn't hosted here: its RSS feed. */
+  rssUrl: text("rss_url").notNull().default(""),
+  askEnabled: boolean("ask_enabled").notNull().default(true),
+  published: boolean("published").notNull().default(true),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull().default(""),
+}, (t) => [uniqueIndex("bio_pages_handle").on(t.handle), uniqueIndex("bio_pages_email").on(t.email)]);
+export type BioPageRow = typeof bioPages.$inferSelect;
+
+/** Views, link taps, plays and shares on a bio page, a row each. */
+export const bioEvents = pgTable("bio_events", {
+  id: serial("id").primaryKey(),
+  pageId: integer("page_id").notNull(),
+  /** view | click | play | share | ask */
+  kind: text("kind").notNull(),
+  label: text("label").notNull().default(""),
+  day: text("day").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("bio_events_page_day").on(t.pageId, t.day)]);
+
+/** A question a listener sent from the bio page. */
+export const listenerQuestions = pgTable("listener_questions", {
+  id: serial("id").primaryKey(),
+  pageId: integer("page_id").notNull(),
+  /** The podcaster's email (the page owner). */
+  email: text("email").notNull(),
+  name: text("name").notNull().default(""),
+  fromEmail: text("from_email").notNull().default(""),
+  question: text("question").notNull(),
+  episode: text("episode").notNull().default(""),
+  /** new | answered | archived */
+  status: text("status").notNull().default("new"),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("listener_questions_email").on(t.email)]);
+export type ListenerQuestionRow = typeof listenerQuestions.$inferSelect;

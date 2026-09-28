@@ -3,13 +3,13 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, Plus, Podcast, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal } from "lucide-react";
+import { LayoutDashboard, Plus, Podcast, Globe, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "podcast";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "podcast" | "page";
 
 interface Item {
   key: HostScreen;
@@ -83,6 +83,7 @@ export function HostNav({
       title: "Your show",
       items: [
         { key: "dashboard", label: "Dashboard", hint: "Your home base: your events, your audience and what to do next", icon: LayoutDashboard },
+        { key: "page", label: "My page", hint: "Your own page at militaryvoices.ai/you: your podcast, links and socials, and questions from listeners", icon: Globe },
         { key: "events", label: "Events", hint: "The events you're part of: your show, your time slot and how to promote it", icon: CalendarDays, badge: eventsCount || undefined },
         ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `The ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} you're co-hosting at the desk, and who's on with you`, icon: Mic2 }] : []),
       ],

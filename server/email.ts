@@ -332,6 +332,27 @@ export async function sendLoginCodeEmail(input: LoginCodeEmailInput): Promise<bo
   });
 }
 
+/** A listener asked a question on the podcaster's bio page. Reply goes straight to the listener when they left an address. */
+export async function sendListenerQuestionEmail(input: { to: string; show: string; name: string; fromEmail: string; question: string; episode: string; dashboardUrl: string }): Promise<boolean> {
+  const who = input.name || (input.fromEmail ? input.fromEmail : "A listener");
+  const quote = `<div style="background:#f5f7fb;border-left:4px solid #f0a71f;border-radius:0 12px 12px 0;padding:14px 18px;margin:0 0 16px;color:#1f2937;font-size:15px;line-height:1.55;white-space:pre-wrap;">${escapeHtml(input.question)}</div>`;
+  const reply = input.fromEmail ? `Reply to this email and it goes straight to ${escapeHtml(input.fromEmail)}.` : "They didn't leave an email, so answer it on your next episode.";
+  return sendRawEmail({
+    to: input.to,
+    ...(input.fromEmail ? { replyTo: input.fromEmail } : {}),
+    subject: `${who} asked you a question`,
+    html: emailShell({
+      banner: EMAIL_BANNERS.podcasters,
+      bannerAlt: "MilitaryVoices.ai",
+      eyebrow: "From your page",
+      heading: `${escapeHtml(who)} asked you a question`,
+      body: `${input.episode ? `<p style="margin:0 0 10px;color:#6b7280;font-size:13px;">About: ${escapeHtml(input.episode)}</p>` : ""}${quote}<p style="margin:0 0 16px;">${reply}</p><p style="margin:0;"><a href="${input.dashboardUrl}" style="color:#053877;font-weight:600;">See all your listener questions</a></p>`,
+      footerNote: `Sent because someone used the Ask box on your MilitaryVoices page${input.show ? ` for ${escapeHtml(input.show)}` : ""}.`,
+    }),
+    text: `${who} asked you a question${input.episode ? ` (about ${input.episode})` : ""}:\n\n${input.question}\n\n${input.fromEmail ? `Reply to this email to answer them at ${input.fromEmail}.` : "They didn't leave an email."}\n\nAll your questions: ${input.dashboardUrl}\n`,
+  }).then((id) => Boolean(id));
+}
+
 /** Podcast hosting: confirm the owner email that goes in the show's feed (Apple and Spotify send their own codes there). */
 export async function sendPodcastOwnerCodeEmail(input: { to: string; code: string; show: string }): Promise<boolean> {
   const codeBlock = `
