@@ -2442,6 +2442,9 @@ export const bioPages = pgTable("bio_pages", {
   brands: text("brands").notNull().default(""),
   /** The Family view (private link): BioFamily as JSON. */
   family: text("family").notNull().default(""),
+  /** Their profile photo with the background taken out (the Cutout top), and the photo it was made from. */
+  cutoutUrl: text("cutout_url").notNull().default(""),
+  cutoutFrom: text("cutout_from").notNull().default(""),
   /** Ask my show: the AI that answers listeners from every episode. */
   aiEnabled: boolean("ai_enabled").notNull().default(true),
   published: boolean("published").notNull().default(true),

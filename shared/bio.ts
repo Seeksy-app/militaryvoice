@@ -9,7 +9,7 @@ export type BioShade = "light" | "dark";
 export type BioFont = "sans" | "serif" | "mono";
 export type BioLinkShape = "pill" | "rounded" | "square";
 export type BioLinkStyle = "fill" | "outline" | "soft";
-export type BioLayout = "portrait" | "landscape" | "blend" | "hero" | "shape";
+export type BioLayout = "portrait" | "landscape" | "blend" | "hero" | "shape" | "cutout";
 /** The podcast edge to edge (full) or in a card with a margin (card). */
 export type BioPodcastFrame = "full" | "card";
 /** How the podcast shows: the latest big (spotlight), a list, or cards to swipe. */
@@ -195,6 +195,8 @@ export interface BioPublic {
   welcome: string;
   /** Their media kit is on (a "For brands" link at the foot of the page). */
   brandsOn?: boolean;
+  /** Their photo with the background taken out, for the Cutout top ("" until made). */
+  cutoutUrl?: string;
   /** Listeners can send a question (it goes to the podcaster's inbox). */
   askEnabled: boolean;
   /** Ask my show: the AI answers from the episodes it has learned (how many). */

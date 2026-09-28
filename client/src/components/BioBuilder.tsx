@@ -23,7 +23,7 @@ import { Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphone
  * component the public page uses. Everything saves as they go.
  */
 
-type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; welcome: string; aiEnabled: boolean; published: boolean; brands: BioBrands; family: BioFamily };
+type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; welcome: string; aiEnabled: boolean; published: boolean; brands: BioBrands; family: BioFamily; cutoutUrl: string; cutoutFrom: string };
 type Resp = { page: Page; url: string; preview: BioPublic; brandsPreview?: BioBrandsPublic | null; familyPreview?: BioFamilyPublic | null; stats: Record<string, number>; questions: ListenerQuestionRow[]; knowledge?: { done: number; total: number } };
 type Tab = "profile" | "design" | "content" | "share" | "brands" | "family" | "questions";
 
@@ -182,9 +182,30 @@ export function BioBuilder() {
   const view: BioPublic | null = useMemo(() => draft && preview ? {
     ...preview, handle: draft.handle, displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl,
     theme: draft.theme, askEnabled: draft.askEnabled, welcome: draft.welcome?.trim() || preview.welcome, brandsOn: draft.brands?.on ?? true,
+    cutoutUrl: draft.cutoutFrom && draft.cutoutFrom === draft.avatarUrl ? draft.cutoutUrl : "",
     ai: { enabled: draft.aiEnabled && (preview.ai?.episodes ?? 0) > 0, episodes: preview.ai?.episodes ?? 0 },
     socials: draft.socials.filter((s) => s.on && s.url), sections: draft.sections.filter((s) => s.visible),
   } : null, [draft, preview]);
+  // Cutout: made from their profile photo when they pick it, and again when the photo changes.
+  const [cutting, setCutting] = useState(false);
+  const cutFailed = useRef("");
+  useEffect(() => {
+    if (!draft || draft.theme.layout !== "cutout" || !draft.avatarUrl || draft.cutoutFrom === draft.avatarUrl || cutting || cutFailed.current === draft.avatarUrl) return;
+    setCutting(true);
+    void (async () => {
+      try {
+        const r = await again(() => apiRequest("POST", "/api/host/bio/cutout", {}));
+        const j = (await r.json()) as { cutoutUrl: string; preview: BioPublic };
+        setDraft((d) => (d ? { ...d, cutoutUrl: j.cutoutUrl, cutoutFrom: d.avatarUrl } : d));
+        setPreview(j.preview);
+      } catch (e) {
+        cutFailed.current = draft.avatarUrl;
+        toast({ title: "Couldn't make your cutout", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
+      } finally { setCutting(false); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft?.theme.layout, draft?.avatarUrl, draft?.cutoutFrom]);
+
   // The Brands view: the numbers from the server, what they write from the draft.
   const kitView: BioBrandsPublic | null = useMemo(() => draft && q.data?.brandsPreview ? {
     ...q.data.brandsPreview, displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, theme: draft.theme, kit: draft.brands ?? DEFAULT_BRANDS,
@@ -237,7 +258,7 @@ export function BioBuilder() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
         <div className="min-w-0">
           {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} />}
-          {tab === "design" && <DesignTab d={draft} change={change} />}
+          {tab === "design" && <DesignTab d={draft} change={change} cutting={cutting} />}
           {tab === "content" && <ContentTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} />}
           {tab === "brands" && <BrandsTab d={draft} change={change} url={url} kit={kitView} />}
@@ -497,7 +518,7 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear }: { label: 
 
 // ---- Design ------------------------------------------------------------------------
 
-function DesignTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void }) {
+function DesignTab({ d, change, cutting = false }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; cutting?: boolean }) {
   const t = d.theme;
   const set = (p: Partial<BioTheme>) => change({ theme: { ...t, ...p } });
   const [hex, setHex] = useState(t.color);
@@ -603,17 +624,18 @@ function DesignTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: bo
         </div>
         <p className="pt-1 text-xs font-semibold text-muted-foreground">Top of the page</p>
         <div className="grid grid-cols-3 gap-3">
-          {([["portrait", "Classic"], ["hero", "Hero"], ["blend", "Cover photo"], ["landscape", "Banner"], ["shape", "Shape"]] as const).map(([v, l]) => {
+          {([["portrait", "Classic"], ["hero", "Hero"], ["cutout", "Cutout"], ["blend", "Cover photo"], ["landscape", "Banner"], ["shape", "Shape"]] as const).map(([v, l]) => {
             const face = d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888";
             return (
-              <Tile key={v} on={t.layout === v} onClick={() => set({ layout: v })} label={l} testid={`bio-layout-${v}`}>
+              <Tile key={v} on={t.layout === v} onClick={() => set({ layout: v })} label={l} note={v === "cutout" && cutting ? "Cutting you out…" : undefined} testid={`bio-layout-${v}`}>
                 <span className="relative flex h-16 flex-col items-center overflow-hidden rounded-lg" style={{ background: ground }}>
-                  {v === "hero" ? <><span className="absolute inset-0" style={{ background: face }} /><span className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" /><span className="absolute bottom-2 h-1.5 w-12 rounded bg-white" /></>
+                  {v === "cutout" ? <><span className="absolute inset-0" style={{ background: `radial-gradient(circle at 50% 35%, ${c}, ${ground})` }} /><span className="absolute left-1/2 top-2 -translate-x-1/2 text-[13px] font-black uppercase leading-none" style={{ color: ink, opacity: 0.8 }}>{(d.displayName || "Name").split(" ")[0].slice(0, 7)}</span>{d.cutoutUrl && d.cutoutFrom === d.avatarUrl ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</>
+                    : v === "hero" ? <><span className="absolute inset-0" style={{ background: face }} /><span className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" /><span className="absolute bottom-2 h-1.5 w-12 rounded bg-white" /></>
                     : v === "blend" ? <span className="h-11 w-full" style={{ background: d.avatarUrl ? face : c, maskImage: "linear-gradient(to bottom, #000 50%, transparent)" }} />
                     : v === "landscape" ? <><span className="h-6 w-full" style={{ background: `linear-gradient(135deg, ${c}, #000741)` }} /><span className="-mt-3 h-6 w-6 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${ground}` }} /></>
                     : v === "shape" ? <span className="relative mt-2 h-9 w-9"><span className="absolute -inset-1 rotate-12" style={{ background: c, borderRadius: "58% 42% 38% 62% / 45% 55% 45% 55%" }} /><span className="absolute inset-0" style={{ background: face, borderRadius: "42% 58% 63% 37% / 52% 38% 62% 48%" }} /></span>
                     : <span className="mt-2.5 h-8 w-8 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${c}` }} />}
-                  {v !== "hero" && <span className="absolute bottom-1.5 h-1 w-10 rounded" style={{ background: ink, opacity: 0.8 }} />}
+                  {v !== "hero" && v !== "cutout" && <span className="absolute bottom-1.5 h-1 w-10 rounded" style={{ background: ink, opacity: 0.8 }} />}
                 </span>
               </Tile>
             );

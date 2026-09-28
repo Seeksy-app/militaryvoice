@@ -85,10 +85,14 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
     setTimeout(() => setCopied(null), 1600);
   };
 
+
+  // Cutout: the name big enough to fill the width behind them, by its longest word.
+  const longest = Math.max(4, ...(data.displayName || "Your name").split(/\s+/).map((w) => w.length));
+  const bigName = Math.round(Math.min(104, Math.max(46, 380 / (longest * 0.62))));
   // Their name, handle, bio and socials: on the page, or in white over their photo (hero).
-  const who = (onPhoto: boolean) => (
+  const who = (onPhoto: boolean, hideName = false) => (
     <>
-      <h1 className={`text-balance font-bold leading-tight tracking-tight ${onPhoto ? "text-[34px]" : "text-[26px]"}`}>{data.displayName || "Your name"}</h1>
+      {!hideName && <h1 className={`text-balance font-bold leading-tight tracking-tight ${onPhoto ? "text-[34px]" : "text-[26px]"}`}>{data.displayName || "Your name"}</h1>}
       <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>@{data.handle}{data.branch ? ` · ${data.branch}` : ""}</p>
       {data.bio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{data.bio}</p>}
       {data.socials.length > 0 && (
@@ -113,7 +117,16 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       )}
       {/* The header: a wide cover photo (blend), full-screen photo with their name on it (hero),
           a banner with the photo over it (landscape), a shaped photo (shape) or a round one (portrait). */}
-      {t.layout === "hero" && photo ? (
+      {t.layout === "cutout" && data.cutoutUrl ? (
+        <>
+          <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `radial-gradient(120% 80% at 50% 30%, ${theirs} 0%, ${theirs} 45%, ${dark ? "#0b1020" : "#e9ecf3"} 100%)` }} data-testid="bio-cutout-header">
+            <h1 className="absolute inset-x-0 top-16 z-0 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName, color: onColor(theirs), opacity: 0.92 }}>{data.displayName || "Your name"}</h1>
+            <img src={data.cutoutUrl} alt="" className="relative z-10 mx-auto block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" />
+            <div className="absolute inset-x-0 bottom-0 z-20 h-24" style={{ background: `linear-gradient(to bottom, transparent, ${dark ? "#0b1020" : "#f5f6fa"})` }} />
+          </div>
+          <div className="relative z-30 mx-auto -mt-4 max-w-[560px] px-5 text-center">{who(false, true)}</div>
+        </>
+      ) : t.layout === "hero" && photo ? (
         <div className="relative flex min-h-[600px] flex-col justify-end" style={{ background: `center 20%/cover url(${photo})` }} data-testid="bio-hero-header">
           <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.55) 70%, ${t.template === "vibrant" ? theirs : dark ? "#0b1020" : "rgba(0,0,0,0.85)"} 100%)` }} />
           <div className="relative mx-auto w-full max-w-[560px] px-5 pb-8 text-center text-white">{who(true)}</div>

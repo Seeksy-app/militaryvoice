@@ -107,6 +107,7 @@ async function publicOf(row: BioPageRow): Promise<BioPublic> {
     askEnabled: row.askEnabled,
     welcome: row.welcome.trim() || `Hi! Thanks for listening. What's on your mind?`,
     brandsOn: parseBrands(row.brands).on,
+    cutoutUrl: row.cutoutFrom && row.cutoutFrom === row.avatarUrl ? row.cutoutUrl : "",
     ai: await aiFor(row),
   };
 }
@@ -273,7 +274,7 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     font: pick("font", ["sans", "serif", "mono"] as const, prev.font),
     linkShape: pick("linkShape", ["pill", "rounded", "square"] as const, prev.linkShape),
     linkStyle: pick("linkStyle", ["fill", "outline", "soft"] as const, prev.linkStyle),
-    layout: pick("layout", ["portrait", "landscape", "blend", "hero", "shape"] as const, prev.layout),
+    layout: pick("layout", ["portrait", "landscape", "blend", "hero", "shape", "cutout"] as const, prev.layout),
     podcastStyle: pick("podcastStyle", ["spotlight", "list", "carousel"] as const, prev.podcastStyle),
     podcastFrame: pick("podcastFrame", ["full", "card"] as const, prev.podcastFrame),
     podcast: (() => {
@@ -364,6 +365,37 @@ export function registerBioPage(app: Express) {
       res.json({ url, preview: await publicOf(out) });
     } catch {
       res.status(400).json({ message: "Couldn't read that image. Try a JPG or PNG." });
+    }
+  });
+
+  // Cutout: their profile photo with the background taken out (BiRefNet on fal, portrait model), kept as a PNG.
+  const cutting = new Map<number, number[]>();
+  app.post("/api/host/bio/cutout", requireHostSession, async (req, res) => {
+    const row = await pageFor(emailOf(req));
+    if (!process.env.FAL_KEY) return res.status(503).json({ message: "Cutout isn't switched on yet." });
+    if (!row.avatarUrl) return res.status(400).json({ message: "Add a profile photo first." });
+    if (row.cutoutUrl && row.cutoutFrom === row.avatarUrl) return res.json({ cutoutUrl: row.cutoutUrl, preview: await publicOf(row) });
+    const hits = (cutting.get(row.id) ?? []).filter((t) => Date.now() - t < 3600_000);
+    if (hits.length >= 10) return res.status(429).json({ message: "That's a lot of cutouts. Try again in an hour." });
+    cutting.set(row.id, [...hits, Date.now()]);
+    try {
+      const r = await fetch("https://fal.run/fal-ai/birefnet/v2", {
+        method: "POST",
+        headers: { Authorization: `Key ${process.env.FAL_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ image_url: row.avatarUrl, model: "Portrait", output_format: "png", operating_resolution: "1024x1024" }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      const j = (await r.json().catch(() => ({}))) as { image?: { url?: string } };
+      if (!r.ok || !j.image?.url) throw new Error(`fal ${r.status}`);
+      const raw = Buffer.from(await (await fetch(j.image.url, { signal: AbortSignal.timeout(30_000) })).arrayBuffer());
+      // Trimmed to the person, so they stand on the foot of the header.
+      const png = await sharp(raw).trim({ threshold: 1 }).resize(1200, 1200, { fit: "inside", withoutEnlargement: true }).png({ compressionLevel: 9 }).toBuffer();
+      const url = await uploadPhoto(`bio/${row.id}-cutout-${Date.now()}.png`, png, "image/png");
+      const [out] = await db.update(bioPages).set({ cutoutUrl: url, cutoutFrom: row.avatarUrl, updatedAt: now() }).where(eq(bioPages.id, row.id)).returning();
+      res.json({ cutoutUrl: url, preview: await publicOf(out) });
+    } catch (err) {
+      console.error("Cutout failed:", (err as Error).message);
+      res.status(502).json({ message: "Couldn't cut out that photo. Try a clearer one of just you." });
     }
   });
 
