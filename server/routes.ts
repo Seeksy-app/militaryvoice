@@ -128,7 +128,7 @@ import { registerMusic } from "./music.js";
 import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
-import { registerHosting } from "./hosting.js";
+import { registerHosting, claimEpisodeAudio } from "./hosting.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
 import { episodeCredits, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
@@ -5521,7 +5521,7 @@ export function registerRoutes(app: Express): void {
   registerReview(app);
   registerSponsorFinder(app, requireAdmin);
   registerPodcastStats(app);
-  registerHosting(app);
+  registerHosting(app, requireAgent);
 
   /** The worker has fetched an import (Zoom): the file is in storage now. */
   app.post("/api/agent/imports/:id/done", requireAgent, async (req, res) => {
@@ -5635,6 +5635,11 @@ export function registerRoutes(app: Express): void {
           });
         }
       }
+    }
+    // A podcast episode to turn from a Library video into audio: quick, and someone is waiting to publish.
+    if (Array.isArray(req.body?.can) && req.body.can.includes("episode-audio")) {
+      const ea = await claimEpisodeAudio().catch((err) => { console.error("Episode audio claim failed:", err); return null; });
+      if (ea) return res.json({ job: { recordingId: ea.id, title: ea.title, durationSec: ea.durationSec, downloadUrl: ea.recordingUrl, show: "", host: "", transcript: [], episodeAudio: { episodeId: ea.id } } });
     }
     // A recording to bring in (Zoom), if this worker can: quick, and someone's Library is waiting on it.
     if (Array.isArray(req.body?.can) && req.body.can.includes("import")) {

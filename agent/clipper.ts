@@ -114,6 +114,8 @@ interface Job {
   /** Only (re)make the clean episode; the clips are already done. */
   cleanOnly?: boolean;
   /** "Edit episode": the source is downloadUrl; cut to trimStart–trimEnd (0 = the end), with an intro and outro. */
+  /** A hosted podcast episode: the Library video (downloadUrl) as its MP3. recordingId is the episode's id. */
+  episodeAudio?: { episodeId: number };
   episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut" };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
@@ -1794,7 +1796,34 @@ async function handleMusic(job: Job): Promise<void> {
   }
 }
 
+/**
+ * A podcast episode from a Library video: the sound only, as a 128k stereo
+ * MP3 at podcast loudness (-16 LUFS, what Apple and Spotify play at), then
+ * into storage for the feed. Never throws.
+ */
+async function handleEpisodeAudio(job: Job): Promise<void> {
+  const id = job.episodeAudio!.episodeId;
+  const tag = `[episode ${id}] audio`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `epaudio-${id}-`));
+  try {
+    console.log(`${tag}: ${job.title}`);
+    const out = path.join(dir, `episode-${id}.mp3`);
+    await ffmpeg(["-i", job.downloadUrl, "-vn", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k", "-id3v2_version", "3", out]);
+    const sizeBytes = (await fs.stat(out)).size;
+    const durationSec = Math.round(Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out]).catch(() => "0")).trim()) || job.durationSec);
+    const audioKey = await uploadBig(out, "audio/mpeg");
+    await api("POST", `/api/agent/episode-audio/${id}/done`, { audioKey, sizeBytes, durationSec });
+    console.log(`${tag}: done (${Math.round(sizeBytes / 1048576)}MB)`);
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/episode-audio/${id}/failed`, { error: (err as Error).message }).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function handle(job: Job): Promise<void> {
+  if (job.episodeAudio) return handleEpisodeAudio(job);
   if (job.musicMix) return handleMusic(job);
   if (job.importFrom) return handleImport(job);
   if (job.episodeEdit) return handleEpisodeEdit(job);
@@ -2055,11 +2084,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 
 async function tick(): Promise<boolean> {
-  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "import", "music", "suggest"] });
+  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "episode-audio", "import", "music", "suggest"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  const clipJob = !(job.clipEdit || job.episodeEdit || job.importFrom || job.musicMix || job.suggestEdits);
+  const clipJob = !(job.clipEdit || job.episodeEdit || job.episodeAudio || job.importFrom || job.musicMix || job.suggestEdits);
   if (clipJob) holding.add(job.recordingId);
   if (job.episodeEdit) editing.add(job.recordingId);
   // "Still on it", every minute: a long quiet stretch (waiting on Creatomate)

@@ -29,7 +29,8 @@ const dateOf = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefine
 export function PodcastHosting() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const q = useQuery<Resp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json() });
+  // While an episode's audio is being made, check back every few seconds.
+  const q = useQuery<Resp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), refetchInterval: (qq) => ((qq.state.data as Resp | undefined)?.shows.some((x) => x.episodes.some((e) => e.audioJob === "queued" || e.audioJob === "running")) ? 5000 : false) });
   const refresh = () => { void qc.invalidateQueries({ queryKey: KEY }); void qc.invalidateQueries({ queryKey: ["/api/host/podcast-stats"] }); };
   const create = useMutation({
     mutationFn: async () => (await apiRequest("POST", "/api/host/hosting/shows", {})).json(),
@@ -153,8 +154,8 @@ export function PodcastHosting() {
           <ul className="divide-y divide-border">
             {h.episodes.map((e) => (
               <li key={e.id} className="flex items-center gap-3 py-2.5" data-testid={`hosting-episode-${e.id}`}>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${e.live ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : e.status === "published" ? "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]" : "bg-muted text-muted-foreground"}`}>
-                  {e.live ? "Live" : e.status === "published" ? "Scheduled" : "Draft"}
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${e.audioJob === "failed" ? "bg-destructive/10 text-destructive" : e.audioJob ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : e.live ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : e.status === "published" ? "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]" : "bg-muted text-muted-foreground"}`}>
+                  {e.audioJob === "failed" ? "Audio failed" : e.audioJob ? <span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Preparing audio</span> : e.live ? "Live" : e.status === "published" ? "Scheduled" : "Draft"}
                 </span>
                 <button type="button" onClick={() => setEditEp(e)} className="min-w-0 flex-1 text-left">
                   <span className="block truncate text-sm font-medium">{e.episodeNumber != null ? `${e.episodeNumber}. ` : ""}{e.title}</span>
@@ -368,7 +369,8 @@ function NewEpisodeDialog({ open, onClose, show, onCreated }: { open: boolean; o
   const [pct, setPct] = useState<number | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const recs = useQuery<RecordingRow[]>({ queryKey: ["/api/host/recordings"], queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(), enabled: open });
-  const cleanOnes = (recs.data ?? []).filter((r) => { try { const c = r.clean ? JSON.parse(r.clean) : null; return c?.status === "done" && c.audioKey; } catch { return false; } });
+  const hasClean = (r: RecordingRow) => { try { const c = r.clean ? JSON.parse(r.clean) : null; return c?.status === "done" && !!c.audioKey; } catch { return false; } };
+  const usable = (recs.data ?? []).filter((r) => r.status === "Ready" && r.url);
   const make = async (body: Record<string, unknown>) => {
     const e = (await (await apiRequest("POST", `/api/host/hosting/shows/${show.id}/episodes`, body)).json()) as HostedEpisodeRow;
     onCreated(e);
@@ -409,17 +411,19 @@ function NewEpisodeDialog({ open, onClose, show, onCreated }: { open: boolean; o
           </>
         ) : (
           <div className="max-h-72 overflow-y-auto">
-            {recs.isLoading ? <Loader2 className="mx-auto my-8 h-5 w-5 animate-spin text-muted-foreground" /> : cleanOnes.length ? (
+            {recs.isLoading ? <Loader2 className="mx-auto my-8 h-5 w-5 animate-spin text-muted-foreground" /> : usable.length ? (
               <ul className="divide-y divide-border">
-                {cleanOnes.map((r) => (
+                {usable.map((r) => (
                   <li key={r.id} className="flex items-center gap-3 py-2">
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{r.title || "Untitled"}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{r.title || "Untitled"}</span>
+                      <span className="block text-xs text-muted-foreground">{hasClean(r) ? "Clean audio: ums and long pauses already out" : "We'll turn the video into audio (a minute or two)"}</span>
+                    </span>
                     <Button size="sm" variant="outline" className="h-8 rounded-full" disabled={pick.isPending} onClick={() => pick.mutate(r.id)}>{pick.isPending && pick.variables === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Use this"}</Button>
                   </li>
                 ))}
               </ul>
-            ) : <p className="py-8 text-center text-sm text-muted-foreground">No clean episodes yet. Clean one in Pōstify, or upload the audio.</p>}
-            <p className="mt-2 text-xs text-muted-foreground">Uses the clean episode's audio: the ums, false starts and long pauses already taken out.</p>
+            ) : <p className="py-8 text-center text-sm text-muted-foreground">Nothing in your Library yet. Upload the audio instead.</p>}
           </div>
         )}
       </DialogContent>

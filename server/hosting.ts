@@ -321,7 +321,42 @@ const art = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1
 const emailOf = (req: Request) => (getSessionEmail(req) ?? "").trim().toLowerCase();
 const num = (v: unknown) => (v === "" || v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Math.max(0, Math.round(Number(v))));
 
-export function registerHosting(app: Express) {
+/** The worker's next episode to turn from video into audio (a stuck one is taken back after 30 minutes). */
+export async function claimEpisodeAudio(): Promise<{ id: number; title: string; durationSec: number; recordingUrl: string } | null> {
+  await schemaIsReady();
+  const stale = new Date(Date.now() - 30 * 60_000).toISOString();
+  const rows = await db.execute(sql`
+    UPDATE hosted_episodes SET audio_job = 'running', audio_job_at = ${now()}
+    WHERE id = (
+      SELECT id FROM hosted_episodes
+      WHERE audio_job = 'queued' OR (audio_job = 'running' AND audio_job_at < ${stale})
+      ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id, title, duration_sec, recording_id`);
+  const r = (rows as unknown as { id: number; title: string; duration_sec: number; recording_id: number | null }[])[0];
+  if (!r) return null;
+  const rec = r.recording_id ? await storage.getRecording(r.recording_id) : undefined;
+  if (!rec?.url) {
+    await db.update(hostedEpisodes).set({ audioJob: "failed", audioError: "The recording couldn't be found." }).where(eq(hostedEpisodes.id, r.id));
+    return null;
+  }
+  const recordingUrl = /^https?:\/\//i.test(rec.url) ? rec.url : await signedRecordingUrl(rec.url, 6 * 3600);
+  return { id: r.id, title: r.title, durationSec: r.duration_sec || rec.durationSec, recordingUrl };
+}
+
+export function registerHosting(app: Express, requireAgent: import("express").RequestHandler) {
+  app.post("/api/agent/episode-audio/:id/done", requireAgent, async (req, res) => {
+    const key = String(req.body?.audioKey ?? "");
+    if (!/^clean\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "No audio." });
+    await db.update(hostedEpisodes).set({ audioKey: key, mime: "audio/mpeg", sizeBytes: num(req.body?.sizeBytes) ?? 0, ...(num(req.body?.durationSec) ? { durationSec: num(req.body?.durationSec)! } : {}), audioJob: "", audioError: "" }).where(eq(hostedEpisodes.id, Number(req.params.id)));
+    res.json({ ok: true });
+  });
+  app.post("/api/agent/episode-audio/:id/failed", requireAgent, async (req, res) => {
+    const requeue = req.body?.requeue === true;
+    await db.update(hostedEpisodes).set(requeue ? { audioJob: "queued" } : { audioJob: "failed", audioError: String(req.body?.error ?? "").slice(0, 300) }).where(eq(hostedEpisodes.id, Number(req.params.id)));
+    res.json({ ok: true });
+  });
+
   // A fresh server creates the hosting tables on its first query; wait for that, so a feed or a play never meets a missing table.
   app.use(["/feed", "/e", "/api/host/hosting"], (_req, _res, next) => { schemaIsReady().then(() => next(), next); });
 
@@ -459,20 +494,26 @@ export function registerHosting(app: Express) {
       if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
       let c: CleanResult | null = null;
       try { c = rec.clean ? JSON.parse(rec.clean) : null; } catch { c = null; }
-      if (!c?.audioKey) return res.status(400).json({ message: "That recording has no clean audio yet. Clean it in Pōstify first, or upload the audio file." });
-      audioKey = c.audioKey;
-      mime = "audio/mpeg";
-      durationSec = Math.round(c.durationSec || rec.durationSec || 0);
       recordingId = rec.id;
       title ||= rec.title;
+      if (c?.audioKey && b.original !== true) {
+        audioKey = c.audioKey;
+        mime = "audio/mpeg";
+        durationSec = Math.round(c.durationSec || rec.durationSec || 0);
+      } else {
+        // No clean audio (or they want the original): the worker makes the MP3 from the video.
+        if (!rec.url) return res.status(400).json({ message: "That recording isn't ready yet." });
+        durationSec = Math.round(rec.durationSec || 0);
+      }
     }
-    if (!audioKey) return res.status(400).json({ message: "Add the episode's audio." });
+    if (!audioKey && !recordingId) return res.status(400).json({ message: "Add the episode's audio." });
     const eps = await episodesOf(s.id);
     const [e] = await db.insert(hostedEpisodes).values({
       showId: s.id, title: title || "New episode", description: String(b.description ?? "").slice(0, 20000),
       audioKey, mime, sizeBytes: num(b.sizeBytes) ?? 0, durationSec, recordingId,
       episodeNumber: num(b.episodeNumber) ?? (s.showType === "serial" ? null : eps.filter((x) => x.episodeType === "full").length + 1),
       season: num(b.season), guid: crypto.randomUUID(), status: "draft", createdAt: now(),
+      audioJob: audioKey ? "" : "queued", audioJobAt: audioKey ? "" : now(),
     }).returning();
     res.status(201).json(e);
   });
@@ -483,7 +524,7 @@ export function registerHosting(app: Express) {
     if (!e || !(await ownShow(email, e.showId))) return res.status(404).json({ message: "No such episode." });
     const b = req.body ?? {};
     const publish = b.status === "published";
-    if (publish && !(e.audioKey || e.audioUrl)) return res.status(400).json({ message: "It needs its audio first." });
+    if (publish && !(e.audioKey || e.audioUrl)) return res.status(400).json({ message: e.audioJob === "failed" ? "Its audio couldn't be made. Delete it and try again, or upload the audio." : e.audioJob ? "Its audio is still being made. A few minutes; then publish." : "It needs its audio first." });
     const at = typeof b.publishedAt === "string" && !Number.isNaN(Date.parse(b.publishedAt)) ? new Date(b.publishedAt).toISOString() : undefined;
     const [out] = await db.update(hostedEpisodes).set({
       ...(typeof b.title === "string" ? { title: b.title.slice(0, 300) } : {}),

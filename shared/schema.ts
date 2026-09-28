@@ -2386,6 +2386,10 @@ export const hostedEpisodes = pgTable("hosted_episodes", {
   publishedAt: text("published_at").notNull().default(""),
   /** The Library recording it was made from, if any. */
   recordingId: integer("recording_id"),
+  /** Turning a Library video into the episode's audio (the worker): "" | queued | running | failed. */
+  audioJob: text("audio_job").notNull().default(""),
+  audioJobAt: text("audio_job_at").notNull().default(""),
+  audioError: text("audio_error").notNull().default(""),
   createdAt: text("created_at").notNull(),
 }, (t) => [index("hosted_episodes_show").on(t.showId)]);
 export type HostedEpisodeRow = typeof hostedEpisodes.$inferSelect;
