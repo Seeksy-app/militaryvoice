@@ -986,6 +986,19 @@ function textToHtml(text: string): string {
 
       // A pulled-out note, in the brand gold. The one thing in an email people
       // read when they read nothing else.
+      // A picture on a line of its own: ![what it shows](https://…), full width.
+      const IMG = /^\s*!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)\s*$/;
+      if (lines.length === 1 && IMG.test(lines[0])) {
+        const [, alt, src] = lines[0].match(IMG)!;
+        return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" width="636" style="display:block;width:100%;max-width:636px;height:auto;border:0;border-radius:12px;margin:6px 0 20px;" />`;
+      }
+      // A button on a line of its own: [[Label]](https://…), gold like every other email's.
+      const BTN = /^\s*\[\[([^\]]+)\]\]\((https?:\/\/[^\s)]+)\)\s*$/;
+      if (lines.length === 1 && BTN.test(lines[0])) {
+        const [, label, href] = lines[0].match(BTN)!;
+        return `<p style="margin:4px 0 22px;"><a href="${escapeHtml(href)}" style="display:inline-block;background:#F0A71F;color:#1a1200;text-decoration:none;font-size:15px;font-weight:700;padding:12px 26px;border-radius:9999px;">${escapeHtml(label)}</a></p>`;
+      }
+
       if (lines.every((l) => QUOTE.test(l))) {
         const body = lines.map((l) => inlineMarks(escapeHtml(l.match(QUOTE)![1].trim()))).join("<br>");
         return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">
