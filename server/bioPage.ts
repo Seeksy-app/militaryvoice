@@ -218,12 +218,13 @@ async function familyOf(row: BioPageRow): Promise<BioFamily> {
 }
 
 async function familyPublicOf(row: BioPageRow, f: BioFamily): Promise<BioFamilyPublic> {
-  const [profile, pod, hosted, stats, video] = await Promise.all([
+  const [profile, pod, hosted, stats, video, audio] = await Promise.all([
     storage.getProfileByEmail(row.email).catch(() => undefined),
     podcastFor(row).catch(() => null),
     hostedAsStats(row.email).catch(() => []),
     storage.listPodcastStats(row.email).catch(() => []),
     uploadedVideo(f.video ?? ""),
+    uploadedVideo(f.audio ?? ""),
   ]);
   const totals = [...hosted.map((h) => h.data.total), ...stats.map((r) => { try { return (JSON.parse(r.data) as PodcastStatsData).total ?? 0; } catch { return 0; } })];
   const followers = parseSocialAccounts(profile?.socialAccounts).reduce((a, x) => a + (x.followers ?? 0), 0);
@@ -240,7 +241,7 @@ async function familyPublicOf(row: BioPageRow, f: BioFamily): Promise<BioFamilyP
     numbers: { episodes: pod?.episodeCount ?? 0, listens: Math.max(0, ...totals), followers },
     askEnabled: row.askEnabled,
     firstName: (profile?.hostName || "").trim().split(/\s+/)[0] || "",
-    media: { video, sample: null },
+    media: { video, audio, sample: null },
   };
 }
 
@@ -251,6 +252,7 @@ function cleanFamily(v: unknown, prev: BioFamily): BioFamily {
     on: typeof x.on === "boolean" ? x.on : prev.on,
     key: x.resetKey === true ? newKey() : prev.key || newKey(),
     note: typeof x.note === "string" ? x.note.slice(0, 1000) : prev.note,
+    noteAlign: x.noteAlign === "center" || x.noteAlign === "right" || x.noteAlign === "left" ? x.noteAlign : prev.noteAlign ?? "left",
     story: typeof x.story === "string" ? x.story.slice(0, 4000) : prev.story,
     milestones: Array.isArray(x.milestones)
       ? x.milestones.slice(0, 30).map((m: Record<string, unknown>) => ({ id: id(m), when: str(m?.when, 40), title: str(m?.title, 120), note: str(m?.note, 400) })).filter((m) => m.when || m.title || m.note)
@@ -262,6 +264,7 @@ function cleanFamily(v: unknown, prev: BioFamily): BioFamily {
     photo: typeof x.photo === "string" ? httpUrl(x.photo) : prev.photo,
     name: typeof x.name === "string" ? x.name.slice(0, 80) : prev.name ?? "",
     video: typeof x.video === "string" ? videoRef(x.video) : prev.video ?? "",
+    audio: typeof x.audio === "string" ? (/^r2:show-assets\/[\w.-]+$/.test(x.audio) ? x.audio : "") : prev.audio ?? "",
   };
 }
 

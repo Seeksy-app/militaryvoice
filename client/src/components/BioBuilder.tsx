@@ -17,7 +17,7 @@ import { PlatformIcon, platformLabel, platformBackground } from "@/components/So
 import { ratesFor } from "@/components/BioBrandsView";
 import { CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music } from "lucide-react";
+import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, Mic, Square, Smile, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music } from "lucide-react";
 
 /**
  * SmartLink (was "My page", then "Rally Point"): the podcaster's bio page builder. Profile, Design, Content and
@@ -274,7 +274,7 @@ export function BioBuilder() {
           {tab === "social" && <SocialTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} />}
           {tab === "brands" && <BrandsTab d={draft} change={change} url={url} kit={kitView} episodes={q.data?.familyPreview?.podcast?.episodes ?? []} />}
-          {tab === "family" && <FamilyTab d={draft} change={change} flush={flush} url={url} episodes={q.data?.familyPreview?.podcast?.episodes ?? []} />}
+          {tab === "family" && <FamilyTab d={draft} change={change} flush={flush} url={url} famPreview={famView} />}
           {tab === "questions" && <QuestionsTab items={q.data?.questions ?? []} onChange={() => void qc.invalidateQueries({ queryKey: KEY })} />}
         </div>
         {/* The page, as listeners will see it. */}
@@ -1152,8 +1152,17 @@ function SectionEditor({ s, upd }: { s: BioSection; upd: (p: Partial<BioSection>
  * The text block's box with its tools over it: align left, centre or right,
  * and bold, italic and underline around what's selected (or where the cursor is).
  */
-function TextEditor({ body, align, onBody, onAlign }: { body: string; align: BioAlign; onBody: (v: string) => void; onAlign: (v: BioAlign) => void }) {
+const EMOJIS = ["❤️", "🥰", "😊", "😂", "🥹", "😍", "🙏", "👏", "💪", "🎉", "🎂", "🎁", "🏠", "👨‍👩‍👧‍👦", "👪", "🤗", "😢", "✨", "⭐", "🌟", "🇺🇸", "🦅", "🎖️", "🪖", "⚓", "✈️", "🫡", "💙", "💛", "🧡", "💚", "💜", "🌻", "🌹", "☀️", "🙌", "👍", "🎙️", "🎧", "📸"];
+
+function TextEditor({ body, align, onBody, onAlign, rows = 5, maxLength = 2000, placeholder = "Write something. Select words, then B, I or U.", emoji = false, testid = "bio-text-body" }: { body: string; align: BioAlign; onBody: (v: string) => void; onAlign: (v: BioAlign) => void; rows?: number; maxLength?: number; placeholder?: string; emoji?: boolean; testid?: string }) {
   const box = useRef<HTMLTextAreaElement>(null);
+  const [emojis, setEmojis] = useState(false);
+  const insert = (text: string) => {
+    const el = box.current;
+    const a = el?.selectionStart ?? body.length, b = el?.selectionEnd ?? body.length;
+    onBody((body.slice(0, a) + text + body.slice(b)).slice(0, maxLength));
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(a + text.length, a + text.length); });
+  };
   const wrap = (mark: string) => {
     const el = box.current;
     if (!el) return;
@@ -1177,8 +1186,24 @@ function TextEditor({ body, align, onBody, onAlign }: { body: string; align: Bio
         {([["**", Bold, "Bold"], ["*", Italic, "Italic"], ["__", Underline, "Underline"]] as const).map(([m, Icon, l]) => (
           <button key={l} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap(m)} className={tool(false)} aria-label={l} title={l} data-testid={`bio-text-${l.toLowerCase()}`}><Icon className="h-4 w-4" /></button>
         ))}
+        {emoji && (
+          <>
+            <span className="mx-1 h-5 w-px bg-border" />
+            <div className="relative">
+              <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => setEmojis(!emojis)} className={tool(emojis)} aria-label="Emoji" title="Emoji" aria-expanded={emojis} data-testid="bio-text-emoji"><Smile className="h-4 w-4" /></button>
+              {emojis && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setEmojis(false)} aria-hidden />
+                  <div className="absolute left-0 top-9 z-50 grid w-[272px] grid-cols-8 gap-0.5 rounded-xl border border-border bg-popover p-1.5 shadow-lg" role="listbox" aria-label="Emoji">
+                    {EMOJIS.map((x) => <button key={x} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => insert(x)} className="flex h-8 w-8 items-center justify-center rounded-lg text-lg hover:bg-muted">{x}</button>)}
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
-      <textarea ref={box} value={body} onChange={(e) => onBody(e.target.value)} rows={5} maxLength={2000} placeholder="Write something. Select words, then B, I or U." className="block w-full resize-y bg-transparent px-3 py-2 text-sm outline-none" style={{ textAlign: align }} data-testid="bio-text-body" />
+      <textarea ref={box} value={body} onChange={(e) => onBody(e.target.value)} rows={rows} maxLength={maxLength} placeholder={placeholder} className="block w-full resize-y bg-transparent px-3 py-2 text-sm outline-none" style={{ textAlign: align }} data-testid={testid} />
     </div>
   );
 }
@@ -1246,6 +1271,89 @@ function ShareTab({ url }: { url: string }) {
 }
 
 // ---- Brands (the media kit) --------------------------------------------------------
+
+/**
+ * A voice message recorded right here (up to three minutes): record, hear it
+ * back, keep it or try again. Kept on our storage, played on their page.
+ */
+function VoiceRecorder({ value, preview, onChange }: { value: string; preview: string; onChange: (v: string) => void }) {
+  const { toast } = useToast();
+  const [state, setState] = useState<"idle" | "recording" | "review" | "saving">("idle");
+  const [secs, setSecs] = useState(0);
+  const [take, setTake] = useState<{ blob: Blob; url: string } | null>(null);
+  const rec = useRef<MediaRecorder | null>(null);
+  const tick = useRef<number>();
+  const MAX = 180;
+  useEffect(() => () => { window.clearInterval(tick.current); rec.current?.stream.getTracks().forEach((t) => t.stop()); }, []);
+  const start = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      const type = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"].find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+      const r = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      const parts: Blob[] = [];
+      r.ondataavailable = (e) => e.data.size && parts.push(e.data);
+      r.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        window.clearInterval(tick.current);
+        const blob = new Blob(parts, { type: r.mimeType || type || "audio/webm" });
+        setTake({ blob, url: URL.createObjectURL(blob) });
+        setState("review");
+      };
+      rec.current = r;
+      r.start(1000);
+      setSecs(0);
+      setState("recording");
+      const t0 = Date.now();
+      tick.current = window.setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); setSecs(s); if (s >= MAX) r.stop(); }, 250);
+    } catch {
+      toast({ title: "Couldn't use your microphone", description: "Allow the microphone for this site in your browser, then try again.", variant: "destructive" });
+    }
+  };
+  const keep = async () => {
+    if (!take) return;
+    setState("saving");
+    try {
+      const ext = take.blob.type.includes("mp4") ? "m4a" : "webm";
+      const key = await uploadToStorage(new File([take.blob], `voice-message.${ext}`, { type: take.blob.type.split(";")[0] }), () => {});
+      onChange(`r2:${key}`);
+      URL.revokeObjectURL(take.url);
+      setTake(null);
+      setState("idle");
+      toast({ title: "Voice message saved", description: "It's on your family page." });
+    } catch (e) {
+      setState("review");
+      toast({ title: "Couldn't save it", description: (e as Error).message, variant: "destructive" });
+    }
+  };
+  const mmss = (n: number) => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+  if (state === "recording") return (
+    <div className="flex items-center gap-3 rounded-2xl border-2 border-red-500/40 bg-red-500/5 p-3">
+      <span className="relative flex h-3 w-3"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-60" /><span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" /></span>
+      <span className="flex-1 text-sm font-semibold tabular-nums">Recording {mmss(secs)} <span className="font-normal text-muted-foreground">/ {mmss(MAX)}</span></span>
+      <Button onClick={() => rec.current?.stop()} className="gap-1.5 rounded-full bg-red-600 hover:bg-red-700" data-testid="voice-stop"><Square className="h-3.5 w-3.5 fill-current" /> Stop</Button>
+    </div>
+  );
+  if ((state === "review" || state === "saving") && take) return (
+    <div className="space-y-2 rounded-2xl border border-border p-3">
+      <audio src={take.url} controls className="w-full" />
+      <div className="flex gap-2">
+        <Button onClick={() => void keep()} disabled={state === "saving"} className="flex-1 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="voice-keep">{state === "saving" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} Use this one</Button>
+        <Button variant="outline" onClick={() => { URL.revokeObjectURL(take.url); setTake(null); void start(); }} disabled={state === "saving"} className="gap-1.5 rounded-full"><RefreshCw className="h-4 w-4" /> Record again</Button>
+      </div>
+    </div>
+  );
+  return (
+    <div className="space-y-2">
+      {value && (
+        <div className="space-y-2 rounded-2xl border border-border bg-muted/40 p-3">
+          <p className="flex items-center justify-between text-sm font-semibold">Your message <button type="button" onClick={() => onChange("")} className="text-xs font-semibold text-muted-foreground hover:text-destructive">Remove</button></p>
+          {preview ? <audio src={preview} controls preload="none" className="w-full" /> : <p className="text-xs text-muted-foreground">Saved.</p>}
+        </div>
+      )}
+      <Button onClick={() => void start()} className="w-full gap-1.5 rounded-full bg-[#053877] hover:bg-[#0a4a99]" data-testid="voice-record"><Mic className="h-4 w-4" /> {value ? "Record a new message" : "Record a message"}</Button>
+    </div>
+  );
+}
 
 /** A video: paste a link (YouTube, Vimeo, Instagram, TikTok), or upload one from the computer or phone. */
 function VideoPick({ value, onChange, testid }: { value: string; onChange: (v: string) => void; testid: string }) {
@@ -1451,7 +1559,7 @@ function AudienceCard({ kit }: { kit: BioBrandsPublic | null }) {
 
 // ---- Family (a private page) --------------------------------------------------------
 
-function FamilyTab({ d, change, flush, url, episodes }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; flush: () => Promise<void>; url: string; episodes: { id: string; title: string }[] }) {
+function FamilyTab({ d, change, flush, url, famPreview }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; flush: () => Promise<void>; url: string; famPreview: BioFamilyPublic | null }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const f = d.family ?? DEFAULT_FAMILY;
@@ -1510,11 +1618,13 @@ function FamilyTab({ d, change, flush, url, episodes }: { d: Page; change: (p: P
           <Input value={f.name ?? ""} onChange={(e) => set({ name: e.target.value })} maxLength={80} placeholder={d.displayName || "Your name"} data-testid="family-name" />
         </Field>
         <Field label="A note to your family" hint="It sits at the top, like a letter.">
-          <Textarea value={f.note} onChange={(e) => set({ note: e.target.value })} rows={4} maxLength={1000} placeholder="Mom, Dad: this is what I've been working on. Thank you for always being in my corner." data-testid="family-note-input" />
+          <TextEditor body={f.note} align={f.noteAlign ?? "left"} onBody={(note) => set({ note })} onAlign={(noteAlign) => set({ noteAlign }, true)} rows={4} maxLength={1000} emoji placeholder="Mom, Dad: this is what I've been working on. Thank you for always being in my corner." testid="family-note-input" />
         </Field>
-        <Field label="Your story">
-          <Textarea value={f.story} onChange={(e) => set({ story: e.target.value })} rows={5} maxLength={4000} placeholder="Why you served, what it taught you, and why you started the show." />
-        </Field>
+      </Card>
+
+      <Card icon={Mic} tone="gold" title="A voice message">
+        <p className="-mt-1 text-xs text-muted-foreground">Record a message in your own voice. It plays near the top of their page.</p>
+        <VoiceRecorder value={f.audio ?? ""} preview={famPreview?.media?.audio?.from === f.audio ? famPreview.media.audio.url : ""} onChange={(v) => set({ audio: v }, true)} />
       </Card>
 
       <Card icon={Video} tone="violet" title="A video for them">
@@ -1557,22 +1667,6 @@ function FamilyTab({ d, change, flush, url, episodes }: { d: Page; change: (p: P
         </Button>
       </Card>
 
-      {episodes.length > 0 && (
-        <Card icon={Headphones} tone="gold" title="Episodes to start with">
-          <p className="-mt-1 text-xs text-muted-foreground">Pick up to three for your family. If you pick none, they see your latest.</p>
-          <div className="space-y-1.5">
-            {episodes.slice(0, 12).map((e) => {
-              const on = f.favorites.includes(e.id);
-              return (
-                <button key={e.id} type="button" onClick={() => set({ favorites: on ? f.favorites.filter((x) => x !== e.id) : [...f.favorites, e.id].slice(-3) }, true)} className={`flex w-full items-center gap-2.5 rounded-xl border-2 px-3 py-2 text-left text-sm transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.05] dark:border-[#8fb5e8]" : "border-border hover:border-[#053877]/40"}`}>
-                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${on ? "bg-[#053877] text-white" : "border border-border"}`}>{on && <Check className="h-3 w-3" />}</span>
-                  <span className="min-w-0 flex-1 truncate">{e.title}</span>
-                </button>
-              );
-            })}
-          </div>
-        </Card>
-      )}
     </div>
   );
 }

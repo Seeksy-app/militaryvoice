@@ -143,6 +143,8 @@ export function videoEmbed(u: string): { kind: "frame" | "file"; src: string; ta
 /** Media resolved on the server for a view: an uploaded video's address, a sample episode's audio. */
 export interface BioViewMedia {
   video: { from: string; url: string } | null;
+  /** The Family view's voice message. */
+  audio?: { from: string; url: string } | null;
   sample: { from: string; title: string; audio: string; artworkUrl: string } | null;
 }
 export function parseBrands(raw: string | null | undefined): BioBrands {
@@ -157,8 +159,9 @@ export interface BioFamily {
   on: boolean;
   /** The private part of the link. New key = the old link stops working. */
   key: string;
-  /** A note to their family, at the top. */
+  /** A note to their family, at the top (**bold**, *italic*, __underline__, and emoji). */
   note: string;
+  noteAlign?: BioAlign;
   /** Their story, in their words. */
   story: string;
   /** Moments that matter: enlisting, deployments, the first episode… */
@@ -172,8 +175,10 @@ export interface BioFamily {
   name: string;
   /** A video for them: a link, or one they uploaded ("r2:<key>"). */
   video: string;
+  /** A voice message they recorded in the app ("r2:<key>"). */
+  audio: string;
 }
-export const DEFAULT_FAMILY: BioFamily = { on: true, key: "", note: "", story: "", milestones: [], photos: [], favorites: [], photo: "", name: "", video: "" };
+export const DEFAULT_FAMILY: BioFamily = { on: true, key: "", note: "", story: "", milestones: [], photos: [], favorites: [], photo: "", name: "", video: "", audio: "" };
 export function parseFamily(raw: string | null | undefined): BioFamily {
   try {
     const v = raw ? JSON.parse(raw) : {};

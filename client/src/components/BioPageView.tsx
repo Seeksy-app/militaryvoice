@@ -316,7 +316,7 @@ function PodcastCard({ p, onAsk, opts, style, full, fallbackArt, accent, ink, su
 }
 
 /** A text block's **bold**, *italic* and __underline__, drawn (nothing else is read as markup). */
-function styled(body: string): React.ReactNode[] {
+export function styled(body: string): React.ReactNode[] {
   return body.split(/(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*)/g).map((part, i) =>
     /^\*\*.+\*\*$/.test(part) ? <strong key={i} className="font-bold">{part.slice(2, -2)}</strong>
       : /^__.+__$/.test(part) ? <u key={i}>{part.slice(2, -2)}</u>

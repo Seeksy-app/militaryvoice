@@ -1,18 +1,17 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Heart, Lock, Pause, Play, X } from "lucide-react";
-import { Chat, onColor, type ChatMsg } from "@/components/BioPageView";
+import { Chat, onColor, styled, type ChatMsg } from "@/components/BioPageView";
 import { useBioFont } from "@/lib/bioFont";
 import { bioPalette, videoEmbed, type BioFamilyPublic } from "@shared/bio";
 
 /**
  * The Family view (militaryvoices.ai/<handle>/family/<key>): a private page for
- * the people closest to them. Their note, what they've made, the episodes to
- * start with, their story and its milestones, photos, and a way to leave a
- * note. No stats for brands, no sponsor talk.
+ * the people closest to them. Their note, a voice message and a video from
+ * them, the milestones along the way, photos, and a way to leave a note. No
+ * podcast, no stats for brands, no sponsor talk.
  */
 
 const compact = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 10_000 ? `${Math.round(n / 1000)}K` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(Math.round(n)));
-const dateOf = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "");
 
 type AskInput = { name: string; email: string; question: string; episode: string; website: string };
 
@@ -30,18 +29,18 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
   const first = f.name?.trim() ? f.name.trim().split(/\s+/)[0] : data.firstName || (data.displayName || "me").split(" ")[0];
   const photo = data.family.photo || data.heroUrl || data.avatarUrl;
   const face = data.family.photo || data.avatarUrl;
-  const [playing, setPlaying] = useState<string | null>(null);
   const [big, setBig] = useState<number | null>(null);
   const [chat, setChat] = useState(false);
   const name = f.name?.trim() || data.displayName || "Your name";
+  // Their voice message, from our copy.
+  const voice = f.audio && data.media?.audio?.from === f.audio ? data.media.audio.url : "";
+  const voiceEl = useRef<HTMLAudioElement | null>(null);
+  const [hearing, setHearing] = useState(false);
+  const [heard, setHeard] = useState(0);
   const fv = f.video ?? "";
   const video = fv.startsWith("r2:") ? (data.media?.video?.from === fv ? { kind: "file" as const, src: data.media.video.url, tall: false } : null) : videoEmbed(fv);
-  const eps = data.podcast?.episodes ?? [];
-  const picks = (f.favorites.length ? f.favorites.map((id) => eps.find((e) => e.id === id)).filter(Boolean) : eps.slice(0, 3)) as typeof eps;
   const n = data.numbers;
   const proud = [
-    n.episodes ? { big: String(n.episodes), label: n.episodes === 1 ? "episode made" : "episodes made" } : null,
-    n.listens ? { big: compact(n.listens), label: "listens" } : null,
     n.followers ? { big: compact(n.followers), label: "people following along" } : null,
   ].filter(Boolean) as { big: string; label: string }[];
 
@@ -68,11 +67,25 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
       <div className="mx-auto flex max-w-[560px] flex-col gap-4 px-4 pt-5">
         {f.note && (
           <section className="relative rounded-3xl p-6 text-left" style={{ background: dark ? "rgba(240,167,31,0.10)" : "#fff8ea", border: `1px solid ${dark ? "rgba(240,167,31,0.25)" : "#f3dfb3"}` }}>
-            <p className="whitespace-pre-line text-[17px] leading-relaxed" style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}>{f.note}</p>
+            <p className="whitespace-pre-line text-[17px] leading-relaxed" style={{ fontFamily: "Georgia, 'Times New Roman', serif", textAlign: f.noteAlign ?? "left" }}>{styled(f.note)}</p>
             <div className="mt-4 flex items-center gap-2.5">
               {face && <img src={face} alt="" className="h-9 w-9 rounded-full object-cover" />}
               <p className="text-sm font-semibold" style={{ fontFamily: "Georgia, serif", fontStyle: "italic" }}>{first}</p>
             </div>
+          </section>
+        )}
+
+        {voice && (
+          <section className="flex items-center gap-3 rounded-3xl p-4 text-left" style={{ background: card, border: `1px solid ${line}` }} data-testid="family-voice">
+            <button type="button" onClick={() => { const a = voiceEl.current; if (!a || preview) return; if (a.paused) void a.play(); else a.pause(); }} aria-label={hearing ? "Pause the message" : "Play the message"} className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full shadow-lg" style={{ background: accent, color: onColor(accent) }}>
+              {face && <img src={face} alt="" className="absolute inset-0 h-full w-full rounded-full object-cover opacity-25" />}
+              {hearing ? <Pause className="relative h-6 w-6 fill-current" /> : <Play className="relative h-6 w-6 translate-x-0.5 fill-current" />}
+            </button>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>A message from {first}</p>
+              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full" style={{ background: line }}><div className="h-full rounded-full transition-[width]" style={{ width: `${Math.round(heard * 100)}%`, background: accent }} /></div>
+            </div>
+            <audio ref={voiceEl} src={voice} preload="none" onPlay={() => setHearing(true)} onPause={() => setHearing(false)} onEnded={() => { setHearing(false); setHeard(0); }} onTimeUpdate={(e) => { const a = e.currentTarget; setHeard(a.duration ? a.currentTime / a.duration : 0); }} />
           </section>
         )}
 
@@ -94,24 +107,6 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
             ))}
           </div>
         )}
-
-        {picks.length > 0 && section(f.favorites.length ? `Start with these` : `Latest from ${data.podcast?.title ?? "the show"}`, (
-          <div className="flex flex-col">
-            {picks.map((e, i) => (
-              <div key={e.id} style={i ? { borderTop: `1px solid ${line}` } : {}} className="py-2.5">
-                <div className="flex items-center gap-3">
-                  <button type="button" onClick={() => !preview && setPlaying(playing === e.id ? null : e.id)} aria-label={playing === e.id ? `Pause ${e.title}` : `Play ${e.title}`} className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl" style={{ background: e.artworkUrl ? `center/cover url(${e.artworkUrl})` : data.avatarUrl ? `center/cover url(${data.avatarUrl})` : theirs }}>
-                    <span className="absolute inset-0 m-auto flex h-8 w-8 items-center justify-center rounded-full shadow" style={{ background: accent, color: onColor(accent) }}>{playing === e.id ? <Pause className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 translate-x-px fill-current" />}</span>
-                  </button>
-                  <span className="min-w-0 flex-1"><span className="line-clamp-2 block text-sm font-semibold leading-snug">{e.title}</span><span className="text-xs" style={{ color: sub }}>{dateOf(e.publishedAt)}</span></span>
-                </div>
-                {playing === e.id && <audio src={e.audio} autoPlay controls preload="none" className="mt-2 w-full" onEnded={() => setPlaying(null)} />}
-              </div>
-            ))}
-          </div>
-        ))}
-
-        {f.story && section("My story", <p className="whitespace-pre-line text-[15px] leading-relaxed">{f.story}</p>)}
 
         {f.milestones.length > 0 && section("Along the way", (
           <ol className="relative ml-2 border-l-2 pl-5" style={{ borderColor: `${accent}55` }}>
