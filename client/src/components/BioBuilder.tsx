@@ -458,10 +458,10 @@ const TONES = {
 } as const;
 
 /** A group of settings in its own card, with a coloured mark. */
-function Card({ icon: I, tone, title, children }: { icon: typeof User; tone: keyof typeof TONES; title: string; children: React.ReactNode }) {
+function Card({ icon: I, tone, title, action, children }: { icon: typeof User; tone: keyof typeof TONES; title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
-      <p className="flex items-center gap-2 text-sm font-bold"><span className={`flex h-7 w-7 items-center justify-center rounded-lg ${TONES[tone]}`}><I className="h-4 w-4" /></span> {title}</p>
+      <div className="flex items-center gap-2"><p className="flex min-w-0 flex-1 items-center gap-2 text-sm font-bold"><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONES[tone]}`}><I className="h-4 w-4" /></span> {title}</p>{action}</div>
       {children}
     </section>
   );
@@ -1490,14 +1490,8 @@ function FamilyTab({ d, change, flush, url, episodes }: { d: Page; change: (p: P
   };
   return (
     <div className="space-y-4">
-      <Card icon={Heart} tone="gold" title="Your family page">
-        <div className="flex items-center justify-between gap-3 rounded-2xl bg-gradient-to-br from-[#2e2433] to-[#4d3a4a] p-4 text-white">
-          <div className="min-w-0">
-            <p className="flex items-center gap-1.5 text-sm font-bold"><Lock className="h-3.5 w-3.5" /> Private link</p>
-            <p className="text-xs text-white/80">{f.on ? "Only people you send it to can open it. It isn't listed or searchable." : "Off: the link doesn't open."}</p>
-          </div>
-          <OnOff on={f.on} onChange={(v) => set({ on: v }, true)} testid="family-on" />
-        </div>
+      <Card icon={Heart} tone="gold" title="Your family private page" action={<Switch checked={f.on} onCheckedChange={(v) => set({ on: v }, true)} aria-label="Family page on" data-testid="family-on" />}>
+        {!f.on && <p className="-mt-1 text-xs text-muted-foreground">Off: the link doesn't open.</p>}
         {f.on && f.key && (
           <>
             <div className="flex gap-2">
