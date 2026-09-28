@@ -7,6 +7,8 @@ import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { uploadPhoto } from "./photoStorage.js";
+import { sendPodcastOwnerCodeEmail } from "./email.js";
+import { XMLParser } from "fast-xml-parser";
 import { hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
 
 /**
@@ -105,6 +107,84 @@ function appOf(ua: string): string {
 // Not a listener: crawlers, link previews, monitors and scripts.
 const BOT = /bot\b|bot\/|crawl|spider|slurp|preview|facebookexternalhit|embedly|curl\/|wget|python-requests|python-urllib|go-http-client|okhttp\/[0-4]\.|java\/|libwww|httpclient|axios|node-fetch|headless|lighthouse|pingdom|uptime|monitor|feedvalidator|podcastindex|podnews|podchaser|listennotes|chartable|podtrac-?check/i;
 
+// ---- Reading another host's feed ------------------------------------------------------
+
+/** Only public web addresses: no local names, no bare IPs (a feed address is fetched from the server). */
+function safeFeedUrl(u: string): boolean {
+  let x: URL;
+  try { x = new URL(u); } catch { return false; }
+  if (!/^https?:$/.test(x.protocol)) return false;
+  const h = x.hostname.toLowerCase();
+  if (!h.includes(".") || h === "localhost" || h.endsWith(".local") || h.endsWith(".internal")) return false;
+  if (/^[\d.]+$/.test(h) || h.includes(":") || h.startsWith("[")) return false;
+  return true;
+}
+
+type ParsedItem = { title: string; notes: string; url: string; mime: string; length: number; guid: string; published: string; duration: number; episode: number | null; season: number | null; episodeType: string; explicit: boolean; image: string };
+type ParsedFeed = { title: string; description: string; author: string; ownerName: string; ownerEmail: string; artwork: string; category: string; subcategory: string; language: string; explicit: boolean; type: string; link: string; copyright: string; guid: string; items: ParsedItem[] };
+
+const txt = (v: unknown): string => {
+  if (v == null) return "";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v).trim();
+  if (Array.isArray(v)) return txt(v[0]);
+  if (typeof v === "object") return txt((v as Record<string, unknown>)["#text"] ?? (v as Record<string, unknown>)["__cdata"] ?? "");
+  return "";
+};
+const attr = (v: unknown, k: string): string => (v && typeof v === "object" ? txt((Array.isArray(v) ? v[0] : v as Record<string, unknown>)?.[`@_${k}`]) : "");
+const list = <T,>(v: T | T[] | undefined): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
+const yes = (v: unknown) => /^(yes|true|explicit)$/i.test(txt(v));
+function dur(v: unknown): number {
+  const s = txt(v);
+  if (!s) return 0;
+  if (/^\d+(\.\d+)?$/.test(s)) return Math.round(Number(s));
+  const p = s.split(":").map(Number);
+  return p.some(Number.isNaN) ? 0 : Math.round(p.reduce((a, n) => a * 60 + n, 0));
+}
+const intOrNull = (v: unknown) => { const n = parseInt(txt(v), 10); return Number.isFinite(n) && n >= 0 ? n : null; };
+
+export async function readFeed(url: string): Promise<ParsedFeed> {
+  let r: Response;
+  try {
+    r = await fetch(url, { headers: { "User-Agent": "MilitaryVoices.ai podcast import", Accept: "application/rss+xml, application/xml, text/xml, */*" }, redirect: "follow", signal: AbortSignal.timeout(20_000) });
+  } catch {
+    throw new Error("We couldn't reach that address. Check it's your show's RSS feed.");
+  }
+  if (!r.ok) throw new Error(`The old host answered ${r.status} for that address.`);
+  const xml = await r.text();
+  if (xml.length > 40_000_000) throw new Error("That feed is too big to read in one go.");
+  const doc = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", cdataPropName: "__cdata", parseTagValue: false, trimValues: true }).parse(xml);
+  const ch = doc?.rss?.channel;
+  if (!ch) throw new Error("That address isn't a podcast RSS feed.");
+  const cat = list(ch["itunes:category"])[0] as Record<string, unknown> | undefined;
+  const items = list(ch.item as Record<string, unknown>[]).map((it): ParsedItem | null => {
+    const enc = list(it.enclosure as Record<string, unknown>[])[0];
+    const u = attr(enc, "url");
+    if (!/^https?:\/\//.test(u)) return null;
+    const pub = Date.parse(txt(it.pubDate));
+    return {
+      title: txt(it.title) || "Untitled episode",
+      notes: txt(it["content:encoded"]) || txt(it.description) || txt(it["itunes:summary"]),
+      url: u, mime: attr(enc, "type") || "audio/mpeg", length: Math.max(0, parseInt(attr(enc, "length"), 10) || 0),
+      guid: txt(it.guid) || u,
+      published: Number.isNaN(pub) ? "" : new Date(pub).toISOString(),
+      duration: dur(it["itunes:duration"]),
+      episode: intOrNull(it["itunes:episode"]), season: intOrNull(it["itunes:season"]),
+      episodeType: ["full", "trailer", "bonus"].includes(txt(it["itunes:episodeType"])) ? txt(it["itunes:episodeType"]) : "full",
+      explicit: yes(it["itunes:explicit"]), image: attr(it["itunes:image"], "href"),
+    };
+  }).filter((x): x is ParsedItem => !!x);
+  const owner = (ch["itunes:owner"] ?? {}) as Record<string, unknown>;
+  return {
+    title: txt(ch.title), description: txt(ch.description) || txt(ch["itunes:summary"]), author: txt(ch["itunes:author"]),
+    ownerName: txt(owner["itunes:name"]), ownerEmail: txt(owner["itunes:email"]),
+    artwork: attr(ch["itunes:image"], "href") || txt((ch.image as Record<string, unknown> | undefined)?.url),
+    category: attr(cat, "text"), subcategory: attr(cat?.["itunes:category"], "text"),
+    language: txt(ch.language), explicit: yes(ch["itunes:explicit"]), type: txt(ch["itunes:type"]) === "serial" ? "serial" : "episodic",
+    link: txt(ch.link), copyright: txt(ch.copyright), guid: txt(ch["podcast:guid"]),
+    items,
+  };
+}
+
 // ---- Data -----------------------------------------------------------------------
 
 async function showsOf(email: string) {
@@ -126,14 +206,20 @@ function readiness(s: HostedShowRow, eps: HostedEpisodeRow[]): string[] {
   if (s.description.trim().length < 20) out.push("A description (a sentence or two)");
   if (!s.artworkUrl) out.push("Cover art (square, at least 1400 pixels)");
   if (!s.ownerEmail.trim()) out.push("An owner email (Apple and Spotify send the confirmation there)");
+  else if (feedOwnerEmail(s) !== s.ownerEmail.trim()) out.push("Confirm the owner email (until then the feed uses your sign-in email)");
   if (!eps.some(live)) out.push("One published episode");
   return out;
 }
 
 // ---- The feed ---------------------------------------------------------------------
 
+/** The owner email the feed may carry: the one they confirmed, or else the one they sign in with. */
+export const feedOwnerEmail = (s: HostedShowRow) => (s.ownerEmail && s.ownerEmailVerified === s.ownerEmail.trim().toLowerCase() ? s.ownerEmail.trim() : s.email);
+
 export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[]): string {
   const self = feedUrl(s.slug);
+  const owner = feedOwnerEmail(s);
+  const notes = (e: HostedEpisodeRow) => (e.notesFormat === "html" ? e.description : notesHtml(e.description));
   const link = s.website || ORIGIN;
   const cat = s.subcategory
     ? `<itunes:category text="${esc(s.category)}"><itunes:category text="${esc(s.subcategory)}"/></itunes:category>`
@@ -143,8 +229,8 @@ export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[]): string {
     return `
     <item>
       <title>${esc(e.title)}</title>
-      <description>${cdata(notesHtml(e.description))}</description>
-      <content:encoded>${cdata(notesHtml(e.description))}</content:encoded>
+      <description>${cdata(notes(e))}</description>
+      <content:encoded>${cdata(notes(e))}</content:encoded>
       <enclosure url="${esc(url)}" length="${e.sizeBytes || 0}" type="${esc(e.mime)}"/>
       <guid isPermaLink="false">${esc(e.guid || `mv-${e.id}`)}</guid>
       <pubDate>${rfc822(e.publishedAt)}</pubDate>
@@ -166,7 +252,7 @@ export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[]): string {
     <description>${cdata(s.description)}</description>
     <itunes:summary>${cdata(s.description)}</itunes:summary>
     <itunes:author>${esc(s.author || s.ownerName || s.title)}</itunes:author>
-    <itunes:owner><itunes:name>${esc(s.ownerName || s.author)}</itunes:name><itunes:email>${esc(s.ownerEmail)}</itunes:email></itunes:owner>
+    <itunes:owner><itunes:name>${esc(s.ownerName || s.author)}</itunes:name><itunes:email>${esc(owner)}</itunes:email></itunes:owner>
     ${s.artworkUrl ? `<itunes:image href="${esc(s.artworkUrl)}"/>
     <image><url>${esc(s.artworkUrl)}</url><title>${esc(s.title)}</title><link>${esc(link)}</link></image>` : ""}
     ${cat}
@@ -174,7 +260,8 @@ export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[]): string {
     <itunes:type>${s.showType === "serial" ? "serial" : "episodic"}</itunes:type>
     ${s.copyright ? `<copyright>${esc(s.copyright)}</copyright>` : ""}
     <podcast:guid>${s.guid || podcastGuid(self)}</podcast:guid>
-    <podcast:locked owner="${esc(s.ownerEmail)}">no</podcast:locked>
+    <podcast:locked owner="${esc(owner)}">no</podcast:locked>${s.newFeedUrl ? `
+    <itunes:new-feed-url>${esc(s.newFeedUrl)}</itunes:new-feed-url>` : ""}
     <generator>MilitaryVoices.ai</generator>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>${items}
   </channel>
@@ -243,6 +330,8 @@ export function registerHosting(app: Express) {
     const slug = String(req.params.slug).replace(/\.(xml|rss)$/i, "");
     const [s] = await db.select().from(hostedShows).where(eq(hostedShows.slug, slug)).limit(1);
     if (!s) return res.status(404).type("text/plain").send("No such feed.");
+    // Moved to another host: the apps follow a permanent redirect (and the tag, for the ones that read the feed first).
+    if (s.newFeedUrl && req.query.preview !== "1") return res.redirect(301, s.newFeedUrl);
     const eps = await episodesOf(s.id);
     res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300");
@@ -282,6 +371,7 @@ export function registerHosting(app: Express) {
         show: s,
         feedUrl: feedUrl(s.slug),
         missing: readiness(s, eps),
+        ownerConfirmed: feedOwnerEmail(s) === s.ownerEmail.trim(),
         episodes: eps.map((e) => ({ ...e, downloads: st.episodes.get(e.id) ?? 0, live: live(e) })),
         stats: { total: st.total, last30: st.series.reduce((a, d) => a + d.count, 0), series: st.series, apps: st.apps },
       });
@@ -304,6 +394,7 @@ export function registerHosting(app: Express) {
       ownerEmail: String(b.ownerEmail ?? email).slice(0, 200),
       artworkUrl: /^https:\/\//.test(String(b.artworkUrl ?? "")) ? String(b.artworkUrl) : "",
       guid: podcastGuid(feedUrl(slug)),
+      ownerEmailVerified: email,
       createdAt: now(), updatedAt: now(),
     }).returning();
     res.status(201).json(s);
@@ -316,8 +407,14 @@ export function registerHosting(app: Express) {
     const str = (k: string, max: number) => (typeof b[k] === "string" ? { [k]: b[k].slice(0, max) } : {});
     const category = typeof b.category === "string" && b.category in CATEGORIES ? b.category : undefined;
     const subcategory = typeof b.subcategory === "string" && (b.subcategory === "" || (CATEGORIES[category ?? s.category] ?? []).includes(b.subcategory)) ? b.subcategory : undefined;
+    const ownerEmail = typeof b.ownerEmail === "string" ? b.ownerEmail.trim().slice(0, 200) : undefined;
+    if (ownerEmail !== undefined && ownerEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ownerEmail)) return res.status(400).json({ message: "That owner email doesn't look right." });
+    const newFeedUrl = typeof b.newFeedUrl === "string" ? b.newFeedUrl.trim() : undefined;
+    if (newFeedUrl && (!/^https?:\/\/[^\s]+$/i.test(newFeedUrl) || newFeedUrl.startsWith(feedUrl(s.slug)))) return res.status(400).json({ message: "Paste the new host's feed address (https://…)." });
     const [out] = await db.update(hostedShows).set({
-      ...str("title", 200), ...str("description", 4000), ...str("author", 200), ...str("ownerName", 200), ...str("ownerEmail", 200), ...str("website", 300), ...str("copyright", 300),
+      ...(ownerEmail !== undefined ? { ownerEmail, ...(ownerEmail.toLowerCase() === s.email ? { ownerEmailVerified: s.email } : {}) } : {}),
+      ...(newFeedUrl !== undefined ? { newFeedUrl } : {}),
+      ...str("title", 200), ...str("description", 4000), ...str("author", 200), ...str("ownerName", 200), ...str("website", 300), ...str("copyright", 300),
       ...(category ? { category, subcategory: subcategory ?? "" } : subcategory !== undefined ? { subcategory } : {}),
       ...(typeof b.explicit === "boolean" ? { explicit: b.explicit } : {}),
       ...(b.showType === "serial" || b.showType === "episodic" ? { showType: b.showType } : {}),
@@ -399,6 +496,100 @@ export function registerHosting(app: Express) {
       ...(!publish && at ? { publishedAt: at } : {}),
     }).where(eq(hostedEpisodes.id, e.id)).returning();
     res.json(out);
+  });
+
+  // Confirm the owner email with a code, before it goes in the feed.
+  app.post("/api/host/hosting/shows/:id/owner-email/send", requireHostSession, async (req, res) => {
+    const s = await ownShow(emailOf(req), Number(req.params.id));
+    if (!s) return res.status(404).json({ message: "No such show." });
+    const to = s.ownerEmail.trim();
+    if (!to) return res.status(400).json({ message: "Add the owner email first." });
+    if (s.ownerCodeAt && Date.now() - Date.parse(s.ownerCodeAt) < 45_000) return res.status(429).json({ message: "A code is on its way. Give it a minute before asking for another." });
+    const code = String(crypto.randomInt(100000, 1000000));
+    await db.update(hostedShows).set({ ownerCode: crypto.createHash("sha256").update(`${s.id}:${code}`).digest("hex"), ownerCodeAt: now() }).where(eq(hostedShows.id, s.id));
+    const ok = await sendPodcastOwnerCodeEmail({ to, code, show: s.title });
+    if (!ok) return res.status(502).json({ message: "Couldn't send the code just now. Try again in a minute." });
+    res.json({ sent: to });
+  });
+  app.post("/api/host/hosting/shows/:id/owner-email/confirm", requireHostSession, async (req, res) => {
+    const s = await ownShow(emailOf(req), Number(req.params.id));
+    if (!s) return res.status(404).json({ message: "No such show." });
+    const code = String(req.body?.code ?? "").replace(/\D/g, "");
+    const fresh = s.ownerCodeAt && Date.now() - Date.parse(s.ownerCodeAt) < 30 * 60_000;
+    if (!fresh || !s.ownerCode || crypto.createHash("sha256").update(`${s.id}:${code}`).digest("hex") !== s.ownerCode) return res.status(400).json({ message: "That code isn't right, or it's more than 30 minutes old. Send a new one." });
+    const [out] = await db.update(hostedShows).set({ ownerEmailVerified: s.ownerEmail.trim().toLowerCase(), ownerCode: "", ownerCodeAt: "" }).where(eq(hostedShows.id, s.id)).returning();
+    res.json(out);
+  });
+
+  // Move a show here: read its feed from the old host, keep every episode (and its guid, so no app plays it twice).
+  app.post("/api/host/hosting/import", requireHostSession, async (req, res) => {
+    const email = emailOf(req);
+    const url = String(req.body?.feedUrl ?? "").trim();
+    if (!safeFeedUrl(url)) return res.status(400).json({ message: "Paste your show's RSS feed address (https://…)." });
+    const mine = await showsOf(email);
+    const target = mine[0];
+    if (target && (await episodesOf(target.id)).length) return res.status(409).json({ message: "You already host a show here with episodes. Moving a second show over is coming later." });
+    let feed: ParsedFeed;
+    try {
+      feed = await readFeed(url);
+    } catch (e) {
+      return res.status(400).json({ message: (e as Error).message });
+    }
+    if (!feed.items.length) return res.status(400).json({ message: "That feed has no episodes we can play." });
+    const slug = target?.slug ?? await uniqueSlug(slugify(feed.title || "show"));
+    const fields = {
+      title: feed.title.slice(0, 200), description: feed.description.slice(0, 4000), author: feed.author.slice(0, 200),
+      ownerName: feed.ownerName.slice(0, 200), ownerEmail: (feed.ownerEmail || email).slice(0, 200),
+      ownerEmailVerified: (feed.ownerEmail || email).toLowerCase() === email ? email : "",
+      artworkUrl: feed.artwork, category: feed.category in CATEGORIES ? feed.category : "Government",
+      subcategory: feed.category in CATEGORIES && (CATEGORIES[feed.category] ?? []).includes(feed.subcategory) ? feed.subcategory : "",
+      language: /^[a-z]{2}(-[a-z]{2})?$/i.test(feed.language) ? feed.language.toLowerCase() : "en-us",
+      explicit: feed.explicit, showType: feed.type, website: feed.link.slice(0, 300), copyright: feed.copyright.slice(0, 300),
+      guid: feed.guid || podcastGuid(url), importedFrom: url, redirectOk: false, redirectCheckedAt: "", updatedAt: now(),
+    };
+    const [show] = target
+      ? await db.update(hostedShows).set(fields).where(eq(hostedShows.id, target.id)).returning()
+      : await db.insert(hostedShows).values({ email, slug, ...fields, createdAt: now() }).returning();
+    const rows = feed.items.slice(0, 3000).map((it) => ({
+      showId: show.id, title: it.title.slice(0, 300), description: it.notes.slice(0, 20000), notesFormat: "html",
+      audioUrl: it.url, mime: it.mime, sizeBytes: Math.min(2_000_000_000, it.length), durationSec: it.duration,
+      episodeNumber: it.episode, season: it.season, episodeType: it.episodeType, explicit: it.explicit, artworkUrl: it.image,
+      guid: it.guid, status: "published", publishedAt: it.published || now(), createdAt: now(),
+    }));
+    for (let i = 0; i < rows.length; i += 200) await db.insert(hostedEpisodes).values(rows.slice(i, i + 200));
+    res.status(201).json({ show, episodes: rows.length });
+  });
+
+  // Has the old host started forwarding to us? Follow the old feed and see where it ends.
+  app.post("/api/host/hosting/shows/:id/redirect-check", requireHostSession, async (req, res) => {
+    const s = await ownShow(emailOf(req), Number(req.params.id));
+    if (!s) return res.status(404).json({ message: "No such show." });
+    if (!s.importedFrom) return res.status(400).json({ message: "This show started here: there's no old feed to forward." });
+    const ours = feedUrl(s.slug).replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase();
+    const norm = (u: string) => u.replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase();
+    let at = s.importedFrom;
+    const hops: { url: string; status: number }[] = [];
+    let ok = false;
+    let tagged = false;
+    try {
+      for (let i = 0; i < 6; i++) {
+        if (!safeFeedUrl(at)) break;
+        const r = await fetch(at, { redirect: "manual", headers: { "User-Agent": "MilitaryVoices.ai redirect check" }, signal: AbortSignal.timeout(10_000) });
+        hops.push({ url: at, status: r.status });
+        const loc = r.headers.get("location");
+        if (r.status >= 300 && r.status < 400 && loc) {
+          at = new URL(loc, at).toString();
+          if (norm(at).replace(/\?.*$/, "") === ours) { ok = true; break; }
+          continue;
+        }
+        if (r.ok) { const m = (await r.text()).match(/<itunes:new-feed-url>\s*([^<\s]+)\s*<\/itunes:new-feed-url>/i); tagged = !!m && norm(m[1]) === ours; }
+        break;
+      }
+    } catch (e) {
+      hops.push({ url: at, status: 0 });
+    }
+    const [out] = await db.update(hostedShows).set({ redirectOk: ok, redirectCheckedAt: now() }).where(eq(hostedShows.id, s.id)).returning();
+    res.json({ ok, tagged, hops, show: out });
   });
 
   app.delete("/api/host/hosting/episodes/:id", requireHostSession, async (req, res) => {

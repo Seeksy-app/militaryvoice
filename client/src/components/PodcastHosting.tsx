@@ -18,7 +18,7 @@ import { AlertCircle, BarChart3, Check, Copy, ExternalLink, Film, ImagePlus, Loa
  */
 
 type Ep = HostedEpisodeRow & { downloads: number; live: boolean };
-type Hosted = { show: HostedShowRow; feedUrl: string; missing: string[]; episodes: Ep[]; stats: { total: number; last30: number; series: { date: string; count: number }[]; apps: Record<string, number> } };
+type Hosted = { show: HostedShowRow; feedUrl: string; missing: string[]; ownerConfirmed: boolean; episodes: Ep[]; stats: { total: number; last30: number; series: { date: string; count: number }[]; apps: Record<string, number> } };
 type Resp = { shows: Hosted[]; categories: Record<string, string[]> };
 
 const KEY = ["/api/host/hosting"];
@@ -69,8 +69,9 @@ export function PodcastHosting() {
           <Button onClick={() => create.mutate()} disabled={create.isPending} className="mt-6 h-11 gap-2 rounded-full bg-[#053877] px-6 text-white hover:bg-[#0a4a99]" data-testid="hosting-start">
             {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Set up your show
           </Button>
-          <p className="mt-2 text-xs text-muted-foreground">Free while you're a MilitaryVoices podcaster. Already hosted somewhere else? Moving your show over is coming next.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Free while you're a MilitaryVoices podcaster.</p>
         </div>
+        <ImportShow onDone={refresh} />
       </section>
     );
   }
@@ -89,6 +90,7 @@ export function PodcastHosting() {
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Your podcast</p>
             <h1 className="mt-0.5 text-2xl font-bold tracking-tight">{s.title}</h1>
             <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{s.description || "No description yet."}</p>
+            <OwnerEmail h={h} onDone={refresh} />
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <FeedLink url={h.feedUrl} />
               <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-full" onClick={() => setEditing(true)} data-testid="hosting-edit-show"><Pencil className="h-3.5 w-3.5" /> Show details</Button>
@@ -105,12 +107,26 @@ export function PodcastHosting() {
         ) : (
           <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/[0.06] p-3.5" data-testid="hosting-ready">
             <Check className="h-4 w-4 text-emerald-600" />
-            <p className="min-w-0 flex-1 text-sm"><span className="font-semibold">Ready for the apps.</span> Submit your feed once to each; new episodes reach them on their own.</p>
-            <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-full"><a href="https://podcastsconnect.apple.com/my-podcasts/new-feed" target="_blank" rel="noreferrer">Apple Podcasts <ExternalLink className="h-3 w-3" /></a></Button>
-            <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-full"><a href="https://creators.spotify.com/pod/dashboard/import" target="_blank" rel="noreferrer">Spotify <ExternalLink className="h-3 w-3" /></a></Button>
+            {s.importedFrom ? (
+              // A moved show is already in the apps: the redirect carries it, nothing to submit.
+              <p className="min-w-0 flex-1 text-sm"><span className="font-semibold">Ready.</span> Your show is already in Apple Podcasts and Spotify; forwarding your old feed moves them here, with nothing to submit again.</p>
+            ) : (
+              <>
+                <p className="min-w-0 flex-1 text-sm"><span className="font-semibold">Ready for the apps.</span> Submit your feed once to each; new episodes reach them on their own.</p>
+                <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-full"><a href="https://podcastsconnect.apple.com/my-podcasts/new-feed" target="_blank" rel="noreferrer">Apple Podcasts <ExternalLink className="h-3 w-3" /></a></Button>
+                <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-full"><a href="https://creators.spotify.com/pod/dashboard/import" target="_blank" rel="noreferrer">Spotify <ExternalLink className="h-3 w-3" /></a></Button>
+              </>
+            )}
           </div>
         )}
       </div>
+
+      {s.importedFrom && <MoveSubscribers h={h} onDone={refresh} />}
+      {s.newFeedUrl && (
+        <div className="rounded-2xl border border-destructive/40 bg-destructive/[0.05] p-4 text-sm" data-testid="hosting-leaving">
+          <span className="font-semibold">This show is moving to another host.</span> The feed forwards apps to <span className="font-mono text-xs">{s.newFeedUrl}</span>. Clear it in Show details to stay.
+        </div>
+      )}
 
       {/* The numbers that matter. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -158,6 +174,102 @@ export function PodcastHosting() {
       <NewEpisodeDialog open={adding} onClose={() => setAdding(false)} show={s} onCreated={(e) => { refresh(); setAdding(false); setEditEp({ ...e, downloads: 0, live: false }); }} />
       <EpisodeDialog ep={editEp} onClose={() => setEditEp(null)} onSaved={refresh} />
     </section>
+  );
+}
+
+/** Move a show here from its old host: its feed brings every episode, with their IDs, so no app plays one twice. */
+function ImportShow({ onDone }: { onDone: () => void }) {
+  const { toast } = useToast();
+  const [url, setUrl] = useState("");
+  const go = useMutation({
+    mutationFn: async () => (await apiRequest("POST", "/api/host/hosting/import", { feedUrl: url.trim() })).json() as Promise<{ episodes: number }>,
+    onSuccess: (r) => { toast({ title: "Your show is here", description: `${r.episodes} episode${r.episodes === 1 ? "" : "s"} moved over. Next: forward your old feed so your subscribers follow.` }); onDone(); },
+    onError: (e: Error) => toast({ title: "Couldn't move that show", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
+  });
+  return (
+    <div className="mt-4 rounded-2xl border border-border bg-card p-5 shadow-sm" data-testid="hosting-import">
+      <p className="font-semibold">Already hosted somewhere else? Move your show here</p>
+      <p className="mt-0.5 text-sm text-muted-foreground">Paste your show's RSS feed. We bring every episode, its notes and its artwork. Your subscribers follow once your old host forwards the feed (we'll show you how).</p>
+      <form onSubmit={(e) => { e.preventDefault(); go.mutate(); }} className="mt-3 flex flex-wrap gap-2">
+        <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://feeds.yourhost.com/your-show" className="h-10 min-w-0 flex-1" data-testid="hosting-import-url" />
+        <Button type="submit" disabled={go.isPending || !/^https?:\/\//.test(url.trim())} className="h-10 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]">{go.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Moving…</> : "Move my show"}</Button>
+      </form>
+      <p className="mt-2 text-xs text-muted-foreground">It's in your old host's settings, often under Distribution or RSS. Buzzsprout, Libsyn, Transistor, Podbean, RSS.com, Spotify for Creators and the rest all have one.</p>
+    </div>
+  );
+}
+
+/** After a move: forward the old feed (a 301) so Apple, Spotify and every app move the subscribers, then check it took. */
+function MoveSubscribers({ h, onDone }: { h: Hosted; onDone: () => void }) {
+  const { toast } = useToast();
+  const s = h.show;
+  const check = useMutation({
+    mutationFn: async () => (await apiRequest("POST", `/api/host/hosting/shows/${s.id}/redirect-check`, {})).json() as Promise<{ ok: boolean; tagged: boolean; hops: { url: string; status: number }[] }>,
+    onSuccess: (r) => {
+      onDone();
+      toast(r.ok ? { title: "Forwarding works", description: "Your old feed sends apps here. Subscribers move over as each app checks in, usually within a few days." } : r.tagged ? { title: "Almost", description: "Your old feed names the new address, but doesn't forward yet. Turn on the redirect (301) at your old host too." } : { title: "Not forwarding yet", description: `Your old feed still answers itself (${r.hops.map((x) => x.status).join(" → ") || "no answer"}). Turn on the redirect at your old host, then check again.`, variant: "destructive" });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't check", description: e.message, variant: "destructive" }),
+  });
+  const { toast: t2 } = useToast();
+  return (
+    <div className={`rounded-2xl border p-5 shadow-sm ${s.redirectOk ? "border-emerald-500/40 bg-emerald-500/[0.05]" : "border-[#053877]/25 bg-card"}`} data-testid="hosting-move">
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-2 font-semibold">{s.redirectOk ? <><Check className="h-4 w-4 text-emerald-600" /> Your subscribers are following</> : "Bring your subscribers with you"}</p>
+          {s.redirectOk ? (
+            <p className="mt-1 text-sm text-muted-foreground">Your old feed forwards here{s.redirectCheckedAt ? ` (checked ${dateOf(s.redirectCheckedAt)})` : ""}. Keep your old host's account open for four weeks while every app catches up, then you can close it.</p>
+          ) : (
+            <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm">
+              <li>At your old host, find <b>Redirect feed</b>, <b>301 redirect</b> or <b>Move to a new host</b> (usually in the show's settings, under RSS or Distribution).</li>
+              <li>Paste your new feed address: <button type="button" onClick={() => navigator.clipboard.writeText(h.feedUrl).then(() => t2({ title: "Copied" }))} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs hover:bg-muted/70">{h.feedUrl.replace(/^https:\/\//, "")} <Copy className="h-3 w-3" /></button></li>
+              <li>Save, then press <b>Check the redirect</b>. Keep the old account open for four weeks while the apps catch up.</li>
+            </ol>
+          )}
+          <p className="mt-2 text-xs text-muted-foreground">Old feed: <span className="font-mono">{s.importedFrom}</span></p>
+        </div>
+        <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending} className="h-9 gap-1.5 rounded-full" data-testid="hosting-redirect-check">{check.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />} Check the redirect</Button>
+      </div>
+    </div>
+  );
+}
+
+/** The owner email: Apple and Spotify send their confirmation there, so only a confirmed one goes in the feed. */
+function OwnerEmail({ h, onDone }: { h: Hosted; onDone: () => void }) {
+  const { toast } = useToast();
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(false);
+  const s = h.show;
+  const send = useMutation({
+    mutationFn: async () => (await apiRequest("POST", `/api/host/hosting/shows/${s.id}/owner-email/send`, {})).json(),
+    onSuccess: () => { setSent(true); toast({ title: "Code sent", description: `Check ${s.ownerEmail}.` }); },
+    onError: (e: Error) => toast({ title: "Couldn't send it", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
+  });
+  const confirm = useMutation({
+    mutationFn: async () => (await apiRequest("POST", `/api/host/hosting/shows/${s.id}/owner-email/confirm`, { code })).json(),
+    onSuccess: () => { setSent(false); setCode(""); toast({ title: "Email confirmed", description: "It's in your feed now." }); onDone(); },
+    onError: (e: Error) => toast({ title: "Not confirmed", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
+  });
+  if (!s.ownerEmail) return null;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs" data-testid="hosting-owner">
+      <span className="text-muted-foreground">Owner email</span>
+      <span className="font-medium">{s.ownerEmail}</span>
+      {h.ownerConfirmed ? (
+        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-700 dark:text-emerald-400"><Check className="h-3 w-3" /> Confirmed</span>
+      ) : sent ? (
+        <form onSubmit={(e) => { e.preventDefault(); confirm.mutate(); }} className="flex items-center gap-1.5">
+          <Input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" placeholder="6-digit code" className="h-7 w-28 text-xs" autoFocus />
+          <Button type="submit" size="sm" disabled={code.length !== 6 || confirm.isPending} className="h-7 rounded-full px-3 text-xs">Confirm</Button>
+          <button type="button" onClick={() => send.mutate()} className="text-muted-foreground underline">Resend</button>
+        </form>
+      ) : (
+        <>
+          <span className="rounded-full bg-[#F0A71F]/20 px-2 py-0.5 font-semibold text-[#8a5a00] dark:text-[#F0A71F]">Not confirmed</span>
+          <button type="button" onClick={() => send.mutate()} disabled={send.isPending} className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]" data-testid="hosting-owner-send">{send.isPending ? "Sending…" : "Send me a code"}</button>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -236,6 +348,7 @@ function ShowDialog({ open, onClose, show, categories, onSaved }: { open: boolea
           </label>
           <label className={label}>Website (optional)<Input value={v.website} onChange={(e) => set("website", e.target.value)} className="mt-1" placeholder="https://" /></label>
           <label className={label}>Copyright (optional)<Input value={v.copyright} onChange={(e) => set("copyright", e.target.value)} className="mt-1" placeholder={`© ${new Date().getFullYear()} ${v.author || v.title}`} /></label>
+          <label className={`${label} sm:col-span-2`}>Moving to another host? (optional)<Input value={v.newFeedUrl} onChange={(e) => set("newFeedUrl", e.target.value)} className="mt-1" placeholder="Your new host's feed address. Leave empty to stay." /><span className="mt-1 block font-normal">Your feed then forwards every app there (a 301), and your subscribers follow.</span></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.explicit} onChange={(e) => set("explicit", e.target.checked)} /> Explicit language</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.showType === "serial"} onChange={(e) => set("showType", e.target.checked ? "serial" : "episodic")} /> Listen in order (a series)</label>
         </div>

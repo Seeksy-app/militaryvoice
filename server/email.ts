@@ -332,6 +332,28 @@ export async function sendLoginCodeEmail(input: LoginCodeEmailInput): Promise<bo
   });
 }
 
+/** Podcast hosting: confirm the owner email that goes in the show's feed (Apple and Spotify send their own codes there). */
+export async function sendPodcastOwnerCodeEmail(input: { to: string; code: string; show: string }): Promise<boolean> {
+  const codeBlock = `
+    <div style="background:#fff7e6;border:2px solid #f0a71f;border-radius:12px;padding:20px 24px;margin:0 0 20px;text-align:center;">
+      <p style="margin:0 0 6px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">Your code</p>
+      <p style="margin:0;color:#053877;font-size:36px;font-weight:800;letter-spacing:0.25em;font-family:monospace;">${escapeHtml(input.code)}</p>
+    </div>`;
+  return sendEmail({
+    to: input.to,
+    subject: `Confirm your podcast email: ${input.code}`,
+    html: emailShell({
+      banner: EMAIL_BANNERS.welcome,
+      bannerAlt: "MilitaryVoices.ai",
+      eyebrow: "Podcast hosting",
+      heading: "Confirm your podcast email",
+      body: `<p style="margin:0 0 16px;">Enter this code on the Podcast page to put this address in the feed for <strong>${escapeHtml(input.show)}</strong>. Apple Podcasts and Spotify send their own confirmation to it when you submit the show. It expires in 30 minutes.</p>${codeBlock}<p style="margin:0;color:#9ca3af;font-size:13px;">If you didn't ask for this, you can ignore this email.</p>`,
+      footerNote: "One-time code, expires in 30 minutes.",
+    }),
+    text: `Your MilitaryVoices.ai podcast email code: ${input.code}\n\nEnter it on the Podcast page to use this address in the feed for ${input.show}. It expires in 30 minutes. If you didn't ask for this, you can ignore this email.\n`,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Listener reminder: "you're set" + when it's on + add-to-calendar links.
 // ---------------------------------------------------------------------------

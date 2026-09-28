@@ -2345,6 +2345,15 @@ export const hostedShows = pgTable("hosted_shows", {
   guid: text("guid").notNull().default(""),
   /** The feed it came from, when it moved here from another host. */
   importedFrom: text("imported_from").notNull().default(""),
+  /** The old feed now forwards (301) to ours: checked, and when. */
+  redirectOk: boolean("redirect_ok").notNull().default(false),
+  redirectCheckedAt: text("redirect_checked_at").notNull().default(""),
+  /** The owner email as confirmed with a code (or the sign-in email): only a confirmed one goes in the feed. */
+  ownerEmailVerified: text("owner_email_verified").notNull().default(""),
+  ownerCode: text("owner_code").notNull().default(""),
+  ownerCodeAt: text("owner_code_at").notNull().default(""),
+  /** Leaving us: the new host's feed. The feed then says so (itunes:new-feed-url) and forwards there (301). */
+  newFeedUrl: text("new_feed_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull().default(""),
 }, (t) => [uniqueIndex("hosted_shows_slug").on(t.slug), index("hosted_shows_email").on(t.email)]);
@@ -2354,8 +2363,10 @@ export const hostedEpisodes = pgTable("hosted_episodes", {
   id: serial("id").primaryKey(),
   showId: integer("show_id").notNull(),
   title: text("title").notNull().default(""),
-  /** Show notes; plain text with line breaks. */
+  /** Show notes: plain text with line breaks, or HTML for an episode that came with an imported show. */
   description: text("description").notNull().default(""),
+  /** text | html */
+  notesFormat: text("notes_format").notNull().default("text"),
   /** Our copy of the audio (R2), or… */
   audioKey: text("audio_key").notNull().default(""),
   /** …the file at the old host, for an episode that came with an imported show. */
