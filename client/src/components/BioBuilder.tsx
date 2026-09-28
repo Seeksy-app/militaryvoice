@@ -12,7 +12,7 @@ import { BioPageView } from "@/components/BioPageView";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import { SWATCHES, TEMPLATES, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircleQuestion, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
+import { Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircleQuestion, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
 /**
  * My page: the podcaster's bio page builder. Profile, Design, Content and
@@ -318,43 +318,128 @@ function DesignTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: bo
   const set = (p: Partial<BioTheme>) => change({ theme: { ...t, ...p } });
   const [hex, setHex] = useState(t.color);
   useEffect(() => setHex(t.color), [t.color]);
-  const pill = (on: boolean) => `rounded-full border px-3.5 py-1.5 text-sm font-semibold ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`;
-  const group = <T extends string>(label: string, value: T, opts: [T, string][], on: (v: T) => void) => (
-    <div><p className="mb-2 text-sm font-semibold">{label}</p><div className="flex flex-wrap gap-2">{opts.map(([v, l]) => <button key={v} type="button" onClick={() => on(v)} className={pill(value === v)}>{l}</button>)}</div></div>
+  const c = t.color;
+  const dark = t.shade === "dark";
+  const ground = dark ? "#0b1020" : "#f5f6fa";
+  const ink = dark ? "#ffffff" : "#0b1020";
+  const r = (shape: string) => (shape === "pill" ? 999 : shape === "rounded" ? 5 : 1);
+  const mini = (style: string, shape: string, w = "w-14") => (
+    <span className={`block h-3 ${w}`} style={style === "fill" ? { background: c, borderRadius: r(shape) } : style === "outline" ? { border: `1.5px solid ${c}`, borderRadius: r(shape) } : { background: dark ? "rgba(255,255,255,0.14)" : "#fff", border: "1px solid rgba(11,16,32,0.12)", borderRadius: r(shape) }} />
   );
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="mb-2 text-sm font-semibold">Template</p>
-        <div className="grid grid-cols-2 gap-2">
+    <div className="space-y-4">
+      <Card icon={Palette} tone="gold" title="Template">
+        <div className="grid grid-cols-2 gap-3">
           {(Object.keys(TEMPLATES) as (keyof typeof TEMPLATES)[]).map((k) => {
-            const tp = TEMPLATES[k];
-            const dark = tp.theme.shade === "dark";
+            const tp = TEMPLATES[k].theme;
+            const tdark = tp.shade === "dark";
+            const bg = k === "vibrant" ? `linear-gradient(180deg, ${c}, #0b1020 75%)` : tdark ? "#0b1020" : "#f5f6fa";
             return (
-              <button key={k} type="button" onClick={() => set({ ...tp.theme, template: k })} className={`rounded-2xl border-2 p-3 text-left ${t.template === k ? "border-[#053877]" : "border-border hover:border-[#053877]/40"}`} data-testid={`bio-template-${k}`}>
-                <span className="mb-2 flex h-14 items-end justify-center gap-1 rounded-lg p-2" style={{ background: k === "vibrant" ? `linear-gradient(180deg, ${t.color}, #0b1020)` : dark ? "#0b1020" : "#f5f6fa" }}>
-                  {[0, 1, 2].map((i) => <span key={i} className="h-2 w-8" style={{ background: tp.theme.linkStyle === "outline" ? "transparent" : t.color, border: `1.5px solid ${t.color}`, borderRadius: tp.theme.linkShape === "pill" ? 999 : tp.theme.linkShape === "rounded" ? 4 : 1 }} />)}
+              <Tile key={k} on={t.template === k} onClick={() => set({ ...tp, template: k })} label={TEMPLATES[k].label} note={TEMPLATES[k].note} testid={`bio-template-${k}`}>
+                {/* A tiny phone in that template: photo, name, the show, two buttons. */}
+                <span className="mx-auto flex h-36 w-[5.5rem] flex-col items-center overflow-hidden rounded-[14px] border-[3px] border-[#111] pb-2" style={{ background: bg }}>
+                  {tp.layout === "blend" ? (
+                    <span className="h-12 w-full" style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : c, maskImage: "linear-gradient(to bottom, #000 55%, transparent)" }} />
+                  ) : tp.layout === "landscape" ? (
+                    <span className="relative mb-3 block h-6 w-full" style={{ background: `linear-gradient(135deg, ${c}, #000741)` }}><span className="absolute -bottom-3 left-1/2 h-6 w-6 -translate-x-1/2 rounded-full ring-2" style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888", boxShadow: `0 0 0 2px ${tdark ? "#0b1020" : "#f5f6fa"}` }} /></span>
+                  ) : (
+                    <span className="mt-2 h-8 w-8 rounded-full" style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888", boxShadow: `0 0 0 2px ${c}` }} />
+                  )}
+                  <span className="mt-1.5 h-1.5 w-12 rounded" style={{ background: tdark ? "#fff" : "#0b1020" }} />
+                  <span className="mt-2 h-6 w-16 rounded-md" style={{ background: tdark ? "rgba(255,255,255,0.1)" : "#fff", border: tdark ? "none" : "1px solid rgba(11,16,32,0.08)" }} />
+                  <span className="mt-1.5 flex flex-col items-center gap-1">{mini(tp.linkStyle ?? "fill", tp.linkShape ?? "pill")}{mini(tp.linkStyle ?? "fill", tp.linkShape ?? "pill")}</span>
                 </span>
-                <span className="block text-sm font-semibold">{tp.label}</span>
-                <span className="block text-xs text-muted-foreground">{tp.note}</span>
+              </Tile>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card icon={Droplet} tone="blue" title="Your colour">
+        <div className="flex flex-wrap gap-2.5">
+          {SWATCHES.map((sw) => {
+            const on = t.color.toLowerCase() === sw.toLowerCase();
+            return (
+              <button key={sw} type="button" onClick={() => set({ color: sw })} aria-label={sw} className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-sm transition-transform hover:scale-110 ${on ? "ring-2 ring-[#053877] ring-offset-2 ring-offset-card" : "border-black/10"}`} style={{ background: sw }}>
+                {on && <Check className="h-4 w-4" style={{ color: ["#FFFFFF", "#F0A71F", "#CA8A04"].includes(sw.toUpperCase()) ? "#0b1020" : "#ffffff" }} />}
               </button>
             );
           })}
         </div>
-      </div>
-      <div>
-        <p className="mb-2 text-sm font-semibold">Colour</p>
-        <div className="flex flex-wrap gap-2">
-          {SWATCHES.map((c) => <button key={c} type="button" onClick={() => set({ color: c })} aria-label={c} className={`h-8 w-8 rounded-full border ${t.color.toLowerCase() === c.toLowerCase() ? "ring-2 ring-[#053877] ring-offset-2" : "border-border"}`} style={{ background: c }} />)}
+        <div className="flex items-center gap-2">
+          <label className="relative h-10 w-10 cursor-pointer overflow-hidden rounded-full border border-border shadow-sm" style={{ background: c }} title="Any colour">
+            <input type="color" value={/^#[0-9a-f]{6}$/i.test(hex) ? hex : "#F0A71F"} onChange={(e) => { setHex(e.target.value); set({ color: e.target.value }); }} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+          </label>
+          <Input value={hex} onChange={(e) => { setHex(e.target.value); if (/^#[0-9a-f]{6}$/i.test(e.target.value)) set({ color: e.target.value }); }} className="w-28 font-mono" />
+          <span className="text-xs text-muted-foreground">Or pick any colour</span>
         </div>
-        <Input value={hex} onChange={(e) => { setHex(e.target.value); if (/^#[0-9a-f]{6}$/i.test(e.target.value)) set({ color: e.target.value }); }} className="mt-2 w-32 font-mono" />
-      </div>
-      {group("Page", t.shade, [["dark", "Dark"], ["light", "Light"]], (v) => set({ shade: v }))}
-      {group("Top of the page", t.layout, [["blend", "Cover photo"], ["landscape", "Banner"], ["portrait", "Round photo"]], (v) => set({ layout: v }))}
-      {group("Font", t.font, [["sans", "Modern"], ["serif", "Classic"], ["mono", "Typewriter"]], (v) => set({ font: v }))}
-      {group("Button shape", t.linkShape, [["pill", "Pill"], ["rounded", "Rounded"], ["square", "Square"]], (v) => set({ linkShape: v }))}
-      {group("Button style", t.linkStyle, [["fill", "Filled"], ["outline", "Outline"], ["soft", "Card"]], (v) => set({ linkStyle: v }))}
+      </Card>
+
+      <Card icon={dark ? Moon : Sun} tone="violet" title="Page and photo">
+        <p className="text-xs font-semibold text-muted-foreground">Page</p>
+        <div className="grid grid-cols-2 gap-3">
+          {([["dark", "Dark"], ["light", "Light"]] as const).map(([v, l]) => (
+            <Tile key={v} on={t.shade === v} onClick={() => set({ shade: v })} label={l}>
+              <span className="flex h-14 flex-col items-center justify-center gap-1.5 rounded-lg" style={{ background: v === "dark" ? "#0b1020" : "#f5f6fa", border: v === "light" ? "1px solid rgba(11,16,32,0.08)" : "none" }}>
+                <span className="h-1.5 w-14 rounded" style={{ background: v === "dark" ? "#fff" : "#0b1020" }} />
+                <span className="h-3 w-16 rounded-full" style={{ background: c }} />
+              </span>
+            </Tile>
+          ))}
+        </div>
+        <p className="pt-1 text-xs font-semibold text-muted-foreground">Top of the page</p>
+        <div className="grid grid-cols-3 gap-3">
+          {([["blend", "Cover photo"], ["landscape", "Banner"], ["portrait", "Round photo"]] as const).map(([v, l]) => (
+            <Tile key={v} on={t.layout === v} onClick={() => set({ layout: v })} label={l}>
+              <span className="relative flex h-14 flex-col items-center overflow-hidden rounded-lg" style={{ background: ground }}>
+                {v === "blend" ? <span className="h-10 w-full" style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : c, maskImage: "linear-gradient(to bottom, #000 50%, transparent)" }} />
+                  : v === "landscape" ? <><span className="h-5 w-full" style={{ background: `linear-gradient(135deg, ${c}, #000741)` }} /><span className="-mt-2.5 h-5 w-5 rounded-full" style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888", boxShadow: `0 0 0 2px ${ground}` }} /></>
+                  : <span className="mt-2.5 h-7 w-7 rounded-full" style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888", boxShadow: `0 0 0 2px ${c}` }} />}
+                <span className="absolute bottom-1.5 h-1 w-10 rounded" style={{ background: ink, opacity: 0.8 }} />
+              </span>
+            </Tile>
+          ))}
+        </div>
+      </Card>
+
+      <Card icon={Type} tone="green" title="Font and buttons">
+        <div className="grid grid-cols-3 gap-3">
+          {([["sans", "Modern", "var(--font-sans)"], ["serif", "Classic", "Georgia, serif"], ["mono", "Typewriter", "'JetBrains Mono', monospace"]] as const).map(([v, l, f]) => (
+            <Tile key={v} on={t.font === v} onClick={() => set({ font: v })} label={l}>
+              <span className="flex h-14 items-center justify-center rounded-lg bg-muted/60 text-3xl font-bold" style={{ fontFamily: f }}>Aa</span>
+            </Tile>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {([["pill", "Pill"], ["rounded", "Rounded"], ["square", "Square"]] as const).map(([v, l]) => (
+            <Tile key={v} on={t.linkShape === v} onClick={() => set({ linkShape: v })} label={l}>
+              <span className="flex h-14 items-center justify-center rounded-lg bg-muted/60"><span className="h-6 w-16" style={{ background: c, borderRadius: r(v) }} /></span>
+            </Tile>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {([["fill", "Filled"], ["outline", "Outline"], ["soft", "Card"]] as const).map(([v, l]) => (
+            <Tile key={v} on={t.linkStyle === v} onClick={() => set({ linkStyle: v })} label={l}>
+              <span className="flex h-14 items-center justify-center rounded-lg" style={{ background: ground }}>
+                <span className="h-6 w-16" style={v === "fill" ? { background: c, borderRadius: r(t.linkShape) } : v === "outline" ? { border: `2px solid ${c}`, borderRadius: r(t.linkShape) } : { background: dark ? "rgba(255,255,255,0.14)" : "#fff", border: "1px solid rgba(11,16,32,0.12)", borderRadius: r(t.linkShape) }} />
+              </span>
+            </Tile>
+          ))}
+        </div>
+      </Card>
     </div>
+  );
+}
+
+/** A visual choice: a little picture of the option, its name, a check when it's the one. */
+function Tile({ on, onClick, label, note, testid, children }: { on: boolean; onClick: () => void; label: string; note?: string; testid?: string; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={on} className={`relative rounded-2xl border-2 p-2 text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${on ? "border-[#053877] bg-[#053877]/[0.05] shadow-sm dark:border-[#8fb5e8]" : "border-border bg-background hover:border-[#053877]/40"}`} data-testid={testid}>
+      {on && <span className="absolute right-1.5 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-[#053877] text-white shadow"><Check className="h-3 w-3" /></span>}
+      {children}
+      <span className="mt-1.5 block text-center text-xs font-semibold">{label}</span>
+      {note && <span className="block text-center text-[11px] leading-tight text-muted-foreground">{note}</span>}
+    </button>
   );
 }
 
