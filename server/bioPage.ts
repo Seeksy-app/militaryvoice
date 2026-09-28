@@ -7,6 +7,7 @@ import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { sendListenerQuestionEmail } from "./email.js";
+import { buildShareCard } from "./shareCard.js";
 import { readFeed } from "./hosting.js";
 import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
 import { bioPages, bioEvents, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
@@ -213,6 +214,76 @@ export function registerBioPage(app: Express) {
     const status = ["new", "answered", "archived"].includes(req.body?.status) ? req.body.status : "answered";
     await db.update(listenerQuestions).set({ status }).where(and(eq(listenerQuestions.id, Number(req.params.id)), eq(listenerQuestions.pageId, row.id)));
     res.json({ ok: true });
+  });
+
+  // ---- Link previews: Slack, iMessage, Facebook, LinkedIn, X ----
+  //      The page is the app's one index.html, whose tags can't vary per
+  //      podcaster; so the preview robots (only them: vercel.json sends their
+  //      user agents here) get a page of their own tags: the podcaster's name,
+  //      bio and a card with their photo. People get the app as always.
+
+  app.get("/og/bio/:handle.jpg", async (req, res) => {
+    const [row] = await db.select().from(bioPages).where(eq(bioPages.handle, String(req.params.handle).toLowerCase())).limit(1);
+    if (!row || !row.published) return res.status(404).end();
+    const pod = await podcastFor(row).catch(() => null);
+    const photo = row.avatarUrl || pod?.artworkUrl || undefined;
+    const jpg = await buildShareCard({
+      podcastName: row.displayName || row.handle,
+      hostName: "",
+      subline: pod?.title && pod.title !== row.displayName ? pod.title : pod ? `${pod.episodeCount} episode${pod.episodeCount === 1 ? "" : "s"} · listen, follow, ask` : "Listen, follow, ask a question",
+      whenLabel: pod ? "Listen now" : "Visit my page",
+      photoUrl: photo,
+      eyebrow: pod ? "Podcast" : "Military voices",
+      footer: `militaryvoices.ai/${row.handle}`,
+    }, "wide");
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
+    res.end(jpg);
+  });
+
+  const PREVIEW_BOT = /facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|applebot|redditbot|pinterest|embedly|skypeuripreview|mastodon|bluesky|iframely|vkshare|quora link preview/i;
+  app.get("/:handle", async (req, res, next) => {
+    const ua = String(req.get("user-agent") ?? "");
+    const h = String(req.params.handle).toLowerCase();
+    if (!PREVIEW_BOT.test(ua)) return next();
+    const origin = `https://${req.get("host")}`;
+    const [row] = handleOk(h) ? await db.select().from(bioPages).where(eq(bioPages.handle, h)).limit(1) : [];
+    if (!row || !row.published) {
+      // Not a page of ours (/faq, /events…): the app's own index.html, with its usual tags.
+      const html = await fetch(`${origin}/index.html`).then((r) => r.text()).catch(() => "");
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.end(html || "<!doctype html><title>MilitaryVoices.ai</title>");
+    }
+    const pod = await podcastFor(row).catch(() => null);
+    const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const title = row.displayName || row.handle;
+    const desc = (row.bio || (pod ? `Listen to ${pod.title}: the latest episodes, and ask the show a question.` : `${title} on MilitaryVoices.ai.`)).replace(/\s+/g, " ").slice(0, 280);
+    const url = `${origin}/${row.handle}`;
+    const img = `${origin}/og/bio/${row.handle}.jpg?v=${encodeURIComponent((row.updatedAt || row.createdAt).slice(0, 16))}`;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
+    res.end(`<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}" />
+<meta property="og:type" content="profile" />
+<meta property="og:site_name" content="MilitaryVoices.ai" />
+<meta property="og:title" content="${esc(title)}" />
+<meta property="og:description" content="${esc(desc)}" />
+<meta property="og:url" content="${url}" />
+<meta property="og:image" content="${img}" />
+<meta property="og:image:secure_url" content="${img}" />
+<meta property="og:image:type" content="image/jpeg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="${esc(title)}" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${esc(title)}" />
+<meta name="twitter:description" content="${esc(desc)}" />
+<meta name="twitter:image" content="${img}" />
+<link rel="canonical" href="${url}" />
+</head><body><h1>${esc(title)}</h1><p>${esc(desc)}</p><p><a href="${url}">${esc(url)}</a></p></body></html>`);
   });
 
   // ---- The public page ----

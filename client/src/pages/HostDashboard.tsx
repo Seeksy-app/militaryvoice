@@ -1494,6 +1494,47 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       </div>
                     </div>
                   </div>
+                  {/* Your podcast, from wherever it lives (hosted here first): the show, its latest episode and its downloads. */}
+                  {podcastSources.length > 0 ? (() => {
+                    const p = podcastSources[0];
+                    const d = p.data!;
+                    const latest = [...d.episodes].sort((x, y) => y.published.localeCompare(x.published))[0];
+                    const hosted = p.source === "militaryvoices";
+                    const last30 = hosted || p.source === "buzzsprout" || p.source === "transistor" ? (d.series ?? []).slice(-30).reduce((n, x) => n + x.count, 0) : null;
+                    const fmt = (n: number) => (n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
+                    return (
+                      <div className="mt-6 flex flex-wrap items-center gap-5 rounded-2xl border border-border bg-card p-5" data-testid="dashboard-podcast">
+                        {d.artwork ? <img src={d.artwork} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover" /> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-[#053877] text-[#F0A71F]"><Headphones className="h-8 w-8" /></span>}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Your podcast{hosted ? " · hosted on MilitaryVoices" : ""}</p>
+                          <p className="truncate text-lg font-bold text-foreground">{p.showName || "Your show"}</p>
+                          {latest && <p className="truncate text-sm text-muted-foreground">Latest: <span className="font-medium text-foreground">{latest.title}</span>{latest.published ? ` · ${new Date(latest.published).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p>}
+                        </div>
+                        <div className="flex gap-6 text-center">
+                          {last30 !== null && <div><p className="text-xl font-bold tabular-nums text-[#053877] dark:text-[#8ab4f8]">{fmt(last30)}</p><p className="text-[11px] text-muted-foreground">{d.unit}, 30 days</p></div>}
+                          <div><p className="text-xl font-bold tabular-nums text-[#053877] dark:text-[#8ab4f8]">{fmt(d.total)}</p><p className="text-[11px] text-muted-foreground">{d.unit}, all time</p></div>
+                          <div><p className="text-xl font-bold tabular-nums text-[#053877] dark:text-[#8ab4f8]">{d.episodes.length}</p><p className="text-[11px] text-muted-foreground">episodes</p></div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {hosted ? (
+                            <Button onClick={() => goTo("podcast")} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="dashboard-podcast-new"><Plus className="h-4 w-4" /> New episode</Button>
+                          ) : (
+                            <Button variant="outline" onClick={() => goTo("analytics")} className="gap-1.5 rounded-full"><BarChart3 className="h-4 w-4" /> Your listens</Button>
+                          )}
+                          <Button variant="outline" onClick={() => goTo("page")} className="gap-1.5 rounded-full" data-testid="dashboard-podcast-page"><Globe className="h-4 w-4" /> Your page</Button>
+                        </div>
+                      </div>
+                    );
+                  })() : (
+                    <div className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl border border-dashed border-border bg-card p-5" data-testid="dashboard-podcast-empty">
+                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877] dark:text-[#8ab4f8]"><Headphones className="h-6 w-6" /></span>
+                      <div className="min-w-0 flex-1"><p className="font-semibold text-foreground">Put your podcast here</p><p className="text-sm text-muted-foreground">Host it with us (your feed for Apple and Spotify, downloads sponsors trust), or connect the host you use.</p></div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button onClick={() => goTo("podcast")} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">Host your podcast</Button>
+                        <Button variant="outline" onClick={() => { window.location.hash = "section-podcast-stats"; goTo("integrations"); }} className="rounded-full">Connect your host</Button>
+                      </div>
+                    </div>
+                  )}
                   {/* Three cards: your events (the Marathon is one of them),
                       your audience, and what's left to do. The co-host hours
                       live on the event's own page, with the event. */}
