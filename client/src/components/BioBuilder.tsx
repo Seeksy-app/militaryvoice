@@ -239,10 +239,10 @@ export function BioBuilder() {
         </div>
         <p className="relative mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">Last 30 days</p>
         <div className="relative mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5" data-testid="bio-stats">
-          {([["view", "Views", Eye, "#8fb5e8"], ["click", "Link taps", Link2, "#c4b5fd"], ["play", "Plays", Play, "#6ee7b7"], ["share", "Shares", Share2, "#7dd3fc"], ["ask", "Messages", MessageCircle, "#F0A71F"]] as const).map(([k, l, I, c]) => (
-            <div key={k} className="flex items-center gap-3 rounded-2xl bg-white/[0.06] p-3 ring-1 ring-white/10 transition-colors hover:bg-white/[0.09]">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: `${c}26`, color: c }}><I className="h-5 w-5" /></span>
-              <span className="min-w-0"><span className="block text-2xl font-bold leading-none tabular-nums">{q.data?.stats?.[k] ?? 0}</span><span className="mt-1 block text-[11px] text-white/65">{l}</span></span>
+          {([["view", "Views", Eye, "#053877"], ["click", "Link taps", Link2, "#7c3aed"], ["play", "Plays", Play, "#059669"], ["share", "Shares", Share2, "#0284c7"], ["ask", "Messages", MessageCircle, "#b36b00"]] as const).map(([k, l, I, c]) => (
+            <div key={k} className="flex items-center gap-3 rounded-2xl border border-[#d9e0ea] bg-white p-3 text-[#0b1020] shadow-sm transition-shadow hover:shadow-md">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: `${c}14`, color: c }}><I className="h-5 w-5" /></span>
+              <span className="min-w-0"><span className="block text-2xl font-bold leading-none tabular-nums">{q.data?.stats?.[k] ?? 0}</span><span className="mt-1 block text-[11px] text-[#0b1020]/60">{l}</span></span>
             </div>
           ))}
         </div>
