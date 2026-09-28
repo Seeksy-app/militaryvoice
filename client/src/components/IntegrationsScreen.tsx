@@ -105,6 +105,16 @@ export function IntegrationsScreen({
       )}
       {social?.configured && accounts.length > 0 && profile && <div className="-mt-3 mb-8"><AudienceConsent profile={profile} /></div>}
 
+      {/* Right under social media: going live on YouTube is the same kind of thing, their own channel. */}
+      <Group
+        id="section-going-out-live"
+        icon={<Radio className="h-4 w-4" />}
+        title="Live streaming"
+        line="Optional. Your slot airs on MilitaryVoices.ai either way; this sends it to your own channel too. YouTube is the only one we can send to directly."
+      >
+        <ConnectYoutube row locked={youtubeLocked} lockedReason="Claim a time slot first — the event is full at the moment." />
+      </Group>
+
       <Group
         id="section-content"
         icon={<Video className="h-4 w-4" />}
@@ -145,14 +155,6 @@ export function IntegrationsScreen({
         <PodcastStatsRows Row={Row} />
       </Group>
 
-      <Group
-        id="section-going-out-live"
-        icon={<Radio className="h-4 w-4" />}
-        title="Live streaming"
-        line="Optional. Your slot airs on MilitaryVoices.ai either way; this sends it to your own channel too. YouTube is the only one we can send to directly."
-      >
-        <ConnectYoutube row locked={youtubeLocked} lockedReason="Claim a time slot first — the event is full at the moment." />
-      </Group>
     </section>
   );
 }
