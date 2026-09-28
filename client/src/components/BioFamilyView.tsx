@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Heart, Lock, Pause, Play, X } from "lucide-react";
 import { Chat, onColor, type ChatMsg } from "@/components/BioPageView";
 import { useBioFont } from "@/lib/bioFont";
-import { bioPalette, type BioFamilyPublic } from "@shared/bio";
+import { bioPalette, videoEmbed, type BioFamilyPublic } from "@shared/bio";
 
 /**
  * The Family view (militaryvoices.ai/<handle>/family/<key>): a private page for
@@ -27,12 +27,15 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
   const { theirs, paper, dark, ink, sub, card, line, accent, font } = pal;
   useBioFont(t.font);
   const f = data.family;
-  const first = data.firstName || (data.displayName || "me").split(" ")[0];
+  const first = f.name?.trim() ? f.name.trim().split(/\s+/)[0] : data.firstName || (data.displayName || "me").split(" ")[0];
   const photo = data.family.photo || data.heroUrl || data.avatarUrl;
   const face = data.family.photo || data.avatarUrl;
   const [playing, setPlaying] = useState<string | null>(null);
   const [big, setBig] = useState<number | null>(null);
   const [chat, setChat] = useState(false);
+  const name = f.name?.trim() || data.displayName || "Your name";
+  const fv = f.video ?? "";
+  const video = fv.startsWith("r2:") ? (data.media?.video?.from === fv ? { kind: "file" as const, src: data.media.video.url, tall: false } : null) : videoEmbed(fv);
   const eps = data.podcast?.episodes ?? [];
   const picks = (f.favorites.length ? f.favorites.map((id) => eps.find((e) => e.id === id)).filter(Boolean) : eps.slice(0, 3)) as typeof eps;
   const n = data.numbers;
@@ -57,7 +60,7 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
         <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, rgba(0,0,0,0) 30%, rgba(0,0,0,0.6) 75%, ${dark ? "#0b1020" : "rgba(0,0,0,0.85)"} 100%)` }} />
         <div className="relative px-5 pb-8">
           <p className="mx-auto flex w-fit items-center gap-1.5 rounded-full bg-black/30 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em]"><Heart className="h-3 w-3 fill-current" /> For family</p>
-          <h1 className="mt-2 text-balance text-[32px] font-bold leading-tight tracking-tight">{data.displayName || "Your name"}</h1>
+          <h1 className="mt-2 text-balance text-[32px] font-bold leading-tight tracking-tight">{name}</h1>
           {data.branch && <p className="mt-0.5 text-sm text-white/80">{data.branch}</p>}
         </div>
       </div>
@@ -70,6 +73,14 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
               {face && <img src={face} alt="" className="h-9 w-9 rounded-full object-cover" />}
               <p className="text-sm font-semibold" style={{ fontFamily: "Georgia, serif", fontStyle: "italic" }}>{first}</p>
             </div>
+          </section>
+        )}
+
+        {video && (
+          <section className="overflow-hidden rounded-3xl bg-black" style={{ border: `1px solid ${line}` }} data-testid="family-video">
+            {video.kind === "file"
+              ? <video src={video.src} controls playsInline preload="metadata" className="max-h-[640px] w-full bg-black" />
+              : <iframe src={video.src} title="Video" loading="lazy" className={`w-full ${video.tall ? "h-[620px]" : "aspect-video"}`} style={{ border: 0 }} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />}
           </section>
         )}
 

@@ -12,9 +12,10 @@ import { audienceFor } from "./discovery.js";
 import { buildShareCard } from "./shareCard.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { readFeed, hostedAsStats } from "./hosting.js";
+import { signedRecordingUrl } from "./recordingStorage.js";
 import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
 import { bioPages, bioEvents, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
-import { DEFAULT_PODCAST, parseTheme, parseSections, parseSocials, parseBrands, parseFamily, type BioFamily, type BioFamilyPublic, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic } from "../shared/bio.js";
+import { DEFAULT_PODCAST, parseTheme, parseSections, parseSocials, parseBrands, parseFamily, type BioFamily, type BioFamilyPublic, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic, type BioViewMedia } from "../shared/bio.js";
 import type { PodcastStatsData } from "../shared/schema.js";
 
 /**
@@ -148,6 +149,7 @@ async function brandsOf(row: BioPageRow): Promise<BioBrandsPublic> {
   const since = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
   const ev = await db.select({ kind: bioEvents.kind, n: sql<number>`count(*)::int` }).from(bioEvents).where(and(eq(bioEvents.pageId, row.id), gte(bioEvents.day, since))).groupBy(bioEvents.kind);
   const count = (k: string) => ev.find((e) => e.kind === k)?.n ?? 0;
+  const kit = parseBrands(row.brands);
   return {
     handle: row.handle,
     displayName: row.displayName,
@@ -155,7 +157,7 @@ async function brandsOf(row: BioPageRow): Promise<BioBrandsPublic> {
     avatarUrl: row.avatarUrl,
     branch: profile?.branch && profile.branch !== "Not applicable" ? profile.branch : "",
     theme: parseTheme(row.theme),
-    kit: parseBrands(row.brands),
+    kit,
     podcast: pod ? { title: pod.title, artworkUrl: pod.artworkUrl, pageUrl: pod.pageUrl, episodeCount: pod.episodeCount, latest: pod.episodes.slice(0, 3).map((e) => ({ title: e.title, publishedAt: e.publishedAt, artworkUrl: e.artworkUrl || pod.artworkUrl })) } : null,
     numbers: {
       perEpisode: best?.perEpisode ?? null,
@@ -169,7 +171,37 @@ async function brandsOf(row: BioPageRow): Promise<BioBrandsPublic> {
       plays30: count("play"),
     },
     audience,
+    media: {
+      video: await uploadedVideo(kit.video),
+      sample: sampleOf(kit, pod),
+    },
   };
+}
+
+/** An uploaded video ("r2:<key>") as an address to play for a few hours; a link plays as it is. */
+async function uploadedVideo(v: string): Promise<BioViewMedia["video"]> {
+  const m = v.match(/^r2:(show-assets\/[\w.-]+)$/);
+  if (!m) return null;
+  const url = await signedRecordingUrl(m[1], 12 * 3600).catch(() => "");
+  return url ? { from: v, url } : null;
+}
+
+/** The sample for brands: one of their episodes, or the link (read when they saved it). */
+function sampleOf(kit: BioBrands, pod: Awaited<ReturnType<typeof podcastFor>> | null): BioViewMedia["sample"] {
+  const ep = kit.sample.match(/^ep:(.+)$/);
+  if (ep) {
+    const e = pod?.episodes.find((x) => x.id === ep[1]);
+    return e ? { from: kit.sample, title: e.title, audio: e.audio, artworkUrl: e.artworkUrl || pod?.artworkUrl || "" } : null;
+  }
+  return kit.sample && kit.sampleInfo?.audio ? { from: kit.sample, ...kit.sampleInfo } : null;
+}
+
+/** A sample link: an audio file plays as it is; a feed gives its latest episode. */
+async function readSample(url: string): Promise<BioBrands["sampleInfo"]> {
+  if (/\.(mp3|m4a|aac|wav|ogg)(\?|$)/i.test(url)) return { title: "Sample episode", audio: url, artworkUrl: "" };
+  const feed = await readFeed(url).catch(() => null);
+  const it = feed?.items.slice().sort((a, b) => b.published.localeCompare(a.published))[0];
+  return it?.url ? { title: it.title, audio: it.url, artworkUrl: it.image || feed?.artwork || "" } : undefined;
 }
 
 // ---- The Family view (private link) ---------------------------------------------------
@@ -186,11 +218,12 @@ async function familyOf(row: BioPageRow): Promise<BioFamily> {
 }
 
 async function familyPublicOf(row: BioPageRow, f: BioFamily): Promise<BioFamilyPublic> {
-  const [profile, pod, hosted, stats] = await Promise.all([
+  const [profile, pod, hosted, stats, video] = await Promise.all([
     storage.getProfileByEmail(row.email).catch(() => undefined),
     podcastFor(row).catch(() => null),
     hostedAsStats(row.email).catch(() => []),
     storage.listPodcastStats(row.email).catch(() => []),
+    uploadedVideo(f.video ?? ""),
   ]);
   const totals = [...hosted.map((h) => h.data.total), ...stats.map((r) => { try { return (JSON.parse(r.data) as PodcastStatsData).total ?? 0; } catch { return 0; } })];
   const followers = parseSocialAccounts(profile?.socialAccounts).reduce((a, x) => a + (x.followers ?? 0), 0);
@@ -207,6 +240,7 @@ async function familyPublicOf(row: BioPageRow, f: BioFamily): Promise<BioFamilyP
     numbers: { episodes: pod?.episodeCount ?? 0, listens: Math.max(0, ...totals), followers },
     askEnabled: row.askEnabled,
     firstName: (profile?.hostName || "").trim().split(/\s+/)[0] || "",
+    media: { video, sample: null },
   };
 }
 
@@ -226,8 +260,13 @@ function cleanFamily(v: unknown, prev: BioFamily): BioFamily {
       : prev.photos,
     favorites: Array.isArray(x.favorites) ? x.favorites.filter((f: unknown): f is string => typeof f === "string").slice(0, 6).map((f) => f.slice(0, 40)) : prev.favorites,
     photo: typeof x.photo === "string" ? httpUrl(x.photo) : prev.photo,
+    name: typeof x.name === "string" ? x.name.slice(0, 80) : prev.name ?? "",
+    video: typeof x.video === "string" ? videoRef(x.video) : prev.video ?? "",
   };
 }
+
+/** A video link (https) or one they uploaded to us. */
+const videoRef = (v: string) => (/^r2:show-assets\/[\w.-]+$/.test(v) ? v : httpUrl(v));
 
 function cleanBrands(v: unknown, prev: BioBrands): BioBrands {
   const x = (v ?? {}) as Record<string, unknown>;
@@ -240,6 +279,11 @@ function cleanBrands(v: unknown, prev: BioBrands): BioBrands {
       ? x.partners.slice(0, 24).map((p: Record<string, unknown>) => ({ id: str(p?.id, 20) || crypto.randomBytes(4).toString("hex"), name: str(p?.name, 60).trim(), url: httpUrl(p?.url) })).filter((p) => p.name || p.url)
       : prev.partners,
     photo: typeof x.photo === "string" ? httpUrl(x.photo) : prev.photo,
+    name: typeof x.name === "string" ? x.name.slice(0, 80) : prev.name ?? "",
+    sponsorOn: typeof x.sponsorOn === "boolean" ? x.sponsorOn : prev.sponsorOn ?? true,
+    video: typeof x.video === "string" ? videoRef(x.video) : prev.video ?? "",
+    sample: typeof x.sample === "string" ? (/^ep:[\w:.-]{1,200}$/.test(x.sample) ? x.sample : httpUrl(x.sample)) : prev.sample ?? "",
+    sampleInfo: prev.sampleInfo,
   };
 }
 
@@ -355,7 +399,13 @@ export function registerBioPage(app: Express) {
     if (typeof b.rssUrl === "string") patch.rssUrl = httpUrl(b.rssUrl);
     if (typeof b.askEnabled === "boolean") patch.askEnabled = b.askEnabled;
     if (typeof b.welcome === "string") patch.welcome = b.welcome.trim().slice(0, 280);
-    if (b.brands && typeof b.brands === "object") patch.brands = JSON.stringify(cleanBrands(b.brands, parseBrands(row.brands)));
+    if (b.brands && typeof b.brands === "object") {
+      const prev = parseBrands(row.brands);
+      const kit = cleanBrands(b.brands, prev);
+      // A sample link is read once, when it's saved (a feed gives its latest episode).
+      if (kit.sample !== prev.sample) kit.sampleInfo = /^https?:/.test(kit.sample) ? await readSample(kit.sample) : undefined;
+      patch.brands = JSON.stringify(kit);
+    }
     if (b.family && typeof b.family === "object") patch.family = JSON.stringify(cleanFamily(b.family, await familyOf(row)));
     if (typeof b.aiEnabled === "boolean") patch.aiEnabled = b.aiEnabled;
     if (typeof b.published === "boolean") patch.published = b.published;
@@ -364,7 +414,12 @@ export function registerBioPage(app: Express) {
     if (b.sections) patch.sections = JSON.stringify(cleanSections(b.sections));
     if (b.socials) patch.socials = JSON.stringify(cleanSocials(b.socials));
     const [out] = await db.update(bioPages).set(patch).where(eq(bioPages.id, row.id)).returning();
-    res.json({ page: { ...out, theme: parseTheme(out.theme), sections: parseSections(out.sections), socials: parseSocials(out.socials) }, url: `${ORIGIN}/${out.handle}`, preview: await publicOf(out) });
+    res.json({
+      page: { ...out, theme: parseTheme(out.theme), sections: parseSections(out.sections), socials: parseSocials(out.socials) }, url: `${ORIGIN}/${out.handle}`, preview: await publicOf(out),
+      // The Brands or Family preview again when they changed, for its video and sample.
+      ...(b.brands ? { brandsPreview: await brandsOf(out).catch(() => null) } : {}),
+      ...(b.family ? { familyPreview: await familyPublicOf(out, parseFamily(out.family)).catch(() => null) } : {}),
+    });
   });
 
   // The photo (square) and the cover (wide), sized for the page.

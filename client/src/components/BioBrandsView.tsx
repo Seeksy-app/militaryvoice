@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { ArrowRight, Check, Eye, Handshake, Headphones, Play, Send, Sparkles, Users } from "lucide-react";
+import { ArrowRight, Check, Eye, Handshake, Headphones, Pause, Play, Send, Sparkles, Users } from "lucide-react";
 import { PlatformIcon, platformBackground, platformLabel } from "@/components/SocialIcons";
 import { onColor } from "@/components/BioPageView";
 import { useBioFont } from "@/lib/bioFont";
-import { podcastWorthFor } from "@/lib/worth";
-import { bioPalette, type BioBrandsPublic } from "@shared/bio";
+import { podcastWorthFor, worthFor, type Deliverable } from "@/lib/worth";
+import { bioPalette, videoEmbed, type BioBrandsPublic } from "@shared/bio";
 import type { SocialPlatform } from "@shared/schema";
 
 /**
@@ -17,6 +17,27 @@ import type { SocialPlatform } from "@shared/schema";
 const compact = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M` : n >= 10_000 ? `${Math.round(n / 1000)}K` : n >= 1000 ? `${(n / 1000).toFixed(1)}K` : String(Math.round(n)));
 const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
 const dateOf = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "");
+
+/**
+ * The rate card: the podcast's (from downloads per episode) and their biggest
+ * social accounts' (from followers, and how the audience behaves where we can
+ * see it), each worked out the way Know Your Worth does.
+ */
+export function ratesFor(data: BioBrandsPublic): { key: string; title: string; note: string; items: Deliverable[] }[] {
+  const n = data.numbers;
+  const a = data.audience;
+  const unit = n.unit === "streams" ? "streams" : "downloads";
+  const out: { key: string; title: string; note: string; items: Deliverable[] }[] = [];
+  const pod = n.perEpisode ? podcastWorthFor(n.perEpisode) : null;
+  if (pod) out.push({ key: "podcast", title: data.podcast?.title ? `Podcast: ${data.podcast.title}` : "Podcast", note: `From about ${compact(n.perEpisode!)} ${unit} per episode.`, items: pod.deliverables });
+  const us = a?.countries.find((c) => /^(us|usa|united states)/i.test(c.name))?.pct ?? null;
+  for (const f of n.followers.slice(0, 2)) {
+    const same = a && a.platform === f.platform;
+    const w = worthFor({ platform: f.platform, followers: f.followers, engagementRate: same ? a!.engagementRate : null, medianViews: same ? a!.medianViews : null, realPct: same ? a!.realPct : null, usPct: same ? us : null });
+    if (w) out.push({ key: f.platform, title: platformLabel(f.platform as SocialPlatform), note: `From ${compact(f.followers)} followers${same && a!.engagementRate != null ? ` and ${a!.engagementRate.toFixed(1)}% engagement` : ""}.`, items: w.deliverables });
+  }
+  return out;
+}
 
 export type SponsorAsk = { name: string; company: string; email: string; budget: string; message: string; website: string };
 
@@ -33,8 +54,16 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
   useBioFont(t.font);
   const n = data.numbers;
   const unit = n.unit === "streams" ? "streams" : "downloads";
-  const rates = data.kit.showRates && n.perEpisode ? podcastWorthFor(n.perEpisode) : null;
+  const rates = data.kit.showRates ? ratesFor(data) : [];
   const [asking, setAsking] = useState(false);
+  const name = data.kit.name?.trim() || data.displayName || "Your name";
+  const sponsorOn = data.kit.sponsorOn ?? true;
+  const cta = data.podcast ? "Sponsor this show" : "Work with me";
+  // Their reel: a link plays in its own player; one they uploaded plays from our copy.
+  const kv = data.kit.video ?? "";
+  const video = kv.startsWith("r2:") ? (data.media?.video?.from === kv ? { kind: "file" as const, src: data.media.video.url, tall: false } : null) : videoEmbed(kv);
+  const sample = data.kit.sample && data.media?.sample?.from === data.kit.sample ? data.media.sample : null;
+  const [hearing, setHearing] = useState(false);
 
   const a = data.audience;
   const stats = [
@@ -76,15 +105,33 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
         <span className="pointer-events-none absolute -right-4 -top-4 h-56 w-56 rounded-full border border-white/10" aria-hidden />
         {(data.kit.photo || data.avatarUrl) && <img src={data.kit.photo || data.avatarUrl} alt="" className="relative mx-auto h-24 w-24 rounded-full object-cover ring-4 ring-white/25" />}
         <p className="relative mx-auto mt-4 w-fit rounded-full bg-black/25 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white">Media kit</p>
-        <h1 className="relative mt-1 text-balance text-[28px] font-bold leading-tight tracking-tight">{data.displayName || "Your name"}</h1>
+        <h1 className="relative mt-1 text-balance text-[28px] font-bold leading-tight tracking-tight">{name}</h1>
         <p className="relative mt-1 text-sm text-white/75">{[data.podcast ? `Host of ${data.podcast.title}` : "", data.branch].filter(Boolean).join(" · ")}</p>
-        {(data.kit.pitch || data.bio) && <p className="relative mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed text-white/90">{data.kit.pitch || data.bio}</p>}
-        <button type="button" onClick={() => { setAsking(true); setTimeout(() => document.getElementById("sponsor")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }} className="relative mt-5 inline-flex items-center gap-2 rounded-full bg-[#F0A71F] px-6 py-3 text-sm font-bold text-[#1a1200] shadow-lg transition-transform hover:scale-[1.03]" data-testid="brands-cta-top">
-          <Handshake className="h-4 w-4" /> Sponsor this show
-        </button>
+        {data.kit.pitch && <p className="relative mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed text-white/90">{data.kit.pitch}</p>}
+        {sponsorOn && (
+          <button type="button" onClick={() => { setAsking(true); setTimeout(() => document.getElementById("sponsor")?.scrollIntoView({ behavior: "smooth", block: "center" }), 50); }} className="relative mt-5 inline-flex items-center gap-2 rounded-full bg-[#F0A71F] px-6 py-3 text-sm font-bold text-[#1a1200] shadow-lg transition-transform hover:scale-[1.03]" data-testid="brands-cta-top">
+            <Handshake className="h-4 w-4" /> {cta}
+          </button>
+        )}
       </div>
 
       <div className="mx-auto flex max-w-[560px] flex-col gap-4 px-4 pt-5">
+        {video && (
+          <section className="overflow-hidden rounded-3xl" style={{ background: "#000", border: `1px solid ${line}` }} data-testid="brands-video">
+            {video.kind === "file"
+              ? <video src={video.src} controls playsInline preload="metadata" className="max-h-[640px] w-full bg-black" />
+              : <iframe src={video.src} title="Video" loading="lazy" className={`w-full ${video.tall ? "h-[620px]" : "aspect-video"}`} style={{ border: 0 }} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />}
+          </section>
+        )}
+        {sample && (
+          <section className="rounded-3xl p-4 text-left" style={{ background: card, border: `1px solid ${line}` }} data-testid="brands-sample">
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => !preview && setHearing(!hearing)} aria-label={hearing ? "Pause the sample" : "Play the sample"} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow" style={{ background: accent, color: onColor(accent) }}>{hearing ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 translate-x-px fill-current" />}</button>
+              <span className="min-w-0 flex-1"><span className="block text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: accent }}>Hear a sample</span><span className="line-clamp-2 block text-sm font-semibold leading-snug">{sample.title}</span></span>
+            </div>
+            {hearing && <audio src={sample.audio} autoPlay controls preload="none" className="mt-3 w-full" onEnded={() => setHearing(false)} />}
+          </section>
+        )}
         {stats.length > 0 && (
           <div>
             <div className="grid grid-cols-2 gap-3">
@@ -130,15 +177,24 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
           </div>
         ))}
 
-        {rates && section("Sponsorship rates", (
-          <div className="flex flex-col">
-            {rates.deliverables.map((d, i) => (
-              <div key={d.key} className="flex items-start gap-3 py-3" style={i ? { borderTop: `1px solid ${line}` } : {}}>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{d.label}</span><span className="block text-xs leading-snug" style={{ color: sub }}>{d.hint.replace(/, read by you/, ", read by the host").replace(/read by you/, "read by the host")}</span></span>
-                <span className="shrink-0 text-right text-base font-bold tabular-nums">{Math.round(d.low) === Math.round(d.high) ? money(d.mid) : `${money(d.low)}–${money(d.high)}`}</span>
+        {rates.length > 0 && section("Sponsorship rates", (
+          <div className="flex flex-col gap-4">
+            {rates.map((g) => (
+              <div key={g.key}>
+                <p className="flex items-center gap-2 text-sm font-bold">
+                  {g.key === "podcast" ? <Headphones className="h-4 w-4" style={{ color: accent }} /> : <span className="flex h-6 w-6 items-center justify-center rounded-full text-white" style={{ background: platformBackground(g.key as SocialPlatform) }}><PlatformIcon platform={g.key as SocialPlatform} className="h-3.5 w-3.5" /></span>}
+                  {g.title}
+                </p>
+                {g.items.map((d, i) => (
+                  <div key={d.key} className="flex items-start gap-3 py-2.5" style={i ? { borderTop: `1px solid ${line}` } : {}}>
+                    <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{d.label}</span><span className="block text-xs leading-snug" style={{ color: sub }}>{d.hint.replace(/, read by you/, ", read by the host").replace(/read by you/, "read by the host")}</span></span>
+                    <span className="shrink-0 text-right text-base font-bold tabular-nums">{Math.round(d.low) === Math.round(d.high) ? money(d.mid) : `${money(d.low)}–${money(d.high)}`}</span>
+                  </div>
+                ))}
+                <p className="text-[11px] leading-snug" style={{ color: sub }}>{g.note}</p>
               </div>
             ))}
-            <p className="mt-1 text-[11px] leading-snug" style={{ color: sub }}>Worked out from about {compact(n.perEpisode!)} {unit} per episode, at 2025–26 host-read rates. The final price is agreed with you.</p>
+            <p className="text-[11px] leading-snug" style={{ color: sub }}>At 2025–26 market rates. The final price is agreed with {name}.</p>
           </div>
         ))}
 
@@ -166,7 +222,7 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
           </div>
         ))}
 
-        <SponsorBox name={data.displayName} open={asking} setOpen={setAsking} preview={preview} onSponsor={onSponsor} ink={ink} sub={sub} card={card} line={line} dark={dark} />
+        {sponsorOn && <SponsorBox cta={cta} name={name} open={asking} setOpen={setAsking} preview={preview} onSponsor={onSponsor} ink={ink} sub={sub} card={card} line={line} dark={dark} />}
 
         <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Media kit by MilitaryVoices.ai</a></p>
       </div>
@@ -175,7 +231,7 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
 }
 
 /** Sponsor this show: a brand's note goes to our partnerships team, who help the podcaster close it. */
-function SponsorBox({ name, open, setOpen, preview, onSponsor, ink, sub, card, line, dark }: { name: string; open: boolean; setOpen: (v: boolean) => void; preview: boolean; onSponsor?: (x: SponsorAsk) => Promise<void>; ink: string; sub: string; card: string; line: string; dark: boolean }) {
+function SponsorBox({ cta, name, open, setOpen, preview, onSponsor, ink, sub, card, line, dark }: { cta: string; name: string; open: boolean; setOpen: (v: boolean) => void; preview: boolean; onSponsor?: (x: SponsorAsk) => Promise<void>; ink: string; sub: string; card: string; line: string; dark: boolean }) {
   const [f, setF] = useState<SponsorAsk>({ name: "", company: "", email: "", budget: "", message: "", website: "" });
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [err, setErr] = useState("");
@@ -190,7 +246,7 @@ function SponsorBox({ name, open, setOpen, preview, onSponsor, ink, sub, card, l
   return (
     <section id="sponsor" className="overflow-hidden rounded-3xl text-left" style={{ background: card, border: `1px solid ${line}` }} data-testid="brands-sponsor">
       <div className="p-5" style={{ background: "linear-gradient(135deg, rgba(240,167,31,0.18), rgba(5,56,119,0.12))" }}>
-        <p className="flex items-center gap-2 text-lg font-bold"><Handshake className="h-5 w-5 text-[#F0A71F]" /> Sponsor {name || "this show"}</p>
+        <p className="flex items-center gap-2 text-lg font-bold"><Handshake className="h-5 w-5 text-[#F0A71F]" /> {cta === "Work with me" ? `Work with ${name}` : `Sponsor ${name}`}</p>
         <p className="mt-1 text-sm" style={{ color: sub }}>Tell us what you have in mind. Our partnerships team replies within one business day.</p>
       </div>
       <div className="p-5 pt-4">

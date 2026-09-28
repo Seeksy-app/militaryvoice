@@ -11,10 +11,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { BioPageView } from "@/components/BioPageView";
 import { BioBrandsView } from "@/components/BioBrandsView";
 import { BioFamilyView } from "@/components/BioFamilyView";
-import { podcastWorthFor } from "@/lib/worth";
+import { uploadToStorage } from "@/lib/upload";
 import { useBioFont } from "@/lib/bioFont";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
-import { CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { ratesFor } from "@/components/BioBrandsView";
+import { CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
 import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music } from "lucide-react";
 
@@ -138,6 +139,9 @@ export function BioBuilder() {
   }, []);
   const [draft, setDraft] = useState<Page | null>(null);
   const [preview, setPreview] = useState<BioPublic | null>(null);
+  // The Brands and Family previews as the server last made them (their uploaded video, their sample).
+  const [kitSrv, setKitSrv] = useState<BioBrandsPublic | null>(null);
+  const [famSrv, setFamSrv] = useState<BioFamilyPublic | null>(null);
   const [url, setUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const pending = useRef<Partial<Page>>({});
@@ -162,6 +166,8 @@ export function BioBuilder() {
     try {
       const r = (await (await apiRequest("PATCH", "/api/host/bio", body)).json()) as Omit<Resp, "stats" | "questions">;
       setPreview(r.preview);
+      if (r.brandsPreview) setKitSrv(r.brandsPreview);
+      if (r.familyPreview) setFamSrv(r.familyPreview);
       setUrl(r.url);
       if (body.handle) setDraft((d) => (d ? { ...d, handle: r.page.handle } : d));
     } catch (e) {
@@ -212,14 +218,15 @@ export function BioBuilder() {
   }, [draft?.theme.layout, draft?.avatarUrl, draft?.cutoutFrom]);
 
   // The Brands view: the numbers from the server, what they write from the draft.
-  const kitView: BioBrandsPublic | null = useMemo(() => draft && q.data?.brandsPreview ? {
-    ...q.data.brandsPreview, displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, theme: draft.theme, kit: draft.brands ?? DEFAULT_BRANDS,
-  } : null, [draft, q.data?.brandsPreview]);
+  const kitView: BioBrandsPublic | null = useMemo(() => draft && (kitSrv ?? q.data?.brandsPreview) ? {
+    ...(kitSrv ?? q.data!.brandsPreview!), displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, theme: draft.theme, kit: draft.brands ?? DEFAULT_BRANDS,
+  } : null, [draft, q.data?.brandsPreview, kitSrv]);
   const famView: BioFamilyPublic | null = useMemo(() => {
-    if (!draft || !q.data?.familyPreview) return null;
+    const srv = famSrv ?? q.data?.familyPreview;
+    if (!draft || !srv) return null;
     const { key: _k, ...family } = draft.family ?? DEFAULT_FAMILY;
-    return { ...q.data.familyPreview, displayName: draft.displayName, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl, theme: draft.theme, askEnabled: draft.askEnabled, family };
-  }, [draft, q.data?.familyPreview]);
+    return { ...srv, displayName: draft.displayName, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl, theme: draft.theme, askEnabled: draft.askEnabled, family };
+  }, [draft, q.data?.familyPreview, famSrv]);
   const page = () => tab === "brands" && kitView ? <BioBrandsView data={kitView} preview listenUrl={url} />
     : tab === "family" && famView ? <BioFamilyView data={famView} preview />
     : <BioPageView data={view!} preview shareBase={url} />;
@@ -266,7 +273,7 @@ export function BioBuilder() {
           {tab === "content" && <ContentTab d={draft} change={change} />}
           {tab === "social" && <SocialTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} />}
-          {tab === "brands" && <BrandsTab d={draft} change={change} url={url} kit={kitView} />}
+          {tab === "brands" && <BrandsTab d={draft} change={change} url={url} kit={kitView} episodes={q.data?.familyPreview?.podcast?.episodes ?? []} />}
           {tab === "family" && <FamilyTab d={draft} change={change} flush={flush} url={url} episodes={q.data?.familyPreview?.podcast?.episodes ?? []} />}
           {tab === "questions" && <QuestionsTab items={q.data?.questions ?? []} onChange={() => void qc.invalidateQueries({ queryKey: KEY })} />}
         </div>
@@ -1240,13 +1247,57 @@ function ShareTab({ url }: { url: string }) {
 
 // ---- Brands (the media kit) --------------------------------------------------------
 
-function BrandsTab({ d, change, url, kit }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; url: string; kit: BioBrandsPublic | null }) {
+/** A video: paste a link (YouTube, Vimeo, Instagram, TikTok), or upload one from the computer or phone. */
+function VideoPick({ value, onChange, testid }: { value: string; onChange: (v: string) => void; testid: string }) {
+  const { toast } = useToast();
+  const input = useRef<HTMLInputElement>(null);
+  const [pct, setPct] = useState<number | null>(null);
+  const [link, setLink] = useState(value.startsWith("r2:") ? "" : value);
+  useEffect(() => { if (!value.startsWith("r2:")) setLink(value); }, [value]);
+  const upload = async (file: File) => {
+    if (file.size > 500 * 1024 * 1024) { toast({ title: "That video is too big", description: "Up to 500 MB. A reel or a short clip works best.", variant: "destructive" }); return; }
+    setPct(0);
+    try {
+      const key = await uploadToStorage(file, setPct);
+      onChange(`r2:${key}`);
+      toast({ title: "Video added" });
+    } catch (e) {
+      toast({ title: "The video didn't upload", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setPct(null);
+      if (input.current) input.current.value = "";
+    }
+  };
+  const bad = link.trim() && !videoEmbed(link);
+  return (
+    <div className="space-y-2">
+      <input ref={input} type="file" accept="video/mp4,video/quicktime,video/webm,video/*" className="hidden" onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
+      {value.startsWith("r2:") ? (
+        <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 p-2.5 text-sm">
+          <Video className="h-4 w-4 text-muted-foreground" /><span className="flex-1 font-semibold">Your uploaded video</span>
+          <button type="button" onClick={() => onChange("")} className="text-xs font-semibold text-muted-foreground hover:text-destructive">Remove</button>
+        </div>
+      ) : (
+        <>
+          <Input value={link} onChange={(e) => setLink(e.target.value)} onBlur={() => link.trim() !== value && onChange(link.trim())} placeholder="Paste a YouTube, Instagram, TikTok or Vimeo link" data-testid={`${testid}-url`} />
+          {bad && <p className="text-[11px] text-destructive">That link won't play here. Try a YouTube, Instagram reel, TikTok or Vimeo link.</p>}
+        </>
+      )}
+      <Button type="button" variant="outline" onClick={() => input.current?.click()} disabled={pct != null} className="w-full gap-1.5 rounded-xl border-dashed" data-testid={`${testid}-upload`}>
+        {pct != null ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading {pct}%</> : <><Video className="h-4 w-4" /> {value.startsWith("r2:") ? "Upload a different video" : "Or upload a video"}</>}
+      </Button>
+    </div>
+  );
+}
+
+function BrandsTab({ d, change, url, kit, episodes }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; url: string; kit: BioBrandsPublic | null; episodes: { id: string; title: string }[] }) {
   const { toast } = useToast();
   const b = d.brands ?? DEFAULT_BRANDS;
   const set = (p: Partial<BioBrands>, now = false) => change({ brands: { ...b, ...p } }, now);
   const link = `${url}/brands`;
   const n = kit?.numbers;
-  const rates = n?.perEpisode ? podcastWorthFor(n.perEpisode) : null;
+  const rates = kit ? ratesFor(kit) : [];
+  const b2 = { ...DEFAULT_BRANDS, ...b };
   const fmt = (v: number) => (v >= 10_000 ? `${Math.round(v / 1000)}K` : v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v));
   const rows: [string, string | null, string][] = [
     ["Downloads per episode", n?.perEpisode ? fmt(n.perEpisode) : null, "Host your show here, or connect your host in Integrations"],
@@ -1271,7 +1322,44 @@ function BrandsTab({ d, change, url, kit }: { d: Page; change: (p: Partial<Page>
           </div>
         )}
         <ViewPhoto kind="brands" url={b.photo ?? ""} fallback={d.avatarUrl} note="A professional headshot works best for brands." onChange={(u) => set({ photo: u }, true)} />
-        <p className="text-xs text-muted-foreground">When a brand asks to sponsor you, our partnerships team gets it and helps you close the deal.</p>
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+          <div><p className="text-sm font-semibold">{kit?.podcast ? "Sponsor this show" : "Work with me"} button</p><p className="text-xs text-muted-foreground">Brands ask to sponsor you from it. Our partnerships team helps you close the deal.</p></div>
+          <Switch checked={b2.sponsorOn} onCheckedChange={(v) => set({ sponsorOn: v }, true)} data-testid="brands-sponsor-on" />
+        </div>
+      </Card>
+
+      <Card icon={User} tone="blue" title="About you, for brands">
+        <Field label="Name brands see" hint="Your own name usually works best here, even if your page uses the show's.">
+          <Input value={b2.name} onChange={(e) => set({ name: e.target.value })} maxLength={80} placeholder={d.displayName || "Your name"} data-testid="brands-name" />
+        </Field>
+        <div>
+          <div className="mb-1 flex items-end justify-between gap-2">
+            <span className="text-sm font-semibold">Bio for brands</span>
+            {d.bio && !b2.pitch && <button type="button" onClick={() => set({ pitch: d.bio.slice(0, 400) })} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Start from my page's bio</button>}
+          </div>
+          <Textarea value={b2.pitch} onChange={(e) => set({ pitch: e.target.value })} rows={4} maxLength={400} placeholder="Marine veteran and host of Marine OCS Blog. I help officer candidates get through OCS, and brands reach them the month before they ship." data-testid="brands-pitch" />
+          <p className="mt-1 text-xs text-muted-foreground">Written for brands: who you are, who you reach, why it works. Only this shows on your kit.</p>
+        </div>
+        <Field label="Who listens and follows">
+          <Textarea value={b2.audience} onChange={(e) => set({ audience: e.target.value })} rows={2} maxLength={400} placeholder="Officer candidates, their families and recent veterans, mostly 22–35, across the US." />
+        </Field>
+      </Card>
+
+      <Card icon={Video} tone="violet" title="Your reel">
+        <p className="-mt-1 text-xs text-muted-foreground">A video brands can watch right on your kit: your best reel, a past sponsored spot, or a short intro.</p>
+        <VideoPick value={b2.video} onChange={(v) => set({ video: v }, true)} testid="brands-video" />
+      </Card>
+
+      <Card icon={Headphones} tone="gold" title="A sample to hear">
+        <p className="-mt-1 text-xs text-muted-foreground">An episode brands can press play on. Pick one of yours, or paste a link to an episode (or a feed, for its latest).</p>
+        {episodes.length > 0 && (
+          <select value={b2.sample.startsWith("ep:") ? b2.sample : ""} onChange={(e) => set({ sample: e.target.value }, true)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" data-testid="brands-sample-ep">
+            <option value="">No episode picked</option>
+            {episodes.slice(0, 50).map((e) => <option key={e.id} value={`ep:${e.id}`}>{e.title}</option>)}
+          </select>
+        )}
+        <Input key={b2.sample.startsWith("ep:") ? "ep" : `u-${b2.sample}`} defaultValue={b2.sample.startsWith("ep:") ? "" : b2.sample} onBlur={(e) => { const v = e.target.value.trim(); if (v !== b2.sample && (v || !b2.sample.startsWith("ep:"))) set({ sample: v }, true); }} placeholder={episodes.length ? "Or paste a link (https://…mp3, or an RSS feed)" : "Paste a link (https://…mp3, or an RSS feed)"} data-testid="brands-sample-url" />
+        {b2.sample && !b2.sample.startsWith("ep:") && kit?.media?.sample?.from !== b2.sample && <p className="text-[11px] text-muted-foreground">We read the link when it saves. If nothing shows on your kit, check it's an audio file or a podcast feed.</p>}
       </Card>
 
       <Card icon={Eye} tone="blue" title="Your numbers, measured by us">
@@ -1289,27 +1377,22 @@ function BrandsTab({ d, change, url, kit }: { d: Page; change: (p: Partial<Page>
 
       <AudienceCard kit={kit} />
 
-      <Card icon={Sparkles} tone="green" title="Your pitch">
-        <Field label="Why brands work with you" hint="One or two lines. Leave it empty to use your bio.">
-          <Textarea value={b.pitch} onChange={(e) => set({ pitch: e.target.value })} rows={3} maxLength={400} placeholder="I help officer candidates get through OCS. Brands reach them the month before they ship." data-testid="brands-pitch" />
-        </Field>
-        <Field label="Who listens">
-          <Textarea value={b.audience} onChange={(e) => set({ audience: e.target.value })} rows={2} maxLength={400} placeholder="Officer candidates, their families and recent veterans, mostly 22–35, across the US." />
-        </Field>
-      </Card>
-
       <Card icon={Tag} tone="violet" title="Sponsorship rates">
         <div className="flex items-center justify-between gap-3">
-          <div><p className="text-sm font-semibold">Show my rates</p><p className="text-xs text-muted-foreground">Worked out from your downloads per episode, like Know Your Worth.</p></div>
-          <Switch checked={b.showRates} onCheckedChange={(v) => set({ showRates: v }, true)} disabled={!rates} data-testid="brands-rates" />
+          <div><p className="text-sm font-semibold">Show my rates</p><p className="text-xs text-muted-foreground">Worked out from your social following and, if you have a show, its downloads, like Know Your Worth.</p></div>
+          <Switch checked={b.showRates} onCheckedChange={(v) => set({ showRates: v }, true)} disabled={!rates.length} data-testid="brands-rates" />
         </div>
-        {rates ? (
-          <div className="divide-y divide-border rounded-2xl border border-border">
-            {rates.deliverables.map((x) => (
-              <div key={x.key} className="flex items-center justify-between gap-3 px-3 py-2 text-sm"><span>{x.label}</span><span className="font-semibold tabular-nums">{Math.round(x.low) === Math.round(x.high) ? `$${Math.round(x.mid).toLocaleString()}` : `$${Math.round(x.low).toLocaleString()}–$${Math.round(x.high).toLocaleString()}`}</span></div>
-            ))}
+        {rates.length ? rates.map((g) => (
+          <div key={g.key}>
+            <p className="mb-1 text-xs font-bold">{g.title}</p>
+            <div className="divide-y divide-border rounded-2xl border border-border">
+              {g.items.map((x) => (
+                <div key={x.key} className="flex items-center justify-between gap-3 px-3 py-2 text-sm"><span>{x.label}</span><span className="font-semibold tabular-nums">{Math.round(x.low) === Math.round(x.high) ? `$${Math.round(x.mid).toLocaleString()}` : `$${Math.round(x.low).toLocaleString()}–$${Math.round(x.high).toLocaleString()}`}</span></div>
+              ))}
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">{g.note}</p>
           </div>
-        ) : <p className="rounded-2xl border border-dashed border-border p-3 text-xs text-muted-foreground">Your rates appear here once we can see your downloads.</p>}
+        )) : <p className="rounded-2xl border border-dashed border-border p-3 text-xs text-muted-foreground">Your rates appear here once you connect a social account in Integrations, or we can see your show's downloads.</p>}
       </Card>
 
       <Card icon={Handshake} tone="gold" title="Brands you've worked with">
@@ -1429,12 +1512,20 @@ function FamilyTab({ d, change, flush, url, episodes }: { d: Page; change: (p: P
       </Card>
 
       <Card icon={Sparkles} tone="green" title="In your words">
+        <Field label="Your name, for family" hint="What they call you. It's at the top and signs your note.">
+          <Input value={f.name ?? ""} onChange={(e) => set({ name: e.target.value })} maxLength={80} placeholder={d.displayName || "Your name"} data-testid="family-name" />
+        </Field>
         <Field label="A note to your family" hint="It sits at the top, like a letter.">
           <Textarea value={f.note} onChange={(e) => set({ note: e.target.value })} rows={4} maxLength={1000} placeholder="Mom, Dad: this is what I've been working on. Thank you for always being in my corner." data-testid="family-note-input" />
         </Field>
         <Field label="Your story">
           <Textarea value={f.story} onChange={(e) => set({ story: e.target.value })} rows={5} maxLength={4000} placeholder="Why you served, what it taught you, and why you started the show." />
         </Field>
+      </Card>
+
+      <Card icon={Video} tone="violet" title="A video for them">
+        <p className="-mt-1 text-xs text-muted-foreground">A message from you, a homecoming, a moment from the show. It plays near the top.</p>
+        <VideoPick value={f.video ?? ""} onChange={(v) => set({ video: v }, true)} testid="family-video" />
       </Card>
 
       <Card icon={Calendar} tone="blue" title="Along the way">

@@ -112,8 +112,39 @@ export interface BioBrands {
   partners: { id: string; name: string; url: string }[];
   /** A photo just for brands ("" = their profile photo). */
   photo: string;
+  /** The name brands see ("" = the page's name). */
+  name: string;
+  /** The Sponsor this show button (Work with me, without a podcast), and the form under it. */
+  sponsorOn: boolean;
+  /** A reel or video: a YouTube, Vimeo, Instagram or TikTok link, or one they uploaded ("r2:<key>"). */
+  video: string;
+  /** A sample to hear: one of their episodes ("ep:<id>"), an audio link, or a feed (its latest episode). */
+  sample: string;
+  /** The sample link as read when it was saved (the server's, never typed in). */
+  sampleInfo?: { title: string; audio: string; artworkUrl: string };
 }
-export const DEFAULT_BRANDS: BioBrands = { on: true, pitch: "", audience: "", showRates: false, partners: [], photo: "" };
+export const DEFAULT_BRANDS: BioBrands = { on: true, pitch: "", audience: "", showRates: false, partners: [], photo: "", name: "", sponsorOn: true, video: "", sample: "" };
+
+/** A video link as a player: an embed (wide or tall), a file to play, or null. */
+export function videoEmbed(u: string): { kind: "frame" | "file"; src: string; tall: boolean } | null {
+  const url = u.trim();
+  if (!/^https:\/\//.test(url)) return null;
+  const yt = url.match(/(?:youtu\.be\/|v=|shorts\/|embed\/|live\/)([\w-]{11})/);
+  if (yt) return { kind: "frame", src: `https://www.youtube-nocookie.com/embed/${yt[1]}`, tall: /shorts\//.test(url) };
+  const vm = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+  if (vm) return { kind: "frame", src: `https://player.vimeo.com/video/${vm[1]}`, tall: false };
+  const ig = url.match(/instagram\.com\/(?:[\w.]+\/)?(reel|reels|p|tv)\/([\w-]+)/);
+  if (ig) return { kind: "frame", src: `https://www.instagram.com/${ig[1] === "p" ? "p" : "reel"}/${ig[2]}/embed/`, tall: true };
+  const tt = url.match(/tiktok\.com\/@[\w.-]+\/video\/(\d+)/);
+  if (tt) return { kind: "frame", src: `https://www.tiktok.com/embed/v2/${tt[1]}`, tall: true };
+  if (/\.(mp4|mov|webm|m4v)(\?|$)/i.test(url)) return { kind: "file", src: url, tall: false };
+  return null;
+}
+/** Media resolved on the server for a view: an uploaded video's address, a sample episode's audio. */
+export interface BioViewMedia {
+  video: { from: string; url: string } | null;
+  sample: { from: string; title: string; audio: string; artworkUrl: string } | null;
+}
 export function parseBrands(raw: string | null | undefined): BioBrands {
   try {
     const v = raw ? JSON.parse(raw) : {};
@@ -137,8 +168,12 @@ export interface BioFamily {
   favorites: string[];
   /** A photo just for family ("" = their cover or profile photo). */
   photo: string;
+  /** The name family sees ("" = the page's name). */
+  name: string;
+  /** A video for them: a link, or one they uploaded ("r2:<key>"). */
+  video: string;
 }
-export const DEFAULT_FAMILY: BioFamily = { on: true, key: "", note: "", story: "", milestones: [], photos: [], favorites: [], photo: "" };
+export const DEFAULT_FAMILY: BioFamily = { on: true, key: "", note: "", story: "", milestones: [], photos: [], favorites: [], photo: "", name: "", video: "" };
 export function parseFamily(raw: string | null | undefined): BioFamily {
   try {
     const v = raw ? JSON.parse(raw) : {};
@@ -163,6 +198,7 @@ export interface BioFamilyPublic {
   askEnabled: boolean;
   /** Their own first name (the page's name is often the show's). */
   firstName: string;
+  media?: BioViewMedia;
 }
 
 /** Independent audience data for the media kit: the podcaster's biggest account, as the index measured it. */
@@ -212,6 +248,7 @@ export interface BioBrandsPublic {
   };
   /** From our Discovery index (cached, never bought for a visitor). */
   audience: BioAudience | null;
+  media?: BioViewMedia;
 }
 
 /** What the public page gets. */
