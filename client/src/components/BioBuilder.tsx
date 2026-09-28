@@ -5,13 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { BioPageView } from "@/components/BioPageView";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import { SWATCHES, TEMPLATES, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
+import { Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
 /**
  * My page: the podcaster's bio page builder. Profile, Design, Content and
@@ -24,6 +25,20 @@ type Resp = { page: Page; url: string; preview: BioPublic; stats: Record<string,
 type Tab = "profile" | "design" | "content" | "share" | "questions";
 
 const KEY = ["/api/host/bio"];
+
+/** Phones to preview on, at their screen size in CSS points (what a web page lays out to). */
+const PHONES = [
+  { id: "iphone-18-pro-max", name: "iPhone 18 Pro Max", w: 440, h: 956 },
+  { id: "iphone-18-pro", name: "iPhone 18 Pro", w: 402, h: 874 },
+  { id: "iphone-17-pro-max", name: "iPhone 17 Pro Max", w: 440, h: 956 },
+  { id: "iphone-air", name: "iPhone Air", w: 420, h: 912 },
+  { id: "iphone-17", name: "iPhone 17 / 17 Pro", w: 402, h: 874 },
+  { id: "iphone-16-plus", name: "iPhone 16 Plus", w: 430, h: 932 },
+  { id: "iphone-16e", name: "iPhone 16e", w: 390, h: 844 },
+  { id: "galaxy-s25-ultra", name: "Galaxy S25 Ultra", w: 412, h: 891 },
+  { id: "pixel-10-pro-xl", name: "Pixel 10 Pro XL", w: 412, h: 915 },
+  { id: "small", name: "Small phone", w: 360, h: 780 },
+] as const;
 const newId = () => Math.random().toString(36).slice(2, 10);
 
 export function BioBuilder() {
@@ -34,6 +49,21 @@ export function BioBuilder() {
   const [tab, setTab] = useState<Tab>(() => { try { return new URLSearchParams(window.location.search).get("tab") === "messages" ? "questions" : (localStorage.getItem("mv_bio_tab") as Tab) || "profile"; } catch { return "profile"; } });
   const go = (t: Tab) => { setTab(t); try { localStorage.setItem("mv_bio_tab", t); } catch { /* fine */ } };
   const [device, setDevice] = useState<"mobile" | "tablet" | "desktop">("mobile");
+  const [phone, setPhone] = useState<string>(() => { try { const v = localStorage.getItem("mv_bio_phone") ?? ""; return PHONES.some((p) => p.id === v) ? v : PHONES[0].id; } catch { return PHONES[0].id; } });
+  const pickPhone = (id: string) => { setPhone(id); setDevice("mobile"); try { localStorage.setItem("mv_bio_phone", id); } catch { /* fine */ } };
+  // The preview at the phone's real size (CSS points), shrunk only when the column is narrower.
+  const stage = useRef<HTMLDivElement | null>(null);
+  const [room, setRoom] = useState({ w: 9999, h: 900 });
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const measure = () => setRoom({ w: el.clientWidth, h: window.innerHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    window.addEventListener("resize", measure);
+    return () => { ro.disconnect(); window.removeEventListener("resize", measure); };
+  }, []);
   const [draft, setDraft] = useState<Page | null>(null);
   const [preview, setPreview] = useState<BioPublic | null>(null);
   const [url, setUrl] = useState("");
@@ -91,11 +121,10 @@ export function BioBuilder() {
   return (
     <section className="mt-2" data-testid="bio-builder">
       {/* The page's own band: the address to share, front and centre, and how it's doing. */}
-      <div className="relative mb-5 overflow-hidden rounded-3xl bg-gradient-to-br from-[#000741] via-[#053877] to-[#0a4a99] p-5 text-white shadow-md sm:p-6" data-testid="bio-hero">
-        <span className="pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full bg-[#F0A71F]/20 blur-2xl" aria-hidden />
-        <span className="pointer-events-none absolute -bottom-20 right-40 h-48 w-48 rounded-full bg-white/10 blur-2xl" aria-hidden />
-        <div className="relative flex flex-wrap items-center gap-x-6 gap-y-4">
-          <div className="min-w-0 flex-1">
+      <div className="relative mb-5 overflow-hidden rounded-3xl bg-[#04102b] p-5 text-white shadow-md sm:p-6" data-testid="bio-hero">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden />
+        <div className="pointer-events-none absolute -right-8 -top-8 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden />
+        <div className="relative min-w-0">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">My page</p>
             <p className="mt-1 truncate text-2xl font-bold tracking-tight sm:text-3xl">{url.replace(/^https?:\/\/(www\.)?/, "")}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -103,17 +132,16 @@ export function BioBuilder() {
               <Button asChild size="sm" variant="outline" className="gap-1.5 rounded-full border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"><a href={url} target="_blank" rel="noreferrer" data-testid="bio-open"><ExternalLink className="h-4 w-4" /> Open</a></Button>
               <span className="text-xs text-white/60">{saving ? "Saving…" : "Saved"}</span>
             </div>
-          </div>
-          <div className="flex gap-2">
-            {([["view", "Views", Eye], ["play", "Plays", Play], ["ask", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
-              <div key={k} className="min-w-[5.5rem] rounded-2xl bg-white/10 px-3 py-2.5 text-center ring-1 ring-white/15">
-                <p className="text-2xl font-bold tabular-nums">{q.data?.stats?.[k] ?? 0}</p>
-                <p className="flex items-center justify-center gap-1 text-[11px] text-white/70"><I className="h-3 w-3" /> {l}</p>
-              </div>
-            ))}
-          </div>
         </div>
-        <p className="relative mt-3 text-[11px] text-white/50">Last 30 days</p>
+        <p className="relative mt-5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">Last 30 days</p>
+        <div className="relative mt-2 grid grid-cols-2 gap-2 sm:grid-cols-5" data-testid="bio-stats">
+          {([["view", "Views", Eye, "#8fb5e8"], ["click", "Link taps", Link2, "#c4b5fd"], ["play", "Plays", Play, "#6ee7b7"], ["share", "Shares", Share2, "#7dd3fc"], ["ask", "Messages", MessageCircle, "#F0A71F"]] as const).map(([k, l, I, c]) => (
+            <div key={k} className="flex items-center gap-3 rounded-2xl bg-white/[0.06] p-3 ring-1 ring-white/10 transition-colors hover:bg-white/[0.09]">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl" style={{ background: `${c}26`, color: c }}><I className="h-5 w-5" /></span>
+              <span className="min-w-0"><span className="block text-2xl font-bold leading-none tabular-nums">{q.data?.stats?.[k] ?? 0}</span><span className="mt-1 block text-[11px] text-white/65">{l}</span></span>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="mb-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-card p-1 shadow-sm" role="tablist">
         {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["share", "Share", Share2], ["questions", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
@@ -128,24 +156,48 @@ export function BioBuilder() {
           {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} />}
           {tab === "design" && <DesignTab d={draft} change={change} />}
           {tab === "content" && <ContentTab d={draft} change={change} />}
-          {tab === "share" && <ShareTab url={url} stats={q.data?.stats ?? {}} />}
+          {tab === "share" && <ShareTab url={url} />}
           {tab === "questions" && <QuestionsTab items={q.data?.questions ?? []} onChange={() => void qc.invalidateQueries({ queryKey: KEY })} />}
         </div>
         {/* The page, as listeners will see it. */}
         <div className="min-w-0 rounded-3xl bg-[radial-gradient(circle_at_20%_10%,rgba(240,167,31,0.18),transparent_45%),radial-gradient(circle_at_85%_80%,rgba(5,56,119,0.16),transparent_50%)] p-4 ring-1 ring-border lg:sticky lg:top-20 lg:self-start">
           <div className="mb-3 flex justify-center">
             <div className="inline-flex gap-1 rounded-full border border-border bg-card p-1">
-              {([["mobile", "Mobile", Smartphone], ["tablet", "Tablet", Tablet], ["desktop", "Desktop", Monitor]] as const).map(([k, l, I]) => (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${device === "mobile" ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid="bio-phone"><Smartphone className="h-3.5 w-3.5" /> {PHONES.find((p) => p.id === phone)?.name} <ChevronDown className="h-3 w-3 opacity-70" /></button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64">
+                  {PHONES.map((p) => (
+                    <DropdownMenuItem key={p.id} onSelect={() => pickPhone(p.id)} className="flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-2">{phone === p.id ? <Check className="h-3.5 w-3.5 text-[#053877] dark:text-[#8fb5e8]" /> : <span className="w-3.5" />}{p.name}</span>
+                      <span className="text-[11px] tabular-nums text-muted-foreground">{p.w} × {p.h}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {([["tablet", "Tablet", Tablet], ["desktop", "Desktop", Monitor]] as const).map(([k, l, I]) => (
                 <button key={k} type="button" onClick={() => setDevice(k)} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${device === k ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`}><I className="h-3.5 w-3.5" /> {l}</button>
               ))}
             </div>
           </div>
-          <div className="flex justify-center">
-            <div className={device === "mobile" ? "w-[360px] rounded-[42px] border-[10px] border-[#111] bg-[#111] shadow-xl" : device === "tablet" ? "w-[560px] rounded-[28px] border-[12px] border-[#111] bg-[#111] shadow-xl" : "w-full rounded-xl border border-border shadow-xl"}>
-              <div className={`overflow-y-auto overflow-x-hidden ${device === "desktop" ? "h-[680px] rounded-xl" : device === "tablet" ? "h-[720px] rounded-[16px]" : "h-[700px] rounded-[32px]"}`}>
-                <BioPageView data={view} preview shareBase={url} />
-              </div>
-            </div>
+          <div ref={stage} className="flex justify-center">
+            {(() => {
+              const ph = PHONES.find((p) => p.id === phone) ?? PHONES[0];
+              const size = device === "mobile" ? { w: ph.w, h: ph.h, edge: 10 } : device === "tablet" ? { w: 768, h: 1024, edge: 12 } : null;
+              if (!size) return (
+                <div className="w-full rounded-xl border border-border shadow-xl"><div className="h-[680px] overflow-y-auto overflow-x-hidden rounded-xl"><BioPageView data={view} preview shareBase={url} /></div></div>
+              );
+              const zoom = Math.min(1, room.w / (size.w + size.edge * 2));
+              const tall = Math.min(size.h, Math.max(480, (room.h - 190) / zoom));
+              return (
+                <div style={{ zoom, width: size.w + size.edge * 2, borderWidth: size.edge }} className={`shrink-0 border-[#111] bg-[#111] shadow-xl ${device === "mobile" ? "rounded-[52px]" : "rounded-[28px]"}`} data-testid="bio-frame">
+                  <div style={{ height: tall }} className={`overflow-y-auto overflow-x-hidden ${device === "mobile" ? "rounded-[42px]" : "rounded-[16px]"}`}>
+                    <BioPageView data={view} preview shareBase={url} />
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -374,6 +426,24 @@ function DesignTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: bo
         </div>
       </Card>
 
+      <Card icon={Headphones} tone="blue" title="Your podcast">
+        <div className="grid grid-cols-3 gap-3">
+          {([["spotlight", "Spotlight", "The latest, big"], ["list", "List", "Episodes in rows"], ["carousel", "Cards", "Swipe through"]] as const).map(([v, l, n]) => {
+            const art = (cls: string) => <span className={`block shrink-0 ${cls}`} style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : `linear-gradient(135deg, ${c}, #000741)` }} />;
+            const line = (w: string) => <span className={`block h-1 ${w} rounded`} style={{ background: ink, opacity: 0.7 }} />;
+            return (
+              <Tile key={v} on={(t.podcastStyle ?? "spotlight") === v} onClick={() => set({ podcastStyle: v })} label={l} note={n} testid={`bio-podstyle-${v}`}>
+                <span className="flex h-20 flex-col gap-1 overflow-hidden rounded-lg p-1.5" style={{ background: ground }}>
+                  {v === "spotlight" ? <>{art("h-11 w-full rounded")}{line("w-3/4")}<span className="flex items-center gap-1">{art("h-3 w-3 rounded-sm")}{line("w-1/2")}</span></>
+                    : v === "list" ? [0, 1, 2, 3].map((i) => <span key={i} className="flex items-center gap-1">{art("h-3.5 w-3.5 rounded-sm")}{line(i % 2 ? "w-2/3" : "w-3/4")}</span>)
+                    : <span className="flex gap-1">{[0, 1].map((i) => <span key={i} className="flex w-[70%] shrink-0 flex-col gap-1">{art("h-12 w-full rounded")}{line("w-3/4")}</span>)}</span>}
+                </span>
+              </Tile>
+            );
+          })}
+        </div>
+      </Card>
+
       <Card icon={dark ? Moon : Sun} tone="violet" title="Page and photo">
         <p className="text-xs font-semibold text-muted-foreground">Page</p>
         <div className="grid grid-cols-2 gap-3">
@@ -531,32 +601,54 @@ function SectionEditor({ s, upd }: { s: BioSection; upd: (p: Partial<BioSection>
 
 // ---- Share -------------------------------------------------------------------------
 
-function ShareTab({ url, stats }: { url: string; stats: Record<string, number> }) {
+function ShareTab({ url }: { url: string }) {
   const { toast } = useToast();
   const [qr, setQr] = useState("");
-  useEffect(() => { QRCode.toDataURL(url, { margin: 1, width: 360, color: { dark: "#000741", light: "#ffffff" } }).then(setQr).catch(() => setQr("")); }, [url]);
-  const copy = () => navigator.clipboard.writeText(url).then(() => toast({ title: "Link copied" }));
+  useEffect(() => { QRCode.toDataURL(url, { margin: 1, width: 480, color: { dark: "#000741", light: "#ffffff" } }).then(setQr).catch(() => setQr("")); }, [url]);
+  const copy = () => navigator.clipboard.writeText(url).then(() => toast({ title: "Link copied", description: "Paste it in your bio, your show notes, anywhere." }));
+  const u = encodeURIComponent(url);
+  const line = encodeURIComponent("My podcast, and everything else I do, in one place:");
+  const places: { label: string; href: string; bg: string; icon?: typeof Mail; platform?: SocialPlatform }[] = [
+    { label: "Text", href: `sms:?&body=${line}%20${u}`, bg: "#16a34a", icon: MessageSquare },
+    { label: "Email", href: `mailto:?subject=${encodeURIComponent("My podcast")}&body=${line}%0A%0A${u}`, bg: "#053877", icon: Mail },
+    { label: "Facebook", href: `https://www.facebook.com/sharer/sharer.php?u=${u}`, bg: "#1877F2", platform: "facebook" },
+    { label: "LinkedIn", href: `https://www.linkedin.com/sharing/share-offsite/?url=${u}`, bg: "#0A66C2", platform: "linkedin" },
+    { label: "X", href: `https://x.com/intent/post?text=${line}&url=${u}`, bg: "#000000", platform: "x" },
+    { label: "Threads", href: `https://www.threads.net/intent/post?text=${line}%20${u}`, bg: "#000000", platform: "threads" },
+  ];
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {([["view", "Views", Eye], ["click", "Link taps", Link2], ["play", "Plays", Play], ["share", "Shares", Share2], ["ask", "Messages", MessageCircle]] as const).map(([k, l, I]) => (
-          <div key={k} className="rounded-xl border border-border bg-card p-3"><p className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground"><I className="h-3 w-3" /> {l}</p><p className="mt-0.5 text-xl font-bold tabular-nums">{stats[k] ?? 0}</p></div>
-        ))}
-      </div>
-      <p className="text-xs text-muted-foreground">Last 30 days.</p>
-      <div className="flex gap-2"><Input readOnly value={url} className="font-mono text-sm" /><Button variant="outline" size="icon" onClick={() => void copy()} aria-label="Copy"><Copy className="h-4 w-4" /></Button></div>
-      <Button onClick={() => void copy()} className="w-full gap-2 bg-[#053877] text-white hover:bg-[#0a4a99]"><Copy className="h-4 w-4" /> Copy my page link</Button>
-      <Button variant="outline" className="w-full gap-2" onClick={() => { if (navigator.share) void navigator.share({ url }).catch(() => {}); else void copy(); }}><Share2 className="h-4 w-4" /> Share via…</Button>
-      <Button asChild variant="outline" className="w-full gap-2"><a href={`sms:?&body=${encodeURIComponent(url)}`}><MessageSquare className="h-4 w-4" /> Share by text message</a></Button>
-      <Button asChild variant="outline" className="w-full gap-2"><a href={url} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open my page</a></Button>
-      {qr && (
-        <div className="rounded-2xl border border-border bg-card p-4 text-center">
-          <p className="text-sm font-semibold">QR code</p>
-          <img src={qr} alt="QR code for your page" className="mx-auto mt-2 h-44 w-44" />
-          <a href={qr} download="my-page-qr.png" className="mt-2 inline-block text-xs font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Download it</a>
-          <p className="mt-1 text-xs text-muted-foreground">For your show notes, slides, table cards and merch.</p>
+      <Card icon={Share2} tone="gold" title="Send your page">
+        <p className="-mt-1 text-xs text-muted-foreground">Or put your link in your Instagram and TikTok bio, your show notes and your email signature.</p>
+        <div className="grid grid-cols-4 gap-2">
+          {places.map((p) => (
+            <a key={p.label} href={p.href} target={p.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer" className="group flex flex-col items-center gap-1.5 rounded-2xl p-2 text-center transition-colors hover:bg-muted">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full text-white shadow-sm transition-transform group-hover:scale-110" style={{ background: p.bg }}>
+                {p.platform ? <PlatformIcon platform={p.platform} className="h-5 w-5" /> : p.icon ? <p.icon className="h-5 w-5" /> : null}
+              </span>
+              <span className="text-[11px] font-semibold">{p.label}</span>
+            </a>
+          ))}
+          <button type="button" onClick={() => { if (navigator.share) void navigator.share({ url }).catch(() => {}); else void copy(); }} className="group flex flex-col items-center gap-1.5 rounded-2xl p-2 text-center transition-colors hover:bg-muted">
+            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-[#F0A71F] to-[#e08a00] text-[#1a1200] shadow-sm transition-transform group-hover:scale-110"><Share2 className="h-5 w-5" /></span>
+            <span className="text-[11px] font-semibold">More</span>
+          </button>
         </div>
+      </Card>
+
+      {qr && (
+        <Card icon={Smartphone} tone="violet" title="QR code">
+          <div className="flex items-center gap-4 rounded-2xl bg-gradient-to-br from-[#F0A71F]/25 via-[#F0A71F]/10 to-[#053877]/15 p-4">
+            <img src={qr} alt="QR code for your page" className="h-32 w-32 shrink-0 rounded-xl bg-white p-1.5 shadow-md" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Point a phone camera at it and your page opens.</p>
+              <p className="mt-1 text-xs text-muted-foreground">For show notes, slides, table cards and merch.</p>
+              <Button asChild size="sm" className="mt-3 gap-1.5 rounded-full bg-[#053877] hover:bg-[#0a4a99]"><a href={qr} download="my-page-qr.png"><ArrowDown className="h-4 w-4" /> Download</a></Button>
+            </div>
+          </div>
+        </Card>
       )}
+
     </div>
   );
 }

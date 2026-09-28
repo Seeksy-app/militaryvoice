@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Calendar, Check, Copy, MessageCircle, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
-import type { BioPublic, BioSection } from "@shared/bio";
+import type { BioPublic, BioSection, BioTheme } from "@shared/bio";
 import type { SocialPlatform } from "@shared/schema";
 
 /**
@@ -124,7 +124,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       </div>
 
       <div className="mx-auto mt-6 flex max-w-[560px] flex-col gap-4 px-4">
-        {data.podcast && <PodcastCard p={data.podcast} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} />}
+        {data.podcast && <PodcastCard p={data.podcast} style={t.podcastStyle ?? "spotlight"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} />}
         {data.ai?.enabled && <AskShow name={data.displayName} episodes={data.ai.episodes} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} onAskAi={onAskAi} onMessage={data.askEnabled ? () => setChat(true) : undefined} />}
         {data.sections.map((s) => <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} />)}
         <p className="mt-4 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>
@@ -133,56 +133,92 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   );
 }
 
-function PodcastCard({ p, accent, ink, sub, card, line, radius, preview, ev, share, copied }: {
-  p: NonNullable<BioPublic["podcast"]>; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; ev: Ev; share: (title: string, id: string) => void; copied: string | null;
+function PodcastCard({ p, style, fallbackArt, accent, ink, sub, card, line, radius, preview, ev, share, copied }: {
+  p: NonNullable<BioPublic["podcast"]>; style: BioTheme["podcastStyle"]; fallbackArt: string; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; ev: Ev; share: (title: string, id: string) => void; copied: string | null;
 }) {
   const [playing, setPlaying] = useState<string | null>(null);
   const [first, ...rest] = p.episodes;
-  const audio = useRef<HTMLAudioElement | null>(null);
+  const now = p.episodes.find((e) => e.id === playing);
   const play = (id: string, title: string) => {
     if (preview) return;
-    if (playing === id) { audio.current?.pause(); setPlaying(null); return; }
+    if (playing === id) { setPlaying(null); return; }
     setPlaying(id);
     ev("play", title);
   };
-  const row = (e: typeof first, big = false) => (
-    <div key={e.id} id={`ep-${e.id}`} className={`flex items-center gap-3 ${big ? "" : "py-3"}`} style={big ? {} : { borderTop: `1px solid ${line}` }}>
-      <button type="button" onClick={() => play(e.id, e.title)} aria-label={playing === e.id ? `Pause ${e.title}` : `Play ${e.title}`} className={`flex shrink-0 items-center justify-center rounded-full ${big ? "h-12 w-12" : "h-9 w-9"}`} style={big ? { background: accent, color: onColor(accent) } : { border: `1.5px solid ${line}`, color: ink }}>
-        {playing === e.id ? <Pause className={`${big ? "h-5 w-5" : "h-3.5 w-3.5"} fill-current`} /> : <Play className={`${big ? "h-5 w-5" : "h-3.5 w-3.5"} translate-x-px fill-current`} />}
-      </button>
+  type E = typeof first;
+  const artOf = (e: E) => e.artworkUrl || p.artworkUrl || fallbackArt;
+  const when = (e: E) => `${dateOf(e.publishedAt)}${e.durationSec ? ` · ${hms(e.durationSec)}` : ""}`;
+  // The episode's picture, with its play button on it.
+  const thumb = (e: E, cls: string, btn: "sm" | "lg") => (
+    <button type="button" onClick={() => play(e.id, e.title)} aria-label={playing === e.id ? `Pause ${e.title}` : `Play ${e.title}`} className={`group relative shrink-0 overflow-hidden ${cls}`} style={{ background: artOf(e) ? `center/cover url(${artOf(e)})` : `linear-gradient(135deg, ${accent}, #000741)` }}>
+      <span className="absolute inset-0 bg-black/10 transition-colors group-hover:bg-black/25" />
+      <span className={`absolute flex items-center justify-center rounded-full shadow-lg ${btn === "lg" ? "bottom-3 left-3 h-12 w-12" : "inset-0 m-auto h-8 w-8"}`} style={{ background: accent, color: onColor(accent) }}>
+        {playing === e.id ? <Pause className={`${btn === "lg" ? "h-5 w-5" : "h-3.5 w-3.5"} fill-current`} /> : <Play className={`${btn === "lg" ? "h-5 w-5" : "h-3.5 w-3.5"} translate-x-px fill-current`} />}
+      </span>
+    </button>
+  );
+  const shareBtn = (e: E) => (
+    <button type="button" onClick={() => share(e.title, e.id)} aria-label={`Share ${e.title}`} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ color: sub }}>
+      {copied === e.id ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+    </button>
+  );
+  const row = (e: E, i: number) => (
+    <div key={e.id} id={`ep-${e.id}`} className="flex items-center gap-3 py-2.5" style={i ? { borderTop: `1px solid ${line}` } : {}}>
+      {thumb(e, "h-14 w-14 rounded-xl", "sm")}
       <div className="min-w-0 flex-1 text-left">
-        {big && <p className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: accent }}>Latest episode</p>}
-        <p className={`${big ? "text-base" : "text-sm"} line-clamp-2 font-semibold leading-snug`}>{e.title}</p>
-        <p className="text-xs" style={{ color: sub }}>{dateOf(e.publishedAt)}{e.durationSec ? ` · ${hms(e.durationSec)}` : ""}</p>
+        <p className="line-clamp-2 text-sm font-semibold leading-snug">{e.title}</p>
+        <p className="text-xs" style={{ color: sub }}>{when(e)}</p>
       </div>
-      <button type="button" onClick={() => share(e.title, e.id)} aria-label={`Share ${e.title}`} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ color: sub }}>
-        {copied === e.id ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
-      </button>
+      {shareBtn(e)}
     </div>
   );
   return (
     <section className="overflow-hidden rounded-3xl text-left" style={{ background: card, border: `1px solid ${line}` }} data-testid="bio-podcast">
-      <div className="flex items-center gap-3 p-4" style={{ borderBottom: `1px solid ${line}` }}>
-        {p.artworkUrl && <img src={p.artworkUrl} alt="" className="h-14 w-14 shrink-0 rounded-xl object-cover" />}
+      <div className="flex items-center gap-3 p-4 pb-3">
+        {(p.artworkUrl || fallbackArt) && <img src={p.artworkUrl || fallbackArt} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />}
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-bold">{p.title}</p>
           <p className="text-xs" style={{ color: sub }}>{p.episodeCount} episode{p.episodeCount === 1 ? "" : "s"}</p>
         </div>
       </div>
-      {first && (
-        <div className="p-4">
-          {row(first, true)}
-          {playing === first.id && <audio ref={audio} src={first.audio} autoPlay controls preload="none" className="mt-3 w-full" onEnded={() => setPlaying(null)} />}
+      {first && style === "spotlight" && (
+        <div className="px-4">
+          <div id={`ep-${first.id}`}>
+            {thumb(first, "aspect-square w-full rounded-2xl", "lg")}
+            <div className="mt-3 flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: accent }}>Latest episode</p>
+                <p className="line-clamp-2 text-base font-bold leading-snug">{first.title}</p>
+                <p className="text-xs" style={{ color: sub }}>{when(first)}</p>
+              </div>
+              {shareBtn(first)}
+            </div>
+          </div>
+          {rest.length > 0 && <div className="mt-2" style={{ borderTop: `1px solid ${line}` }}>{rest.slice(0, 4).map((e, i) => row(e, i))}</div>}
         </div>
       )}
-      {rest.length > 0 && (
-        <div className="px-4 pb-2">
-          {rest.slice(0, 4).map((e) => (
-            <div key={e.id}>
-              {row(e)}
-              {playing === e.id && <audio src={e.audio} autoPlay controls preload="none" className="mb-3 w-full" onEnded={() => setPlaying(null)} />}
+      {first && style === "list" && <div className="px-4">{p.episodes.slice(0, 6).map((e, i) => row(e, i))}</div>}
+      {first && style === "carousel" && (
+        <div className="flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+          {p.episodes.slice(0, 10).map((e, i) => (
+            <div key={e.id} id={`ep-${e.id}`} className="w-[70%] shrink-0 snap-start">
+              {thumb(e, "aspect-square w-full rounded-2xl", "lg")}
+              <div className="mt-2 flex items-start gap-1">
+                <div className="min-w-0 flex-1">
+                  {i === 0 && <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: accent }}>Latest</p>}
+                  <p className="line-clamp-2 text-sm font-semibold leading-snug">{e.title}</p>
+                  <p className="text-xs" style={{ color: sub }}>{when(e)}</p>
+                </div>
+                {shareBtn(e)}
+              </div>
             </div>
           ))}
+        </div>
+      )}
+      {now && (
+        <div className="mx-4 mt-3 rounded-2xl p-3" style={{ border: `1px solid ${line}` }}>
+          <p className="mb-1 truncate text-xs font-semibold">{now.title}</p>
+          <audio key={now.id} src={now.audio} autoPlay controls preload="none" className="w-full" onEnded={() => setPlaying(null)} />
         </div>
       )}
       <div className="flex flex-wrap gap-2 p-4 pt-2">

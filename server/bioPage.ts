@@ -72,7 +72,7 @@ async function podcastFor(row: BioPageRow): Promise<BioPublic["podcast"]> {
       return {
         title: show.title, artworkUrl: show.artworkUrl, feedUrl: `${ORIGIN}/feed/${show.slug}`, pageUrl: `${ORIGIN}/podcast/${show.slug}`,
         appleUrl: show.appleUrl, spotifyUrl: show.spotifyUrl, episodeCount: eps.length,
-        episodes: eps.slice(0, 12).map((e) => ({ id: String(e.id), title: e.title, publishedAt: e.publishedAt, durationSec: e.durationSec, audio: `${ORIGIN}/e/${e.id}.${/mp4|m4a|aac/.test(e.mime) ? (e.mime.startsWith("video") ? "mp4" : "m4a") : "mp3"}`, notes: "" })),
+        episodes: eps.slice(0, 12).map((e) => ({ id: String(e.id), title: e.title, publishedAt: e.publishedAt, durationSec: e.durationSec, audio: `${ORIGIN}/e/${e.id}.${/mp4|m4a|aac/.test(e.mime) ? (e.mime.startsWith("video") ? "mp4" : "m4a") : "mp3"}`, notes: "", artworkUrl: e.artworkUrl || show.artworkUrl })),
       };
     }
   }
@@ -82,7 +82,7 @@ async function podcastFor(row: BioPageRow): Promise<BioPublic["podcast"]> {
   if (hit && Date.now() - hit.at < 30 * 60_000) return hit.data;
   const data = await readFeed(url).then((f) => ({
     title: f.title, artworkUrl: f.artwork, feedUrl: url, pageUrl: f.link, appleUrl: "", spotifyUrl: "", episodeCount: f.items.length,
-    episodes: f.items.slice().sort((a, b) => b.published.localeCompare(a.published)).slice(0, 12).map((it, i) => ({ id: `rss-${i}`, title: it.title, publishedAt: it.published, durationSec: it.duration, audio: it.url, notes: "" })),
+    episodes: f.items.slice().sort((a, b) => b.published.localeCompare(a.published)).slice(0, 12).map((it, i) => ({ id: `rss-${i}`, title: it.title, publishedAt: it.published, durationSec: it.duration, audio: it.url, notes: "", artworkUrl: it.image || f.artwork })),
   })).catch(() => null);
   feedCache.set(url, { at: Date.now(), data });
   return data;
@@ -138,6 +138,7 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     linkShape: pick("linkShape", ["pill", "rounded", "square"] as const, prev.linkShape),
     linkStyle: pick("linkStyle", ["fill", "outline", "soft"] as const, prev.linkStyle),
     layout: pick("layout", ["portrait", "landscape", "blend"] as const, prev.layout),
+    podcastStyle: pick("podcastStyle", ["spotlight", "list", "carousel"] as const, prev.podcastStyle),
   };
 }
 

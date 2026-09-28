@@ -10,6 +10,8 @@ export type BioFont = "sans" | "serif" | "mono";
 export type BioLinkShape = "pill" | "rounded" | "square";
 export type BioLinkStyle = "fill" | "outline" | "soft";
 export type BioLayout = "portrait" | "landscape" | "blend";
+/** How the podcast shows: the latest big (spotlight), a list, or cards to swipe. */
+export type BioPodcastStyle = "spotlight" | "list" | "carousel";
 
 export interface BioTheme {
   template: BioTemplate;
@@ -20,6 +22,7 @@ export interface BioTheme {
   linkShape: BioLinkShape;
   linkStyle: BioLinkStyle;
   layout: BioLayout;
+  podcastStyle: BioPodcastStyle;
 }
 
 export type BioSection =
@@ -52,7 +55,8 @@ export interface BioPublic {
     appleUrl: string;
     spotifyUrl: string;
     episodeCount: number;
-    episodes: { id: string; title: string; publishedAt: string; durationSec: number; audio: string; notes: string }[];
+    /** artworkUrl: the episode's own art, else the show's. */
+    episodes: { id: string; title: string; publishedAt: string; durationSec: number; audio: string; notes: string; artworkUrl: string }[];
   };
   /** Listeners can send a question (it goes to the podcaster's inbox). */
   askEnabled: boolean;
@@ -67,7 +71,7 @@ export const TEMPLATES: Record<BioTemplate, { label: string; note: string; theme
   vibrant: { label: "Vibrant", note: "Your colour behind everything", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "landscape" } },
 };
 
-export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend" };
+export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight" };
 
 export const SWATCHES = ["#F0A71F", "#053877", "#0A4A99", "#DC2626", "#991B1B", "#EA580C", "#CA8A04", "#16A34A", "#0D9488", "#7C3AED", "#DB2777", "#111827", "#6B7280", "#FFFFFF"];
 
