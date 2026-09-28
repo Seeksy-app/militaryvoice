@@ -603,6 +603,25 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     res.status(201).json(e);
   });
 
+  // An episode's own picture (in place of the still from its video, or the show's art).
+  app.post("/api/host/hosting/episodes/:id/artwork", requireHostSession, art.single("file"), async (req, res) => {
+    const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
+    if (!e || !(await ownShow(emailOf(req), e.showId))) return res.status(404).json({ message: "No such episode." });
+    if (!req.file) return res.status(400).json({ message: "Choose an image." });
+    try {
+      const meta = await sharp(req.file.buffer).metadata();
+      const side = Math.min(meta.width ?? 0, meta.height ?? 0);
+      if (side < 600) return res.status(400).json({ message: `That image is ${side}px on its short side. Use one at least 1400 × 1400.` });
+      const img = await sharp(req.file.buffer).rotate().resize(Math.min(3000, Math.max(1400, side)), Math.min(3000, Math.max(1400, side)), { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer();
+      const url = await uploadPhoto(`podcast-art/episode-${e.id}-${Date.now()}.jpg`, img, "image/jpeg");
+      await db.update(hostedEpisodes).set({ artworkUrl: url, stillJob: "done" }).where(eq(hostedEpisodes.id, e.id));
+      res.json({ ok: true, url });
+    } catch (err) {
+      console.error("Episode art failed:", err);
+      res.status(500).json({ message: "Couldn't use that image. Try a JPG or PNG." });
+    }
+  });
+
   app.patch("/api/host/hosting/episodes/:id", requireHostSession, async (req, res) => {
     const email = emailOf(req);
     const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);

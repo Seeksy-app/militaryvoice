@@ -155,6 +155,7 @@ export function PodcastHosting() {
           <ul className="divide-y divide-border">
             {h.episodes.map((e) => (
               <li key={e.id} className="flex items-center gap-3 py-2.5" data-testid={`hosting-episode-${e.id}`}>
+                <EpisodeArt ep={e} fallback={s.artworkUrl} onDone={refresh} />
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${e.audioJob === "failed" ? "bg-destructive/10 text-destructive" : e.audioJob ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : e.live ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : e.status === "published" ? "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]" : "bg-muted text-muted-foreground"}`}>
                   {e.audioJob === "failed" ? "Audio failed" : e.audioJob ? <span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Preparing audio</span> : e.live ? "Live" : e.status === "published" ? "Scheduled" : "Draft"}
                 </span>
@@ -281,6 +282,38 @@ function FeedLink({ url }: { url: string }) {
     <button type="button" onClick={() => navigator.clipboard.writeText(url).then(() => toast({ title: "Feed address copied", description: "Paste it into Apple Podcasts Connect or Spotify for Creators." }))} className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium hover:bg-muted" title="Copy your RSS feed address" data-testid="hosting-feed">
       <Radio className="h-3.5 w-3.5 shrink-0 text-[#b36b00]" /> <span className="truncate">{url.replace(/^https:\/\//, "")}</span> <Copy className="h-3 w-3 shrink-0 text-muted-foreground" />
     </button>
+  );
+}
+
+/** An episode's picture: the still from its video (made for it), or one they choose. */
+function EpisodeArt({ ep, fallback, onDone }: { ep: Ep; fallback: string; onDone: () => void }) {
+  const { toast } = useToast();
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const go = async (file: File) => {
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch(`/api/host/hosting/episodes/${ep.id}/artwork`, { method: "POST", body: fd, credentials: "include" });
+      if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message || "Couldn't use that image.");
+      onDone();
+    } catch (e) {
+      toast({ title: "Picture not changed", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = "";
+    }
+  };
+  const src = ep.artworkUrl || fallback;
+  return (
+    <>
+      <input ref={input} type="file" accept="image/jpeg,image/png" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} />
+      <button type="button" onClick={() => input.current?.click()} disabled={busy} className="group relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border bg-muted" title="The episode's picture. Tap to change it." data-testid={`hosting-episode-art-${ep.id}`}>
+        {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-muted-foreground"><ImagePlus className="h-4 w-4" /></span>}
+        <span className={`absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] font-semibold text-white transition-opacity ${busy ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Change"}</span>
+      </button>
+    </>
   );
 }
 
