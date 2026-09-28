@@ -2056,7 +2056,7 @@ export type PostifyTokenRow = typeof postifyTokens.$inferSelect;
 export const podcastStats = pgTable("podcast_stats", {
   id: serial("id").primaryKey(),
   email: text("email").notNull(),
-  /** buzzsprout | podbean | spotify */
+  /** buzzsprout | podbean | transistor | spotify */
   source: text("source").notNull(),
   creds: text("creds").notNull().default(""),
   /** The show's name as the source knows it. */

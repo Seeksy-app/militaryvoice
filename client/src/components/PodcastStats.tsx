@@ -7,19 +7,20 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { PodcastStatsData } from "@shared/schema";
 
-type Source = "buzzsprout" | "podbean" | "spotify";
+type Source = "buzzsprout" | "podbean" | "transistor" | "spotify";
 interface SourceView { source: Source; showName: string; status: string; error: string; fetchedAt: string; data: PodcastStatsData | null }
 interface StatsResponse { sources: SourceView[]; benchmark: { unit: string; avg: number; percentile: number; peers: number }[] }
 
 const KEY = ["/api/host/podcast-stats"];
-const NAME: Record<Source, string> = { buzzsprout: "Buzzsprout", podbean: "Podbean", spotify: "Spotify" };
+const NAME: Record<Source, string> = { buzzsprout: "Buzzsprout", podbean: "Podbean", transistor: "Transistor", spotify: "Spotify" };
 /** Each host's own mark, as a small badge (their site icon). */
 const MARK: Record<Source, string> = {
   buzzsprout: "https://www.google.com/s2/favicons?domain=buzzsprout.com&sz=64",
   podbean: "https://www.google.com/s2/favicons?domain=podbean.com&sz=64",
+  transistor: "https://www.google.com/s2/favicons?domain=transistor.fm&sz=64",
   spotify: "https://www.google.com/s2/favicons?domain=podcasters.spotify.com&sz=64",
 };
-const COLOR: Record<Source, string> = { buzzsprout: "#1B1B1B", podbean: "#7ACB2F", spotify: "#1DB954" };
+const COLOR: Record<Source, string> = { buzzsprout: "#1B1B1B", podbean: "#7ACB2F", transistor: "#2C3E50", spotify: "#1DB954" };
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(Math.round(n)));
 const when = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "");
 const MONTH = 30 * 86400000;
@@ -49,7 +50,7 @@ export function PodcastStatsRows({ Row }: { Row: (p: { icon: ReactNode; name: st
   const file = useRef<HTMLInputElement>(null);
   const done = () => { setForm({}); setOpen(null); void qc.invalidateQueries({ queryKey: KEY }); };
   const connect = useMutation({
-    mutationFn: async (source: "buzzsprout" | "podbean") => (await apiRequest("POST", `/api/host/podcast-stats/${source}`, form)).json(),
+    mutationFn: async (source: "buzzsprout" | "podbean" | "transistor") => (await apiRequest("POST", `/api/host/podcast-stats/${source}`, form)).json(),
     onSuccess: (r: SourceView) => { toast({ title: `${NAME[r.source]} connected`, description: r.showName || "Your numbers are in Your analytics." }); done(); },
     onError: (e: Error) => toast({ title: "Couldn't connect", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
   });
@@ -81,7 +82,7 @@ export function PodcastStatsRows({ Row }: { Row: (p: { icon: ReactNode; name: st
     !r ? "Not connected"
     : r.status === "failed" ? <span className="text-destructive">{r.error}</span>
     : <><span className="font-medium text-foreground">{r.showName || "Connected"}</span>{r.data ? ` · ${compact(r.data.total)} ${r.data.unit}` : ""}{r.fetchedAt ? ` · updated ${when(r.fetchedAt)}` : ""}</>;
-  const right = (s: "buzzsprout" | "podbean") => {
+  const right = (s: "buzzsprout" | "podbean" | "transistor") => {
     const r = row(s);
     return r ? (
       <span className="flex items-center gap-1">
@@ -105,6 +106,16 @@ export function PodcastStatsRows({ Row }: { Row: (p: { icon: ReactNode; name: st
             {field("podcastId", "Podcast ID (optional)")}
             <Button type="submit" disabled={connect.isPending || !form.token} className="h-9 gap-1.5 rounded-full">{connect.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />} Connect</Button>
             <p className="text-xs text-muted-foreground sm:col-span-3">In Buzzsprout, open <span className="font-semibold text-foreground">Profile → API</span> and copy your API token. With more than one show, add the podcast's ID (the number in its Buzzsprout address). We read your download numbers only, and keep the token encrypted.</p>
+          </form>
+        )}
+      </Row>
+      <Row testId="row-transistor" icon={<Badge source="transistor" />} name="Transistor" line={status(row("transistor"))} right={right("transistor")}>
+        {open === "transistor" && (
+          <form onSubmit={(e) => { e.preventDefault(); connect.mutate("transistor"); }} className="mt-4 grid gap-3 rounded-xl bg-muted/40 p-4 sm:grid-cols-[1fr_14rem_auto] sm:items-end">
+            {field("key", "API key", true)}
+            {field("show", "Show (optional)")}
+            <Button type="submit" disabled={connect.isPending || !form.key} className="h-9 gap-1.5 rounded-full">{connect.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />} Connect</Button>
+            <p className="text-xs text-muted-foreground sm:col-span-3">In Transistor, open <span className="font-semibold text-foreground">Account → API</span> (top right, your name) and copy your API key. With more than one show, paste the show's RSS feed address (like feeds.transistor.fm/your-show) under Show. We read your download numbers only, and keep the key encrypted.</p>
           </form>
         )}
       </Row>
@@ -212,7 +223,7 @@ export function PodcastListens({ onConnect }: { onConnect: () => void }) {
         <Headphones className="h-7 w-7 shrink-0 text-[#053877] dark:text-[#8ab4f8]" />
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-foreground">See your podcast's downloads here</p>
-          <p className="text-sm text-muted-foreground">Connect Buzzsprout or Podbean, or upload your Spotify numbers, and see where your show fits among MilitaryVoices podcasts.</p>
+          <p className="text-sm text-muted-foreground">Connect Buzzsprout, Transistor or Podbean, or upload your Spotify numbers, and see where your show fits among MilitaryVoices podcasts.</p>
         </div>
         <Button variant="outline" className="gap-1.5 rounded-full" onClick={onConnect} data-testid="button-podcast-stats-connect"><Link2 className="h-4 w-4" /> Connect</Button>
       </div>

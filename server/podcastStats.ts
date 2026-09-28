@@ -12,6 +12,8 @@ import type { PodcastStatsData, PodcastStatsRow } from "../shared/schema.js";
  * - Podbean: their API client id and secret (Business plan: Settings →
  *   Advanced Options → AI & Integrations). Downloads by month for two years,
  *   and where they come from.
+ * - Transistor: their API key (Account → API). Downloads a day at a time, per
+ *   show and per episode, since the show began.
  * - Spotify: the CSVs Spotify for Creators exports. Spotify has no stats API
  *   for anyone, so it's an upload, and we ask for a new one each month.
  *
@@ -57,6 +59,50 @@ async function buzzsprout(creds: { token: string; podcastId?: string }): Promise
     showName: show.title,
     podcastId: String(show.id),
     data: { total: episodes.reduce((a, e) => a + e.count, 0), unit: "downloads", episodes, series, from: days[0], to: days[days.length - 1], artwork: /^https:\/\//.test(show.artwork_url ?? "") ? show.artwork_url : undefined },
+  };
+}
+
+// ---- Transistor ---------------------------------------------------------------
+
+/** Transistor's dates are dd-mm-yyyy. */
+const tdate = (d: Date) => `${String(d.getUTCDate()).padStart(2, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${d.getUTCFullYear()}`;
+const fromT = (s: string) => { const [dd, mm, yy] = s.split("-"); return `${yy}-${mm}-${dd}`; };
+
+async function tr<T>(key: string, path: string): Promise<T> {
+  const r = await fetch(`https://api.transistor.fm/v1/${path}`, { headers: { "x-api-key": key, "User-Agent": UA, Accept: "application/json" } });
+  if (r.status === 401 || r.status === 403) throw new StatsError("Transistor didn't accept that API key.");
+  if (r.status === 404) throw new StatsError("Transistor doesn't know that show.");
+  if (r.status === 429) throw new StatsError("Transistor asked us to slow down. Try again in a minute.");
+  if (!r.ok) throw new StatsError(`Transistor answered ${r.status}.`);
+  return r.json() as Promise<T>;
+}
+
+async function transistor(creds: { key: string; show?: string }): Promise<{ showName: string; show: string; data: PodcastStatsData }> {
+  type Show = { id: string; attributes: { title: string; slug?: string; image_url?: string; created_at?: string; feed_url?: string } };
+  const shows = (await tr<{ data: Show[] }>(creds.key, "shows?pagination[per]=50")).data ?? [];
+  // A show by its ID, its slug, or the end of its feed address (feeds.transistor.fm/<slug>).
+  const want = (creds.show ?? "").trim().replace(/\/+$/, "").split("/").pop()?.toLowerCase() ?? "";
+  const show = want ? shows.find((s) => s.id === want || s.attributes.slug?.toLowerCase() === want || (s.attributes.feed_url ?? "").toLowerCase().endsWith(`/${want}`)) : shows[0];
+  if (!show) throw new StatsError(shows.length ? "That show isn't on this Transistor account. Use its feed address or slug." : "No shows on this Transistor account.");
+  const now = new Date();
+  const began = show.attributes.created_at ? new Date(show.attributes.created_at) : new Date(now.getTime() - 5 * 365 * 86400000);
+  const range = `start_date=${tdate(began)}&end_date=${tdate(now)}`;
+  type Day = { date: string; downloads: number };
+  const all = await tr<{ data: { attributes: { downloads: Day[] } } }>(creds.key, `analytics/${show.id}?${range}`);
+  const eps = await tr<{ data: { attributes: { episodes: { title: string; published_at?: string; downloads: Day[] }[] } } }>(creds.key, `analytics/${show.id}/episodes?${range}`).catch(() => null);
+  const days = (all.data?.attributes?.downloads ?? []).map((d) => ({ date: fromT(d.date), count: Math.max(0, Number(d.downloads) || 0) })).sort((a, b) => a.date.localeCompare(b.date));
+  const episodes = (eps?.data?.attributes?.episodes ?? [])
+    .map((e) => ({ title: e.title, published: (e.published_at ?? "").slice(0, 10), count: (e.downloads ?? []).reduce((a, d) => a + (Number(d.downloads) || 0), 0) }))
+    .sort((a, b) => b.published.localeCompare(a.published));
+  const series = days.slice(-30);
+  return {
+    showName: show.attributes.title,
+    show: show.id,
+    data: {
+      total: days.reduce((a, d) => a + d.count, 0), unit: "downloads", episodes, series,
+      from: days[0]?.date, to: days[days.length - 1]?.date,
+      artwork: /^https:\/\//.test(show.attributes.image_url ?? "") ? show.attributes.image_url : undefined,
+    },
   };
 }
 
@@ -241,6 +287,10 @@ async function refresh(row: PodcastStatsRow): Promise<PodcastStatsRow> {
       const r = await buzzsprout(creds);
       return storage.upsertPodcastStats(row.email, "buzzsprout", { showName: r.showName, data: JSON.stringify(r.data), status: "ok", error: "", fetchedAt: new Date().toISOString() });
     }
+    if (row.source === "transistor") {
+      const r = await transistor(creds);
+      return storage.upsertPodcastStats(row.email, "transistor", { showName: r.showName, data: JSON.stringify(r.data), status: "ok", error: "", fetchedAt: new Date().toISOString() });
+    }
     if (row.source === "podbean") {
       const r = await podbean(creds);
       return storage.upsertPodcastStats(row.email, "podbean", { showName: r.showName, data: JSON.stringify(r.data), status: "ok", error: "", fetchedAt: new Date().toISOString() });
@@ -272,6 +322,21 @@ export function registerPodcastStats(app: Express) {
       const r = await buzzsprout({ token, podcastId: podcastId || undefined });
       const row = await storage.upsertPodcastStats(email(req), "buzzsprout", {
         creds: seal(JSON.stringify({ token, podcastId: r.podcastId })), showName: r.showName, data: JSON.stringify(r.data), status: "ok", error: "", fetchedAt: new Date().toISOString(),
+      });
+      res.json(view(row));
+    } catch (e) {
+      res.status(e instanceof StatsError ? 400 : 502).json({ message: (e as Error).message });
+    }
+  });
+
+  app.post("/api/host/podcast-stats/transistor", requireHostSession, async (req, res) => {
+    const key = String(req.body?.key ?? "").trim();
+    const show = String(req.body?.show ?? "").trim().slice(0, 300);
+    if (!key) return res.status(400).json({ message: "Paste your Transistor API key." });
+    try {
+      const r = await transistor({ key, show: show || undefined });
+      const row = await storage.upsertPodcastStats(email(req), "transistor", {
+        creds: seal(JSON.stringify({ key, show: r.show })), showName: r.showName, data: JSON.stringify(r.data), status: "ok", error: "", fetchedAt: new Date().toISOString(),
       });
       res.json(view(row));
     } catch (e) {
