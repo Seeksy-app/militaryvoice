@@ -118,6 +118,8 @@ interface Job {
   episodeAudio?: { episodeId: number; copy?: boolean; mime?: string };
   /** Ask my show: transcribe this episode (downloadUrl) so the AI can answer from it. recordingId is the transcript's id. */
   transcriptJob?: { id: number };
+  /** A still from an episode's video, for its picture. */
+  episodeStill?: { episodeId: number };
   episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut" };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
@@ -1836,6 +1838,37 @@ async function handleEpisodeAudio(job: Job): Promise<void> {
   }
 }
 
+/**
+ * An episode's picture: a still from its video, a little way in (past any
+ * intro), the most typical frame of a few seconds there so it isn't mid-blink
+ * or a black cut. The server crops it square around the people. Never throws.
+ */
+async function handleEpisodeStill(job: Job): Promise<void> {
+  const id = job.episodeStill!.episodeId;
+  const tag = `[episode ${id}] still`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `epstill-${id}-`));
+  try {
+    const out = path.join(dir, "still.jpg");
+    const dur = job.durationSec > 0 ? job.durationSec : 600;
+    let jpeg: Buffer | null = null;
+    for (const at of [Math.min(Math.max(dur * 0.12, 8), 180), dur * 0.35, dur * 0.6]) {
+      await fs.rm(out, { force: true }).catch(() => {});
+      await ffmpeg(["-ss", String(Math.floor(at)), "-i", job.downloadUrl, "-vf", "thumbnail=90,scale='min(1920,iw)':-2", "-frames:v", "1", "-q:v", "2", out]).catch(() => {});
+      const buf = await fs.readFile(out).catch(() => null);
+      // A near-empty JPEG is a black or blank frame: try further in.
+      if (buf && buf.length > 25_000) { jpeg = buf; break; }
+    }
+    if (!jpeg) throw new Error("no usable frame (audio only, or all dark)");
+    await api("POST", `/api/agent/episode-still/${id}/done`, { jpeg: jpeg.toString("base64") });
+    console.log(`${tag}: done`);
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/episode-still/${id}/failed`, {}).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 /** Ask my show: an episode's words, for the AI to answer listeners from. Never throws. */
 async function handleTranscript(job: Job): Promise<void> {
   const id = job.transcriptJob!.id;
@@ -1863,6 +1896,7 @@ async function handleTranscript(job: Job): Promise<void> {
 async function handle(job: Job): Promise<void> {
   if (job.transcriptJob) return handleTranscript(job);
   if (job.episodeAudio) return handleEpisodeAudio(job);
+  if (job.episodeStill) return handleEpisodeStill(job);
   if (job.musicMix) return handleMusic(job);
   if (job.importFrom) return handleImport(job);
   if (job.episodeEdit) return handleEpisodeEdit(job);
@@ -2123,11 +2157,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 
 async function tick(): Promise<boolean> {
-  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "episode-audio", "episode-copy", "transcript", "import", "music", "suggest"] });
+  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "episode-audio", "episode-copy", "episode-still", "transcript", "import", "music", "suggest"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  const clipJob = !(job.clipEdit || job.episodeEdit || job.episodeAudio || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits);
+  const clipJob = !(job.clipEdit || job.episodeEdit || job.episodeAudio || job.episodeStill || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits);
   if (clipJob) holding.add(job.recordingId);
   if (job.episodeEdit) editing.add(job.recordingId);
   // "Still on it", every minute: a long quiet stretch (waiting on Creatomate)

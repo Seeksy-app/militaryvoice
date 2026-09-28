@@ -128,7 +128,7 @@ import { registerMusic } from "./music.js";
 import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
-import { registerHosting, claimEpisodeAudio } from "./hosting.js";
+import { registerHosting, claimEpisodeAudio, claimEpisodeStill } from "./hosting.js";
 import { registerBioPage } from "./bioPage.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
@@ -5691,6 +5691,11 @@ export function registerRoutes(app: Express): void {
     if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("transcript")) {
       const tr = await claimTranscript().catch((err) => { console.error("Transcript claim failed:", err); return null; });
       if (tr) return res.json({ job: { recordingId: tr.id, title: tr.title, durationSec: 0, downloadUrl: tr.url, show: "", host: "", transcript: [], transcriptJob: { id: tr.id } } });
+    }
+    // Nothing else: a still from an episode's video, for its picture.
+    if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("episode-still")) {
+      const st = await claimEpisodeStill().catch((err) => { console.error("Episode still claim failed:", err); return null; });
+      if (st) return res.json({ job: { recordingId: st.id, title: st.title, durationSec: st.durationSec, downloadUrl: st.url, show: "", host: "", transcript: [], episodeStill: { episodeId: st.id } } });
     }
     // Nothing else to do: copy a moved show's episode from the old host into our storage.
     if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("episode-copy")) {

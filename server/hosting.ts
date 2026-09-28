@@ -355,7 +355,60 @@ export async function claimEpisodeAudio(mode: "convert" | "copy" = "convert"): P
   return { id: r.id, title: r.title, durationSec: r.duration_sec || rec.durationSec, recordingUrl };
 }
 
+/**
+ * An episode that's a video (uploaded, or made from a Library recording), with no picture of its own: the worker
+ * takes a still from the video for it (the page's thumbnail, and the feed's).
+ */
+export async function claimEpisodeStill(): Promise<{ id: number; title: string; durationSec: number; url: string } | null> {
+  await schemaIsReady();
+  const stale = new Date(Date.now() - 30 * 60_000).toISOString();
+  const rows = await db.execute(sql`
+    UPDATE hosted_episodes SET still_job = 'running', still_job_at = ${now()}
+    WHERE id = (
+      SELECT id FROM hosted_episodes
+      WHERE artwork_url = '' AND (recording_id IS NOT NULL OR (mime LIKE 'video/%' AND audio_key <> '')) AND audio_job NOT IN ('queued', 'running')
+        AND (still_job = '' OR (still_job = 'running' AND still_job_at < ${stale}))
+      ORDER BY id DESC LIMIT 1 FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id, title, duration_sec, recording_id, mime, audio_key`);
+  const r = (rows as unknown as { id: number; title: string; duration_sec: number; recording_id: number | null; mime: string; audio_key: string }[])[0];
+  if (!r) return null;
+  // Uploaded as a video: the episode's own file.
+  if (r.mime.startsWith("video/") && r.audio_key) return { id: r.id, title: r.title, durationSec: r.duration_sec, url: await signedRecordingUrl(r.audio_key, 6 * 3600) };
+  const rec = r.recording_id ? await storage.getRecording(r.recording_id) : undefined;
+  // An audio-only recording has no picture to take.
+  if (!rec?.url || /\.(mp3|m4a|wav|aac|ogg|flac)(\?|$)/i.test(rec.url)) {
+    await db.update(hostedEpisodes).set({ stillJob: "failed" }).where(eq(hostedEpisodes.id, r.id));
+    return null;
+  }
+  const url = /^https?:\/\//i.test(rec.url) ? rec.url : await signedRecordingUrl(rec.url, 6 * 3600);
+  return { id: r.id, title: r.title, durationSec: r.duration_sec || rec.durationSec, url };
+}
+
 export function registerHosting(app: Express, requireAgent: import("express").RequestHandler) {
+  app.post("/api/agent/episode-still/:id/done", requireAgent, async (req, res) => {
+    const id = Number(req.params.id);
+    try {
+      const buf = Buffer.from(String(req.body?.jpeg ?? ""), "base64");
+      if (buf.length < 2000) throw new Error("no picture");
+      // Square, on the people in it (Apple wants 1400 or more on a side).
+      const img = await sharp(buf).resize(1400, 1400, { fit: "cover", position: "attention" }).jpeg({ quality: 88 }).toBuffer();
+      const url = await uploadPhoto(`podcast-art/episode-${id}-${Date.now()}.jpg`, img, "image/jpeg");
+      // Only if they haven't added a picture of their own meanwhile.
+      await db.update(hostedEpisodes).set({ artworkUrl: url, stillJob: "done" }).where(and(eq(hostedEpisodes.id, id), eq(hostedEpisodes.artworkUrl, "")));
+      await db.update(hostedEpisodes).set({ stillJob: "done" }).where(eq(hostedEpisodes.id, id));
+      res.json({ ok: true, url });
+    } catch (err) {
+      console.error("Episode still failed:", (err as Error).message);
+      await db.update(hostedEpisodes).set({ stillJob: "failed" }).where(eq(hostedEpisodes.id, id));
+      res.status(400).json({ message: "Couldn't use that picture." });
+    }
+  });
+  app.post("/api/agent/episode-still/:id/failed", requireAgent, async (req, res) => {
+    await db.update(hostedEpisodes).set({ stillJob: "failed" }).where(eq(hostedEpisodes.id, Number(req.params.id)));
+    res.json({ ok: true });
+  });
+
   app.post("/api/agent/episode-audio/:id/done", requireAgent, async (req, res) => {
     const key = String(req.body?.audioKey ?? "");
     if (!/^clean\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "No audio." });
