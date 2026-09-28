@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BioFamilyView } from "@/components/BioFamilyView";
 import type { ChatMsg } from "@/components/BioPageView";
-import type { BioFamilyPublic } from "@shared/bio";
+import { bioPalette, type BioFamilyPublic } from "@shared/bio";
 
 /** militaryvoices.ai/<handle>/family/<key>: the private Family view. Not indexed. */
 export default function BioFamilyPage({ handle, fkey }: { handle: string; fkey: string }) {
@@ -26,7 +26,7 @@ export default function BioFamilyPage({ handle, fkey }: { handle: string; fkey: 
     </div>
   );
   return (
-    <div data-bio-public className="min-h-screen" style={{ background: q.data.theme.shade === "dark" ? "#0b1020" : "#f5f6fa" }}>
+    <div data-bio-public className="min-h-screen" style={{ background: bioPalette(q.data.theme).background }}>
       <BioFamilyView
         data={q.data}
         onAsk={async (x) => {

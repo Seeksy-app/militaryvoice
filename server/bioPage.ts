@@ -270,10 +270,23 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
   return {
     template: pick("template", ["classic", "bold", "minimal", "vibrant"] as const, prev.template),
     color: /^#[0-9a-f]{6}$/i.test(String(x.color)) ? String(x.color) : prev.color,
-    shade: pick("shade", ["light", "dark"] as const, prev.shade),
-    font: pick("font", ["sans", "serif", "mono"] as const, prev.font),
-    linkShape: pick("linkShape", ["pill", "rounded", "square"] as const, prev.linkShape),
-    linkStyle: pick("linkStyle", ["fill", "outline", "soft"] as const, prev.linkStyle),
+    shade: pick("shade", ["none", "minimal", "light", "tint", "dark"] as const, prev.shade),
+    font: pick("font", ["sans", "serif", "mono", "playfair", "montserrat", "poppins"] as const, prev.font),
+    linkShape: pick("linkShape", ["pill", "rounded", "square", "squircle"] as const, prev.linkShape),
+    linkStyle: pick("linkStyle", ["fill", "outline", "soft", "hard"] as const, prev.linkStyle),
+    linkColor: typeof x.linkColor === "string" ? (/^#[0-9a-f]{6}$/i.test(x.linkColor) ? x.linkColor : "") : prev.linkColor ?? "",
+    background: (() => {
+      const o = (x.background ?? {}) as Record<string, unknown>;
+      const pv = prev.background ?? { mode: "solid" as const, color: "", image: "" };
+      return {
+        mode: (["solid", "gradient", "image"] as const).includes(o.mode as "solid") ? (o.mode as "solid" | "gradient" | "image") : pv.mode,
+        color: typeof o.color === "string" ? (/^#[0-9a-f]{6}$/i.test(o.color) ? o.color : "") : pv.color,
+        image: typeof o.image === "string" ? httpUrl(o.image) : pv.image,
+      };
+    })(),
+    imageY: Number.isFinite(Number(x.imageY)) && x.imageY !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.imageY)))) : prev.imageY ?? 50,
+    avatarSize: pick("avatarSize", ["s", "m", "l"] as const, prev.avatarSize ?? "m"),
+    branding: typeof x.branding === "boolean" ? x.branding : prev.branding ?? true,
     layout: pick("layout", ["portrait", "landscape", "blend", "hero", "shape", "cutout"] as const, prev.layout),
     podcastStyle: pick("podcastStyle", ["spotlight", "list", "carousel"] as const, prev.podcastStyle),
     podcastFrame: pick("podcastFrame", ["full", "card"] as const, prev.podcastFrame),
@@ -349,7 +362,7 @@ export function registerBioPage(app: Express) {
   // The photo (square) and the cover (wide), sized for the page.
   app.post("/api/host/bio/image/:kind", requireHostSession, art.single("file"), async (req, res) => {
     const row = await pageFor(emailOf(req));
-    const kind = req.params.kind === "hero" ? "hero" : ["family", "brands"].includes(String(req.params.kind)) ? "family" : "avatar";
+    const kind = req.params.kind === "hero" ? "hero" : ["family", "brands", "bg"].includes(String(req.params.kind)) ? "family" : "avatar";
     if (!req.file) return res.status(400).json({ message: "Choose an image." });
     try {
       // A family photo: kept at its own unlisted address, added to the Family view by the builder.

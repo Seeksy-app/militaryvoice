@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Heart, Lock, Pause, Play, X } from "lucide-react";
-import { Chat, onColor, standOut, type ChatMsg } from "@/components/BioPageView";
-import type { BioFamilyPublic } from "@shared/bio";
+import { Chat, onColor, type ChatMsg } from "@/components/BioPageView";
+import { useBioFont } from "@/lib/bioFont";
+import { bioPalette, type BioFamilyPublic } from "@shared/bio";
 
 /**
  * The Family view (militaryvoices.ai/<handle>/family/<key>): a private page for
@@ -22,14 +23,9 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
   onLoadMessages?: (tokens: string[]) => Promise<ChatMsg[]>;
 }) {
   const t = data.theme;
-  const dark = t.shade === "dark";
-  const theirs = t.color.toLowerCase() === "#ffffff" && !dark ? "#053877" : t.color;
-  const accent = standOut(theirs, dark ? "#0b1020" : "#f5f6fa", dark);
-  const ink = dark ? "#ffffff" : "#0b1020";
-  const sub = dark ? "rgba(255,255,255,0.68)" : "rgba(11,16,32,0.62)";
-  const card = dark ? "rgba(255,255,255,0.07)" : "#ffffff";
-  const line = dark ? "rgba(255,255,255,0.12)" : "rgba(11,16,32,0.10)";
-  const font = t.font === "serif" ? "Georgia, 'Times New Roman', serif" : t.font === "mono" ? "'JetBrains Mono', ui-monospace, monospace" : "var(--font-sans)";
+  const pal = bioPalette(t);
+  const { theirs, paper, dark, ink, sub, card, line, accent, font } = pal;
+  useBioFont(t.font);
   const f = data.family;
   const first = data.firstName || (data.displayName || "me").split(" ")[0];
   const photo = data.family.photo || data.heroUrl || data.avatarUrl;
@@ -54,7 +50,7 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
   );
 
   return (
-    <div style={{ background: dark ? "#0b1020" : "#f5f6fa", color: ink, fontFamily: font, minHeight: "100%" }} className="relative pb-10" data-testid="bio-family">
+    <div style={{ background: pal.background, color: ink, fontFamily: font, minHeight: "100%" }} className="relative pb-10" data-testid="bio-family">
       {data.askEnabled && (
         <>
           {chat && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20`} onClick={() => setChat(false)} aria-hidden />}

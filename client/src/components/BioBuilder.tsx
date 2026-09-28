@@ -12,10 +12,11 @@ import { BioPageView } from "@/components/BioPageView";
 import { BioBrandsView } from "@/components/BioBrandsView";
 import { BioFamilyView } from "@/components/BioFamilyView";
 import { podcastWorthFor } from "@/lib/worth";
+import { useBioFont } from "@/lib/bioFont";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
-import { SWATCHES, TEMPLATES, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { SWATCHES, TEMPLATES, FONTS, bioPalette, onColor, type BioBackground, type BioFont, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
+import { X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
 /**
  * Rally Point (was "My page"): the podcaster's bio page builder. Profile, Design, Content and
@@ -266,7 +267,7 @@ export function BioBuilder() {
           {tab === "questions" && <QuestionsTab items={q.data?.questions ?? []} onChange={() => void qc.invalidateQueries({ queryKey: KEY })} />}
         </div>
         {/* The page, as listeners will see it. */}
-        <div className="min-w-0 rounded-3xl bg-[radial-gradient(circle_at_20%_10%,rgba(240,167,31,0.18),transparent_45%),radial-gradient(circle_at_85%_80%,rgba(5,56,119,0.16),transparent_50%)] p-4 ring-1 ring-border lg:sticky lg:top-20 lg:self-start">
+        <div className="min-w-0 rounded-3xl bg-white p-4 dark:bg-card ring-1 ring-border lg:sticky lg:top-20 lg:self-start">
           <div className="mb-3 flex justify-center">
             <div className="inline-flex gap-1 rounded-full border border-border bg-card p-1">
               <DropdownMenu>
@@ -329,6 +330,8 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
     { label: "Show your podcast or add a link", done: !!view.podcast || d.sections.length > 0 },
   ];
   const done = steps.filter((s) => s.done).length;
+  const [hideSteps, setHideSteps] = useState(() => { try { return localStorage.getItem("mv_bio_steps_hidden") === "1"; } catch { return false; } });
+  const dismissSteps = () => { setHideSteps(true); try { localStorage.setItem("mv_bio_steps_hidden", "1"); } catch { /* this visit */ } };
   const move = (i: number, dir: -1 | 1) => { const s = [...d.socials]; const j = i + dir; if (j < 0 || j >= s.length) return; [s[i], s[j]] = [s[j], s[i]]; change({ socials: s }); };
   const hosted = /\/feed\//.test(view.podcast?.feedUrl ?? "");
   const { toast } = useToast();
@@ -346,9 +349,13 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
   };
   return (
     <div className="space-y-4">
-      {done < steps.length && (
-        <div className="rounded-2xl border border-[#F0A71F]/40 bg-gradient-to-br from-[#F0A71F]/[0.12] to-transparent p-4" data-testid="bio-checklist">
-          <div className="flex items-center justify-between"><p className="text-sm font-bold">{steps.length - done === 1 ? "One step to go" : "Finish your page"}</p><span className="rounded-full bg-[#F0A71F] px-2 py-0.5 text-xs font-bold text-[#1a1200]">{done} of {steps.length}</span></div>
+      {done < steps.length && !hideSteps && (
+        <div className="rounded-2xl border border-[#F0A71F]/50 bg-[#FFF6E0] p-4 dark:bg-[#F0A71F]/10" data-testid="bio-checklist">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-bold">{steps.length - done === 1 ? "One step to go" : "Finish your page"}</p>
+            <span className="ml-auto rounded-full bg-[#F0A71F] px-2 py-0.5 text-xs font-bold text-[#1a1200]">{done} of {steps.length}</span>
+            <button type="button" onClick={dismissSteps} aria-label="Hide this" title="Hide this" className="flex h-7 w-7 items-center justify-center rounded-full text-[#8a5a00] hover:bg-[#F0A71F]/20 dark:text-[#F0A71F]" data-testid="bio-checklist-close"><X className="h-4 w-4" /></button>
+          </div>
           <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-[#F0A71F]/20"><div className="h-full rounded-full bg-gradient-to-r from-[#F0A71F] to-[#e08a00] transition-all" style={{ width: `${(done / steps.length) * 100}%` }} /></div>
           <ul className="mt-3 space-y-1.5">
             {steps.map((s) => <li key={s.label} className={`flex items-center gap-2 text-sm ${s.done ? "text-muted-foreground line-through" : ""}`}>{s.done ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4 text-muted-foreground/50" />} {s.label}</li>)}
@@ -521,16 +528,35 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear }: { label: 
 function DesignTab({ d, change, cutting = false }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; cutting?: boolean }) {
   const t = d.theme;
   const set = (p: Partial<BioTheme>) => change({ theme: { ...t, ...p } });
-  const [hex, setHex] = useState(t.color);
-  useEffect(() => setHex(t.color), [t.color]);
   const c = t.color;
-  const dark = t.shade === "dark";
-  const ground = dark ? "#0b1020" : "#f5f6fa";
-  const ink = dark ? "#ffffff" : "#0b1020";
-  const r = (shape: string) => (shape === "pill" ? 999 : shape === "rounded" ? 5 : 1);
+  const pal = bioPalette(t);
+  const dark = pal.dark;
+  const ground = pal.paper;
+  const ink = pal.ink;
+  const bgv = t.background ?? { mode: "solid" as const, color: "", image: "" };
+  const setBg = (p: Partial<BioBackground>) => set({ background: { ...bgv, ...p } });
+  const r = (shape: string) => (shape === "pill" ? 999 : shape === "rounded" ? 5 : shape === "squircle" ? 7 : 1);
   const mini = (style: string, shape: string, w = "w-14") => (
     <span className={`block h-3 ${w}`} style={style === "fill" ? { background: c, borderRadius: r(shape) } : style === "outline" ? { border: `1.5px solid ${c}`, borderRadius: r(shape) } : { background: dark ? "rgba(255,255,255,0.14)" : "#fff", border: "1px solid rgba(11,16,32,0.12)", borderRadius: r(shape) }} />
   );
+  const bgIn = useRef<HTMLInputElement>(null);
+  const [bgBusy, setBgBusy] = useState(false);
+  const { toast } = useToast();
+  const uploadBg = async (f: File) => {
+    setBgBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const res = await again(() => fetch("/api/host/bio/image/bg", { method: "POST", body: fd, credentials: "include" }));
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.message || "Couldn't use that image.");
+      setBg({ mode: "image", image: j.url });
+    } catch (e) {
+      toast({ title: "Background not changed", description: (e as Error).message, variant: "destructive" });
+    } finally { setBgBusy(false); if (bgIn.current) bgIn.current.value = ""; }
+  };
+  const seg = (on: boolean) => `flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${on ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`;
+  const label = (text: string, hint?: string) => <div><p className="text-sm font-semibold">{text}</p>{hint && <p className="text-xs text-muted-foreground">{hint}</p>}</div>;
   return (
     <div className="space-y-4">
       <Card icon={Palette} tone="gold" title="Template">
@@ -560,69 +586,7 @@ function DesignTab({ d, change, cutting = false }: { d: Page; change: (p: Partia
         </div>
       </Card>
 
-      <Card icon={Droplet} tone="blue" title="Your colour">
-        <div className="flex flex-wrap gap-2.5">
-          {SWATCHES.map((sw) => {
-            const on = t.color.toLowerCase() === sw.toLowerCase();
-            return (
-              <button key={sw} type="button" onClick={() => set({ color: sw })} aria-label={sw} className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-sm transition-transform hover:scale-110 ${on ? "ring-2 ring-[#053877] ring-offset-2 ring-offset-card" : "border-black/10"}`} style={{ background: sw }}>
-                {on && <Check className="h-4 w-4" style={{ color: ["#FFFFFF", "#F0A71F", "#CA8A04"].includes(sw.toUpperCase()) ? "#0b1020" : "#ffffff" }} />}
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="relative h-10 w-10 cursor-pointer overflow-hidden rounded-full border border-border shadow-sm" style={{ background: c }} title="Any colour">
-            <input type="color" value={/^#[0-9a-f]{6}$/i.test(hex) ? hex : "#F0A71F"} onChange={(e) => { setHex(e.target.value); set({ color: e.target.value }); }} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
-          </label>
-          <Input value={hex} onChange={(e) => { setHex(e.target.value); if (/^#[0-9a-f]{6}$/i.test(e.target.value)) set({ color: e.target.value }); }} className="w-28 font-mono" />
-          <span className="text-xs text-muted-foreground">Or pick any colour</span>
-        </div>
-      </Card>
-
-      <Card icon={Headphones} tone="blue" title="Your podcast">
-        <div className="grid grid-cols-3 gap-3">
-          {([["spotlight", "Spotlight", "The latest, big"], ["list", "List", "Episodes in rows"], ["carousel", "Cards", "Swipe through"]] as const).map(([v, l, n]) => {
-            const art = (cls: string) => <span className={`block shrink-0 ${cls}`} style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : `linear-gradient(135deg, ${c}, #000741)` }} />;
-            const line = (w: string) => <span className={`block h-1 ${w} rounded`} style={{ background: ink, opacity: 0.7 }} />;
-            return (
-              <Tile key={v} on={(t.podcastStyle ?? "spotlight") === v} onClick={() => set({ podcastStyle: v })} label={l} note={n} testid={`bio-podstyle-${v}`}>
-                <span className="flex h-20 flex-col gap-1 overflow-hidden rounded-lg p-1.5" style={{ background: ground }}>
-                  {v === "spotlight" ? <>{art("h-11 w-full rounded")}{line("w-3/4")}<span className="flex items-center gap-1">{art("h-3 w-3 rounded-sm")}{line("w-1/2")}</span></>
-                    : v === "list" ? [0, 1, 2, 3].map((i) => <span key={i} className="flex items-center gap-1">{art("h-3.5 w-3.5 rounded-sm")}{line(i % 2 ? "w-2/3" : "w-3/4")}</span>)
-                    : <span className="flex gap-1">{[0, 1].map((i) => <span key={i} className="flex w-[70%] shrink-0 flex-col gap-1">{art("h-12 w-full rounded")}{line("w-3/4")}</span>)}</span>}
-                </span>
-              </Tile>
-            );
-          })}
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {([["full", "Edge to edge", "Fills the screen"], ["card", "In a card", "With a margin"]] as const).map(([v, l, n]) => (
-            <Tile key={v} on={(t.podcastFrame ?? "full") === v} onClick={() => set({ podcastFrame: v })} label={l} note={n} testid={`bio-podframe-${v}`}>
-              <span className="flex h-16 flex-col overflow-hidden rounded-lg" style={{ background: ground, padding: v === "card" ? 6 : 0 }}>
-                <span className={`flex flex-1 flex-col gap-1 ${v === "card" ? "rounded-md p-1" : ""}`} style={v === "card" ? { background: dark ? "rgba(255,255,255,0.1)" : "#fff" } : {}}>
-                  <span className={`block flex-1 ${v === "card" ? "rounded-sm" : ""}`} style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : `linear-gradient(135deg, ${c}, #000741)` }} />
-                  <span className={`block h-1 w-2/3 rounded ${v === "full" ? "mx-1 mb-1" : ""}`} style={{ background: ink, opacity: 0.7 }} />
-                </span>
-              </span>
-            </Tile>
-          ))}
-        </div>
-      </Card>
-
-      <Card icon={dark ? Moon : Sun} tone="violet" title="Page and photo">
-        <p className="text-xs font-semibold text-muted-foreground">Page</p>
-        <div className="grid grid-cols-2 gap-3">
-          {([["dark", "Dark"], ["light", "Light"]] as const).map(([v, l]) => (
-            <Tile key={v} on={t.shade === v} onClick={() => set({ shade: v })} label={l}>
-              <span className="flex h-14 flex-col items-center justify-center gap-1.5 rounded-lg" style={{ background: v === "dark" ? "#0b1020" : "#f5f6fa", border: v === "light" ? "1px solid rgba(11,16,32,0.08)" : "none" }}>
-                <span className="h-1.5 w-14 rounded" style={{ background: v === "dark" ? "#fff" : "#0b1020" }} />
-                <span className="h-3 w-16 rounded-full" style={{ background: c }} />
-              </span>
-            </Tile>
-          ))}
-        </div>
-        <p className="pt-1 text-xs font-semibold text-muted-foreground">Top of the page</p>
+      <Card icon={ImagePlus} tone="violet" title="Top of the page">
         <div className="grid grid-cols-3 gap-3">
           {([["portrait", "Classic"], ["hero", "Hero"], ["cutout", "Cutout"], ["blend", "Cover photo"], ["landscape", "Banner"], ["shape", "Shape"]] as const).map(([v, l]) => {
             const face = d.avatarUrl ? `center/cover url(${d.avatarUrl})` : "#888";
@@ -641,34 +605,155 @@ function DesignTab({ d, change, cutting = false }: { d: Page; change: (p: Partia
             );
           })}
         </div>
+        {(t.layout === "blend" || t.layout === "hero" || t.layout === "landscape") && (
+          <div>
+            {label("Image position", "Move the crop up or down if it cuts off a head.")}
+            <div className="mt-2 flex items-center gap-3">
+              <span className="text-[11px] text-muted-foreground">Top</span>
+              <input type="range" min={0} max={100} step={1} value={t.imageY ?? 50} onChange={(e) => set({ imageY: Number(e.target.value) })} className="h-2 flex-1 cursor-pointer accent-[#053877]" data-testid="bio-image-y" />
+              <span className="text-[11px] text-muted-foreground">Bottom</span>
+            </div>
+          </div>
+        )}
+        {(t.layout === "portrait" || t.layout === "shape") && (
+          <div>
+            {label("Photo size")}
+            <div className="mt-2 flex gap-1 rounded-full border border-border p-1">
+              {([["s", "Small"], ["m", "Medium"], ["l", "Large"]] as const).map(([v, l]) => <button key={v} type="button" onClick={() => set({ avatarSize: v })} className={seg((t.avatarSize ?? "m") === v)} data-testid={`bio-avatar-${v}`}>{l}</button>)}
+            </div>
+          </div>
+        )}
       </Card>
 
-      <Card icon={Type} tone="green" title="Font and buttons">
-        <div className="grid grid-cols-3 gap-3">
-          {([["sans", "Modern", "var(--font-sans)"], ["serif", "Classic", "Georgia, serif"], ["mono", "Typewriter", "'JetBrains Mono', monospace"]] as const).map(([v, l, f]) => (
-            <Tile key={v} on={t.font === v} onClick={() => set({ font: v })} label={l}>
-              <span className="flex h-14 items-center justify-center rounded-lg bg-muted/60 text-3xl font-bold" style={{ fontFamily: f }}>Aa</span>
-            </Tile>
-          ))}
+      <Card icon={Droplet} tone="blue" title="Colours">
+        {label("Theme colour", "Headings, badges and buttons.")}
+        <ColourPick value={t.color} onPick={(v) => set({ color: v })} testid="bio-colour" />
+        <div className="border-t border-border pt-3">
+          {label("Link colour", "Your link buttons.")}
         </div>
-        <div className="grid grid-cols-3 gap-3">
-          {([["pill", "Pill"], ["rounded", "Rounded"], ["square", "Square"]] as const).map(([v, l]) => (
-            <Tile key={v} on={t.linkShape === v} onClick={() => set({ linkShape: v })} label={l}>
-              <span className="flex h-14 items-center justify-center rounded-lg bg-muted/60"><span className="h-6 w-16" style={{ background: c, borderRadius: r(v) }} /></span>
-            </Tile>
-          ))}
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          {([["fill", "Filled"], ["outline", "Outline"], ["soft", "Card"]] as const).map(([v, l]) => (
-            <Tile key={v} on={t.linkStyle === v} onClick={() => set({ linkStyle: v })} label={l}>
-              <span className="flex h-14 items-center justify-center rounded-lg" style={{ background: ground }}>
-                <span className="h-6 w-16" style={v === "fill" ? { background: c, borderRadius: r(t.linkShape) } : v === "outline" ? { border: `2px solid ${c}`, borderRadius: r(t.linkShape) } : { background: dark ? "rgba(255,255,255,0.14)" : "#fff", border: "1px solid rgba(11,16,32,0.12)", borderRadius: r(t.linkShape) }} />
+        <ColourPick value={t.linkColor || t.color} onPick={(v) => set({ linkColor: v })} testid="bio-link-colour" />
+        {t.linkColor && <button type="button" onClick={() => set({ linkColor: "" })} className="w-fit rounded-full border border-[#053877]/40 px-3 py-1.5 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]">Reset to theme colour</button>}
+      </Card>
+
+      <Card icon={dark ? Moon : Sun} tone="gold" title="Page">
+        {label("Shade", "How light or dark the page is.")}
+        <div className="grid grid-cols-5 gap-2">
+          {([["none", "None", "#ffffff"], ["minimal", "Minimal", "#f9fafb"], ["light", "Light", "#f3f4f6"], ["tint", "Tint", `${c}22`], ["dark", "Dark", "#0b1020"]] as const).map(([v, l, bgc]) => (
+            <Tile key={v} on={(t.shade as string) === v} onClick={() => set({ shade: v, ...(bgv.mode === "solid" && bgv.color ? { background: { ...bgv, color: "" } } : {}) })} label={l} testid={`bio-shade-${v}`}>
+              <span className="flex h-10 flex-col items-center justify-center gap-1 rounded-lg border border-black/5" style={{ background: bgc }}>
+                <span className="h-1 w-7 rounded" style={{ background: v === "dark" ? "#fff" : "#0b1020", opacity: 0.7 }} />
+                <span className="h-1 w-5 rounded" style={{ background: v === "dark" ? "#fff" : "#0b1020", opacity: 0.4 }} />
               </span>
             </Tile>
           ))}
         </div>
+        <div className="border-t border-border pt-3">{label("Background")}</div>
+        <div className="flex gap-1 rounded-full border border-border p-1">
+          {(["solid", "gradient", "image"] as const).map((m) => <button key={m} type="button" onClick={() => setBg({ mode: m })} className={`${seg(bgv.mode === m)} capitalize`} data-testid={`bio-bg-${m}`}>{m}</button>)}
+        </div>
+        {bgv.mode === "solid" && (
+          <>
+            <ColourPick value={bgv.color || pal.paper} onPick={(v) => setBg({ color: v })} testid="bio-bg-colour" />
+            {bgv.color && <button type="button" onClick={() => setBg({ color: "" })} className="w-fit rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">Use the shade's colour</button>}
+          </>
+        )}
+        {bgv.mode === "gradient" && (
+          <>
+            <div className="h-16 w-full rounded-xl border border-border" style={{ background: pal.background }} />
+            <p className="text-[11px] text-muted-foreground">From your theme colour at the top, down to:</p>
+            <ColourPick value={bgv.color || pal.paper} onPick={(v) => setBg({ color: v })} testid="bio-bg-gradient" />
+          </>
+        )}
+        {bgv.mode === "image" && (
+          <>
+            <input ref={bgIn} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void uploadBg(e.target.files[0])} />
+            <button type="button" onClick={() => bgIn.current?.click()} className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border p-4 transition-colors hover:border-[#053877]" data-testid="bio-bg-upload">
+              {bgv.image ? <img src={bgv.image} alt="" className="h-24 w-full rounded-lg object-cover" /> : bgBusy ? <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /> : <ImagePlus className="h-7 w-7 text-muted-foreground" />}
+              <span className="text-xs font-semibold text-muted-foreground">{bgv.image ? "Change image" : "Upload an image"}</span>
+            </button>
+            <p className="text-[11px] text-muted-foreground">Dark shade puts a dark wash over it; the others, a light one, so your words stay readable.</p>
+            {bgv.image && <button type="button" onClick={() => setBg({ image: "", mode: "solid" })} className="w-fit text-xs font-semibold text-destructive">Remove image</button>}
+          </>
+        )}
+      </Card>
+
+      <Card icon={Type} tone="green" title="Font">
+        <div className="space-y-2">
+          {(Object.keys(FONTS) as BioFont[]).map((f) => (
+            <FontRow key={f} font={f} on={t.font === f} onPick={() => set({ font: f })} />
+          ))}
+        </div>
+      </Card>
+
+      <Card icon={Layers} tone="blue" title="Buttons">
+        {label("Shape")}
+        <div className="grid grid-cols-4 gap-2">
+          {([["pill", "Pill"], ["rounded", "Rounded"], ["square", "Square"], ["squircle", "Squircle"]] as const).map(([v, l]) => (
+            <Tile key={v} on={t.linkShape === v} onClick={() => set({ linkShape: v })} label={l} testid={`bio-shape-${v}`}>
+              <span className="flex h-12 items-center justify-center rounded-lg bg-muted/60"><span className="h-6 w-14" style={{ background: t.linkColor || c, borderRadius: r(v) }} /></span>
+            </Tile>
+          ))}
+        </div>
+        {label("Style")}
+        <div className="grid grid-cols-2 gap-2">
+          {([["fill", "Fill"], ["outline", "Outline"], ["soft", "Soft shadow"], ["hard", "Hard shadow"]] as const).map(([v, l]) => {
+            const lc = t.linkColor || c;
+            return (
+              <Tile key={v} on={t.linkStyle === v} onClick={() => set({ linkStyle: v })} label={l} testid={`bio-style-${v}`}>
+                <span className="flex h-14 items-center justify-center rounded-lg" style={{ background: ground }}>
+                  <span className="flex h-8 w-28 items-center justify-center text-[11px] font-semibold" style={v === "fill" ? { background: lc, color: onColor(lc), borderRadius: r(t.linkShape) } : v === "outline" ? { border: `2px solid ${lc}`, color: ink, borderRadius: r(t.linkShape) } : v === "hard" ? { background: dark ? "#141a2c" : "#fff", border: `2px solid ${dark ? "#fff" : "#0b1020"}`, boxShadow: `3px 3px 0 ${lc}`, color: ink, borderRadius: r(t.linkShape) } : { background: dark ? "rgba(255,255,255,0.1)" : "#fff", boxShadow: "0 4px 12px rgba(11,16,32,0.14)", color: ink, borderRadius: r(t.linkShape) }}>Sample</span>
+                </span>
+              </Tile>
+            );
+          })}
+        </div>
+      </Card>
+
+      <Card icon={Sparkles} tone="violet" title="Branding">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+          <div><p className="text-sm font-semibold">Show "Made with MilitaryVoices.ai"</p><p className="text-xs text-muted-foreground">A small line at the foot of your page.</p></div>
+          <Switch checked={t.branding ?? true} onCheckedChange={(v) => set({ branding: v })} data-testid="bio-branding" />
+        </div>
       </Card>
     </div>
+  );
+}
+
+/** A colour: the swatches, and any colour by picker or hex. */
+function ColourPick({ value, onPick, testid }: { value: string; onPick: (v: string) => void; testid?: string }) {
+  const [hex, setHex] = useState(value);
+  useEffect(() => setHex(value), [value]);
+  return (
+    <div className="space-y-2.5" data-testid={testid}>
+      <div className="grid grid-cols-8 gap-2">
+        {SWATCHES.map((sw) => {
+          const on = value.toLowerCase() === sw.toLowerCase();
+          return (
+            <button key={sw} type="button" onClick={() => onPick(sw)} aria-label={sw} className={`flex aspect-square w-full items-center justify-center rounded-full border shadow-sm transition-transform hover:scale-110 ${on ? "ring-2 ring-[#053877] ring-offset-2 ring-offset-card" : "border-black/10"}`} style={{ background: sw }}>
+              {on && <Check className="h-4 w-4" style={{ color: onColor(sw) }} />}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="relative h-9 w-9 shrink-0 cursor-pointer overflow-hidden rounded-full border border-border shadow-sm" style={{ background: /^#[0-9a-f]{6}$/i.test(hex) ? hex : value }} title="Any colour">
+          <input type="color" value={/^#[0-9a-f]{6}$/i.test(hex) ? hex : "#F0A71F"} onChange={(e) => { setHex(e.target.value); onPick(e.target.value); }} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" />
+        </label>
+        <Input value={hex} onChange={(e) => { setHex(e.target.value); if (/^#[0-9a-f]{6}$/i.test(e.target.value)) onPick(e.target.value); }} className="h-9 flex-1 font-mono uppercase" maxLength={7} />
+      </div>
+    </div>
+  );
+}
+
+/** A typeface, shown in itself. */
+function FontRow({ font, on, onPick }: { font: BioFont; on: boolean; onPick: () => void }) {
+  useBioFont(font);
+  const f = FONTS[font];
+  return (
+    <button type="button" onClick={onPick} className={`flex w-full items-center justify-between rounded-2xl border-2 px-4 py-3 text-left transition-all ${on ? "border-[#053877] bg-[#053877]/[0.05] dark:border-[#8fb5e8]" : "border-border hover:border-[#053877]/40"}`} style={{ fontFamily: f.css }} data-testid={`bio-font-${font}`}>
+      <span className="text-[15px]">{f.label}</span>
+      <span className="flex items-center gap-2"><span className="text-2xl font-bold">Aa</span>{on && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#053877] text-white"><Check className="h-3 w-3" /></span>}</span>
+    </button>
   );
 }
 
@@ -746,10 +831,12 @@ function ContentTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: b
   );
 }
 
-/** Your podcast, always first: its options (the look, Spotlight, List or Cards, is in Design). */
+/** Your podcast, always first: open it to design it (its look, frame, heading, episodes and buttons). */
 function PodcastBlock({ d, change, open, toggle }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; open: boolean; toggle: () => void }) {
   const o = { ...DEFAULT_PODCAST, ...(d.theme.podcast ?? {}) };
   const set = (p: Partial<BioPodcastOptions>, now = false) => change({ theme: { ...d.theme, podcast: { ...o, ...p } } }, now);
+  const setTheme = (p: Partial<BioTheme>) => change({ theme: { ...d.theme, ...p } }, true);
+  const pal = bioPalette(d.theme);
   const pill = (on: boolean) => `rounded-full border-2 px-3 py-1.5 text-xs font-semibold transition-colors ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border text-muted-foreground hover:border-[#053877]/40"}`;
   return (
     <div className={`overflow-hidden rounded-2xl ${o.on ? "" : "opacity-70"}`} data-testid="bio-podcast-block">
@@ -777,7 +864,36 @@ function PodcastBlock({ d, change, open, toggle }: { d: Page; change: (p: Partia
             </div>
             <p className="mt-1.5 text-[11px] text-muted-foreground">Apple and Spotify show once you add your show's links on the Podcast screen.</p>
           </div>
-          <p className="text-[11px] text-muted-foreground">Spotlight, List or Cards, and edge to edge, are in Design.</p>
+          <div>
+            <p className="mb-1.5 text-sm font-semibold">Look</p>
+            <div className="grid grid-cols-3 gap-2">
+              {([["spotlight", "Spotlight", "The latest, big"], ["list", "List", "Episodes in rows"], ["carousel", "Cards", "Swipe through"]] as const).map(([v, l, n]) => {
+                const art = (cls: string) => <span className={`block shrink-0 ${cls}`} style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : `linear-gradient(135deg, ${d.theme.color}, #000741)` }} />;
+                const ln = (w: string) => <span className={`block h-1 ${w} rounded`} style={{ background: pal.ink, opacity: 0.7 }} />;
+                return (
+                  <Tile key={v} on={(d.theme.podcastStyle ?? "spotlight") === v} onClick={() => setTheme({ podcastStyle: v })} label={l} note={n} testid={`bio-podstyle-${v}`}>
+                    <span className="flex h-20 flex-col gap-1 overflow-hidden rounded-lg p-1.5" style={{ background: pal.paper }}>
+                      {v === "spotlight" ? <>{art("h-11 w-full rounded")}{ln("w-3/4")}<span className="flex items-center gap-1">{art("h-3 w-3 rounded-sm")}{ln("w-1/2")}</span></>
+                        : v === "list" ? [0, 1, 2, 3].map((i) => <span key={i} className="flex items-center gap-1">{art("h-3.5 w-3.5 rounded-sm")}{ln(i % 2 ? "w-2/3" : "w-3/4")}</span>)
+                        : <span className="flex gap-1">{[0, 1].map((i) => <span key={i} className="flex w-[70%] shrink-0 flex-col gap-1">{art("h-12 w-full rounded")}{ln("w-3/4")}</span>)}</span>}
+                    </span>
+                  </Tile>
+                );
+              })}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {([["full", "Edge to edge", "Fills the screen"], ["card", "In a card", "With a margin"]] as const).map(([v, l, n]) => (
+              <Tile key={v} on={(d.theme.podcastFrame ?? "full") === v} onClick={() => setTheme({ podcastFrame: v })} label={l} note={n} testid={`bio-podframe-${v}`}>
+                <span className="flex h-14 flex-col overflow-hidden rounded-lg" style={{ background: pal.paper, padding: v === "card" ? 6 : 0 }}>
+                  <span className={`flex flex-1 flex-col gap-1 ${v === "card" ? "rounded-md p-1" : ""}`} style={v === "card" ? { background: pal.dark ? "rgba(255,255,255,0.1)" : "#fff" } : {}}>
+                    <span className={`block flex-1 ${v === "card" ? "rounded-sm" : ""}`} style={{ background: d.avatarUrl ? `center/cover url(${d.avatarUrl})` : `linear-gradient(135deg, ${d.theme.color}, #000741)` }} />
+                    <span className={`block h-1 w-2/3 rounded ${v === "full" ? "mx-1 mb-1" : ""}`} style={{ background: pal.ink, opacity: 0.7 }} />
+                  </span>
+                </span>
+              </Tile>
+            ))}
+          </div>
         </div>
       )}
     </div>

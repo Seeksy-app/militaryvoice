@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Calendar, Check, Copy, MessageCircle, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
-import { DEFAULT_PODCAST, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
+import { DEFAULT_PODCAST, bioPalette, onColor, standOut, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
+import { useBioFont } from "@/lib/bioFont";
 import type { SocialPlatform } from "@shared/schema";
 
 /**
@@ -15,20 +16,7 @@ type Ev = (kind: "view" | "click" | "play" | "share", label?: string) => void;
 
 const hms = (sec: number) => { const s = Math.round(sec); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
 const dateOf = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "");
-/** Black or white text, whichever reads on this colour. */
-function lum(hex: string): number {
-  const n = parseInt(hex.slice(1), 16);
-  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-export function onColor(hex: string): string {
-  return lum(hex) > 0.45 ? "#0b1020" : "#ffffff";
-}
-/** Their colour, unless it would vanish into the page behind it (navy on a dark page): then white, or navy on a light one. */
-export function standOut(color: string, page: string, dark: boolean): string {
-  const [a, b] = [lum(color), lum(page)];
-  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 2.4 ? color : dark ? "#ffffff" : "#053877";
-}
+export { onColor, standOut };
 const youtubeEmbed = (u: string) => {
   const m = u.match(/(?:youtu\.be\/|v=|shorts\/|embed\/|live\/)([\w-]{11})/);
   if (m) return `https://www.youtube-nocookie.com/embed/${m[1]}`;
@@ -56,21 +44,17 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   shareBase: string;
 }) {
   const t = data.theme;
-  const dark = t.shade === "dark";
-  const theirs = t.color.toLowerCase() === "#ffffff" && !dark ? "#053877" : t.color;
-  // Buttons, bubbles and marks sit on the page, so they take a colour that shows on it.
-  const accent = standOut(theirs, dark ? "#0b1020" : "#f5f6fa", dark);
-  const ink = dark ? "#ffffff" : "#0b1020";
-  const sub = dark ? "rgba(255,255,255,0.68)" : "rgba(11,16,32,0.62)";
-  const card = dark ? "rgba(255,255,255,0.07)" : "#ffffff";
-  const line = dark ? "rgba(255,255,255,0.12)" : "rgba(11,16,32,0.10)";
-  const bg = t.template === "vibrant" ? `linear-gradient(180deg, ${theirs} 0%, ${dark ? "#0b1020" : "#f7f8fb"} 70%)` : dark ? "#0b1020" : "#f5f6fa";
-  const radius = t.linkShape === "pill" ? 9999 : t.linkShape === "rounded" ? 14 : 4;
-  const font = t.font === "serif" ? "Georgia, 'Times New Roman', serif" : t.font === "mono" ? "'JetBrains Mono', ui-monospace, monospace" : "var(--font-sans)";
+  // The page's colours, from the theme (shade, background, their colour, the link colour); see bioPalette.
+  const pal = bioPalette(t);
+  const { theirs, paper, dark, ink, sub, card, line, accent, link, font, radius } = pal;
+  const bg = pal.background;
+  useBioFont(t.font);
+  const Y = Number.isFinite(t.imageY) ? t.imageY : 50;
   const btn = (primary = true): React.CSSProperties => t.linkStyle === "fill" && primary
-    ? { background: accent, color: onColor(accent), borderRadius: radius }
-    : t.linkStyle === "outline" ? { border: `2px solid ${accent}`, color: ink, borderRadius: radius, background: "transparent" }
-    : { background: card, color: ink, borderRadius: radius, border: `1px solid ${line}`, boxShadow: dark ? "none" : "0 2px 10px rgba(11,16,32,0.06)" };
+    ? { background: link, color: onColor(link), borderRadius: radius }
+    : t.linkStyle === "outline" ? { border: `2px solid ${link}`, color: ink, borderRadius: radius, background: "transparent" }
+    : t.linkStyle === "hard" ? { background: dark ? "#141a2c" : "#ffffff", color: ink, borderRadius: radius, border: `2px solid ${dark ? "rgba(255,255,255,0.85)" : "#0b1020"}`, boxShadow: `4px 4px 0 ${link}` }
+    : { background: card, color: ink, borderRadius: radius, border: `1px solid ${line}`, boxShadow: dark ? "0 6px 18px rgba(0,0,0,0.35)" : "0 6px 18px rgba(11,16,32,0.10)" };
   const photo = data.heroUrl || data.avatarUrl;
   const [copied, setCopied] = useState<string | null>(null);
   const ev: Ev = (k, l) => { if (!preview) onEvent?.(k, l); };
@@ -119,15 +103,15 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
           a banner with the photo over it (landscape), a shaped photo (shape) or a round one (portrait). */}
       {t.layout === "cutout" && data.cutoutUrl ? (
         <>
-          <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `radial-gradient(120% 80% at 50% 30%, ${theirs} 0%, ${theirs} 45%, ${dark ? "#0b1020" : "#e9ecf3"} 100%)` }} data-testid="bio-cutout-header">
+          <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `radial-gradient(120% 80% at 50% 30%, ${theirs} 0%, ${theirs} 45%, ${paper} 100%)` }} data-testid="bio-cutout-header">
             <h1 className="absolute inset-x-0 top-16 z-0 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName, color: onColor(theirs), opacity: 0.92 }}>{data.displayName || "Your name"}</h1>
             <img src={data.cutoutUrl} alt="" className="relative z-10 mx-auto block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" />
-            <div className="absolute inset-x-0 bottom-0 z-20 h-24" style={{ background: `linear-gradient(to bottom, transparent, ${dark ? "#0b1020" : "#f5f6fa"})` }} />
+            <div className="absolute inset-x-0 bottom-0 z-20 h-24" style={{ background: `linear-gradient(to bottom, transparent, ${paper})` }} />
           </div>
           <div className="relative z-30 mx-auto -mt-4 max-w-[560px] px-5 text-center">{who(false, true)}</div>
         </>
       ) : t.layout === "hero" && photo ? (
-        <div className="relative flex min-h-[600px] flex-col justify-end" style={{ background: `center 20%/cover url(${photo})` }} data-testid="bio-hero-header">
+        <div className="relative flex min-h-[600px] flex-col justify-end" style={{ background: `center ${Y}%/cover url(${photo})` }} data-testid="bio-hero-header">
           <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.55) 70%, ${t.template === "vibrant" ? theirs : dark ? "#0b1020" : "rgba(0,0,0,0.85)"} 100%)` }} />
           <div className="relative mx-auto w-full max-w-[560px] px-5 pb-8 text-center text-white">{who(true)}</div>
         </div>
@@ -135,23 +119,23 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
         <>
           {t.layout === "blend" && photo ? (
             <div className="relative">
-              <img src={photo} alt="" className="h-[340px] w-full object-cover" />
-              <div className="absolute inset-x-0 bottom-0 h-40" style={{ background: `linear-gradient(to bottom, transparent, ${t.template === "vibrant" ? theirs : dark ? "#0b1020" : "#f5f6fa"})` }} />
+              <img src={photo} alt="" className="h-[340px] w-full object-cover" style={{ objectPosition: `center ${Y}%` }} />
+              <div className="absolute inset-x-0 bottom-0 h-40" style={{ background: `linear-gradient(to bottom, transparent, ${t.template === "vibrant" && !t.background?.color ? theirs : paper})` }} />
             </div>
           ) : t.layout === "landscape" ? (
             <div className="relative">
-              <div className="h-36 w-full" style={{ background: data.heroUrl ? `center/cover url(${data.heroUrl})` : `linear-gradient(135deg, ${theirs}, #000741)` }} />
-              {data.avatarUrl && <img src={data.avatarUrl} alt="" className="absolute -bottom-12 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full object-cover" style={{ boxShadow: `0 0 0 4px ${dark ? "#0b1020" : "#f5f6fa"}` }} />}
+              <div className="h-40 w-full" style={{ background: data.heroUrl ? `center ${Y}%/cover url(${data.heroUrl})` : `linear-gradient(135deg, ${theirs}, #000741)` }} />
+              {data.avatarUrl && <img src={data.avatarUrl} alt="" className="absolute -bottom-12 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full object-cover" style={{ boxShadow: `0 0 0 4px ${paper}` }} />}
             </div>
           ) : t.layout === "shape" && data.avatarUrl ? (
             <div className="flex justify-center pt-12">
-              <div className="relative h-44 w-44">
+              <div className="relative" style={{ width: { s: 144, m: 176, l: 208 }[t.avatarSize ?? "m"], height: { s: 144, m: 176, l: 208 }[t.avatarSize ?? "m"] }}>
                 <span className="absolute -inset-3 rotate-12" style={{ background: accent, borderRadius: "58% 42% 38% 62% / 45% 55% 45% 55%", opacity: 0.9 }} />
                 <img src={data.avatarUrl} alt="" className="relative h-full w-full object-cover" style={{ borderRadius: "42% 58% 63% 37% / 52% 38% 62% 48%" }} />
               </div>
             </div>
           ) : (
-            data.avatarUrl && <div className="flex justify-center pt-10"><img src={data.avatarUrl} alt="" className="h-28 w-28 rounded-full object-cover" style={{ boxShadow: `0 0 0 4px ${accent}` }} /></div>
+            data.avatarUrl && <div className="flex justify-center pt-10"><img src={data.avatarUrl} alt="" className="rounded-full object-cover" style={{ width: { s: 88, m: 112, l: 144 }[t.avatarSize ?? "m"], height: { s: 88, m: 112, l: 144 }[t.avatarSize ?? "m"], boxShadow: `0 0 0 4px ${accent}` }} /></div>
           )}
           <div className={`mx-auto max-w-[560px] px-5 text-center ${t.layout === "blend" && photo ? "-mt-12 relative" : t.layout === "landscape" ? "pt-14" : t.layout === "shape" ? "pt-7" : "pt-4"}`}>{who(false)}</div>
         </>
@@ -162,7 +146,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
         {data.ai?.enabled && <AskShow name={data.displayName} episodes={data.ai.episodes} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} onAskAi={onAskAi} onMessage={data.askEnabled ? () => setChat(true) : undefined} />}
         {data.sections.map((s) => <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} />)}
         {data.brandsOn && <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : `/${data.handle}/brands`} className="font-semibold hover:underline" data-testid="bio-for-brands">For brands: sponsor this show</a></p>}
-        <p className={`${data.brandsOn ? "mt-1" : "mt-4"} text-center text-xs`} style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>
+        {(t.branding ?? true) && <p className={`${data.brandsOn ? "mt-1" : "mt-4"} text-center text-xs`} style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>}
       </div>
     </div>
   );

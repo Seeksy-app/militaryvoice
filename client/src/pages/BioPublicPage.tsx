@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BioPageView, type ChatMsg } from "@/components/BioPageView";
 import NotFound from "@/pages/not-found";
-import type { BioPublic } from "@shared/bio";
+import { bioPalette, type BioPublic } from "@shared/bio";
 
 /** militaryvoices.ai/<handle>: a podcaster's page, as the builder previews it. */
 export default function BioPublicPage({ handle }: { handle: string }) {
@@ -25,7 +25,7 @@ export default function BioPublicPage({ handle }: { handle: string }) {
   if (q.isLoading) return <div className="min-h-screen bg-[#0b1020]" />;
   if (!q.data) return <NotFound />;
   return (
-    <div data-bio-public className="min-h-screen" style={{ background: q.data.theme.shade === "dark" ? "#0b1020" : "#f5f6fa" }}>
+    <div data-bio-public className="min-h-screen" style={{ background: bioPalette(q.data.theme).background }}>
       <BioPageView
         data={q.data}
         shareBase={`${window.location.origin}/${q.data.handle}`}

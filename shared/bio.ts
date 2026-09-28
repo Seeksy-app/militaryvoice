@@ -5,10 +5,13 @@
  */
 
 export type BioTemplate = "classic" | "bold" | "minimal" | "vibrant";
-export type BioShade = "light" | "dark";
-export type BioFont = "sans" | "serif" | "mono";
-export type BioLinkShape = "pill" | "rounded" | "square";
-export type BioLinkStyle = "fill" | "outline" | "soft";
+/** The page's tone: plain white, a hint of grey, light grey, a tint of their colour, or dark. */
+export type BioShade = "none" | "minimal" | "light" | "tint" | "dark";
+export type BioFont = "sans" | "serif" | "mono" | "playfair" | "montserrat" | "poppins";
+export type BioLinkShape = "pill" | "rounded" | "square" | "squircle";
+/** soft = a white card with a soft shadow; hard = a card with a solid offset shadow in the link colour. */
+export type BioLinkStyle = "fill" | "outline" | "soft" | "hard";
+export interface BioBackground { mode: "solid" | "gradient" | "image"; /** "" = the shade's own */ color: string; image: string }
 export type BioLayout = "portrait" | "landscape" | "blend" | "hero" | "shape" | "cutout";
 /** The podcast edge to edge (full) or in a card with a margin (card). */
 export type BioPodcastFrame = "full" | "card";
@@ -28,6 +31,15 @@ export interface BioTheme {
   podcastFrame: BioPodcastFrame;
   /** The podcast section's own options. */
   podcast: BioPodcastOptions;
+  /** The link buttons' colour ("" = the theme colour). */
+  linkColor: string;
+  background: BioBackground;
+  /** Where the cover, hero or banner photo is cropped, top (0) to bottom (100). */
+  imageY: number;
+  /** The round (or shaped) photo's size. */
+  avatarSize: "s" | "m" | "l";
+  /** "Made with MilitaryVoices.ai" at the foot. */
+  branding: boolean;
 }
 
 export interface BioPodcastOptions {
@@ -210,14 +222,84 @@ export const TEMPLATES: Record<BioTemplate, { label: string; note: string; theme
   vibrant: { label: "Vibrant", note: "Your colour behind everything", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "landscape" } },
 };
 
-export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight", podcastFrame: "full", podcast: DEFAULT_PODCAST };
+export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight", podcastFrame: "full", podcast: DEFAULT_PODCAST, linkColor: "", background: { mode: "solid", color: "", image: "" }, imageY: 50, avatarSize: "m", branding: true };
 
-export const SWATCHES = ["#F0A71F", "#053877", "#0A4A99", "#DC2626", "#991B1B", "#EA580C", "#CA8A04", "#16A34A", "#0D9488", "#7C3AED", "#DB2777", "#111827", "#6B7280", "#FFFFFF"];
+/** MilCrunch's fourteen (white, the greys, black, the reds, orange, gold, pink, purple, navy, teal, green) and our gold and navy. */
+export const SWATCHES = [
+  "#FFFFFF", "#D1D5DB", "#9CA3AF", "#6B7280", "#000000", "#991B1B", "#DC2626", "#EA580C",
+  "#CA8A04", "#F0A71F", "#DB2777", "#7C3AED", "#1E3A8A", "#053877", "#0D9488", "#16A34A",
+];
+
+/** The typefaces, as CSS, and the Google Fonts family to load (none for the site's own). */
+export const FONTS: Record<BioFont, { label: string; css: string; google?: string }> = {
+  sans: { label: "Inter", css: "var(--font-sans)" },
+  serif: { label: "Merriweather", css: "'Merriweather', Georgia, serif", google: "Merriweather:wght@400;700;900" },
+  mono: { label: "IBM Plex Mono", css: "'IBM Plex Mono', ui-monospace, monospace", google: "IBM+Plex+Mono:wght@400;600;700" },
+  playfair: { label: "Playfair Display", css: "'Playfair Display', Georgia, serif", google: "Playfair+Display:wght@400;700;900" },
+  montserrat: { label: "Montserrat", css: "'Montserrat', sans-serif", google: "Montserrat:wght@400;600;800" },
+  poppins: { label: "Poppins", css: "'Poppins', sans-serif", google: "Poppins:wght@400;600;800" },
+};
+
+export const LINK_RADIUS: Record<BioLinkShape, number> = { pill: 9999, rounded: 14, square: 3, squircle: 20 };
+
+// ---- Colour -------------------------------------------------------------------------
+
+const HEX = /^#[0-9a-f]{6}$/i;
+export function lum(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+export function onColor(hex: string): string {
+  return lum(hex) > 0.45 ? "#0b1020" : "#ffffff";
+}
+/** Their colour, unless it would vanish into the page behind it (navy on a dark page): then white, or navy on a light one. */
+export function standOut(color: string, page: string, dark: boolean): string {
+  const [a, b] = [lum(color), lum(page)];
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 2.4 ? color : dark ? "#ffffff" : "#053877";
+}
+function mix(a: string, b: string, t: number): string {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const ch = (x: number, y: number) => Math.round(x + (y - x) * t);
+  const r = ch((pa >> 16) & 255, (pb >> 16) & 255), g = ch((pa >> 8) & 255, (pb >> 8) & 255), bl = ch(pa & 255, pb & 255);
+  return `#${((1 << 24) | (r << 16) | (g << 8) | bl).toString(16).slice(1)}`;
+}
+
+/**
+ * Everything the page is painted with, from the theme: the page colour and
+ * what sits behind it (a solid, a gradient from their colour, or a photo under
+ * a scrim), whether it reads dark, the ink, and the colours that must show on it.
+ */
+export function bioPalette(t: BioTheme) {
+  const theirs = HEX.test(t.color) ? t.color : "#F0A71F";
+  const shade = (t.shade as string) ?? "light";
+  const base = shade === "none" ? "#ffffff" : shade === "minimal" ? "#f9fafb" : shade === "tint" ? mix("#ffffff", theirs, 0.1) : shade === "dark" ? "#0b1020" : "#f5f6fa";
+  const bg = t.background ?? { mode: "solid", color: "", image: "" };
+  const chosen = HEX.test(bg.color) ? bg.color : "";
+  const paper = bg.mode !== "image" && chosen ? chosen : base;
+  const dark = bg.mode === "image" ? shade === "dark" : lum(paper) < 0.3;
+  let background = paper;
+  // A soft wash of their colour at the top, as MilCrunch does, so the words stay readable on it.
+  if (bg.mode === "gradient") background = `linear-gradient(180deg, ${mix(paper, theirs, dark ? 0.45 : 0.3)} 0%, ${paper} 65%)`;
+  else if (bg.mode === "image" && /^https?:\/\//.test(bg.image)) background = `linear-gradient(${dark ? "rgba(11,16,32,0.62)" : "rgba(255,255,255,0.7)"}, ${dark ? "rgba(11,16,32,0.62)" : "rgba(255,255,255,0.7)"}), center/cover no-repeat url(${bg.image})`;
+  else if (t.template === "vibrant" && !chosen) background = `linear-gradient(180deg, ${theirs} 0%, ${dark ? "#0b1020" : "#f7f8fb"} 70%)`;
+  const ink = dark ? "#ffffff" : "#0b1020";
+  const accent = standOut(theirs === "#ffffff" && !dark ? "#053877" : theirs, paper, dark);
+  const link = HEX.test(t.linkColor ?? "") ? standOut(t.linkColor, paper, dark) : accent;
+  return {
+    theirs, paper, background, dark, ink, accent, link,
+    sub: dark ? "rgba(255,255,255,0.68)" : "rgba(11,16,32,0.62)",
+    card: dark ? "rgba(255,255,255,0.07)" : "#ffffff",
+    line: dark ? "rgba(255,255,255,0.12)" : "rgba(11,16,32,0.10)",
+    font: (FONTS[t.font] ?? FONTS.sans).css,
+    radius: LINK_RADIUS[t.linkShape] ?? 14,
+  };
+}
 
 export function parseTheme(raw: string | null | undefined): BioTheme {
   let v: Partial<BioTheme> = {};
   try { v = raw ? JSON.parse(raw) : {}; } catch { v = {}; }
-  const t = { ...DEFAULT_THEME, ...v, podcast: { ...DEFAULT_PODCAST, ...(v.podcast ?? {}) } };
+  const t = { ...DEFAULT_THEME, ...v, podcast: { ...DEFAULT_PODCAST, ...(v.podcast ?? {}) }, background: { ...DEFAULT_THEME.background, ...(v.background ?? {}) } };
   if (!/^#[0-9a-f]{6}$/i.test(t.color)) t.color = DEFAULT_THEME.color;
   return t;
 }

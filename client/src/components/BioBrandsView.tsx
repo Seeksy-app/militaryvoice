@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { ArrowRight, Check, Eye, Handshake, Headphones, Play, Send, Sparkles, Users } from "lucide-react";
 import { PlatformIcon, platformBackground, platformLabel } from "@/components/SocialIcons";
-import { onColor, standOut } from "@/components/BioPageView";
+import { onColor } from "@/components/BioPageView";
+import { useBioFont } from "@/lib/bioFont";
 import { podcastWorthFor } from "@/lib/worth";
-import type { BioBrandsPublic } from "@shared/bio";
+import { bioPalette, type BioBrandsPublic } from "@shared/bio";
 import type { SocialPlatform } from "@shared/schema";
 
 /**
@@ -27,14 +28,9 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
   listenUrl: string;
 }) {
   const t = data.theme;
-  const dark = t.shade === "dark";
-  const theirs = t.color.toLowerCase() === "#ffffff" && !dark ? "#053877" : t.color;
-  const accent = standOut(theirs, dark ? "#0b1020" : "#f5f6fa", dark);
-  const ink = dark ? "#ffffff" : "#0b1020";
-  const sub = dark ? "rgba(255,255,255,0.68)" : "rgba(11,16,32,0.62)";
-  const card = dark ? "rgba(255,255,255,0.07)" : "#ffffff";
-  const line = dark ? "rgba(255,255,255,0.12)" : "rgba(11,16,32,0.10)";
-  const font = t.font === "serif" ? "Georgia, 'Times New Roman', serif" : t.font === "mono" ? "'JetBrains Mono', ui-monospace, monospace" : "var(--font-sans)";
+  const pal = bioPalette(t);
+  const { theirs, paper, dark, ink, sub, card, line, accent, font } = pal;
+  useBioFont(t.font);
   const n = data.numbers;
   const unit = n.unit === "streams" ? "streams" : "downloads";
   const rates = data.kit.showRates && n.perEpisode ? podcastWorthFor(n.perEpisode) : null;
@@ -73,7 +69,7 @@ export function BioBrandsView({ data, preview = false, onSponsor, listenUrl }: {
   );
 
   return (
-    <div style={{ background: dark ? "#0b1020" : "#f5f6fa", color: ink, fontFamily: font, minHeight: "100%" }} className="pb-10" data-testid="bio-brands">
+    <div style={{ background: pal.background, color: ink, fontFamily: font, minHeight: "100%" }} className="pb-10" data-testid="bio-brands">
       {/* The top: who they are, for a brand. */}
       <div className="relative overflow-hidden px-5 pb-8 pt-10 text-center text-white" style={{ background: `linear-gradient(145deg, ${theirs} 0%, #000741 85%)` }}>
         <span className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full border border-white/10" aria-hidden />
