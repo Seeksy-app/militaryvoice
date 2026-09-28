@@ -632,6 +632,10 @@ async function ensureSchemaSafe(attempt = 0): Promise<void> {
 }
 
 let schemaReady: Promise<void> | null = null;
+/** For modules that query `db` directly (hosting): wait until the tables exist. */
+export function schemaIsReady(): Promise<void> {
+  return ready();
+}
 function ready(): Promise<void> {
   if (!schemaReady) {
     schemaReady = ensureSchemaSafe().catch((err) => {

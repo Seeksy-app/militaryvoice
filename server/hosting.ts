@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import multer from "multer";
 import sharp from "sharp";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
-import { db, storage } from "./storage.js";
+import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { uploadPhoto } from "./photoStorage.js";
@@ -202,6 +202,7 @@ export async function showStats(showId: number, days = 30) {
 
 /** The hosted show in the same shape as Buzzsprout's and the rest, for the Dashboard and Your analytics. */
 export async function hostedAsStats(email: string): Promise<{ source: "militaryvoices"; showName: string; status: string; error: string; fetchedAt: string; data: PodcastStatsData }[]> {
+  await schemaIsReady();
   const shows = await showsOf(email);
   const out = [];
   for (const s of shows) {
@@ -234,6 +235,9 @@ const emailOf = (req: Request) => (getSessionEmail(req) ?? "").trim().toLowerCas
 const num = (v: unknown) => (v === "" || v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Math.max(0, Math.round(Number(v))));
 
 export function registerHosting(app: Express) {
+  // A fresh server creates the hosting tables on its first query; wait for that, so a feed or a play never meets a missing table.
+  app.use(["/feed", "/e", "/api/host/hosting"], (_req, _res, next) => { schemaIsReady().then(() => next(), next); });
+
   // The feed.
   app.get("/feed/:slug", async (req, res) => {
     const slug = String(req.params.slug).replace(/\.(xml|rss)$/i, "");
