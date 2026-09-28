@@ -51,13 +51,6 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
 
   return (
     <div style={{ background: pal.background, color: ink, fontFamily: font, minHeight: "100%" }} className="relative pb-10" data-testid="bio-family">
-      {data.askEnabled && (
-        <>
-          {chat && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20`} onClick={() => setChat(false)} aria-hidden />}
-          <Chat handle={data.handle} name={data.displayName} avatar={face} welcome={`Leave ${first} a note. Only ${first} sees it.`} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat}
-            onAsk={onAsk ? (x) => onAsk({ ...x, episode: "From the family page" }) : undefined} onLoad={onLoadMessages} />
-        </>
-      )}
 
       {/* The top: their photo, warm, and who it's for. */}
       <div className="relative flex min-h-[420px] flex-col justify-end text-center text-white" style={{ background: photo ? `center 25%/cover url(${photo})` : `linear-gradient(145deg, ${theirs}, #000741)` }}>
@@ -146,6 +139,13 @@ export function BioFamilyView({ data, preview = false, onAsk, onLoadMessages }: 
           <img src={f.photos[big].url} alt={f.photos[big].caption} className="max-h-[80%] max-w-full rounded-xl object-contain" />
           {f.photos[big].caption && <p className="mt-3 text-center text-sm text-white/85">{f.photos[big].caption}</p>}
         </div>
+      )}
+      {data.askEnabled && (
+        <>
+          {chat && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20`} onClick={() => setChat(false)} aria-hidden />}
+          <Chat handle={data.handle} name={data.displayName} avatar={face} welcome={`Leave ${first} a note. Only ${first} sees it.`} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat}
+            onAsk={onAsk ? (x) => onAsk({ ...x, episode: "From the family page" }) : undefined} onLoad={onLoadMessages} />
+        </>
       )}
     </div>
   );

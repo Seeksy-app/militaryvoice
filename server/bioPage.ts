@@ -256,9 +256,11 @@ function cleanSections(v: unknown): BioSection[] {
     switch (x.type) {
       case "links": return [{ ...base, type: "links", links: (Array.isArray(x.links) ? x.links : []).slice(0, 30).map((l: Record<string, unknown>) => ({ id: /^[\w-]{1,40}$/.test(String(l.id)) ? String(l.id) : crypto.randomBytes(4).toString("hex"), label: str(l.label, 80), url: httpUrl(l.url) })).filter((l) => l.label || l.url) }];
       case "video": return [{ ...base, type: "video", url: httpUrl(x.url) }];
-      case "promo": return [{ ...base, type: "promo", code: str(x.code, 40), url: httpUrl(x.url), note: str(x.note, 200) }];
+      case "promo": return [{ ...base, type: "promo", code: str(x.code, 40), url: httpUrl(x.url), note: str(x.note, 200),
+        codes: (Array.isArray(x.codes) ? x.codes : []).slice(0, 20).map((c: Record<string, unknown>) => ({ id: /^[\w-]{1,40}$/.test(String(c.id)) ? String(c.id) : crypto.randomBytes(4).toString("hex"), brand: str(c.brand, 60), code: str(c.code, 40), note: str(c.note, 200), url: httpUrl(c.url) })) }];
+      case "music": return [{ ...base, type: "music", tracks: (Array.isArray(x.tracks) ? x.tracks : []).slice(0, 12).map((t: Record<string, unknown>) => ({ id: /^[\w-]{1,40}$/.test(String(t.id)) ? String(t.id) : crypto.randomBytes(4).toString("hex"), url: str(t.url, 500).trim() })).filter((t) => !t.url || /^https:\/\/\S+$/.test(t.url)) }];
       case "meeting": return [{ ...base, type: "meeting", url: httpUrl(x.url), note: str(x.note, 200) }];
-      case "text": return [{ ...base, type: "text", body: str(x.body, 2000) }];
+      case "text": return [{ ...base, type: "text", body: str(x.body, 2000), align: x.align === "center" || x.align === "right" ? x.align : "left" }];
       default: return [];
     }
   });
@@ -287,6 +289,7 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     imageY: Number.isFinite(Number(x.imageY)) && x.imageY !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.imageY)))) : prev.imageY ?? 50,
     avatarSize: pick("avatarSize", ["s", "m", "l"] as const, prev.avatarSize ?? "m"),
     branding: typeof x.branding === "boolean" ? x.branding : prev.branding ?? true,
+    hideName: typeof x.hideName === "boolean" ? x.hideName : prev.hideName ?? false,
     bgTint: Number.isFinite(Number(x.bgTint)) && x.bgTint !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.bgTint)))) : prev.bgTint ?? 0,
     bgBrightness: Number.isFinite(Number(x.bgBrightness)) && x.bgBrightness !== undefined ? Math.max(-100, Math.min(100, Math.round(Number(x.bgBrightness)))) : prev.bgBrightness ?? 0,
     cutoutY: Number.isFinite(Number(x.cutoutY)) && x.cutoutY !== undefined ? Math.max(-160, Math.min(160, Math.round(Number(x.cutoutY)))) : prev.cutoutY ?? 0,

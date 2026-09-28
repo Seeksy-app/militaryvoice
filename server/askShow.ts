@@ -116,18 +116,32 @@ export async function knowledgeOf(email: string): Promise<{ done: number; total:
   return { done: rows.find((r) => r.status === "done")?.n ?? 0, total };
 }
 
-/** The passages most like the question: Postgres full-text search, any of its words, best first. */
-async function passages(email: string, question: string) {
+type Passage = { id: number; start_sec: number; text: string; transcript_id: number; title: string; audio_url: string; published_at: string; rank: number };
+
+/**
+ * The passages most like the question: Postgres full-text search, any of its
+ * words, best first. Asked about one episode, only that episode's, topped up
+ * with passages from across it so "what's it about?" has the whole of it to go on.
+ */
+async function passages(email: string, question: string, episode = ""): Promise<Passage[]> {
   const words = Array.from(new Set(question.toLowerCase().match(/[a-z0-9']{3,}/g) ?? [])).slice(0, 24).map((w) => w.replace(/'/g, ""));
-  if (!words.length) return [];
+  const only = episode ? sql`AND t.title = ${episode}` : sql``;
   const tsq = words.join(" | ");
-  const rows = await db.execute(sql`
+  const hits = words.length ? (await db.execute(sql`
     SELECT c.id, c.start_sec, c.text, c.transcript_id, t.title, t.audio_url, t.published_at,
            ts_rank_cd(to_tsvector('english', c.text), to_tsquery('english', ${tsq})) AS rank
     FROM transcript_chunks c JOIN show_transcripts t ON t.id = c.transcript_id
-    WHERE c.email = ${email} AND to_tsvector('english', c.text) @@ to_tsquery('english', ${tsq})
-    ORDER BY rank DESC LIMIT 10`).catch(() => [] as unknown[]);
-  return rows as unknown as { id: number; start_sec: number; text: string; transcript_id: number; title: string; audio_url: string; published_at: string; rank: number }[];
+    WHERE c.email = ${email} ${only} AND to_tsvector('english', c.text) @@ to_tsquery('english', ${tsq})
+    ORDER BY rank DESC LIMIT 10`).catch(() => [] as unknown[])) as unknown as Passage[] : [];
+  if (!episode || hits.length >= 6) return hits;
+  const all = (await db.execute(sql`
+    SELECT c.id, c.start_sec, c.text, c.transcript_id, t.title, t.audio_url, t.published_at, 0 AS rank
+    FROM transcript_chunks c JOIN show_transcripts t ON t.id = c.transcript_id
+    WHERE c.email = ${email} ${only} ORDER BY c.start_sec`).catch(() => [] as unknown[])) as unknown as Passage[];
+  const step = Math.max(1, Math.floor(all.length / 12));
+  const spread = all.filter((_, i) => i % step === 0).slice(0, 12);
+  const seen = new Set(hits.map((h) => h.id));
+  return [...hits, ...spread.filter((p) => !seen.has(p.id))].slice(0, 16);
 }
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
@@ -167,10 +181,15 @@ export function registerAskShow(app: Express, requireAgent: RequestHandler) {
     const history = (Array.isArray(req.body?.history) ? req.body.history : []).slice(-4)
       .map((h: { role?: string; content?: string }) => ({ role: h.role === "assistant" ? "assistant" as const : "user" as const, content: String(h.content ?? "").slice(0, 1500) }))
       .filter((h: { content: string }) => h.content);
-    const found = await passages(page.email, [question, ...history.filter((h: { role: string }) => h.role === "user").map((h: { content: string }) => h.content)].join(" "));
+    const episode = String(req.body?.episode ?? "").trim().slice(0, 400);
+    const asked = [question, ...history.filter((h: { role: string }) => h.role === "user").map((h: { content: string }) => h.content)].join(" ");
+    // About one episode: its own passages; if it hasn't been learned yet, the whole show's.
+    let found = episode ? await passages(page.email, asked, episode) : [];
+    const scoped = found.length > 0;
+    if (!scoped) found = await passages(page.email, asked);
     const k = await knowledgeOf(page.email);
     if (!found.length) {
-      return res.json({ answer: k.done ? `I couldn't find that in the episodes I've learned. ${page.displayName || "The host"} would know${page.askEnabled ? ": message them with the chat button at the top" : ""}.` : `I'm still learning ${page.displayName || "this show"}'s episodes. Try again soon${page.askEnabled ? ", or message them with the chat button at the top" : ""}.`, sources: [], unanswered: true });
+      return res.json({ answer: k.done ? `I couldn't find that in the episodes I've learned. ${page.displayName || "The host"} would know${page.askEnabled ? ": message them with the chat button in the corner" : ""}.` : `I'm still learning ${page.displayName || "this show"}'s episodes. Try again soon${page.askEnabled ? ", or message them with the chat button in the corner" : ""}.`, sources: [], unanswered: true });
     }
     const excerpts = found.map((f, i) => `[${i + 1}] "${f.title}" at ${mmss(f.start_sec)}:\n${f.text}`).join("\n\n");
     const who = page.displayName || "the host";
@@ -179,7 +198,7 @@ export function registerAskShow(app: Express, requireAgent: RequestHandler) {
       const out = await client.messages.create({
         model: "claude-sonnet-5",
         max_tokens: 700,
-        system: `You answer listeners' questions on ${who}'s podcast page, on ${who}'s behalf: you are the show's AI, not ${who} in person, and you say so if asked. Answer ONLY from the transcript excerpts below, which are from the show's own episodes. Be warm, plain and brief (2 to 5 sentences), the way ${who} would put it. Put the excerpt number in square brackets after each point that uses it, like [2]. If the excerpts don't answer the question, say you couldn't find it on the show and suggest messaging ${who} with the chat button at the top of the page; never guess, never add facts that aren't in them. No medical, legal or financial advice beyond what was said on the show, and say it's what was said on the show.\n\nExcerpts:\n\n${excerpts}`,
+        system: `You answer listeners' questions on ${who}'s podcast page, on ${who}'s behalf: you are the show's AI, not ${who} in person, and you say so if asked. Answer ONLY from the transcript excerpts below, which are from the show's own episodes${scoped ? ` (the listener is asking about the episode "${episode}", and these are from it)` : ""}. Be warm, plain and brief (2 to 5 sentences), the way ${who} would put it. Put the excerpt number in square brackets after each point that uses it, like [2]. If the excerpts don't answer the question, say you couldn't find it on the show and suggest messaging ${who} with the chat button in the corner of the page; never guess, never add facts that aren't in them. No medical, legal or financial advice beyond what was said on the show, and say it's what was said on the show.\n\nExcerpts:\n\n${excerpts}`,
         messages: [...history, { role: "user", content: question }],
       });
       const text = out.content.filter((c) => c.type === "text").map((c) => (c as { text: string }).text).join("").trim();

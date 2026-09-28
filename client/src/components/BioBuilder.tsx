@@ -14,9 +14,9 @@ import { BioFamilyView } from "@/components/BioFamilyView";
 import { podcastWorthFor } from "@/lib/worth";
 import { useBioFont } from "@/lib/bioFont";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
-import { CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, onColor, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
+import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music } from "lucide-react";
 
 /**
  * SmartLink (was "My page", then "Rally Point"): the podcaster's bio page builder. Profile, Design, Content and
@@ -648,6 +648,10 @@ function DesignTab({ d, change, view, cutting = false, cutError = "" }: { d: Pag
             );
           })}
         </div>
+          <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+            <div><p className="text-sm font-semibold">Show my name</p><p className="text-xs text-muted-foreground">Turn it off when your photo or logo already says it.</p></div>
+            <Switch checked={!(t.hideName ?? false)} onCheckedChange={(v) => set({ hideName: !v })} data-testid="bio-show-name" />
+          </div>
           {CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && (
             <div className="mt-4 space-y-3 rounded-xl bg-muted/40 p-3" data-testid="bio-cutout-adjust">
               <RangeRow label="Photo position" hint="Up or down" value={t.cutoutY ?? 0} min={-160} max={160} onChange={(v) => set({ cutoutY: v })} testid="bio-cutout-y" />
@@ -946,16 +950,18 @@ function Tile({ on, onClick, label, note, testid, children }: { on: boolean; onC
 const KINDS: { type: BioSectionType; label: string; hint: string; icon: typeof Link2; tone: string }[] = [
   { type: "links", label: "Links", hint: "Buttons to your site, store, anything", icon: Link2, tone: "bg-[#053877]/10 text-[#053877] dark:bg-[#8fb5e8]/15 dark:text-[#8fb5e8]" },
   { type: "video", label: "Video", hint: "A YouTube or Vimeo video", icon: Video, tone: "bg-red-500/12 text-red-600 dark:text-red-400" },
-  { type: "promo", label: "Promo code", hint: "A sponsor's code, tap to copy", icon: Tag, tone: "bg-[#F0A71F]/15 text-[#b36b00] dark:text-[#F0A71F]" },
+  { type: "promo", label: "Promo codes", hint: "Sponsors' codes, tap to copy", icon: Tag, tone: "bg-[#F0A71F]/15 text-[#b36b00] dark:text-[#F0A71F]" },
   { type: "meeting", label: "Book a meeting", hint: "Your Calendly or booking link", icon: Calendar, tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
   { type: "text", label: "Text", hint: "A few words of your own", icon: Type, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-300" },
+  { type: "music", label: "Music", hint: "Spotify, Apple Music, SoundCloud", icon: Music, tone: "bg-pink-500/15 text-pink-700 dark:text-pink-300" },
 ];
 function blank(type: BioSectionType): BioSection {
   const base = { id: newId(), visible: true, title: "" };
   switch (type) {
     case "links": return { ...base, type, links: [{ id: newId(), label: "", url: "" }] };
     case "video": return { ...base, type, url: "" };
-    case "promo": return { ...base, type, title: "Save with my code", code: "", url: "", note: "" };
+    case "promo": return { ...base, type, title: "Promo codes", codes: [{ id: newId(), brand: "", code: "", note: "", url: "" }], code: "", url: "", note: "" };
+    case "music": return { ...base, type, title: "Music", tracks: [{ id: newId(), url: "" }] };
     case "meeting": return { ...base, type, title: "Book a time with me", url: "", note: "" };
     default: return { ...base, type: "text", body: "" };
   }
@@ -1088,10 +1094,86 @@ function SectionEditor({ s, upd }: { s: BioSection; upd: (p: Partial<BioSection>
     </>
   );
   if (s.type === "video") return <>{title}<Input value={s.url} onChange={(e) => upd({ url: e.target.value })} placeholder="https://youtube.com/watch?v=…" /></>;
-  if (s.type === "promo") return <>{title}<Input value={s.code} onChange={(e) => upd({ code: e.target.value.toUpperCase() })} placeholder="CODE" className="font-mono" /><Input value={s.url} onChange={(e) => upd({ url: e.target.value })} placeholder="The sponsor's link (https://)" /><Input value={s.note} onChange={(e) => upd({ note: e.target.value })} placeholder="e.g. 20% off your first order" /></>;
+  if (s.type === "promo") {
+    // The list of codes (an old single code becomes the first of it).
+    const codes = promoCodes(s);
+    const put = (c: BioPromoCode[]) => upd({ codes: c, code: "", url: "", note: "" });
+    const edit = (i: number, p: Partial<BioPromoCode>) => put(codes.map((x, j) => (j === i ? { ...x, ...p } : x)));
+    return (
+      <>
+        {title}
+        {codes.map((c, i) => (
+          <div key={c.id} className="space-y-2 rounded-xl border border-dashed border-[#F0A71F]/60 bg-[#F0A71F]/5 p-2.5" data-testid="bio-promo-code">
+            <div className="flex gap-2">
+              <Input value={c.brand} onChange={(e) => edit(i, { brand: e.target.value })} placeholder="Brand (e.g. Grunt Style)" maxLength={60} className="flex-1" />
+              <Input value={c.code} onChange={(e) => edit(i, { code: e.target.value.toUpperCase().replace(/\s+/g, "") })} placeholder="CODE" maxLength={40} className="w-32 font-mono" />
+              <button type="button" onClick={() => put(codes.filter((_, j) => j !== i))} className="px-1 text-muted-foreground hover:text-destructive" aria-label="Remove code"><Trash2 className="h-4 w-4" /></button>
+            </div>
+            <Input value={c.note} onChange={(e) => edit(i, { note: e.target.value })} placeholder="What it saves (e.g. 20% off your first order)" maxLength={200} />
+            <Input value={c.url} onChange={(e) => edit(i, { url: e.target.value })} placeholder="Their shop link (https://)" />
+          </div>
+        ))}
+        <button type="button" onClick={() => put([...codes, { id: newId(), brand: "", code: "", note: "", url: "" }])} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] dark:text-[#8fb5e8]" data-testid="bio-promo-add"><Plus className="h-3.5 w-3.5" /> Another code</button>
+      </>
+    );
+  }
+  if (s.type === "music") return (
+    <>
+      {title}
+      {s.tracks.map((x, i) => {
+        const ok = !x.url.trim() || musicEmbed(x.url);
+        return (
+          <div key={x.id}>
+            <div className="flex gap-2">
+              <Input value={x.url} onChange={(e) => upd({ tracks: s.tracks.map((y, j) => (j === i ? { ...y, url: e.target.value } : y)) })} placeholder="Paste a Spotify, Apple Music or SoundCloud link" className="flex-1" data-testid="bio-music-url" />
+              <button type="button" onClick={() => upd({ tracks: s.tracks.filter((_, j) => j !== i) })} className="px-1 text-muted-foreground hover:text-destructive" aria-label="Remove"><Trash2 className="h-4 w-4" /></button>
+            </div>
+            {!ok && <p className="mt-1 text-[11px] text-muted-foreground">We'll show this as a Listen button. Spotify, Apple Music, SoundCloud and YouTube links play right on your page.</p>}
+          </div>
+        );
+      })}
+      <button type="button" onClick={() => upd({ tracks: [...s.tracks, { id: newId(), url: "" }] })} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] dark:text-[#8fb5e8]"><Plus className="h-3.5 w-3.5" /> Another song or playlist</button>
+      <p className="text-[11px] text-muted-foreground">A song, an album, a playlist or an artist. Each one plays right on your page.</p>
+    </>
+  );
   if (s.type === "meeting") return <>{title}<Input value={s.url} onChange={(e) => upd({ url: e.target.value })} placeholder="https://calendly.com/…" /><Input value={s.note} onChange={(e) => upd({ note: e.target.value })} placeholder="e.g. Guests, sponsors and fellow veterans welcome" /></>;
-  if (s.type === "text") return <>{title}<Textarea value={s.body} onChange={(e) => upd({ body: e.target.value })} rows={4} maxLength={2000} /></>;
+  if (s.type === "text") return <>{title}<TextEditor body={s.body} align={s.align ?? "left"} onBody={(body) => upd({ body })} onAlign={(align) => upd({ align })} /></>;
   return null;
+}
+
+/**
+ * The text block's box with its tools over it: align left, centre or right,
+ * and bold, italic and underline around what's selected (or where the cursor is).
+ */
+function TextEditor({ body, align, onBody, onAlign }: { body: string; align: BioAlign; onBody: (v: string) => void; onAlign: (v: BioAlign) => void }) {
+  const box = useRef<HTMLTextAreaElement>(null);
+  const wrap = (mark: string) => {
+    const el = box.current;
+    if (!el) return;
+    const a = el.selectionStart, b = el.selectionEnd;
+    const picked = body.slice(a, b);
+    // Already wrapped: take the marks off again.
+    const on = picked.startsWith(mark) && picked.endsWith(mark) && picked.length >= mark.length * 2;
+    const inner = on ? picked.slice(mark.length, -mark.length) : picked;
+    const next = on ? inner : `${mark}${inner}${mark}`;
+    onBody(body.slice(0, a) + next + body.slice(b));
+    requestAnimationFrame(() => { el.focus(); const start = on ? a : a + mark.length; el.setSelectionRange(start, start + inner.length); });
+  };
+  const tool = (on: boolean) => `flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${on ? "bg-[#053877] text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`;
+  return (
+    <div className="overflow-hidden rounded-xl border border-input bg-background focus-within:ring-2 focus-within:ring-ring">
+      <div className="flex items-center gap-0.5 border-b border-border bg-muted/40 px-1.5 py-1" role="toolbar" aria-label="Text tools">
+        {([["left", AlignLeft, "Align left"], ["center", AlignCenter, "Centre"], ["right", AlignRight, "Align right"]] as const).map(([v, Icon, l]) => (
+          <button key={v} type="button" onClick={() => onAlign(v)} className={tool(align === v)} aria-label={l} title={l} aria-pressed={align === v} data-testid={`bio-text-${v}`}><Icon className="h-4 w-4" /></button>
+        ))}
+        <span className="mx-1 h-5 w-px bg-border" />
+        {([["**", Bold, "Bold"], ["*", Italic, "Italic"], ["__", Underline, "Underline"]] as const).map(([m, Icon, l]) => (
+          <button key={l} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap(m)} className={tool(false)} aria-label={l} title={l} data-testid={`bio-text-${l.toLowerCase()}`}><Icon className="h-4 w-4" /></button>
+        ))}
+      </div>
+      <textarea ref={box} value={body} onChange={(e) => onBody(e.target.value)} rows={5} maxLength={2000} placeholder="Write something. Select words, then B, I or U." className="block w-full resize-y bg-transparent px-3 py-2 text-sm outline-none" style={{ textAlign: align }} data-testid="bio-text-body" />
+    </div>
+  );
 }
 
 // ---- Share -------------------------------------------------------------------------

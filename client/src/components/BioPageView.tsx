@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Calendar, Check, Copy, MessageCircle, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
+import { Calendar, Check, Copy, ExternalLink, MessageCircle, Music, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
-import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, onColor, standOut, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
+import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, musicEmbed, onColor, promoCodes, standOut, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
 import { useBioFont } from "@/lib/bioFont";
 import type { SocialPlatform } from "@shared/schema";
 
@@ -9,7 +9,8 @@ import type { SocialPlatform } from "@shared/schema";
  * A podcaster's bio page, drawn from its data alone: the builder's preview
  * and the public page are this same component, so they can never disagree.
  * The show sits top and centre: the latest episode to play and share, the
- * rest below it, then their links; a chat button at the top for a message to them.
+ * rest below it, then their links; a chat button in the bottom corner for a
+ * message to them, and on each episode one to ask the show's AI about it.
  */
 
 type Ev = (kind: "view" | "click" | "play" | "share", label?: string) => void;
@@ -39,7 +40,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   /** The listener's messages (by the keys their browser keeps) with any replies. */
   onLoadMessages?: (tokens: string[]) => Promise<ChatMsg[]>;
   /** Ask my show: the AI's answer from the episodes. */
-  onAskAi?: (question: string, history: { role: "user" | "assistant"; content: string }[]) => Promise<AiAnswer>;
+  onAskAi?: (question: string, history: { role: "user" | "assistant"; content: string }[], episode?: string) => Promise<AiAnswer>;
   /** The page's own address, for sharing an episode. */
   shareBase: string;
 }) {
@@ -60,6 +61,9 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   const [copied, setCopied] = useState<string | null>(null);
   const ev: Ev = (k, l) => { if (!preview) onEvent?.(k, l); };
   const [chat, setChat] = useState(false);
+  // The episode a listener is asking the show's AI about (its sheet slides up from the bottom).
+  const [askEp, setAskEp] = useState<{ id: string; title: string } | null>(null);
+  const noName = t.hideName ?? false;
 
   const share = async (title: string, id: string) => {
     const url = `${shareBase}#ep-${id}`;
@@ -77,7 +81,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   // Their name, handle, bio and socials: on the page, or in white over their photo (hero).
   const who = (onPhoto: boolean, hideName = false) => (
     <>
-      {!hideName && <h1 className={`text-balance font-bold leading-tight tracking-tight ${onPhoto ? "text-[34px]" : "text-[26px]"}`}>{data.displayName || "Your name"}</h1>}
+      {!hideName && !noName && <h1 className={`text-balance font-bold leading-tight tracking-tight ${onPhoto ? "text-[34px]" : "text-[26px]"}`}>{data.displayName || "Your name"}</h1>}
       <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>@{data.handle}{data.branch ? ` · ${data.branch}` : ""}</p>
       {data.bio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{data.bio}</p>}
       {data.socials.length > 0 && (
@@ -94,17 +98,11 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
 
   return (
     <div style={{ background: bg, color: ink, fontFamily: font, minHeight: "100%" }} className="relative pb-10" data-testid="bio-page">
-      {data.askEnabled && (
-        <>
-          {chat && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20`} onClick={() => setChat(false)} aria-hidden />}
-          <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} welcome={data.welcome} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat} onAsk={onAsk} onLoad={onLoadMessages} />
-        </>
-      )}
       {/* The header: a wide cover photo (blend), full-screen photo with their name on it (hero),
           a banner with the photo over it (landscape), a shaped photo (shape) or a round one (portrait). */}
       {CUTOUT_LAYOUTS.includes(t.layout) && data.cutoutUrl ? (
         <>
-          <CutoutTop kind={t.layout} src={data.cutoutUrl} name={data.displayName || "Your name"} theirs={theirs} paper={paper} dark={dark} bigName={bigName} dy={t.cutoutY ?? 0} size={(t.cutoutSize ?? 100) / 100} latest={data.podcast?.episodes[0]?.title} handle={data.handle} />
+          <CutoutTop kind={t.layout} src={data.cutoutUrl} name={noName ? "" : data.displayName || "Your name"} theirs={theirs} paper={paper} dark={dark} bigName={bigName} dy={t.cutoutY ?? 0} size={(t.cutoutSize ?? 100) / 100} latest={data.podcast?.episodes[0]?.title} handle={data.handle} />
           <div className={`relative z-30 mx-auto max-w-[560px] px-5 text-center ${t.layout === "popout" ? "pt-5" : "-mt-4"}`}>{who(false, t.layout !== "popout")}</div>
         </>
       ) : t.layout === "hero" && photo ? (
@@ -139,12 +137,15 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       )}
 
       <div className="mx-auto mt-6 flex max-w-[560px] flex-col gap-4 px-4">
-        {data.podcast && (t.podcast?.on ?? true) && <PodcastCard p={data.podcast} opts={{ ...DEFAULT_PODCAST, ...(t.podcast ?? {}) }} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} />}
-        {data.ai?.enabled && <AskShow name={data.displayName} episodes={data.ai.episodes} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} onAskAi={onAskAi} onMessage={data.askEnabled ? () => setChat(true) : undefined} />}
+        {data.podcast && (t.podcast?.on ?? true) && <PodcastCard p={data.podcast} onAsk={data.ai?.enabled ? setAskEp : undefined} opts={{ ...DEFAULT_PODCAST, ...(t.podcast ?? {}) }} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} />}
         {data.sections.map((s) => <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} />)}
         {data.brandsOn && <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : `/${data.handle}/brands`} className="font-semibold hover:underline" data-testid="bio-for-brands">For brands: sponsor this show</a></p>}
         {(t.branding ?? true) && <p className={`${data.brandsOn ? "mt-1" : "mt-4"} text-center text-xs`} style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>}
       </div>
+      {/* Last on the page so they stick to the foot of the screen: the chat bubble, and the sheet for asking about an episode. */}
+      {(chat || askEp) && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20 ${askEp ? "bg-black/40" : ""}`} onClick={() => { setChat(false); setAskEp(null); }} aria-hidden />}
+      {data.askEnabled && !askEp && <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} welcome={data.welcome} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat} onAsk={onAsk} onLoad={onLoadMessages} />}
+      {askEp && <AskSheet key={askEp.id} ep={askEp} name={data.displayName} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} onAskAi={onAskAi} onClose={() => setAskEp(null)} onMessage={data.askEnabled ? () => { setAskEp(null); setChat(true); } : undefined} />}
     </div>
   );
 }
@@ -175,7 +176,7 @@ function CutoutTop({ kind, src, name, theirs, paper, dark, bigName, dy, size, la
     const edge = "drop-shadow(4px 0 0 #fff) drop-shadow(-4px 0 0 #fff) drop-shadow(0 4px 0 #fff) drop-shadow(0 -4px 0 #fff) drop-shadow(0 14px 18px rgba(0,0,0,0.35))";
     return (
       <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `repeating-linear-gradient(135deg, ${theirs} 0 26px, ${theirs}d9 26px 52px)` }} data-testid="bio-sticker-header">
-        <h1 className="absolute inset-x-0 top-14 z-0 -rotate-6 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName * 0.9, color: "#ffffff", textShadow: "0 4px 0 rgba(0,0,0,0.25)" }}>{name}</h1>
+        {name && <h1 className="absolute inset-x-0 top-14 z-0 -rotate-6 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName * 0.9, color: "#ffffff", textShadow: "0 4px 0 rgba(0,0,0,0.25)" }}>{name}</h1>}
         <img src={src} alt="" className="relative z-10 mx-auto block h-[380px] w-auto max-w-[90%] object-contain object-bottom" style={{ ...move, filter: edge }} />
         {fade}
       </div>
@@ -185,7 +186,7 @@ function CutoutTop({ kind, src, name, theirs, paper, dark, bigName, dy, size, la
     const ink = onColor(theirs);
     return (
       <div className="relative flex min-h-[520px] flex-col overflow-hidden" style={{ background: `linear-gradient(180deg, ${theirs} 0%, ${theirs} 70%, ${paper} 100%)` }} data-testid="bio-magazine-header">
-        <h1 className="z-0 break-words px-3 pt-7 text-center font-black uppercase leading-[0.82] tracking-tight" style={{ fontSize: bigName * 1.05, color: ink, fontFamily: FONTS.playfair.css }}>{name}</h1>
+        {name ? <h1 className="z-0 break-words px-3 pt-7 text-center font-black uppercase leading-[0.82] tracking-tight" style={{ fontSize: bigName * 1.05, color: ink, fontFamily: FONTS.playfair.css }}>{name}</h1> : <div className="h-20" />}
         <img src={src} alt="" className="relative z-10 mx-auto -mt-12 block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={move} />
         {latest && (
           <div className="absolute bottom-10 left-4 z-20 max-w-[48%] text-left" style={{ color: "#fff", textShadow: "0 2px 10px rgba(0,0,0,0.6)" }}>
@@ -200,15 +201,15 @@ function CutoutTop({ kind, src, name, theirs, paper, dark, bigName, dy, size, la
   }
   return (
     <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `radial-gradient(120% 80% at 50% 30%, ${theirs} 0%, ${theirs} 45%, ${paper} 100%)` }} data-testid="bio-cutout-header">
-      <h1 className="absolute inset-x-0 top-16 z-0 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName, color: onColor(theirs), opacity: 0.92 }}>{name}</h1>
+      {name && <h1 className="absolute inset-x-0 top-16 z-0 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName, color: onColor(theirs), opacity: 0.92 }}>{name}</h1>}
       <img src={src} alt="" className="relative z-10 mx-auto block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={move} />
       {fade}
     </div>
   );
 }
 
-function PodcastCard({ p, opts, style, full, fallbackArt, accent, ink, sub, card, line, radius, preview, ev, share, copied }: {
-  p: NonNullable<BioPublic["podcast"]>; opts: BioPodcastOptions; style: BioTheme["podcastStyle"]; full: boolean; fallbackArt: string; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; ev: Ev; share: (title: string, id: string) => void; copied: string | null;
+function PodcastCard({ p, onAsk, opts, style, full, fallbackArt, accent, ink, sub, card, line, radius, preview, ev, share, copied }: {
+  p: NonNullable<BioPublic["podcast"]>; onAsk?: (e: { id: string; title: string }) => void; opts: BioPodcastOptions; style: BioTheme["podcastStyle"]; full: boolean; fallbackArt: string; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; ev: Ev; share: (title: string, id: string) => void; copied: string | null;
 }) {
   const [playing, setPlaying] = useState<string | null>(null);
   const [first, ...rest] = p.episodes;
@@ -231,6 +232,12 @@ function PodcastCard({ p, opts, style, full, fallbackArt, accent, ink, sub, card
       </span>
     </button>
   );
+  // Ask the show's AI about this episode (when it has learned the show).
+  const askBtn = (e: E) => onAsk && (
+    <button type="button" onClick={() => onAsk({ id: e.id, title: e.title })} aria-label={`Ask about ${e.title}`} title="Ask about this episode" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-110" style={{ background: `${accent}22`, color: accent }} data-testid="bio-ep-ask">
+      <MessageCircle className="h-4 w-4" />
+    </button>
+  );
   const shareBtn = (e: E) => (
     <button type="button" onClick={() => share(e.title, e.id)} aria-label={`Share ${e.title}`} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ color: sub }}>
       {copied === e.id ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
@@ -243,6 +250,7 @@ function PodcastCard({ p, opts, style, full, fallbackArt, accent, ink, sub, card
         <p className="line-clamp-2 text-sm font-semibold leading-snug">{e.title}</p>
         <p className="text-xs" style={{ color: sub }}>{when(e)}</p>
       </div>
+      {askBtn(e)}
       {shareBtn(e)}
     </div>
   );
@@ -250,7 +258,6 @@ function PodcastCard({ p, opts, style, full, fallbackArt, accent, ink, sub, card
     // Full: edge to edge on the page, the latest's picture the full width. Card: in a box with a margin.
     <section className={`text-left ${full ? "-mx-4" : "overflow-hidden rounded-3xl"}`} style={full ? {} : { background: card, border: `1px solid ${line}` }} data-testid="bio-podcast">
       <div className="flex items-center gap-3 p-4 pb-3">
-        {(p.artworkUrl || fallbackArt) && <img src={p.artworkUrl || fallbackArt} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />}
         <div className="min-w-0 flex-1">
           <p className="truncate text-base font-bold">{opts.heading.trim() || p.title}</p>
           <p className="text-xs" style={{ color: sub }}>{p.episodeCount} episode{p.episodeCount === 1 ? "" : "s"}</p>
@@ -266,6 +273,7 @@ function PodcastCard({ p, opts, style, full, fallbackArt, accent, ink, sub, card
                 <p className="line-clamp-2 text-base font-bold leading-snug">{first.title}</p>
                 <p className="text-xs" style={{ color: sub }}>{when(first)}</p>
               </div>
+              {askBtn(first)}
               {shareBtn(first)}
             </div>
           </div>
@@ -284,6 +292,7 @@ function PodcastCard({ p, opts, style, full, fallbackArt, accent, ink, sub, card
                   <p className="line-clamp-2 text-sm font-semibold leading-snug">{e.title}</p>
                   <p className="text-xs" style={{ color: sub }}>{when(e)}</p>
                 </div>
+                {askBtn(e)}
                 {shareBtn(e)}
               </div>
             </div>
@@ -306,8 +315,17 @@ function PodcastCard({ p, opts, style, full, fallbackArt, accent, ink, sub, card
   );
 }
 
+/** A text block's **bold**, *italic* and __underline__, drawn (nothing else is read as markup). */
+function styled(body: string): React.ReactNode[] {
+  return body.split(/(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*)/g).map((part, i) =>
+    /^\*\*.+\*\*$/.test(part) ? <strong key={i} className="font-bold">{part.slice(2, -2)}</strong>
+      : /^__.+__$/.test(part) ? <u key={i}>{part.slice(2, -2)}</u>
+      : /^\*.+\*$/.test(part) ? <em key={i}>{part.slice(1, -1)}</em>
+      : part);
+}
+
 function Section({ s, btn, ink, sub, card, line, accent, preview, ev }: { s: BioSection; btn: (primary?: boolean) => React.CSSProperties; ink: string; sub: string; card: string; line: string; accent: string; preview: boolean; ev: Ev }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
   const title = s.title ? <p className="mb-2 mt-1 text-center text-xs font-bold uppercase tracking-[0.12em]" style={{ color: sub }}>{s.title}</p> : null;
   if (s.type === "links") return (
     <section>
@@ -323,14 +341,45 @@ function Section({ s, btn, ink, sub, card, line, accent, preview, ev }: { s: Bio
     const src = youtubeEmbed(s.url);
     return src ? <section>{title}<div className="aspect-video overflow-hidden rounded-2xl" style={{ border: `1px solid ${line}` }}><iframe src={src} title={s.title || "Video"} className="h-full w-full" allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen /></div></section> : null;
   }
-  if (s.type === "promo") return (
-    <section className="rounded-2xl p-4 text-center" style={{ background: card, border: `1px dashed ${accent}` }}>
-      <p className="flex items-center justify-center gap-1.5 text-sm font-semibold"><Tag className="h-4 w-4" style={{ color: accent }} /> {s.title || "Promo code"}</p>
-      {s.note && <p className="mt-1 text-sm" style={{ color: sub }}>{s.note}</p>}
-      {s.code && <button type="button" onClick={() => { void navigator.clipboard?.writeText(s.code); setCopied(true); setTimeout(() => setCopied(false), 1500); ev("click", `Promo ${s.code}`); }} className="mt-2 inline-flex items-center gap-2 rounded-lg px-4 py-2 font-mono text-lg font-bold tracking-widest" style={{ background: `${accent}22`, color: ink }}>{s.code} {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}</button>}
-      {s.url && <a href={preview ? undefined : s.url} target="_blank" rel="noreferrer" onClick={() => ev("click", s.title || "Promo")} className="mt-3 block px-4 py-2.5 text-sm font-semibold" style={btn()}>Shop now</a>}
-    </section>
-  );
+  if (s.type === "promo") {
+    // Each code a ticket: whose it is and what it saves, the code to tap and copy, and their shop.
+    const codes = promoCodes(s).filter((c) => c.code || c.url || c.brand);
+    if (!codes.length) return null;
+    return (
+      <section data-testid="bio-promos">
+        <p className="mb-2 mt-1 flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-[0.12em]" style={{ color: sub }}><Tag className="h-3.5 w-3.5" style={{ color: accent }} /> {s.title || "Promo codes"}</p>
+        <div className="flex flex-col gap-2.5">
+          {codes.map((c) => (
+            <div key={c.id} className="flex items-center gap-3 rounded-2xl p-3 text-left" style={{ background: card, border: `1px dashed ${accent}` }}>
+              <div className="min-w-0 flex-1">
+                {c.brand && <p className="truncate text-sm font-bold">{c.brand}</p>}
+                {c.note && <p className="text-xs leading-snug" style={{ color: sub }}>{c.note}</p>}
+                {c.url && <a href={preview ? undefined : c.url} target="_blank" rel="noreferrer" onClick={() => ev("click", c.brand || "Promo")} className="mt-1 inline-flex items-center gap-1 text-xs font-semibold hover:underline" style={{ color: accent }}>Shop now <ExternalLink className="h-3 w-3" /></a>}
+              </div>
+              {c.code && <button type="button" onClick={() => { void navigator.clipboard?.writeText(c.code); setCopied(c.id); setTimeout(() => setCopied(null), 1500); ev("click", `Promo ${c.code}`); }} aria-label={`Copy ${c.code}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 font-mono text-sm font-bold tracking-widest" style={{ background: `${accent}22`, color: ink }}>{copied === c.id ? <>Copied <Check className="h-3.5 w-3.5" /></> : <>{c.code} <Copy className="h-3.5 w-3.5" /></>}</button>}
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+  if (s.type === "music") {
+    const tracks = s.tracks.filter((x) => x.url);
+    if (!tracks.length) return null;
+    return (
+      <section data-testid="bio-music">
+        <p className="mb-2 mt-1 flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-[0.12em]" style={{ color: sub }}><Music className="h-3.5 w-3.5" style={{ color: accent }} /> {s.title || "Music"}</p>
+        <div className="flex flex-col gap-2.5">
+          {tracks.map((x) => {
+            const m = musicEmbed(x.url);
+            return m
+              ? <iframe key={x.id} src={m.src} title="Music" loading="lazy" className={`w-full overflow-hidden rounded-2xl ${m.h ? "" : "aspect-video"}`} style={m.h ? { height: m.h, border: 0 } : { border: 0 }} allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" />
+              : <a key={x.id} href={preview ? undefined : x.url} target="_blank" rel="noreferrer" onClick={() => ev("click", "Music")} className="flex items-center justify-center gap-2 px-5 py-3.5 text-[15px] font-semibold" style={btn()}><Music className="h-4 w-4" /> Listen</a>;
+          })}
+        </div>
+      </section>
+    );
+  }
   if (s.type === "meeting") return (
     <section className="rounded-2xl p-4 text-center" style={{ background: card, border: `1px solid ${line}` }}>
       <p className="flex items-center justify-center gap-1.5 text-sm font-semibold"><Calendar className="h-4 w-4" style={{ color: accent }} /> {s.title || "Book a time with me"}</p>
@@ -338,18 +387,21 @@ function Section({ s, btn, ink, sub, card, line, accent, preview, ev }: { s: Bio
       {s.url && <a href={preview ? undefined : s.url} target="_blank" rel="noreferrer" onClick={() => ev("click", "Booking")} className="mt-3 block px-4 py-2.5 text-sm font-semibold" style={btn()}>Pick a time</a>}
     </section>
   );
-  if (s.type === "text") return <section className="rounded-2xl p-4 text-left" style={{ background: card, border: `1px solid ${line}` }}>{s.title && <p className="mb-1 font-semibold">{s.title}</p>}<p className="whitespace-pre-line text-sm leading-relaxed" style={{ color: sub }}>{s.body}</p></section>;
+  if (s.type === "text") {
+    if (!s.title.trim() && !s.body.trim()) return null;
+    return <section className="rounded-2xl p-4" style={{ background: card, border: `1px solid ${line}`, textAlign: s.align ?? "left" }}>{s.title && <p className="mb-1 font-semibold">{s.title}</p>}{s.body && <p className="whitespace-pre-line text-sm leading-relaxed" style={{ color: sub }}>{styled(s.body)}</p>}</section>;
+  }
   return null;
 }
 
 /**
- * The chat button at the top of the page: a message to the podcaster, and
+ * The chat button in the bottom corner of the page: a message to the podcaster, and
  * their reply back here (a badge on the button when one comes). The listener's
  * browser keeps the keys to their messages; the reply email carries one too.
  */
 export function Chat({ handle, name, avatar, welcome = "", accent, ink, sub, line, dark, preview, open, setOpen, onAsk, onLoad, corner = false }: {
   handle: string; name: string; avatar: string; welcome?: string; accent: string; ink: string; sub: string; line: string; dark: boolean; preview: boolean;
-  /** A bubble in the bottom corner (a page with its own top bar), not at the top. */
+  /** Fixed to the window's corner (a page with its own layout); otherwise it rides the foot of the page it ends. */
   corner?: boolean;
   open: boolean; setOpen: (v: boolean) => void; onAsk?: (q: AskInput) => Promise<{ token?: string; createdAt?: string }>; onLoad?: (tokens: string[]) => Promise<ChatMsg[]>;
 }) {
@@ -425,17 +477,17 @@ export function Chat({ handle, name, avatar, welcome = "", accent, ink, sub, lin
     ? <img src={avatar} alt="" className={`${size} shrink-0 rounded-full object-cover`} />
     : <span className={`${size} flex shrink-0 items-center justify-center rounded-full text-xs font-bold`} style={{ background: accent, color: onColor(accent) }}>{(name || "?").slice(0, 1)}</span>;
   return (
-    <div className={corner ? "fixed bottom-5 right-5 z-40" : "sticky top-0 z-30 h-0"}>
-      <div className={corner ? "relative" : "relative mx-auto flex max-w-[560px] justify-end p-3"}>
+    <div className={corner ? "fixed bottom-5 right-5 z-40" : "sticky bottom-0 z-30 h-0"}>
+      <div className={corner ? "relative" : "relative mx-auto h-0 max-w-[560px]"}>
         <button type="button" onClick={() => setOpen(!open)} aria-label={unread ? `${unread} new ${unread === 1 ? "reply" : "replies"}` : "Send message"} aria-expanded={open}
-          className={`group relative flex items-center justify-center rounded-full shadow-lg ring-2 transition-transform hover:scale-105 ${corner ? "h-14 w-14" : "h-11 w-11"}`}
+          className={`group flex items-center justify-center rounded-full shadow-lg ring-2 transition-transform hover:scale-105 ${corner ? "relative h-14 w-14" : "absolute bottom-4 right-4 h-12 w-12"}`}
           style={{ background: accent, color: onColor(accent), ["--tw-ring-color" as string]: dark ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.9)" }} data-testid="bio-chat">
           {open ? <X className={corner ? "h-6 w-6" : "h-5 w-5"} /> : <MessageCircle className={corner ? "h-6 w-6" : "h-5 w-5"} />}
           {unread > 0 && !open && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ef4444] px-1 text-[11px] font-bold text-white ring-2 ring-white" data-testid="bio-chat-badge">{unread}</span>}
           {!open && <span className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[#0b1020] px-2.5 py-1 text-xs font-semibold text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100">{unread ? `${unread} new ${unread === 1 ? "reply" : "replies"}` : "Send message"}</span>}
         </button>
         {open && (
-          <div className={`absolute flex max-h-[70vh] flex-col ${corner ? "bottom-[4.5rem] right-0 w-[min(22rem,calc(100vw-2.5rem))]" : "left-3 right-3 top-16 ml-auto max-w-[22rem]"} overflow-hidden rounded-3xl text-left shadow-2xl`} style={{ background: panel, color: ink, border: `1px solid ${line}` }} role="dialog" aria-label={`Message ${name}`} data-testid="bio-chat-panel">
+          <div className={`absolute flex max-h-[min(70vh,600px)] flex-col ${corner ? "bottom-[4.5rem] right-0 w-[min(22rem,calc(100vw-2.5rem))]" : "bottom-[4.75rem] left-3 right-3 ml-auto max-w-[22rem]"} overflow-hidden rounded-3xl text-left shadow-2xl`} style={{ background: panel, color: ink, border: `1px solid ${line}` }} role="dialog" aria-label={`Message ${name}`} data-testid="bio-chat-panel">
             <div className="flex items-center gap-2.5 px-4 py-3" style={{ borderBottom: `1px solid ${line}` }}>
               {face("h-9 w-9")}
               <div className="min-w-0 flex-1">
@@ -485,26 +537,33 @@ export function Chat({ handle, name, avatar, welcome = "", accent, ink, sub, lin
 }
 
 /**
- * Ask my show: listeners ask, the show's AI answers from what was said on it,
- * with the episode and minute to press play on. What it can't find, it points
- * to the chat button, which goes to the host.
+ * Ask about an episode: a sheet that slides up from the foot of the page, where
+ * the show's AI (it has listened to the show) answers from what was said in
+ * that episode, with the minute to press play on. What it can't find, it
+ * offers to send to the host.
  */
-function AskShow({ name, episodes, accent, ink, sub, card, line, radius, preview, onAskAi, onMessage }: { name: string; episodes: number; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; onAskAi?: (q: string, h: { role: "user" | "assistant"; content: string }[]) => Promise<AiAnswer>; onMessage?: () => void }) {
+function AskSheet({ ep, name, accent, ink, sub, line, dark, preview, onAskAi, onClose, onMessage }: { ep: { id: string; title: string }; name: string; accent: string; ink: string; sub: string; line: string; dark: boolean; preview: boolean; onAskAi?: (q: string, h: { role: "user" | "assistant"; content: string }[], episode?: string) => Promise<AiAnswer>; onClose: () => void; onMessage?: () => void }) {
   const [q, setQ] = useState("");
   const [turns, setTurns] = useState<({ role: "user"; content: string } | ({ role: "assistant"; content: string } & Partial<AiAnswer>))[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const player = useRef<HTMLAudioElement | null>(null);
+  const end = useRef<HTMLDivElement | null>(null);
   const [src, setSrc] = useState<{ url: string; at: number; title: string } | null>(null);
-  const ask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const text = q.trim();
+  useEffect(() => { end.current?.scrollIntoView({ block: "end" }); }, [turns.length, busy]);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+  const ask = async (question: string) => {
+    const text = question.trim();
     if (preview || !onAskAi || text.length < 4 || busy) return;
     setBusy(true); setErr(""); setQ("");
     const history = turns.map((t) => ({ role: t.role, content: t.content }));
     setTurns((x) => [...x, { role: "user", content: text }]);
     try {
-      const a = await onAskAi(text, history);
+      const a = await onAskAi(text, history, ep.title);
       setTurns((x) => [...x, { role: "assistant", content: a.answer, ...a }]);
     } catch (x) {
       setErr((x as Error).message);
@@ -517,16 +576,32 @@ function AskShow({ name, episodes, accent, ink, sub, card, line, radius, preview
     setTimeout(() => { const a = player.current; if (!a) return; a.currentTime = at; void a.play().catch(() => {}); }, 150);
   };
   const clean = (s: string) => s.replace(/\s*\[\d+\]/g, "");
+  const bubble = dark ? "rgba(255,255,255,0.08)" : "#f1f3f8";
   return (
-    <section className="rounded-3xl p-4 text-left" style={{ background: card, border: `1px solid ${line}` }} data-testid="bio-ask-ai">
-      <p className="flex items-center gap-2 text-base font-bold"><Sparkles className="h-5 w-5" style={{ color: accent }} /> Ask the show</p>
-      <p className="mt-0.5 text-xs" style={{ color: sub }}>An AI that has listened to {episodes} episode{episodes === 1 ? "" : "s"} of {name || "this show"}. It answers from what was said, and shows you where.</p>
-      {turns.length > 0 && (
-        <div className="mt-3 flex flex-col gap-2">
+    <div className="sticky bottom-0 z-40 h-0">
+      <div className="absolute inset-x-0 bottom-0 mx-auto flex max-h-[min(78vh,640px)] max-w-[560px] flex-col overflow-hidden rounded-t-3xl text-left shadow-[0_-12px_40px_rgba(0,0,0,0.35)] animate-in slide-in-from-bottom duration-300" style={{ background: dark ? "#151b2f" : "#ffffff", color: ink }} role="dialog" aria-label={`Ask about ${ep.title}`} data-testid="bio-ask-sheet">
+        <span className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full" style={{ background: line }} />
+        <div className="flex items-start gap-2.5 px-4 pb-3 pt-2" style={{ borderBottom: `1px solid ${line}` }}>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ background: `${accent}22`, color: accent }}><Sparkles className="h-4 w-4" /></span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold">Ask about this episode</p>
+            <p className="line-clamp-1 text-xs" style={{ color: sub }}>{ep.title}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: bubble }}><X className="h-4 w-4" /></button>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-4 py-3">
+          <p className="mr-8 self-start rounded-2xl rounded-bl-md px-3 py-2 text-sm" style={{ background: bubble }}>What would you like to know about this episode? I've listened to it, and I'll show you the minute it was said.</p>
+          {turns.length === 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {["What's it about?", "The key takeaways", "The best advice in it"].map((x) => (
+                <button key={x} type="button" onClick={() => void ask(x)} className="rounded-full px-3 py-1.5 text-xs font-semibold" style={{ border: `1px solid ${accent}`, color: ink }}>{x}</button>
+              ))}
+            </div>
+          )}
           {turns.map((t, i) => t.role === "user" ? (
-            <p key={i} className="ml-8 self-end rounded-2xl px-3 py-2 text-sm" style={{ background: `${accent}26`, color: ink }}>{t.content}</p>
+            <p key={i} className="ml-10 self-end rounded-2xl rounded-br-md px-3 py-2 text-sm" style={{ background: accent, color: onColor(accent) }}>{t.content}</p>
           ) : (
-            <div key={i} className="mr-4 rounded-2xl px-3 py-2 text-sm leading-relaxed" style={{ border: `1px solid ${line}` }}>
+            <div key={i} className="mr-6 self-start rounded-2xl rounded-bl-md px-3 py-2 text-sm leading-relaxed" style={{ background: bubble }}>
               <p className="whitespace-pre-line">{clean(t.content)}</p>
               {t.unanswered && onMessage && (
                 <button type="button" onClick={onMessage} className="mt-2 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold" style={{ background: accent, color: onColor(accent) }}><MessageCircle className="h-3.5 w-3.5" /> Send {name || "them"} a message</button>
@@ -543,19 +618,20 @@ function AskShow({ name, episodes, accent, ink, sub, card, line, radius, preview
             </div>
           ))}
           {busy && <p className="text-xs" style={{ color: sub }}>Listening back…</p>}
+          <div ref={end} />
         </div>
-      )}
-      {src && (
-        <div className="mt-3">
-          <p className="mb-1 truncate text-xs font-semibold">{src.title}</p>
-          <audio ref={player} src={src.url} controls preload="none" className="w-full" />
-        </div>
-      )}
-      <form onSubmit={ask} className="mt-3 flex gap-2">
-        <input value={q} onChange={(e) => { setQ(e.target.value); setErr(""); }} maxLength={500} placeholder={turns.length ? "Ask a follow-up" : "What did they say about…?"} className="h-11 min-w-0 flex-1 px-3 text-sm outline-none" style={{ background: "transparent", border: `1px solid ${line}`, color: ink, borderRadius: 12 }} />
-        <button type="submit" disabled={busy || q.trim().length < 4} aria-label="Ask" className="flex h-11 w-11 shrink-0 items-center justify-center disabled:opacity-50" style={{ background: accent, color: onColor(accent), borderRadius: Math.min(radius, 14) }}><Send className="h-4 w-4" /></button>
-      </form>
-      {err && <p className="mt-1 text-xs text-red-500">{err}</p>}
-    </section>
+        {src && (
+          <div className="px-4 pb-2">
+            <p className="mb-1 truncate text-xs font-semibold">{src.title}</p>
+            <audio ref={player} src={src.url} controls preload="none" className="w-full" />
+          </div>
+        )}
+        <form onSubmit={(e) => { e.preventDefault(); void ask(q); }} className="flex gap-2 px-4 pb-5 pt-3" style={{ borderTop: `1px solid ${line}` }}>
+          <input value={q} onChange={(e) => { setQ(e.target.value); setErr(""); }} maxLength={500} placeholder={turns.length ? "Ask a follow-up" : "Ask anything about it"} className="h-11 min-w-0 flex-1 rounded-full px-4 text-sm outline-none" style={{ background: "transparent", border: `1px solid ${line}`, color: ink }} data-testid="bio-ask-input" />
+          <button type="submit" disabled={busy || q.trim().length < 4} aria-label="Ask" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:opacity-50" style={{ background: accent, color: onColor(accent) }}><Send className="h-4 w-4" /></button>
+        </form>
+        {err && <p className="px-4 pb-3 text-xs text-red-500">{err}</p>}
+      </div>
+    </div>
   );
 }

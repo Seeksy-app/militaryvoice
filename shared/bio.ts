@@ -42,6 +42,8 @@ export interface BioTheme {
   avatarSize: "s" | "m" | "l";
   /** "Made with MilitaryVoices.ai" at the foot. */
   branding: boolean;
+  /** Their name left off the top (a logo or a photo that says it already). */
+  hideName: boolean;
   /** How much of their colour washes into the background, 0–100. */
   bgTint: number;
   /** The background darker (−100) or lighter (+100). */
@@ -69,9 +71,30 @@ export const DEFAULT_PODCAST: BioPodcastOptions = { on: true, heading: "", count
 export type BioSection =
   | { id: string; type: "links"; visible: boolean; title: string; links: { id: string; label: string; url: string }[] }
   | { id: string; type: "video"; visible: boolean; title: string; url: string }
-  | { id: string; type: "promo"; visible: boolean; title: string; code: string; url: string; note: string }
+  /** Promo codes: a list of sponsors' codes (code/url/note are the one code from before the list, read as the first). */
+  | { id: string; type: "promo"; visible: boolean; title: string; codes?: BioPromoCode[]; code: string; url: string; note: string }
   | { id: string; type: "meeting"; visible: boolean; title: string; url: string; note: string }
-  | { id: string; type: "text"; visible: boolean; title: string; body: string };
+  /** Text: **bold**, *italic* and __underline__ in the body, aligned left, centre or right. */
+  | { id: string; type: "text"; visible: boolean; title: string; body: string; align?: BioAlign }
+  /** Music: songs, albums or playlists from Spotify, Apple Music, SoundCloud or YouTube, each a player. */
+  | { id: string; type: "music"; visible: boolean; title: string; tracks: { id: string; url: string }[] };
+export type BioAlign = "left" | "center" | "right";
+export type BioPromoCode = { id: string; brand: string; code: string; note: string; url: string };
+/** A promo section's codes, the old single code included. */
+export const promoCodes = (s: { codes?: BioPromoCode[]; code: string; url: string; note: string; id: string }): BioPromoCode[] =>
+  s.codes?.length ? s.codes : s.code || s.url || s.note ? [{ id: `${s.id}-0`, brand: "", code: s.code, note: s.note, url: s.url }] : [];
+
+/** A music link as an embedded player: its address and height, or null when we can't play it here. */
+export function musicEmbed(u: string): { src: string; h: number } | null {
+  const url = u.trim();
+  const sp = url.match(/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(track|album|playlist|artist|episode|show)\/([A-Za-z0-9]+)/);
+  if (sp) return { src: `https://open.spotify.com/embed/${sp[1]}/${sp[2]}`, h: sp[1] === "track" || sp[1] === "episode" ? 152 : 352 };
+  if (/^https:\/\/music\.apple\.com\//.test(url)) return { src: url.replace("https://music.apple.com/", "https://embed.music.apple.com/"), h: /[?&]i=|\/song\//.test(url) ? 175 : 450 };
+  if (/^https:\/\/(www\.|m\.)?soundcloud\.com\//.test(url)) return { src: `https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&visual=false&show_comments=false`, h: /\/sets\//.test(url) ? 300 : 166 };
+  const yt = url.match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/);
+  if (yt) return { src: `https://www.youtube-nocookie.com/embed/${yt[1]}`, h: 0 };
+  return null;
+}
 export type BioSectionType = BioSection["type"];
 
 export interface BioSocial { platform: string; username: string; url: string; on: boolean }
@@ -234,7 +257,7 @@ export const TEMPLATES: Record<BioTemplate, { label: string; note: string; theme
   portrait: { label: "Portrait", note: "Your photo, full screen", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "hero" } },
 };
 
-export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight", podcastFrame: "full", podcast: DEFAULT_PODCAST, linkColor: "", background: { mode: "solid", color: "", image: "" }, imageY: 50, avatarSize: "m", branding: true, bgTint: 0, bgBrightness: 0, bgWash: 65, cutoutY: 0, cutoutSize: 100 };
+export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight", podcastFrame: "full", podcast: DEFAULT_PODCAST, linkColor: "", background: { mode: "solid", color: "", image: "" }, imageY: 50, avatarSize: "m", branding: true, hideName: false, bgTint: 0, bgBrightness: 0, bgWash: 65, cutoutY: 0, cutoutSize: 100 };
 
 /** MilCrunch's fourteen (white, the greys, black, the reds, orange, gold, pink, purple, navy, teal, green) and our gold and navy. */
 export const SWATCHES = [
