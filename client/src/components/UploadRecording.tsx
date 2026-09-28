@@ -6,7 +6,9 @@ import { durationOf, uploadToStorage } from "@/lib/upload";
 import { Loader2, Upload } from "lucide-react";
 
 /** Add a video you already have: it's filed as a recording, nothing more (clipping is Pōstify's). */
-export function UploadRecording({ onDone, tall = false, autoOpen = false, title = "Drop a video here, or click to browse", note = "MP4, MOV or WebM, up to 2GB. Then make clips from it in Pōstify." }: {
+export function UploadRecording({ onDone, tall = false, autoOpen = false, initialFile, title = "Drop a video here, or click to browse", note = "MP4, MOV or WebM, up to 2GB. Then make clips from it in Pōstify." }: {
+  /** A file already dropped somewhere else (Social's box): upload it straight away. */
+  initialFile?: File | null;
   /** Open the file picker on arrival: the dashboard's + Create › Upload video. */
   autoOpen?: boolean;
   /** Called with the new recording's id once it's filed. */
@@ -33,6 +35,11 @@ export function UploadRecording({ onDone, tall = false, autoOpen = false, title 
     // Still inside the click that asked for it, so the browser lets the picker open.
     input.current?.click();
   }, [autoOpen]);
+  const started = useRef<File | null>(null);
+  useEffect(() => {
+    if (initialFile && started.current !== initialFile) { started.current = initialFile; void go(initialFile); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile]);
   async function go(file: File) {
     if (!file.type.startsWith("video/") && !/\.(mp4|mov|m4v|webm)$/i.test(file.name)) {
       toast({ title: "That isn't a video", description: "Upload an MP4, MOV or WebM.", variant: "destructive" });

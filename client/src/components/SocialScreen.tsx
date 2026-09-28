@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip as ChartTip, XAxis, YAxis } from "recharts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { ClipRow, HostPostRow, PostMetrics, PostResult, RecordingRow, SocialPlatform } from "@shared/schema";
-import { AlertTriangle, BarChart3, Heart, Lightbulb, MessageCircle, Repeat2, TrendingDown, TrendingUp, Users, Eye, ChevronDown, Clapperboard, Film, ImagePlus, Upload, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, Loader2, Play, Plus, Send, Settings2, Share2, Target, Trash2, X } from "lucide-react";
+import { AlertTriangle, BarChart3, Heart, Lightbulb, MessageCircle, Repeat2, TrendingDown, TrendingUp, Users, Eye, ChevronDown, Clapperboard, Film, ImagePlus, Upload, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, Loader2, Play, Plus, Send, Settings2, Share2, Sparkles, Target, Trash2, X } from "lucide-react";
 
 /**
  * Social: the podcaster's own social desk, the way Later or Buffer lay it out.
@@ -49,7 +49,8 @@ export function SocialScreen() {
   const [targetAt, setTargetAt] = useState<string | undefined>(undefined);
   const [picking, setPicking] = useState<string | null>(null); // Create post, optionally for a slot (datetime-local)
   const [pickKind, setPickKind] = useState<"clips" | "episodes" | "upload">("clips");
-  const create = (k: "clips" | "episodes" | "upload") => { setPickKind(k); setPicking(""); };
+  const [dropped, setDropped] = useState<File | null>(null);
+  const create = (k: "clips" | "episodes" | "upload", file?: File) => { setPickKind(k); setDropped(file ?? null); setPicking(""); };
   const [open, setOpen] = useState<Post | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
   const [viewing, setViewing] = useState<{ src: string; title: string } | null>(null);
@@ -93,12 +94,6 @@ export function SocialScreen() {
   const postClip = (c: ClipRow, at?: string) => { setTargetAt(at); setTarget({ kind: "clip", id: c.id, title: c.title, caption: c.caption, shapes: [...shapesOf(c)] }); };
   const postEpisode = (r: RecordingRow, at?: string) => { setTargetAt(at); setTarget({ kind: "recording", id: r.id, title: r.title }); };
 
-  // One tap: the clip, in its first shape, to every connected account, in the next open slot.
-  const queueClip = useMutation({
-    mutationFn: async (c: ClipRow) => (await apiRequest("POST", `/api/host/clips/${c.id}/publish`, { platforms: connected, title: c.title, description: c.caption ?? "", shape: shapesOf(c)[0], queue: true })).json() as Promise<{ scheduledAt?: string }>,
-    onSuccess: (r) => { refresh(); toast({ title: "In your queue", description: r.scheduledAt ? `It goes out ${fmtWhen(Date.parse(r.scheduledAt))}.` : "It goes out in your next open slot." }); },
-    onError: (e: Error) => toast({ title: "Couldn't queue that", description: e.message, variant: "destructive" }),
-  });
   const move = useMutation({
     mutationFn: async (v: { id: number; at: number }) => (await apiRequest("PATCH", `/api/host/posts/${v.id}`, { scheduledAt: new Date(v.at).toISOString() })).json(),
     onSuccess: () => { refresh(); toast({ title: "Moved" }); },
@@ -111,25 +106,48 @@ export function SocialScreen() {
   });
 
   const noAccounts = social.isSuccess && connected.length === 0;
+  const [over, setOver] = useState(false);
+  const weekDays = Array.from({ length: 7 }, (_, i) => wk + i * DAY);
+  const inWeek = (t: number) => t >= wk && t < wk + 7 * DAY;
+  const openSlots = (queue.data?.slots ?? []).filter((x) => x.available && x.post_count === 0).map((x) => Date.parse(x.datetime_utc)).filter((t) => t > now && inWeek(t));
+  const later = upcoming.filter((p) => p.at >= wk + 7 * DAY).length;
+  const fillN = Math.min(openSlots.length, ready.length);
+  // Fill my week: the newest ready clips, one to each open slot, every connected channel.
+  const fill = useMutation({
+    mutationFn: async () => {
+      const times: number[] = [];
+      for (const c of ready.slice(0, fillN)) {
+        const r = (await (await apiRequest("POST", `/api/host/clips/${c.id}/publish`, { platforms: connected, title: c.title, description: c.caption ?? "", shape: shapesOf(c)[0], queue: true })).json()) as { scheduledAt?: string };
+        if (r.scheduledAt) times.push(Date.parse(r.scheduledAt));
+      }
+      return times;
+    },
+    onSuccess: (times) => { refresh(); toast({ title: `Your week is set: ${times.length} clip${times.length === 1 ? "" : "s"} queued`, description: times.length ? times.map((t) => fmtWhen(t)).join(" · ") : undefined }); },
+    onError: (e: Error) => { refresh(); toast({ title: "Couldn't fill all of it", description: e.message, variant: "destructive" }); },
+  });
   const followersTotal = accounts.reduce((n, x) => n + (x.followers ?? 0), 0);
   const week7 = useQuery<Analytics>({ queryKey: ["/api/host/social/analytics", 7], queryFn: async () => (await apiRequest("GET", "/api/host/social/analytics?days=7")).json(), enabled: tab === "home" && connected.length > 0, retry: false });
   const reach7 = trend(week7.data?.views?.per_day);
 
   return (
     <section className="mt-2" data-testid="social-screen">
-      {/* Header: the accounts, and the two things you do here. */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="mr-2 text-xl font-bold text-foreground">Social</h1>
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+      {/* Header: one line of what matters, and the channels as small marks. */}
+      <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <h1 className="text-xl font-bold text-foreground">Social</h1>
+        {accounts.length > 0 && (
+          <span className="text-sm text-muted-foreground" data-testid="social-summary">
+            <b className="font-semibold tabular-nums text-foreground">{compact(followersTotal)}</b> followers
+            {reach7 && <> · <b className="font-semibold tabular-nums text-foreground">{compact(reach7.last)}</b> views this week</>}
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-1.5">
           {accounts.map((a, i) => (
-            <span key={`${a.platform}-${i}`} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium" title={platformLabel(a.platform)}>
-              <PlatformIcon platform={a.platform} className="h-3.5 w-3.5" />
-              {a.username ? `@${a.username.replace(/^@/, "")}` : platformLabel(a.platform)}
-              {typeof a.followers === "number" && <span className="tabular-nums text-muted-foreground">{compact(a.followers)}</span>}
-            </span>
+            <Tip key={`${a.platform}-${i}`} text={`${platformLabel(a.platform)}${a.username ? ` · @${a.username.replace(/^@/, "")}` : ""}${typeof a.followers === "number" ? ` · ${compact(a.followers)} followers` : ""}`}>
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-foreground/80"><PlatformIcon platform={a.platform} className="h-3.5 w-3.5" /></span>
+            </Tip>
           ))}
-          <a href="/host/dashboard/integrations" className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground"><Link2 className="h-3.5 w-3.5" /> {accounts.length ? "Manage" : "Connect accounts"}</a>
-        </div>
+          <a href="/host/dashboard/integrations" className="ml-1 inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground"><Link2 className="h-3.5 w-3.5" /> {accounts.length ? "Manage" : "Connect accounts"}</a>
+        </span>
       </div>
 
       {/* The two views, and on the same line the queue's times and the way to make a post. */}
@@ -166,138 +184,80 @@ export function SocialScreen() {
 
       {tab === "home" ? (
         <div className="flex flex-col gap-4">
-          {/* Start here: one box for anything they want to share, to every channel. */}
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="social-composer">
-            <div className="flex items-center gap-3">
-              <span className="flex shrink-0 -space-x-1.5">
-                {(connected.length ? connected : (["instagram", "youtube", "facebook"] as SocialPlatform[])).slice(0, 5).map((pl) => (
-                  <span key={pl} className={`flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-muted ${connected.length ? "" : "opacity-40"}`}><PlatformIcon platform={pl} className="h-4 w-4" /></span>
-                ))}
-              </span>
-              <button type="button" onClick={() => create("upload")} disabled={noAccounts} className="min-w-0 flex-1 truncate rounded-full border border-border bg-muted/40 px-4 py-2.5 text-left text-sm text-muted-foreground transition-colors hover:border-[#053877]/40 hover:bg-muted disabled:opacity-60" data-testid="social-compose">
-                What do you want to share today?
-              </button>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {([["upload", "Photo or video", ImagePlus], ["clips", "A clip", Clapperboard], ["episodes", "An episode", Film]] as const).map(([k, label, I]) => (
-                <button key={k} type="button" onClick={() => create(k)} disabled={noAccounts} className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold hover:border-[#053877]/40 hover:bg-[#053877]/[0.04] disabled:opacity-50" data-testid={`social-compose-${k}`}>
-                  <I className="h-3.5 w-3.5 text-[#053877] dark:text-[#8fb5e8]" /> {label}
-                </button>
-              ))}
-              <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">One post, to every channel you pick, now or on your schedule.</span>
+          {/* One box for anything they want to share: drop it, or pick from the Library. */}
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => !noAccounts && create("upload")}
+            onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !noAccounts) create("upload"); }}
+            onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files?.[0]; if (f && !noAccounts) create("upload", f); }}
+            className={`cursor-pointer rounded-2xl border-2 border-dashed p-6 text-center transition-colors ${over ? "border-[#053877] bg-[#053877]/[0.06]" : "border-border bg-card hover:border-[#053877]/50"} ${noAccounts ? "pointer-events-none opacity-50" : ""}`}
+            data-testid="social-compose"
+          >
+            <Upload className="mx-auto h-6 w-6 text-[#053877] dark:text-[#8fb5e8]" />
+            <p className="mt-2 text-base font-semibold">Drop a photo or video to post</p>
+            <p className="text-sm text-muted-foreground">It goes to {connected.length === 1 ? "your channel" : `all ${connected.length} of your channels`}, in your next open slot. Or click to choose one.</p>
+            <div className="mt-3 flex justify-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <Button variant="outline" size="sm" onClick={() => create("clips")} disabled={noAccounts} className="gap-1.5 rounded-full" data-testid="social-compose-clips"><Clapperboard className="h-4 w-4" /> Use a clip</Button>
+              <Button variant="outline" size="sm" onClick={() => create("episodes")} disabled={noAccounts} className="gap-1.5 rounded-full" data-testid="social-compose-episodes"><Film className="h-4 w-4" /> Use an episode</Button>
             </div>
           </div>
 
-          {/* The numbers that matter this week. */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Stat label="Followers" icon={Users} value={compact(followersTotal)} sub={`across ${accounts.length} ${accounts.length === 1 ? "channel" : "channels"}`} />
-            <Stat label="Views, last 7 days" icon={Eye} value={reach7 ? compact(reach7.last) : "—"} sub={reach7 && reach7.change ? <span className={reach7.change > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600"}>{reach7.change > 0 ? "+" : ""}{compact(reach7.change)} this week</span> : "on everything you've posted"} onClick={() => go("analytics")} />
-            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-              <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><Target className="h-3.5 w-3.5" /> Posts this week</p>
-              <p className="mt-1 text-2xl font-bold tabular-nums">{thisWeek} <span className="text-sm font-medium text-muted-foreground">of {goal}</span></p>
-              <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[#F0A71F] transition-all" style={{ width: `${Math.min(100, (thisWeek / goal) * 100)}%` }} /></div>
-              <div className="mt-1.5 flex items-center gap-0.5 text-[11px] text-muted-foreground">
-                Goal
-                {[3, 5, 7, 14].map((g) => (
-                  <button key={g} type="button" onClick={() => { setGoal(g); try { localStorage.setItem("mv_post_goal", String(g)); } catch { /* fine */ } }} className={`rounded-full px-1.5 font-semibold ${goal === g ? "bg-[#053877] text-white" : "hover:bg-muted"}`}>{g}</button>
-                ))}
-              </div>
+          {/* The week: what's going out, the open slots to fill, the goal, and one button to fill it. */}
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="social-week">
+            <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h2 className="text-sm font-semibold">Your week</h2>
+              <span className="text-xs text-muted-foreground"><b className="tabular-nums text-foreground">{thisWeek}</b> of {goal} posts</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild><button type="button" className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Change goal</button></DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {[3, 5, 7, 14].map((g) => <DropdownMenuItem key={g} onSelect={() => { setGoal(g); try { localStorage.setItem("mv_post_goal", String(g)); } catch { /* fine */ } }}>{g} posts a week {goal === g && <Check className="ml-auto h-3.5 w-3.5" />}</DropdownMenuItem>)}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              {fillN > 0 ? (
+                <Button onClick={() => fill.mutate()} disabled={fill.isPending || noAccounts} className="ml-auto h-9 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="social-fill-week">
+                  {fill.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Fill my week with {fillN} clip{fillN === 1 ? "" : "s"}
+                </Button>
+              ) : openSlots.length > 0 && !ready.length ? (
+                <span className="ml-auto text-xs text-muted-foreground">{openSlots.length} open slot{openSlots.length === 1 ? "" : "s"} left this week</span>
+              ) : null}
             </div>
-            <Stat label="Scheduled" icon={CalendarClock} value={String(upcoming.length)} sub={upcoming.length ? `next ${fmtWhen(upcoming[0].at)}` : queue.data?.next ? `next open slot ${fmtWhen(Date.parse(queue.data.next))}` : "nothing waiting"} onClick={() => go("calendar")} />
+            <div className="grid gap-1.5 sm:grid-cols-7">
+              {weekDays.map((d) => {
+                const dayPosts = posts.filter((p) => p.status !== "failed" && sameDay(p.at, d)).sort((x, y) => x.at - y.at);
+                const daySlots = openSlots.filter((t) => sameDay(t, d));
+                const today = sameDay(d, now);
+                return (
+                  <div key={d} className={`flex min-h-[7.5rem] flex-col gap-1.5 rounded-xl border p-1.5 ${today ? "border-[#F0A71F]/60 bg-[#F0A71F]/[0.05]" : "border-border"}`} data-testid={`social-day-${new Date(d).getDay()}`}>
+                    <span className={`px-1 text-[11px] font-semibold ${today ? "text-[#b36b00]" : "text-muted-foreground"}`}>{new Date(d).toLocaleDateString(undefined, { weekday: "short" })} {new Date(d).getDate()}</span>
+                    {dayPosts.map((p) => (
+                      <button key={p.id} type="button" onClick={() => setOpen(p)} className="flex min-w-0 items-center gap-1.5 rounded-lg border border-border bg-background p-1 text-left hover:border-[#053877]/40" title={`${p.title} · ${fmtWhen(p.at)}`}>
+                        <Thumb p={p} className="h-8 w-6" />
+                        <span className="min-w-0 flex-1"><span className="block truncate text-[11px] font-medium leading-tight">{p.title || "Post"}</span><span className="block text-[10px] text-muted-foreground">{p.at > now ? fmtTime(p.at) : "Posted"}</span></span>
+                      </button>
+                    ))}
+                    {daySlots.map((t) => (
+                      <button key={t} type="button" onClick={() => { setPickKind("clips"); setPicking(local(t)); }} className="rounded-lg border border-dashed border-border px-1 py-2 text-[11px] font-medium text-muted-foreground hover:border-[#053877]/50 hover:text-foreground" title="Fill this slot">
+                        + {fmtTime(t)}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+            {later > 0 && <button type="button" onClick={() => go("calendar")} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">{later} more scheduled after this week <ChevronRight className="h-3 w-3" /></button>}
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-            <div className="flex min-w-0 flex-col gap-4">
-              {/* Every channel, and whether it's been fed this week. */}
-              <Card title="Your channels" icon={Share2} note={accounts.length ? undefined : "none connected yet"}>
-                {accounts.length ? (
-                  <ul className="divide-y divide-border">
-                    {accounts.map((acc, i) => {
-                      const mine = posts.filter((p) => p.status !== "failed" && p.platforms.split(",").includes(acc.platform));
-                      const week = mine.filter((p) => p.at >= wk && p.at < wk + 7 * DAY).length;
-                      const last = mine.filter((p) => p.at <= now).sort((x, y) => y.at - x.at)[0];
-                      const quiet = !last || now - last.at > 7 * DAY;
-                      return (
-                        <li key={`${acc.platform}-${i}`} className="flex items-center gap-3 py-2.5" data-testid={`social-channel-${acc.platform}`}>
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted"><PlatformIcon platform={acc.platform} className="h-[18px] w-[18px]" /></span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold">{acc.username ? `@${acc.username.replace(/^@/, "")}` : platformLabel(acc.platform)}</span>
-                            <span className="block truncate text-xs text-muted-foreground">
-                              {platformLabel(acc.platform)}{typeof acc.followers === "number" ? ` · ${compact(acc.followers)} followers` : ""}
-                            </span>
-                          </span>
-                          <span className="hidden w-24 text-right text-xs sm:block">
-                            <b className="tabular-nums">{week}</b> <span className="text-muted-foreground">this week</span>
-                          </span>
-                          <span className={`hidden w-32 text-right text-xs md:block ${quiet ? "font-semibold text-[#b36b00] dark:text-[#F0A71F]" : "text-muted-foreground"}`}>
-                            {last ? `Last post ${ago(last.at, now)}` : "No posts yet"}
-                          </span>
-                          <Button size="sm" variant="outline" onClick={() => create("upload")} className="h-8 shrink-0 gap-1 rounded-full px-3 text-xs" data-testid={`social-channel-post-${acc.platform}`}><Plus className="h-3.5 w-3.5" /> Post</Button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Connect Instagram, YouTube, TikTok, Facebook, LinkedIn or X and post to all of them from here.</p>
-                )}
-              </Card>
-
-              {/* How the last posts landed, with a link to each one live. */}
-              <Card title="Recently posted" icon={Send}>
-                {gone.length ? (
-                  <ul className="divide-y divide-border">
-                    {gone.slice(0, 6).map((p) => <PostRow key={p.id} p={p} onOpen={() => setOpen(p)} />)}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Nothing yet. What goes out shows here, with a link to it on each channel.</p>
-                )}
-              </Card>
-            </div>
-
-            <div className="flex min-w-0 flex-col gap-4">
-              <Card title="Up next" icon={Clock} note={upcoming.length ? `${upcoming.length} scheduled` : undefined}>
-                {upcoming.length ? (
-                  <ul className="divide-y divide-border">
-                    {upcoming.slice(0, 5).map((p) => <PostRow key={p.id} p={p} onOpen={() => setOpen(p)} onRemove={() => setRemoving(p)} compactRow />)}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Nothing scheduled{queue.data?.next ? `. Your next open slot is ${fmtWhen(Date.parse(queue.data.next))}` : ""}.</p>
-                )}
-                <button type="button" onClick={() => go("calendar")} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">See the calendar <ChevronRight className="h-3 w-3" /></button>
-              </Card>
-
-              {/* Clips from Pōstify that haven't gone out: one idea among many, kept small. */}
-              <Card title="Clips ready to post" icon={Clapperboard} note={ready.length ? String(ready.length) : undefined}>
-                {ready.length ? (
-                  <>
-                    <ul className="divide-y divide-border">
-                      {ready.slice(0, 4).map((c) => {
-                        const src = c.verticalUrl || c.squareUrl || c.url;
-                        return (
-                          <li key={c.id} className="flex items-center gap-2.5 py-2" data-testid={`social-ready-${c.id}`}>
-                            <button type="button" onClick={() => setViewing({ src, title: c.title })} className="relative h-12 w-9 shrink-0 overflow-hidden rounded-md bg-black" aria-label={`Play ${c.title}`}>
-                              <video src={`${src}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-                            </button>
-                            <span className="line-clamp-2 min-w-0 flex-1 text-xs font-semibold leading-snug">{c.title}</span>
-                            <Tip text="Add to your queue: every connected channel, the next open slot">
-                              <button type="button" onClick={() => queueClip.mutate(c)} disabled={queueClip.isPending || noAccounts} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-50" aria-label="Queue" data-testid={`social-queue-${c.id}`}>
-                                {queueClip.isPending && queueClip.variables?.id === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarClock className="h-3.5 w-3.5" />}
-                              </button>
-                            </Tip>
-                            <Tip text="Choose the words, channels and time">
-                              <button type="button" onClick={() => postClip(c)} disabled={noAccounts} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border hover:bg-muted disabled:opacity-50" aria-label="Post with options" data-testid={`social-post-${c.id}`}><Send className="h-3.5 w-3.5" /></button>
-                            </Tip>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    {ready.length > 4 && <button type="button" onClick={() => create("clips")} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">See all {ready.length} <ChevronRight className="h-3 w-3" /></button>}
-                  </>
-                ) : (
-                  <p className="text-sm text-muted-foreground">{clipList.length ? "Every clip is posted or queued." : <>No clips yet. <a href="/host/dashboard/postify" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Create clips in Pōstify</a>.</>}</p>
-                )}
-              </Card>
-            </div>
+          {/* How the last few landed. */}
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="mb-1 flex items-center justify-between"><h2 className="text-sm font-semibold">Recently posted</h2>{gone.length > 5 && <button type="button" onClick={() => go("analytics")} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">See how they did</button>}</div>
+            {gone.length ? (
+              <ul className="divide-y divide-border">{gone.slice(0, 5).map((p) => <PostRow key={p.id} p={p} onOpen={() => setOpen(p)} />)}</ul>
+            ) : (
+              <p className="py-2 text-sm text-muted-foreground">Nothing yet. What goes out shows here, with a link to it on each channel.</p>
+            )}
           </div>
         </div>
       ) : tab === "analytics" ? (
@@ -325,6 +285,7 @@ export function SocialScreen() {
           </DialogHeader>
           <LibraryPicker
             initial={pickKind}
+            initialFile={dropped}
             clips={clipList}
             episodes={episodes}
             used={usedClips}
@@ -371,25 +332,6 @@ export function SocialScreen() {
 
 function compact(n: number) {
   return n >= 1e6 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1).replace(/\.0$/, "")}K` : String(n);
-}
-
-/** "3 days ago", "yesterday", "today". */
-function ago(t: number, now: number) {
-  const d = Math.floor((new Date(now).setHours(0, 0, 0, 0) - new Date(t).setHours(0, 0, 0, 0)) / DAY);
-  return d <= 0 ? "today" : d === 1 ? "yesterday" : d < 30 ? `${d} days ago` : new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function Stat({ label, icon: I, value, sub, onClick }: { label: string; icon: typeof Home; value: string; sub: React.ReactNode; onClick?: () => void }) {
-  const body = (
-    <>
-      <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><I className="h-3.5 w-3.5" /> {label}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums">{value}</p>
-      <p className="mt-0.5 truncate text-xs text-muted-foreground">{sub}</p>
-    </>
-  );
-  return onClick
-    ? <button type="button" onClick={onClick} className="rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition-colors hover:border-[#053877]/40">{body}</button>
-    : <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">{body}</div>;
 }
 
 function Tip({ text, children }: { text: string; children: React.ReactElement }) {
@@ -541,7 +483,7 @@ function Calendar({ posts, slots, onOpen, onSlot, onMove, onRemove }: { posts: P
   );
 }
 
-function LibraryPicker({ initial = "clips", clips, episodes, used, onClip, onEpisode, onPhoto, onVideo }: { initial?: "clips" | "episodes" | "upload"; clips: ClipRow[]; episodes: RecordingRow[]; used: Set<number>; onClip: (c: ClipRow) => void; onEpisode: (r: RecordingRow) => void; onPhoto: (p: { storageKey: string; preview: string; title: string }) => void; onVideo: (id: number) => void }) {
+function LibraryPicker({ initial = "clips", initialFile = null, clips, episodes, used, onClip, onEpisode, onPhoto, onVideo }: { initial?: "clips" | "episodes" | "upload"; initialFile?: File | null; clips: ClipRow[]; episodes: RecordingRow[]; used: Set<number>; onClip: (c: ClipRow) => void; onEpisode: (r: RecordingRow) => void; onPhoto: (p: { storageKey: string; preview: string; title: string }) => void; onVideo: (id: number) => void }) {
   const [kind, setKind] = useState<"clips" | "episodes" | "upload">(initial);
   const { toast } = useToast();
   const [pct, setPct] = useState<number | null>(null);
@@ -558,6 +500,12 @@ function LibraryPicker({ initial = "clips", clips, episodes, used, onClip, onEpi
       setPct(null);
     }
   };
+  // A picture dropped on Social's box uploads here straight away (a video goes to the video box below).
+  const droppedPhoto = useRef<File | null>(null);
+  useEffect(() => {
+    if (initialFile && initialFile.type.startsWith("image/") && droppedPhoto.current !== initialFile) { droppedPhoto.current = initialFile; void photo(initialFile); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFile]);
   return (
     <div>
       <div className="mb-3 inline-flex rounded-full border border-border p-0.5 text-xs">
@@ -575,7 +523,7 @@ function LibraryPicker({ initial = "clips", clips, episodes, used, onClip, onEpi
             <span className="text-xs text-muted-foreground">JPG, PNG or WebP. Posts to everything but YouTube.</span>
           </label>
           <div className="min-h-[12rem]" data-testid="social-upload-video">
-            <UploadRecording tall title="A video" note="Drop it here or click. It's saved to your Library too, so Pōstify can clip it." onDone={onVideo} />
+            <UploadRecording tall title="A video" note="Drop it here or click. It's saved to your Library too, so Pōstify can clip it." onDone={onVideo} initialFile={initialFile && !initialFile.type.startsWith("image/") ? initialFile : null} />
           </div>
         </div>
       ) : kind === "clips" ? (

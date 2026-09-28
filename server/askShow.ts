@@ -49,6 +49,9 @@ async function store(id: number, email: string, lines: Line[]) {
  */
 export async function syncKnowledge(email: string): Promise<void> {
   await schemaIsReady();
+  // One that failed (the transcriber was down, a bill unpaid) tries again after a few hours, by itself.
+  const retry = new Date(Date.now() - 3 * 3600_000).toISOString();
+  await db.execute(sql`UPDATE show_transcripts SET status = 'queued', error = '' WHERE email = ${email} AND status = 'failed' AND claimed_at < ${retry} AND error NOT LIKE 'No audio%' AND error NOT LIKE 'Nothing was said%'`);
   const have = new Set((await db.select({ k: showTranscripts.episodeKey }).from(showTranscripts).where(eq(showTranscripts.email, email))).map((r) => r.k));
   const [show] = await db.select().from(hostedShows).where(eq(hostedShows.email, email)).orderBy(hostedShows.id).limit(1);
   const add: (typeof showTranscripts.$inferInsert)[] = [];
