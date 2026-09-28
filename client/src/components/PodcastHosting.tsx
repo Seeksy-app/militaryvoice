@@ -95,6 +95,7 @@ export function PodcastHosting() {
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <FeedLink url={h.feedUrl} />
               <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-full" onClick={() => setEditing(true)} data-testid="hosting-edit-show"><Pencil className="h-3.5 w-3.5" /> Show details</Button>
+              {h.episodes.some((e) => e.live) && <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 rounded-full"><a href={`/podcast/${s.slug}`} target="_blank" rel="noreferrer" data-testid="hosting-public-page">Your show page <ExternalLink className="h-3 w-3" /></a></Button>}
             </div>
           </div>
         </div>
@@ -349,6 +350,8 @@ function ShowDialog({ open, onClose, show, categories, onSaved }: { open: boolea
           </label>
           <label className={label}>Website (optional)<Input value={v.website} onChange={(e) => set("website", e.target.value)} className="mt-1" placeholder="https://" /></label>
           <label className={label}>Copyright (optional)<Input value={v.copyright} onChange={(e) => set("copyright", e.target.value)} className="mt-1" placeholder={`© ${new Date().getFullYear()} ${v.author || v.title}`} /></label>
+          <label className={label}>Apple Podcasts link (once listed)<Input value={v.appleUrl} onChange={(e) => set("appleUrl", e.target.value)} className="mt-1" placeholder="https://podcasts.apple.com/…" /></label>
+          <label className={label}>Spotify link (once listed)<Input value={v.spotifyUrl} onChange={(e) => set("spotifyUrl", e.target.value)} className="mt-1" placeholder="https://open.spotify.com/show/…" /></label>
           <label className={`${label} sm:col-span-2`}>Moving to another host? (optional)<Input value={v.newFeedUrl} onChange={(e) => set("newFeedUrl", e.target.value)} className="mt-1" placeholder="Your new host's feed address. Leave empty to stay." /><span className="mt-1 block font-normal">Your feed then forwards every app there (a 301), and your subscribers follow.</span></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.explicit} onChange={(e) => set("explicit", e.target.checked)} /> Explicit language</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.showType === "serial"} onChange={(e) => set("showType", e.target.checked ? "serial" : "episodic")} /> Listen in order (a series)</label>

@@ -61,6 +61,11 @@ const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 const cdata = (s: string) => `<![CDATA[${s.replace(/]]>/g, "]]]]><![CDATA[>")}]]>`;
 const notesHtml = (s: string) => s.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
 const rfc822 = (iso: string) => new Date(iso).toUTCString();
+/** Show notes as plain text for the public page: tags out (an imported feed's HTML is never put on our page), paragraphs kept. */
+const notesText = (html: string) => html
+  .replace(/<(br|\/p|\/div|\/li|\/h\d)\s*\/?>/gi, "\n").replace(/<li[^>]*>/gi, "• ").replace(/<[^>]+>/g, "")
+  .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
+  .replace(/\n{3,}/g, "\n\n").trim();
 const extOf = (mime: string) => (/mp4|m4a|aac/.test(mime) ? (mime.startsWith("video") ? "mp4" : "m4a") : "mp3");
 
 /** podcast:guid: a UUIDv5 of the feed address without its scheme, in the Podcasting 2.0 namespace. */
@@ -220,7 +225,7 @@ export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[]): string {
   const self = feedUrl(s.slug);
   const owner = feedOwnerEmail(s);
   const notes = (e: HostedEpisodeRow) => (e.notesFormat === "html" ? e.description : notesHtml(e.description));
-  const link = s.website || ORIGIN;
+  const link = s.website || `${ORIGIN}/podcast/${s.slug}`;
   const cat = s.subcategory
     ? `<itunes:category text="${esc(s.category)}"><itunes:category text="${esc(s.subcategory)}"/></itunes:category>`
     : `<itunes:category text="${esc(s.category)}"/>`;
@@ -358,7 +363,19 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
   });
 
   // A fresh server creates the hosting tables on its first query; wait for that, so a feed or a play never meets a missing table.
-  app.use(["/feed", "/e", "/api/host/hosting"], (_req, _res, next) => { schemaIsReady().then(() => next(), next); });
+  app.use(["/feed", "/e", "/api/host/hosting", "/api/public/podcast"], (_req, _res, next) => { schemaIsReady().then(() => next(), next); });
+
+  // The show's public page: what anyone can see and play.
+  app.get("/api/public/podcast/:slug", async (req, res) => {
+    const [s] = await db.select().from(hostedShows).where(eq(hostedShows.slug, String(req.params.slug))).limit(1);
+    if (!s || s.newFeedUrl) return res.status(404).json({ message: "No such show." });
+    const eps = (await episodesOf(s.id)).filter(live);
+    res.setHeader("Cache-Control", "public, max-age=120, s-maxage=120");
+    res.json({
+      show: { title: s.title, description: s.description, author: s.author || s.ownerName, artworkUrl: s.artworkUrl, category: s.category, website: s.website, appleUrl: s.appleUrl, spotifyUrl: s.spotifyUrl, feedUrl: feedUrl(s.slug) },
+      episodes: eps.map((e) => ({ id: e.id, title: e.title, notes: e.notesFormat === "html" ? notesText(e.description) : e.description, publishedAt: e.publishedAt, durationSec: e.durationSec, episodeNumber: e.episodeNumber, season: e.season, artworkUrl: e.artworkUrl, audio: `${ORIGIN}/e/${e.id}.${extOf(e.mime)}` })),
+    });
+  });
 
   // The feed.
   app.get("/feed/:slug", async (req, res) => {
@@ -449,6 +466,8 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     const [out] = await db.update(hostedShows).set({
       ...(ownerEmail !== undefined ? { ownerEmail, ...(ownerEmail.toLowerCase() === s.email ? { ownerEmailVerified: s.email } : {}) } : {}),
       ...(newFeedUrl !== undefined ? { newFeedUrl } : {}),
+      ...(typeof b.appleUrl === "string" && (b.appleUrl === "" || /^https:\/\/podcasts\.apple\.com\//.test(b.appleUrl)) ? { appleUrl: b.appleUrl.trim() } : {}),
+      ...(typeof b.spotifyUrl === "string" && (b.spotifyUrl === "" || /^https:\/\/open\.spotify\.com\//.test(b.spotifyUrl)) ? { spotifyUrl: b.spotifyUrl.trim() } : {}),
       ...str("title", 200), ...str("description", 4000), ...str("author", 200), ...str("ownerName", 200), ...str("website", 300), ...str("copyright", 300),
       ...(category ? { category, subcategory: subcategory ?? "" } : subcategory !== undefined ? { subcategory } : {}),
       ...(typeof b.explicit === "boolean" ? { explicit: b.explicit } : {}),

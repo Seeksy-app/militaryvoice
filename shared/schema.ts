@@ -2352,6 +2352,9 @@ export const hostedShows = pgTable("hosted_shows", {
   ownerEmailVerified: text("owner_email_verified").notNull().default(""),
   ownerCode: text("owner_code").notNull().default(""),
   ownerCodeAt: text("owner_code_at").notNull().default(""),
+  /** Where to follow it, once it's listed (shown on its public page). */
+  appleUrl: text("apple_url").notNull().default(""),
+  spotifyUrl: text("spotify_url").notNull().default(""),
   /** Leaving us: the new host's feed. The feed then says so (itunes:new-feed-url) and forwards there (301). */
   newFeedUrl: text("new_feed_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
