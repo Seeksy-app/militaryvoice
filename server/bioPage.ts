@@ -8,6 +8,7 @@ import { requireHostSession, getSessionEmail } from "./session.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { sendListenerQuestionEmail } from "./email.js";
 import { buildShareCard } from "./shareCard.js";
+import Anthropic from "@anthropic-ai/sdk";
 import { readFeed } from "./hosting.js";
 import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
 import { bioPages, bioEvents, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
@@ -206,6 +207,34 @@ export function registerBioPage(app: Express) {
       res.json({ url, preview: await publicOf(out) });
     } catch {
       res.status(400).json({ message: "Couldn't read that image. Try a JPG or PNG." });
+    }
+  });
+
+  // Write it for me: a first draft of their bio from what we know (the show, its episodes, their service). They edit it.
+  app.post("/api/host/bio/draft-bio", requireHostSession, async (req, res) => {
+    const row = await pageFor(emailOf(req));
+    const p = await storage.getProfileByEmail(row.email).catch(() => undefined);
+    const pod = await podcastFor(row).catch(() => null);
+    const facts = [
+      `Name on the page: ${row.displayName || p?.podcastName || ""}`,
+      p?.hostName ? `Host: ${p.hostName}` : "",
+      p?.branch ? `Branch: ${p.branch}${p.serviceStatus ? ` (${p.serviceStatus})` : ""}` : "",
+      pod ? `Podcast: ${pod.title}, ${pod.episodeCount} episode${pod.episodeCount === 1 ? "" : "s"}` : "",
+      pod?.episodes.length ? `Recent episode titles: ${pod.episodes.slice(0, 8).map((e) => e.title).join(" | ")}` : "",
+    ].filter(Boolean).join("\n");
+    try {
+      const client = new Anthropic();
+      const out = await client.messages.create({
+        model: "claude-sonnet-5",
+        max_tokens: 200,
+        system: "You write short bios for military and veteran podcasters' link-in-bio pages. Two sentences, under 280 characters, first person, warm and plain, no hashtags, no emoji, no quotation marks. Say who they are and what the show is about and who it's for, using only the facts given; never invent ranks, units, awards or numbers.",
+        messages: [{ role: "user", content: `Facts:\n${facts}\n\nWrite the bio.` }],
+      });
+      const text = out.content.filter((c) => c.type === "text").map((c) => (c as { text: string }).text).join("").trim().replace(/^["']|["']$/g, "").slice(0, 500);
+      res.json({ bio: text });
+    } catch (err) {
+      console.error("Bio draft failed:", (err as Error).message);
+      res.status(502).json({ message: "Couldn't write one just now. Try again in a moment." });
     }
   });
 

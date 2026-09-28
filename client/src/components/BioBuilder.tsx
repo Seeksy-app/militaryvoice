@@ -12,7 +12,7 @@ import { BioPageView } from "@/components/BioPageView";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import { SWATCHES, TEMPLATES, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircleQuestion, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
+import { Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircleQuestion, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers } from "lucide-react";
 
 /**
  * My page: the podcaster's bio page builder. Profile, Design, Content and
@@ -91,16 +91,34 @@ export function BioBuilder() {
 
   return (
     <section className="mt-2" data-testid="bio-builder">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <h1 className="mr-2 text-xl font-bold">My page</h1>
-        <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-sm font-medium hover:bg-muted" data-testid="bio-open">
-          {url.replace(/^https?:\/\/(www\.)?/, "")} <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-        </a>
-        <span className="text-xs text-muted-foreground">{saving ? "Saving…" : "Saved"}</span>
+      {/* The page's own band: the address to share, front and centre, and how it's doing. */}
+      <div className="relative mb-5 overflow-hidden rounded-3xl bg-gradient-to-br from-[#000741] via-[#053877] to-[#0a4a99] p-5 text-white shadow-md sm:p-6" data-testid="bio-hero">
+        <span className="pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full bg-[#F0A71F]/20 blur-2xl" aria-hidden />
+        <span className="pointer-events-none absolute -bottom-20 right-40 h-48 w-48 rounded-full bg-white/10 blur-2xl" aria-hidden />
+        <div className="relative flex flex-wrap items-center gap-x-6 gap-y-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">My page</p>
+            <p className="mt-1 truncate text-2xl font-bold tracking-tight sm:text-3xl">{url.replace(/^https?:\/\/(www\.)?/, "")}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button size="sm" onClick={() => void navigator.clipboard.writeText(url).then(() => toast({ title: "Link copied", description: "Paste it in your bio, your show notes, anywhere." }))} className="gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-copy"><Copy className="h-4 w-4" /> Copy link</Button>
+              <Button asChild size="sm" variant="outline" className="gap-1.5 rounded-full border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white"><a href={url} target="_blank" rel="noreferrer" data-testid="bio-open"><ExternalLink className="h-4 w-4" /> Open</a></Button>
+              <span className="text-xs text-white/60">{saving ? "Saving…" : "Saved"}</span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {([["view", "Views", Eye], ["play", "Plays", Play], ["ask", "Questions", MessageCircleQuestion]] as const).map(([k, l, I]) => (
+              <div key={k} className="min-w-[5.5rem] rounded-2xl bg-white/10 px-3 py-2.5 text-center ring-1 ring-white/15">
+                <p className="text-2xl font-bold tabular-nums">{q.data?.stats?.[k] ?? 0}</p>
+                <p className="flex items-center justify-center gap-1 text-[11px] text-white/70"><I className="h-3 w-3" /> {l}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p className="relative mt-3 text-[11px] text-white/50">Last 30 days</p>
       </div>
-      <div className="mb-4 flex gap-1 overflow-x-auto border-b border-border" role="tablist">
+      <div className="mb-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-card p-1 shadow-sm" role="tablist">
         {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["share", "Share", Share2], ["questions", "Questions", MessageCircleQuestion]] as const).map(([k, l, I]) => (
-          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`-mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-[#F0A71F] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`bio-tab-${k}`}>
+          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} data-testid={`bio-tab-${k}`}>
             <I className="h-4 w-4" /> {l}{k === "questions" && newQs > 0 && <span className="rounded-full bg-[#F0A71F] px-1.5 text-[11px] font-bold text-[#1a1200]">{newQs}</span>}
           </button>
         ))}
@@ -115,7 +133,7 @@ export function BioBuilder() {
           {tab === "questions" && <QuestionsTab items={q.data?.questions ?? []} onChange={() => void qc.invalidateQueries({ queryKey: KEY })} />}
         </div>
         {/* The page, as listeners will see it. */}
-        <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">
+        <div className="min-w-0 rounded-3xl bg-[radial-gradient(circle_at_20%_10%,rgba(240,167,31,0.18),transparent_45%),radial-gradient(circle_at_85%_80%,rgba(5,56,119,0.16),transparent_50%)] p-4 ring-1 ring-border lg:sticky lg:top-20 lg:self-start">
           <div className="mb-3 flex justify-center">
             <div className="inline-flex gap-1 rounded-full border border-border bg-card p-1">
               {([["mobile", "Mobile", Smartphone], ["tablet", "Tablet", Tablet], ["desktop", "Desktop", Monitor]] as const).map(([k, l, I]) => (
@@ -151,21 +169,37 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
   const done = steps.filter((s) => s.done).length;
   const move = (i: number, dir: -1 | 1) => { const s = [...d.socials]; const j = i + dir; if (j < 0 || j >= s.length) return; [s[i], s[j]] = [s[j], s[i]]; change({ socials: s }); };
   const hosted = /\/feed\//.test(view.podcast?.feedUrl ?? "");
+  const { toast } = useToast();
+  const [drafting, setDrafting] = useState(false);
+  const draftBio = async () => {
+    setDrafting(true);
+    try {
+      const r = (await (await apiRequest("POST", "/api/host/bio/draft-bio", {})).json()) as { bio: string };
+      if (r.bio) change({ bio: r.bio });
+    } catch (e) {
+      toast({ title: "Couldn't write one", description: (e as Error).message.replace(/^\d+:\s*/, ""), variant: "destructive" });
+    } finally {
+      setDrafting(false);
+    }
+  };
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {done < steps.length && (
-        <div className="rounded-2xl border border-[#053877]/20 bg-[#053877]/[0.03] p-4" data-testid="bio-checklist">
-          <div className="flex items-center justify-between"><p className="text-sm font-semibold">Finish your page</p><span className="text-xs text-muted-foreground">{done} of {steps.length}</span></div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[#053877] transition-all" style={{ width: `${(done / steps.length) * 100}%` }} /></div>
+        <div className="rounded-2xl border border-[#F0A71F]/40 bg-gradient-to-br from-[#F0A71F]/[0.12] to-transparent p-4" data-testid="bio-checklist">
+          <div className="flex items-center justify-between"><p className="text-sm font-bold">{steps.length - done === 1 ? "One step to go" : "Finish your page"}</p><span className="rounded-full bg-[#F0A71F] px-2 py-0.5 text-xs font-bold text-[#1a1200]">{done} of {steps.length}</span></div>
+          <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-[#F0A71F]/20"><div className="h-full rounded-full bg-gradient-to-r from-[#F0A71F] to-[#e08a00] transition-all" style={{ width: `${(done / steps.length) * 100}%` }} /></div>
           <ul className="mt-3 space-y-1.5">
             {steps.map((s) => <li key={s.label} className={`flex items-center gap-2 text-sm ${s.done ? "text-muted-foreground line-through" : ""}`}>{s.done ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4 text-muted-foreground/50" />} {s.label}</li>)}
           </ul>
         </div>
       )}
+      <Card icon={ImagePlus} tone="gold" title="Photos">
       <div className="grid grid-cols-2 gap-3">
         <ImagePick label="Profile photo" kind="avatar" url={d.avatarUrl} round onDone={(u, p) => { change({ avatarUrl: u }); setPreview(p); }} onClear={() => change({ avatarUrl: "" }, true)} />
         <ImagePick label="Cover photo" kind="hero" url={d.heroUrl} note={d.theme.layout === "portrait" ? "Shown with the Banner or Cover layouts" : undefined} onDone={(u, p) => { change({ heroUrl: u }); setPreview(p); }} onClear={() => change({ heroUrl: "" }, true)} />
       </div>
+      </Card>
+      <Card icon={User} tone="blue" title="About you">
       <Field label="Name on the page"><Input value={d.displayName} onChange={(e) => change({ displayName: e.target.value })} maxLength={80} /></Field>
       <Field label="Your link" hint="3 to 30 letters or numbers. Changing it breaks links you've already shared.">
         <div className="flex items-center rounded-md border border-input bg-background pl-3 text-sm focus-within:ring-2 focus-within:ring-ring">
@@ -173,7 +207,17 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
           <input value={handle} onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 30))} onBlur={() => { if (handle !== d.handle) change({ handle }, true); }} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} className="h-9 min-w-0 flex-1 bg-transparent pr-3 outline-none" data-testid="bio-handle" />
         </div>
       </Field>
-      <Field label="Bio"><Textarea value={d.bio} onChange={(e) => change({ bio: e.target.value })} maxLength={500} rows={3} placeholder="Who you are, what the show is about, who it's for." /></Field>
+      <div>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <span className="text-sm font-semibold">Bio</span>
+          <button type="button" onClick={() => void draftBio()} disabled={drafting} className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#F0A71F] to-[#e08a00] px-2.5 py-1 text-xs font-bold text-[#1a1200] shadow-sm hover:opacity-90 disabled:opacity-60" data-testid="bio-draft">
+            {drafting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {d.bio.trim() ? "Rewrite it for me" : "Write it for me"}
+          </button>
+        </div>
+        <Textarea value={d.bio} onChange={(e) => change({ bio: e.target.value })} maxLength={500} rows={3} placeholder="Who you are, what the show is about, who it's for." />
+      </div>
+      </Card>
+      <Card icon={Headphones} tone="green" title="Your podcast and listeners">
       <Field label="Your podcast" hint={hosted ? "Hosted here on MilitaryVoices: new episodes appear on your page by themselves." : "Paste your show's RSS feed and your latest episodes appear, top and centre."}>
         {hosted ? <p className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-emerald-600" /> {view.podcast?.title}</p> : <Input value={d.rssUrl} onChange={(e) => change({ rssUrl: e.target.value })} placeholder="https://feeds.yourhost.com/your-show" />}
       </Field>
@@ -190,8 +234,9 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
         </div>
         <Switch checked={d.aiEnabled} onCheckedChange={(v) => change({ aiEnabled: v }, true)} />
       </div>
+      </Card>
+      <Card icon={Share2} tone="violet" title="Social icons">
       <div>
-        <p className="mb-2 text-sm font-semibold">Social icons</p>
         {d.socials.length ? (
           <ul className="space-y-2">
             {d.socials.map((s, i) => (
@@ -206,7 +251,25 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
         ) : <p className="text-sm text-muted-foreground">Connect your accounts in Integrations and they appear here.</p>}
         <a href="/host/dashboard/integrations" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]"><Link2 className="h-3.5 w-3.5" /> Manage connections</a>
       </div>
+      </Card>
     </div>
+  );
+}
+
+const TONES = {
+  gold: "bg-[#F0A71F]/15 text-[#b36b00] dark:text-[#F0A71F]",
+  blue: "bg-[#053877]/10 text-[#053877] dark:bg-[#8fb5e8]/15 dark:text-[#8fb5e8]",
+  green: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+  violet: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
+} as const;
+
+/** A group of settings in its own card, with a coloured mark. */
+function Card({ icon: I, tone, title, children }: { icon: typeof User; tone: keyof typeof TONES; title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
+      <p className="flex items-center gap-2 text-sm font-bold"><span className={`flex h-7 w-7 items-center justify-center rounded-lg ${TONES[tone]}`}><I className="h-4 w-4" /></span> {title}</p>
+      {children}
+    </section>
   );
 }
 
