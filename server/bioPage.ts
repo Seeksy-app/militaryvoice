@@ -149,6 +149,8 @@ function cleanSocials(v: unknown): BioSocial[] {
 // ---- Routes -------------------------------------------------------------------------
 
 export function registerBioPage(app: Express) {
+  // Straight after a deploy, wait for new tables and columns before the first query.
+  app.use(["/api/host/bio", "/api/public/bio"], (_req, _res, next) => { schemaIsReady().then(() => next(), next); });
   // The builder.
   app.get("/api/host/bio", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
