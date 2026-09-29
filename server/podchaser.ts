@@ -44,7 +44,11 @@ async function cached<T>(k: string, maxAgeMs: number, make: () => Promise<T>): P
 // The API: a year-long token, points, and the fields this plan can't see
 // ---------------------------------------------------------------------------
 
-export const podchaserOn = () => Boolean(process.env.PODCHASER_CLIENT_ID?.trim() && process.env.PODCHASER_CLIENT_SECRET?.trim());
+// The key has gone by a few names on Podchaser's settings page ("Key", "API key", "Client ID").
+const env = (...names: string[]) => names.map((n) => process.env[n]?.trim()).find(Boolean) ?? "";
+const clientId = () => env("PODCHASER_CLIENT_ID", "PODCHASER_API_KEY", "PODCHASER_KEY", "PODCHASER_CLIENT_KEY", "PODCHASER_ID");
+const clientSecret = () => env("PODCHASER_CLIENT_SECRET", "PODCHASER_SECRET", "PODCHASER_API_SECRET");
+export const podchaserOn = () => Boolean(clientId() && clientSecret());
 
 let token: { value: string; exp: number } | null = null;
 async function accessToken(fresh = false): Promise<string> {
@@ -60,7 +64,7 @@ async function accessToken(fresh = false): Promise<string> {
     signal: AbortSignal.timeout(20_000),
     body: JSON.stringify({
       query: "mutation Token($id: String!, $secret: String!) { requestAccessToken(input: { grant_type: CLIENT_CREDENTIALS, client_id: $id, client_secret: $secret }) { access_token expires_in } }",
-      variables: { id: process.env.PODCHASER_CLIENT_ID!.trim(), secret: process.env.PODCHASER_CLIENT_SECRET!.trim() },
+      variables: { id: clientId(), secret: clientSecret() },
     }),
   });
   const j = (await res.json().catch(() => ({}))) as { data?: { requestAccessToken?: { access_token?: string; expires_in?: number } }; errors?: { message: string }[] };
@@ -234,7 +238,8 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
   app.get("/api/discover/podcasts/status", (req, res) =>
     send(res, async () => {
       res.set("Cache-Control", "no-store");
-      if (!podchaserOn()) return { on: false };
+      // Which half is missing, never its value.
+      if (!podchaserOn()) return { on: false, key: Boolean(clientId()), secret: Boolean(clientSecret()) };
       await accessToken();
       const no = await deniedFields();
       return { on: true, ok: true, locked: Array.from(no), ...(getAdminEmail(req) ? { points } : {}) };
