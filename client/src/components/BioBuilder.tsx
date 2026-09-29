@@ -509,6 +509,9 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro, onGo
           </Tooltip>
         } /></div>
         {d.theme.hideBio && <span className="mt-1 block text-xs text-muted-foreground">Hidden on your page. It's kept here for when you switch it back on.</span>}
+        {!d.theme.hideBio && d.bio.trim() && d.socials.some((x) => x.on && x.url) && (
+          <div className="mt-3"><RangeRow label="Space" hint={d.theme.socialsFirst ? "between your icons and your bio" : "between your bio and your icons"} value={d.theme.bioGap ?? 16} min={0} max={64} onChange={(v) => change({ theme: { ...d.theme, bioGap: v } })} unit="px" testid="bio-gap" /></div>
+        )}
       </div>
       </Card>
       <Card icon={MessageCircle} tone="green" title="Your listeners">
@@ -1071,9 +1074,8 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
           {cutError && CUTOUT_LAYOUTS.includes(t.layout) && <p className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{cutError}</p>}
           {hasPhoto && !CUTOUT_LAYOUTS.includes(t.layout) && (
             <div className="mt-5">
-              <p className="text-xs font-medium text-muted-foreground">Image position</p>
-              <p className="text-[11px] text-muted-foreground/80">Shift the crop if the photo cuts off a head or an important detail.</p>
-              <input type="range" min={0} max={100} step={1} value={t.imageY ?? 50} onChange={(e) => set({ imageY: Number(e.target.value) })} className="mv-range mt-3" style={{ background: rangeFill(t.imageY ?? 50, 0, 100) }} data-testid="bio-image-y" />
+              {/* The top crops the picture to fit; this picks which part shows (0 the top of it, 100 the bottom). */}
+              <RangeRow label="Photo position" hint="Up or down, if it cuts off a head" value={t.imageY ?? 50} min={0} max={100} onChange={(v) => set({ imageY: v })} unit="%" testid="bio-image-y" />
             </div>
           )}
           {(t.layout === "portrait" || (t.layout === "shape" && !(d.cutoutUrl && d.cutoutFrom === d.avatarUrl))) && (
@@ -1871,32 +1873,87 @@ function SectionEditor({ s, upd }: { s: BioSection; upd: (p: Partial<BioSection>
  */
 const EMOJIS = ["❤️", "🥰", "😊", "😂", "🥹", "😍", "🙏", "👏", "💪", "🎉", "🎂", "🎁", "🏠", "👨‍👩‍👧‍👦", "👪", "🤗", "😢", "✨", "⭐", "🌟", "🇺🇸", "🦅", "🎖️", "🪖", "⚓", "✈️", "🫡", "💙", "💛", "🧡", "💚", "💜", "🌻", "🌹", "☀️", "🙌", "👍", "🎙️", "🎧", "📸"];
 
-function TextEditor({ body, align = "left", onBody, onAlign, rows = 5, maxLength = 2000, placeholder = "Write something. Select words, then B, I or U.", emoji = true, testid = "bio-text-body", action }: { body: string; align?: BioAlign; onBody: (v: string) => void; onAlign?: (v: BioAlign) => void; rows?: number; maxLength?: number; placeholder?: string; emoji?: boolean; testid?: string; /** A tool of its own at the toolbar's right end (the bio's "write it for me"). */ action?: React.ReactNode }) {
-  const box = useRef<HTMLTextAreaElement>(null);
-  const [emojis, setEmojis] = useState(false);
-  const insert = (text: string) => {
-    const el = box.current;
-    const a = el?.selectionStart ?? body.length, b = el?.selectionEnd ?? body.length;
-    onBody((body.slice(0, a) + text + body.slice(b)).slice(0, maxLength));
-    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(a + text.length, a + text.length); });
+/** Their marks (**bold**, *italic*, __underline__, as the page reads them) as HTML for the editor. */
+function marksToHtml(md: string): string {
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const walk = (t: string): string => t.split(/(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*)/g).map((part) =>
+    /^\*\*.+\*\*$/.test(part) ? `<b>${walk(part.slice(2, -2))}</b>`
+      : /^__.+__$/.test(part) ? `<u>${walk(part.slice(2, -2))}</u>`
+      : /^\*.+\*$/.test(part) ? `<i>${walk(part.slice(1, -1))}</i>`
+      : esc(part)).join("");
+  return md.split("\n").map(walk).join("<br>");
+}
+/** The editor's HTML back to their marks. Bold and italic don't nest (the page can't show both), so the outer one wins. */
+function htmlToMarks(root: HTMLElement): string {
+  const walk = (n: Node, c: { b: boolean; i: boolean; u: boolean }): string => {
+    if (n.nodeType === Node.TEXT_NODE) return (n.textContent ?? "").replace(/\u00a0/g, " ");
+    if (!(n instanceof HTMLElement)) return "";
+    const tag = n.tagName;
+    if (tag === "BR") return "\n";
+    const w = n.style.fontWeight, fs = n.style.fontStyle, td = n.style.textDecoration || n.style.textDecorationLine;
+    const bold = tag === "B" || tag === "STRONG" || w === "bold" || Number(w) >= 600;
+    const ital = tag === "I" || tag === "EM" || fs === "italic";
+    const und = tag === "U" || /underline/.test(td);
+    const addB = bold && !c.b && !c.i, addI = ital && !c.i && !c.b, addU = und && !c.u;
+    let inner = Array.from(n.childNodes).map((x) => walk(x, { b: c.b || addB, i: c.i || addI, u: c.u || addU })).join("");
+    // Chrome wraps each new line in a <div>.
+    const block = tag === "DIV" || tag === "P";
+    if (!inner.trim()) return block ? "\n" : inner;
+    // The page reads marks a line at a time, so a mark across a line break is closed and opened again on each line.
+    const wrap = (t: string, m: string) => t.split("\n").map((seg) => (seg.trim() ? `${m}${seg}${m}` : seg)).join("\n");
+    if (addI) inner = wrap(inner, "*");
+    if (addB) inner = wrap(inner, "**");
+    if (addU) inner = wrap(inner, "__");
+    return block ? `\n${inner}` : inner;
   };
-  const wrap = (mark: string) => {
+  return Array.from(root.childNodes).map((x) => walk(x, { b: false, i: false, u: false })).join("").replace(/^\n/, "");
+}
+
+/**
+ * A text box that shows its formatting: select words and press B, I or U and they turn bold,
+ * italic or underlined right there (no marks to learn). Saved as the marks the page reads.
+ * `plain`: no formatting at all (words read aloud, like the talking intro's script).
+ */
+function TextEditor({ body, align = "left", onBody, onAlign, rows = 5, maxLength = 2000, placeholder = "Write something. Select words, then B, I or U.", emoji = true, testid = "bio-text-body", action, plain = false }: { body: string; align?: BioAlign; onBody: (v: string) => void; onAlign?: (v: BioAlign) => void; rows?: number; maxLength?: number; placeholder?: string; emoji?: boolean; testid?: string; /** A tool of its own at the toolbar's right end (the bio's "write it for me"). */ action?: React.ReactNode; plain?: boolean }) {
+  const box = useRef<HTMLDivElement>(null);
+  const area = useRef<HTMLTextAreaElement>(null);
+  const [emojis, setEmojis] = useState(false);
+  // What we last sent up: when the body comes back the same, the box is left alone (the cursor stays put).
+  const sent = useRef<string | null>(null);
+  const [marks, setMarks] = useState({ b: false, i: false, u: false });
+  useEffect(() => {
+    const el = box.current;
+    if (!el || body === sent.current) return;
+    el.innerHTML = marksToHtml(body);
+    sent.current = body;
+  }, [body]);
+  const emit = () => {
     const el = box.current;
     if (!el) return;
-    let a = el.selectionStart, b = el.selectionEnd;
-    // Nothing selected: the word the cursor is in; no word there, nothing to do (no empty "****").
-    if (a === b) {
-      while (a > 0 && /\S/.test(body[a - 1])) a--;
-      while (b < body.length && /\S/.test(body[b])) b++;
-      if (a === b) { el.focus(); return; }
+    let md = htmlToMarks(el);
+    if (md.length > maxLength) { md = md.slice(0, maxLength); el.innerHTML = marksToHtml(md); }
+    sent.current = md;
+    onBody(md);
+  };
+  const readMarks = () => { try { setMarks({ b: document.queryCommandState("bold"), i: document.queryCommandState("italic"), u: document.queryCommandState("underline") }); } catch { /* fine */ } };
+  const format = (cmd: "bold" | "italic" | "underline") => {
+    box.current?.focus();
+    document.execCommand("styleWithCSS", false, "false");
+    document.execCommand(cmd);
+    emit();
+    readMarks();
+  };
+  const insert = (text: string) => {
+    if (plain) {
+      const el = area.current;
+      const a = el?.selectionStart ?? body.length, b = el?.selectionEnd ?? body.length;
+      onBody((body.slice(0, a) + text + body.slice(b)).slice(0, maxLength));
+      requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(a + text.length, a + text.length); });
+      return;
     }
-    const picked = body.slice(a, b);
-    // Already wrapped: take the marks off again.
-    const on = picked.startsWith(mark) && picked.endsWith(mark) && picked.length >= mark.length * 2;
-    const inner = on ? picked.slice(mark.length, -mark.length) : picked;
-    const next = on ? inner : `${mark}${inner}${mark}`;
-    onBody(body.slice(0, a) + next + body.slice(b));
-    requestAnimationFrame(() => { el.focus(); const start = on ? a : a + mark.length; el.setSelectionRange(start, start + inner.length); });
+    box.current?.focus();
+    document.execCommand("insertText", false, text);
+    emit();
   };
   const tool = (on: boolean) => `flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${on ? "bg-[#053877] text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`;
   return (
@@ -1908,8 +1965,8 @@ function TextEditor({ body, align = "left", onBody, onAlign, rows = 5, maxLength
           ))}
           <span className="mx-1 h-5 w-px bg-border" />
         </>}
-        {([["**", Bold, "Bold"], ["*", Italic, "Italic"], ["__", Underline, "Underline"]] as const).map(([m, Icon, l]) => (
-          <button key={l} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => wrap(m)} className={tool(false)} aria-label={l} title={l} data-testid={`bio-text-${l.toLowerCase()}`}><Icon className="h-4 w-4" /></button>
+        {!plain && ([["bold", Bold, "Bold", marks.b], ["italic", Italic, "Italic", marks.i], ["underline", Underline, "Underline", marks.u]] as const).map(([cmd, Icon, l, on]) => (
+          <button key={l} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => format(cmd)} className={tool(on)} aria-label={l} title={l} aria-pressed={on} data-testid={`bio-text-${l.toLowerCase()}`}><Icon className="h-4 w-4" /></button>
         ))}
         {emoji && (
           <>
@@ -1929,7 +1986,23 @@ function TextEditor({ body, align = "left", onBody, onAlign, rows = 5, maxLength
         )}
         {action && <div className="ml-auto">{action}</div>}
       </div>
-      <textarea ref={box} value={body} onChange={(e) => onBody(e.target.value)} rows={rows} maxLength={maxLength} placeholder={placeholder} className="block w-full resize-y bg-transparent px-3 py-2 text-sm outline-none" style={{ textAlign: align }} data-testid={testid} />
+      {plain ? (
+        <textarea ref={area} value={body} onChange={(e) => onBody(e.target.value)} rows={rows} maxLength={maxLength} placeholder={placeholder} className="block w-full resize-y bg-transparent px-3 py-2 text-sm outline-none" style={{ textAlign: align }} data-testid={testid} />
+      ) : (
+        <div className="relative">
+          {!body && <span className="pointer-events-none absolute left-3 top-2 text-sm text-muted-foreground" style={{ textAlign: align }} aria-hidden>{placeholder}</span>}
+          <div ref={box} contentEditable suppressContentEditableWarning role="textbox" aria-multiline aria-label={placeholder}
+            onInput={emit} onKeyUp={readMarks} onMouseUp={readMarks} onFocus={readMarks}
+            onKeyDown={(e) => {
+              // One line break per Enter (no <div>s), and the usual shortcuts.
+              if (e.key === "Enter") { e.preventDefault(); document.execCommand("insertLineBreak"); emit(); }
+              if ((e.metaKey || e.ctrlKey) && ["b", "i", "u"].includes(e.key.toLowerCase())) { e.preventDefault(); format(e.key.toLowerCase() === "b" ? "bold" : e.key.toLowerCase() === "i" ? "italic" : "underline"); }
+            }}
+            onPaste={(e) => { e.preventDefault(); document.execCommand("insertText", false, e.clipboardData.getData("text/plain")); emit(); }}
+            className="block w-full overflow-y-auto whitespace-pre-wrap break-words bg-transparent px-3 py-2 text-sm leading-relaxed outline-none [&_b]:font-bold"
+            style={{ textAlign: align, minHeight: `${rows * 1.625 + 1}rem`, maxHeight: "22rem" }} data-testid={testid} />
+        </div>
+      )}
     </div>
   );
 }
@@ -2136,7 +2209,7 @@ function IntroCard({ d, st, start, reset, on, setOn, at, setAt, patch }: { d: Pa
             </>
           ) : (
             <>
-              <TextEditor body={script} onBody={setScript} rows={3} maxLength={600} emoji={false} placeholder="What you'd like to say" testid="bio-intro-script" />
+              <TextEditor body={script} onBody={setScript} rows={3} maxLength={600} emoji={false} plain placeholder="What you'd like to say" testid="bio-intro-script" />
               <div className="flex gap-1 rounded-full border border-border p-1" role="radiogroup" aria-label="A man's or a woman's voice">
                 <button type="button" role="radio" aria-checked={man} onClick={() => pickSex(true)} className={seg(man)} data-testid="bio-intro-man">Man's voice</button>
                 <button type="button" role="radio" aria-checked={!man} onClick={() => pickSex(false)} className={seg(!man)} data-testid="bio-intro-woman">Woman's voice</button>

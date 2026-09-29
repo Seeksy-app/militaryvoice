@@ -119,7 +119,8 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
     <>
       {!hideName && !noName && <h1 className="text-balance font-bold leading-tight tracking-tight" style={{ fontSize: Math.round((onPhoto ? 34 : 26) * (t.nameSize ?? 100) / 100) }}>{data.displayName || "Your name"}</h1>}
       {t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} onChat={data.askEnabled && chatAt === "socials" ? () => setChat(true) : undefined} chatColor={accent} />}
-      {data.bio && !t.hideBio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{styled(data.bio)}</p>}
+      {/* The space to their icons is theirs to set. The icons' own top margin (16) merges with this one: past 16 this one wins, under it they add. */}
+      {data.bio && !t.hideBio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub, ...(t.socialsFirst ? { marginTop: t.bioGap ?? 16 } : { marginBottom: (t.bioGap ?? 16) >= 16 ? t.bioGap : (t.bioGap ?? 16) - 16 }) }}>{styled(data.bio)}</p>}
       {intro("bio")}
       {!t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} onChat={data.askEnabled && chatAt === "socials" ? () => setChat(true) : undefined} chatColor={accent} />}
     </>
@@ -541,10 +542,11 @@ function PodcastCard({ p, onAsk, opts, style, full, fallbackArt, accent, ink, su
 
 /** A text block's **bold**, *italic* and __underline__, drawn (nothing else is read as markup). */
 export function styled(body: string): React.ReactNode[] {
+  // Marks can sit inside each other (bold inside underline), so each one's words are read again.
   return body.split(/(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*)/g).map((part, i) =>
-    /^\*\*.+\*\*$/.test(part) ? <strong key={i} className="font-bold">{part.slice(2, -2)}</strong>
-      : /^__.+__$/.test(part) ? <u key={i}>{part.slice(2, -2)}</u>
-      : /^\*.+\*$/.test(part) ? <em key={i}>{part.slice(1, -1)}</em>
+    /^\*\*.+\*\*$/.test(part) ? <strong key={i} className="font-bold">{styled(part.slice(2, -2))}</strong>
+      : /^__.+__$/.test(part) ? <u key={i}>{styled(part.slice(2, -2))}</u>
+      : /^\*.+\*$/.test(part) ? <em key={i}>{styled(part.slice(1, -1))}</em>
       : part);
 }
 

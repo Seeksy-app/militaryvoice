@@ -43,6 +43,8 @@ export interface BioTheme {
   intro?: boolean;
   /** The big picture across the top (Hero, Big photo): their cover photo, or their profile photo. */
   topPhoto?: "cover" | "profile";
+  /** Space between their bio and their social icons, in pixels. */
+  bioGap?: number;
   /** Their bio is kept but not shown on the page. */
   hideBio?: boolean;
   /** What the intro bubble says; one is picked at random each visit ([] = "Say hi 👋"). */
