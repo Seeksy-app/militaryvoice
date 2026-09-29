@@ -96,6 +96,8 @@ export interface BioPodcastOptions {
   spotify: boolean;
   all: boolean;
   rss: boolean;
+  /** The Cards look's size: small, medium or large (large fills most of the width). */
+  cardSize?: "s" | "m" | "l";
   /** Which show: "" = their first show hosted here, "show:<id>" = that one, "rss" = the feed in rssUrl. */
   source?: string;
 }

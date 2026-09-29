@@ -1730,6 +1730,13 @@ function PodcastOptions({ d, change, view, knowledge }: { d: Page; change: (p: P
                 );
               })}
             </div>
+            {/* The cards' size: smaller shows more of the next ones. */}
+            {(d.theme.podcastStyle ?? "spotlight") === "carousel" && (
+              <div className="mt-2 flex items-center gap-2" role="radiogroup" aria-label="Card size">
+                <span className="text-xs font-semibold text-muted-foreground">Card size</span>
+                {([["s", "Small"], ["m", "Medium"], ["l", "Large"]] as const).map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={(o.cardSize ?? "m") === v} onClick={() => set({ cardSize: v }, true)} className={pill((o.cardSize ?? "m") === v)} data-testid={`bio-card-size-${v}`}>{l}</button>)}
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-2">
             {([["full", "Edge to edge", "Fills the screen"], ["card", "In a card", "With a margin"]] as const).map(([v, l, n]) => (
