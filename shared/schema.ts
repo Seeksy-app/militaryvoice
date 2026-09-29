@@ -660,6 +660,19 @@ export type CadenceKey = (typeof CADENCE_STEPS)[number]["key"];
  */
 export const COHOST_BLOCK_MINUTES = 60;
 
+/** Listeners who signed up on a podcaster's SmartLink (Stay in touch): theirs, in their Contacts. */
+export const bioSubscribers = pgTable(
+  "bio_subscribers",
+  {
+    id: serial("id").primaryKey(),
+    pageId: integer("page_id").notNull(),
+    email: text("email").notNull(),
+    name: text("name").notNull().default(""),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => ({ onePerPage: uniqueIndex("bio_subscribers_page_email_unique").on(t.pageId, t.email) }),
+);
+
 /**
  * A podcaster's guest on their slot: who they are (as read and shown on air),
  * and their own link into the green room. The link's token is the only way a

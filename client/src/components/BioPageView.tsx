@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Calendar, Check, Copy, ExternalLink, MessageCircle, Music, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
+import { Calendar, Check, Copy, ExternalLink, Mail, MessageCircle, Music, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
 import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, musicEmbed, onColor, promoCodes, standOut, type BioChatAt, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
 import { useBioFont } from "@/lib/bioFont";
@@ -33,7 +33,7 @@ export type AiAnswer = { answer: string; sources: { n: number; title: string; st
 export type ChatMsg = { token: string; question: string; reply: string; repliedAt: string; createdAt: string };
 type AskInput = { name: string; email: string; question: string; episode: string; website: string };
 
-export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, onLoadMessages, shareBase }: {
+export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, onLoadMessages, onSubscribe, shareBase }: {
   data: BioPublic;
   /** In the builder: nothing is counted, nothing is sent. */
   preview?: boolean;
@@ -46,6 +46,8 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   onAskAi?: (question: string, history: { role: "user" | "assistant"; content: string }[], episode?: string) => Promise<AiAnswer>;
   /** The page's own address, for sharing an episode. */
   shareBase: string;
+  /** Stay in touch: a listener's email, to the podcaster's Contacts. */
+  onSubscribe?: (x: { email: string; name: string; website: string }) => Promise<void>;
 }) {
   const t = data.theme;
   // The page's colours, from the theme (shade, background, their colour, the link colour); see bioPalette.
@@ -104,7 +106,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
 
       <div className="mx-auto mt-6 flex max-w-[560px] flex-col gap-4 px-4">
         {/* Their blocks in their order; the podcast is one of them (they add it from Content). */}
-        {data.sections.map((s) => s.type === "podcast" ? (data.podcast ? <PodcastCard key={s.id} p={data.podcast} onAsk={data.ai?.enabled ? setAskEp : undefined} opts={{ ...DEFAULT_PODCAST, ...(t.podcast ?? {}) }} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} /> : null) : <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} />)}
+        {data.sections.map((s) => s.type === "podcast" ? (data.podcast ? <PodcastCard key={s.id} p={data.podcast} onAsk={data.ai?.enabled ? setAskEp : undefined} opts={{ ...DEFAULT_PODCAST, ...(t.podcast ?? {}) }} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} /> : null) : <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} handle={data.handle} onSubscribe={onSubscribe} />)}
         {BRANDS_LIVE && data.brandsOn && <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : `/${data.handle}/brands`} className="font-semibold hover:underline" data-testid="bio-for-brands">For brands: sponsor this show</a></p>}
         {(t.branding ?? true) && <p className="mt-4 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>}
       </div>
@@ -196,6 +198,50 @@ export function PageTop({ t, avatar, hero, cutoutUrl, living = "", name, handle,
         </>
       )}
     </>
+  );
+}
+
+/**
+ * Stay in touch: an email (and a first name, if they like) to the podcaster,
+ * who finds it in their Contacts. Remembered in this browser once they're in.
+ */
+function SignupBlock({ s, btn, ink, sub, card, line, accent, preview, handle, onSubscribe }: { s: Extract<BioSection, { type: "signup" }>; btn: (primary?: boolean) => React.CSSProperties; ink: string; sub: string; card: string; line: string; accent: string; preview: boolean; handle: string; onSubscribe?: (x: { email: string; name: string; website: string }) => Promise<void> }) {
+  const key = `mv_joined_${handle}`;
+  const [done, setDone] = useState(() => { if (preview) return false; try { return localStorage.getItem(key) === "1"; } catch { return false; } });
+  const [f, setF] = useState({ email: "", name: "", website: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const field = { background: "transparent", border: `1px solid ${line}`, color: ink, borderRadius: 12 };
+  const go = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (preview || !onSubscribe || busy) return;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) { setErr("That email doesn't look right."); return; }
+    setBusy(true); setErr("");
+    try {
+      await onSubscribe({ email: f.email.trim(), name: f.name.trim(), website: f.website });
+      setDone(true);
+      try { localStorage.setItem(key, "1"); } catch { /* this visit only */ }
+    } catch (x) { setErr((x as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <section className="rounded-3xl p-5 text-center" style={{ background: card, border: `1px solid ${line}` }} data-testid="bio-signup">
+      <p className="flex items-center justify-center gap-2 text-base font-bold"><Mail className="h-4 w-4" style={{ color: accent }} /> {s.title || "Stay in touch"}</p>
+      {s.note && <p className="mx-auto mt-1 max-w-sm text-sm" style={{ color: sub }}>{s.note}</p>}
+      {done ? (
+        <p className="mt-3 flex items-center justify-center gap-2 text-sm font-semibold" data-testid="bio-signup-done"><Check className="h-4 w-4" style={{ color: accent }} /> You're in. Thanks!</p>
+      ) : (
+        <form onSubmit={go} className="mx-auto mt-3 flex max-w-sm flex-col gap-2">
+          <div className="flex gap-2">
+            <input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="First name" autoComplete="given-name" maxLength={80} className="h-11 w-[38%] min-w-0 px-3 text-sm outline-none" style={field} />
+            <input value={f.email} onChange={(e) => { setF({ ...f, email: e.target.value }); setErr(""); }} type="email" placeholder="Your email" autoComplete="email" required maxLength={200} className="h-11 min-w-0 flex-1 px-3 text-sm outline-none" style={field} data-testid="bio-signup-email" />
+          </div>
+          <input value={f.website} onChange={(e) => setF({ ...f, website: e.target.value })} tabIndex={-1} autoComplete="off" aria-hidden className="hidden" name="website" />
+          <button type="submit" disabled={busy} className="h-11 px-4 text-sm font-semibold disabled:opacity-60" style={btn()} data-testid="bio-signup-go">{busy ? "One moment…" : s.button || "Sign me up"}</button>
+          {err && <p className="text-xs text-red-500">{err}</p>}
+          <p className="text-[11px]" style={{ color: sub }}>Only they see your email. No spam.</p>
+        </form>
+      )}
+    </section>
   );
 }
 
@@ -388,7 +434,8 @@ export function styled(body: string): React.ReactNode[] {
       : part);
 }
 
-function Section({ s, btn, ink, sub, card, line, accent, preview, ev }: { s: BioSection; btn: (primary?: boolean) => React.CSSProperties; ink: string; sub: string; card: string; line: string; accent: string; preview: boolean; ev: Ev }) {
+function Section({ s, btn, ink, sub, card, line, accent, preview, ev, handle = "", onSubscribe }: { s: BioSection; btn: (primary?: boolean) => React.CSSProperties; ink: string; sub: string; card: string; line: string; accent: string; preview: boolean; ev: Ev; handle?: string; onSubscribe?: (x: { email: string; name: string; website: string }) => Promise<void> }) {
+  if (s.type === "signup") return <SignupBlock s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} handle={handle} onSubscribe={onSubscribe} />;
   const [copied, setCopied] = useState<string | null>(null);
   const title = s.title ? <p className="mb-2 mt-1 text-center text-xs font-bold uppercase tracking-[0.12em]" style={{ color: sub }}>{s.title}</p> : null;
   if (s.type === "links") return (

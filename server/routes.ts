@@ -129,7 +129,7 @@ import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerHosting, claimEpisodeAudio, claimEpisodeStill } from "./hosting.js";
-import { registerBioPage, registerBioAgent, claimLivingSqueeze } from "./bioPage.js";
+import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor } from "./bioPage.js";
 import { registerGuests, guestByToken, markGuestJoined } from "./guests.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
@@ -9157,9 +9157,13 @@ export function registerRoutes(app: Express): void {
     const active = signupRows.filter((s) => s.status !== "cancelled");
     const mySignups = active.filter((s) => s.email.trim().toLowerCase() === email);
     const mySignupIds = new Set(mySignups.map((s) => s.id));
-    const contacts = reminderRows
-      .filter((r) => mySignupIds.has(r.signupId))
-      .map((r) => ({ id: r.id, name: r.name, email: r.email, phone: r.phone, createdAt: r.createdAt, signupId: r.signupId }));
+    // Theirs: people who asked for a reminder of their show, and people who signed up on their SmartLink.
+    const contacts = [
+      ...reminderRows
+        .filter((r) => mySignupIds.has(r.signupId))
+        .map((r) => ({ id: r.id, name: r.name, email: r.email, phone: r.phone, createdAt: r.createdAt, signupId: r.signupId, source: "Show reminder" })),
+      ...(await subscribersFor(email).catch(() => [])).map((x) => ({ id: 1_000_000_000 + x.id, name: x.name, email: x.email, phone: "", createdAt: x.createdAt, signupId: 0, source: "SmartLink" })),
+    ];
     res.json({
       email,
       event: toPublicEvent(event),

@@ -14,7 +14,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { readFeed, hostedAsStats } from "./hosting.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
-import { bioPages, bioEvents, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
+import { bioPages, bioEvents, bioSubscribers, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
 import { DEFAULT_PODCAST, parseTheme, parseSections, parseSocials, parseBrands, parseFamily, type BioFamily, type BioFamilyPublic, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic, type BioViewMedia, type BioLayout, BRANDS_SECTIONS, FAMILY_SECTIONS } from "../shared/bio.js";
 import type { PodcastStatsData } from "../shared/schema.js";
 
@@ -329,6 +329,7 @@ function cleanSections(v: unknown): BioSection[] {
       case "music": return [{ ...base, type: "music", tracks: (Array.isArray(x.tracks) ? x.tracks : []).slice(0, 12).map((t: Record<string, unknown>) => ({ id: /^[\w-]{1,40}$/.test(String(t.id)) ? String(t.id) : crypto.randomBytes(4).toString("hex"), url: str(t.url, 500).trim() })).filter((t) => !t.url || /^https:\/\/\S+$/.test(t.url)) }];
       case "meeting": return [{ ...base, type: "meeting", url: httpUrl(x.url), note: str(x.note, 200) }];
       case "podcast": return [{ ...base, type: "podcast" }];
+      case "signup": return [{ ...base, type: "signup", note: str(x.note, 200), button: str(x.button, 40) }];
       case "text": return [{ ...base, type: "text", body: str(x.body, 2000), align: x.align === "center" || x.align === "right" ? x.align : "left" }];
       default: return [];
     }
@@ -390,6 +391,14 @@ function cleanSocials(v: unknown): BioSocial[] {
 }
 
 // ---- Routes -------------------------------------------------------------------------
+
+/** Who signed up on their SmartLink (Stay in touch), newest first: for their Contacts. */
+export async function subscribersFor(email: string): Promise<{ id: number; name: string; email: string; createdAt: string }[]> {
+  await schemaIsReady();
+  const [page] = await db.select({ id: bioPages.id }).from(bioPages).where(eq(bioPages.email, email)).limit(1);
+  if (!page) return [];
+  return db.select({ id: bioSubscribers.id, name: bioSubscribers.name, email: bioSubscribers.email, createdAt: bioSubscribers.createdAt }).from(bioSubscribers).where(eq(bioSubscribers.pageId, page.id)).orderBy(desc(bioSubscribers.id));
+}
 
 /** The living photo's job: fal making it (status, response), then the worker making it smaller (squeeze). */
 type LivingState = { status?: string; response?: string; from: string; at: number; squeeze?: "queued" | "running"; src?: string };
@@ -1068,6 +1077,24 @@ export function registerBioPage(app: Express) {
 
   // A listener's question: kept, and sent to the podcaster (reply goes straight to the listener).
   const recent = new Map<string, number[]>();
+  // Stay in touch: a listener's email, into the podcaster's Contacts (once per page).
+  const joins = new Map<string, number[]>();
+  app.post("/api/public/bio/:handle/subscribe", async (req, res) => {
+    await schemaIsReady();
+    const [row] = await db.select().from(bioPages).where(eq(bioPages.handle, String(req.params.handle).toLowerCase())).limit(1);
+    if (!row || !row.published || !parseSections(row.sections).some((x) => x.type === "signup" && x.visible)) return res.status(404).json({ message: "Sign-ups are off for this page." });
+    const ip = String(req.ip ?? "");
+    const hits = (joins.get(ip) ?? []).filter((t) => Date.now() - t < 3600_000);
+    if (hits.length >= 10) return res.status(429).json({ message: "Try again in a little while." });
+    joins.set(ip, [...hits, Date.now()]);
+    if (str(req.body?.website, 100)) return res.json({ ok: true }); // a bot filled the hidden field
+    const email = str(req.body?.email, 200).trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ message: "That email doesn't look right." });
+    await db.insert(bioSubscribers).values({ pageId: row.id, email, name: str(req.body?.name, 80).trim(), createdAt: now() }).onConflictDoNothing();
+    await db.insert(bioEvents).values({ pageId: row.id, kind: "click", label: "Stay in touch", day: now().slice(0, 10), createdAt: now() }).catch(() => {});
+    res.json({ ok: true });
+  });
+
   app.post("/api/public/bio/:handle/ask", async (req, res) => {
     const [row] = await db.select().from(bioPages).where(eq(bioPages.handle, String(req.params.handle).toLowerCase())).limit(1);
     if (!row || !row.published || !row.askEnabled) return res.status(404).json({ message: "Questions are off for this page." });

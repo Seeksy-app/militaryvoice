@@ -1455,6 +1455,7 @@ const KINDS: { type: BioSectionType; label: string; hint: string; icon: typeof L
   { type: "promo", label: "Promo codes", hint: "Sponsors' codes, tap to copy", icon: Tag, tone: "bg-[#F0A71F]/15 text-[#b36b00] dark:text-[#F0A71F]" },
   { type: "meeting", label: "Book a meeting", hint: "Your Calendly or booking link", icon: Calendar, tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
   { type: "text", label: "Text", hint: "A few words of your own", icon: Type, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-300" },
+  { type: "signup", label: "Stay in touch", hint: "An email sign-up, into your Contacts", icon: Mail, tone: "bg-sky-500/15 text-sky-700 dark:text-sky-300" },
   { type: "music", label: "Music", hint: "Spotify, Apple Music, SoundCloud", icon: Music, tone: "bg-pink-500/15 text-pink-700 dark:text-pink-300" },
 ];
 function blank(type: BioSectionType): BioSection {
@@ -1465,6 +1466,7 @@ function blank(type: BioSectionType): BioSection {
     case "promo": return { ...base, type, title: "Promo codes", codes: [{ id: newId(), brand: "", code: "", note: "", url: "" }], code: "", url: "", note: "" };
     case "music": return { ...base, type, title: "Music", tracks: [{ id: newId(), url: "" }] };
     case "podcast": return { ...base, type };
+    case "signup": return { ...base, type, title: "Stay in touch", note: "New episodes and news, straight to your inbox.", button: "Sign me up" };
     case "meeting": return { ...base, type, title: "Book a time with me", url: "", note: "" };
     default: return { ...base, type: "text", body: "" };
   }
@@ -1622,6 +1624,14 @@ function SectionEditor({ s, upd }: { s: BioSection; upd: (p: Partial<BioSection>
       </>
     );
   }
+  if (s.type === "signup") return (
+    <>
+      {title}
+      <Input value={s.note} onChange={(e) => upd({ note: e.target.value })} placeholder="A line under it: what they'll get" maxLength={200} />
+      <Input value={s.button} onChange={(e) => upd({ button: e.target.value })} placeholder="Button: Sign me up" maxLength={40} />
+      <p className="text-[11px] text-muted-foreground">Each sign-up lands in <b>Contacts</b> on your dashboard, with a CSV to download.</p>
+    </>
+  );
   if (s.type === "music") return (
     <>
       {title}

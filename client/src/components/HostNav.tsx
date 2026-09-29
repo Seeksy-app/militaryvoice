@@ -102,7 +102,7 @@ export function HostNav({
       items: [
         { key: "analytics", label: "Your analytics", hint: "Your followers, reach and engagement as sponsors see them, and what to charge", icon: BarChart3 },
         { key: "discovery", label: "Discovery", hint: "Search military and veteran creators to find guests, partners and sponsors", icon: Compass },
-        ...(contactsCount > 0 ? [{ key: "contacts" as const, label: "Contacts", hint: `${contactsCount} ${contactsCount === 1 ? "listener" : "listeners"} asked to be reminded about your show`, icon: Users }] : []),
+        ...(contactsCount > 0 ? [{ key: "contacts" as const, label: "Contacts", hint: `${contactsCount} ${contactsCount === 1 ? "person wants" : "people want"} to hear from you`, icon: Users }] : []),
       ],
     },
     // Pro is one quiet line until it opens. Three greyed doors with locks were

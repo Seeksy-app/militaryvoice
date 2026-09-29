@@ -36,6 +36,10 @@ export default function BioPublicPage({ handle }: { handle: string }) {
           if (!r.ok) throw new Error((j as { message?: string }).message || "Couldn't ask that. Try again.");
           return j;
         }}
+        onSubscribe={async (x) => {
+          const r = await fetch(`/api/public/bio/${encodeURIComponent(h)}/subscribe`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(x) });
+          if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message || "Couldn't sign you up. Try again.");
+        }}
         onAsk={async (x) => {
           const r = await fetch(`/api/public/bio/${encodeURIComponent(h)}/ask`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(x) });
           const j = (await r.json().catch(() => ({}))) as { message?: string; token?: string; createdAt?: string };

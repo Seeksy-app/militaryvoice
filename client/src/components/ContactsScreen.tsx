@@ -1,7 +1,7 @@
 import { Download, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-interface Contact { id: number; name: string; email: string; phone: string; createdAt: string; signupId: number }
+interface Contact { id: number; name: string; email: string; phone: string; createdAt: string; signupId: number; source?: string }
 
 /**
  * The people who asked to be told when this show is on.
@@ -14,7 +14,7 @@ export function ContactsScreen({ contacts }: { contacts: Contact[] }) {
   const rows = [...contacts].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   function download() {
     const esc = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const csv = ["name,email,phone,asked_on", ...rows.map((c) => [c.name, c.email, c.phone, c.createdAt].map(esc).join(","))].join("\n");
+    const csv = ["name,email,phone,from,asked_on", ...rows.map((c) => [c.name, c.email, c.phone, c.source ?? "Show reminder", c.createdAt].map(esc).join(","))].join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     a.download = "contacts.csv";
@@ -30,7 +30,7 @@ export function ContactsScreen({ contacts }: { contacts: Contact[] }) {
             <span className="rounded-full bg-[#053877]/10 px-2 py-0.5 text-xs font-bold text-[#053877] dark:bg-white/10 dark:text-white">{rows.length}</span>
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            People who asked to be reminded when your show is on. They get the reminder from us; the list is yours.
+            People who want to hear from you: those who signed up on your SmartLink, and those who asked to be reminded when your show is on. The list is yours.
           </p>
         </div>
         <Button size="sm" variant="outline" className="gap-1.5 rounded-full" onClick={download} disabled={!rows.length} data-testid="button-contacts-csv">
@@ -47,6 +47,7 @@ export function ContactsScreen({ contacts }: { contacts: Contact[] }) {
                 <span className="min-w-[10rem] font-medium text-foreground">{c.name || "—"}</span>
                 <a href={`mailto:${c.email}`} className="min-w-[14rem] text-primary hover:underline">{c.email}</a>
                 <span className="text-muted-foreground">{c.phone}</span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.source === "SmartLink" ? "bg-[#F0A71F]/15 text-[#8a5300] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground"}`}>{c.source ?? "Show reminder"}</span>
                 <span className="ml-auto text-xs text-muted-foreground">
                   {new Date(c.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                 </span>
