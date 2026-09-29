@@ -826,7 +826,7 @@ function DesignTab({ d, change, view, cutting = false, cutError = "" }: { d: Pag
             <div className="mt-5">
               <p className="text-xs font-medium text-muted-foreground">Image position</p>
               <p className="text-[11px] text-muted-foreground/80">Shift the crop if the photo cuts off a head or an important detail.</p>
-              <input type="range" min={0} max={100} step={1} value={t.imageY ?? 50} onChange={(e) => set({ imageY: Number(e.target.value) })} className="mt-2 h-2 w-full cursor-pointer accent-[#053877]" data-testid="bio-image-y" />
+              <input type="range" min={0} max={100} step={1} value={t.imageY ?? 50} onChange={(e) => set({ imageY: Number(e.target.value) })} className="mv-range mt-3" style={{ background: rangeFill(t.imageY ?? 50, 0, 100) }} data-testid="bio-image-y" />
             </div>
           )}
           {(t.layout === "portrait" || t.layout === "shape") && (
@@ -955,11 +955,19 @@ function DesignSection({ id, title, sub, bind, children }: { id: string; title: 
 }
 
 /** A slider with its label and value. */
+/** A slider's track: grey, with navy filled up to the handle (from the middle when it runs either side of zero). */
+function rangeFill(value: number, min: number, max: number): string {
+  const pct = ((value - min) / (max - min)) * 100;
+  const from = min < 0 && max > 0 ? ((0 - min) / (max - min)) * 100 : 0;
+  const [a, b] = pct < from ? [pct, from] : [from, pct];
+  return `linear-gradient(to right, #d5dbe7 ${a}%, #053877 ${a}%, #053877 ${b}%, #d5dbe7 ${b}%)`;
+}
+
 function RangeRow({ label, hint, value, min, max, onChange, unit = "", track, testid }: { label: string; hint: string; value: number; min: number; max: number; onChange: (v: number) => void; unit?: string; track?: string; testid?: string }) {
   return (
     <div>
       <div className="flex items-baseline justify-between"><span className="text-xs font-semibold">{label} <span className="font-normal text-muted-foreground">{hint}</span></span><span className="text-[11px] tabular-nums text-muted-foreground">{value > 0 && min < 0 ? "+" : ""}{value}{unit}</span></div>
-      <input type="range" min={min} max={max} step={1} value={value} onChange={(e) => onChange(Number(e.target.value))} className="mt-1.5 h-2 w-full cursor-pointer appearance-none rounded-full accent-[#053877]" style={track ? { background: track } : undefined} data-testid={testid} />
+      <input type="range" min={min} max={max} step={1} value={value} onChange={(e) => onChange(Number(e.target.value))} className="mv-range mt-2" style={{ background: track ?? rangeFill(value, min, max) }} data-testid={testid} />
     </div>
   );
 }
