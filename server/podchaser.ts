@@ -151,19 +151,17 @@ function toPerson(c: any): PodPerson {
 // The search words: theirs, kept to the military and veteran community
 // ---------------------------------------------------------------------------
 
-const COMMUNITY = "(veteran OR veterans OR military OR army OR navy OR marines OR USMC OR airman OR soldier OR milspouse)";
-const BRANCH_WORDS: Record<string, string[]> = {
-  Army: ["army"], Navy: ["navy"], "Air Force": ["airforce", "USAF"], "Marine Corps": ["marine", "marines", "USMC"], "Coast Guard": ["coastguard", "USCG"], "Space Force": ["spaceforce"], "Military spouse": ["milspouse", "milspouses"],
+// Podchaser's plain search ranks by relevance across titles and descriptions; its boolean
+// search matches far fewer (47 shows against 18,036 for the same words). So: plain words,
+// with a branch, or "veteran" when they didn't say anything military themselves.
+const BRANCH_WORDS: Record<string, string> = {
+  Army: "army", Navy: "navy", "Air Force": "air force", "Marine Corps": "marine corps", "Coast Guard": "coast guard", "Space Force": "space force", "Military spouse": "military spouse",
 };
-/** Their words (all of them), and a branch (any of them) or else the community. */
 export function searchTerm(q: string, branches: string[], community: boolean): string {
-  const words = q.replace(/[()"*~:]/g, " ").split(/\s+/).map((w) => w.trim()).filter((w) => w.length > 1 && !/^(and|or|not)$/i.test(w)).slice(0, 8);
-  const parts = words.length ? [words.length > 1 ? `(${words.join(" AND ")})` : words[0]] : [];
-  const bs = branches.flatMap((b) => BRANCH_WORDS[b] ?? []);
-  const mentions = /\b(veteran|military|army|navy|marine|usmc|air force|coast guard|space force|milspouse|spouse)\b/i.test(q);
-  if (bs.length) parts.push(`(${bs.join(" OR ")})`);
-  else if (community && !mentions) parts.push(COMMUNITY);
-  return parts.join(" AND ") || COMMUNITY;
+  const words = q.replace(/[()"*~:+|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 120);
+  const bs = branches.map((b) => BRANCH_WORDS[b]).filter(Boolean);
+  const mentions = /\b(veteran|military|army|navy|marine|usmc|air force|coast guard|space force|milspouse|spouse|soldier|sailor|airman)\b/i.test(q);
+  return [words, bs.join(" "), !mentions && community ? "veteran" : ""].filter(Boolean).join(" ").trim() || "veteran";
 }
 
 // ---------------------------------------------------------------------------
@@ -229,8 +227,8 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
       const kind = req.body?.kind === "people" ? "people" : "shows";
       const q = String(req.body?.q ?? "").trim().slice(0, 200);
       const branches = String(req.body?.branch ?? "").split(",").map((b) => b.trim()).filter((b) => BRANCH_WORDS[b]).slice(0, 7);
-      // People are found by what they're known for: their words and a branch, never the whole community list.
-      const term = kind === "shows" ? searchTerm(q, branches, req.body?.community !== false) : [q.replace(/[()"*~:]/g, " "), ...branches.map((b) => BRANCH_WORDS[b][0])].join(" ").replace(/\s+/g, " ").trim() || "veteran";
+      // A person is found by what they're known for: their own words, with "veteran" only when there are none.
+      const term = searchTerm(q, branches, kind === "shows" ? req.body?.community !== false : !q);
       const sort = (kind === "shows" ? SHOW_SORTS : PERSON_SORTS)[String(req.body?.sort)] ?? "relevance";
       const guests = kind === "shows" && req.body?.hasGuests === true;
       const active = kind === "shows" && req.body?.active === true;
@@ -242,7 +240,7 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
         const since = new Date(Date.now() - 90 * DAY).toISOString().slice(0, 10);
         const j = kind === "people"
           ? await get("/search/creators", { q: term, page: page + 1, sort, sort_direction: sort === "relevance" ? undefined : "desc" })
-          : await get("/search/podcasts", { q: term, bool_search: true, page: page + 1, sort, sort_direction: sort === "relevance" ? undefined : "desc", language: "en", has_guests: guests ? true : undefined, latest_episode_from: active ? since : undefined });
+          : await get("/search/podcasts", { q: term, page: page + 1, sort, sort_direction: sort === "relevance" ? undefined : "desc", language: "en", has_guests: guests ? true : undefined, latest_episode_from: active ? since : undefined });
         const rows = list(j);
         const results = kind === "people" ? rows.map(toPerson) : rows.map((p) => toShow(p));
         found = { total: n(j?.pagination?.total_results) ?? rows.length, perPage: n(j?.pagination?.per_page) ?? (rows.length || 25), results };
