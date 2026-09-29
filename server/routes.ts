@@ -6141,10 +6141,19 @@ export function registerRoutes(app: Express): void {
     const clip = await storage.getClip(Number(req.params.id));
     if (!clip || clip.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such clip." });
     if (clip.editStatus === "queued" || clip.editStatus === "running") return res.status(409).json({ message: "That clip is already being updated." });
-    const title = String(req.body?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 90);
-    const subtitle = String(req.body?.subtitle ?? "").replace(/\s+/g, " ").trim().slice(0, 70);
+    const title = String(req.body?.title ?? clip.title).replace(/\s+/g, " ").trim().slice(0, 90);
+    const subtitle = String(req.body?.subtitle ?? clip.subtitle).replace(/\s+/g, " ").trim().slice(0, 70);
     if (!title) return res.status(400).json({ message: "A clip needs a title." });
-    const row = await storage.updateClip(clip.id, { editTitle: title, editSubtitle: subtitle, editStatus: "queued", editError: "", editAt: new Date().toISOString() });
+    // Trim: new in and out points in the episode (the remake cuts from there).
+    const times: { startSec?: number; endSec?: number } = {};
+    if (req.body?.startSec !== undefined || req.body?.endSec !== undefined) {
+      const startSec = Math.max(0, Math.round(Number(req.body.startSec ?? clip.startSec) * 10) / 10);
+      const endSec = Math.round(Number(req.body.endSec ?? clip.endSec) * 10) / 10;
+      if (!(endSec - startSec >= 5)) return res.status(400).json({ message: "A clip needs at least 5 seconds." });
+      if (endSec - startSec > 180) return res.status(400).json({ message: "Clips are 3 minutes at most." });
+      Object.assign(times, { startSec, endSec });
+    }
+    const row = await storage.updateClip(clip.id, { ...times, editTitle: title, editSubtitle: subtitle, editStatus: "queued", editError: "", editAt: new Date().toISOString() });
     res.json(row);
   });
 
@@ -6383,6 +6392,13 @@ export function registerRoutes(app: Express): void {
       editStatus: "",
       editError: "",
     });
+    // It had music: the remake came back without it, so mix it again (from these new files).
+    const rec = await storage.getRecording(clip.recordingId);
+    const mix = rec ? parseMusicMix(rec.musicMix) : null;
+    if (rec && mix && mix.status === "done") {
+      const orig = { ...(mix.orig ?? {}), [String(clip.id)]: { url: ok(b.url) ? b.url : clip.url, verticalUrl: ok(b.verticalUrl) ? b.verticalUrl : clip.verticalUrl, squareUrl: ok(b.squareUrl) ? b.squareUrl : clip.squareUrl } };
+      await storage.setMusicMix(rec.id, JSON.stringify({ ...mix, orig, status: "queued", at: new Date().toISOString() }));
+    }
     res.json({ ok: true });
   });
 

@@ -1342,6 +1342,69 @@ function downloadHref(url: string, name: string): string {
 }
 
 /** "Edit text": the title and the gold line under it, remade in all three shapes. */
+/**
+ * Too long? Play the clip, set where it should start and end (the buttons take the
+ * playhead, the sliders fine-tune), hear it back, then we remake every shape from there.
+ */
+function TrimClipDialog({ c, open, onOpenChange }: { c: ClipRow; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const len = Math.max(0, c.endSec - c.startSec);
+  const [range, setRange] = useState<[number, number]>([0, len]);
+  const [t, setT] = useState(0);
+  const vid = useRef<HTMLVideoElement>(null);
+  const stopAt = useRef<number | null>(null);
+  useEffect(() => { if (open) { setRange([0, len]); setT(0); } }, [open, len]);
+  const src = c.verticalUrl || c.url || c.squareUrl;
+  const newLen = range[1] - range[0];
+  const playNew = () => { const v = vid.current; if (!v) return; v.currentTime = range[0]; stopAt.current = range[1]; void v.play(); };
+  const save = useMutation({
+    mutationFn: async () => (await apiRequest("POST", `/api/host/clips/${c.id}/text`, { startSec: c.startSec + range[0], endSec: c.startSec + range[1] })).json(),
+    onSuccess: () => {
+      onOpenChange(false);
+      void qc.invalidateQueries({ queryKey: ["/api/host/clips"] });
+      toast({ title: "Trimming the clip", description: `Now ${hms(newLen)}. Every shape is remade from the new points, with its music; about a minute.` });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't trim that", description: e.message, variant: "destructive" }),
+  });
+  const changed = range[0] > 0.2 || range[1] < len - 0.2;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Trim this clip</DialogTitle>
+          <DialogDescription>Play it, then set where it should start and end.</DialogDescription>
+        </DialogHeader>
+        {src && (
+          <video
+            ref={vid} src={src} controls playsInline
+            onTimeUpdate={(e) => { const v = e.currentTarget; setT(v.currentTime); if (stopAt.current !== null && v.currentTime >= stopAt.current) { v.pause(); stopAt.current = null; } }}
+            className="mx-auto max-h-[42vh] rounded-lg bg-black"
+          />
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <Button type="button" variant="outline" onClick={() => setRange(([, b]) => [Math.min(t, b - 5), b])} className="gap-1.5 rounded-full" data-testid="clip-trim-start"><ArrowLeftToLine className="h-4 w-4" /> Start here ({hms(t)})</Button>
+          <Button type="button" variant="outline" onClick={() => setRange(([a]) => [a, Math.max(t, a + 5)])} className="gap-1.5 rounded-full" data-testid="clip-trim-end"><ArrowRightToLine className="h-4 w-4" /> End here ({hms(t)})</Button>
+        </div>
+        <label className="block text-xs font-semibold text-muted-foreground">Starts at {hms(range[0])}
+          <input type="range" min={0} max={len} step={0.1} value={range[0]} onChange={(e) => { const v = Number(e.target.value); setRange(([, b]) => [Math.min(v, b - 5), b]); if (vid.current) vid.current.currentTime = v; }} className="mt-1 w-full accent-[#053877]" />
+        </label>
+        <label className="block text-xs font-semibold text-muted-foreground">Ends at {hms(range[1])}
+          <input type="range" min={0} max={len} step={0.1} value={range[1]} onChange={(e) => { const v = Number(e.target.value); setRange(([a]) => [a, Math.max(v, a + 5)]); if (vid.current) vid.current.currentTime = v; }} className="mt-1 w-full accent-[#053877]" />
+        </label>
+        <p className="text-sm">
+          <span className="font-semibold tabular-nums">{hms(len)} → {hms(newLen)}</span>
+          <span className="text-muted-foreground">{changed ? ` (${Math.round(len - newLen)} sec shorter)` : ""}</span>
+        </p>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="outline" onClick={playNew} className="gap-1.5 rounded-full"><Play className="h-4 w-4" /> Play the new version</Button>
+          <Button type="button" onClick={() => save.mutate()} disabled={!changed || save.isPending} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="clip-trim-save">{save.isPending && <Loader2 className="h-4 w-4 animate-spin" />} Trim the clip</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function EditTextDialog({ c, open, onOpenChange }: { c: ClipRow; open: boolean; onOpenChange: (v: boolean) => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -1436,6 +1499,7 @@ function ClipPreview({ c, onClose }: { c: ClipRow | null; onClose: () => void })
 function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
+  const [trimmingClip, setTrimmingClip] = useState(false);
   const [posting, setPosting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const updating = c.editStatus === "queued" || c.editStatus === "running";
@@ -1512,6 +1576,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
                   <Copy className="h-3.5 w-3.5" /> Copy the caption
                 </DropdownMenuItem>
               )}
+              {!updating && <DropdownMenuItem className="gap-2" onSelect={() => setTrimmingClip(true)} data-testid="clip-trim"><Brackets className="h-3.5 w-3.5" /> Trim this clip</DropdownMenuItem>}
               {!updating && <DropdownMenuItem className="gap-2" onSelect={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" /> Edit the title and text</DropdownMenuItem>}
               <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onSelect={() => setDeleting(true)}><Trash2 className="h-3.5 w-3.5" /> Delete this clip</DropdownMenuItem>
             </DropdownMenuContent>
@@ -1520,6 +1585,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
       </div>
     </div>
     <EditTextDialog c={c} open={editing} onOpenChange={setEditing} />
+    <TrimClipDialog c={c} open={trimmingClip} onOpenChange={setTrimmingClip} />
     <ConfirmDelete open={deleting} onOpenChange={setDeleting} title={`Delete "${c.title}"?`} description="It moves to Recently deleted, where you can put it back for 15 days. The episode isn't touched." url={`/api/host/clips/${c.id}`} restorable />
     <PostDialog
       target={posting ? { kind: "clip", id: c.id, title: c.title, caption: c.caption, shapes: ([["vertical", c.verticalUrl], ["square", c.squareUrl], ["wide", c.url]] as const).filter(([, u]) => u).map(([s]) => s) } : null}
