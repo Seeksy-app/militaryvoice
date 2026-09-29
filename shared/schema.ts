@@ -1999,6 +1999,28 @@ export const trash = pgTable("trash", {
   expiresAt: text("expires_at").notNull(),
 }, (t) => [index("trash_email_idx").on(t.email), index("trash_expires_idx").on(t.expiresAt)]);
 
+/**
+ * A creator's own studio ("Go live"): one per creator, its own LiveKit room (my-<id>),
+ * apart from any event. Guests come in on the invite token; recordings go to the
+ * owner's Library; going live pushes to their YouTube and any streaming keys they add.
+ */
+export const personalStudios = pgTable("personal_studios", {
+  id: serial("id").primaryKey(),
+  ownerEmail: text("owner_email").notNull().unique(),
+  name: text("name").notNull().default("My studio"),
+  inviteToken: text("invite_token").notNull(),
+  /** Streaming keys, JSON [{ id, name, url, key, on }]. */
+  streams: text("streams").notNull().default("[]"),
+  youtubeOn: boolean("youtube_on").notNull().default(true),
+  recordingEgressId: text("recording_egress_id").notNull().default(""),
+  recordingSince: text("recording_since").notNull().default(""),
+  liveEgressId: text("live_egress_id").notNull().default(""),
+  liveSince: text("live_since").notNull().default(""),
+  liveWatchUrl: text("live_watch_url").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});
+export type PersonalStudioRow = typeof personalStudios.$inferSelect;
+
 // Saved segment — a named filter that can be used as a broadcast target
 export const segments = pgTable("segments", {
   id: serial("id").primaryKey(),

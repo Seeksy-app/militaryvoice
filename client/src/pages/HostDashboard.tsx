@@ -68,6 +68,7 @@ import { ShowMaterials } from "@/components/ShowMaterials";
 import { EventSettings } from "@/components/EventSettings";
 import { PlanBilling } from "@/components/PlanBilling";
 import { RecentlyDeleted } from "@/components/RecentlyDeleted";
+import { StudioHome } from "@/components/StudioHome";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { PostStudio, NavCredits } from "@/components/PostStudio";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
@@ -588,7 +589,7 @@ function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -598,6 +599,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   postify: "postify",
   billing: "billing",
   trash: "recently-deleted",
+  studio: "studio",
   social: "social",
   podcast: "podcast",
   page: "page",
@@ -1284,6 +1286,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <PlanBilling />
         ) : screen === "trash" ? (
           <RecentlyDeleted />
+        ) : screen === "studio" ? (
+          <StudioHome />
         ) : screen === "postify" ? (
           <PostStudio />
         ) : screen === "social" ? (
@@ -1728,7 +1732,7 @@ function CreateMenu({ goTo, children }: { goTo: (s: Screen) => void; children: R
         >
           <SquarePlay className="h-5 w-5" /> Upload video
         </DropdownMenuItem>
-        <DropdownMenuItem className="gap-3 rounded-lg px-3 py-2.5 text-sm" onSelect={() => goTo("greenroom")} data-testid="create-live">
+        <DropdownMenuItem className="gap-3 rounded-lg px-3 py-2.5 text-sm" onSelect={() => { window.location.href = "/my-studio"; }} data-testid="create-live">
           <Radio className="h-5 w-5" /> Go live
         </DropdownMenuItem>
         <DropdownMenuItem className="gap-3 rounded-lg px-3 py-2.5 text-sm" onSelect={() => goTo("social")} data-testid="create-post">
