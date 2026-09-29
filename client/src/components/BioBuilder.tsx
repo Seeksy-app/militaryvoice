@@ -1020,7 +1020,7 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
           )}
           <PhotoStyle d={d} change={change} />
           {CUTOUT_LAYOUTS.includes(t.layout) && t.layout !== "sticker" && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <ScenePicker scene={t.scene ?? ""} sceneKey={t.sceneKey ?? ""} onPick={(scene, sceneKey) => set({ scene, sceneKey })} />}
-          {(t.layout === "hero" || t.layout === "blend" || (t.layout === "portrait" && !d.heroUrl)) && hasPhoto ? <LivingPhoto on={t.living ?? false} setOn={(v) => set({ living: v })} st={living} start={startLiving} />
+          {!LIVING_ON ? null : (t.layout === "hero" || t.layout === "blend" || (t.layout === "portrait" && !d.heroUrl)) && hasPhoto ? <LivingPhoto on={t.living ?? false} setOn={(v) => set({ living: v })} st={living} start={startLiving} />
             : hasPhoto && (living.status === "done" || living.status === "running") ? (
               // Made (or on its way) but this top can't play it: say where it plays, one tap to get there.
               <div className="mt-4 rounded-xl border-2 border-[#F0A71F]/40 bg-[#F0A71F]/5 p-3" data-testid="bio-living-elsewhere">
@@ -1255,6 +1255,8 @@ function ScenePicker({ scene, sceneKey, onPick }: { scene: string; sceneKey: str
  * The living photo: their top photo moving for a few seconds (a blink, a
  * breath, a smile), looping. Made once (about a minute), then on or off.
  */
+/** The living photo is off for now (29 Sep 2026, Andrew): the builder hides it and pages don't play it. The server still makes one if asked. */
+const LIVING_ON = false;
 type LivingState = { status: "none" | "running" | "done" | "failed" | "loading"; url?: string; message?: string };
 function LivingPhoto({ on, setOn, st, start }: { on: boolean; setOn: (v: boolean) => void; st: LivingState; start: (again?: boolean) => void }) {
   return (

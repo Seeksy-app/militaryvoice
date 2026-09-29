@@ -102,7 +102,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       {/* The chat at the top of the page (a top corner, or opened from their social icons) rides the top of the screen. */}
       {intro("top")}
       {data.askEnabled && chatTop && <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} welcome={data.welcome} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat} onAsk={onAsk} onLoad={onLoadMessages} at={chatAt} />}
-      <PageTop t={t} avatar={data.avatarUrl} hero={data.heroUrl} cutoutUrl={data.cutoutUrl} living={t.living ? data.livingUrl : ""} name={noName ? "" : data.displayName || "Your name"} handle={data.handle} latest={data.podcast?.episodes[0]?.title}>{who}</PageTop>
+      <PageTop t={t} avatar={data.avatarUrl} hero={data.heroUrl} cutoutUrl={data.cutoutUrl} living={LIVING_ON && t.living ? data.livingUrl : ""} name={noName ? "" : data.displayName || "Your name"} handle={data.handle} latest={data.podcast?.episodes[0]?.title}>{who}</PageTop>
 
       <div className="mx-auto mt-6 flex max-w-[560px] flex-col gap-4 px-4">
         {/* Their blocks in their order; the podcast is one of them (they add it from Content). */}
@@ -250,6 +250,9 @@ function SignupBlock({ s, btn, ink, sub, card, line, accent, preview, handle, on
  * breaking out of a circle (popout), a sticker on stripes (sticker), or on a
  * magazine cover under a masthead (magazine). dy and size are their adjusters.
  */
+/** The living photo is off for now (29 Sep 2026): pages show the still. */
+const LIVING_ON = false;
+
 function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, nameY = 0, dy, size, latest, handle }: { kind: string; src: string; name: string; bg: string; scene: string; paper: string; dark: boolean; bigName: number; nameY?: number; dy: number; size: number; latest?: string; handle: string }) {
   const move: React.CSSProperties = { transform: `translateY(${dy}px) scale(${size})`, transformOrigin: "bottom center" };
   // A scene behind them (an image) in place of the colour: the background, the circle, the blob, the cover.
