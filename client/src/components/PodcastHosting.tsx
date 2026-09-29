@@ -184,7 +184,6 @@ export function PodcastHosting() {
 
       {tab === "episodes" && (
         <>
-          {s.importedFrom && <MoveSubscribers h={h} onDone={refresh} />}
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -236,9 +235,9 @@ export function PodcastHosting() {
                 ))}
               </ul>
             </div>
-          ) : s.importedFrom ? (
-            <div className="flex items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/[0.06] p-3.5 text-sm"><Check className="h-4 w-4 text-emerald-600" /> <span><b>Already listed.</b> Your show moved here from another host, so the apps follow the forwarded feed; nothing to submit again. Add each app's link below for your show page and SmartLink.</span></div>
           ) : null}
+          {/* A moved show is in the apps already, by its old feed: forwarding that feed moves them all here. */}
+          {s.importedFrom && <MoveSubscribers h={h} onDone={refresh} />}
           <Directories h={h} ready={ready} onSaved={refresh} />
           <YouTubeEpisodes h={h} onDone={refresh} />
         </>
@@ -274,6 +273,15 @@ const DIRS: { key: string; name: string; reach: string; url: string; steps: stri
 function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved: () => void }) {
   const { toast } = useToast();
   const s = h.show;
+  const moved = !!s.importedFrom;
+  // A moved show: bring its cover art over and find its Apple listing, once.
+  const looked = useRef(0);
+  useEffect(() => {
+    if (!moved || looked.current === s.id) return;
+    looked.current = s.id;
+    void apiRequest("POST", `/api/host/hosting/shows/${s.id}/listings`, {}).then(() => onSaved()).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moved, s.id]);
   const dirs = parseDirs(s.directories);
   // Apple's and Spotify's links may already be in from before.
   if (s.appleUrl && !dirs.apple?.url) dirs.apple = { state: "live", url: s.appleUrl };
@@ -299,7 +307,7 @@ function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold">Where your show is listed</h2>
-          <p className="text-xs text-muted-foreground">List it once in each; new episodes reach them on their own. {listed ? `Live on ${listed} of ${DIRS.length}.` : ""}</p>
+          <p className="text-xs text-muted-foreground">{moved ? "Your show is in these already, by your old feed: forwarding it (above) moves each one here. List it only where it isn't yet." : "List it once in each; new episodes reach them on their own."} {listed ? `Live on ${listed} of ${DIRS.length}.` : ""}</p>
         </div>
         <FeedLink url={h.feedUrl} />
       </div>
@@ -315,11 +323,11 @@ function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved
                   <span className="block text-sm font-semibold">{d.name}</span>
                   <span className="block truncate text-xs text-muted-foreground">{d.reach}</span>
                 </button>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st?.state === "live" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground"}`}>{st?.state === "live" ? "Live" : st?.state === "submitted" ? "Submitted" : "Not listed"}</span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st?.state === "live" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground"}`}>{st?.state === "live" ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "submitted" ? "Submitted" : moved ? "Moves with your forward" : "Not listed"}</span>
                 {st?.state === "live" && st.url ? (
                   <Button asChild size="sm" variant="outline" className="h-8 gap-1 rounded-full"><a href={st.url} target="_blank" rel="noreferrer">Open <ExternalLink className="h-3 w-3" /></a></Button>
                 ) : (
-                  <Button size="sm" onClick={() => void listIt(d)} disabled={!ready} title={ready ? undefined : "Finish what the apps need first (above)"} className="h-8 gap-1 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid={`hosting-dir-list-${d.key}`}>{st?.state === "submitted" ? "Open again" : "List it"} <ExternalLink className="h-3 w-3" /></Button>
+                  <Button size="sm" variant={moved ? "outline" : "default"} onClick={() => void listIt(d)} disabled={!ready} title={ready ? undefined : "Finish what the apps need first (above)"} className={`h-8 gap-1 rounded-full ${moved ? "" : "bg-[#053877] text-white hover:bg-[#0a4a99]"}`} data-testid={`hosting-dir-list-${d.key}`}>{st?.state === "submitted" ? "Open again" : moved ? "Not there? List it" : "List it"} <ExternalLink className="h-3 w-3" /></Button>
                 )}
               </div>
               {(isOpen || st?.state === "submitted") && (

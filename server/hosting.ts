@@ -205,6 +205,50 @@ async function episodesOf(showId: number) {
 }
 const live = (e: HostedEpisodeRow) => e.status === "published" && !!e.publishedAt && Date.parse(e.publishedAt) <= Date.now() && !!(e.audioKey || e.audioUrl);
 
+/** Our own storage (the photos bucket): art kept there stays when an old host's account closes. */
+const ours = (url: string) => /\/storage\/v1\/object\/public\//.test(url);
+
+/**
+ * For a show that moved here: its cover art copied to our storage (square, at most 3000, a JPEG
+ * Apple takes), and Apple's listing found by the old feed or ours, saved as live in Directories.
+ */
+export async function findListings(s: HostedShowRow): Promise<HostedShowRow> {
+  const set: Partial<HostedShowRow> = {};
+  if (s.artworkUrl && !ours(s.artworkUrl) && safeFeedUrl(s.artworkUrl)) {
+    try {
+      const r = await fetch(s.artworkUrl, { signal: AbortSignal.timeout(30_000) });
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (r.ok && buf.length < 25_000_000) {
+        const meta = await sharp(buf).metadata();
+        const side = Math.min(3000, Math.min(meta.width ?? 0, meta.height ?? 0));
+        if (side >= 600) {
+          const img = await sharp(buf).rotate().resize(side, side, { fit: "cover", position: "attention" }).jpeg({ quality: 88 }).toBuffer();
+          set.artworkUrl = await uploadPhoto(`podcast-art/${s.id}-${Date.now()}.jpg`, img, "image/jpeg");
+        }
+      }
+    } catch (err) { console.warn("Cover art copy failed:", (err as Error).message); }
+  }
+  const dirs = (() => { try { return JSON.parse(s.directories || "{}") as Record<string, { state: string; url: string; at?: string }>; } catch { return {}; } })();
+  if (!dirs.apple?.url && !s.appleUrl) {
+    try {
+      const norm = (u: string) => u.replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase();
+      const feeds = new Set([s.importedFrom, feedUrl(s.slug)].filter(Boolean).map(norm));
+      const r = await fetch(`https://itunes.apple.com/search?${new URLSearchParams({ term: s.title, entity: "podcast", limit: "25" })}`, { signal: AbortSignal.timeout(15_000) });
+      const j = (await r.json().catch(() => ({}))) as { results?: { feedUrl?: string; collectionViewUrl?: string }[] };
+      const hit = (j.results ?? []).find((x) => x.feedUrl && feeds.has(norm(x.feedUrl)));
+      if (hit?.collectionViewUrl) {
+        const url = hit.collectionViewUrl.replace(/\?.*$/, "");
+        dirs.apple = { state: "live", url, at: now() };
+        set.appleUrl = url;
+        set.directories = JSON.stringify(dirs);
+      }
+    } catch (err) { console.warn("Apple lookup failed:", (err as Error).message); }
+  }
+  if (!Object.keys(set).length) return s;
+  const [out] = await db.update(hostedShows).set({ ...set, updatedAt: now() }).where(eq(hostedShows.id, s.id)).returning();
+  return out;
+}
+
 /** What's missing before Apple will take the feed. */
 function readiness(s: HostedShowRow, eps: HostedEpisodeRow[]): string[] {
   const out: string[] = [];
@@ -756,7 +800,16 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       audioJob: "copy",
     }));
     for (let i = 0; i < rows.length; i += 200) await db.insert(hostedEpisodes).values(rows.slice(i, i + 200));
+    // The cover art, kept with us (the old host's copy goes when the account does), and where it's listed already.
+    await findListings(show).catch((err) => console.warn("Listings on import:", (err as Error).message));
     res.status(201).json({ show, episodes: rows.length });
+  });
+
+  // A moved show: bring its cover art over, and find where it's listed already (Apple, by its feed).
+  app.post("/api/host/hosting/shows/:id/listings", requireHostSession, async (req, res) => {
+    const s = await ownShow(emailOf(req), Number(req.params.id));
+    if (!s) return res.status(404).json({ message: "No such show." });
+    res.json(await findListings(s));
   });
 
   // Has the old host started forwarding to us? Follow the old feed and see where it ends.
