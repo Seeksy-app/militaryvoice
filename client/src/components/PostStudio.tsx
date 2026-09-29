@@ -1030,13 +1030,14 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
             canSplit={canSplit}
             actions={
               <>
-                {/* Icons with their names on hover, as in Canva: Split, and Trim with what's kept. */}
-                <TimelineButton tip="Split (S)" onClick={split} disabled={!canSplit || trimming} testid="tool-split" square>
-                  <SplitIcon />
+                {/* Two jobs, named on the button: Trim is only the start and end; Split takes out a section. */}
+                <TimelineButton tip={trimming ? "Finish trimming first (Done)" : canSplit ? "Split: take out an unwanted section. Split at the start and end of it, click the piece, then delete it. (S)" : "Split: take out an unwanted section. Move the blue playhead to where it starts, then split."} onClick={split} disabled={!canSplit || trimming} testid="tool-split">
+                  <SplitIcon /> Split
                 </TimelineButton>
-                <TimelineButton tip="Trim" on={trimming} onClick={() => { setTrimming((v) => !v); setSel(null); }} testid="tool-trim">
-                  <Scissors className="h-4 w-4" /> {hms(Math.max(0, keepLen - cutTotal))}
+                <TimelineButton tip="Trim: only the start and end. Drag the yellow handles to where it should begin and finish." on={trimming} onClick={() => { setTrimming((v) => !v); setSel(null); }} testid="tool-trim">
+                  <Scissors className="h-4 w-4" /> Trim start & end
                 </TimelineButton>
+                <span className="ml-1 text-sm tabular-nums text-muted-foreground" title="How long it will be" data-testid="tool-length">Length {hms(Math.max(0, keepLen - cutTotal))}</span>
               </>
             }
             extra={trimming || bounds.length > 2 || sel ? (
@@ -1100,10 +1101,13 @@ function CardIcon({ tip, onClick, testid, children }: { tip: string; onClick: ()
 function TimelineButton({ tip, on, onClick, disabled, testid, tone, square, children }: { tip: string; on?: boolean; onClick: () => void; disabled?: boolean; testid: string; tone?: "violet"; square?: boolean; children: React.ReactNode }) {
   return (
     <Tooltip>
+      {/* A disabled button fires no hover, so the name sits on a wrapper: it still says why. */}
       <TooltipTrigger asChild>
-        <button type="button" aria-pressed={on} onClick={onClick} disabled={disabled} aria-label={tip} className={`inline-flex h-9 items-center gap-1.5 rounded-lg border ${square ? "w-9 justify-center" : "px-3"} text-sm font-semibold tabular-nums transition-colors disabled:opacity-40 ${on ? "border-[#F0A71F] bg-[#F0A71F] text-[#1a1200]" : tone === "violet" ? "border-violet-300 bg-background text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950" : "border-border bg-background hover:bg-muted"}`} data-testid={testid}>
+        <span className="inline-flex" tabIndex={disabled ? 0 : undefined}>
+        <button type="button" aria-pressed={on} onClick={onClick} disabled={disabled} aria-label={tip} className={`inline-flex h-9 items-center gap-1.5 rounded-lg border ${square ? "w-9 justify-center" : "px-3"} text-sm font-semibold tabular-nums transition-colors disabled:pointer-events-none disabled:opacity-40 ${on ? "border-[#F0A71F] bg-[#F0A71F] text-[#1a1200]" : tone === "violet" ? "border-violet-300 bg-background text-violet-700 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950" : "border-border bg-background hover:bg-muted"}`} data-testid={testid}>
           {children}
         </button>
+        </span>
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-[16rem] text-xs">{tip}</TooltipContent>
     </Tooltip>
