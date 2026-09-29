@@ -471,9 +471,30 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { 
         {hosted ? <p className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-emerald-600" /> {view.podcast?.title}</p> : <Input value={d.rssUrl} onChange={(e) => change({ rssUrl: e.target.value })} placeholder="https://feeds.yourhost.com/your-show" />}
       </Field>
       <div className="flex items-center justify-between rounded-xl border border-border p-3">
-        <div><p className="text-sm font-semibold">Let listeners message you</p><p className="text-xs text-muted-foreground">A chat button in the corner of your page. You reply from Messages; they see it on your page, and by email if they left one.</p></div>
+        <div><p className="text-sm font-semibold">Let listeners message you</p><p className="text-xs text-muted-foreground">A chat button on your page. You reply from Messages; they see it on your page, and by email if they left one.</p></div>
         <Switch checked={d.askEnabled} onCheckedChange={(v) => change({ askEnabled: v }, true)} />
       </div>
+      {d.askEnabled && (
+        <div>
+          <p className="mb-1.5 text-sm font-semibold">Where the chat button goes</p>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Where the chat button goes">
+            {([["top-left", "Top left"], ["top-right", "Top right"], ["socials", "With my icons"], ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"]] as const).map(([v, l]) => {
+              const on = (d.theme.chatAt ?? "top-right") === v;
+              return (
+                <button key={v} type="button" role="radio" aria-checked={on} onClick={() => change({ theme: { ...d.theme, chatAt: v } }, true)} className={`flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 text-[11px] font-semibold transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.05] dark:border-[#8fb5e8]" : "border-border text-muted-foreground hover:border-[#053877]/40"}`} data-testid={`bio-chat-at-${v}`}>
+                  {/* A little page, with the button where it goes. */}
+                  <span className="relative block h-10 w-8 rounded-md border border-border bg-muted/50">
+                    {v === "socials"
+                      ? <span className="absolute inset-x-0 top-4 flex justify-center gap-0.5">{[0, 1, 2].map((i) => <span key={i} className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />)}<span className="h-1.5 w-1.5 rounded-full bg-[#F0A71F]" /></span>
+                      : <span className={`absolute h-2.5 w-2.5 rounded-full bg-[#F0A71F] ${v.startsWith("top") ? "top-1" : "bottom-1"} ${v.endsWith("left") ? "left-1" : "right-1"}`} />}
+                  </span>
+                  {l}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {d.askEnabled && (
         <Field label="Your welcome message" hint="The first thing your chat says, from you.">
           <Input value={d.welcome ?? ""} onChange={(e) => change({ welcome: e.target.value })} maxLength={280} placeholder="Hi! Thanks for listening. What's on your mind?" data-testid="bio-welcome" />
@@ -1000,12 +1021,8 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
           <CardSelect testid="bio-font" value={t.font} onPick={(v) => set({ font: v as BioFont })} options={(Object.keys(FONTS) as BioFont[]).map((f) => ({ value: f, node: <FontFace font={f} /> }))} />
         </DesignSection>
 
-        <DesignSection bind={refs} id="color" title="Colours" sub="Everything with colour on your page, in one place.">
+        <DesignSection bind={refs} id="color" title="Colours" sub="From the whole page down to your buttons.">
           <div className="space-y-5">
-            <div>
-              <p className="mb-2 text-xs font-semibold">Theme colour <span className="font-normal text-muted-foreground">for headings, badges and buttons</span></p>
-              <ColourPick value={t.color} onPick={(v) => set({ color: v })} testid="bio-colour" />
-            </div>
             <div>
               <p className="mb-2 text-xs font-semibold">Shade <span className="font-normal text-muted-foreground">how light or dark the page is</span></p>
               <CardSelect testid="bio-shade" value={t.shade as string} onPick={(v) => set({ shade: v as BioTheme["shade"], ...(bgv.mode === "solid" && bgv.color ? { background: { ...bgv, color: "" } } : {}) })}
@@ -1013,13 +1030,6 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
                   value: v,
                   node: <span className="flex items-center gap-3"><span className="flex h-10 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-black/5" style={{ background: bgc }}><span className="h-1 w-7 rounded-full" style={{ background: tx, opacity: 0.7 }} /><span className="h-1 w-4 rounded-full" style={{ background: tx, opacity: 0.4 }} /></span><span className="text-sm font-medium">{l}</span></span>,
                 }))} />
-            </div>
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold">Link colour <span className="font-normal text-muted-foreground">for your link buttons</span></p>
-                {t.linkColor && <button type="button" onClick={() => set({ linkColor: "" })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Same as the theme colour</button>}
-              </div>
-              <ColourPick value={t.linkColor || t.color} onPick={(v) => set({ linkColor: v })} testid="bio-link-colour" />
             </div>
             <div>
               <p className="mb-2 text-xs font-semibold">Background</p>
@@ -1067,6 +1077,17 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
                 <ColourPick value={t.stickerColor || t.color} onPick={(v) => set({ stickerColor: v })} testid="bio-sticker-colour" />
               </div>
             )}
+            <div>
+              <p className="mb-2 text-xs font-semibold">Theme colour <span className="font-normal text-muted-foreground">for headings, badges and buttons</span></p>
+              <ColourPick value={t.color} onPick={(v) => set({ color: v })} testid="bio-colour" />
+            </div>
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold">Link colour <span className="font-normal text-muted-foreground">for your link buttons</span></p>
+                {t.linkColor && <button type="button" onClick={() => set({ linkColor: "" })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Same as the theme colour</button>}
+              </div>
+              <ColourPick value={t.linkColor || t.color} onPick={(v) => set({ linkColor: v })} testid="bio-link-colour" />
+            </div>
           </div>
         </DesignSection>
 

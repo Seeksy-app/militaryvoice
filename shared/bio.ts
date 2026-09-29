@@ -35,6 +35,8 @@ export interface BioTheme {
   podcast: BioPodcastOptions;
   /** The link buttons' colour ("" = the theme colour). */
   linkColor: string;
+  /** Where the chat button sits: a corner, or in with their social icons. */
+  chatAt?: BioChatAt;
   /** Their talking intro shows as a bubble on the page (tap to hear them say hello). */
   intro?: boolean;
   /** Their living photo plays in place of the still (Hero, Cover photo and Classic tops). */
@@ -91,6 +93,7 @@ export type BioSection =
   /** Music: songs, albums or playlists from Spotify, Apple Music, SoundCloud or YouTube, each a player. */
   | { id: string; type: "music"; visible: boolean; title: string; tracks: { id: string; url: string }[] };
 export type BioAlign = "left" | "center" | "right";
+export type BioChatAt = "top-left" | "top-right" | "bottom-left" | "bottom-right" | "socials";
 export type BioPromoCode = { id: string; brand: string; code: string; note: string; url: string };
 /** A promo section's codes, the old single code included. */
 export const promoCodes = (s: { codes?: BioPromoCode[]; code: string; url: string; note: string; id: string }): BioPromoCode[] =>

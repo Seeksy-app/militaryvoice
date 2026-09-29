@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Calendar, Check, Copy, ExternalLink, MessageCircle, Music, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
-import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, musicEmbed, onColor, promoCodes, standOut, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
+import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, musicEmbed, onColor, promoCodes, standOut, type BioChatAt, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
 import { useBioFont } from "@/lib/bioFont";
 import type { SocialPlatform } from "@shared/schema";
 
@@ -65,6 +65,8 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   // The episode a listener is asking the show's AI about (its sheet slides up from the bottom).
   const [askEp, setAskEp] = useState<{ id: string; title: string } | null>(null);
   const noName = t.hideName ?? false;
+  const chatAt = t.chatAt ?? "top-right";
+  const chatTop = chatAt === "top-left" || chatAt === "top-right" || chatAt === "socials";
 
   const share = async (title: string, id: string) => {
     const url = `${shareBase}#ep-${id}`;
@@ -81,14 +83,16 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
     <>
       {!hideName && !noName && <h1 className="text-balance font-bold leading-tight tracking-tight" style={{ fontSize: Math.round((onPhoto ? 34 : 26) * (t.nameSize ?? 100) / 100) }}>{data.displayName || "Your name"}</h1>}
       <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>@{data.handle}{data.branch ? ` · ${data.branch}` : ""}</p>
-      {t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} />}
+      {t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} onChat={data.askEnabled && chatAt === "socials" ? () => setChat(true) : undefined} chatColor={accent} />}
       {data.bio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{styled(data.bio)}</p>}
-      {!t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} />}
+      {!t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} onChat={data.askEnabled && chatAt === "socials" ? () => setChat(true) : undefined} chatColor={accent} />}
     </>
   );
 
   return (
     <div style={{ background: bg, color: ink, fontFamily: font, minHeight: "100%" }} className="relative pb-10" data-testid="bio-page">
+      {/* The chat at the top of the page (a top corner, or opened from their social icons) rides the top of the screen. */}
+      {data.askEnabled && chatTop && <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} welcome={data.welcome} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat} onAsk={onAsk} onLoad={onLoadMessages} at={chatAt} />}
       <PageTop t={t} avatar={data.avatarUrl} hero={data.heroUrl} cutoutUrl={data.cutoutUrl} living={t.living ? data.livingUrl : ""} name={noName ? "" : data.displayName || "Your name"} handle={data.handle} latest={data.podcast?.episodes[0]?.title}>{who}</PageTop>
 
       <div className="mx-auto mt-6 flex max-w-[560px] flex-col gap-4 px-4">
@@ -99,16 +103,16 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       </div>
       {/* Last on the page so they stick to the foot of the screen: the chat bubble, and the sheet for asking about an episode. */}
       {(chat || askEp) && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20 ${askEp ? "bg-black/40" : ""}`} onClick={() => { setChat(false); setAskEp(null); }} aria-hidden />}
-      {t.intro && data.introUrl && !askEp && <IntroBubble src={data.introUrl} name={data.displayName} accent={accent} preview={preview} onPlay={() => ev("play", "Talking intro")} />}
-      {data.askEnabled && !askEp && <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} welcome={data.welcome} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat} onAsk={onAsk} onLoad={onLoadMessages} />}
+      {t.intro && data.introUrl && !askEp && <IntroBubble src={data.introUrl} name={data.displayName} accent={accent} right={data.askEnabled && chatAt === "bottom-left"} preview={preview} onPlay={() => ev("play", "Talking intro")} />}
+      {data.askEnabled && !askEp && !chatTop && <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} welcome={data.welcome} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat} onAsk={onAsk} onLoad={onLoadMessages} at={chatAt} />}
       {askEp && <AskSheet key={askEp.id} ep={askEp} name={data.displayName} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} onAskAi={onAskAi} onClose={() => setAskEp(null)} onMessage={data.askEnabled ? () => { setAskEp(null); setChat(true); } : undefined} />}
     </div>
   );
 }
 
 /** Their social accounts, a row of round icons (a white ring over a photo). */
-export function SocialRow({ socials, onPhoto = false, preview, onTap }: { socials: { platform: string; url: string }[]; onPhoto?: boolean; preview: boolean; onTap?: (platform: string) => void }) {
-  if (!socials.length) return null;
+export function SocialRow({ socials, onPhoto = false, preview, onTap, onChat, chatColor = "#053877" }: { socials: { platform: string; url: string }[]; onPhoto?: boolean; preview: boolean; onTap?: (platform: string) => void; onChat?: () => void; chatColor?: string }) {
+  if (!socials.length && !onChat) return null;
   return (
     <div className="mt-4 flex flex-wrap justify-center gap-2.5" data-testid="social-row">
       {socials.map((s) => (
@@ -116,6 +120,12 @@ export function SocialRow({ socials, onPhoto = false, preview, onTap }: { social
           <PlatformIcon platform={s.platform as SocialPlatform} className="h-5 w-5" />
         </a>
       ))}
+      {/* The chat, in with their icons (their choice): opens the chat to message them. */}
+      {onChat && (
+        <button type="button" onClick={onChat} aria-label="Send a message" className="flex h-10 w-10 items-center justify-center rounded-full transition-transform hover:scale-110" style={{ background: chatColor, color: onColor(chatColor), boxShadow: onPhoto ? "0 0 0 2px rgba(255,255,255,0.85)" : undefined }} data-testid="bio-chat-social">
+          <MessageCircle className="h-5 w-5" />
+        </button>
+      )}
     </div>
   );
 }
@@ -445,7 +455,7 @@ function Section({ s, btn, ink, sub, card, line, accent, preview, ev }: { s: Bio
  * Their talking intro: a round bubble in the bottom left with them moving in it
  * (silent). Tap it and it opens and they say hello, with sound.
  */
-function IntroBubble({ src, name, accent, preview, onPlay }: { src: string; name: string; accent: string; preview: boolean; onPlay: () => void }) {
+function IntroBubble({ src, name, accent, preview, onPlay, right = false }: { src: string; name: string; accent: string; preview: boolean; onPlay: () => void; right?: boolean }) {
   const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState(false);
   const full = useRef<HTMLVideoElement | null>(null);
@@ -454,12 +464,12 @@ function IntroBubble({ src, name, accent, preview, onPlay }: { src: string; name
     <div className="sticky bottom-0 z-30 h-0">
       <div className="relative mx-auto h-0 max-w-[560px]">
         {open ? (
-          <div className="absolute bottom-4 left-3 w-[min(17rem,calc(100%-5.5rem))] overflow-hidden rounded-3xl bg-black shadow-2xl ring-2 ring-white/70" role="dialog" aria-label={`${first || "Their"} hello`} data-testid="bio-intro-player">
+          <div className={`absolute bottom-4 ${right ? "right-3" : "left-3"} w-[min(17rem,calc(100%-5.5rem))] overflow-hidden rounded-3xl bg-black shadow-2xl ring-2 ring-white/70`} role="dialog" aria-label={`${first || "Their"} hello`} data-testid="bio-intro-player">
             <video ref={full} src={src} autoPlay playsInline controls className="aspect-square w-full object-cover" onEnded={() => setOpen(false)} />
             <button type="button" onClick={() => setOpen(false)} className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white" aria-label="Close"><X className="h-4 w-4" /></button>
           </div>
         ) : (
-          <button type="button" onClick={() => { setOpen(true); setSeen(true); if (!preview) onPlay(); }} className="group absolute bottom-4 left-4 flex items-center gap-2" aria-label={`Play ${first || "their"} hello`} data-testid="bio-intro">
+          <button type="button" onClick={() => { setOpen(true); setSeen(true); if (!preview) onPlay(); }} className={`group absolute bottom-4 flex items-center gap-2 ${right ? "right-4 flex-row-reverse" : "left-4"}`} aria-label={`Play ${first || "their"} hello`} data-testid="bio-intro">
             <span className="relative block h-16 w-16 overflow-hidden rounded-full shadow-xl ring-[3px] transition-transform group-hover:scale-105" style={{ ["--tw-ring-color" as string]: accent }}>
               <video src={src} autoPlay muted loop playsInline preload="metadata" className="h-full w-full object-cover" />
               <span className="absolute inset-0 flex items-center justify-center bg-black/15"><Play className="h-5 w-5 translate-x-px fill-white text-white drop-shadow" /></span>
@@ -477,10 +487,12 @@ function IntroBubble({ src, name, accent, preview, onPlay }: { src: string; name
  * their reply back here (a badge on the button when one comes). The listener's
  * browser keeps the keys to their messages; the reply email carries one too.
  */
-export function Chat({ handle, name, avatar, welcome = "", accent, ink, sub, line, dark, preview, open, setOpen, onAsk, onLoad, corner = false }: {
+export function Chat({ handle, name, avatar, welcome = "", accent, ink, sub, line, dark, preview, open, setOpen, onAsk, onLoad, corner = false, at = "bottom-right" }: {
   handle: string; name: string; avatar: string; welcome?: string; accent: string; ink: string; sub: string; line: string; dark: boolean; preview: boolean;
-  /** Fixed to the window's corner (a page with its own layout); otherwise it rides the foot of the page it ends. */
+  /** Fixed to the window's corner (a page with its own layout); otherwise it rides the page. */
   corner?: boolean;
+  /** Which corner it rides (a top one goes first on the page, a bottom one last), or no button of its own: in their social icons. */
+  at?: BioChatAt;
   open: boolean; setOpen: (v: boolean) => void; onAsk?: (q: AskInput) => Promise<{ token?: string; createdAt?: string }>; onLoad?: (tokens: string[]) => Promise<ChatMsg[]>;
 }) {
   type Kept = { tokens?: string[]; seen?: string; name?: string; email?: string };
@@ -549,23 +561,25 @@ export function Chat({ handle, name, avatar, welcome = "", accent, ink, sub, lin
     } finally { setBusy(false); }
   };
 
+  const top = at === "top-left" || at === "top-right" || at === "socials";
+  const left = at === "top-left" || at === "bottom-left";
   const panel = dark ? "#151b2f" : "#ffffff";
   const field = { background: "transparent", border: `1px solid ${line}`, color: ink, borderRadius: 12 };
   const face = (size: string) => avatar
     ? <img src={avatar} alt="" className={`${size} shrink-0 rounded-full object-cover`} />
     : <span className={`${size} flex shrink-0 items-center justify-center rounded-full text-xs font-bold`} style={{ background: accent, color: onColor(accent) }}>{(name || "?").slice(0, 1)}</span>;
   return (
-    <div className={corner ? "fixed bottom-5 right-5 z-40" : "sticky bottom-0 z-30 h-0"}>
+    <div className={corner ? "fixed bottom-5 right-5 z-40" : `sticky ${top ? "top-0" : "bottom-0"} z-30 h-0`}>
       <div className={corner ? "relative" : "relative mx-auto h-0 max-w-[560px]"}>
-        <button type="button" onClick={() => setOpen(!open)} aria-label={unread ? `${unread} new ${unread === 1 ? "reply" : "replies"}` : "Send message"} aria-expanded={open}
-          className={`group flex items-center justify-center rounded-full shadow-lg ring-2 transition-transform hover:scale-105 ${corner ? "relative h-14 w-14" : "absolute bottom-4 right-4 h-12 w-12"}`}
+        {at !== "socials" && <button type="button" onClick={() => setOpen(!open)} aria-label={unread ? `${unread} new ${unread === 1 ? "reply" : "replies"}` : "Send message"} aria-expanded={open}
+          className={`group flex items-center justify-center rounded-full shadow-lg ring-2 transition-transform hover:scale-105 ${corner ? "relative h-14 w-14" : `absolute h-12 w-12 ${top ? "top-3" : "bottom-4"} ${left ? "left-4" : "right-4"}`}`}
           style={{ background: accent, color: onColor(accent), ["--tw-ring-color" as string]: dark ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.9)" }} data-testid="bio-chat">
           {open ? <X className={corner ? "h-6 w-6" : "h-5 w-5"} /> : <MessageCircle className={corner ? "h-6 w-6" : "h-5 w-5"} />}
           {unread > 0 && !open && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ef4444] px-1 text-[11px] font-bold text-white ring-2 ring-white" data-testid="bio-chat-badge">{unread}</span>}
-          {!open && <span className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-full bg-[#0b1020] px-2.5 py-1 text-xs font-semibold text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100">{unread ? `${unread} new ${unread === 1 ? "reply" : "replies"}` : "Send message"}</span>}
-        </button>
+          {!open && <span className={`pointer-events-none absolute top-1/2 -translate-y-1/2 ${left && !corner ? "left-full ml-2" : "right-full mr-2"}  whitespace-nowrap rounded-full bg-[#0b1020] px-2.5 py-1 text-xs font-semibold text-white opacity-0 shadow-md transition-opacity group-hover:opacity-100`}>{unread ? `${unread} new ${unread === 1 ? "reply" : "replies"}` : "Send message"}</span>}
+        </button>}
         {open && (
-          <div className={`absolute flex max-h-[min(70vh,600px)] flex-col ${corner ? "bottom-[4.5rem] right-0 w-[min(22rem,calc(100vw-2.5rem))]" : "bottom-[4.75rem] left-3 right-3 ml-auto max-w-[22rem]"} overflow-hidden rounded-3xl text-left shadow-2xl`} style={{ background: panel, color: ink, border: `1px solid ${line}` }} role="dialog" aria-label={`Message ${name}`} data-testid="bio-chat-panel">
+          <div className={`absolute flex max-h-[min(70vh,600px)] flex-col ${corner ? "bottom-[4.5rem] right-0 w-[min(22rem,calc(100vw-2.5rem))]" : `${top ? (at === "socials" ? "top-3" : "top-[4.25rem]") : "bottom-[4.75rem]"} left-3 right-3 max-w-[22rem] ${at === "socials" ? "mx-auto" : left ? "mr-auto" : "ml-auto"}`} overflow-hidden rounded-3xl text-left shadow-2xl`} style={{ background: panel, color: ink, border: `1px solid ${line}` }} role="dialog" aria-label={`Message ${name}`} data-testid="bio-chat-panel">
             <div className="flex items-center gap-2.5 px-4 py-3" style={{ borderBottom: `1px solid ${line}` }}>
               {face("h-9 w-9")}
               <div className="min-w-0 flex-1">

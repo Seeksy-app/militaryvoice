@@ -363,6 +363,7 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     socialsFirst: typeof x.socialsFirst === "boolean" ? x.socialsFirst : prev.socialsFirst ?? false,
     living: typeof x.living === "boolean" ? x.living : prev.living ?? false,
     intro: typeof x.intro === "boolean" ? x.intro : prev.intro ?? false,
+    chatAt: (["top-left", "top-right", "bottom-left", "bottom-right", "socials"] as const).includes(x.chatAt as never) ? (x.chatAt as BioTheme["chatAt"]) : prev.chatAt ?? "top-right",
     scene: typeof x.scene === "string" ? httpUrl(x.scene) : prev.scene ?? "",
     nameSize: Number.isFinite(Number(x.nameSize)) && x.nameSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.nameSize)))) : prev.nameSize ?? 100,
     cutoutSize: Number.isFinite(Number(x.cutoutSize)) && x.cutoutSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.cutoutSize)))) : prev.cutoutSize ?? 100,
