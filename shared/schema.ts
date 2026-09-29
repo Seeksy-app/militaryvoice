@@ -2449,6 +2449,9 @@ export const bioPages = pgTable("bio_pages", {
   livingUrl: text("living_url").notNull().default(""),
   livingFrom: text("living_from").notNull().default(""),
   livingJob: text("living_job").notNull().default(""),
+  /** The talking intro: their photo saying hello in their voice (or an AI voice), and the job making it (JSON). */
+  introUrl: text("intro_url").notNull().default(""),
+  introJob: text("intro_job").notNull().default(""),
   /** Ask my show: the AI that answers listeners from every episode. */
   aiEnabled: boolean("ai_enabled").notNull().default(true),
   published: boolean("published").notNull().default(true),

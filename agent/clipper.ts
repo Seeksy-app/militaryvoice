@@ -121,7 +121,7 @@ interface Job {
   /** A still from an episode's video, for its picture. */
   episodeStill?: { episodeId: number };
   /** A SmartLink's living photo (downloadUrl) made small enough for phones. */
-  livingSqueeze?: { pageId: number };
+  livingSqueeze?: { pageId: number; kind?: "living" | "intro" };
   episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut" };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
@@ -1851,17 +1851,19 @@ async function handleEpisodeAudio(job: Job): Promise<void> {
  */
 async function handleLivingSqueeze(job: Job): Promise<void> {
   const id = job.livingSqueeze!.pageId;
-  const tag = `[page ${id}] living photo`;
+  // A talking intro keeps its sound; a living photo has none.
+  const intro = job.livingSqueeze!.kind === "intro";
+  const tag = `[page ${id}] ${intro ? "talking intro" : "living photo"}`;
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `living-${id}-`));
   try {
     const out = path.join(dir, "living.mp4");
-    await ffmpeg(["-i", job.downloadUrl, "-vf", "scale='min(720,iw)':-2", "-c:v", "libx264", "-preset", "medium", "-crf", "26", "-pix_fmt", "yuv420p", "-an", "-movflags", "+faststart", out]);
+    await ffmpeg(["-i", job.downloadUrl, "-vf", "scale='min(720,iw)':-2", "-c:v", "libx264", "-preset", "medium", "-crf", "26", "-pix_fmt", "yuv420p", ...(intro ? ["-c:a", "aac", "-b:a", "96k"] : ["-an"]), "-movflags", "+faststart", out]);
     const mp4 = await fs.readFile(out);
-    await api("POST", `/api/agent/living-squeeze/${id}/done`, { mp4: mp4.toString("base64") });
+    await api("POST", `/api/agent/living-squeeze/${id}/done${intro ? "?kind=intro" : ""}`, { mp4: mp4.toString("base64") });
     console.log(`${tag}: done (${Math.round(mp4.length / 1024)} KB)`);
   } catch (err) {
     console.warn(`${tag} failed: ${(err as Error).message}`);
-    await api("POST", `/api/agent/living-squeeze/${id}/failed`, {}).catch(() => {});
+    await api("POST", `/api/agent/living-squeeze/${id}/failed${intro ? "?kind=intro" : ""}`, {}).catch(() => {});
   } finally {
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }

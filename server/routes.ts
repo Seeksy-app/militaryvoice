@@ -5701,7 +5701,7 @@ export function registerRoutes(app: Express): void {
     // Nothing else: a living photo to make smaller for phones.
     if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("living-squeeze")) {
       const lv = await claimLivingSqueeze().catch((err) => { console.error("Living squeeze claim failed:", err); return null; });
-      if (lv) return res.json({ job: { recordingId: lv.id, title: "Living photo", durationSec: 5, downloadUrl: lv.url, show: "", host: "", transcript: [], livingSqueeze: { pageId: lv.id } } });
+      if (lv) return res.json({ job: { recordingId: lv.id, title: "Living photo", durationSec: 5, downloadUrl: lv.url, show: "", host: "", transcript: [], livingSqueeze: { pageId: lv.id, kind: lv.kind } } });
     }
     // Nothing else to do: copy a moved show's episode from the old host into our storage.
     if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("episode-copy")) {

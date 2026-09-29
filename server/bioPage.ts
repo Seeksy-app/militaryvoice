@@ -110,6 +110,7 @@ async function publicOf(row: BioPageRow): Promise<BioPublic> {
     brandsOn: parseBrands(row.brands).on,
     cutoutUrl: row.cutoutFrom && row.cutoutFrom === row.avatarUrl ? row.cutoutUrl : "",
     livingUrl: row.livingFrom && row.livingFrom === (row.heroUrl || row.avatarUrl) ? row.livingUrl : "",
+    introUrl: row.introUrl,
     ai: await aiFor(row),
   };
 }
@@ -361,6 +362,7 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     cutoutY: Number.isFinite(Number(x.cutoutY)) && x.cutoutY !== undefined ? Math.max(-160, Math.min(160, Math.round(Number(x.cutoutY)))) : prev.cutoutY ?? 0,
     socialsFirst: typeof x.socialsFirst === "boolean" ? x.socialsFirst : prev.socialsFirst ?? false,
     living: typeof x.living === "boolean" ? x.living : prev.living ?? false,
+    intro: typeof x.intro === "boolean" ? x.intro : prev.intro ?? false,
     scene: typeof x.scene === "string" ? httpUrl(x.scene) : prev.scene ?? "",
     nameSize: Number.isFinite(Number(x.nameSize)) && x.nameSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.nameSize)))) : prev.nameSize ?? 100,
     cutoutSize: Number.isFinite(Number(x.cutoutSize)) && x.cutoutSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.cutoutSize)))) : prev.cutoutSize ?? 100,
@@ -387,17 +389,23 @@ function cleanSocials(v: unknown): BioSocial[] {
 /** The living photo's job: fal making it (status, response), then the worker making it smaller (squeeze). */
 type LivingState = { status?: string; response?: string; from: string; at: number; squeeze?: "queued" | "running"; src?: string };
 
-/** A living photo for the worker to make smaller: 720p, silent, starting as it loads. */
-export async function claimLivingSqueeze(): Promise<{ id: number; url: string } | null> {
+/**
+ * A video for the worker to make smaller for phones: a living photo (720p, silent)
+ * or a talking intro (720p, with its sound), starting as it loads.
+ */
+export async function claimLivingSqueeze(): Promise<{ id: number; url: string; kind: "living" | "intro" } | null> {
   await schemaIsReady();
-  const rows = await db.select({ id: bioPages.id, livingJob: bioPages.livingJob }).from(bioPages).where(sql`${bioPages.livingJob} LIKE '%"squeeze"%'`).limit(10);
-  for (const r of rows) {
-    let j: LivingState;
-    try { j = JSON.parse(r.livingJob) as LivingState; } catch { continue; }
-    if (!j.src || !(j.squeeze === "queued" || (j.squeeze === "running" && Date.now() - j.at > 20 * 60_000))) continue;
-    const next = JSON.stringify({ ...j, squeeze: "running", at: Date.now() } satisfies LivingState);
-    const got = await db.update(bioPages).set({ livingJob: next }).where(and(eq(bioPages.id, r.id), eq(bioPages.livingJob, r.livingJob))).returning({ id: bioPages.id });
-    if (got.length) return { id: r.id, url: j.src };
+  for (const kind of ["living", "intro"] as const) {
+    const col = kind === "living" ? bioPages.livingJob : bioPages.introJob;
+    const rows = await db.select({ id: bioPages.id, job: col }).from(bioPages).where(sql`${col} LIKE '%"squeeze"%'`).limit(10);
+    for (const r of rows) {
+      let j: LivingState;
+      try { j = JSON.parse(r.job) as LivingState; } catch { continue; }
+      if (!j.src || !(j.squeeze === "queued" || (j.squeeze === "running" && Date.now() - j.at > 20 * 60_000))) continue;
+      const next = JSON.stringify({ ...j, squeeze: "running", at: Date.now() } satisfies LivingState);
+      const got = await db.update(bioPages).set(kind === "living" ? { livingJob: next } : { introJob: next }).where(and(eq(bioPages.id, r.id), eq(col, r.job))).returning({ id: bioPages.id });
+      if (got.length) return { id: r.id, url: j.src, kind };
+    }
   }
   return null;
 }
@@ -406,27 +414,32 @@ export async function claimLivingSqueeze(): Promise<{ id: number; url: string } 
 export function registerBioAgent(app: Express, requireAgent: import("express").RequestHandler) {
   app.post("/api/agent/living-squeeze/:id/done", requireAgent, async (req, res) => {
     const id = Number(req.params.id);
+    const intro = req.query.kind === "intro";
     const [row] = await db.select().from(bioPages).where(eq(bioPages.id, id)).limit(1);
     if (!row) return res.status(404).json({ message: "No such page." });
     let j: LivingState | null = null;
-    try { j = JSON.parse(row.livingJob) as LivingState; } catch { j = null; }
+    try { j = JSON.parse(intro ? row.introJob : row.livingJob) as LivingState; } catch { j = null; }
     try {
       const buf = Buffer.from(String(req.body?.mp4 ?? ""), "base64");
       if (buf.length < 20_000) throw new Error("no video");
       // Only if it's still the one on their page (they may have made a new one meanwhile).
-      if (j?.src && j.src === row.livingUrl) {
+      if (intro && j?.src && j.src === row.introUrl) {
+        const url = await uploadShowAsset(`bio/${id}-intro-${Date.now()}-720.mp4`, buf, "video/mp4");
+        await db.update(bioPages).set({ introUrl: url, introJob: "" }).where(and(eq(bioPages.id, id), eq(bioPages.introUrl, j.src)));
+      } else if (!intro && j?.src && j.src === row.livingUrl) {
         const url = await uploadShowAsset(`bio/${id}-living-${Date.now()}-720.mp4`, buf, "video/mp4");
         await db.update(bioPages).set({ livingUrl: url, livingJob: "" }).where(and(eq(bioPages.id, id), eq(bioPages.livingUrl, j.src)));
       }
       res.json({ ok: true });
     } catch (err) {
       console.error("Living photo squeeze failed:", (err as Error).message);
-      await db.update(bioPages).set({ livingJob: "" }).where(eq(bioPages.id, id));
+      await db.update(bioPages).set(intro ? { introJob: "" } : { livingJob: "" }).where(eq(bioPages.id, id));
       res.status(400).json({ message: "Couldn't use that video." });
     }
   });
   app.post("/api/agent/living-squeeze/:id/failed", requireAgent, async (req, res) => {
-    await db.update(bioPages).set({ livingJob: "" }).where(and(eq(bioPages.id, Number(req.params.id)), sql`${bioPages.livingJob} LIKE '%"squeeze"%'`));
+    if (req.query.kind === "intro") await db.update(bioPages).set({ introJob: "" }).where(and(eq(bioPages.id, Number(req.params.id)), sql`${bioPages.introJob} LIKE '%"squeeze"%'`));
+    else await db.update(bioPages).set({ livingJob: "" }).where(and(eq(bioPages.id, Number(req.params.id)), sql`${bioPages.livingJob} LIKE '%"squeeze"%'`));
     res.json({ ok: true });
   });
 }
@@ -588,6 +601,75 @@ export function registerBioPage(app: Express) {
       res.json({ status: "done", livingUrl: url, preview: await publicOf(saved) });
     } catch (err) {
       console.error("Living photo check failed:", (err as Error).message);
+      res.json({ status: "running" });
+    }
+  });
+
+  // The talking intro: their profile photo saying hello, in their own recorded voice or an AI voice
+  // (ElevenLabs), made to speak by Kling's avatar model on fal's queue, a few minutes. Up to 45 seconds.
+  const INTRO = "fal-ai/kling-video/ai-avatar/v2/standard";
+  const VOICES = ["Brian", "George", "Chris", "Eric", "Sarah", "Jessica", "Laura", "Alice"];
+  const introRuns = new Map<number, number[]>();
+  app.post("/api/host/bio/intro", requireHostSession, async (req, res) => {
+    const row = await pageFor(emailOf(req));
+    if (!process.env.FAL_KEY) return res.status(503).json({ message: "Talking intros aren't switched on yet." });
+    if (!row.avatarUrl) return res.status(400).json({ message: "Add a profile photo first: a clear one of your face works best." });
+    const job = row.introJob ? (JSON.parse(row.introJob) as LivingState) : null;
+    if (job && !job.squeeze && Date.now() - job.at < 20 * 60_000) return res.json({ status: "running" });
+    const hits = (introRuns.get(row.id) ?? []).filter((t) => Date.now() - t < 24 * 3600_000);
+    if (hits.length >= 3) return res.status(429).json({ message: "That's three today. Try again tomorrow." });
+    let audio = "";
+    try {
+      if (req.body?.mode === "voice") {
+        // Their own voice, recorded in the builder and stored with us.
+        const key = String(req.body?.audioKey ?? "").replace(/^r2:/, "");
+        if (!/^show-assets\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "Record your hello first." });
+        audio = await signedRecordingUrl(key, 6 * 3600);
+      } else {
+        const text = String(req.body?.script ?? "").trim().slice(0, 600);
+        if (text.length < 10) return res.status(400).json({ message: "Write what you'd like to say." });
+        const voice = VOICES.includes(String(req.body?.voice)) ? String(req.body.voice) : "Brian";
+        const t = await fetch("https://fal.run/fal-ai/elevenlabs/tts/turbo-v2.5", { method: "POST", headers: FAL(), signal: AbortSignal.timeout(60_000), body: JSON.stringify({ text, voice, stability: 0.5, similarity_boost: 0.75, speed: 1 }) });
+        const tj = (await t.json().catch(() => ({}))) as { audio?: { url?: string } };
+        if (!t.ok || !tj.audio?.url) throw new Error(`tts ${t.status}`);
+        audio = tj.audio.url;
+      }
+      introRuns.set(row.id, [...hits, Date.now()]);
+      const r = await fetch(`https://queue.fal.run/${INTRO}`, {
+        method: "POST", headers: FAL(), signal: AbortSignal.timeout(30_000),
+        body: JSON.stringify({ image_url: row.avatarUrl, audio_url: audio, prompt: "The person speaks warmly and naturally to the camera with a friendly expression and small natural head movements." }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { status_url?: string; response_url?: string };
+      if (!r.ok || !j.status_url || !j.response_url) throw new Error(`fal ${r.status}`);
+      await db.update(bioPages).set({ introJob: JSON.stringify({ status: j.status_url, response: j.response_url, from: row.avatarUrl, at: Date.now() } satisfies LivingState) }).where(eq(bioPages.id, row.id));
+      res.json({ status: "running" });
+    } catch (err) {
+      console.error("Talking intro failed to start:", (err as Error).message);
+      res.status(502).json({ message: "Couldn't start that. Try again in a moment." });
+    }
+  });
+  app.get("/api/host/bio/intro", requireHostSession, async (req, res) => {
+    const row = await pageFor(emailOf(req));
+    const job = row.introJob ? (JSON.parse(row.introJob) as LivingState) : null;
+    if (!job || job.squeeze) return res.json(row.introUrl ? { status: "done", livingUrl: row.introUrl } : { status: "none" });
+    try {
+      const st = (await (await fetch(job.status!, { headers: FAL(), signal: AbortSignal.timeout(20_000) })).json().catch(() => ({}))) as { status?: string };
+      if (st.status !== "COMPLETED") {
+        if (Date.now() - job.at > 20 * 60_000) { await db.update(bioPages).set({ introJob: "" }).where(eq(bioPages.id, row.id)); return res.json({ status: "failed", message: "That took too long. Try again." }); }
+        return res.json({ status: "running" });
+      }
+      const out = (await (await fetch(job.response!, { headers: FAL(), signal: AbortSignal.timeout(30_000) })).json().catch(() => ({}))) as { video?: { url?: string } };
+      if (!out.video?.url) {
+        await db.update(bioPages).set({ introJob: "" }).where(eq(bioPages.id, row.id));
+        return res.json({ status: "failed", message: "It couldn't make your photo talk. Try a clear photo of your face, looking at the camera." });
+      }
+      const buf = Buffer.from(await (await fetch(out.video.url, { signal: AbortSignal.timeout(90_000) })).arrayBuffer());
+      const url = await uploadShowAsset(`bio/${row.id}-intro-${Date.now()}.mp4`, buf, "video/mp4");
+      // On the page now; the worker makes a smaller copy for phones (with its sound) and swaps it in.
+      const [saved] = await db.update(bioPages).set({ introUrl: url, introJob: JSON.stringify({ from: job.from, at: Date.now(), squeeze: "queued", src: url } satisfies LivingState), updatedAt: now() }).where(eq(bioPages.id, row.id)).returning();
+      res.json({ status: "done", livingUrl: url, preview: await publicOf(saved) });
+    } catch (err) {
+      console.error("Talking intro check failed:", (err as Error).message);
       res.json({ status: "running" });
     }
   });

@@ -270,6 +270,9 @@ export function BioBuilder() {
     }
   };
 
+  // The talking intro, watched the same way (a few minutes on fal), switched on for them when it's ready.
+  const [intro, startIntro, resetIntro] = useFalJob("/api/host/bio/intro", setPreview, () => { const d0 = draftRef.current; if (d0) change({ theme: { ...d0.theme, intro: true } }, true); }, { title: "Your talking intro is ready", description: "It's on your page: tap the bubble to hear it." });
+
   // The Brands view: the numbers from the server, what they write from the draft.
   const kitView: BioBrandsPublic | null = useMemo(() => draft && (kitSrv ?? q.data?.brandsPreview) ? {
     ...(kitSrv ?? q.data!.brandsPreview!), displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl, theme: draft.theme, kit: { ...DEFAULT_BRANDS, ...(draft.brands ?? {}) },
@@ -332,7 +335,7 @@ export function BioBuilder() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
         <div className="min-w-0">
-          {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} />}
+          {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} intro={<IntroCard d={draft} st={intro} start={(b) => void startIntro(b)} reset={resetIntro} on={draft.theme.intro ?? false} setOn={(v) => change({ theme: { ...draft.theme, intro: v } }, true)} />} />}
           {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} living={living} startLiving={startLiving} />}
           {tab === "content" && <ContentTab d={draft} change={change} />}
           {tab === "social" && <SocialTab d={draft} change={change} />}
@@ -343,6 +346,7 @@ export function BioBuilder() {
         </div>
         {/* The page, as listeners will see it. */}
         <div className="min-w-0 rounded-3xl bg-white p-4 dark:bg-card ring-1 ring-border lg:sticky lg:top-20 lg:self-start">
+          {intro.status === "running" && <p className="mb-2 flex items-center justify-center gap-2 rounded-full bg-violet-500/15 px-3 py-1.5 text-xs font-semibold text-violet-800 dark:text-violet-300" data-testid="bio-intro-pill"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Making your talking intro. Keep working; it's ready in a few minutes.</p>}
           {living.status === "running" && <p className="mb-2 flex items-center justify-center gap-2 rounded-full bg-[#F0A71F]/15 px-3 py-1.5 text-xs font-semibold text-[#8a5300] dark:text-[#F0A71F]" data-testid="bio-living-pill"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Bringing your photo to life. Keep working; it's ready in about three minutes.</p>}
           <div className="mb-3 flex justify-center">
             <div className="inline-flex gap-1 rounded-full border border-border bg-card p-1">
@@ -395,7 +399,7 @@ export function BioBuilder() {
 
 // ---- Profile -----------------------------------------------------------------------
 
-function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page; view: BioPublic; change: (p: Partial<Page>, now?: boolean) => void; flush: () => Promise<void>; setPreview: (p: BioPublic) => void; knowledge?: { done: number; total: number } }) {
+function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { d: Page; view: BioPublic; change: (p: Partial<Page>, now?: boolean) => void; flush: () => Promise<void>; setPreview: (p: BioPublic) => void; knowledge?: { done: number; total: number }; intro?: React.ReactNode }) {
   const [handle, setHandle] = useState(d.handle);
   useEffect(() => setHandle(d.handle), [d.handle]);
   const steps = [
@@ -443,6 +447,7 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
         <ImagePick label="Cover photo" kind="hero" url={d.heroUrl} note="Used by the Hero, Cover photo and Banner tops. Without one, they use your profile photo." onDone={(u, p) => { change({ heroUrl: u }); setPreview(p); }} onClear={() => change({ heroUrl: "" }, true)} onFixed={(u) => change({ heroUrl: u }, true)} />
       </div>
       </Card>
+      {intro}
       <Card icon={User} tone="blue" title="About you">
       <Field label="Name on the page"><Input value={d.displayName} onChange={(e) => change({ displayName: e.target.value })} maxLength={80} /></Field>
       <Field label="Your link" hint="3 to 30 letters or numbers. Changing it breaks links you've already shared.">
@@ -1728,14 +1733,128 @@ function ShareTab({ url }: { url: string }) {
  * A voice message recorded right here (up to three minutes): record, hear it
  * back, keep it or try again. Kept on our storage, played on their page.
  */
-function VoiceRecorder({ value, preview, onChange }: { value: string; preview: string; onChange: (v: string) => void }) {
+/** A fal job the builder watches (made on fal's queue, a few minutes): its state, and a way to start one. */
+type JobState = { status: "none" | "running" | "done" | "failed" | "loading"; url?: string; message?: string };
+function useFalJob(path: string, setPreview: (p: BioPublic) => void, onDone: () => void, doneNote: { title: string; description: string }) {
+  const { toast } = useToast();
+  const [st, setSt] = useState<JobState>({ status: "loading" });
+  const done = useRef(onDone);
+  done.current = onDone;
+  const check = useCallback(async () => {
+    try {
+      const j = (await (await apiRequest("GET", path)).json()) as { status: JobState["status"]; livingUrl?: string; message?: string; preview?: BioPublic };
+      if (j.preview) setPreview(j.preview);
+      setSt({ status: j.status, url: j.livingUrl, message: j.message });
+      return j;
+    } catch { return null; }
+  }, [path, setPreview]);
+  useEffect(() => { void check(); }, [check]);
+  useEffect(() => {
+    if (st.status !== "running") return;
+    const t = setInterval(async () => {
+      const j = await check();
+      if (j?.status === "done") { done.current(); toast(doneNote); }
+      if (j?.status === "failed") toast({ title: "That didn't work", description: j.message, variant: "destructive" });
+    }, 8000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [st.status]);
+  const start = async (body: Record<string, unknown>) => {
+    setSt({ status: "running" });
+    try {
+      const r = await apiRequest("POST", path, body);
+      const j = (await r.json()) as { status: string; livingUrl?: string };
+      if (j.status === "done") setSt({ status: "done", url: j.livingUrl });
+    } catch (e) {
+      setSt({ status: "none" });
+      toast({ title: "Couldn't start it", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
+    }
+  };
+  return [st, start, () => setSt({ status: "none" })] as const;
+}
+
+/**
+ * The talking intro: their profile photo saying hello. Record it in their own
+ * voice, or type it and pick an AI voice; made in a few minutes, then on or off.
+ */
+const INTRO_VOICES = [["Brian", "Brian", "deep, steady"], ["George", "George", "warm, British"], ["Chris", "Chris", "easy-going"], ["Eric", "Eric", "friendly"], ["Sarah", "Sarah", "soft, calm"], ["Jessica", "Jessica", "bright"], ["Laura", "Laura", "upbeat"], ["Alice", "Alice", "clear, British"]] as const;
+function IntroCard({ d, st, start, reset, on, setOn }: { d: Page; st: JobState; start: (b: Record<string, unknown>) => void; reset: () => void; on: boolean; setOn: (v: boolean) => void }) {
+  const [mode, setMode] = useState<"voice" | "ai">("voice");
+  const [voiceKey, setVoiceKey] = useState("");
+  const first = (d.displayName || "").split(/\s+/)[0];
+  const [script, setScript] = useState(`Hey, welcome in! I'm ${first || "the host"}. Press play on an episode, and if you've got a question, send me a message. Thanks for stopping by.`);
+  const [voice, setVoice] = useState("Brian");
+  const seg = (x: boolean) => `flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${x ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`;
+  const make = () => start(mode === "voice" ? { mode, audioKey: voiceKey } : { mode, script, voice });
+  return (
+    <Card icon={Video} tone="violet" title="Your talking intro" action={st.status === "done" ? <Switch checked={on} onCheckedChange={setOn} aria-label="Show my talking intro" data-testid="bio-intro-on" /> : undefined}>
+      {st.status === "done" && st.url ? (
+        <div className="flex items-center gap-3">
+          <video src={st.url} controls playsInline className="h-28 w-28 shrink-0 rounded-2xl bg-black object-cover" />
+          <div className="min-w-0 flex-1 space-y-1">
+            <p className="text-xs text-muted-foreground">{on ? "On your page: a bubble with you in it. Tap it and you say hello." : "Made. Switch it on to put it on your page."}</p>
+            <button type="button" onClick={() => { setVoiceKey(""); reset(); }} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground" data-testid="bio-intro-again">Make a new one</button>
+          </div>
+        </div>
+      ) : st.status === "running" ? (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="bio-intro-running"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Making your photo talk. A few minutes; keep working, even on another tab.</p>
+      ) : (
+        <>
+          <p className="-mt-1 text-xs text-muted-foreground">Your profile photo, saying hello to everyone who opens your page. Up to 45 seconds.</p>
+          {!d.avatarUrl && <p className="rounded-xl bg-[#F0A71F]/10 px-3 py-2 text-xs text-[#8a5300] dark:text-[#F0A71F]">Add a profile photo first (above): a clear one of your face, looking at the camera.</p>}
+          <div className="flex gap-1 rounded-full border border-border p-1">
+            <button type="button" onClick={() => setMode("voice")} className={seg(mode === "voice")} data-testid="bio-intro-mode-voice">In my voice</button>
+            <button type="button" onClick={() => setMode("ai")} className={seg(mode === "ai")} data-testid="bio-intro-mode-ai">Type it, pick a voice</button>
+          </div>
+          {mode === "voice" ? (
+            <>
+              <p className="rounded-xl bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground"><b className="text-foreground">Something to say:</b> {script}</p>
+              <VoiceRecorder value={voiceKey} preview="" onChange={setVoiceKey} wav max={45} saved="Got it" savedNote="Now make your talking intro." recordLabel="Record my hello" />
+            </>
+          ) : (
+            <>
+              <TextEditor body={script} onBody={setScript} rows={3} maxLength={600} emoji={false} placeholder="What you'd like to say" testid="bio-intro-script" />
+              <select value={voice} onChange={(e) => setVoice(e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" data-testid="bio-intro-voice">
+                {INTRO_VOICES.map(([v, l, n]) => <option key={v} value={v}>{l}: {n}</option>)}
+              </select>
+            </>
+          )}
+          <Button onClick={make} disabled={!d.avatarUrl || st.status === "loading" || (mode === "voice" ? !voiceKey : script.trim().length < 10)} className="w-full gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-intro-make"><Sparkles className="h-4 w-4" /> Make my talking intro</Button>
+        </>
+      )}
+    </Card>
+  );
+}
+
+/** A recording as a plain WAV (mono, 24 kHz): every service takes it, whatever the browser recorded. */
+async function toWav(blob: Blob): Promise<Blob> {
+  const ctx = new AudioContext();
+  const src = await ctx.decodeAudioData(await blob.arrayBuffer());
+  await ctx.close();
+  const rate = 24000;
+  const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(src.duration * rate)), rate);
+  const node = off.createBufferSource();
+  node.buffer = src;
+  node.connect(off.destination);
+  node.start();
+  const data = (await off.startRendering()).getChannelData(0);
+  const v = new DataView(new ArrayBuffer(44 + data.length * 2));
+  const tag = (o: number, t: string) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  tag(0, "RIFF"); v.setUint32(4, 36 + data.length * 2, true); tag(8, "WAVE"); tag(12, "fmt ");
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  tag(36, "data"); v.setUint32(40, data.length * 2, true);
+  for (let i = 0; i < data.length; i++) { const x = Math.max(-1, Math.min(1, data[i])); v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true); }
+  return new Blob([v], { type: "audio/wav" });
+}
+
+function VoiceRecorder({ value, preview, onChange, wav = false, max = 180, saved = "Voice message saved", savedNote = "It's on your family page.", recordLabel = "Record a message" }: { value: string; preview: string; onChange: (v: string) => void; wav?: boolean; max?: number; saved?: string; savedNote?: string; recordLabel?: string }) {
   const { toast } = useToast();
   const [state, setState] = useState<"idle" | "recording" | "review" | "saving">("idle");
   const [secs, setSecs] = useState(0);
   const [take, setTake] = useState<{ blob: Blob; url: string } | null>(null);
   const rec = useRef<MediaRecorder | null>(null);
   const tick = useRef<number>();
-  const MAX = 180;
+  const MAX = max;
   useEffect(() => () => { window.clearInterval(tick.current); rec.current?.stream.getTracks().forEach((t) => t.stop()); }, []);
   const start = async () => {
     try {
@@ -1766,12 +1885,13 @@ function VoiceRecorder({ value, preview, onChange }: { value: string; preview: s
     setState("saving");
     try {
       const ext = take.blob.type.includes("mp4") ? "m4a" : "webm";
-      const key = await uploadToStorage(new File([take.blob], `voice-message.${ext}`, { type: take.blob.type.split(";")[0] }), () => {});
+      const file = wav ? new File([await toWav(take.blob)], "voice.wav", { type: "audio/wav" }) : new File([take.blob], `voice-message.${ext}`, { type: take.blob.type.split(";")[0] });
+      const key = await uploadToStorage(file, () => {});
       onChange(`r2:${key}`);
       URL.revokeObjectURL(take.url);
       setTake(null);
       setState("idle");
-      toast({ title: "Voice message saved", description: "It's on your family page." });
+      toast({ title: saved, description: savedNote });
     } catch (e) {
       setState("review");
       toast({ title: "Couldn't save it", description: (e as Error).message, variant: "destructive" });
@@ -1802,7 +1922,7 @@ function VoiceRecorder({ value, preview, onChange }: { value: string; preview: s
           {preview ? <audio src={preview} controls preload="none" className="w-full" /> : <p className="text-xs text-muted-foreground">Saved.</p>}
         </div>
       )}
-      <Button onClick={() => void start()} className="w-full gap-1.5 rounded-full bg-[#053877] hover:bg-[#0a4a99]" data-testid="voice-record"><Mic className="h-4 w-4" /> {value ? "Record a new message" : "Record a message"}</Button>
+      <Button onClick={() => void start()} className="w-full gap-1.5 rounded-full bg-[#053877] hover:bg-[#0a4a99]" data-testid="voice-record"><Mic className="h-4 w-4" /> {value ? "Record again" : recordLabel}</Button>
     </div>
   );
 }

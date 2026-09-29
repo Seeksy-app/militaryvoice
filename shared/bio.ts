@@ -35,6 +35,8 @@ export interface BioTheme {
   podcast: BioPodcastOptions;
   /** The link buttons' colour ("" = the theme colour). */
   linkColor: string;
+  /** Their talking intro shows as a bubble on the page (tap to hear them say hello). */
+  intro?: boolean;
   /** Their living photo plays in place of the still (Hero, Cover photo and Classic tops). */
   living?: boolean;
   /** A scene behind their cut-out (an image), in place of the colour ("" = the colour). */
@@ -338,6 +340,8 @@ export interface BioPublic {
   cutoutUrl?: string;
   /** Their living photo (a short looping video of the top's photo, "" until made). */
   livingUrl?: string;
+  /** Their talking intro (a video of their photo saying hello, "" until made). */
+  introUrl?: string;
   /** Listeners can send a question (it goes to the podcaster's inbox). */
   askEnabled: boolean;
   /** Ask my show: the AI answers from the episodes it has learned (how many). */

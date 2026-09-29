@@ -99,6 +99,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       </div>
       {/* Last on the page so they stick to the foot of the screen: the chat bubble, and the sheet for asking about an episode. */}
       {(chat || askEp) && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20 ${askEp ? "bg-black/40" : ""}`} onClick={() => { setChat(false); setAskEp(null); }} aria-hidden />}
+      {t.intro && data.introUrl && !askEp && <IntroBubble src={data.introUrl} name={data.displayName} accent={accent} preview={preview} onPlay={() => ev("play", "Talking intro")} />}
       {data.askEnabled && !askEp && <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} welcome={data.welcome} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat} onAsk={onAsk} onLoad={onLoadMessages} />}
       {askEp && <AskSheet key={askEp.id} ep={askEp} name={data.displayName} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} onAskAi={onAskAi} onClose={() => setAskEp(null)} onMessage={data.askEnabled ? () => { setAskEp(null); setChat(true); } : undefined} />}
     </div>
@@ -438,6 +439,37 @@ function Section({ s, btn, ink, sub, card, line, accent, preview, ev }: { s: Bio
     return <section className="rounded-2xl p-4" style={{ background: card, border: `1px solid ${line}`, textAlign: s.align ?? "left" }}>{s.title && <p className="mb-1 font-semibold">{s.title}</p>}{s.body && <p className="whitespace-pre-line text-sm leading-relaxed" style={{ color: sub }}>{styled(s.body)}</p>}</section>;
   }
   return null;
+}
+
+/**
+ * Their talking intro: a round bubble in the bottom left with them moving in it
+ * (silent). Tap it and it opens and they say hello, with sound.
+ */
+function IntroBubble({ src, name, accent, preview, onPlay }: { src: string; name: string; accent: string; preview: boolean; onPlay: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [seen, setSeen] = useState(false);
+  const full = useRef<HTMLVideoElement | null>(null);
+  const first = (name || "").split(/\s+/)[0];
+  return (
+    <div className="sticky bottom-0 z-30 h-0">
+      <div className="relative mx-auto h-0 max-w-[560px]">
+        {open ? (
+          <div className="absolute bottom-4 left-3 w-[min(17rem,calc(100%-5.5rem))] overflow-hidden rounded-3xl bg-black shadow-2xl ring-2 ring-white/70" role="dialog" aria-label={`${first || "Their"} hello`} data-testid="bio-intro-player">
+            <video ref={full} src={src} autoPlay playsInline controls className="aspect-square w-full object-cover" onEnded={() => setOpen(false)} />
+            <button type="button" onClick={() => setOpen(false)} className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white" aria-label="Close"><X className="h-4 w-4" /></button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => { setOpen(true); setSeen(true); if (!preview) onPlay(); }} className="group absolute bottom-4 left-4 flex items-center gap-2" aria-label={`Play ${first || "their"} hello`} data-testid="bio-intro">
+            <span className="relative block h-16 w-16 overflow-hidden rounded-full shadow-xl ring-[3px] transition-transform group-hover:scale-105" style={{ ["--tw-ring-color" as string]: accent }}>
+              <video src={src} autoPlay muted loop playsInline preload="metadata" className="h-full w-full object-cover" />
+              <span className="absolute inset-0 flex items-center justify-center bg-black/15"><Play className="h-5 w-5 translate-x-px fill-white text-white drop-shadow" /></span>
+            </span>
+            {!seen && <span className="rounded-full px-3 py-1.5 text-xs font-bold shadow-lg" style={{ background: accent, color: onColor(accent) }}>Say hi 👋</span>}
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /**
