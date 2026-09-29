@@ -715,7 +715,7 @@ export interface IStorage {
   createSponsorSearch(row: Pick<SponsorSearchRow, "eventId" | "kind" | "brief" | "company" | "runId">): Promise<SponsorSearchRow>;
   updateSponsorSearch(id: number, patch: Partial<Pick<SponsorSearchRow, "status" | "result" | "error">>): Promise<SponsorSearchRow | null>;
   deleteSponsorSearch(id: number): Promise<void>;
-  createInbound(row: Omit<InboundEmailRow, "id" | "createdAt">): Promise<InboundEmailRow>;
+  createInbound(row: Omit<InboundEmailRow, "id" | "createdAt" | "readAt" | "archived"> & Partial<Pick<InboundEmailRow, "readAt" | "archived">>): Promise<InboundEmailRow>;
   listInbound(limit?: number): Promise<InboundEmailRow[]>;
   listInboundByEmail(email: string): Promise<InboundEmailRow[]>;
   getInbound(id: number): Promise<InboundEmailRow | null>;
@@ -1288,7 +1288,7 @@ class DatabaseStorage implements IStorage {
     await db.delete(sponsorSearches).where(eq(sponsorSearches.id, id));
   }
 
-  async createInbound(row: Omit<InboundEmailRow, "id" | "createdAt">): Promise<InboundEmailRow> {
+  async createInbound(row: Omit<InboundEmailRow, "id" | "createdAt" | "readAt" | "archived"> & Partial<Pick<InboundEmailRow, "readAt" | "archived">>): Promise<InboundEmailRow> {
     await ready();
     const [r] = await db.insert(inboundEmails).values({ ...row, createdAt: new Date().toISOString() }).returning();
     return r;

@@ -1898,8 +1898,19 @@ export const contacts = pgTable("contacts", {
   lifecycleStage: text("lifecycle_stage").notNull().default("lead"),
   importedAt: text("imported_at").notNull(),
   lastEngagedAt: text("last_engaged_at").notNull().default(""),
+  /** Our own labels for them (JSON list): "sponsor", "vip", "guest", … */
+  tags: text("tags").notNull().default("[]"),
 });
 export type ContactRow = typeof contacts.$inferSelect;
+
+/** A note the team keeps on a person (by email, so anyone can have them, in Contacts or not). */
+export const contactNotes = pgTable("contact_notes", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  text: text("text").notNull(),
+  author: text("author").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("contact_notes_email_idx").on(t.email)]);
 
 // Saved segment — a named filter that can be used as a broadcast target
 export const segments = pgTable("segments", {
@@ -2062,6 +2073,9 @@ export const inboundEmails = pgTable("inbound_emails", {
   ackResendId: text("ack_resend_id").notNull().default(""),
   ackText: text("ack_text").notNull().default(""),
   createdAt: text("created_at").notNull(),
+  /** Opened in Mail ("" = unread), and put away in Archive. */
+  readAt: text("read_at").notNull().default(""),
+  archived: boolean("archived").notNull().default(false),
 }, (t) => [index("inbound_from_idx").on(t.fromEmail)]);
 export type InboundEmailRow = typeof inboundEmails.$inferSelect;
 

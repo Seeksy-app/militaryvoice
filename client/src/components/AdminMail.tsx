@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Check, CheckCheck, Eye, Inbox, Loader2, Megaphone, MousePointerClick, PenSquare, Search, Send, SendHorizontal, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Archive, ArchiveRestore, ArrowDownLeft, ArrowUpRight, Check, CheckCheck, Eye, Inbox, Loader2, Mail, MailOpen, Megaphone, MousePointerClick, PenSquare, Search, Send, SendHorizontal, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,11 +15,11 @@ import { apiRequest } from "@/lib/queryClient";
  */
 
 type Events = { delivered: boolean; opened: boolean; clicked: boolean; bounced: boolean; complained: boolean } | null;
-type Item = { key: string; dir: "in" | "out" | "campaign"; email: string; name: string; subject: string; snippet: string; at: string; kind: string; status: string; ok: boolean; events: Events; inboundId?: number; broadcastId?: number; count?: number; opened?: number; clicked?: number };
+type Item = { key: string; dir: "in" | "out" | "campaign"; email: string; name: string; subject: string; snippet: string; at: string; kind: string; status: string; ok: boolean; events: Events; inboundId?: number; broadcastId?: number; count?: number; opened?: number; clicked?: number; unread?: boolean; archived?: boolean };
 type Msg = { key: string; dir: "in" | "out"; at: string; subject: string; body: string; from: string; kind: string; ok?: boolean; error?: string; events?: Events;
   inbound?: { id: number; status: string; draftFrom: string; draftSubject: string; draftText: string; summary: string } };
 type Thread = { email: string; name: string; contact: { status: string; lifecycleStage: string; source: string } | null; messages: Msg[] };
-type Folder = "needs" | "inbox" | "sent" | "campaigns" | "failed" | "all";
+type Folder = "needs" | "inbox" | "sent" | "campaigns" | "failed" | "all" | "archive";
 
 /** What each kind of email we send is, in words. */
 const KIND: Record<string, string> = {
@@ -65,18 +65,40 @@ export function AdminMail() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState<Item | null>(null);
   const [composing, setComposing] = useState(false);
-  const counts = useQuery<{ needs: number; sentToday: number; failedWeek: number }>({ queryKey: ["/api/admin/mail/counts"], queryFn: async () => (await apiRequest("GET", "/api/admin/mail/counts")).json(), refetchInterval: 60_000 });
+  const { toast } = useToast();
+  // Ticked items, for doing several at once (as in a mail app).
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const counts = useQuery<{ needs: number; unread: number; sentToday: number; failedWeek: number }>({ queryKey: ["/api/admin/mail/counts"], queryFn: async () => (await apiRequest("GET", "/api/admin/mail/counts")).json(), refetchInterval: 60_000 });
   const list = useQuery<{ items: Item[] }>({ queryKey: ["/api/admin/mail", folder, search], queryFn: async () => (await apiRequest("GET", `/api/admin/mail?folder=${folder}&q=${encodeURIComponent(search)}`)).json(), refetchInterval: 60_000 });
-  useEffect(() => { setOpen(null); }, [folder, search]);
+  useEffect(() => { setOpen(null); setPicked(new Set()); }, [folder, search]);
+  const bulk = async (action: string, keys = Array.from(picked), quiet = false) => {
+    if (!keys.length) return;
+    if (action === "delete" && !window.confirm(`Delete ${keys.length === 1 ? "this email" : `these ${keys.length} emails`}? What came in is gone for good; anything we sent leaves the list (it was still sent).`)) return;
+    try {
+      await apiRequest("POST", "/api/admin/mail/bulk", { keys, action });
+      if (!quiet) toast({ title: { read: "Marked as read", unread: "Marked as unread", archive: "Archived", unarchive: "Back in the Inbox", noreply: "Marked: no reply needed", delete: "Deleted" }[action] ?? "Done", description: keys.length > 1 ? `${keys.length} emails` : undefined });
+      if (!quiet) setPicked(new Set());
+      if (action === "delete" || action === "archive" || action === "unarchive") setOpen((o) => (o && keys.includes(o.key) ? null : o));
+      refresh();
+    } catch (e) { toast({ title: "Didn't work", description: clean((e as Error).message), variant: "destructive" }); }
+  };
+  const openItem = (it: Item) => { setOpen(it); setComposing(false); if (it.dir === "in" && it.unread) void bulk("read", [it.key], true); };
   const refresh = () => { void qc.invalidateQueries({ queryKey: ["/api/admin/mail"] }); void qc.invalidateQueries({ queryKey: ["/api/admin/mail/counts"] }); void qc.invalidateQueries({ queryKey: ["/api/admin/mail/thread"] }); void qc.invalidateQueries({ queryKey: ["/api/admin/inbound"] }); };
   const folders: { k: Folder; label: string; icon: typeof Inbox; n?: number; tone?: string }[] = [
     { k: "needs", label: "Needs a reply", icon: PenSquare, n: counts.data?.needs, tone: "bg-[#F0A71F] text-[#1a1200]" },
-    { k: "inbox", label: "Inbox", icon: Inbox },
+    { k: "inbox", label: "Inbox", icon: Inbox, n: counts.data?.unread },
     { k: "sent", label: "Sent", icon: SendHorizontal, n: counts.data?.sentToday },
     { k: "campaigns", label: "Campaigns", icon: Megaphone },
     { k: "failed", label: "Didn't send", icon: AlertTriangle, n: counts.data?.failedWeek, tone: "bg-destructive text-white" },
     { k: "all", label: "All mail", icon: ArrowUpRight },
+    { k: "archive", label: "Archive", icon: Archive },
   ];
+  const items = list.data?.items ?? [];
+  const pickable = folder !== "campaigns";
+  const allPicked = items.length > 0 && items.every((i) => picked.has(i.key));
+  const pickedItems = items.filter((i) => picked.has(i.key));
+  const anyIn = pickedItems.some((i) => i.dir === "in");
+  const anyWaiting = pickedItems.some((i) => i.dir === "in" && (i.status === "new" || i.status === "drafted"));
   return (
     <div className="grid min-h-[70vh] gap-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm lg:grid-cols-[13rem_minmax(18rem,26rem)_1fr]" data-testid="admin-mail">
       {/* Folders */}
@@ -99,21 +121,41 @@ export function AdminMail() {
           <div className="relative flex-1"><Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search mail: a name, an address, words" className="h-9 pl-8" data-testid="mail-search" /></div>
           {search && <button type="button" onClick={() => { setQ(""); setSearch(""); }} className="rounded p-1 text-muted-foreground hover:text-foreground" aria-label="Clear search"><X className="h-4 w-4" /></button>}
         </form>
+        {pickable && items.length > 0 && (
+          <div className="flex min-h-[44px] flex-wrap items-center gap-1 border-b border-border px-3 py-1.5" data-testid="mail-bulkbar">
+            <input type="checkbox" checked={allPicked} onChange={() => setPicked(allPicked ? new Set() : new Set(items.map((i) => i.key)))} className="mr-1 h-4 w-4 accent-[#053877]" aria-label="Select all" data-testid="mail-pick-all" />
+            {picked.size === 0 ? <span className="text-xs text-muted-foreground">Select to mark read, archive or delete</span> : (
+              <>
+                <span className="mr-1 text-xs font-semibold">{picked.size} selected</span>
+                {anyIn && <button type="button" onClick={() => void bulk("read")} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted" title="Mark as read" data-testid="mail-bulk-read"><MailOpen className="h-3.5 w-3.5" /> Read</button>}
+                {anyIn && <button type="button" onClick={() => void bulk("unread")} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted" title="Mark as unread"><Mail className="h-3.5 w-3.5" /> Unread</button>}
+                {anyIn && (folder === "archive"
+                  ? <button type="button" onClick={() => void bulk("unarchive")} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted"><ArchiveRestore className="h-3.5 w-3.5" /> Move to Inbox</button>
+                  : <button type="button" onClick={() => void bulk("archive")} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted" data-testid="mail-bulk-archive"><Archive className="h-3.5 w-3.5" /> Archive</button>)}
+                {anyWaiting && <button type="button" onClick={() => void bulk("noreply")} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted"><Check className="h-3.5 w-3.5" /> No reply needed</button>}
+                <button type="button" onClick={() => void bulk("delete")} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10" data-testid="mail-bulk-delete"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+              </>
+            )}
+          </div>
+        )}
         <ul className="flex-1 divide-y divide-border overflow-y-auto" style={{ maxHeight: "75vh" }}>
           {list.isLoading && <li className="flex justify-center p-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></li>}
-          {!list.isLoading && !list.data?.items.length && <li className="p-8 text-center text-sm text-muted-foreground">{folder === "needs" ? "Nothing waiting. Everyone who wrote in has an answer." : folder === "failed" ? "Nothing failed to send." : "Nothing here."}</li>}
-          {list.data?.items.map((it) => {
+          {!list.isLoading && !list.data?.items.length && <li className="p-8 text-center text-sm text-muted-foreground">{folder === "needs" ? "Nothing waiting. Everyone who wrote in has an answer." : folder === "failed" ? "Nothing failed to send." : folder === "archive" ? "Nothing archived." : "Nothing here."}</li>}
+          {items.map((it) => {
             const on = open?.key === it.key;
             const waiting = it.dir === "in" && (it.status === "new" || it.status === "drafted");
+            const bold = it.dir === "in" && it.unread;
             return (
-              <li key={it.key}>
-                <button type="button" onClick={() => { setOpen(it); setComposing(false); }} className={`w-full px-3 py-2.5 text-left transition-colors ${on ? "bg-[#053877]/[0.07] dark:bg-white/[0.07]" : "hover:bg-muted/60"}`} data-testid="mail-item">
+              <li key={it.key} className={`flex items-start ${picked.has(it.key) ? "bg-[#F0A71F]/[0.08]" : ""}`}>
+                {pickable && <input type="checkbox" checked={picked.has(it.key)} onChange={() => setPicked((p) => { const n = new Set(p); n.has(it.key) ? n.delete(it.key) : n.add(it.key); return n; })} className="ml-3 mt-3.5 h-4 w-4 shrink-0 accent-[#053877]" aria-label={`Select ${it.subject}`} data-testid="mail-pick" />}
+                <button type="button" onClick={() => openItem(it)} className={`min-w-0 flex-1 px-3 py-2.5 text-left transition-colors ${on ? "bg-[#053877]/[0.07] dark:bg-white/[0.07]" : "hover:bg-muted/60"}`} data-testid="mail-item">
                   <div className="flex items-center gap-2">
+                    {bold && <span className="h-2 w-2 shrink-0 rounded-full bg-[#2563eb]" aria-label="Unread" />}
                     {it.dir === "in" ? <ArrowDownLeft className="h-3.5 w-3.5 shrink-0 text-[#b36b00]" aria-label="Came in" /> : it.dir === "campaign" ? <Megaphone className="h-3.5 w-3.5 shrink-0 text-[#053877] dark:text-[#8fb5e8]" aria-label="Campaign" /> : <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-[#053877] dark:text-[#8fb5e8]" aria-label="We sent" />}
-                    <span className={`min-w-0 flex-1 truncate text-sm ${waiting ? "font-bold" : "font-semibold"}`}>{it.dir === "campaign" ? `${it.name} · ${it.count} ${it.count === 1 ? "person" : "people"}` : it.dir === "out" ? `To ${it.email}` : it.name}</span>
+                    <span className={`min-w-0 flex-1 truncate text-sm ${bold ? "font-bold" : waiting ? "font-semibold" : "font-medium text-foreground/85"}`}>{it.dir === "campaign" ? `${it.name} · ${it.count} ${it.count === 1 ? "person" : "people"}` : it.dir === "out" ? `To ${it.email}` : it.name}</span>
                     <span className="shrink-0 text-[11px] text-muted-foreground">{when(it.at)}</span>
                   </div>
-                  <p className={`truncate text-[13px] ${waiting ? "font-semibold" : ""}`}>{it.subject || "(no subject)"}</p>
+                  <p className={`truncate text-[13px] ${bold ? "font-semibold" : ""}`}>{it.subject || "(no subject)"}</p>
                   <div className="mt-0.5 flex items-center gap-2">
                     <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{it.dir === "out" ? kindOf(it.kind) : it.dir === "campaign" ? `${it.opened ?? 0} opened · ${it.clicked ?? 0} clicked` : it.snippet}</p>
                     {waiting ? <span className="shrink-0 rounded-full bg-[#F0A71F]/20 px-2 py-0.5 text-[10px] font-bold text-[#8a5a00] dark:text-[#F0A71F]">Needs a reply</span>

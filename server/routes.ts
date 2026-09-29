@@ -133,6 +133,7 @@ import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor }
 import { registerGuests, guestByToken, markGuestJoined } from "./guests.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
 import { registerMail } from "./mail.js";
+import { registerContactProfile } from "./contactProfile.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
 import { episodeCredits, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
@@ -5550,6 +5551,7 @@ export function registerRoutes(app: Express): void {
   registerGuests(app, requireAdmin);
   registerCaptures(app, requireAdmin, (req) => getAdminEmail(req) ?? "");
   registerMail(app, requireAdmin);
+  registerContactProfile(app, requireAdmin);
   registerBioPage(app);
   registerAskShow(app, requireAgent);
 

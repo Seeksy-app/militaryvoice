@@ -50,10 +50,12 @@ async function eventsFor(ids: string[]): Promise<Map<string, Events>> {
 type Item = {
   key: string; dir: "in" | "out" | "campaign"; email: string; name: string; subject: string; snippet: string; at: string;
   kind: string; status: string; ok: boolean; events: Events | null; inboundId?: number; broadcastId?: number; count?: number; opened?: number; clicked?: number;
+  /** Came in and not opened yet; put away in Archive. */
+  unread?: boolean; archived?: boolean;
 };
 const inItem = (r: typeof inboundEmails.$inferSelect): Item => ({
   key: `in-${r.id}`, dir: "in", email: r.fromEmail.toLowerCase(), name: r.fromName || r.fromEmail, subject: r.subject, snippet: snippet(r.summary || said(r.bodyText)), at: r.receivedAt,
-  kind: r.category || "other", status: r.status, ok: true, events: null, inboundId: r.id,
+  kind: r.category || "other", status: r.status, ok: true, events: null, inboundId: r.id, unread: !r.readAt, archived: r.archived,
 });
 const outItem = (r: MailLogRow, ev: Map<string, Events>): Item => ({
   key: `out-${r.id}`, dir: "out", email: r.toEmail, name: r.toEmail, subject: r.subject, snippet: snippet(r.bodyText), at: r.sentAt,
@@ -75,8 +77,12 @@ export function registerMail(app: Express, requireAdmin: RequestHandler) {
     const inWhere = (extra?: ReturnType<typeof and>) => and(extra, q ? or(ilike(inboundEmails.fromEmail, like), ilike(inboundEmails.fromName, like), ilike(inboundEmails.subject, like), ilike(inboundEmails.bodyText, like)) : undefined);
     const outWhere = (extra?: ReturnType<typeof and>) => and(extra, q ? or(ilike(mailLog.toEmail, like), ilike(mailLog.subject, like), ilike(mailLog.bodyText, like)) : undefined);
     let items: Item[] = [];
-    if (folder === "needs" || folder === "inbox") {
-      const rows = await db.select().from(inboundEmails).where(inWhere(folder === "needs" ? and(inArray(inboundEmails.status, ["new", "drafted"])) : undefined)).orderBy(desc(inboundEmails.receivedAt)).limit(limit).offset(offset);
+    if (folder === "needs" || folder === "inbox" || folder === "archive") {
+      const rows = await db.select().from(inboundEmails).where(inWhere(
+        folder === "archive" ? and(eq(inboundEmails.archived, true))
+          : folder === "needs" ? and(inArray(inboundEmails.status, ["new", "drafted"]), eq(inboundEmails.archived, false))
+          : and(eq(inboundEmails.archived, false)),
+      )).orderBy(desc(inboundEmails.receivedAt)).limit(limit).offset(offset);
       items = rows.map(inItem);
     } else if (folder === "sent" || folder === "failed") {
       const rows = await db.select().from(mailLog).where(outWhere(folder === "failed" ? and(eq(mailLog.ok, false)) : and(notInArray(mailLog.kind, BULK_KINDS)))).orderBy(desc(mailLog.sentAt)).limit(limit).offset(offset);
@@ -100,7 +106,7 @@ export function registerMail(app: Express, requireAdmin: RequestHandler) {
     } else {
       // All mail: in and out together, newest first (campaigns stay in Campaigns).
       const [ins, outs] = await Promise.all([
-        db.select().from(inboundEmails).where(inWhere()).orderBy(desc(inboundEmails.receivedAt)).limit(limit + offset),
+        db.select().from(inboundEmails).where(inWhere(and(eq(inboundEmails.archived, false)))).orderBy(desc(inboundEmails.receivedAt)).limit(limit + offset),
         db.select().from(mailLog).where(outWhere(and(notInArray(mailLog.kind, BULK_KINDS)))).orderBy(desc(mailLog.sentAt)).limit(limit + offset),
       ]);
       const ev = await eventsFor(outs.map((r) => r.resendId));
@@ -114,10 +120,34 @@ export function registerMail(app: Express, requireAdmin: RequestHandler) {
     noStore(res);
     await schemaIsReady();
     const since = new Date(Date.now() - 24 * 3600_000).toISOString();
-    const [needs] = await db.select({ n: sql<number>`count(*)::int` }).from(inboundEmails).where(inArray(inboundEmails.status, ["new", "drafted"]));
+    const [needs] = await db.select({ n: sql<number>`count(*)::int` }).from(inboundEmails).where(and(inArray(inboundEmails.status, ["new", "drafted"]), eq(inboundEmails.archived, false)));
+    const [unread] = await db.select({ n: sql<number>`count(*)::int` }).from(inboundEmails).where(and(eq(inboundEmails.readAt, ""), eq(inboundEmails.archived, false)));
     const [today] = await db.select({ n: sql<number>`count(*)::int` }).from(mailLog).where(and(sql`${mailLog.sentAt} >= ${since}`, notInArray(mailLog.kind, BULK_KINDS)));
     const [failed] = await db.select({ n: sql<number>`count(*)::int` }).from(mailLog).where(and(eq(mailLog.ok, false), sql`${mailLog.sentAt} >= ${new Date(Date.now() - 7 * 86400_000).toISOString()}`));
-    res.json({ needs: needs?.n ?? 0, sentToday: today?.n ?? 0, failedWeek: failed?.n ?? 0 });
+    res.json({ needs: needs?.n ?? 0, unread: unread?.n ?? 0, sentToday: today?.n ?? 0, failedWeek: failed?.n ?? 0 });
+  });
+
+  /**
+   * Several at once, as a mail app does: read or unread, archive or bring back, no reply needed,
+   * or delete (what came in is gone; a sent one leaves the list, it was still sent).
+   */
+  app.post("/api/admin/mail/bulk", requireAdmin, async (req, res) => {
+    await schemaIsReady();
+    const keys: string[] = (Array.isArray(req.body?.keys) ? req.body.keys : []).map(String).slice(0, 500);
+    const action = String(req.body?.action ?? "");
+    const ins = keys.filter((k) => /^in-\d+$/.test(k)).map((k) => Number(k.slice(3)));
+    const outs = keys.filter((k) => /^out-\d+$/.test(k)).map((k) => Number(k.slice(4)));
+    if (!ins.length && !outs.length) return res.status(400).json({ message: "Pick something first." });
+    if (ins.length) {
+      if (action === "read") await db.update(inboundEmails).set({ readAt: now() }).where(and(inArray(inboundEmails.id, ins), eq(inboundEmails.readAt, "")));
+      else if (action === "unread") await db.update(inboundEmails).set({ readAt: "" }).where(inArray(inboundEmails.id, ins));
+      else if (action === "archive") await db.update(inboundEmails).set({ archived: true, readAt: now() }).where(inArray(inboundEmails.id, ins));
+      else if (action === "unarchive") await db.update(inboundEmails).set({ archived: false }).where(inArray(inboundEmails.id, ins));
+      else if (action === "noreply") await db.update(inboundEmails).set({ status: "ignored", readAt: now() }).where(and(inArray(inboundEmails.id, ins), inArray(inboundEmails.status, ["new", "drafted"])));
+      else if (action === "delete") await db.delete(inboundEmails).where(inArray(inboundEmails.id, ins));
+    }
+    if (outs.length && action === "delete") await db.delete(mailLog).where(inArray(mailLog.id, outs));
+    res.json({ ok: true, done: ins.length + outs.length });
   });
 
   /** One person's whole conversation with us: what they wrote, and everything we sent them. */
