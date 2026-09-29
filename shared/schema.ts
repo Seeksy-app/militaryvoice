@@ -1226,6 +1226,8 @@ export const recordings = pgTable("recordings", {
   importClaimedAt: text("import_claimed_at").notNull().default(""),
   /** "Edit episode" (EpisodeEdit as JSON): trim, intro and outro, made into a new Library copy. */
   episodeEdit: text("episode_edit").notNull().default(""),
+  /** The editor's work in progress (trim, cuts, intro, outro), saved as they go so they can come back to it. */
+  editDraft: text("edit_draft").notNull().default(""),
   /**
    * "Add music" after the clips are made (MusicMix as JSON): the track, its
    * state, and each clip's files from before any music, so a track can be

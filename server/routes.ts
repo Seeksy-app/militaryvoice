@@ -6221,6 +6221,27 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
+  /** The editor's work in progress, saved as they go: trim, cuts, intro and outro. */
+  app.put("/api/host/recordings/:id/edit-draft", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
+    const b = req.body ?? {};
+    const n = (v: unknown) => Math.max(0, Number(v) || 0);
+    const bookend = (v: any) => (v && typeof v.key === "string" && /^show-assets\/[\w.-]+$/.test(v.key) ? { key: v.key, name: String(v.name ?? "").slice(0, 120), dur: n(v.dur) || undefined } : null);
+    const draft = b.clear ? "" : JSON.stringify({
+      source: b.source === "clean" ? "clean" : "original",
+      trimStart: n(b.trimStart), trimEnd: n(b.trimEnd),
+      cuts: (Array.isArray(b.cuts) ? b.cuts : []).slice(0, 50).map((c: unknown[]) => [n(c?.[0]), n(c?.[1])]).filter(([x, y]: number[]) => y > x),
+      intro: bookend(b.intro), outro: bookend(b.outro),
+      introT: ["fade", "black", "cut"].includes(b.introT) ? b.introT : "fade",
+      outroT: ["fade", "black", "cut"].includes(b.outroT) ? b.outroT : "fade",
+      at: new Date().toISOString(),
+    });
+    await storage.setEditDraft(rec.id, draft);
+    res.json({ ok: true });
+  });
+
   /** "Edit episode": trim, intro, outro — made by the clipper into a new copy in the Library. */
   app.post("/api/host/recordings/:id/episode-edit", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();

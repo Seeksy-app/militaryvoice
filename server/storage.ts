@@ -872,6 +872,7 @@ export interface IStorage {
   saveCleanCopy(source: RecordingRow, videoKey: string, durationSec: number): Promise<RecordingRow>;
   saveEditedCopy(source: RecordingRow, videoKey: string, durationSec: number): Promise<RecordingRow>;
   setEpisodeEdit(recordingId: number, json: string): Promise<void>;
+  setEditDraft(recordingId: number, json: string): Promise<void>;
   /** The next "Edit episode" to make, or one whose worker went quiet for an hour. */
   claimEpisodeEdit(): Promise<RecordingRow | undefined>;
   createUploadedRecording(v: { email: string; title: string; storageKey: string; durationSec: number; sizeBytes: number; free: boolean; queue?: boolean }): Promise<RecordingRow>;
@@ -1962,6 +1963,11 @@ class DatabaseStorage implements IStorage {
       })
       .returning();
     return row;
+  }
+
+  async setEditDraft(recordingId: number, json: string): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ editDraft: json }).where(eq(recordings.id, recordingId));
   }
 
   async setEpisodeEdit(recordingId: number, json: string): Promise<void> {
