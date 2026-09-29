@@ -114,6 +114,10 @@ export function EventSettings({
     (openSignups ?? []).filter((x) => x.status !== "cancelled").length >=
       totalSlots(open.event.durationHours, open.event.slotMinutes);
 
+  // No time on this event: the doors wait for one. With the lineup full (or closed), there's none to take.
+  const noTime = !!open && open.slotIndex == null;
+  const shutOut = noTime && (open!.event.closed === true || eventFull);
+
   const onAirLabel =
     open?.slotIndex != null
       ? (() => {
@@ -401,39 +405,43 @@ export function EventSettings({
             {/* The doors, over the foot of the dark card. */}
             <div className="relative -mt-10 grid gap-3 px-3 sm:grid-cols-2 sm:px-5 xl:grid-cols-4" id="your-time-slot">
               <Door
-                onClick={() => document.getElementById("event-show-form")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                off={shutOut}
+                onClick={shutOut ? undefined : () => document.getElementById("event-show-form")?.scrollIntoView({ behavior: "smooth", block: "start" })}
                 icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877] dark:text-[#8ab4f8]"><Mic2 className="h-5 w-5" /></span>}
                 title="Your show"
                 line={showReady ? "Name, artwork, format and guests" : "Set it up to take a time"}
-                stat={showReady ? "Ready" : "To do"}
+                stat={shutOut ? "Lineup full" : showReady ? "Ready" : "To do"}
                 good={showReady}
                 testId="event-door-show"
               />
               <Door
-                onClick={onOpenPromotion}
+                off={noTime}
+                onClick={noTime ? undefined : onOpenPromotion}
                 icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F0A71F]/15 text-[#b77a00]"><Megaphone className="h-5 w-5" /></span>}
                 title="Promotion"
                 line="Share card, posting plan and clips"
-                stat={planned.length ? `${postedCount}/${planned.length} posts out` : air ? "Plan your posts" : "After you take a time"}
+                stat={shutOut ? "Lineup full" : planned.length ? `${postedCount}/${planned.length} posts out` : air ? "Plan your posts" : "After you take a time"}
                 good={planned.length > 0 && postedCount === planned.length}
                 testId="event-door-promotion"
               />
               <Door
-                onClick={onOpenGreenRoom}
-                href={onOpenGreenRoom ? undefined : greenRoomHref}
+                off={noTime}
+                onClick={noTime ? undefined : onOpenGreenRoom}
+                href={noTime || onOpenGreenRoom ? undefined : greenRoomHref}
                 icon={<StudioIcon className="h-10 w-10 rounded-xl" tone="green" />}
                 title="Green room"
                 line="Check your camera and mic, then go live"
-                stat={live ? "Go in now" : "Open any time"}
+                stat={shutOut ? "Lineup full" : noTime ? "After you take a time" : live ? "Go in now" : "Open any time"}
                 good={live}
                 testId="event-door-greenroom"
               />
               <Door
+                off={noTime || !(air && showReady)}
                 onClick={air && showReady ? () => setCohostOpen(true) : undefined}
                 icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600/10 text-emerald-700"><Users className="h-5 w-5" /></span>}
                 title="Co-host"
                 line="Sit in at the desk with Alex or Riccoh"
-                stat={cohostMine > 0 ? `${cohostMine} hour${cohostMine === 1 ? "" : "s"} yours` : cohostBoard ? `${cohostOpenCount} open` : air && showReady ? "Take an hour" : "After your show's set"}
+                stat={shutOut ? "Lineup full" : cohostMine > 0 ? `${cohostMine} hour${cohostMine === 1 ? "" : "s"} yours` : cohostBoard ? `${cohostOpenCount} open` : air && showReady ? "Take an hour" : "After your show's set"}
                 good={cohostMine > 0}
                 testId="event-door-cohost"
               />
@@ -478,14 +486,29 @@ export function EventSettings({
         </div>
       ) : (
         <div className="mt-6 rounded-2xl border border-border bg-card p-5">
-          <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">Choose a time</h3>
+          {shutOut ? (
+            <div className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-[#F0A71F] via-[#f5b94a] to-[#ffd98a] p-5 text-[#1a1200] shadow-lg" data-testid="lineup-full">
+              <span className="pointer-events-none absolute -right-6 -top-8 text-[120px] leading-none opacity-20" aria-hidden>🎉</span>
+              <p className="text-xs font-bold uppercase tracking-[0.18em]">The lineup is full</p>
+              <p className="mt-1 text-2xl font-extrabold leading-tight">Hooray! Every spot on {open.event.name} is taken.</p>
+              <p className="mt-2 max-w-xl text-sm text-[#3d2b00]">Thank you for being part of it. There's no time left to take this round, but you can still tune in on the day, cheer on the shows below, and share the lineup.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <a href="/agenda" className="inline-flex items-center gap-1.5 rounded-full bg-[#1a1200] px-4 py-2 text-sm font-semibold text-white hover:bg-black">See the lineup</a>
+                <a href="/platform" className="inline-flex items-center gap-1.5 rounded-full border-2 border-[#1a1200]/30 px-4 py-2 text-sm font-semibold hover:bg-white/30">Host your own event</a>
+              </div>
+            </div>
+          ) : null}
+          <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-foreground">{shutOut ? "Who's on" : "Choose a time"}</h3>
           <p className="mb-3 mt-1 text-sm text-muted-foreground">
-            {open.show?.showName
+            {shutOut
+              ? "Every time is spoken for. Here's the running order."
+              : open.show?.showName
               ? "Tap any open time to take it."
               : "Save your show below first — a slot needs a show attached to it."}
           </p>
           <EventSlotPicker
             event={open.event}
+            quiet={shutOut}
             disabled={!open.show?.showName}
             showFormat={openShow?.showFormat ?? open.show?.showFormat}
           />
@@ -566,7 +589,9 @@ export function EventSettings({
 }
 
 /** A door on the event's dashboard: what it is, a line, and where it stands. */
-function Door({ onClick, href, icon, title, line, stat, good, testId }: {
+function Door({ onClick, href, icon, title, line, stat, good, testId, off = false }: {
+  /** Not open to them yet (no time on the event): greyed right through, not a click away. */
+  off?: boolean;
   onClick?: () => void;
   href?: string;
   icon: React.ReactNode;
@@ -588,7 +613,7 @@ function Door({ onClick, href, icon, title, line, stat, good, testId }: {
       <span className="mt-0.5 block text-sm text-muted-foreground">{line}</span>
     </>
   );
-  const cls = `group flex flex-col rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition-all ${onClick || href ? "hover:-translate-y-0.5 hover:border-[#053877]/30 hover:shadow-md" : "cursor-default opacity-80"}`;
-  if (href) return <a href={href} target="_blank" rel="noreferrer" className={cls} data-testid={testId}>{inner}</a>;
-  return <button type="button" onClick={onClick} disabled={!onClick} className={cls} data-testid={testId}>{inner}</button>;
+  const cls = `group flex flex-col rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition-all ${off ? "cursor-not-allowed opacity-45 grayscale" : onClick || href ? "hover:-translate-y-0.5 hover:border-[#053877]/30 hover:shadow-md" : "cursor-default opacity-80"}`;
+  if (href && !off) return <a href={href} target="_blank" rel="noreferrer" className={cls} data-testid={testId}>{inner}</a>;
+  return <button type="button" onClick={off ? undefined : onClick} disabled={off || !onClick} aria-disabled={off || undefined} className={cls} data-testid={testId}>{inner}</button>;
 }

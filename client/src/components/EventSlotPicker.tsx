@@ -16,9 +16,12 @@ export function EventSlotPicker({
   event,
   disabled,
   showFormat,
+  quiet = false,
 }: {
   event: PublicEvent;
   disabled?: boolean;
+  /** The page already says the lineup is full (its own box), so no note here too. */
+  quiet?: boolean;
   /** How their show runs. Daytime slots are live only, so a recorded show
       can't take one — said on the slot itself rather than after the click. */
   showFormat?: string;
@@ -77,7 +80,7 @@ export function EventSlotPicker({
       {/* Said plainly, once, at the top. A grid of thirty-two greyed-out
           buttons is not an answer to "when can I go on" — somebody has to read
           every one of them to work out there is nothing left. */}
-      {closed ? (
+      {quiet ? null : closed ? (
         <p
           className="mb-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm font-semibold text-foreground"
           data-testid="text-lineup-closed"
