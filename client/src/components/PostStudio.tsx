@@ -1045,12 +1045,17 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
               // Done with this one edit (a trim, or a split and a delete): what was
               // cut stays cut, the split lines and the pick clear, and the next edit
               // starts clean. The blue button makes the episode once they're all done.
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" onClick={() => { setTrimming(false); setSplits([]); setSel(null); }} className="ml-1 inline-flex h-8 items-center rounded-lg bg-[#F0A71F] px-4 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="tool-done">Done</button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[15rem] text-xs">Finish this edit and keep going. Make edited episode when they're all done.</TooltipContent>
-              </Tooltip>
+              <>
+                {/* After a split, say the next step: pick the piece to take out. */}
+                {!trimming && bounds.length > 2 && !sel && <span className="text-xs font-medium text-muted-foreground" data-testid="tool-next">Now click the piece to take out</span>}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    {/* A picked piece is picked to be taken out, so Done takes it out. */}
+                    <button type="button" onClick={() => { if (sel) del(); setTrimming(false); setSplits([]); setSel(null); }} className="ml-1 inline-flex h-8 items-center rounded-lg bg-[#F0A71F] px-4 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="tool-done">{sel ? `Take out ${hms(sel[1] - sel[0])} · Done` : "Done"}</button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[15rem] text-xs">{sel ? "Takes the picked piece out, and finishes this edit." : "Finish this edit and keep going. Make edited episode when they're all done."}</TooltipContent>
+                </Tooltip>
+              </>
             ) : undefined}
             onChange={(st, en) => setTrim({ start: st < 0.25 ? 0 : st, end: en >= pos.d - 0.25 ? 0 : en })}
           />
