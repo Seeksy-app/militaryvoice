@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Calendar, Check, Copy, ExternalLink, Mail, MessageCircle, Music, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
+import { Calendar, Check, Copy, ExternalLink, Mail, MessageCircle, Music, Pause, Play, Radio, Send, Share2, Sparkles, Tag, UserPlus, X } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
 import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, musicEmbed, onColor, promoCodes, standOut, videoEmbed, type BioChatAt, type BioPodcastOptions, type BioPopup, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
 import { useBioFont } from "@/lib/bioFont";
@@ -72,6 +72,38 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   const showIntro = Boolean(t.intro && data.introUrl);
   const intro = (spot: "top" | "bottom" | "bio") => showIntro && !askEp && (spot === "bio" ? introAt === "bio" : introAt.startsWith(spot)) && <IntroBubble src={data.introUrl!} name={data.displayName} handle={data.handle} says={t.introSay} back={t.introBack} accent={accent} at={introAt} preview={preview} onPlay={() => ev("play", "Talking intro")} />;
 
+  // The whole page: the phone's share sheet, or the link copied.
+  const sharePage = async () => {
+    if (preview) return;
+    ev("share", "Page");
+    if (typeof navigator !== "undefined" && navigator.share) { try { await navigator.share({ title: data.displayName, url: shareBase }); return; } catch { /* fall through to copy */ } }
+    await navigator.clipboard?.writeText(shareBase).catch(() => {});
+    setCopied("page");
+    setTimeout(() => setCopied(null), 1600);
+  };
+  // A contact card for their phone: their name, photo, page and social links.
+  const saveContact = () => {
+    if (preview) return;
+    ev("click", "Save my contact");
+    const esc = (v: string) => v.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/([,;])/g, "\\$1");
+    const plain = (data.bio || "").replace(/\*\*|__|\*/g, "");
+    const lines = [
+      "BEGIN:VCARD", "VERSION:3.0", `FN:${esc(data.displayName || data.handle)}`, `N:;${esc(data.displayName || data.handle)};;;`,
+      `URL:${shareBase}`,
+      ...data.socials.map((x) => `URL;type=${x.platform}:${x.url}`),
+      ...(data.avatarUrl ? [`PHOTO;VALUE=URI:${data.avatarUrl}`] : []),
+      ...(plain ? [`NOTE:${esc(plain.slice(0, 400))}`] : []),
+      "END:VCARD",
+    ];
+    const blob = new Blob([lines.join("\r\n")], { type: "text/vcard" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${data.handle || "contact"}.vcf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  };
   const share = async (title: string, id: string) => {
     const url = `${shareBase}#ep-${id}`;
     ev("share", title);
@@ -105,6 +137,12 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
         {data.sections.map((s) => s.type === "podcast" ? (data.podcast ? <PodcastCard key={s.id} p={data.podcast} onAsk={data.ai?.enabled ? setAskEp : undefined} opts={{ ...DEFAULT_PODCAST, ...(t.podcast ?? {}) }} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} /> : null) : <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} handle={data.handle} onSubscribe={onSubscribe} />)}
         {BRANDS_LIVE && data.brandsOn && <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : `/${data.handle}/brands`} className="font-semibold hover:underline" data-testid="bio-for-brands">For brands: sponsor this show</a></p>}
       </div>
+      {(t.shareButton || t.contactButton) && (
+        <div className="mx-auto mt-6 flex max-w-[560px] justify-center gap-2 px-4" data-testid="bio-page-buttons">
+          {t.shareButton && <button type="button" onClick={() => void sharePage()} className="inline-flex h-10 items-center gap-2 px-4 text-sm font-semibold" style={btn(false)} data-testid="bio-share-page">{copied === "page" ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />} {copied === "page" ? "Link copied" : "Share"}</button>}
+          {t.contactButton && <button type="button" onClick={saveContact} className="inline-flex h-10 items-center gap-2 px-4 text-sm font-semibold" style={btn(false)} data-testid="bio-save-contact"><UserPlus className="h-4 w-4" /> Save my contact</button>}
+        </div>
+      )}
       {/* At the foot of the screen, however short the page: it reads as the page's footer, not part of their icons. */}
       {(t.branding ?? true) && <p className="mt-auto pt-12 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>}
       {t.popup && t.popup.kind !== "none" && <PagePopup p={t.popup} handle={data.handle} preview={preview} peek={popupPeek} onPeekClose={onPopupClose} solid={dark ? "#141a2c" : "#ffffff"} ink={ink} sub={sub} card={card} line={line} accent={accent} btn={btn} ev={ev} onSubscribe={onSubscribe} />}

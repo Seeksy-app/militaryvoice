@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
+import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1563,6 +1564,14 @@ function ContentTab({ d, change, view, knowledge, onPeek }: { d: Page; change: (
         }} />
       </Card>
       <PopupCard d={d} change={change} onPeek={onPeek} fold={fold.of("popup")} />
+      <Card icon={Share2} tone="green" title="Buttons on your page" fold={fold.of("buttons")}>
+        {([["shareButton", "Share", "Listeners send your page to a friend: their phone's share menu, or the link copied."], ["contactButton", "Save my contact", "Listeners add you to their phone's contacts: your name, photo, page and socials."]] as const).map(([k, l, note]) => (
+          <div key={k} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+            <div className="min-w-0"><p className="text-sm font-semibold">{l}</p><p className="text-xs text-muted-foreground">{note}</p></div>
+            <Switch checked={d.theme[k] ?? false} onCheckedChange={(v) => change({ theme: { ...d.theme, [k]: v } }, true)} aria-label={`${l} button`} data-testid={`bio-${k}`} />
+          </div>
+        ))}
+      </Card>
     </div>
   );
 }
@@ -1648,12 +1657,36 @@ function PodcastOptions({ d, change, view, knowledge }: { d: Page; change: (p: P
   const setTheme = (p: Partial<BioTheme>) => change({ theme: { ...d.theme, ...p } }, true);
   const pal = bioPalette(d.theme);
   const pill = (on: boolean) => `rounded-full border-2 px-3 py-1.5 text-xs font-semibold transition-colors ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border text-muted-foreground hover:border-[#053877]/40"}`;
-  const hosted = /\/feed\//.test(view.podcast?.feedUrl ?? "");
+  // Their shows hosted here, to pick from; or a feed from another host.
+  const hostingQ = useQuery<{ shows: { show: { id: number; title: string }; episodes: { live?: boolean }[] }[] }>({ queryKey: ["/api/host/hosting"], queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000 });
+  const shows = hostingQ.data?.shows ?? [];
+  const src = o.source || (shows.length ? `show:${shows[0].show.id}` : "rss");
+  const chosen = shows.find((x) => `show:${x.show.id}` === src);
+  const pickSource = (v: string) => { set({ source: v }, true); };
   return (
         <div className="space-y-3" data-testid="bio-podcast-options">
-          <Field label="Your show" hint={hosted ? "Hosted here on MilitaryVoices: new episodes appear by themselves." : "Paste your show's RSS feed and your latest episodes appear, to play right on your page."}>
-            {hosted ? <p className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-emerald-600" /> {view.podcast?.title}</p> : <Input value={d.rssUrl} onChange={(e) => change({ rssUrl: e.target.value })} placeholder="https://feeds.yourhost.com/your-show" data-testid="bio-rss" />}
-          </Field>
+          <div>
+            <p className="mb-1 text-sm font-semibold">Your show</p>
+            {shows.length > 0 && (
+              <select value={src} onChange={(e) => pickSource(e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" aria-label="Your show" data-testid="bio-podcast-source">
+                {shows.map((x) => <option key={x.show.id} value={`show:${x.show.id}`}>{x.show.title || "Untitled show"} (hosted here)</option>)}
+                <option value="rss">A show on another host (paste its RSS feed)</option>
+              </select>
+            )}
+            {src === "rss" ? (
+              <>
+                <Input value={d.rssUrl} onChange={(e) => change({ rssUrl: e.target.value })} placeholder="https://feeds.yourhost.com/your-show" className={shows.length ? "mt-2" : ""} data-testid="bio-rss" />
+                <p className="mt-1 text-xs text-muted-foreground">Your host (Buzzsprout, Libsyn, Spotify for Creators…) shows it as "RSS feed". Your latest episodes appear here, to play right on your page.</p>
+                {!shows.length && (
+                  <p className="mt-2 rounded-xl bg-[#053877]/[0.05] px-3 py-2 text-xs dark:bg-white/[0.05]">
+                    <b>No podcast yet, or only on YouTube?</b> Start one here: upload your episodes (video is fine, we make the audio), we make your RSS feed, and you list it on Apple and Spotify. <Link href="/host/dashboard/podcast" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]" data-testid="bio-start-podcast">Start my podcast</Link>
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">{chosen && !chosen.episodes.some((e) => e.live) ? <>No episodes out yet. <Link href="/host/dashboard/podcast" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Add your first</Link> and it shows here.</> : "Hosted here on MilitaryVoices: new episodes appear by themselves."}</p>
+            )}
+          </div>
           {/* Listeners ask a question on the podcast; the AI answers from the episodes. */}
           <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3" data-testid="bio-ai">
             <div className="min-w-0">

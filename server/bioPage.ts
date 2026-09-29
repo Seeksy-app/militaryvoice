@@ -68,7 +68,10 @@ const feedCache = new Map<string, { at: number; data: BioPublic["podcast"] }>();
 
 /** The show for the page: hosted here first; otherwise their feed. */
 async function podcastFor(row: BioPageRow): Promise<BioPublic["podcast"]> {
-  const [show] = await db.select().from(hostedShows).where(eq(hostedShows.email, row.email)).orderBy(hostedShows.id).limit(1);
+  // Their pick: a show hosted here (the first by default), or a feed from another host.
+  const source = parseTheme(row.theme).podcast?.source ?? "";
+  const shows = source === "rss" ? [] : await db.select().from(hostedShows).where(eq(hostedShows.email, row.email)).orderBy(hostedShows.id);
+  const show = source.startsWith("show:") ? shows.find((s) => s.id === Number(source.slice(5))) ?? shows[0] : shows[0];
   if (show && !show.newFeedUrl) {
     const eps = (await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.showId, show.id)).orderBy(desc(hostedEpisodes.publishedAt)))
       .filter((e) => e.status === "published" && e.publishedAt && Date.parse(e.publishedAt) <= Date.now() && (e.audioKey || e.audioUrl));
@@ -362,6 +365,8 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     imageY: Number.isFinite(Number(x.imageY)) && x.imageY !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.imageY)))) : prev.imageY ?? 50,
     avatarSize: pick("avatarSize", ["s", "m", "l"] as const, prev.avatarSize ?? "m"),
     branding: typeof x.branding === "boolean" ? x.branding : prev.branding ?? true,
+    shareButton: typeof x.shareButton === "boolean" ? x.shareButton : prev.shareButton ?? false,
+    contactButton: typeof x.contactButton === "boolean" ? x.contactButton : prev.contactButton ?? false,
     hideName: typeof x.hideName === "boolean" ? x.hideName : prev.hideName ?? false,
     hideBio: typeof x.hideBio === "boolean" ? x.hideBio : prev.hideBio ?? false,
     bgTint: Number.isFinite(Number(x.bgTint)) && x.bgTint !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.bgTint)))) : prev.bgTint ?? 0,
@@ -392,7 +397,8 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
       const o = (x.podcast ?? {}) as Record<string, unknown>;
       const pv = prev.podcast ?? DEFAULT_PODCAST;
       const b = (k: "on" | "apple" | "spotify" | "all" | "rss") => (typeof o[k] === "boolean" ? (o[k] as boolean) : pv[k]);
-      return { on: b("on"), heading: typeof o.heading === "string" ? o.heading.slice(0, 80) : pv.heading, count: [3, 5, 10].includes(Number(o.count)) ? Number(o.count) : pv.count, apple: b("apple"), spotify: b("spotify"), all: b("all"), rss: b("rss") };
+      return { on: b("on"), heading: typeof o.heading === "string" ? o.heading.slice(0, 80) : pv.heading, count: [3, 5, 10].includes(Number(o.count)) ? Number(o.count) : pv.count, apple: b("apple"), spotify: b("spotify"), all: b("all"), rss: b("rss"),
+        source: typeof o.source === "string" && /^(|rss|show:\d{1,9})$/.test(o.source) ? o.source : pv.source ?? "" };
     })(),
   };
 }

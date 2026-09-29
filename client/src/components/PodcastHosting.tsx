@@ -199,7 +199,7 @@ export function PodcastHosting() {
             ))}
           </ul>
         ) : (
-          <p className="py-6 text-center text-sm text-muted-foreground">No episodes yet. Add your first: upload the audio, or use a clean episode from your Library.</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">No episodes yet. Add your first: upload the audio or the video, or use a clean episode from your Library.</p>
         )}
       </div>
 
@@ -475,7 +475,7 @@ function NewEpisodeDialog({ open, onClose, show, onCreated }: { open: boolean; o
     onCreated(e);
   };
   const upload = async (file: File) => {
-    if (!/^audio\/|^video\/mp4/.test(file.type)) return toast({ title: "That isn't audio", description: "Choose an MP3 or M4A file.", variant: "destructive" });
+    if (!/^audio\/|^video\/mp4/.test(file.type)) return toast({ title: "That file won't play as an episode", description: "Choose an MP3 or M4A, or an MP4 video.", variant: "destructive" });
     try {
       setPct(0);
       const dur = await durationOf(file).catch(() => 0);
@@ -497,15 +497,15 @@ function NewEpisodeDialog({ open, onClose, show, onCreated }: { open: boolean; o
           <DialogDescription>Start with the audio. You'll add the title and notes next, and choose when it goes out.</DialogDescription>
         </DialogHeader>
         <div className="flex gap-1 rounded-xl bg-muted/60 p-1" role="tablist">
-          {([["upload", "Upload audio", Upload], ["library", "From your Library", Film]] as const).map(([k, l, I]) => (
+          {([["upload", "Upload audio or video", Upload], ["library", "From your Library", Film]] as const).map(([k, l, I]) => (
             <button key={k} type="button" role="tab" aria-selected={from === k} onClick={() => setFrom(k)} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold ${from === k ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}><I className="h-4 w-4" /> {l}</button>
           ))}
         </div>
         {from === "upload" ? (
           <>
-            <input ref={input} type="file" accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,.mp3,.m4a" className="hidden" onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
+            <input ref={input} type="file" accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,video/mp4,.mp3,.m4a,.mp4" className="hidden" onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
             <button type="button" onClick={() => input.current?.click()} disabled={pct !== null} className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-sm hover:border-[#053877]/50 hover:bg-[#053877]/[0.03]" data-testid="hosting-upload">
-              {pct === null ? <><Upload className="h-6 w-6 text-[#053877]" /><span className="font-semibold">Choose the episode's audio</span><span className="text-xs text-muted-foreground">MP3 or M4A</span></> : <><Loader2 className="h-6 w-6 animate-spin text-[#053877]" /><span className="font-semibold tabular-nums">Uploading… {pct}%</span><span className="text-xs text-muted-foreground">Keep this page open until it finishes.</span></>}
+              {pct === null ? <><Upload className="h-6 w-6 text-[#053877]" /><span className="font-semibold">Choose the episode's file</span><span className="text-xs text-muted-foreground">MP3 or M4A, or an MP4 video (the one you put on YouTube)</span></> : <><Loader2 className="h-6 w-6 animate-spin text-[#053877]" /><span className="font-semibold tabular-nums">Uploading… {pct}%</span><span className="text-xs text-muted-foreground">Keep this page open until it finishes.</span></>}
             </button>
           </>
         ) : (

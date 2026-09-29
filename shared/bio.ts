@@ -70,6 +70,9 @@ export interface BioTheme {
   avatarSize: "s" | "m" | "l";
   /** "Made with MilitaryVoices.ai" at the foot. */
   branding: boolean;
+  /** A Share button and a Save my contact button (a contact card) on the page. */
+  shareButton?: boolean;
+  contactButton?: boolean;
   /** Their name left off the top (a logo or a photo that says it already). */
   hideName: boolean;
   /** How much of their colour washes into the background, 0–100. */
@@ -93,6 +96,8 @@ export interface BioPodcastOptions {
   spotify: boolean;
   all: boolean;
   rss: boolean;
+  /** Which show: "" = their first show hosted here, "show:<id>" = that one, "rss" = the feed in rssUrl. */
+  source?: string;
 }
 export const DEFAULT_PODCAST: BioPodcastOptions = { on: true, heading: "", count: 5, apple: true, spotify: true, all: true, rss: true };
 
