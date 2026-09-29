@@ -131,6 +131,7 @@ import { registerPodcastStats } from "./podcastStats.js";
 import { registerHosting, claimEpisodeAudio, claimEpisodeStill } from "./hosting.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor } from "./bioPage.js";
 import { registerGuests, guestByToken, markGuestJoined } from "./guests.js";
+import { registerCaptures, onCaptureWebhook } from "./captures.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
 import { episodeCredits, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
@@ -5546,6 +5547,7 @@ export function registerRoutes(app: Express): void {
   registerHosting(app, requireAgent);
   registerBioAgent(app, requireAgent);
   registerGuests(app, requireAdmin);
+  registerCaptures(app, requireAdmin, (req) => getAdminEmail(req) ?? "");
   registerBioPage(app);
   registerAskShow(app, requireAgent);
 
@@ -7260,6 +7262,8 @@ export function registerRoutes(app: Express): void {
     }
     // Always 200 once it's verified: LiveKit retries, and a retry storm on a
     // bug of ours would be worse than a missed row.
+    // An outside show's stream starting or stopping: record it, or stop. Before the reply, so it runs to the end.
+    await onCaptureWebhook(event as never).catch((err) => console.error("Capture webhook failed:", err));
     res.json({ ok: true });
 
     if (event.event !== "egress_ended" || !event.egressInfo) return;

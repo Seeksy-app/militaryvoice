@@ -660,6 +660,29 @@ export type CadenceKey = (typeof CADENCE_STEPS)[number]["key"];
  */
 export const COHOST_BLOCK_MINUTES = 60;
 
+/**
+ * Recording a show that happens somewhere else (Riverside, StreamYard, OBS):
+ * an RTMP address and key into a room of its own; when the stream arrives it
+ * records, and the file goes to the owner's Library.
+ */
+export const captures = pgTable("captures", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull().default(""),
+  /** Whose Library it goes to. */
+  ownerEmail: text("owner_email").notNull().default(""),
+  room: text("room").notNull().default(""),
+  ingressId: text("ingress_id").notNull().default(""),
+  url: text("url").notNull().default(""),
+  streamKey: text("stream_key").notNull().default(""),
+  egressId: text("egress_id").notNull().default(""),
+  /** waiting (no stream yet) · recording · done · failed */
+  status: text("status").notNull().default("waiting"),
+  recordingId: integer("recording_id"),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});
+export type CaptureRow = typeof captures.$inferSelect;
+
 /** Listeners who signed up on a podcaster's SmartLink (Stay in touch): theirs, in their Contacts. */
 export const bioSubscribers = pgTable(
   "bio_subscribers",

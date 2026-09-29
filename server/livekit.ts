@@ -255,6 +255,15 @@ export async function startSegmentRecording(
   return info.egressId;
 }
 
+/**
+ * An outside show, recorded: the room's one feed (an RTMP stream) to a single
+ * MP4, in LiveKit's own speaker layout (the feed fills the frame).
+ */
+export async function startRoomRecording(room: string, filepath: string): Promise<string> {
+  const info = await egress().startRoomCompositeEgress(room, { file: mp4Output(filepath) }, { layout: "speaker" });
+  return info.egressId;
+}
+
 /** Add or drop a destination without interrupting what's already going out. */
 export async function updateBroadcastTargets(
   egressId: string,

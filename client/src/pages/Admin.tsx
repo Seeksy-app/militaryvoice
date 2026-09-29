@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { OutsideCapture } from "@/components/OutsideCapture";
 import { GuestsEditor } from "@/components/GuestsEditor";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
@@ -5283,6 +5284,7 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   <StudioConsole key={`ev-${selectedEventId}`} adminGet={adminGet} adminSend={adminSend} view="live" eventId={selectedEventId} kind="event" onLeave={() => setEventTab("overview")} />
                 </TabsContent>
                 <TabsContent value="clips" className="mt-2 lg:mt-0">
+                  <OutsideCapture />
                   <AdminClips eventId={selectedEventId} adminGet={adminGet} adminSend={adminSend} />
                 </TabsContent>
                 <TabsContent value="run" className="mt-2 lg:mt-0">
