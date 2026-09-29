@@ -1410,9 +1410,18 @@ export function EditTextDialog({ c, open, onOpenChange }: { c: ClipRow; open: bo
   const qc = useQueryClient();
   const [title, setTitle] = useState(c.title);
   const [subtitle, setSubtitle] = useState(c.subtitle);
+  // Three better titles from what's said in it; one click puts one in the box.
+  const [ideas, setIdeas] = useState<string[]>([]);
+  const [thinking, setThinking] = useState(false);
   useEffect(() => {
-    if (open) { setTitle(c.title); setSubtitle(c.subtitle); }
+    if (open) { setTitle(c.title); setSubtitle(c.subtitle); setIdeas([]); }
   }, [open, c.title, c.subtitle]);
+  const suggest = async () => {
+    setThinking(true);
+    try { setIdeas(((await (await apiRequest("POST", `/api/host/clips/${c.id}/suggest-title`)).json()) as { titles: string[] }).titles); }
+    catch (e) { toast({ title: "No ideas just now", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" }); }
+    finally { setThinking(false); }
+  };
   const save = useMutation({
     mutationFn: async () => (await apiRequest("POST", `/api/host/clips/${c.id}/text`, { title, subtitle })).json(),
     onSuccess: () => {
@@ -1433,7 +1442,17 @@ export function EditTextDialog({ c, open, onOpenChange }: { c: ClipRow; open: bo
           <div>
             <Label htmlFor={`clip-title-${c.id}`}>Title</Label>
             <Input id={`clip-title-${c.id}`} className="mt-1" value={title} maxLength={90} onChange={(e) => setTitle(e.target.value)} data-testid="input-clip-title" />
-            <p className="mt-1 text-[11px] text-muted-foreground">Short reads best: six words or so.</p>
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <p className="text-[11px] text-muted-foreground">Short reads best: six words or so.</p>
+              <button type="button" onClick={() => void suggest()} disabled={thinking} className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[#053877] hover:underline disabled:opacity-60 dark:text-white" data-testid="clip-title-suggest">{thinking ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} Suggest titles</button>
+            </div>
+            {ideas.length > 0 && (
+              <div className="mt-2 flex flex-col gap-1.5">
+                {ideas.map((t) => (
+                  <button key={t} type="button" onClick={() => setTitle(t)} className={`rounded-lg border px-3 py-1.5 text-left text-sm ${title === t ? "border-[#053877] bg-[#053877]/5" : "border-border hover:bg-muted"}`}>{t}</button>
+                ))}
+              </div>
+            )}
           </div>
           <div>
             <Label htmlFor={`clip-sub-${c.id}`}>Subtitle</Label>
@@ -1453,7 +1472,7 @@ export function EditTextDialog({ c, open, onOpenChange }: { c: ClipRow; open: bo
 }
 
 /** A clip in each of its sizes: a tab per shape, the video at that shape, and a download for it. */
-function ClipPreview({ c, onClose }: { c: ClipRow | null; onClose: () => void }) {
+export function ClipPreview({ c, onClose }: { c: ClipRow | null; onClose: () => void }) {
   const shapes = c ? ([
     { key: "vertical", label: "Vertical", ratio: "9:16", href: c.verticalUrl, box: "aspect-[9/16] h-[min(70vh,640px)]", tip: "Reels, TikTok and Shorts" },
     { key: "square", label: "Square", ratio: "1:1", href: c.squareUrl, box: "aspect-square h-[min(60vh,520px)]", tip: "the Instagram and Facebook feed, and LinkedIn" },
@@ -1496,7 +1515,7 @@ function ClipPreview({ c, onClose }: { c: ClipRow | null; onClose: () => void })
   );
 }
 
-function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
+export function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [trimmingClip, setTrimmingClip] = useState(false);

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { UploadRecording } from "@/components/UploadRecording";
 import { MyRecordings } from "@/components/MyRecordings";
+import { ClipsLibrary } from "@/components/ClipsLibrary";
 import { apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, RecordingRow, ClipRow, HostPostRow, CleanResult } from "@shared/schema";
 import { Clock3, Film, Library, Scissors, Send, Timer } from "lucide-react";
@@ -17,6 +18,11 @@ interface EventEntry {
 
 export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string | null }) {
   const [eventId, setEventId] = useState<number | null>(null);
+  // Episodes or Clips; a link can open the clips (?tab=clips&ep=48).
+  const q = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+  const [tab, setTab] = useState<"episodes" | "clips">(q.get("tab") === "clips" ? "clips" : "episodes");
+  const [clipEp, setClipEp] = useState<number | null>(Number(q.get("ep")) || null);
+  const showClips = (ep: number | null) => { setClipEp(ep); setTab("clips"); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
   const { data: entries } = useQuery<EventEntry[]>({
     queryKey: ["/api/host/events"],
@@ -42,13 +48,17 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
   const saved = (recordings ?? []).reduce((n, r) => {
     try { return n + (r.clean ? ((JSON.parse(r.clean) as CleanResult).removedSec ?? 0) : 0); } catch { return n; }
   }, 0);
-  const stats = [
-    { icon: Film, n: String(originals.length), label: originals.length === 1 ? "Episode" : "Episodes" },
+  // The counts that lead somewhere are buttons: episodes, clips, and the posts on the Social calendar.
+  const stats: { icon: typeof Film; n: string; label: string; go?: () => void }[] = [
+    { icon: Film, n: String(originals.length), label: originals.length === 1 ? "Episode" : "Episodes", go: () => setTab("episodes") },
     { icon: Clock3, n: hours >= 1 ? hours.toFixed(1) : `${Math.round(hours * 60)}m`, label: hours >= 1 ? "Hours recorded" : "Recorded" },
-    { icon: Scissors, n: String(clips?.length ?? 0), label: "Clips made" },
-    { icon: Send, n: String(posts?.filter((p) => p.status !== "failed").length ?? 0), label: "Posts sent" },
+    { icon: Scissors, n: String(clips?.length ?? 0), label: "Clips made", go: () => showClips(null) },
+    { icon: Send, n: String(posts?.filter((p) => p.status !== "failed").length ?? 0), label: "Posts sent", go: () => { window.location.href = "/host/dashboard/social"; } },
     { icon: Timer, n: saved >= 60 ? `${Math.floor(saved / 60)}:${String(Math.round(saved % 60)).padStart(2, "0")}` : `${Math.round(saved)}s`, label: "Time saved" },
   ];
+
+  const clipCounts = new Map<number, number>();
+  for (const c of clips ?? []) clipCounts.set(c.recordingId, (clipCounts.get(c.recordingId) ?? 0) + 1);
 
   // Only offer events that actually have something to show, plus whichever is
   // currently selected, so the filter never lists dead ends.
@@ -71,15 +81,34 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
         <div className="col-span-2 sm:col-span-3 lg:col-span-2">
           <UploadRecording autoOpen />
         </div>
-        {stats.map((s) => (
-          <div key={s.label} className="flex flex-col justify-center rounded-2xl border border-border bg-card px-4 py-3" data-testid={`library-stat-${s.label}`}>
-            <s.icon className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" />
-            <p className="mt-1.5 text-2xl font-bold tabular-nums text-foreground">{s.n}</p>
-            <p className="text-xs text-muted-foreground">{s.label}</p>
-          </div>
+        {stats.map((s) => {
+          const inner = (
+            <>
+              <s.icon className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" />
+              <p className="mt-1.5 text-2xl font-bold tabular-nums text-foreground">{s.n}</p>
+              <p className="text-xs text-muted-foreground">{s.label}{s.go && <span aria-hidden> →</span>}</p>
+            </>
+          );
+          return s.go ? (
+            <button key={s.label} type="button" onClick={s.go} className="flex flex-col justify-center rounded-2xl border border-border bg-card px-4 py-3 text-left transition-colors hover:border-[#053877]/40 hover:bg-[#053877]/[0.03]" data-testid={`library-stat-${s.label}`}>{inner}</button>
+          ) : (
+            <div key={s.label} className="flex flex-col justify-center rounded-2xl border border-border bg-card px-4 py-3" data-testid={`library-stat-${s.label}`}>{inner}</div>
+          );
+        })}
+      </div>
+
+      {/* Two views of one Library: the episodes (with their folders), and every clip made from them. */}
+      <div className="mb-4 inline-flex rounded-full border border-border bg-card p-1" role="tablist">
+        {([["episodes", "Episodes", originals.length], ["clips", "Clips", clips?.length ?? 0]] as const).map(([k, label, n]) => (
+          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => (k === "clips" ? showClips(clipEp) : setTab("episodes"))} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`library-tab-${k}`}>
+            {label} <span className={tab === k ? "text-white/70" : ""}>{n}</span>
+          </button>
         ))}
       </div>
 
+      {tab === "clips" ? (
+        <ClipsLibrary clips={clips ?? []} posts={posts ?? []} recordings={recordings ?? []} episode={clipEp} onEpisode={setClipEp} />
+      ) : (<>
       {options.length > 1 && (
         <div className="mb-4 flex flex-wrap gap-2">
           {[{ id: null as number | null, label: "All events", n: recordings?.length ?? 0 }, ...options.map((e) => ({
@@ -106,7 +135,8 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
         </div>
       )}
 
-      <MyRecordings socialAccounts={socialAccounts} eventId={eventId} showEmpty />
+      <MyRecordings socialAccounts={socialAccounts} eventId={eventId} showEmpty clipCounts={clipCounts} onShowClips={showClips} />
+      </>)}
 
       {/* Clips and clean episodes live in Pōstify; this page is the recordings. */}
       <p className="mt-6 text-sm text-muted-foreground">

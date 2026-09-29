@@ -83,8 +83,13 @@ export function MyRecordings({
   socialAccounts,
   eventId,
   showEmpty = false,
+  clipCounts,
+  onShowClips,
 }: {
   socialAccounts?: string | null;
+  /** Clips per recording, for the "4 clips →" link on each card. */
+  clipCounts?: Map<number, number>;
+  onShowClips?: (recordingId: number) => void;
   /** Only this event's sessions. Omit for every event. */
   eventId?: number | null;
   /** Say so when there is nothing, instead of rendering nothing at all. */
@@ -311,6 +316,9 @@ export function MyRecordings({
                 <p className="mt-0.5 tabular-nums text-xs text-muted-foreground">
                   {new Date(r.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
                   {size(r.sizeBytes) ? ` · ${size(r.sizeBytes)}` : ""}
+                  {onShowClips && (clipCounts?.get(main.id) ?? 0) > 0 && (
+                    <> · <button type="button" onClick={() => onShowClips(main.id)} className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid={`recording-clips-${main.id}`}>{clipCounts!.get(main.id)} clip{clipCounts!.get(main.id) === 1 ? "" : "s"} →</button></>
+                  )}
                 </p>
                 {versions.length > 0 && (
                   <div className="mt-2 inline-flex rounded-full border border-border p-0.5" role="group" aria-label="Version">

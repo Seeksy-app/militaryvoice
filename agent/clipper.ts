@@ -1078,7 +1078,10 @@ export async function pickMoments(job: Job, lines: Line[]): Promise<Moment[]> {
   const n = more ? Math.min(8, more.count) : job.clipCount && job.clipCount > 0 ? Math.min(12, job.clipCount) : WANTED;
   const avoid = more?.avoid ?? [];
   const clear = (m: Moment) => !avoid.some(([a, b]) => m.startSec < b && m.endSec > a);
-  if (!key) return densestStretches(lines, n);
+  if (!key) {
+    console.warn("   ANTHROPIC_API_KEY isn't set on this worker: rough cuts by speech density, with first-words titles");
+    return densestStretches(lines, n, "no-key");
+  }
 
   const client = new Anthropic({ apiKey: key, timeout: 5 * 60_000, maxRetries: 1 });
   const prompt = `You are cutting clips from one segment of a 24-hour podcastathon for the military and veteran community.
@@ -1109,19 +1112,25 @@ ${transcriptText(lines)}`;
   // Room to think over a long transcript. At 4,000 the thinking on a
   // half-hour episode used the budget up and the list came back cut off —
   // empty — so a whole episode got no clips. Twice before giving up.
+  // A third try without thinking: when the thinking has used the budget twice, a
+  // plain answer beats falling back to rough cuts with first-words titles.
   let raw: unknown = [];
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const plain = attempt === 3;
     const res = await client.messages.create({
       model: "claude-opus-5",
-      max_tokens: 16000,
-      thinking: { type: "adaptive" },
+      max_tokens: plain ? 8000 : 16000,
+      ...(plain ? {} : { thinking: { type: "adaptive" as const } }),
       tools: [PICK_TOOL],
-      tool_choice: { type: "tool", name: "pick_moments" },
-      messages: [{ role: "user", content: prompt }],
-    });
+      tool_choice: plain ? { type: "tool", name: "pick_moments" } : { type: "auto" },
+      messages: [{ role: "user", content: plain ? prompt : `${prompt}
+
+Answer with the pick_moments tool.` }],
+    }).catch((err: Error) => { console.warn(`   the pick failed (${err.message})${attempt < 3 ? " — asking again" : ""}`); return null; });
+    if (!res) continue;
     const use = res.content.find((c) => c.type === "tool_use");
     if (!use || use.type !== "tool_use") {
-      console.warn(`   no pick came back (stop: ${res.stop_reason})${attempt === 1 ? " — asking again" : ""}`);
+      console.warn(`   no pick came back (stop: ${res.stop_reason})${attempt < 3 ? " — asking again" : ""}`);
       continue;
     }
     // The list sometimes comes back as a JSON string rather than an array.
@@ -1131,9 +1140,9 @@ ${transcriptText(lines)}`;
     }
     if (!Array.isArray(raw)) raw = [];
     if ((raw as unknown[]).length) break;
-    console.warn(`   the pick came back empty (stop: ${res.stop_reason})${attempt === 1 ? " — asking again" : ""}`);
+    console.warn(`   the pick came back empty (stop: ${res.stop_reason})${attempt < 3 ? " — asking again" : ""}`);
   }
-  if (!(raw as unknown[]).length) return more ? [] : densestStretches(lines, n);
+  if (!(raw as unknown[]).length) return more ? [] : densestStretches(lines, n, "no-answer");
   const moments = (raw as Moment[]).map((m) => ({
     title: String(m.title ?? "").slice(0, 120),
     caption: String(m.caption ?? "").slice(0, 400),
@@ -1158,7 +1167,7 @@ export function roughTitle(text: string): string {
   return t ? t[0].toUpperCase() + t.slice(1) : "Clip";
 }
 
-export function densestStretches(lines: Line[], n = WANTED): Moment[] {
+export function densestStretches(lines: Line[], n = WANTED, why: "no-key" | "no-answer" = "no-key"): Moment[] {
   if (lines.length === 0) return [];
   const WINDOW = 45;
   const end = Math.max(...lines.map((l) => l.endSec));
@@ -1171,7 +1180,7 @@ export function densestStretches(lines: Line[], n = WANTED): Moment[] {
       // The first words said, without the ums and false starts ("Uh, there's…").
       title: roughTitle(inWindow.map((l) => l.text).join(" ")),
       caption: "",
-      reason: "Picked by speech density — no model was configured, so this is a rough cut.",
+      reason: why === "no-key" ? "Picked by speech density: this worker has no AI key, so this is a rough cut." : "Picked by speech density: the AI didn't answer, so this is a rough cut.",
       startSec: Math.floor(t),
       endSec: Math.ceil(t + WINDOW),
     });

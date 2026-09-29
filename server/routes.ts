@@ -1,3 +1,4 @@
+import Anthropic from "@anthropic-ai/sdk";
 import express from "express";
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import crypto from "node:crypto";
@@ -6164,6 +6165,30 @@ export function registerRoutes(app: Express): void {
     }
     const row = await storage.updateClip(clip.id, { ...times, editTitle: title, editSubtitle: subtitle, editStatus: "queued", editError: "", editAt: new Date().toISOString() });
     res.json(row);
+  });
+
+  /** Three better titles for a clip, from what's said in it: short, specific, never bait. */
+  app.post("/api/host/clips/:id/suggest-title", requireHostSession, async (req, res) => {
+    const email = ((req as any).hostEmail as string).trim().toLowerCase();
+    const clip = await storage.getClip(Number(req.params.id));
+    if (!clip || clip.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such clip." });
+    const words = clip.transcript.replace(/\s+/g, " ").trim().slice(0, 4000);
+    if (words.split(" ").length < 8) return res.status(400).json({ message: "There's not enough said in this clip to title it." });
+    try {
+      const out = await new Anthropic().messages.create({
+        model: "claude-sonnet-5",
+        max_tokens: 300,
+        system: "You title short video clips from military and veteran podcasts. Each title is 4 to 7 words, says what happens or the claim made, reads cleanly on a phone, and would make someone stop scrolling without being bait. Never turn someone's service, injury or loss into a hook. No quotation marks, no emoji, no hashtags, no trailing punctuation. Use only what is said.",
+        messages: [{ role: "user", content: `${clip.subtitle ? `Show: ${clip.subtitle}\n` : ""}What's said in the clip:\n${words}\n\nGive three different titles, one per line, nothing else.` }],
+      });
+      const text = out.content.filter((c) => c.type === "text").map((c) => (c as { text: string }).text).join("\n");
+      const titles = text.split("\n").map((t) => t.replace(/^\s*(\d+[.)]|[-*•])\s*/, "").replace(/^["'“]|["'”]$/g, "").trim()).filter((t) => t && t.length <= 90).slice(0, 3);
+      if (!titles.length) throw new Error("no titles");
+      res.json({ titles });
+    } catch (err) {
+      console.error("Clip title suggestion failed:", (err as Error).message);
+      res.status(502).json({ message: "Couldn't think of one just now. Try again in a moment." });
+    }
   });
 
   /**
