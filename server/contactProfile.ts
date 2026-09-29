@@ -5,6 +5,7 @@ import type { Express, RequestHandler } from "express";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, schemaIsReady } from "./storage.js";
 import { getAdminEmail } from "./session.js";
+import { enrollByTrigger } from "./automations.js";
 import { bioPages, bioSubscribers, broadcastEvents, contactNotes, contacts, events, hostedEpisodes, hostedShows, inboundEmails, mailLog, podcasterProfiles, reminders, signups } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -104,9 +105,12 @@ export function registerContactProfile(app: Express, requireAdmin: RequestHandle
     const email = String(req.body?.email ?? "").trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+$/.test(email)) return res.status(400).json({ message: "Whose tags?" });
     const tags = JSON.stringify(cleanTags(req.body?.tags));
-    const [row] = await db.select({ id: contacts.id }).from(contacts).where(eq(sql`lower(${contacts.email})`, email)).limit(1);
+    const [row] = await db.select({ id: contacts.id, tags: contacts.tags, firstName: contacts.firstName }).from(contacts).where(eq(sql`lower(${contacts.email})`, email)).limit(1);
     if (row) await db.update(contacts).set({ tags }).where(eq(contacts.id, row.id));
     else await db.insert(contacts).values({ email, source: "manual", importedAt: now(), tags });
+    // A new tag starts any automation that's on for it.
+    const before = new Set(parseTags(row?.tags));
+    for (const t of JSON.parse(tags) as string[]) if (!before.has(t)) await enrollByTrigger(`tag:${t}`, email, row?.firstName ?? "");
     res.json({ tags: JSON.parse(tags) });
   });
 

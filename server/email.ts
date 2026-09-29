@@ -1208,11 +1208,13 @@ export interface BroadcastEmailOptions {
   senderMember?: { name: string; title: string; photoUrl: string } | null;
   bannerTitle?: string;
   preheader?: string;
+  /** What sent it, for the mail log. */
+  kind?: string;
 }
 
 export async function sendBroadcastEmail(opts: BroadcastEmailOptions): Promise<string | null> {
   const rendered = renderBroadcastEmail(opts);
-  return sendRawEmail({ kind: "sendBroadcastEmail",
+  return sendRawEmail({ kind: opts.kind ?? "sendBroadcastEmail",
     to: opts.to,
     from: `${rendered.fromName} <hello@militaryvoices.ai>`,
     subject: rendered.subject,

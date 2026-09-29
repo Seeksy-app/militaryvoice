@@ -44,6 +44,7 @@ import { AdminChat } from "@/components/AdminChat";
 import { AdminMail } from "@/components/AdminMail";
 import { ContactProfile } from "@/components/AdminContact";
 import { CampaignBuilder } from "@/components/CampaignBuilder";
+import { AutomationsPanel } from "@/components/AdminAutomations";
 import { AudienceFigures } from "@/components/AudienceFigures";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
@@ -4549,9 +4550,12 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
       {view === "automation" && (
         <div className="flex flex-col gap-4">
           <BroadcastSubNav view={view} setView={setView} />
-          <p className="text-sm text-muted-foreground">
-            Everything a podcaster receives, in the order it reaches them.
-          </p>
+          <AutomationsPanel eventId={eventId} teamMembers={teamMembers} segmentOptions={segmentOptions}>
+          <section className="flex flex-col gap-3">
+          <div>
+            <h3 className="font-semibold">Marathon countdown</h3>
+            <p className="text-sm text-muted-foreground">Everything a podcaster receives, in the order it reaches them.</p>
+          </div>
 
           <CadenceList
             event={event}
@@ -4566,6 +4570,8 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
               toast({ title: "Scheduled ✓", description: `"${b.subject}" goes ${new Date(whenIso).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit" })}.` });
             }}
           />
+          </section>
+          </AutomationsPanel>
         </div>
       )}
 

@@ -1912,6 +1912,68 @@ export const contactNotes = pgTable("contact_notes", {
   createdAt: text("created_at").notNull(),
 }, (t) => [index("contact_notes_email_idx").on(t.email)]);
 
+/**
+ * Automations: a series of emails each person gets on their own clock, starting
+ * when they do something (make an account, a SmartLink, join Discovery, get a
+ * tag) or when the team adds them. Only people who start after it's switched
+ * on join, so turning one on never mails a backlog.
+ */
+export const automations = pgTable("automations", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  /** account | smartlink | podcast | discovery | slot | contact | tag:<name> | manual */
+  trigger: text("trigger").notNull().default("manual"),
+  status: text("status").notNull().default("off"), // off | on
+  /** When it was last switched on: triggers from before this don't join. */
+  startedAt: text("started_at").notNull().default(""),
+  /** Stop someone's series once they write back to us. */
+  stopOnReply: boolean("stop_on_reply").notNull().default(true),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull().default(""),
+});
+export type AutomationRow = typeof automations.$inferSelect;
+
+export const automationSteps = pgTable("automation_steps", {
+  id: serial("id").primaryKey(),
+  automationId: integer("automation_id").notNull(),
+  position: integer("position").notNull().default(0),
+  /** Wait this long after the previous email (the first: after they start). */
+  delayHours: integer("delay_hours").notNull().default(0),
+  subject: text("subject").notNull().default(""),
+  preheader: text("preheader").notNull().default(""),
+  bodyText: text("body_text").notNull().default(""),
+  sender: text("sender").notNull().default("team"),
+  banner: text("banner").notNull().default("welcome"),
+}, (t) => [index("automation_steps_auto_idx").on(t.automationId)]);
+export type AutomationStepRow = typeof automationSteps.$inferSelect;
+
+/** One person going through one automation. */
+export const automationRuns = pgTable("automation_runs", {
+  id: serial("id").primaryKey(),
+  automationId: integer("automation_id").notNull(),
+  email: text("email").notNull(),
+  firstName: text("first_name").notNull().default(""),
+  status: text("status").notNull().default("active"), // active | done | stopped
+  /** The next email to send, by position in the series. */
+  stepIndex: integer("step_index").notNull().default(0),
+  nextAt: text("next_at").notNull().default(""),
+  enrolledAt: text("enrolled_at").notNull(),
+  endedAt: text("ended_at").notNull().default(""),
+  /** finished | replied | unsubscribed | removed | bounced */
+  endReason: text("end_reason").notNull().default(""),
+}, (t) => [index("automation_runs_auto_idx").on(t.automationId), index("automation_runs_due_idx").on(t.status, t.nextAt)]);
+export type AutomationRunRow = typeof automationRuns.$inferSelect;
+
+export const automationSends = pgTable("automation_sends", {
+  id: serial("id").primaryKey(),
+  runId: integer("run_id").notNull(),
+  automationId: integer("automation_id").notNull(),
+  stepId: integer("step_id").notNull(),
+  email: text("email").notNull(),
+  resendId: text("resend_id").notNull().default(""),
+  sentAt: text("sent_at").notNull(),
+}, (t) => [index("automation_sends_auto_idx").on(t.automationId)]);
+
 // Saved segment — a named filter that can be used as a broadcast target
 export const segments = pgTable("segments", {
   id: serial("id").primaryKey(),

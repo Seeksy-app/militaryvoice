@@ -3207,7 +3207,10 @@ class DatabaseStorage implements IStorage {
 
   async unsubscribeContact(email: string): Promise<void> {
     await ready();
-    await db.update(contacts).set({ status: "unsubscribed" }).where(eq(contacts.email, email.toLowerCase().trim()));
+    const key = email.toLowerCase().trim();
+    const done = await db.update(contacts).set({ status: "unsubscribed" }).where(eq(contacts.email, key)).returning({ id: contacts.id });
+    // Not on the list (an account holder in an automation, say): keep a row so every sender knows.
+    if (!done.length) await db.insert(contacts).values({ email: key, source: "unsubscribe", status: "unsubscribed", importedAt: new Date().toISOString() }).onConflictDoNothing();
   }
 
   async listActiveContactEmails(): Promise<{ id: number; email: string; firstName: string }[]> {

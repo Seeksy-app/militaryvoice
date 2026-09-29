@@ -140,7 +140,11 @@ async function uploadImage(file: File): Promise<string> {
   return signed.publicUrl;
 }
 
-export function CampaignBuilder({ eventId, initial, source, initialSegment, segmentOptions, teamMembers, onClose }: {
+/** One email of an automation: the same editor, saved to its step, with no audience or send. */
+export type StepDraft = { subject: string; preheader: string; sender: string; banner: string; bodyText: string };
+export type StepMode = { back: string; onSave: (d: StepDraft) => Promise<void>; onTest: (d: StepDraft) => Promise<{ ok: boolean; to: string }> };
+
+export function CampaignBuilder({ eventId, initial, source, initialSegment, segmentOptions, teamMembers, onClose, step }: {
   eventId: number;
   initial: BroadcastRow | null;
   source?: string;
@@ -148,6 +152,7 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
   segmentOptions: SegmentOption[];
   teamMembers: Member[];
   onClose: () => void;
+  step?: StepMode;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -169,6 +174,7 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
   const tags = useQuery<{ tag: string; count: number }[]>({ queryKey: ["/api/admin/contact-tags"], queryFn: () => adminGet("/api/admin/contact-tags") });
   const templates = useQuery<BroadcastRow[]>({ queryKey: ["/api/admin/broadcasts", eventId], queryFn: () => adminGet(`/api/admin/broadcasts?eventId=${eventId}`) });
   const audience = useQuery<{ count: number; people: { email: string; firstName: string }[] }>({
+    enabled: !step,
     queryKey: ["/api/admin/segment-preview", segment, eventId],
     queryFn: () => adminGet(`/api/admin/segment-preview?segment=${encodeURIComponent(segment)}&eventId=${eventId}`),
   });
@@ -210,7 +216,7 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
   const hints: string[] = [];
   if (!subject.trim()) problems.push("Write a subject line.");
   if (!body.trim()) problems.push("Add something to the email.");
-  if (count === 0) problems.push("Nobody is in this audience yet.");
+  if (!step && count === 0) problems.push("Nobody is in this audience yet.");
   if (blocks.some((b) => b.type === "button" && (!b.label.trim() || !/^https?:\/\/\S+\.\S+/.test(b.href.trim())))) problems.push("A button needs words and a link starting https://.");
   if (blocks.some((b) => b.type === "image" && !b.src)) problems.push("A picture block is empty.");
   if (/\{\{(?!First_Name\}\}|Slot_Time\}\}|Remind_Me_Later\}\})[^}]*\}\}/i.test(`${subject}\n${body}`)) problems.push("There's a {{…}} the email can't fill in. Only {{First_Name}} works here.");
@@ -222,6 +228,11 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
     if (!subject.trim() || !body.trim()) {
       toast({ title: "Add a subject and some words first", variant: "destructive" });
       return null;
+    }
+    if (step) {
+      await step.onSave({ subject: subject.trim(), preheader, sender, banner, bodyText: body });
+      if (!opts.quiet) toast({ title: "Saved" });
+      return { ...(initial as BroadcastRow), subject, bodyText: body };
     }
     const payload = { subject: subject.trim(), bodyText: body, segment, sender, banner, preheader, scheduledFor: opts.scheduledFor ?? null };
     const row: BroadcastRow = saved
@@ -240,7 +251,9 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
   const sendTest = () => run("test", async () => {
     const row = await save({ quiet: true });
     if (!row) return;
-    const r: { ok: boolean; to: string } = await adminSend("POST", `/api/admin/broadcasts/${row.id}/test?eventId=${eventId}`).then((x) => x.json());
+    const r: { ok: boolean; to: string } = step
+      ? await step.onTest({ subject: subject.trim(), preheader, sender, banner, bodyText: body })
+      : await adminSend("POST", `/api/admin/broadcasts/${row.id}/test?eventId=${eventId}`).then((x) => x.json());
     toast(r.ok ? { title: "Test sent", description: `Check ${r.to}.` } : { title: "Test not sent", description: `The mail provider refused it. Nothing reached ${r.to}.`, variant: "destructive" });
   });
 
@@ -259,13 +272,13 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
     <div className="flex flex-col gap-4" data-testid="campaign-builder">
       {/* One bar: back, what this is, and the three things you do with it. */}
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={onClose} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground" data-testid="builder-back"><ArrowLeft className="h-4 w-4" /> Campaigns</button>
+        <button type="button" onClick={onClose} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground" data-testid="builder-back"><ArrowLeft className="h-4 w-4" /> {step?.back ?? "Campaigns"}</button>
         <span className="min-w-0 truncate text-sm font-semibold">{subject.trim() || (initial ? "Edit campaign" : "New campaign")}</span>
         {saved?.status === "scheduled" && saved.scheduledFor && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">Scheduled {new Date(saved.scheduledFor).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>}
         <div className="ml-auto flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => void run("save", async () => { await save(); })} disabled={busy !== null} className="gap-1.5 rounded-full" data-testid="builder-save">{busy === "save" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Save</Button>
           <Button variant="outline" size="sm" onClick={sendTest} disabled={busy !== null || !subject.trim() || !body.trim()} className="gap-1.5 rounded-full" data-testid="builder-test">{busy === "test" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}Send me a test</Button>
-          <Button size="sm" onClick={() => setReview(true)} disabled={busy !== null} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="builder-review">Review &amp; send</Button>
+          {!step && <Button size="sm" onClick={() => setReview(true)} disabled={busy !== null} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="builder-review">Review &amp; send</Button>}
         </div>
       </div>
 
@@ -273,8 +286,8 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
         {/* Left: the settings, then the blocks. */}
         <div className="flex min-w-0 flex-col gap-4">
           <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block">
+            <div className={`grid gap-3 ${step ? "" : "sm:grid-cols-2"}`}>
+              {!step && <label className="block">
                 <span className="mb-1 block text-xs font-medium text-muted-foreground">To</span>
                 <Select value={segment} onValueChange={setSegment}>
                   <SelectTrigger data-testid="builder-to"><SelectValue>{segLabel}</SelectValue></SelectTrigger>
@@ -292,7 +305,7 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
                   </SelectContent>
                 </Select>
                 <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Users className="h-3 w-3" />{audience.isFetching ? "Counting…" : count === undefined ? "" : `${count} ${count === 1 ? "person" : "people"}, unsubscribed left out`}</span>
-              </label>
+              </label>}
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-muted-foreground">From</span>
                 <Select value={sender} onValueChange={setSender}>
