@@ -7223,7 +7223,12 @@ export function registerRoutes(app: Express): void {
     const from = req.body?.from === "riccoh" ? "riccoh" : "team";
     const subject = String(req.body?.subject ?? row.draftSubject ?? "").trim() || (row.subject.startsWith("Re:") ? row.subject : `Re: ${row.subject}`);
     if (!text) return res.status(400).json({ message: "Nothing to send." });
-    const paragraphs = text.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("\n");
+    // Web addresses in the reply become links (a full stop or bracket after one stays outside it).
+    const linkify = (h: string) => h.replace(/https?:\/\/[^\s<]+/g, (u) => {
+      const m = u.match(/^(.*?)([.,;:!?)\]]*)$/)!;
+      return `<a href="${m[1]}" style="color:#053877;font-weight:600;">${m[1]}</a>${m[2]}`;
+    });
+    const paragraphs = text.split(/\n{2,}/).map((p) => `<p>${linkify(esc(p)).replace(/\n/g, "<br>")}</p>`).join("\n");
     const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: subject.replace(/^re:\s*/i, ""), body: paragraphs });
     const headers: Record<string, string> = {};
     if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
