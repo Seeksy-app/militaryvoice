@@ -66,6 +66,7 @@ import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { ProfileForm, type PendingSlotSummary } from "@/components/ProfileForm";
 import { ShowMaterials } from "@/components/ShowMaterials";
 import { EventSettings } from "@/components/EventSettings";
+import { PlanBilling } from "@/components/PlanBilling";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { PostStudio, NavCredits } from "@/components/PostStudio";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
@@ -586,7 +587,7 @@ function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -594,6 +595,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   cohost: "cohost",
   analytics: "analytics",
   postify: "postify",
+  billing: "billing",
   social: "social",
   podcast: "podcast",
   page: "page",
@@ -1276,6 +1278,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             onOpenLibrary={() => goTo("recordings")}
             youtubeLocked={noWayIn}
           />
+        ) : screen === "billing" ? (
+          <PlanBilling />
         ) : screen === "postify" ? (
           <PostStudio />
         ) : screen === "social" ? (

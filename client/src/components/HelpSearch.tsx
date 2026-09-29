@@ -19,7 +19,7 @@ export function HelpSearch({ compact = false, autoFocus = false }: { compact?: b
   const [q, setQ] = useState("");
   const results = useMemo(() => (q.trim() ? searchHelp(q).slice(0, compact ? 4 : 8) : []), [q, compact]);
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="help-search">
+    <div className="rounded-2xl border border-border bg-card p-4 text-left text-foreground shadow-sm" data-testid="help-search">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

@@ -6646,7 +6646,7 @@ export function registerRoutes(app: Express): void {
     const customerId = sub?.customerId || addon?.customerId;
     if (!customerId) return res.status(404).json({ message: "No plan yet." });
     try {
-      res.json({ url: await billingPortal(customerId, `${originOf(req)}${sub?.customerId ? "/host/dashboard/postify" : "/discover"}`) });
+      res.json({ url: await billingPortal(customerId, `${originOf(req)}/host/dashboard/billing`) });
     } catch (err: any) {
       console.error("Billing portal failed:", err?.message);
       res.status(502).json({ message: "The billing page didn't open. Try again in a moment." });
