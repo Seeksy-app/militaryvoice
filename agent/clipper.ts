@@ -120,6 +120,8 @@ interface Job {
   transcriptJob?: { id: number };
   /** A still from an episode's video, for its picture. */
   episodeStill?: { episodeId: number };
+  /** A SmartLink's living photo (downloadUrl) made small enough for phones. */
+  livingSqueeze?: { pageId: number };
   episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut" };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
@@ -1843,6 +1845,28 @@ async function handleEpisodeAudio(job: Job): Promise<void> {
  * intro), the most typical frame of a few seconds there so it isn't mid-blink
  * or a black cut. The server crops it square around the people. Never throws.
  */
+/**
+ * A living photo, made smaller for phones: 720p, no sound, H.264 that starts
+ * playing as it loads. Kling's own is 1440p and about 13 MB for five seconds.
+ */
+async function handleLivingSqueeze(job: Job): Promise<void> {
+  const id = job.livingSqueeze!.pageId;
+  const tag = `[page ${id}] living photo`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `living-${id}-`));
+  try {
+    const out = path.join(dir, "living.mp4");
+    await ffmpeg(["-i", job.downloadUrl, "-vf", "scale='min(720,iw)':-2", "-c:v", "libx264", "-preset", "medium", "-crf", "26", "-pix_fmt", "yuv420p", "-an", "-movflags", "+faststart", out]);
+    const mp4 = await fs.readFile(out);
+    await api("POST", `/api/agent/living-squeeze/${id}/done`, { mp4: mp4.toString("base64") });
+    console.log(`${tag}: done (${Math.round(mp4.length / 1024)} KB)`);
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/living-squeeze/${id}/failed`, {}).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function handleEpisodeStill(job: Job): Promise<void> {
   const id = job.episodeStill!.episodeId;
   const tag = `[episode ${id}] still`;
@@ -1897,6 +1921,7 @@ async function handle(job: Job): Promise<void> {
   if (job.transcriptJob) return handleTranscript(job);
   if (job.episodeAudio) return handleEpisodeAudio(job);
   if (job.episodeStill) return handleEpisodeStill(job);
+  if (job.livingSqueeze) return handleLivingSqueeze(job);
   if (job.musicMix) return handleMusic(job);
   if (job.importFrom) return handleImport(job);
   if (job.episodeEdit) return handleEpisodeEdit(job);
@@ -2157,7 +2182,7 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 
 async function tick(): Promise<boolean> {
-  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "episode-audio", "episode-copy", "episode-still", "transcript", "import", "music", "suggest"] });
+  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "episode-audio", "episode-copy", "episode-still", "living-squeeze", "transcript", "import", "music", "suggest"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.

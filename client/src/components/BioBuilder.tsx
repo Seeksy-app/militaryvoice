@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -292,7 +292,7 @@ export function BioBuilder() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
         <div className="min-w-0">
           {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} />}
-          {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} />}
+          {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} setPreview={setPreview} />}
           {tab === "content" && <ContentTab d={draft} change={change} />}
           {tab === "social" && <SocialTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} />}
@@ -742,7 +742,7 @@ const DESIGN_RAIL = [
  * Design, as MilCrunch lays it out: a rail of sections on the left (it follows
  * you as you scroll, and jumps when clicked) and every setting in one column.
  */
-function DesignTab({ d, change, view, cutting = false, cutError = "" }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic; cutting?: boolean; cutError?: string }) {
+function DesignTab({ d, change, view, cutting = false, cutError = "", setPreview }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic; cutting?: boolean; cutError?: string; setPreview: (p: BioPublic) => void }) {
   const t = d.theme;
   const set = (p: Partial<BioTheme>) => change({ theme: { ...t, ...p } });
   const c = t.color;
@@ -832,6 +832,8 @@ function DesignTab({ d, change, view, cutting = false, cutError = "" }: { d: Pag
               <ColourPick value={t.stickerColor || t.color} onPick={(v) => set({ stickerColor: v })} testid="bio-sticker-colour" />
             </div>
           )}
+          {CUTOUT_LAYOUTS.includes(t.layout) && t.layout !== "sticker" && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <ScenePicker scene={t.scene ?? ""} onPick={(scene) => set({ scene })} />}
+          {(t.layout === "hero" || t.layout === "blend" || (t.layout === "portrait" && !d.heroUrl)) && hasPhoto && <LivingPhoto on={t.living ?? false} setOn={(v) => set({ living: v })} photo={d.heroUrl || d.avatarUrl} setPreview={setPreview} />}
           {cutError && CUTOUT_LAYOUTS.includes(t.layout) && <p className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{cutError}</p>}
           {hasPhoto && !CUTOUT_LAYOUTS.includes(t.layout) && (
             <div className="mt-5">
@@ -966,6 +968,135 @@ function DesignSection({ id, title, sub, bind, children }: { id: string; title: 
 }
 
 /** A slider with its label and value. */
+/**
+ * A scene behind their cut-out: the colour, one of ours (made for them the
+ * first time they pick it), one they describe, or a photo of their own.
+ */
+const SCENE_PICKS = [["flag", "Flag", "🇺🇸"], ["base", "Airfield", "✈️"], ["studio", "Studio", "🎙️"], ["sea", "At sea", "⚓"], ["mountains", "Mountains", "🏔️"], ["city", "City night", "🌃"], ["beach", "Beach", "🏖️"], ["camo", "Camo", "🪖"]] as const;
+function ScenePicker({ scene, onPick }: { scene: string; onPick: (url: string) => void }) {
+  const { toast } = useToast();
+  const [made, setMade] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [own, setOwn] = useState("");
+  const fileIn = useRef<HTMLInputElement>(null);
+  const make = async (key: string, body: { preset?: string; prompt?: string }) => {
+    if (made[key]) { onPick(made[key]); return; }
+    setBusy(key);
+    try {
+      const r = await again(() => apiRequest("POST", "/api/host/bio/scene", body));
+      const j = (await r.json()) as { url: string };
+      setMade((m) => ({ ...m, [key]: j.url }));
+      onPick(j.url);
+    } catch (e) {
+      toast({ title: "No scene this time", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
+    } finally { setBusy(null); }
+  };
+  const upload = async (file: File) => {
+    setBusy("upload");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await again(() => fetch("/api/host/bio/image/bg", { method: "POST", body: fd, credentials: "include" }));
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.message || "Couldn't use that image.");
+      onPick(j.url);
+    } catch (e) {
+      toast({ title: "Photo not used", description: (e as Error).message, variant: "destructive" });
+    } finally { setBusy(null); if (fileIn.current) fileIn.current.value = ""; }
+  };
+  const chip = (on: boolean) => `relative flex h-16 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-xl border-2 text-[11px] font-semibold transition-all ${on ? "border-[#053877] ring-2 ring-[#053877]/20" : "border-border hover:border-[#053877]/40"}`;
+  return (
+    <div className="mt-4 space-y-2 rounded-xl bg-muted/40 p-3" data-testid="bio-scene">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold">Scene behind you</p>
+        {scene && <button type="button" onClick={() => onPick("")} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Back to the colour</button>}
+      </div>
+      <p className="text-[11px] text-muted-foreground">Made for you by AI in a few seconds. Pick one, describe your own, or use a photo.</p>
+      <div className="grid grid-cols-4 gap-2">
+        {SCENE_PICKS.map(([k, l, e]) => {
+          const url = made[k];
+          return (
+            <button key={k} type="button" onClick={() => void make(k, { preset: k })} disabled={busy != null} className={chip(!!url && scene === url)} style={url ? { background: `center/cover url(${url})` } : undefined} data-testid={`bio-scene-${k}`}>
+              {busy === k ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className={url ? "rounded bg-black/55 px-1.5 py-0.5 text-white" : ""}>{url ? l : <><span className="block text-lg leading-none">{e}</span>{l}</>}</span>}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex gap-2">
+        <Input value={own} onChange={(e) => setOwn(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && own.trim().length > 2) void make(`own:${own.trim()}`, { prompt: own.trim() }); }} maxLength={300} placeholder="Or describe one: a hangar at dawn, Fenway Park…" className="h-9 flex-1 text-xs" data-testid="bio-scene-own" />
+        <Button type="button" onClick={() => void make(`own:${own.trim()}`, { prompt: own.trim() })} disabled={busy != null || own.trim().length < 3} className="h-9 rounded-full bg-[#053877] px-3 text-xs hover:bg-[#0a4a99]">{busy?.startsWith("own:") ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Make it"}</Button>
+      </div>
+      <input ref={fileIn} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
+      <button type="button" onClick={() => fileIn.current?.click()} disabled={busy != null} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">{busy === "upload" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />} Use a photo of my own</button>
+    </div>
+  );
+}
+
+/**
+ * The living photo: their top photo moving for a few seconds (a blink, a
+ * breath, a smile), looping. Made once (about a minute), then on or off.
+ */
+function LivingPhoto({ on, setOn, photo, setPreview }: { on: boolean; setOn: (v: boolean) => void; photo: string; setPreview: (p: BioPublic) => void }) {
+  const { toast } = useToast();
+  const [st, setSt] = useState<{ status: "none" | "running" | "done" | "failed" | "loading"; url?: string; message?: string }>({ status: "loading" });
+  const check = useCallback(async () => {
+    try {
+      const j = (await (await apiRequest("GET", "/api/host/bio/living")).json()) as { status: "none" | "running" | "done" | "failed"; livingUrl?: string; message?: string; preview?: BioPublic };
+      if (j.preview) setPreview(j.preview);
+      setSt({ status: j.status, url: j.livingUrl, message: j.message });
+      return j;
+    } catch { return null; }
+  }, [setPreview]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void check(); }, [photo]);
+  useEffect(() => {
+    if (st.status !== "running") return;
+    const t = setInterval(async () => {
+      const j = await check();
+      if (j?.status === "done") { setOn(true); toast({ title: "Your photo is alive", description: "It's on your page now." }); }
+      if (j?.status === "failed") toast({ title: "Couldn't bring it to life", description: j.message, variant: "destructive" });
+    }, 6000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [st.status]);
+  const start = async (again = false) => {
+    setSt({ status: "running" });
+    try {
+      const r = await apiRequest("POST", "/api/host/bio/living", { again });
+      const j = (await r.json()) as { status: string; livingUrl?: string };
+      if (j.status === "done") { setSt({ status: "done", url: j.livingUrl }); setOn(true); }
+    } catch (e) {
+      setSt({ status: "none" });
+      toast({ title: "Couldn't start it", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
+    }
+  };
+  return (
+    <div className="mt-4 space-y-2 rounded-xl border-2 border-[#F0A71F]/40 bg-[#F0A71F]/5 p-3" data-testid="bio-living-card">
+      <div className="flex items-center gap-2">
+        <Sparkles className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" />
+        <p className="flex-1 text-sm font-semibold">Living photo</p>
+        {st.status === "done" && <Switch checked={on} onCheckedChange={setOn} aria-label="Show my living photo" data-testid="bio-living-on" />}
+      </div>
+      {st.status === "done" && st.url ? (
+        <div className="flex items-center gap-3">
+          <video src={st.url} autoPlay muted loop playsInline className="h-16 w-16 shrink-0 rounded-xl object-cover" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-muted-foreground">{on ? "Your photo moves on your page: a blink, a breath, a smile." : "Made. Switch it on to show it on your page."}</p>
+            <button type="button" onClick={() => void start(true)} className="mt-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground">Make a new one</button>
+          </div>
+        </div>
+      ) : st.status === "running" ? (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="bio-living-running"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Bringing your photo to life. About a minute; you can keep working.</p>
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground">Your photo, moving for a few seconds on a loop: a blink, a breath, a smile. Made by AI in about a minute.</p>
+          <Button type="button" onClick={() => void start()} disabled={st.status === "loading"} className="w-full gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-living-make"><Sparkles className="h-4 w-4" /> Bring my photo to life</Button>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** A slider's track: grey, with navy filled up to the handle (from the middle when it runs either side of zero). */
 function rangeFill(value: number, min: number, max: number): string {
   const pct = ((value - min) / (max - min)) * 100;

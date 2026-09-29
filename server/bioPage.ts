@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { and, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
-import { uploadPhoto } from "./photoStorage.js";
+import { uploadPhoto, uploadShowAsset } from "./photoStorage.js";
 import { sendListenerQuestionEmail, sendListenerReplyEmail, sendSponsorInquiryEmail } from "./email.js";
 import { parseSocialAccounts } from "./uploadPost.js";
 import { audienceFor } from "./discovery.js";
@@ -109,6 +109,7 @@ async function publicOf(row: BioPageRow): Promise<BioPublic> {
     welcome: row.welcome.trim() || `Hi! Thanks for listening. What's on your mind?`,
     brandsOn: parseBrands(row.brands).on,
     cutoutUrl: row.cutoutFrom && row.cutoutFrom === row.avatarUrl ? row.cutoutUrl : "",
+    livingUrl: row.livingFrom && row.livingFrom === (row.heroUrl || row.avatarUrl) ? row.livingUrl : "",
     ai: await aiFor(row),
   };
 }
@@ -359,6 +360,8 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     bgBrightness: Number.isFinite(Number(x.bgBrightness)) && x.bgBrightness !== undefined ? Math.max(-100, Math.min(100, Math.round(Number(x.bgBrightness)))) : prev.bgBrightness ?? 0,
     cutoutY: Number.isFinite(Number(x.cutoutY)) && x.cutoutY !== undefined ? Math.max(-160, Math.min(160, Math.round(Number(x.cutoutY)))) : prev.cutoutY ?? 0,
     socialsFirst: typeof x.socialsFirst === "boolean" ? x.socialsFirst : prev.socialsFirst ?? false,
+    living: typeof x.living === "boolean" ? x.living : prev.living ?? false,
+    scene: typeof x.scene === "string" ? httpUrl(x.scene) : prev.scene ?? "",
     nameSize: Number.isFinite(Number(x.nameSize)) && x.nameSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.nameSize)))) : prev.nameSize ?? 100,
     cutoutSize: Number.isFinite(Number(x.cutoutSize)) && x.cutoutSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.cutoutSize)))) : prev.cutoutSize ?? 100,
     bgWash: Number.isFinite(Number(x.bgWash)) && x.bgWash !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.bgWash)))) : prev.bgWash ?? 65,
@@ -380,6 +383,53 @@ function cleanSocials(v: unknown): BioSocial[] {
 }
 
 // ---- Routes -------------------------------------------------------------------------
+
+/** The living photo's job: fal making it (status, response), then the worker making it smaller (squeeze). */
+type LivingState = { status?: string; response?: string; from: string; at: number; squeeze?: "queued" | "running"; src?: string };
+
+/** A living photo for the worker to make smaller: 720p, silent, starting as it loads. */
+export async function claimLivingSqueeze(): Promise<{ id: number; url: string } | null> {
+  await schemaIsReady();
+  const rows = await db.select({ id: bioPages.id, livingJob: bioPages.livingJob }).from(bioPages).where(sql`${bioPages.livingJob} LIKE '%"squeeze"%'`).limit(10);
+  for (const r of rows) {
+    let j: LivingState;
+    try { j = JSON.parse(r.livingJob) as LivingState; } catch { continue; }
+    if (!j.src || !(j.squeeze === "queued" || (j.squeeze === "running" && Date.now() - j.at > 20 * 60_000))) continue;
+    const next = JSON.stringify({ ...j, squeeze: "running", at: Date.now() } satisfies LivingState);
+    const got = await db.update(bioPages).set({ livingJob: next }).where(and(eq(bioPages.id, r.id), eq(bioPages.livingJob, r.livingJob))).returning({ id: bioPages.id });
+    if (got.length) return { id: r.id, url: j.src };
+  }
+  return null;
+}
+
+/** The worker's side of the living photo: the smaller copy comes back, or it couldn't (the big one stays). */
+export function registerBioAgent(app: Express, requireAgent: import("express").RequestHandler) {
+  app.post("/api/agent/living-squeeze/:id/done", requireAgent, async (req, res) => {
+    const id = Number(req.params.id);
+    const [row] = await db.select().from(bioPages).where(eq(bioPages.id, id)).limit(1);
+    if (!row) return res.status(404).json({ message: "No such page." });
+    let j: LivingState | null = null;
+    try { j = JSON.parse(row.livingJob) as LivingState; } catch { j = null; }
+    try {
+      const buf = Buffer.from(String(req.body?.mp4 ?? ""), "base64");
+      if (buf.length < 20_000) throw new Error("no video");
+      // Only if it's still the one on their page (they may have made a new one meanwhile).
+      if (j?.src && j.src === row.livingUrl) {
+        const url = await uploadShowAsset(`bio/${id}-living-${Date.now()}-720.mp4`, buf, "video/mp4");
+        await db.update(bioPages).set({ livingUrl: url, livingJob: "" }).where(and(eq(bioPages.id, id), eq(bioPages.livingUrl, j.src)));
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      console.error("Living photo squeeze failed:", (err as Error).message);
+      await db.update(bioPages).set({ livingJob: "" }).where(eq(bioPages.id, id));
+      res.status(400).json({ message: "Couldn't use that video." });
+    }
+  });
+  app.post("/api/agent/living-squeeze/:id/failed", requireAgent, async (req, res) => {
+    await db.update(bioPages).set({ livingJob: "" }).where(and(eq(bioPages.id, Number(req.params.id)), sql`${bioPages.livingJob} LIKE '%"squeeze"%'`));
+    res.json({ ok: true });
+  });
+}
 
 export function registerBioPage(app: Express) {
   // Straight after a deploy, wait for new tables and columns before the first query.
@@ -469,6 +519,110 @@ export function registerBioPage(app: Express) {
 
   // Cutout: their profile photo with the background taken out (BiRefNet on fal, portrait model), kept as a PNG.
   const cutting = new Map<number, number[]>();
+  // ---- fal: the living photo and the scenes behind a cut-out ------------------------
+  const FAL = () => ({ Authorization: `Key ${process.env.FAL_KEY}`, "Content-Type": "application/json" });
+
+  // The living photo: their top photo, moving for five seconds (a blink, a breath, a smile),
+  // ending on the photo itself so it loops without a jump. Kling on fal's queue, about a minute.
+  const LIVING = "fal-ai/kling-video/v2.5-turbo/pro/image-to-video";
+  const livingRuns = new Map<number, number[]>();
+  type LivingJob = LivingState;
+  app.post("/api/host/bio/living", requireHostSession, async (req, res) => {
+    const row = await pageFor(emailOf(req));
+    if (!process.env.FAL_KEY) return res.status(503).json({ message: "Living photos aren't switched on yet." });
+    const photo = row.heroUrl || row.avatarUrl;
+    if (!photo) return res.status(400).json({ message: "Add a photo first." });
+    if (row.livingUrl && row.livingFrom === photo && !req.body?.again) return res.json({ status: "done", livingUrl: row.livingUrl });
+    const job = row.livingJob ? (JSON.parse(row.livingJob) as LivingJob) : null;
+    if (job && !job.squeeze && job.from === photo && Date.now() - job.at < 15 * 60_000) return res.json({ status: "running" });
+    const hits = (livingRuns.get(row.id) ?? []).filter((t) => Date.now() - t < 24 * 3600_000);
+    if (hits.length >= 4) return res.status(429).json({ message: "That's four today. Try again tomorrow." });
+    livingRuns.set(row.id, [...hits, Date.now()]);
+    try {
+      const r = await fetch(`https://queue.fal.run/${LIVING}`, {
+        method: "POST", headers: FAL(), signal: AbortSignal.timeout(30_000),
+        body: JSON.stringify({
+          image_url: photo, tail_image_url: photo, duration: "5", cfg_scale: 0.5,
+          prompt: "The person in the photo comes to life: they breathe naturally, blink, and give a small warm smile, then settle back to exactly how they started. Subtle, natural, gentle motion. The camera stays completely still. Same framing, same lighting, same background.",
+          negative_prompt: "camera movement, zoom, pan, talking, big gestures, blur, distortion, morphing face, extra limbs, low quality",
+        }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { status_url?: string; response_url?: string };
+      if (!r.ok || !j.status_url || !j.response_url) throw new Error(`fal ${r.status}`);
+      await db.update(bioPages).set({ livingJob: JSON.stringify({ status: j.status_url, response: j.response_url, from: photo, at: Date.now() } satisfies LivingJob) }).where(eq(bioPages.id, row.id));
+      res.json({ status: "running" });
+    } catch (err) {
+      console.error("Living photo failed to start:", (err as Error).message);
+      res.status(502).json({ message: "Couldn't start that. Try again in a moment." });
+    }
+  });
+  // How it's going: when fal has it, the video is copied to our storage and kept.
+  app.get("/api/host/bio/living", requireHostSession, async (req, res) => {
+    const row = await pageFor(emailOf(req));
+    const photo = row.heroUrl || row.avatarUrl;
+    const job = row.livingJob ? (JSON.parse(row.livingJob) as LivingJob) : null;
+    // Made, and waiting to be made smaller for phones: it's already on the page.
+    if (!job || job.squeeze) return res.json(row.livingUrl && row.livingFrom === photo ? { status: "done", livingUrl: row.livingUrl } : { status: "none" });
+    try {
+      const st = (await (await fetch(job.status!, { headers: FAL(), signal: AbortSignal.timeout(20_000) })).json().catch(() => ({}))) as { status?: string };
+      if (st.status !== "COMPLETED") {
+        if (Date.now() - job.at > 15 * 60_000) { await db.update(bioPages).set({ livingJob: "" }).where(eq(bioPages.id, row.id)); return res.json({ status: "failed", message: "That took too long. Try again." }); }
+        return res.json({ status: "running", queued: st.status === "IN_QUEUE" });
+      }
+      const out = (await (await fetch(job.response!, { headers: FAL(), signal: AbortSignal.timeout(30_000) })).json().catch(() => ({}))) as { video?: { url?: string }; detail?: unknown };
+      if (!out.video?.url) {
+        await db.update(bioPages).set({ livingJob: "" }).where(eq(bioPages.id, row.id));
+        return res.json({ status: "failed", message: "It couldn't bring that photo to life. Try a clearer photo of just you, facing the camera." });
+      }
+      const buf = Buffer.from(await (await fetch(out.video.url, { signal: AbortSignal.timeout(60_000) })).arrayBuffer());
+      const url = await uploadShowAsset(`bio/${row.id}-living-${Date.now()}.mp4`, buf, "video/mp4");
+      // On the page now; the worker makes a smaller copy for phones (720p, no sound) and swaps it in.
+      const [saved] = await db.update(bioPages).set({ livingUrl: url, livingFrom: job.from, livingJob: JSON.stringify({ from: job.from, at: Date.now(), squeeze: "queued", src: url } satisfies LivingJob), updatedAt: now() }).where(eq(bioPages.id, row.id)).returning();
+      res.json({ status: "done", livingUrl: url, preview: await publicOf(saved) });
+    } catch (err) {
+      console.error("Living photo check failed:", (err as Error).message);
+      res.json({ status: "running" });
+    }
+  });
+
+  // A scene behind their cut-out: one of ours, or one they describe. FLUX schnell, a few seconds.
+  const SCENES: Record<string, string> = {
+    flag: "a huge American flag waving in the wind, dramatic soft light",
+    base: "a military airfield at golden hour, fighter jets far away on the runway, warm sunset sky",
+    studio: "a cozy podcast studio with warm lamps, microphones and acoustic panels",
+    sea: "a navy ship on a calm ocean at dusk, pink and orange sky",
+    mountains: "a mountain range at dawn, pastel sky and soft morning haze",
+    city: "a city skyline at night with warm glowing lights",
+    beach: "a calm beach at sunset, warm golden light on the water",
+    camo: "an abstract woodland camouflage pattern, soft studio light",
+  };
+  const sceneRuns = new Map<number, number[]>();
+  app.post("/api/host/bio/scene", requireHostSession, async (req, res) => {
+    const row = await pageFor(emailOf(req));
+    if (!process.env.FAL_KEY) return res.status(503).json({ message: "Scenes aren't switched on yet." });
+    const preset = SCENES[String(req.body?.preset ?? "")];
+    const own = String(req.body?.prompt ?? "").trim().slice(0, 300);
+    if (!preset && own.length < 3) return res.status(400).json({ message: "Pick a scene, or describe one." });
+    const hits = (sceneRuns.get(row.id) ?? []).filter((t) => Date.now() - t < 3600_000);
+    if (hits.length >= 20) return res.status(429).json({ message: "That's a lot of scenes. Try again in an hour." });
+    sceneRuns.set(row.id, [...hits, Date.now()]);
+    try {
+      const r = await fetch("https://fal.run/fal-ai/flux/schnell", {
+        method: "POST", headers: FAL(), signal: AbortSignal.timeout(60_000),
+        body: JSON.stringify({ prompt: `${preset || own}. Photorealistic background photo, no people, nothing in the middle foreground, soft depth of field, vertical composition.`, image_size: "portrait_4_3", num_images: 1, output_format: "jpeg", enable_safety_checker: true }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { images?: { url?: string }[]; has_nsfw_concepts?: boolean[] };
+      if (j.has_nsfw_concepts?.[0]) return res.status(400).json({ message: "Try describing a different scene." });
+      if (!r.ok || !j.images?.[0]?.url) throw new Error(`fal ${r.status}`);
+      const raw = Buffer.from(await (await fetch(j.images[0].url, { signal: AbortSignal.timeout(30_000) })).arrayBuffer());
+      const jpg = await sharp(raw).resize(1080, 1440, { fit: "cover" }).jpeg({ quality: 84, mozjpeg: true }).toBuffer();
+      res.json({ url: await uploadPhoto(`bio/${row.id}-scene-${Date.now()}.jpg`, jpg) });
+    } catch (err) {
+      console.error("Scene failed:", (err as Error).message);
+      res.status(502).json({ message: "Couldn't make that scene. Try again in a moment." });
+    }
+  });
+
   // A brand's logo from its home page: its app icon (apple-touch-icon, the biggest there is), or its site icon.
   app.get("/api/host/bio/logo", requireHostSession, async (req, res) => {
     let u: URL;

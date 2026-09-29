@@ -129,7 +129,7 @@ import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerHosting, claimEpisodeAudio, claimEpisodeStill } from "./hosting.js";
-import { registerBioPage } from "./bioPage.js";
+import { registerBioPage, registerBioAgent, claimLivingSqueeze } from "./bioPage.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
 import { episodeCredits, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
@@ -5524,6 +5524,7 @@ export function registerRoutes(app: Express): void {
   registerSponsorFinder(app, requireAdmin);
   registerPodcastStats(app);
   registerHosting(app, requireAgent);
+  registerBioAgent(app, requireAgent);
   registerBioPage(app);
   registerAskShow(app, requireAgent);
 
@@ -5696,6 +5697,11 @@ export function registerRoutes(app: Express): void {
     if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("episode-still")) {
       const st = await claimEpisodeStill().catch((err) => { console.error("Episode still claim failed:", err); return null; });
       if (st) return res.json({ job: { recordingId: st.id, title: st.title, durationSec: st.durationSec, downloadUrl: st.url, show: "", host: "", transcript: [], episodeStill: { episodeId: st.id } } });
+    }
+    // Nothing else: a living photo to make smaller for phones.
+    if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("living-squeeze")) {
+      const lv = await claimLivingSqueeze().catch((err) => { console.error("Living squeeze claim failed:", err); return null; });
+      if (lv) return res.json({ job: { recordingId: lv.id, title: "Living photo", durationSec: 5, downloadUrl: lv.url, show: "", host: "", transcript: [], livingSqueeze: { pageId: lv.id } } });
     }
     // Nothing else to do: copy a moved show's episode from the old host into our storage.
     if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("episode-copy")) {

@@ -35,6 +35,10 @@ export interface BioTheme {
   podcast: BioPodcastOptions;
   /** The link buttons' colour ("" = the theme colour). */
   linkColor: string;
+  /** Their living photo plays in place of the still (Hero, Cover photo and Classic tops). */
+  living?: boolean;
+  /** A scene behind their cut-out (an image), in place of the colour ("" = the colour). */
+  scene?: string;
   /** Their social icons above their bio (else under it). */
   socialsFirst?: boolean;
   /** Their name's size at the top, percent (100 = as drawn). */
@@ -332,6 +336,8 @@ export interface BioPublic {
   brandsOn?: boolean;
   /** Their photo with the background taken out, for the Cutout top ("" until made). */
   cutoutUrl?: string;
+  /** Their living photo (a short looping video of the top's photo, "" until made). */
+  livingUrl?: string;
   /** Listeners can send a question (it goes to the podcaster's inbox). */
   askEnabled: boolean;
   /** Ask my show: the AI answers from the episodes it has learned (how many). */

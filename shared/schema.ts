@@ -2445,6 +2445,10 @@ export const bioPages = pgTable("bio_pages", {
   /** Their profile photo with the background taken out (the Cutout top), and the photo it was made from. */
   cutoutUrl: text("cutout_url").notNull().default(""),
   cutoutFrom: text("cutout_from").notNull().default(""),
+  /** The living photo: a few seconds of their photo moving (video), the photo it was made from, and the job making one (JSON). */
+  livingUrl: text("living_url").notNull().default(""),
+  livingFrom: text("living_from").notNull().default(""),
+  livingJob: text("living_job").notNull().default(""),
   /** Ask my show: the AI that answers listeners from every episode. */
   aiEnabled: boolean("ai_enabled").notNull().default(true),
   published: boolean("published").notNull().default(true),
