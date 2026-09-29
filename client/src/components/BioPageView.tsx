@@ -250,6 +250,7 @@ function PagePopup({ p, handle, preview, peek, onPeekClose, solid, ink, sub, car
   const key = `mv_popup_${handle}`;
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
+  const [first, setFirst] = useState("");
   const [website, setWebsite] = useState("");
   const [state, setState] = useState<"idle" | "busy" | "done">("idle");
   const [err, setErr] = useState("");
@@ -271,7 +272,7 @@ function PagePopup({ p, handle, preview, peek, onPeekClose, solid, ink, sub, car
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setErr("That email doesn't look right."); return; }
     setState("busy"); setErr("");
     try {
-      await onSubscribe({ email: email.trim(), name: "", website });
+      await onSubscribe({ email: email.trim(), name: first.trim(), website });
       setState("done");
       try { localStorage.setItem(`mv_joined_${handle}`, "1"); } catch { /* fine */ }
     } catch (x) { setErr((x as Error).message); setState("idle"); }
@@ -295,6 +296,7 @@ function PagePopup({ p, handle, preview, peek, onPeekClose, solid, ink, sub, car
             <p className="mt-4 flex items-center justify-center gap-2 text-sm font-semibold"><Check className="h-4 w-4" style={{ color: accent }} /> You're in. Thanks!</p>
           ) : (
             <form onSubmit={join} className="mt-4 flex flex-col gap-2">
+              <input value={first} onChange={(e) => setFirst(e.target.value)} placeholder="First name" autoComplete="given-name" maxLength={80} className="h-11 rounded-xl px-3 text-sm outline-none" style={{ background: "transparent", border: `1px solid ${line}`, color: ink }} data-testid="bio-popup-name" />
               <input value={email} onChange={(e) => { setEmail(e.target.value); setErr(""); }} type="email" placeholder="Your email" autoComplete="email" required maxLength={200} className="h-11 rounded-xl px-3 text-sm outline-none" style={{ background: "transparent", border: `1px solid ${line}`, color: ink }} data-testid="bio-popup-email" />
               <input value={website} onChange={(e) => setWebsite(e.target.value)} tabIndex={-1} autoComplete="off" aria-hidden className="hidden" name="website" />
               <button type="submit" disabled={state === "busy"} className="h-11 px-4 text-sm font-semibold disabled:opacity-60" style={btn()}>{state === "busy" ? "One moment…" : p.button || "Sign me up"}</button>
