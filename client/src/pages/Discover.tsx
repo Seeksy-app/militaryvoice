@@ -236,7 +236,8 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
   const [tab, setTab] = useState<"search" | "enrich" | "lists">("search");
   // Podcasts: their own sort, audience floor and guests switch, and the show or person open.
   const [pcSort, setPcSort] = useState("best");
-  const [pcActive, setPcActive] = useState(false);
+  // On by default: a show with nothing new in months isn't booking guests.
+  const [pcActive, setPcActive] = useState(true);
   const [pcGuests, setPcGuests] = useState(false);
   const [podOpen, setPodOpen] = useState<PodOpen | null>(null);
   const [podFrom, setPodFrom] = useState<PodOpen[]>([]);

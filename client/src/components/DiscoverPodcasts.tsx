@@ -97,7 +97,8 @@ export function PodcastResults({ ask, isMember, onJoin, onOpen, saved, onSave }:
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-xl font-semibold tracking-tight">
-            {search.isLoading ? "Searching…" : first ? `${first.total.toLocaleString()} ${people ? (first.total === 1 ? "host or guest" : "hosts and guests") : first.total === 1 ? "podcast" : "podcasts"}` : "Search"}
+            {/* Plain search counts every show with any of the words; past a few thousand, the count says nothing. */}
+            {search.isLoading ? "Searching…" : first ? first.total > 2000 ? "Best matches" : `${first.total.toLocaleString()} ${people ? (first.total === 1 ? "host or guest" : "hosts and guests") : first.total === 1 ? "podcast" : "podcasts"}` : "Search"}
           </h2>
           {first && <p className="mt-1 text-sm text-muted-foreground">{people ? "People who host a show or have been a guest on one" : "Shows"}{ask.q ? <> about <span className="font-medium text-foreground">"{ask.q}"</span></> : null}{ask.branch ? <> · {ask.branch.split(",").join(", ")}</> : !people ? " in the military and veteran community" : ""}</p>}
         </div>
