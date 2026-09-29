@@ -629,7 +629,9 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     if (!e || !(await ownShow(email, e.showId))) return res.status(404).json({ message: "No such episode." });
     const b = req.body ?? {};
     const publish = b.status === "published";
-    if (publish && !(e.audioKey || e.audioUrl)) return res.status(400).json({ message: e.audioJob === "failed" ? "Its audio couldn't be made. Delete it and try again, or upload the audio." : e.audioJob ? "Its audio is still being made. A few minutes; then publish." : "It needs its audio first." });
+    // Audio still being made (from a video, or copied in): it can be published now, and it joins
+    // the feed by itself the moment its audio lands (the feed only lists episodes with audio).
+    if (publish && !(e.audioKey || e.audioUrl) && (!e.audioJob || e.audioJob === "failed")) return res.status(400).json({ message: e.audioJob === "failed" ? "Its audio couldn't be made. Delete it and try again, or upload the audio." : "It needs its audio first." });
     const at = typeof b.publishedAt === "string" && !Number.isNaN(Date.parse(b.publishedAt)) ? new Date(b.publishedAt).toISOString() : undefined;
     const [out] = await db.update(hostedEpisodes).set({
       ...(typeof b.title === "string" ? { title: b.title.slice(0, 300) } : {}),

@@ -546,9 +546,12 @@ function EpisodeDialog({ ep, onClose, onSaved }: { ep: Ep | null; onClose: () =>
       if (status) body.status = status;
       if (status === "published" && when === "later" && at) body.publishedAt = new Date(at).toISOString();
       if (status === "published" && ep.status !== "published" && when === "now") body.publishedAt = new Date().toISOString();
-      await apiRequest("PATCH", `/api/host/hosting/episodes/${ep.id}`, body);
+      const out = (await (await apiRequest("PATCH", `/api/host/hosting/episodes/${ep.id}`, body)).json()) as Ep;
       onSaved();
-      toast({ title: status === "published" ? (when === "later" && at ? "Scheduled" : "Published") : "Saved", description: status === "published" ? "It's in your feed. The apps pick it up within the hour." : undefined });
+      const waiting = status === "published" && !out.audioKey && !out.audioUrl && !!out.audioJob;
+      toast(waiting
+        ? { title: when === "later" && at ? "Scheduled" : "It goes out as soon as it's ready", description: "Its audio is being made: a few minutes. It joins your feed by itself; nothing else to do." }
+        : { title: status === "published" ? (when === "later" && at ? "Scheduled" : "Published") : "Saved", description: status === "published" ? "It's in your feed. The apps pick it up within the hour." : undefined });
       close();
     } catch (e) {
       toast({ title: "Couldn't save", description: (e as Error).message, variant: "destructive" });
