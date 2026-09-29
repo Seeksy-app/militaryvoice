@@ -483,10 +483,10 @@ export function registerBioPage(app: Express) {
     if (typeof b.aiEnabled === "boolean") patch.aiEnabled = b.aiEnabled;
     if (typeof b.published === "boolean") patch.published = b.published;
     if (b.avatarUrl === "" || b.heroUrl === "") { if (b.avatarUrl === "") patch.avatarUrl = ""; if (b.heroUrl === "") patch.heroUrl = ""; }
-    // A fixed-up copy they chose: only this page's own, from our photo storage.
+    // A fixed-up or restyled copy they chose, or their own photo back: only this page's own, from our photo storage.
     const ours = (v: unknown, kind: "avatar" | "hero") => {
       const base = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
-      return typeof v === "string" && !!base && v.startsWith(`${base}/storage/v1/object/public/`) && new RegExp(`/bio/${row.id}-${kind}-fixed-\\d+\\.jpg$`).test(v);
+      return typeof v === "string" && !!base && v.startsWith(`${base}/storage/v1/object/public/`) && new RegExp(`/bio/${row.id}-${kind}-((fixed|styled-[a-z]+)-)?\\d+\\.jpg$`).test(v);
     };
     if (ours(b.avatarUrl, "avatar")) patch.avatarUrl = b.avatarUrl;
     if (ours(b.heroUrl, "hero")) patch.heroUrl = b.heroUrl;
@@ -619,6 +619,53 @@ export function registerBioPage(app: Express) {
     } catch (err) {
       console.error("Fix-up failed:", (err as Error).message);
       res.status(502).json({ message: "Couldn't fix up that photo. Try again in a moment." });
+    }
+  });
+
+  // Styles: their photo redrawn in another look (FLUX Kontext), the same person and pose, about 7 seconds.
+  // Sent back to look at; it becomes their photo only when they choose it.
+  const STYLES: Record<string, string> = {
+    comic: "a bold comic book illustration with clean black ink lines, flat colours and halftone shading",
+    oil: "a classic oil painting portrait with rich colour and visible brush strokes on canvas",
+    cartoon: "a friendly 3D animated film character with soft studio lighting and smooth shading",
+    watercolor: "a loose, bright watercolour painting on white paper with soft bleeding edges",
+    sketch: "a detailed graphite pencil sketch on cream paper with cross-hatched shading",
+    popart: "1960s pop art: a bold screen print with flat bright colours and thick outlines",
+    anime: "a clean Japanese anime illustration with crisp line art and cel shading",
+    neon: "a synthwave neon portrait with glowing magenta and cyan rim light on a dark background",
+  };
+  const styleRuns = new Map<number, number[]>();
+  app.post("/api/host/bio/style", requireHostSession, async (req, res) => {
+    const row = await pageFor(emailOf(req));
+    if (!process.env.FAL_KEY) return res.status(503).json({ message: "Styles aren't switched on yet." });
+    const kind = req.body?.kind === "hero" ? "hero" : "avatar";
+    const key = String(req.body?.style ?? "");
+    const look = STYLES[key];
+    // Always from the photo they uploaded (or fixed up), never a style on a style.
+    const src = String(req.body?.from ?? "") || (kind === "hero" ? row.heroUrl : row.avatarUrl);
+    if (!look) return res.status(400).json({ message: "Pick a style." });
+    const store = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
+    const theirs = src === row.avatarUrl || src === row.heroUrl || (!!store && src.startsWith(`${store}/storage/v1/object/public/`) && src.includes(`/bio/${row.id}-`));
+    if (!src || !theirs) return res.status(400).json({ message: "Add a photo first." });
+    const hits = (styleRuns.get(row.id) ?? []).filter((t) => Date.now() - t < 24 * 3600_000);
+    if (hits.length >= 30) return res.status(429).json({ message: "That's a lot of styles today. Try again tomorrow." });
+    styleRuns.set(row.id, [...hits, Date.now()]);
+    try {
+      const r = await fetch("https://fal.run/fal-ai/flux-pro/kontext", {
+        method: "POST", headers: FAL(), signal: AbortSignal.timeout(90_000),
+        body: JSON.stringify({ image_url: src, prompt: `Redraw this photo as ${look}. Keep the same person: their face, expression, hair, pose, clothes and framing exactly. Only change the art style.`, ...(kind === "avatar" ? { aspect_ratio: "1:1" } : {}), output_format: "jpeg", safety_tolerance: "2", num_images: 1 }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { images?: { url?: string }[]; has_nsfw_concepts?: boolean[] };
+      if (j.has_nsfw_concepts?.[0]) return res.status(400).json({ message: "Try a different photo." });
+      if (!r.ok || !j.images?.[0]?.url) throw new Error(`fal ${r.status}`);
+      const raw = Buffer.from(await (await fetch(j.images[0].url, { signal: AbortSignal.timeout(30_000) })).arrayBuffer());
+      const img = kind === "avatar"
+        ? await sharp(raw).resize(1024, 1024, { fit: "cover" }).jpeg({ quality: 90, mozjpeg: true }).toBuffer()
+        : await sharp(raw).resize(2000, 2000, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 88, mozjpeg: true }).toBuffer();
+      res.json({ url: await uploadPhoto(`bio/${row.id}-${kind}-styled-${key}-${Date.now()}.jpg`, img, "image/jpeg") });
+    } catch (err) {
+      console.error("Style failed:", (err as Error).message);
+      res.status(502).json({ message: "Couldn't make that style. Try again in a moment." });
     }
   });
 

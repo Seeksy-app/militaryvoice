@@ -739,6 +739,11 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear, onFixed }: 
   // Fix-up: a sharper, cleaner copy made on fal, shown next to theirs to choose.
   const [fixing, setFixing] = useState(false);
   const [fixed, setFixed] = useState("");
+  const [styling, setStyling] = useState(false);
+  // Their own photo, kept in this browser when they pick a style, so styles always start from it and they can go back.
+  const origKey = `mv_bio_orig_${kind}`;
+  const original = (() => { try { return localStorage.getItem(origKey) || ""; } catch { return ""; } })();
+  const styled = /-styled-/.test(url);
   const fixUp = async () => {
     setFixing(true);
     try {
@@ -774,13 +779,17 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear, onFixed }: 
       </button>
       {url && (
         <div className="mt-1 flex items-center justify-between gap-2">
-          {/-fixed-/.test(url)
-            ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><Check className="h-3.5 w-3.5" /> Fixed up</span>
-            : <button type="button" onClick={() => void fixUp()} disabled={fixing} className="inline-flex items-center gap-1 text-xs font-semibold text-[#b36b00] hover:underline disabled:opacity-70 dark:text-[#F0A71F]" data-testid={`bio-fixup-${kind}`}>{fixing ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sharpening, about 20 seconds…</> : <><Sparkles className="h-3.5 w-3.5" /> Fix up</>}</button>}
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {/-fixed-/.test(url) ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><Check className="h-3.5 w-3.5" /> Fixed up</span>
+              : !styled && <button type="button" onClick={() => void fixUp()} disabled={fixing} className="inline-flex items-center gap-1 text-xs font-semibold text-[#b36b00] hover:underline disabled:opacity-70 dark:text-[#F0A71F]" data-testid={`bio-fixup-${kind}`}>{fixing ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sharpening…</> : <><Sparkles className="h-3.5 w-3.5" /> Fix up</>}</button>}
+            <button type="button" onClick={() => setStyling(true)} className="inline-flex items-center gap-1 text-xs font-semibold text-[#6d28d9] hover:underline dark:text-violet-300" data-testid={`bio-styles-${kind}`}><Palette className="h-3.5 w-3.5" /> Styles</button>
+            {styled && original && <button type="button" onClick={() => { onFixed(original); try { localStorage.removeItem(origKey); } catch { /* fine */ } }} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Back to my original</button>}
+          </span>
           <button type="button" onClick={onClear} className="text-xs text-muted-foreground hover:text-foreground">Remove</button>
         </div>
       )}
       {note && <p className="mt-1 text-xs text-muted-foreground">{note}</p>}
+      {styling && <StylePicker kind={kind} src={styled && original ? original : url} round={round} onClose={() => setStyling(false)} onUse={(u) => { try { if (!styled) localStorage.setItem(origKey, url); } catch { /* fine */ } onFixed(u); setStyling(false); }} />}
       {fixed && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={() => setFixed("")} role="dialog" aria-label="Your photo, fixed up" data-testid="bio-fixup-compare">
           <div className="w-full max-w-2xl rounded-3xl bg-card p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -801,6 +810,69 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear, onFixed }: 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Styles: their photo redrawn in a look they pick (comic, oil, 3D cartoon…),
+ * each made the first time it's tapped (about 7 seconds) and shown beside the
+ * original; theirs only when they choose it.
+ */
+const STYLE_PICKS = [["comic", "Comic book", "💥"], ["oil", "Oil painting", "🖼️"], ["cartoon", "3D cartoon", "🧸"], ["watercolor", "Watercolour", "🎨"], ["sketch", "Pencil sketch", "✏️"], ["popart", "Pop art", "🟡"], ["anime", "Anime", "✨"], ["neon", "Neon", "🌆"]] as const;
+function StylePicker({ kind, src, round, onClose, onUse }: { kind: "avatar" | "hero"; src: string; round?: boolean; onClose: () => void; onUse: (url: string) => void }) {
+  const { toast } = useToast();
+  const [made, setMade] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [pick, setPick] = useState<string | null>(null);
+  const make = async (k: string) => {
+    if (made[k]) { setPick(k); return; }
+    setBusy(k);
+    try {
+      const r = await again(() => apiRequest("POST", "/api/host/bio/style", { kind, style: k, from: src }));
+      const u = ((await r.json()) as { url: string }).url;
+      setMade((m) => ({ ...m, [k]: u }));
+      setPick(k);
+    } catch (e) {
+      toast({ title: "No style this time", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
+    } finally { setBusy(null); }
+  };
+  const shown = pick && made[pick] ? made[pick] : src;
+  const label = STYLE_PICKS.find(([k]) => k === pick)?.[1];
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={onClose} role="dialog" aria-label="Styles" data-testid="bio-styles">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-card p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div><p className="text-lg font-bold">Styles</p><p className="text-sm text-muted-foreground">Your photo, redrawn. Tap a look; it takes a few seconds.</p></div>
+          <button type="button" onClick={onClose} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted" aria-label="Close"><X className="h-5 w-5" /></button>
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-[1fr_1.1fr]">
+          <figure className="relative overflow-hidden rounded-2xl border border-border bg-muted/40">
+            <img src={shown} alt="" className={`w-full object-cover ${round ? "aspect-square" : "aspect-[4/3]"} ${busy ? "opacity-50" : ""}`} />
+            {busy && <span className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm font-semibold"><Loader2 className="h-6 w-6 animate-spin" /> Redrawing you…</span>}
+            <figcaption className="absolute left-2 top-2 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-bold text-white">{label ?? "Your photo"}</figcaption>
+          </figure>
+          <div>
+            <div className="grid grid-cols-2 gap-2">
+              {STYLE_PICKS.map(([k, l, e]) => {
+                const on = pick === k;
+                return (
+                  <button key={k} type="button" onClick={() => void make(k)} disabled={busy != null} className={`relative flex h-14 items-center gap-2 overflow-hidden rounded-xl border-2 px-2.5 text-left text-xs font-semibold transition-all disabled:opacity-60 ${on ? "border-[#6d28d9] ring-2 ring-[#6d28d9]/20" : "border-border hover:border-[#6d28d9]/40"}`} data-testid={`bio-style-${k}`}>
+                    {made[k] ? <img src={made[k]} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" /> : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-lg">{busy === k ? <Loader2 className="h-4 w-4 animate-spin" /> : e}</span>}
+                    <span className="min-w-0 flex-1 leading-tight">{l}</span>
+                    {on && <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#6d28d9] text-white"><Check className="h-3 w-3" /></span>}
+                  </button>
+                );
+              })}
+            </div>
+            {pick && <button type="button" onClick={() => setPick(null)} className="mt-2 text-xs font-semibold text-muted-foreground hover:text-foreground">See my photo again</button>}
+          </div>
+        </div>
+        <div className="mt-5 flex gap-2">
+          <Button onClick={() => pick && made[pick] && onUse(made[pick])} disabled={!pick || !made[pick]} className="flex-1 gap-1.5 rounded-full bg-[#6d28d9] font-semibold text-white hover:bg-[#5b21b6]" data-testid="bio-style-use"><Check className="h-4 w-4" /> {label ? `Use ${label}` : "Pick a style"}</Button>
+          <Button variant="outline" onClick={onClose} className="rounded-full">Keep mine</Button>
+        </div>
+      </div>
     </div>
   );
 }
