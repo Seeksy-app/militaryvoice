@@ -211,10 +211,12 @@ export function PageTop({ t, avatar, hero, cutoutUrl, living = "", name, handle,
           <div className={`relative z-30 mx-auto max-w-[560px] px-5 text-center ${t.layout === "popout" || t.layout === "shape" ? "pt-5" : "-mt-4"}`}>{children(false, t.layout !== "popout" && t.layout !== "shape")}</div>
         </>
       ) : t.layout === "hero" && photo ? (
-        <div className="relative flex min-h-[600px] flex-col justify-end" style={{ background: `center ${Y}%/cover url(${photo})` }} data-testid="bio-hero-header">
-          {living && moving("absolute inset-0 h-full w-full object-cover", { objectPosition: `center ${Y}%` })}
+        <div className="relative flex min-h-[600px] flex-col justify-end overflow-hidden" data-testid="bio-hero-header">
+          {/* The photo, zoomed about the part they picked (Photo size), so it always fills the top. */}
+          <img src={photo} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: `center ${Y}%`, transform: `scale(${(t.imageZoom ?? 100) / 100})`, transformOrigin: `center ${Y}%` }} />
+          {living && moving("absolute inset-0 h-full w-full object-cover", { objectPosition: `center ${Y}%`, transform: `scale(${(t.imageZoom ?? 100) / 100})`, transformOrigin: `center ${Y}%` })}
           <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0.55) 70%, ${t.template === "vibrant" ? theirs : dark ? "#0b1020" : "rgba(0,0,0,0.85)"} 100%)` }} />
-          <div className="relative mx-auto w-full max-w-[560px] px-5 pb-8 text-center text-white">{children(true)}</div>
+          <div className="relative mx-auto w-full max-w-[560px] px-5 pb-8 text-center text-white" style={{ translate: `0 ${t.nameY ?? 0}px` }}>{children(true)}</div>
         </div>
       ) : (
         <>

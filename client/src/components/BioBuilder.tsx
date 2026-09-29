@@ -1041,18 +1041,24 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
             <Switch checked={!(t.hideName ?? false)} onCheckedChange={(v) => set({ hideName: !v })} data-testid="bio-show-name" />
           </div>
           {/* Sizes: their name, and their cut-out photo's place and size. */}
-          {(!t.hideName || (CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl)) && (
+          {(!t.hideName || (CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl) || (t.layout === "hero" && hasPhoto)) && (
             <div className="mt-3 space-y-3 rounded-xl bg-muted/40 p-3" data-testid="bio-cutout-adjust">
               {!t.hideName && <>
                 <RangeRow label="Name size" hint="Smaller or bigger" value={t.nameSize ?? 100} min={60} max={150} onChange={(v) => set({ nameSize: v })} unit="%" testid="bio-name-size" />
                 {/* Only where the name is big behind their photo: elsewhere it sits in a column with the rest. */}
                 {CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <RangeRow label="Name position" hint="Up or down" value={t.nameY ?? 0} min={-120} max={120} onChange={(v) => set({ nameY: v })} testid="bio-name-y" />}
+                {/* Hero: the name (and what's under it) moves up the photo. */}
+                {t.layout === "hero" && hasPhoto && <RangeRow label="Name position" hint="Up or down" value={t.nameY ?? 0} min={-260} max={40} onChange={(v) => set({ nameY: v })} testid="bio-hero-name-y" />}
+              </>}
+              {t.layout === "hero" && hasPhoto && <>
+                <RangeRow label="Photo position" hint="Up or down" value={t.imageY ?? 50} min={0} max={100} onChange={(v) => set({ imageY: v })} unit="%" testid="bio-hero-image-y" />
+                <RangeRow label="Photo size" hint="Smaller or bigger" value={t.imageZoom ?? 100} min={100} max={200} onChange={(v) => set({ imageZoom: v })} unit="%" testid="bio-hero-zoom" />
               </>}
               {CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <>
                 <RangeRow label="Photo position" hint="Up or down" value={t.cutoutY ?? 0} min={-160} max={160} onChange={(v) => set({ cutoutY: v })} testid="bio-cutout-y" />
                 <RangeRow label="Photo size" hint="Smaller or bigger" value={t.cutoutSize ?? 100} min={60} max={150} onChange={(v) => set({ cutoutSize: v })} unit="%" testid="bio-cutout-size" />
               </>}
-              {((t.nameSize ?? 100) !== 100 || (t.nameY ?? 0) !== 0 || (t.cutoutY ?? 0) !== 0 || (t.cutoutSize ?? 100) !== 100) && <button type="button" onClick={() => set({ nameSize: 100, nameY: 0, cutoutY: 0, cutoutSize: 100 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
+              {((t.nameSize ?? 100) !== 100 || (t.nameY ?? 0) !== 0 || (t.cutoutY ?? 0) !== 0 || (t.cutoutSize ?? 100) !== 100 || (t.layout === "hero" && ((t.imageY ?? 50) !== 50 || (t.imageZoom ?? 100) !== 100))) && <button type="button" onClick={() => set({ nameSize: 100, nameY: 0, cutoutY: 0, cutoutSize: 100, ...(t.layout === "hero" ? { imageY: 50, imageZoom: 100 } : {}) })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
             </div>
           )}
           <PhotoStyle d={d} change={change} />
@@ -1072,7 +1078,7 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
               </div>
             ) : null}
           {cutError && CUTOUT_LAYOUTS.includes(t.layout) && <p className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{cutError}</p>}
-          {hasPhoto && !CUTOUT_LAYOUTS.includes(t.layout) && (
+          {hasPhoto && !CUTOUT_LAYOUTS.includes(t.layout) && t.layout !== "hero" && (
             <div className="mt-5">
               {/* The top crops the picture to fit; this picks which part shows (0 the top of it, 100 the bottom). */}
               <RangeRow label="Photo position" hint="Up or down, if it cuts off a head" value={t.imageY ?? 50} min={0} max={100} onChange={(v) => set({ imageY: v })} unit="%" testid="bio-image-y" />

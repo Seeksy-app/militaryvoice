@@ -394,7 +394,8 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
       const kind = (["none", "promo", "email"] as const).includes(p.kind as never) ? (p.kind as "none") : "none";
       return { kind, pre: str(p.pre, 60), heading: str(p.heading, 80), note: str(p.note, 200), button: str(p.button, 40), image: httpUrl(p.image), url: httpUrl(p.url) };
     })() : prev.popup,
-    nameY: Number.isFinite(Number(x.nameY)) && x.nameY !== undefined ? Math.max(-120, Math.min(120, Math.round(Number(x.nameY)))) : prev.nameY ?? 0,
+    nameY: Number.isFinite(Number(x.nameY)) && x.nameY !== undefined ? Math.max(-260, Math.min(120, Math.round(Number(x.nameY)))) : prev.nameY ?? 0,
+    imageZoom: Number.isFinite(Number(x.imageZoom)) && x.imageZoom !== undefined ? Math.max(100, Math.min(200, Math.round(Number(x.imageZoom)))) : prev.imageZoom ?? 100,
     nameSize: Number.isFinite(Number(x.nameSize)) && x.nameSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.nameSize)))) : prev.nameSize ?? 100,
     cutoutSize: Number.isFinite(Number(x.cutoutSize)) && x.cutoutSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.cutoutSize)))) : prev.cutoutSize ?? 100,
     bgWash: Number.isFinite(Number(x.bgWash)) && x.bgWash !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.bgWash)))) : prev.bgWash ?? 65,

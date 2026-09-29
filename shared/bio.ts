@@ -70,6 +70,8 @@ export interface BioTheme {
   background: BioBackground;
   /** Where the cover, hero or banner photo is cropped, top (0) to bottom (100). */
   imageY: number;
+  /** Hero: how far in the photo is zoomed, 100 (fills the top) to 200. */
+  imageZoom?: number;
   /** The round (or shaped) photo's size. */
   avatarSize: "s" | "m" | "l";
   /** "Made with MilitaryVoices.ai" at the foot. */
