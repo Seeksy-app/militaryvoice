@@ -73,7 +73,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   const introWant = t.introAt ?? "bottom-left";
   const introAt = data.askEnabled && introWant === chatAt ? (introWant.endsWith("left") ? introWant.replace("left", "right") : introWant.replace("right", "left")) as typeof introWant : introWant;
   const showIntro = Boolean(t.intro && data.introUrl);
-  const intro = (spot: "top" | "bottom" | "bio") => showIntro && !askEp && (spot === "bio" ? introAt === "bio" : introAt.startsWith(spot)) && <IntroBubble src={data.introUrl!} name={data.displayName} accent={accent} at={introAt} preview={preview} onPlay={() => ev("play", "Talking intro")} />;
+  const intro = (spot: "top" | "bottom" | "bio") => showIntro && !askEp && (spot === "bio" ? introAt === "bio" : introAt.startsWith(spot)) && <IntroBubble src={data.introUrl!} name={data.displayName} handle={data.handle} says={t.introSay} back={t.introBack} accent={accent} at={introAt} preview={preview} onPlay={() => ev("play", "Talking intro")} />;
 
   const share = async (title: string, id: string) => {
     const url = `${shareBase}#ep-${id}`;
@@ -91,7 +91,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       {!hideName && !noName && <h1 className="text-balance font-bold leading-tight tracking-tight" style={{ fontSize: Math.round((onPhoto ? 34 : 26) * (t.nameSize ?? 100) / 100) }}>{data.displayName || "Your name"}</h1>}
       <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>@{data.handle}{data.branch ? ` · ${data.branch}` : ""}</p>
       {t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} onChat={data.askEnabled && chatAt === "socials" ? () => setChat(true) : undefined} chatColor={accent} />}
-      {data.bio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{styled(data.bio)}</p>}
+      {data.bio && !t.hideBio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{styled(data.bio)}</p>}
       {intro("bio")}
       {!t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} onChat={data.askEnabled && chatAt === "socials" ? () => setChat(true) : undefined} chatColor={accent} />}
     </>
@@ -509,9 +509,19 @@ function Section({ s, btn, ink, sub, card, line, accent, preview, ev, handle = "
  * Their talking intro: a round bubble in the bottom left with them moving in it
  * (silent). Tap it and it opens and they say hello, with sound.
  */
-function IntroBubble({ src, name, accent, preview, onPlay, at = "bottom-left" }: { src: string; name: string; accent: string; preview: boolean; onPlay: () => void; at?: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "bio" }) {
+function IntroBubble({ src, name, handle, says, back, accent, preview, onPlay, at = "bottom-left" }: { src: string; name: string; handle: string; says?: string[]; back?: string; accent: string; preview: boolean; onPlay: () => void; at?: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "bio" }) {
   const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState(false);
+  // What the bubble says: their line for someone who's been before, else one of theirs at random
+  // (the builder's preview shows their first, so it holds still while they edit).
+  const lines = says?.length ? says : ["Say hi 👋"];
+  const [say] = useState(() => {
+    if (preview) return lines[0];
+    let been = false;
+    try { const k = `mv_been_${handle}`; been = Boolean(localStorage.getItem(k)); localStorage.setItem(k, "1"); } catch { /* private window: a first visit every time */ }
+    return been && back ? back : lines[Math.floor(Math.random() * lines.length)];
+  });
+  const shown = preview ? lines[0] : say;
   const first = (name || "").split(/\s+/)[0];
   const top = at.startsWith("top");
   const right = at.endsWith("right");
@@ -533,7 +543,7 @@ function IntroBubble({ src, name, accent, preview, onPlay, at = "bottom-left" }:
     <div className="mt-4 flex justify-center">
       {open ? <div className="relative w-full max-w-[18rem]">{player("relative")}</div> : (
         <button type="button" onClick={play} className="group inline-flex items-center gap-2.5 rounded-full py-1 pl-1 pr-4 text-sm font-bold shadow-lg" style={{ background: accent, color: onColor(accent) }} aria-label={`Play ${first || "their"} hello`} data-testid="bio-intro">
-          {face("h-10 w-10")} Hear me say hi 👋
+          {face("h-10 w-10")} {shown}
         </button>
       )}
     </div>
@@ -545,7 +555,7 @@ function IntroBubble({ src, name, accent, preview, onPlay, at = "bottom-left" }:
         {open ? player(`absolute ${top ? "top-3" : "bottom-4"} ${right ? "right-3" : "left-3"} w-[min(17rem,calc(100%-5.5rem))]`) : (
           <button type="button" onClick={play} className={`group absolute flex items-center gap-2 ${top ? "top-3" : "bottom-4"} ${right ? "right-4 flex-row-reverse" : "left-4"}`} aria-label={`Play ${first || "their"} hello`} data-testid="bio-intro">
             {face("h-16 w-16")}
-            {!seen && <span className="rounded-full px-3 py-1.5 text-xs font-bold shadow-lg" style={{ background: accent, color: onColor(accent) }}>Say hi 👋</span>}
+            {!seen && <span className="rounded-full px-3 py-1.5 text-xs font-bold shadow-lg" style={{ background: accent, color: onColor(accent) }}>{shown}</span>}
           </button>
         )}
       </div>

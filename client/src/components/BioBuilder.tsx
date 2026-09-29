@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useBioFont } from "@/lib/bioFont";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
 import { ratesFor } from "@/components/BioBrandsView";
-import { BRANDS_SECTIONS, FAMILY_SECTIONS, arrange, type BioLayout, type BrandsSectionId, type FamilySectionId, CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { BRANDS_SECTIONS, FAMILY_SECTIONS, arrange, type BioLayout, type BrandsSectionId, type FamilySectionId, CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, INTRO_VOICES, INTRO_SAYS, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
 import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, Mic, Square, Smile, GripVertical, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music } from "lucide-react";
 
@@ -338,7 +338,7 @@ export function BioBuilder() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
         <div className="min-w-0">
-          {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} intro={<IntroCard d={draft} st={intro} start={(b) => void startIntro(b)} reset={resetIntro} on={draft.theme.intro ?? false} setOn={(v) => change({ theme: { ...draft.theme, intro: v } }, true)} at={draft.theme.introAt ?? "bottom-left"} setAt={(v) => change({ theme: { ...draft.theme, introAt: v } }, true)} />} />}
+          {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} intro={<IntroCard d={draft} st={intro} start={(b) => void startIntro(b)} reset={resetIntro} on={draft.theme.intro ?? false} setOn={(v) => change({ theme: { ...draft.theme, intro: v } }, true)} at={draft.theme.introAt ?? "bottom-left"} setAt={(v) => change({ theme: { ...draft.theme, introAt: v } }, true)} patch={(p, now) => change({ theme: { ...draft.theme, ...p } }, now)} />} />}
           {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} living={living} startLiving={startLiving} />}
           {tab === "content" && <ContentTab d={draft} change={change} view={view} />}
           {tab === "social" && <SocialTab d={draft} change={change} />}
@@ -452,8 +452,15 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { 
       </Card>
       {intro}
       <Card icon={User} tone="blue" title="About you">
-      <Field label="Name on the page"><Input value={d.displayName} onChange={(e) => change({ displayName: e.target.value })} maxLength={80} /></Field>
-      <Field label="Your link" hint="3 to 30 letters or numbers. Changing it breaks links you've already shared.">
+      <div>
+        <span className="mb-1 flex items-center gap-2.5 text-sm font-semibold">
+          Name on the page
+          <Switch checked={!(d.theme.hideName ?? false)} onCheckedChange={(v) => change({ theme: { ...d.theme, hideName: !v } }, true)} aria-label="Show my name on the page" data-testid="bio-about-name-on" />
+        </span>
+        <Input value={d.displayName} onChange={(e) => change({ displayName: e.target.value })} maxLength={80} className={d.theme.hideName ? "opacity-50" : ""} data-testid="bio-name" />
+        {d.theme.hideName && <span className="mt-1 block text-xs text-muted-foreground">Hidden on your page. We still use it in emails and your chat.</span>}
+      </div>
+      <Field label="Custom shareable link" hint="3 to 30 letters or numbers. Changing it breaks links you've already shared.">
         <div className="flex items-center rounded-md border border-input bg-background pl-3 text-sm focus-within:ring-2 focus-within:ring-ring">
           <span className="text-muted-foreground">militaryvoices.ai/</span>
           <input value={handle} onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 30))} onBlur={() => { if (handle !== d.handle) change({ handle }, true); }} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} className="h-9 min-w-0 flex-1 bg-transparent pr-3 outline-none" data-testid="bio-handle" />
@@ -461,12 +468,16 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { 
       </Field>
       <div>
         <div className="mb-1 flex items-center justify-between gap-2">
-          <span className="text-sm font-semibold">Bio</span>
+          <span className="flex items-center gap-2.5 text-sm font-semibold">
+            Bio
+            <Switch checked={!(d.theme.hideBio ?? false)} onCheckedChange={(v) => change({ theme: { ...d.theme, hideBio: !v } }, true)} aria-label="Show my bio on the page" data-testid="bio-about-bio-on" />
+          </span>
           <button type="button" onClick={() => void draftBio()} disabled={drafting} className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#F0A71F] to-[#e08a00] px-2.5 py-1 text-xs font-bold text-[#1a1200] shadow-sm hover:opacity-90 disabled:opacity-60" data-testid="bio-draft">
             {drafting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {d.bio.trim() ? "Rewrite it for me" : "Write it for me"}
           </button>
         </div>
-        <TextEditor body={d.bio} onBody={(bio) => change({ bio })} maxLength={500} rows={3} placeholder="Who you are, what the show is about, who it's for." testid="bio-bio" />
+        <div className={d.theme.hideBio ? "opacity-50" : ""}><TextEditor body={d.bio} onBody={(bio) => change({ bio })} maxLength={500} rows={3} placeholder="Who you are, what the show is about, who it's for." testid="bio-bio" /></div>
+        {d.theme.hideBio && <span className="mt-1 block text-xs text-muted-foreground">Hidden on your page. It's kept here for when you switch it back on.</span>}
       </div>
       </Card>
       <Card icon={MessageCircle} tone="green" title="Your listeners">
@@ -1815,7 +1826,6 @@ function useFalJob(path: string, setPreview: (p: BioPublic) => void, onDone: () 
  * The talking intro: their profile photo saying hello. Record it in their own
  * voice, or type it and pick an AI voice; made in a few minutes, then on or off.
  */
-const INTRO_VOICES = [["Brian", "Brian", "deep, steady"], ["George", "George", "warm, British"], ["Chris", "Chris", "easy-going"], ["Eric", "Eric", "friendly"], ["Sarah", "Sarah", "soft, calm"], ["Jessica", "Jessica", "bright"], ["Laura", "Laura", "upbeat"], ["Alice", "Alice", "clear, British"]] as const;
 /**
  * Where something sits on the page, picked on one little phone: tap the spot.
  * The chosen one is gold; `taken` shows where the other bubble already is.
@@ -1851,12 +1861,24 @@ function SpotPicker({ value, spots, onPick, taken, testid }: { value: Spot; spot
   );
 }
 
-function IntroCard({ d, st, start, reset, on, setOn, at, setAt }: { d: Page; st: JobState; start: (b: Record<string, unknown>) => void; reset: () => void; on: boolean; setOn: (v: boolean) => void; at: string; setAt: (v: NonNullable<BioTheme["introAt"]>) => void }) {
+function IntroCard({ d, st, start, reset, on, setOn, at, setAt, patch }: { d: Page; st: JobState; start: (b: Record<string, unknown>) => void; reset: () => void; on: boolean; setOn: (v: boolean) => void; at: string; setAt: (v: NonNullable<BioTheme["introAt"]>) => void; patch: (p: Partial<BioTheme>, now?: boolean) => void }) {
   const [mode, setMode] = useState<"voice" | "ai">("voice");
   const [voiceKey, setVoiceKey] = useState("");
   const first = (d.displayName || "").split(/\s+/)[0];
   const [script, setScript] = useState(`Hey, welcome in! I'm ${first || "the host"}. Press play on an episode, and if you've got a question, send me a message. Thanks for stopping by.`);
   const [voice, setVoice] = useState("Brian");
+  const [man, setMan] = useState(true);
+  const sample = useRef<HTMLAudioElement | null>(null);
+  const [hearing, setHearing] = useState("");
+  const hear = (id: string) => {
+    sample.current?.pause();
+    if (hearing === id) { setHearing(""); return; }
+    const a = new Audio(`/voices/${id.toLowerCase()}.mp3`);
+    a.onended = () => setHearing("");
+    sample.current = a; setHearing(id); void a.play().catch(() => setHearing(""));
+  };
+  useEffect(() => () => sample.current?.pause(), []);
+  const pickSex = (m: boolean) => { setMan(m); const firstOf = INTRO_VOICES.find((v) => v.man === m); if (firstOf) setVoice(firstOf.id); };
   const seg = (x: boolean) => `flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${x ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`;
   const make = () => start(mode === "voice" ? { mode, audioKey: voiceKey } : { mode, script, voice });
   return (
@@ -1875,6 +1897,7 @@ function IntroCard({ d, st, start, reset, on, setOn, at, setAt }: { d: Page; st:
           <p className="mb-1.5 text-sm font-semibold">Where it goes</p>
           <SpotPicker value={at as Spot} spots={["top-left", "top-right", "bio", "bottom-left", "bottom-right"]} onPick={(v) => setAt(v as NonNullable<BioTheme["introAt"]>)} taken={d.askEnabled ? { at: (d.theme.chatAt ?? "top-right") as Spot, label: "Your chat button" } : undefined} testid="bio-intro-at" />
           {d.askEnabled && at === (d.theme.chatAt ?? "top-right") && <p className="mt-1.5 text-[11px] text-muted-foreground">Your chat button is there, so it moves to the other side.</p>}
+          <IntroSays says={d.theme.introSay ?? []} back={d.theme.introBack ?? ""} patch={patch} />
         </div>
       ) : st.status === "done" && st.url ? null : st.status === "running" ? (
         <p className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="bio-intro-running"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Making your photo talk. A few minutes; keep working, even on another tab.</p>
@@ -1894,15 +1917,63 @@ function IntroCard({ d, st, start, reset, on, setOn, at, setAt }: { d: Page; st:
           ) : (
             <>
               <TextEditor body={script} onBody={setScript} rows={3} maxLength={600} emoji={false} placeholder="What you'd like to say" testid="bio-intro-script" />
-              <select value={voice} onChange={(e) => setVoice(e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" data-testid="bio-intro-voice">
-                {INTRO_VOICES.map(([v, l, n]) => <option key={v} value={v}>{l}: {n}</option>)}
-              </select>
+              <div className="flex gap-1 rounded-full border border-border p-1" role="radiogroup" aria-label="A man's or a woman's voice">
+                <button type="button" role="radio" aria-checked={man} onClick={() => pickSex(true)} className={seg(man)} data-testid="bio-intro-man">Man's voice</button>
+                <button type="button" role="radio" aria-checked={!man} onClick={() => pickSex(false)} className={seg(!man)} data-testid="bio-intro-woman">Woman's voice</button>
+              </div>
+              <div className="flex gap-2">
+                <select value={voice} onChange={(e) => { setVoice(e.target.value); if (hearing) hear(e.target.value); }} className="h-10 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm" aria-label="Voice" data-testid="bio-intro-voice">
+                  {INTRO_VOICES.filter((v) => v.man === man).map((v) => <option key={v.id} value={v.id}>{v.id}: {v.note}</option>)}
+                </select>
+                <Button type="button" variant="outline" onClick={() => hear(voice)} className="h-10 shrink-0 gap-1.5 rounded-full" data-testid="bio-intro-hear">{hearing === voice ? <><Square className="h-3.5 w-3.5 fill-current" /> Stop</> : <><Play className="h-3.5 w-3.5 fill-current" /> Hear it</>}</Button>
+              </div>
             </>
           )}
           <Button onClick={make} disabled={!d.avatarUrl || st.status === "loading" || (mode === "voice" ? !voiceKey : script.trim().length < 10)} className="w-full gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-intro-make"><Sparkles className="h-4 w-4" /> Make my talking intro</Button>
         </>
       )}
     </Card>
+  );
+}
+
+/**
+ * What the intro bubble says: tap ready-made lines on or off, or write their own. With more
+ * than one, each visit gets one at random; someone who's been before can get their own line.
+ */
+function IntroSays({ says, back, patch }: { says: string[]; back: string; patch: (p: Partial<BioTheme>, now?: boolean) => void }) {
+  const [own, setOwn] = useState("");
+  // Nothing picked means the first ready-made line, so it starts ticked.
+  const base = says.length ? says : [INTRO_SAYS[0]];
+  const all = [...INTRO_SAYS, ...says.filter((l) => !INTRO_SAYS.includes(l))];
+  const flip = (l: string) => {
+    const next = base.includes(l) ? base.filter((x) => x !== l) : [...base, l].slice(0, 6);
+    patch({ introSay: next }, true);
+  };
+  const add = () => { const l = own.replace(/\s+/g, " ").trim().slice(0, 32); if (!l) return; if (!base.includes(l)) patch({ introSay: [...base, l].slice(0, 6) }, true); setOwn(""); };
+  return (
+    <div className="mt-4 space-y-2" data-testid="bio-intro-says">
+      <p className="text-sm font-semibold">What the bubble says</p>
+      <div className="flex flex-wrap gap-1.5">
+        {all.map((l) => {
+          const onNow = base.includes(l);
+          return (
+            <button key={l} type="button" aria-pressed={onNow} onClick={() => flip(l)} className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${onNow ? "border-[#053877] bg-[#053877] text-white" : "border-border text-muted-foreground hover:border-[#053877]/50 hover:text-foreground"}`} data-testid="bio-intro-say">
+              {onNow && <Check className="h-3 w-3" />}{l}
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex gap-2">
+        <Input value={own} onChange={(e) => setOwn(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} maxLength={32} placeholder="Or write your own" className="h-9" data-testid="bio-intro-say-own" />
+        <Button type="button" variant="outline" onClick={add} disabled={!own.trim() || base.length >= 6} className="h-9 shrink-0 rounded-full" data-testid="bio-intro-say-add">Add</Button>
+      </div>
+      <p className="text-[11px] text-muted-foreground">{base.length > 1 ? `Each visit gets one of these ${base.length} at random.` : "Pick more than one and each visit gets one at random."}</p>
+      <label className="block pt-1">
+        <span className="text-sm font-semibold">For someone who's been before</span>
+        <Input value={back} onChange={(e) => patch({ introBack: e.target.value.slice(0, 32) })} maxLength={32} placeholder="Welcome back! 👋" className="mt-1.5 h-9" data-testid="bio-intro-back" />
+        <span className="mt-1 block text-[11px] text-muted-foreground">We know them by their browser. Leave it empty and they get the lines above.</span>
+      </label>
+    </div>
   );
 }
 

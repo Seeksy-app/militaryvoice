@@ -15,7 +15,7 @@ import { readFeed, hostedAsStats } from "./hosting.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
 import { bioPages, bioEvents, bioSubscribers, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
-import { DEFAULT_PODCAST, parseTheme, parseSections, parseSocials, parseBrands, parseFamily, type BioFamily, type BioFamilyPublic, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic, type BioViewMedia, type BioLayout, BRANDS_SECTIONS, FAMILY_SECTIONS } from "../shared/bio.js";
+import { DEFAULT_PODCAST, parseTheme, parseSections, parseSocials, parseBrands, parseFamily, type BioFamily, type BioFamilyPublic, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic, type BioViewMedia, type BioLayout, BRANDS_SECTIONS, FAMILY_SECTIONS, INTRO_VOICES } from "../shared/bio.js";
 import type { PodcastStatsData } from "../shared/schema.js";
 
 /**
@@ -361,12 +361,15 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     avatarSize: pick("avatarSize", ["s", "m", "l"] as const, prev.avatarSize ?? "m"),
     branding: typeof x.branding === "boolean" ? x.branding : prev.branding ?? true,
     hideName: typeof x.hideName === "boolean" ? x.hideName : prev.hideName ?? false,
+    hideBio: typeof x.hideBio === "boolean" ? x.hideBio : prev.hideBio ?? false,
     bgTint: Number.isFinite(Number(x.bgTint)) && x.bgTint !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.bgTint)))) : prev.bgTint ?? 0,
     bgBrightness: Number.isFinite(Number(x.bgBrightness)) && x.bgBrightness !== undefined ? Math.max(-100, Math.min(100, Math.round(Number(x.bgBrightness)))) : prev.bgBrightness ?? 0,
     cutoutY: Number.isFinite(Number(x.cutoutY)) && x.cutoutY !== undefined ? Math.max(-160, Math.min(160, Math.round(Number(x.cutoutY)))) : prev.cutoutY ?? 0,
     socialsFirst: typeof x.socialsFirst === "boolean" ? x.socialsFirst : prev.socialsFirst ?? false,
     living: typeof x.living === "boolean" ? x.living : prev.living ?? false,
     intro: typeof x.intro === "boolean" ? x.intro : prev.intro ?? false,
+    introSay: Array.isArray(x.introSay) ? (x.introSay as unknown[]).map((l) => String(l ?? "").replace(/\s+/g, " ").trim().slice(0, 32)).filter((l, i, all) => l && all.indexOf(l) === i).slice(0, 6) : prev.introSay ?? [],
+    introBack: typeof x.introBack === "string" ? x.introBack.replace(/\s+/g, " ").trim().slice(0, 32) : prev.introBack ?? "",
     introAt: (["top-left", "top-right", "bottom-left", "bottom-right", "bio"] as const).includes(x.introAt as never) ? (x.introAt as BioTheme["introAt"]) : prev.introAt ?? "bottom-left",
     chatAt: (["top-left", "top-right", "bottom-left", "bottom-right", "socials"] as const).includes(x.chatAt as never) ? (x.chatAt as BioTheme["chatAt"]) : prev.chatAt ?? "top-right",
     scene: typeof x.scene === "string" ? httpUrl(x.scene) : prev.scene ?? "",
@@ -622,7 +625,7 @@ export function registerBioPage(app: Express) {
   // The talking intro: their profile photo saying hello, in their own recorded voice or an AI voice
   // (ElevenLabs), made to speak by Kling's avatar model on fal's queue, a few minutes. Up to 45 seconds.
   const INTRO = "fal-ai/kling-video/ai-avatar/v2/standard";
-  const VOICES = ["Brian", "George", "Chris", "Eric", "Sarah", "Jessica", "Laura", "Alice"];
+  const VOICES = INTRO_VOICES.map((v) => v.id);
   const introRuns = new Map<number, number[]>();
   app.post("/api/host/bio/intro", requireHostSession, async (req, res) => {
     const row = await pageFor(emailOf(req));
