@@ -371,6 +371,32 @@ export async function sendListenerReplyEmail(input: { to: string; show: string; 
   }).then((id) => Boolean(id));
 }
 
+/**
+ * A podcaster's guest, invited: who asked them, when, and their own link into
+ * the green room (no account needed). Sent when the podcaster (or the crew)
+ * presses "Email it to them".
+ */
+export async function sendGuestInviteEmail(input: { to: string; guestName: string; hostName: string; show: string; eventName: string; whenLabel: string; link: string; replyTo?: string }): Promise<boolean> {
+  const first = input.guestName.trim().split(/\s+/)[0] || "there";
+  const who = input.hostName || input.show || "Your host";
+  const btn = `<p style="margin:18px 0 6px;"><a href="${input.link}" style="display:inline-block;background:#F0A71F;color:#1a1200;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;">Your link to the green room</a></p>`;
+  const tips = `<ul style="margin:14px 0 0;padding-left:18px;color:#374151;font-size:14px;line-height:1.6;"><li>Open it on a laptop with Chrome or Edge, 10 minutes before.</li><li>Headphones help, and a quiet room.</li><li>Your name and title are filled in; change them if you like.</li></ul>`;
+  return sendRawEmail({
+    to: input.to,
+    ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+    subject: `${who} invited you on ${input.show || "their show"} at ${input.eventName}`,
+    html: emailShell({
+      banner: EMAIL_BANNERS.studio,
+      bannerAlt: "MilitaryVoices.ai studio",
+      eyebrow: "You're a guest",
+      heading: `Hi ${escapeHtml(first)}, you're on ${escapeHtml(input.show || "the show")}`,
+      body: `<p style="margin:0 0 10px;">${escapeHtml(who)} invited you to join them live at <b>${escapeHtml(input.eventName)}</b>.</p>${input.whenLabel ? `<p style="margin:0 0 4px;"><b>When:</b> ${escapeHtml(input.whenLabel)}</p>` : ""}${btn}<p style="margin:0;color:#6b7280;font-size:13px;">It's yours: no account, no password. Please don't share it.</p>${tips}`,
+      footerNote: `Sent because ${escapeHtml(who)} added you as a guest on MilitaryVoices.ai.`,
+    }),
+    text: `Hi ${first},\n\n${who} invited you to join them live on ${input.show || "their show"} at ${input.eventName}.${input.whenLabel ? `\nWhen: ${input.whenLabel}` : ""}\n\nYour link to the green room (no account needed, please don't share it):\n${input.link}\n\nOpen it on a laptop with Chrome or Edge 10 minutes before. Headphones help.\n`,
+  }).then((id) => Boolean(id));
+}
+
 /** Podcast hosting: confirm the owner email that goes in the show's feed (Apple and Spotify send their own codes there). */
 export async function sendPodcastOwnerCodeEmail(input: { to: string; code: string; show: string }): Promise<boolean> {
   const codeBlock = `

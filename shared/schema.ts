@@ -660,6 +660,39 @@ export type CadenceKey = (typeof CADENCE_STEPS)[number]["key"];
  */
 export const COHOST_BLOCK_MINUTES = 60;
 
+/**
+ * A podcaster's guest on their slot: who they are (as read and shown on air),
+ * and their own link into the green room. The link's token is the only way a
+ * guest gets in; it ties them to the booking, so they come on stage with it.
+ */
+export const showGuests = pgTable(
+  "show_guests",
+  {
+    id: serial("id").primaryKey(),
+    signupId: integer("signup_id").notNull(),
+    eventId: integer("event_id").notNull(),
+    /** The podcaster whose guest they are (or the admin who added them for them). */
+    ownerEmail: text("owner_email").notNull().default(""),
+    name: text("name").notNull().default(""),
+    /** Under their name on air: "Founder, Veterans First". */
+    title: text("title").notNull().default(""),
+    /** A few lines the host or the crew can read to introduce them. */
+    intro: text("intro").notNull().default(""),
+    photoUrl: text("photo_url").notNull().default(""),
+    email: text("email").notNull().default(""),
+    token: text("token").notNull(),
+    invitedAt: text("invited_at").notNull().default(""),
+    joinedAt: text("joined_at").notNull().default(""),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull().default(""),
+  },
+  (t) => ({
+    tokenUnique: uniqueIndex("show_guests_token_unique").on(t.token),
+    bySignup: index("show_guests_signup_idx").on(t.signupId),
+  }),
+);
+export type ShowGuestRow = typeof showGuests.$inferSelect;
+
 export const cohostSlots = pgTable(
   "cohost_slots",
   {

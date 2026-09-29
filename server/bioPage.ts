@@ -363,6 +363,7 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     socialsFirst: typeof x.socialsFirst === "boolean" ? x.socialsFirst : prev.socialsFirst ?? false,
     living: typeof x.living === "boolean" ? x.living : prev.living ?? false,
     intro: typeof x.intro === "boolean" ? x.intro : prev.intro ?? false,
+    introAt: (["top-left", "top-right", "bottom-left", "bottom-right", "bio"] as const).includes(x.introAt as never) ? (x.introAt as BioTheme["introAt"]) : prev.introAt ?? "bottom-left",
     chatAt: (["top-left", "top-right", "bottom-left", "bottom-right", "socials"] as const).includes(x.chatAt as never) ? (x.chatAt as BioTheme["chatAt"]) : prev.chatAt ?? "top-right",
     scene: typeof x.scene === "string" ? httpUrl(x.scene) : prev.scene ?? "",
     nameSize: Number.isFinite(Number(x.nameSize)) && x.nameSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.nameSize)))) : prev.nameSize ?? 100,
@@ -826,8 +827,12 @@ export function registerBioPage(app: Express) {
   app.post("/api/host/bio/cutout", requireHostSession, async (req, res) => {
     const row = await pageFor(emailOf(req));
     if (!process.env.FAL_KEY) return res.status(503).json({ message: "Cutout isn't switched on yet." });
-    if (!row.avatarUrl) return res.status(400).json({ message: "Add a profile photo first." });
-    if (row.cutoutUrl && row.cutoutFrom === row.avatarUrl) return res.json({ cutoutUrl: row.cutoutUrl, preview: await publicOf(row) });
+    // The photo the builder is showing (it may be a moment ahead of what's saved): their own photo, or this page's own copy of one.
+    const store = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
+    const asked = typeof req.body?.from === "string" ? req.body.from : "";
+    const photo = asked && (asked === row.avatarUrl || (!!store && asked.startsWith(`${store}/storage/v1/object/public/`) && new RegExp(`/bio/${row.id}-avatar-`).test(asked))) ? asked : row.avatarUrl;
+    if (!photo) return res.status(400).json({ message: "Add a profile photo first." });
+    if (row.cutoutUrl && row.cutoutFrom === photo) return res.json({ cutoutUrl: row.cutoutUrl, cutoutFrom: photo, preview: await publicOf(row) });
     const hits = (cutting.get(row.id) ?? []).filter((t) => Date.now() - t < 3600_000);
     if (hits.length >= 10) return res.status(429).json({ message: "That's a lot of cutouts. Try again in an hour." });
     cutting.set(row.id, [...hits, Date.now()]);
@@ -835,7 +840,7 @@ export function registerBioPage(app: Express) {
       const r = await fetch("https://fal.run/fal-ai/birefnet/v2", {
         method: "POST",
         headers: { Authorization: `Key ${process.env.FAL_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ image_url: row.avatarUrl, model: "Portrait", output_format: "png", operating_resolution: "1024x1024" }),
+        body: JSON.stringify({ image_url: photo, model: "Portrait", output_format: "png", operating_resolution: "1024x1024" }),
         signal: AbortSignal.timeout(60_000),
       });
       const j = (await r.json().catch(() => ({}))) as { image?: { url?: string } };

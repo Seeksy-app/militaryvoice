@@ -67,6 +67,11 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   const noName = t.hideName ?? false;
   const chatAt = t.chatAt ?? "top-right";
   const chatTop = chatAt === "top-left" || chatAt === "top-right" || chatAt === "socials";
+  // The talking intro where they put it, moved across if the chat has that corner.
+  const introWant = t.introAt ?? "bottom-left";
+  const introAt = data.askEnabled && introWant === chatAt ? (introWant.endsWith("left") ? introWant.replace("left", "right") : introWant.replace("right", "left")) as typeof introWant : introWant;
+  const showIntro = Boolean(t.intro && data.introUrl);
+  const intro = (spot: "top" | "bottom" | "bio") => showIntro && !askEp && (spot === "bio" ? introAt === "bio" : introAt.startsWith(spot)) && <IntroBubble src={data.introUrl!} name={data.displayName} accent={accent} at={introAt} preview={preview} onPlay={() => ev("play", "Talking intro")} />;
 
   const share = async (title: string, id: string) => {
     const url = `${shareBase}#ep-${id}`;
@@ -85,6 +90,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>@{data.handle}{data.branch ? ` · ${data.branch}` : ""}</p>
       {t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} onChat={data.askEnabled && chatAt === "socials" ? () => setChat(true) : undefined} chatColor={accent} />}
       {data.bio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{styled(data.bio)}</p>}
+      {intro("bio")}
       {!t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} onChat={data.askEnabled && chatAt === "socials" ? () => setChat(true) : undefined} chatColor={accent} />}
     </>
   );
@@ -92,6 +98,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   return (
     <div style={{ background: bg, color: ink, fontFamily: font, minHeight: "100%" }} className="relative pb-10" data-testid="bio-page">
       {/* The chat at the top of the page (a top corner, or opened from their social icons) rides the top of the screen. */}
+      {intro("top")}
       {data.askEnabled && chatTop && <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} welcome={data.welcome} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat} onAsk={onAsk} onLoad={onLoadMessages} at={chatAt} />}
       <PageTop t={t} avatar={data.avatarUrl} hero={data.heroUrl} cutoutUrl={data.cutoutUrl} living={t.living ? data.livingUrl : ""} name={noName ? "" : data.displayName || "Your name"} handle={data.handle} latest={data.podcast?.episodes[0]?.title}>{who}</PageTop>
 
@@ -103,7 +110,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       </div>
       {/* Last on the page so they stick to the foot of the screen: the chat bubble, and the sheet for asking about an episode. */}
       {(chat || askEp) && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20 ${askEp ? "bg-black/40" : ""}`} onClick={() => { setChat(false); setAskEp(null); }} aria-hidden />}
-      {t.intro && data.introUrl && !askEp && <IntroBubble src={data.introUrl} name={data.displayName} accent={accent} right={data.askEnabled && chatAt === "bottom-left"} preview={preview} onPlay={() => ev("play", "Talking intro")} />}
+      {intro("bottom")}
       {data.askEnabled && !askEp && !chatTop && <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} welcome={data.welcome} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat} onAsk={onAsk} onLoad={onLoadMessages} at={chatAt} />}
       {askEp && <AskSheet key={askEp.id} ep={askEp} name={data.displayName} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} onAskAi={onAskAi} onClose={() => setAskEp(null)} onMessage={data.askEnabled ? () => { setAskEp(null); setChat(true); } : undefined} />}
     </div>
@@ -455,25 +462,42 @@ function Section({ s, btn, ink, sub, card, line, accent, preview, ev }: { s: Bio
  * Their talking intro: a round bubble in the bottom left with them moving in it
  * (silent). Tap it and it opens and they say hello, with sound.
  */
-function IntroBubble({ src, name, accent, preview, onPlay, right = false }: { src: string; name: string; accent: string; preview: boolean; onPlay: () => void; right?: boolean }) {
+function IntroBubble({ src, name, accent, preview, onPlay, at = "bottom-left" }: { src: string; name: string; accent: string; preview: boolean; onPlay: () => void; at?: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "bio" }) {
   const [open, setOpen] = useState(false);
   const [seen, setSeen] = useState(false);
-  const full = useRef<HTMLVideoElement | null>(null);
   const first = (name || "").split(/\s+/)[0];
+  const top = at.startsWith("top");
+  const right = at.endsWith("right");
+  const play = () => { setOpen(true); setSeen(true); if (!preview) onPlay(); };
+  const player = (cls: string) => (
+    <div className={`overflow-hidden rounded-3xl bg-black shadow-2xl ring-2 ring-white/70 ${cls}`} role="dialog" aria-label={`${first || "Their"} hello`} data-testid="bio-intro-player">
+      <video src={src} autoPlay playsInline controls className="aspect-square w-full object-cover" onEnded={() => setOpen(false)} />
+      <button type="button" onClick={() => setOpen(false)} className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white" aria-label="Close"><X className="h-4 w-4" /></button>
+    </div>
+  );
+  const face = (size: string) => (
+    <span className={`relative block ${size} overflow-hidden rounded-full shadow-xl ring-[3px] transition-transform group-hover:scale-105`} style={{ ["--tw-ring-color" as string]: accent }}>
+      <video src={src} autoPlay muted loop playsInline preload="metadata" className="h-full w-full object-cover" />
+      <span className="absolute inset-0 flex items-center justify-center bg-black/15"><Play className="h-5 w-5 translate-x-px fill-white text-white drop-shadow" /></span>
+    </span>
+  );
+  // Under their bio: in the page, a face and a line to press.
+  if (at === "bio") return (
+    <div className="mt-4 flex justify-center">
+      {open ? <div className="relative w-full max-w-[18rem]">{player("relative")}</div> : (
+        <button type="button" onClick={play} className="group inline-flex items-center gap-2.5 rounded-full py-1 pl-1 pr-4 text-sm font-bold shadow-lg" style={{ background: accent, color: onColor(accent) }} aria-label={`Play ${first || "their"} hello`} data-testid="bio-intro">
+          {face("h-10 w-10")} Hear me say hi 👋
+        </button>
+      )}
+    </div>
+  );
+  // In a corner: rides the top or the foot of the screen.
   return (
-    <div className="sticky bottom-0 z-30 h-0">
+    <div className={`sticky ${top ? "top-0" : "bottom-0"} z-30 h-0`}>
       <div className="relative mx-auto h-0 max-w-[560px]">
-        {open ? (
-          <div className={`absolute bottom-4 ${right ? "right-3" : "left-3"} w-[min(17rem,calc(100%-5.5rem))] overflow-hidden rounded-3xl bg-black shadow-2xl ring-2 ring-white/70`} role="dialog" aria-label={`${first || "Their"} hello`} data-testid="bio-intro-player">
-            <video ref={full} src={src} autoPlay playsInline controls className="aspect-square w-full object-cover" onEnded={() => setOpen(false)} />
-            <button type="button" onClick={() => setOpen(false)} className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-white" aria-label="Close"><X className="h-4 w-4" /></button>
-          </div>
-        ) : (
-          <button type="button" onClick={() => { setOpen(true); setSeen(true); if (!preview) onPlay(); }} className={`group absolute bottom-4 flex items-center gap-2 ${right ? "right-4 flex-row-reverse" : "left-4"}`} aria-label={`Play ${first || "their"} hello`} data-testid="bio-intro">
-            <span className="relative block h-16 w-16 overflow-hidden rounded-full shadow-xl ring-[3px] transition-transform group-hover:scale-105" style={{ ["--tw-ring-color" as string]: accent }}>
-              <video src={src} autoPlay muted loop playsInline preload="metadata" className="h-full w-full object-cover" />
-              <span className="absolute inset-0 flex items-center justify-center bg-black/15"><Play className="h-5 w-5 translate-x-px fill-white text-white drop-shadow" /></span>
-            </span>
+        {open ? player(`absolute ${top ? "top-3" : "bottom-4"} ${right ? "right-3" : "left-3"} w-[min(17rem,calc(100%-5.5rem))]`) : (
+          <button type="button" onClick={play} className={`group absolute flex items-center gap-2 ${top ? "top-3" : "bottom-4"} ${right ? "right-4 flex-row-reverse" : "left-4"}`} aria-label={`Play ${first || "their"} hello`} data-testid="bio-intro">
+            {face("h-16 w-16")}
             {!seen && <span className="rounded-full px-3 py-1.5 text-xs font-bold shadow-lg" style={{ background: accent, color: onColor(accent) }}>Say hi 👋</span>}
           </button>
         )}

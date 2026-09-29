@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { GuestsEditor } from "@/components/GuestsEditor";
 import { useSearch, useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -1329,6 +1330,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     {/* The YouTube row moved out. Whether their slot also goes
                         to their own channel is an Integrations question, and
                         having it here too meant one setting with two homes. */}
+                    {/* Their guests: each with their own link into the green room. */}
+                    {entry.signupId != null && (entry.show?.showFormat ?? profile.showFormat) !== "prerecorded" && (
+                      <section id="your-guests" className="rounded-2xl border border-border bg-card p-5 shadow-sm"><GuestsEditor signupId={entry.signupId} /></section>
+                    )}
                     <ShowMaterials profile={profile} showFormat={entry.show?.showFormat} interviewNeed={entry.show?.interviewNeed} />
                   </div>
                 )}

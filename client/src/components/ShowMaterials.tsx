@@ -659,22 +659,11 @@ export function ShowMaterials({
           )}
 
           {!isPrerecorded && (
-          <div>
-            <Label htmlFor="guests" className="text-sm font-semibold text-foreground">
-              Who's appearing with you <span className="font-normal text-muted-foreground">— leave blank if it's just you</span>
-            </Label>
-            <Textarea
-              id="guests"
-              rows={3}
-              className="mt-1.5"
-              placeholder="Jane Doe — Founder, Veterans First"
-              value={guests}
-              onChange={(e) => setGuests(e.target.value)}
-              data-testid="input-guests"
-            />
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              Full names and titles, one per line, exactly as you want them read on air.
-            </p>
+          <div className="rounded-xl bg-muted/40 px-3 py-2.5 text-sm">
+            <span className="font-semibold text-foreground">Bringing a guest?</span>{" "}
+            <button type="button" onClick={() => document.getElementById("your-guests")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="font-semibold text-primary hover:underline">Add them in Your guests</button>
+            <span className="text-muted-foreground">: each gets their own link into the green room.</span>
+            {guests.trim() && <p className="mt-1 whitespace-pre-line text-xs text-muted-foreground">You wrote before: {guests}</p>}
           </div>
           )}
 

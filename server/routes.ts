@@ -130,6 +130,7 @@ import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerHosting, claimEpisodeAudio, claimEpisodeStill } from "./hosting.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze } from "./bioPage.js";
+import { registerGuests, guestByToken, markGuestJoined } from "./guests.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
 import { episodeCredits, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
@@ -3549,6 +3550,13 @@ export function registerRoutes(app: Express): void {
     return { event, studio: await storage.getOrCreateStudio(event.id) };
   }
 
+  /** A guest's link opens their host's event's green room, whichever event the page would pick by itself. */
+  async function studioForGuest(guest: { eventId: number } | null, found: Awaited<ReturnType<typeof studioForSlug>>) {
+    if (!guest || (found && found.event.id === guest.eventId)) return found;
+    const ev = await storage.getEventById(guest.eventId);
+    return ev ? { event: ev, studio: await storage.getOrCreateStudio(ev.id) } : found;
+  }
+
   /** The studio an admin request is talking about, defaulting to the event's own. */
   async function adminStudio(req: Request) {
     const eventId = Number(req.query.eventId) || Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
@@ -3570,14 +3578,14 @@ export function registerRoutes(app: Express): void {
   }
 
   /** What a speaker sees: their own state plus whether the room is live. */
-  async function speakerState(event: EventRow, studio: StudioRow, clientKey: string, req?: Request) {
+  async function speakerState(event: EventRow, studio: StudioRow, clientKey: string, req?: Request, guestOk = false) {
     // Same rule the join endpoint enforces, answered early so the page can
     // explain rather than let someone fill in a form that will be refused.
     let mayJoin = false;
     let crew = false;
     if (req) {
       crew = await isCrew(req, event.id);
-      if (crew) mayJoin = true;
+      if (crew || guestOk) mayJoin = true;
       else {
         const host = (getSessionEmail(req) ?? "").trim().toLowerCase();
         mayJoin =
@@ -3677,13 +3685,14 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/studio/state", async (req, res) => {
     noStore(res);
-    const found = await studioForSlug(typeof req.query.slug === "string" ? req.query.slug : undefined, numParam(req.query.studioId), req);
+    const guest = typeof req.query.g === "string" ? await guestByToken(req.query.g) : null;
+    const found = await studioForGuest(guest, await studioForSlug(typeof req.query.slug === "string" ? req.query.slug : undefined, numParam(req.query.studioId), req));
     if (!found) {
       res.status(404).json({ message: "No event" });
       return;
     }
     const clientKey = typeof req.query.clientKey === "string" ? req.query.clientKey : "";
-    res.json(await speakerState(found.event, found.studio, clientKey, req));
+    res.json(await speakerState(found.event, found.studio, clientKey, req, Boolean(guest && guest.eventId === found.event.id)));
   });
 
   /**
@@ -3790,11 +3799,14 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
-    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId), req);
+    // A podcaster's guest comes in on their own link (no account): it names the booking they're on.
+    const guestRaw = typeof req.body?.guestToken === "string" ? await guestByToken(req.body.guestToken) : null;
+    const found = await studioForGuest(guestRaw, await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId), req));
     if (!found) {
       res.status(404).json({ message: "No event" });
       return;
     }
+    const guest = guestRaw && guestRaw.eventId === found.event.id ? guestRaw : null;
     // A signed-in podcaster is recognised and gets their show name automatically.
     const hostEmail = getSessionEmail(req);
     const profile = hostEmail ? await storage.getProfileByEmail(hostEmail) : undefined;
@@ -3825,7 +3837,7 @@ export function registerRoutes(app: Express): void {
       ((await storage.listCohostSlots(found.event.id)).some((c) => c.email.trim().toLowerCase() === me) ||
         // The second host on somebody's booking — Jane on the opening.
         (await storage.listSignups(found.event.id)).some((sg) => sg.status !== "cancelled" && (sg.coHostEmail ?? "").trim().toLowerCase() === me));
-    if (!crew && !onTheAgenda && !coHost) {
+    if (!crew && !onTheAgenda && !coHost && !guest) {
       res.status(403).json({
         message: hostEmail
           ? "The green room is for podcasters on this event's lineup. Take a time on the agenda and it opens for you."
@@ -3834,13 +3846,21 @@ export function registerRoutes(app: Express): void {
       return;
     }
 
-    const row = await storage.upsertStudioParticipant(found.studio.id, parsed.data.clientKey, {
+    // A guest is tied to their host's booking (so they come on stage with it), under the name and title the host gave.
+    const row = await storage.upsertStudioParticipant(found.studio.id, parsed.data.clientKey, guest && !crew && !onTheAgenda && !coHost ? {
+      signupId: guest.signupId,
+      displayName: parsed.data.displayName || guest.name,
+      displayTitle: parsed.data.displayTitle || guest.title,
+      email: guest.email || parsed.data.email,
+      role: "Speaker",
+    } : {
       ...(parsed.data.signupId ? { signupId: parsed.data.signupId } : {}),
       displayName: parsed.data.displayName || profile?.hostName || "",
       ...(parsed.data.displayTitle !== undefined ? { displayTitle: parsed.data.displayTitle } : {}),
       email: hostEmail || parsed.data.email,
       role: "Speaker",
     });
+    if (guest) void markGuestJoined(guest.id).catch(() => {});
     res.status(201).json(row);
   });
 
@@ -5525,6 +5545,7 @@ export function registerRoutes(app: Express): void {
   registerPodcastStats(app);
   registerHosting(app, requireAgent);
   registerBioAgent(app, requireAgent);
+  registerGuests(app, requireAdmin);
   registerBioPage(app);
   registerAskShow(app, requireAgent);
 

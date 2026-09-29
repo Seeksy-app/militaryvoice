@@ -407,10 +407,21 @@ export default function Studio({ slug }: { slug?: string }) {
   const { toast } = useToast();
   // A link can name which room to walk into; without one you land in the
   // event's own studio, which is what every link issued so far means.
-  const studioId = useMemo(() => {
+  const urlStudioId = useMemo(() => {
     const v = Number(new URLSearchParams(window.location.search).get("studioId"));
     return Number.isFinite(v) && v > 0 ? v : undefined;
   }, []);
+  // A podcaster's guest comes in on their own link (?g=): no account; it names their host's booking and studio,
+  // and brings their name and title, as the host gave them.
+  const guestToken = useMemo(() => new URLSearchParams(window.location.search).get("g") ?? "", []);
+  const { data: guest } = useQuery<{ name: string; title: string; photoUrl: string; host: { name: string; photoUrl: string }; show: string; eventName: string; studioId: number | null }>({
+    queryKey: ["/api/public/guest", guestToken],
+    queryFn: async () => (await apiRequest("GET", `/api/public/guest/${encodeURIComponent(guestToken)}`)).json(),
+    enabled: Boolean(guestToken),
+    staleTime: Infinity,
+    retry: false,
+  });
+  const studioId = urlStudioId ?? guest?.studioId ?? undefined;
   // ?s=<signup id> comes from the podcaster's own emails, and lets the
   // producer's scenes find them by booking rather than by name.
   const signupId = useMemo(() => {
@@ -436,6 +447,12 @@ export default function Studio({ slug }: { slug?: string }) {
   }, [key, slug, studioId]);
   const [name, setName] = useState("");
   const [title, setTitle] = useState("");
+  // A guest's name and title, filled in from their host (theirs to change).
+  useEffect(() => {
+    if (!guest) return;
+    if (guest.name) setName((n) => n || guest.name);
+    if (guest.title) setTitle((t) => t || guest.title);
+  }, [guest]);
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
   const [camOn, setCamOn] = useState(false);
@@ -505,7 +522,7 @@ export default function Studio({ slug }: { slug?: string }) {
   const { data: state, refetch: refetchState } = useQuery<StudioState>({
     queryKey: stateKey,
     queryFn: async () => {
-      const q = new URLSearchParams({ clientKey: key, ...(slug ? { slug } : {}), ...(studioId ? { studioId: String(studioId) } : {}) });
+      const q = new URLSearchParams({ clientKey: key, ...(slug ? { slug } : {}), ...(studioId ? { studioId: String(studioId) } : {}), ...(guestToken ? { g: guestToken } : {}) });
       const res = await apiRequest("GET", `/api/studio/state?${q}`);
       return res.json();
     },
@@ -640,7 +657,7 @@ export default function Studio({ slug }: { slug?: string }) {
   async function join() {
     setJoining(true);
     try {
-      await apiRequest("POST", "/api/studio/join", { clientKey: key, displayName: name.trim(), displayTitle: title.trim(), email: "", slug, studioId, signupId });
+      await apiRequest("POST", "/api/studio/join", { clientKey: key, displayName: name.trim(), displayTitle: title.trim(), email: "", slug, studioId, signupId, ...(guestToken ? { guestToken } : {}) });
       setJoined(true);
       if (!streamRef.current) void startMedia();
     } catch (err) {
@@ -865,7 +882,7 @@ export default function Studio({ slug }: { slug?: string }) {
         : "";
     return (
       <StudioJoin
-        inviter={host ? { name: host.name, photoUrl: host.photoUrl } : null}
+        inviter={guest?.host?.name ? { name: guest.host.name, photoUrl: guest.host.photoUrl } : host ? { name: host.name, photoUrl: host.photoUrl } : null}
         eventName={state?.eventName ?? ""}
         whenLabel={whenLabel}
         stream={stream}
@@ -1014,11 +1031,20 @@ export default function Studio({ slug }: { slug?: string }) {
              refuses either way; this is only so nobody is surprised by it. */
           <div className="mx-auto mt-10 max-w-md rounded-2xl border border-white/15 bg-white/[0.06] p-6 text-center backdrop-blur">
             <Users className="mx-auto h-8 w-8 text-white/35" />
-            <h2 className="mt-3 text-lg font-semibold">The green room is for the lineup</h2>
-            <p className="mt-2 text-sm text-white/70">
-              It carries live microphones and every other speaker's camera, so it's open to podcasters with a time on
-              this event — and the crew. Take a slot and it opens for you.
-            </p>
+            {guestToken ? (
+              <>
+                <h2 className="mt-3 text-lg font-semibold">This guest link isn't working</h2>
+                <p className="mt-2 text-sm text-white/70">It may have been replaced, or the show was moved. Ask the host who invited you for a fresh link.</p>
+              </>
+            ) : (
+              <>
+                <h2 className="mt-3 text-lg font-semibold">The green room is for the lineup</h2>
+                <p className="mt-2 text-sm text-white/70">
+                  It carries live microphones and every other speaker's camera, so it's open to podcasters with a time on
+                  this event — and the crew. Take a slot and it opens for you.
+                </p>
+              </>
+            )}
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               <Link href="/host/dashboard">
                 <Button className="rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]">

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { GuestsEditor } from "@/components/GuestsEditor";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
 import { LogoLockup } from "@/components/Logo";
@@ -991,6 +992,13 @@ function SignupsCard({ eventId }: { eventId: number }) {
                                   </div>
                                 ))}
                               </dl>
+                            )}
+                            {/* Their guests, with links: add one for them, email it, or copy it. */}
+                            {s.showFormat !== "prerecorded" && s.status !== "cancelled" && (
+                              <details className="mt-2">
+                                <summary className="cursor-pointer text-xs font-semibold text-primary">Guests and their links</summary>
+                                <div className="mt-2"><GuestsEditor signupId={s.id} admin compact /></div>
+                              </details>
                             )}
                           </div>
                         </div>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { GuestsList } from "@/components/GuestsEditor";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -698,6 +699,7 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
                       </div>
                     )}
 
+                    {s && s.showFormat !== "prerecorded" && <div className="mt-2"><GuestsList signupId={s.id} /></div>}
                     {s && (s.guests || s.interviewQuestions || s.promoNotes || s.needsInterviewer) && (
                       <details className="mt-2">
                         <summary className="cursor-pointer text-[12px] font-medium text-primary">Show details from the podcaster</summary>

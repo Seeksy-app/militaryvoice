@@ -35,6 +35,8 @@ export interface BioTheme {
   podcast: BioPodcastOptions;
   /** The link buttons' colour ("" = the theme colour). */
   linkColor: string;
+  /** Where the talking intro sits: a corner, or under their bio. */
+  introAt?: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "bio";
   /** Where the chat button sits: a corner, or in with their social icons. */
   chatAt?: BioChatAt;
   /** Their talking intro shows as a bubble on the page (tap to hear them say hello). */

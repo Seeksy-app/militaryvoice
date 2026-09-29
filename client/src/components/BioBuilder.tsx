@@ -214,9 +214,12 @@ export function BioBuilder() {
     setCutting(true);
     void (async () => {
       try {
-        const r = await again(() => apiRequest("POST", "/api/host/bio/cutout", {}));
-        const j = (await r.json()) as { cutoutUrl: string; preview: BioPublic };
-        setDraft((d) => (d ? { ...d, cutoutUrl: j.cutoutUrl, cutoutFrom: d.avatarUrl } : d));
+        // Save the photo first, then cut out that very photo (not whatever the server had a moment ago).
+        const from = draft.avatarUrl;
+        await flush();
+        const r = await again(() => apiRequest("POST", "/api/host/bio/cutout", { from }));
+        const j = (await r.json()) as { cutoutUrl: string; cutoutFrom?: string; preview: BioPublic };
+        setDraft((d) => (d ? { ...d, cutoutUrl: j.cutoutUrl, cutoutFrom: j.cutoutFrom ?? from } : d));
         setCutError("");
         setPreview(j.preview);
       } catch (e) {
@@ -335,7 +338,7 @@ export function BioBuilder() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
         <div className="min-w-0">
-          {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} intro={<IntroCard d={draft} st={intro} start={(b) => void startIntro(b)} reset={resetIntro} on={draft.theme.intro ?? false} setOn={(v) => change({ theme: { ...draft.theme, intro: v } }, true)} />} />}
+          {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} intro={<IntroCard d={draft} st={intro} start={(b) => void startIntro(b)} reset={resetIntro} on={draft.theme.intro ?? false} setOn={(v) => change({ theme: { ...draft.theme, intro: v } }, true)} at={draft.theme.introAt ?? "bottom-left"} setAt={(v) => change({ theme: { ...draft.theme, introAt: v } }, true)} />} />}
           {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} living={living} startLiving={startLiving} />}
           {tab === "content" && <ContentTab d={draft} change={change} />}
           {tab === "social" && <SocialTab d={draft} change={change} />}
@@ -765,10 +768,6 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear, onFixed }: 
   // Fix-up: a sharper, cleaner copy made on fal, shown next to theirs to choose.
   const [fixing, setFixing] = useState(false);
   const [fixed, setFixed] = useState("");
-  const [styling, setStyling] = useState(false);
-  // Their own photo, kept in this browser when they pick a style, so styles always start from it and they can go back.
-  const origKey = `mv_bio_orig_${kind}`;
-  const original = (() => { try { return localStorage.getItem(origKey) || ""; } catch { return ""; } })();
   const styled = /-styled-/.test(url);
   const fixUp = async () => {
     setFixing(true);
@@ -808,14 +807,12 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear, onFixed }: 
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             {/-fixed-/.test(url) ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><Check className="h-3.5 w-3.5" /> Fixed up</span>
               : !styled && <button type="button" onClick={() => void fixUp()} disabled={fixing} className="inline-flex items-center gap-1 text-xs font-semibold text-[#b36b00] hover:underline disabled:opacity-70 dark:text-[#F0A71F]" data-testid={`bio-fixup-${kind}`}>{fixing ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sharpening…</> : <><Sparkles className="h-3.5 w-3.5" /> Fix up</>}</button>}
-            <button type="button" onClick={() => setStyling(true)} className="inline-flex items-center gap-1 text-xs font-semibold text-[#6d28d9] hover:underline dark:text-violet-300" data-testid={`bio-styles-${kind}`}><Palette className="h-3.5 w-3.5" /> Styles</button>
-            {styled && original && <button type="button" onClick={() => { onFixed(original); try { localStorage.removeItem(origKey); } catch { /* fine */ } }} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Back to my original</button>}
+            {styled && kind === "avatar" && <span className="text-xs text-muted-foreground">Styled: change it in Design</span>}
           </span>
           <button type="button" onClick={onClear} className="text-xs text-muted-foreground hover:text-foreground">Remove</button>
         </div>
       )}
       {note && <p className="mt-1 text-xs text-muted-foreground">{note}</p>}
-      {styling && <StylePicker kind={kind} src={styled && original ? original : url} round={round} onClose={() => setStyling(false)} onUse={(u) => { try { if (!styled) localStorage.setItem(origKey, url); } catch { /* fine */ } onFixed(u); setStyling(false); }} />}
       {fixed && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={() => setFixed("")} role="dialog" aria-label="Your photo, fixed up" data-testid="bio-fixup-compare">
           <div className="w-full max-w-2xl rounded-3xl bg-card p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -836,6 +833,34 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear, onFixed }: 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Their photo's style, in Design: the look it's drawn in (their own photo, or a
+ * comic, a painting…). Styles always start from their own photo, kept in this
+ * browser when they first pick one, so they can go back to it.
+ */
+function PhotoStyle({ d, change }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void }) {
+  const [open, setOpen] = useState(false);
+  const url = d.avatarUrl;
+  const origKey = "mv_bio_orig_avatar";
+  const original = (() => { try { return localStorage.getItem(origKey) || ""; } catch { return ""; } })();
+  const styled = /-styled-([a-z]+)-/.exec(url)?.[1];
+  const label = styled ? STYLE_PICKS.find(([k]) => k === styled)?.[1] ?? "A style" : "Your photo";
+  if (!url) return null;
+  return (
+    <div className="mt-3 flex items-center gap-3 rounded-xl bg-muted/40 p-3" data-testid="bio-photo-style">
+      <img src={url} alt="" className="h-14 w-14 shrink-0 rounded-full object-cover" />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold">Photo style <span className="font-normal text-muted-foreground">{label}</span></p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1 text-xs font-semibold text-[#6d28d9] hover:underline dark:text-violet-300" data-testid="bio-styles-avatar"><Palette className="h-3.5 w-3.5" /> {styled ? "Try another style" : "Try a style: comic, painting, 3D…"}</button>
+          {styled && original && <button type="button" onClick={() => { change({ avatarUrl: original }, true); try { localStorage.removeItem(origKey); } catch { /* fine */ } }} className="text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="bio-style-original">Back to my original</button>}
+        </div>
+      </div>
+      {open && <StylePicker kind="avatar" src={styled && original ? original : url} round onClose={() => setOpen(false)} onUse={(u) => { try { if (!styled) localStorage.setItem(origKey, url); } catch { /* fine */ } change({ avatarUrl: u }, true); setOpen(false); }} />}
     </div>
   );
 }
@@ -997,6 +1022,7 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
               {((t.nameSize ?? 100) !== 100 || (t.cutoutY ?? 0) !== 0 || (t.cutoutSize ?? 100) !== 100) && <button type="button" onClick={() => set({ nameSize: 100, cutoutY: 0, cutoutSize: 100 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
             </div>
           )}
+          <PhotoStyle d={d} change={change} />
           {CUTOUT_LAYOUTS.includes(t.layout) && t.layout !== "sticker" && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <ScenePicker scene={t.scene ?? ""} onPick={(scene) => set({ scene })} />}
           {(t.layout === "hero" || t.layout === "blend" || (t.layout === "portrait" && !d.heroUrl)) && hasPhoto && <LivingPhoto on={t.living ?? false} setOn={(v) => set({ living: v })} st={living} start={startLiving} />}
           {cutError && CUTOUT_LAYOUTS.includes(t.layout) && <p className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{cutError}</p>}
@@ -1799,7 +1825,21 @@ function useFalJob(path: string, setPreview: (p: BioPublic) => void, onDone: () 
  * voice, or type it and pick an AI voice; made in a few minutes, then on or off.
  */
 const INTRO_VOICES = [["Brian", "Brian", "deep, steady"], ["George", "George", "warm, British"], ["Chris", "Chris", "easy-going"], ["Eric", "Eric", "friendly"], ["Sarah", "Sarah", "soft, calm"], ["Jessica", "Jessica", "bright"], ["Laura", "Laura", "upbeat"], ["Alice", "Alice", "clear, British"]] as const;
-function IntroCard({ d, st, start, reset, on, setOn }: { d: Page; st: JobState; start: (b: Record<string, unknown>) => void; reset: () => void; on: boolean; setOn: (v: boolean) => void }) {
+/** A spot on the page, drawn as a little page with a dot where it goes. */
+function SpotTile({ v, label, on, onPick, testid }: { v: string; label: string; on: boolean; onPick: () => void; testid: string }) {
+  return (
+    <button type="button" role="radio" aria-checked={on} onClick={onPick} className={`flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 text-[11px] font-semibold transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.05] dark:border-[#8fb5e8]" : "border-border text-muted-foreground hover:border-[#053877]/40"}`} data-testid={testid}>
+      <span className="relative block h-10 w-8 rounded-md border border-border bg-muted/50">
+        {v === "socials" || v === "bio"
+          ? <span className="absolute inset-x-0 top-4 flex justify-center gap-0.5">{v === "bio" ? <span className="h-1 w-5 rounded bg-muted-foreground/40" /> : [0, 1, 2].map((i) => <span key={i} className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />)}<span className="h-1.5 w-1.5 rounded-full bg-[#F0A71F]" /></span>
+          : <span className={`absolute h-2.5 w-2.5 rounded-full bg-[#F0A71F] ${v.startsWith("top") ? "top-1" : "bottom-1"} ${v.endsWith("left") ? "left-1" : "right-1"}`} />}
+      </span>
+      {label}
+    </button>
+  );
+}
+
+function IntroCard({ d, st, start, reset, on, setOn, at, setAt }: { d: Page; st: JobState; start: (b: Record<string, unknown>) => void; reset: () => void; on: boolean; setOn: (v: boolean) => void; at: string; setAt: (v: NonNullable<BioTheme["introAt"]>) => void }) {
   const [mode, setMode] = useState<"voice" | "ai">("voice");
   const [voiceKey, setVoiceKey] = useState("");
   const first = (d.displayName || "").split(/\s+/)[0];
@@ -1817,7 +1857,18 @@ function IntroCard({ d, st, start, reset, on, setOn }: { d: Page; st: JobState; 
             <button type="button" onClick={() => { setVoiceKey(""); reset(); }} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground" data-testid="bio-intro-again">Make a new one</button>
           </div>
         </div>
-      ) : st.status === "running" ? (
+      ) : null}
+      {st.status === "done" && st.url && on ? (
+        <div>
+          <p className="mb-1.5 text-sm font-semibold">Where it goes</p>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Where your talking intro goes">
+            {([["top-left", "Top left"], ["top-right", "Top right"], ["bio", "Under my bio"], ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"]] as const).map(([v, l]) => (
+              <SpotTile key={v} v={v} label={l} on={at === v} onPick={() => setAt(v)} testid={`bio-intro-at-${v}`} />
+            ))}
+          </div>
+          {d.askEnabled && at === (d.theme.chatAt ?? "top-right") && <p className="mt-1.5 text-[11px] text-muted-foreground">Your chat button is there, so it moves to the other side.</p>}
+        </div>
+      ) : st.status === "done" && st.url ? null : st.status === "running" ? (
         <p className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="bio-intro-running"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Making your photo talk. A few minutes; keep working, even on another tab.</p>
       ) : (
         <>
