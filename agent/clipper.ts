@@ -1704,15 +1704,17 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
         labels.push(`[mu${k}]`);
         at++;
       }
-      graph.push(`[${cur}a]${labels.join("")}amix=inputs=${labels.length + 1}:duration=first:normalize=0[a]`, `[${cur}v]null[v]`);
+      graph.push(`[${cur}a]${labels.join("")}amix=inputs=${labels.length + 1}:duration=first:normalize=0[a]`, `[${cur}v]format=yuv420p[v]`);
       console.log(`${tag}: music under ${music.length} part${music.length === 1 ? "" : "s"}`);
     } else {
-      graph.push(`[${cur}v]null[v]`, `[${cur}a]anull[a]`);
+      // The crossfades can hand back 4:4:4 video, which Safari won't play at all and other browsers
+      // stutter on: always finish in the ordinary 4:2:0.
+      graph.push(`[${cur}v]format=yuv420p[v]`, `[${cur}a]anull[a]`);
     }
     const script = path.join(dir, "graph.txt");
     await fs.writeFile(script, graph.join(";"));
     const out = path.join(dir, `${job.recordingId}-edited.mp4`);
-    await run("ffmpeg", [...args, "-filter_complex_script", script, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", process.env.CLEAN_PRESET || "superfast", "-crf", "23", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out]);
+    await run("ffmpeg", [...args, "-filter_complex_script", script, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", process.env.CLEAN_PRESET || "superfast", "-crf", "23", "-pix_fmt", "yuv420p", "-profile:v", "high", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out]);
     const videoKey = await uploadBig(out, "video/mp4");
     await api("POST", `/api/agent/episode-edits/${job.recordingId}/done`, { videoKey, durationSec: Math.round(total) });
     console.log(`${tag}: done`);
