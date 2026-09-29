@@ -305,12 +305,10 @@ function PodcastCard({ p, onAsk, opts, style, full, fallbackArt, accent, ink, su
   return (
     // Full: edge to edge on the page, the latest's picture the full width. Card: in a box with a margin.
     <section className={`text-left ${full ? "-mx-4" : "overflow-hidden rounded-3xl"}`} style={full ? {} : { background: card, border: `1px solid ${line}` }} data-testid="bio-podcast">
-      <div className="flex items-center gap-3 p-4 pb-3">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-base font-bold">{opts.heading.trim() || p.title}</p>
-          <p className="text-xs" style={{ color: sub }}>{p.episodeCount} episode{p.episodeCount === 1 ? "" : "s"}</p>
-        </div>
-      </div>
+      {/* No title or count on top (it's their page, and room is short): only a heading they wrote. */}
+      {opts.heading.trim()
+        ? <p className="truncate px-4 pb-1 pt-3 text-xs font-bold uppercase tracking-[0.12em]" style={{ color: sub }}>{opts.heading.trim()}</p>
+        : <div className={full ? "" : style === "list" ? "h-1" : "h-4"} />}
       {first && style === "spotlight" && (
         <div className={full ? "" : "px-4"}>
           <div id={`ep-${first.id}`}>
@@ -353,7 +351,7 @@ function PodcastCard({ p, onAsk, opts, style, full, fallbackArt, accent, ink, su
           <audio key={now.id} src={now.audio} autoPlay controls preload="none" className="w-full" onEnded={() => setPlaying(null)} />
         </div>
       )}
-      <div className="flex flex-wrap gap-2 p-4 pt-2">
+      <div className="flex flex-wrap gap-2 px-4 pb-3 pt-1.5">
         {opts.apple && p.appleUrl && <a href={preview ? undefined : p.appleUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "Apple Podcasts")} className="px-3.5 py-2 text-xs font-semibold text-white" style={{ background: "#872EC4", borderRadius: radius }}>Apple Podcasts</a>}
         {opts.spotify && p.spotifyUrl && <a href={preview ? undefined : p.spotifyUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "Spotify")} className="px-3.5 py-2 text-xs font-semibold text-black" style={{ background: "#1DB954", borderRadius: radius }}>Spotify</a>}
         {opts.all && p.pageUrl && <a href={preview ? undefined : p.pageUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "All episodes")} className="px-3.5 py-2 text-xs font-semibold" style={{ border: `1px solid ${line}`, borderRadius: radius }}>All episodes</a>}

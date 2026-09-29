@@ -1413,7 +1413,7 @@ function PodcastBlock({ d, change, open, toggle }: { d: Page; change: (p: Partia
       </div>
       {open && (
         <div className="space-y-3 border-2 border-t-0 border-[#053877]/30 bg-background p-3">
-          <Field label="Heading" hint="Leave it empty to use your show's name.">
+          <Field label="Heading" hint="Optional: a small line over your episodes. Leave it empty to keep it tight.">
             <Input value={o.heading} onChange={(e) => set({ heading: e.target.value })} maxLength={80} placeholder="Latest from the show" />
           </Field>
           <div>
