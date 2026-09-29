@@ -809,8 +809,8 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear, onFixed }: 
 
 const DESIGN_RAIL = [
   { id: "layout", label: "Layout", icon: LayoutTemplate },
-  { id: "color", label: "Colours", icon: Palette },
   { id: "font", label: "Font", icon: Type },
+  { id: "color", label: "Colours", icon: Palette },
   { id: "shape", label: "Shape", icon: Shapes },
   { id: "style", label: "Style", icon: Paintbrush },
   { id: "brand", label: "Brand", icon: QrCode },
@@ -888,26 +888,15 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
             <div><p className="text-sm font-semibold">Show my name</p><p className="text-xs text-muted-foreground">Turn it off when your photo or logo already says it.</p></div>
             <Switch checked={!(t.hideName ?? false)} onCheckedChange={(v) => set({ hideName: !v })} data-testid="bio-show-name" />
           </div>
-          {!t.hideName && (
-            <div className="mt-3 space-y-2 rounded-xl bg-muted/40 p-3">
-              <RangeRow label="Name size" hint="Smaller or bigger" value={t.nameSize ?? 100} min={60} max={150} onChange={(v) => set({ nameSize: v })} unit="%" testid="bio-name-size" />
-              {(t.nameSize ?? 100) !== 100 && <button type="button" onClick={() => set({ nameSize: 100 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
-            </div>
-          )}
-          {CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && (
-            <div className="mt-4 space-y-3 rounded-xl bg-muted/40 p-3" data-testid="bio-cutout-adjust">
-              <RangeRow label="Photo position" hint="Up or down" value={t.cutoutY ?? 0} min={-160} max={160} onChange={(v) => set({ cutoutY: v })} testid="bio-cutout-y" />
-              <RangeRow label="Photo size" hint="Smaller or bigger" value={t.cutoutSize ?? 100} min={60} max={150} onChange={(v) => set({ cutoutSize: v })} unit="%" testid="bio-cutout-size" />
-              {((t.cutoutY ?? 0) !== 0 || (t.cutoutSize ?? 100) !== 100) && <button type="button" onClick={() => set({ cutoutY: 0, cutoutSize: 100 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
-            </div>
-          )}
-          {CUTOUT_LAYOUTS.includes(t.layout) && (
-            <div className="mt-4 space-y-2 rounded-xl bg-muted/40 p-3" data-testid="bio-sticker-colour">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold">{t.layout === "sticker" ? "Stripe colour" : t.layout === "popout" ? "Circle colour" : t.layout === "shape" ? "Shape colour" : t.layout === "magazine" ? "Cover colour" : "Background colour"}</p>
-                {t.stickerColor && <button type="button" onClick={() => set({ stickerColor: "" })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Use my theme colour</button>}
-              </div>
-              <ColourPick value={t.stickerColor || t.color} onPick={(v) => set({ stickerColor: v })} testid="bio-sticker-colour" />
+          {/* Sizes: their name, and their cut-out photo's place and size. */}
+          {(!t.hideName || (CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl)) && (
+            <div className="mt-3 space-y-3 rounded-xl bg-muted/40 p-3" data-testid="bio-cutout-adjust">
+              {!t.hideName && <RangeRow label="Name size" hint="Smaller or bigger" value={t.nameSize ?? 100} min={60} max={150} onChange={(v) => set({ nameSize: v })} unit="%" testid="bio-name-size" />}
+              {CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <>
+                <RangeRow label="Photo position" hint="Up or down" value={t.cutoutY ?? 0} min={-160} max={160} onChange={(v) => set({ cutoutY: v })} testid="bio-cutout-y" />
+                <RangeRow label="Photo size" hint="Smaller or bigger" value={t.cutoutSize ?? 100} min={60} max={150} onChange={(v) => set({ cutoutSize: v })} unit="%" testid="bio-cutout-size" />
+              </>}
+              {((t.nameSize ?? 100) !== 100 || (t.cutoutY ?? 0) !== 0 || (t.cutoutSize ?? 100) !== 100) && <button type="button" onClick={() => set({ nameSize: 100, cutoutY: 0, cutoutSize: 100 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
             </div>
           )}
           {CUTOUT_LAYOUTS.includes(t.layout) && t.layout !== "sticker" && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <ScenePicker scene={t.scene ?? ""} onPick={(scene) => set({ scene })} />}
@@ -928,6 +917,10 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
               </div>
             </div>
           )}
+        </DesignSection>
+
+        <DesignSection bind={refs} id="font" title="Font" sub="Choose a typeface for your page.">
+          <CardSelect testid="bio-font" value={t.font} onPick={(v) => set({ font: v as BioFont })} options={(Object.keys(FONTS) as BioFont[]).map((f) => ({ value: f, node: <FontFace font={f} /> }))} />
         </DesignSection>
 
         <DesignSection bind={refs} id="color" title="Colours" sub="Everything with colour on your page, in one place.">
@@ -988,11 +981,16 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
                 {((t.bgTint ?? 0) !== 0 || (t.bgBrightness ?? 0) !== 0) && <button type="button" onClick={() => set({ bgTint: 0, bgBrightness: 0 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
               </div>
             </div>
+            {CUTOUT_LAYOUTS.includes(t.layout) && (
+              <div data-testid="bio-sticker-colour">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold">{t.layout === "sticker" ? "Stripes behind your photo" : t.layout === "popout" ? "Circle behind your photo" : t.layout === "shape" ? "Shape behind your photo" : t.layout === "magazine" ? "Cover behind your photo" : "Behind your photo"} <span className="font-normal text-muted-foreground">{t.scene && t.layout !== "sticker" ? "when there's no scene" : ""}</span></p>
+                  {t.stickerColor && <button type="button" onClick={() => set({ stickerColor: "" })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Same as the theme colour</button>}
+                </div>
+                <ColourPick value={t.stickerColor || t.color} onPick={(v) => set({ stickerColor: v })} testid="bio-sticker-colour" />
+              </div>
+            )}
           </div>
-        </DesignSection>
-
-        <DesignSection bind={refs} id="font" title="Font" sub="Choose a typeface for your page.">
-          <CardSelect testid="bio-font" value={t.font} onPick={(v) => set({ font: v as BioFont })} options={(Object.keys(FONTS) as BioFont[]).map((f) => ({ value: f, node: <FontFace font={f} /> }))} />
         </DesignSection>
 
         <DesignSection bind={refs} id="shape" title="Link shape" sub="Corner style for your link buttons.">
