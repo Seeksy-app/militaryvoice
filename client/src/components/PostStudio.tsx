@@ -12,14 +12,14 @@ import { Label } from "@/components/ui/label";
 import { startPlanCheckout, openBillingPortal, startTokenCheckout } from "@/lib/tokens";
 import { PostDialog } from "@/components/PostDialog";
 import { durationOf, uploadToStorage } from "@/lib/upload";
-import { TrimStrip, Icon, SplitIcon, type Cut } from "@/components/TrimStrip";
+import { TrimStrip, Icon, type Cut } from "@/components/TrimStrip";
 import { NotifyPrompt } from "@/components/Notifications";
 import { UploadRecording } from "@/components/UploadRecording";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
-import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend } from "lucide-react";
+import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets } from "lucide-react";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -1026,16 +1026,17 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
             selected={sel}
             onPick={trimming ? undefined : pick}
             onDelete={del}
-            onSplit={trimming ? undefined : split}
+            onSplit={() => { if (trimming) setTrimming(false); split(); }}
             canSplit={canSplit}
             actions={
               <>
                 {/* Two jobs, named on the button: Trim is only the start and end; Split takes out a section. */}
-                <TimelineButton tip={trimming ? "Finish trimming first (Done)" : canSplit ? "Split: take out an unwanted section. Split at the start and end of it, click the piece, then delete it. (S)" : "Split: take out an unwanted section. Move the blue playhead to where it starts, then split."} onClick={split} disabled={!canSplit || trimming} testid="tool-split">
-                  <SplitIcon /> Split
+                {/* Scissors mean "cut" to everyone, so they're on Split; Trim wears brackets, like its yellow handles. */}
+                <TimelineButton tip={canSplit ? "Split: take out an unwanted section. Split at the start and end of it, click the piece, then delete it. (S)" : "Split: take out an unwanted section. Move the blue playhead to where it starts, then split."} onClick={() => { if (trimming) setTrimming(false); split(); }} disabled={!canSplit} testid="tool-split">
+                  <Scissors className="h-4 w-4" /> Split
                 </TimelineButton>
                 <TimelineButton tip="Trim: only the start and end. Drag the yellow handles to where it should begin and finish." on={trimming} onClick={() => { setTrimming((v) => !v); setSel(null); }} testid="tool-trim">
-                  <Scissors className="h-4 w-4" /> Trim start & end
+                  <Brackets className="h-4 w-4" /> Trim start & end
                 </TimelineButton>
                 <span className="ml-1 text-sm tabular-nums text-muted-foreground" title="How long it will be" data-testid="tool-length">Length {hms(Math.max(0, keepLen - cutTotal))}</span>
               </>

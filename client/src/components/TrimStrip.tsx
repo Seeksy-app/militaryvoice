@@ -575,11 +575,11 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
                 {moved && canSplit && onSplit && !drag && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => { onSplit(); setMoved(false); }} aria-label="Split" className={`pointer-events-auto absolute -top-1.5 ${x(head) > inner - 48 ? "right-3" : "left-3"} flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-background text-foreground shadow-md hover:bg-muted`} data-testid="trim-split-pop">
-                        <SplitIcon />
+                      <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => { onSplit(); setMoved(false); }} aria-label="Split" className={`pointer-events-auto absolute -top-1.5 ${x(head) > inner - 48 ? "right-3" : "left-3"} flex h-7 items-center gap-1 rounded-lg border border-border bg-background px-2 text-xs font-semibold text-foreground shadow-md hover:bg-muted`} data-testid="trim-split-pop">
+                        <Scissors className="h-3.5 w-3.5" /> Split
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">Split</TooltipContent>
+                    <TooltipContent side="top" className="max-w-[14rem] text-xs">Split here, to take out a section</TooltipContent>
                   </Tooltip>
                 )}
               </>
@@ -614,15 +614,6 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
 function secs(n: number) {
   const t = Math.max(0, Math.round(n));
   return t < 60 ? `${t}s` : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
-}
-
-/** Canva's split mark: a frame parted down the middle. */
-export function SplitIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M9 6H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h4M15 6h4a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-4M12 3v18" />
-    </svg>
-  );
 }
 
 /** A small round icon button with its name on hover. */
