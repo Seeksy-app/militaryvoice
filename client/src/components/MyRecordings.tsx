@@ -42,7 +42,7 @@ function sourceOf(r: RecordingRow): number | null {
 }
 
 type Version = { label: string; rec: RecordingRow };
-type Episode = { main: RecordingRow; versions: Version[] };
+type Episode = { main: RecordingRow; versions: Version[]; earlier: Version[] };
 
 /**
  * One card per episode: the original with its clean and edited copies as
@@ -62,13 +62,17 @@ function episodes(rows: RecordingRow[]): Episode[] {
       const mine = copies.get(main.id) ?? [];
       const clean = mine.filter((c) => !c.egressId.startsWith("CLEAN_EDIT_"));
       const edited = mine.filter((c) => c.egressId.startsWith("CLEAN_EDIT_")).sort((a, b) => a.id - b.id);
+      // Only the latest edit on the card; the ones before it wait under Earlier edits.
+      const latest = edited[edited.length - 1];
+      const when = (rec: RecordingRow) => new Date(rec.startedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
       return {
         main,
         versions: mine.length === 0 ? [] : [
           ...clean.map((rec) => ({ label: "Clean", rec })),
-          ...edited.map((rec, i) => ({ label: edited.length > 1 ? `Edited ${i + 1}` : "Edited", rec })),
+          ...(latest ? [{ label: "Edited", rec: latest }] : []),
           { label: "Original", rec: main },
         ],
+        earlier: edited.slice(0, -1).reverse().map((rec) => ({ label: `Edited ${when(rec)}`, rec })),
       };
     });
 }
@@ -245,9 +249,11 @@ export function MyRecordings({
 
       {/* Thumbnails, each with one menu: the things you do with an episode. */}
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {shown.map(({ main, versions }) => {
-          // The clean copy first: it's the one to post.
-          const r = versions.find((v) => v.rec.id === picked[main.id])?.rec ?? versions[0]?.rec ?? main;
+        {shown.map(({ main, versions, earlier }) => {
+          // Their latest edit first when there is one (it's the one they made to use); otherwise the clean copy.
+          const all = [...versions, ...earlier];
+          const r = all.find((v) => v.rec.id === picked[main.id])?.rec ?? versions.find((v) => v.label === "Edited")?.rec ?? versions[0]?.rec ?? main;
+          const olderPicked = earlier.find((v) => v.rec.id === r.id);
           const clean = versions.length > 0 || main.egressId.startsWith("CLEAN_");
           return (
           <li
@@ -320,6 +326,23 @@ export function MyRecordings({
                         {v.label}
                       </button>
                     ))}
+                    {earlier.length > 0 && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button type="button" className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition-colors ${olderPicked ? "bg-[#000741] text-white dark:bg-white dark:text-[#000741]" : "text-muted-foreground hover:text-foreground"}`} data-testid={`version-earlier-${main.id}`}>
+                            {olderPicked ? olderPicked.label : `Earlier edits (${earlier.length})`} ▾
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-56">
+                          {earlier.map((v) => (
+                            <DropdownMenuItem key={v.rec.id} onSelect={() => { setPicked((p) => ({ ...p, [main.id]: v.rec.id })); setPlaying(null); }} className="flex justify-between gap-2 text-sm">
+                              <span>{v.label}</span>
+                              <span className="tabular-nums text-xs text-muted-foreground">{clock(v.rec.durationSec)}</span>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 )}
               </div>
@@ -333,7 +356,7 @@ export function MyRecordings({
                   <DropdownMenuContent align="end" className="w-52">
                     {r.status === "Ready" && (<>
                     <DropdownMenuItem onSelect={() => void download(r.id)} className="gap-2" data-testid={`button-download-recording-${r.id}`}>
-                      <Download className="h-4 w-4" /> {versions.length > 0 ? `Download ${versions.find((v) => v.rec.id === r.id)?.label.toLowerCase()}` : "Download"}
+                      <Download className="h-4 w-4" /> {versions.length > 0 ? `Download ${olderPicked ? "this edit" : versions.find((v) => v.rec.id === r.id)?.label.toLowerCase()}` : "Download"}
                     </DropdownMenuItem>
                     {/* Clips and the clean episode are made in Pōstify. */}
                     {/* A clean copy is already Pōstify's output; clips come from the original. */}
