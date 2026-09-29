@@ -1,21 +1,24 @@
 // Podcasts in Discovery: shows, and the people who host them or have been on
-// them, from Podchaser's index.
+// them, from Podchaser's REST API (one key in the x-api-key header).
 //
-// Podchaser charges in points per answer (a page of ten shows is about a
-// hundred), so like the creator index every answer is cached and shared: a
-// search page for a week, a show or a person for a month. Some fields are only
-// on some plans (audience, contacts, credits, Power Score); a field the plan
-// won't give is learned from the first refusal, remembered, and left out of
-// every query after, so a search never fails over one column.
+// The Starter plan is a thousand requests a month, so every answer is kept
+// and shared: a search page for a week, a show or a person for a month, and
+// each show or person a search brings back is kept too, so opening it asks for
+// less. Before any fresh request we check what's left this month (that check
+// is free), and stop short of the end so the month never runs dry.
 import type { Express, Request, Response } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "./storage.js";
 import { discoveryCache } from "../shared/schema.js";
-import { getAdminEmail } from "./session.js";
+import { getAdminEmail, getSessionEmail } from "./session.js";
 
-const API = "https://api.podchaser.com/graphql";
+const BASE = "https://developers.podchaser.com/api/rest/v1";
 const DAY = 86_400_000;
-const PAGE = 10;
+/** Requests kept back each month, so the last days of it still answer. */
+const RESERVE = 40;
+/** Fresh searches a visitor (no account) may cause a day, and a member. */
+const VISITOR_FRESH = 2;
+const MEMBER_FRESH = 40;
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -41,108 +44,58 @@ async function cached<T>(k: string, maxAgeMs: number, make: () => Promise<T>): P
 }
 
 // ---------------------------------------------------------------------------
-// The API: a year-long token, points, and the fields this plan can't see
+// The API, and the month's allowance
 // ---------------------------------------------------------------------------
 
-// The key has gone by a few names on Podchaser's settings page ("Key", "API key", "Client ID").
-const env = (...names: string[]) => names.map((n) => process.env[n]?.trim()).find(Boolean) ?? "";
-const clientId = () => env("PODCHASER_CLIENT_ID", "PODCHASER_API_KEY", "PODCHASER_KEY", "PODCHASER_CLIENT_KEY", "PODCHASER_ID");
-const clientSecret = () => env("PODCHASER_CLIENT_SECRET", "PODCHASER_SECRET", "PODCHASER_API_SECRET");
-export const podchaserOn = () => Boolean(clientId() && clientSecret());
+const apiKey = () => (process.env.PODCHASER_API_KEY || process.env.PODCHASER_CLIENT_ID || process.env.PODCHASER_KEY || "").trim();
+export const podchaserOn = () => Boolean(apiKey());
 
-let token: { value: string; exp: number } | null = null;
-async function accessToken(fresh = false): Promise<string> {
+type Usage = { tier: string; used: number; remaining: number | null; quota: number | null; cycleEnd: string };
+let usage: (Usage & { at: number }) | null = null;
+/** What's left this month. Asking is free; kept for five minutes, counted down as we go. */
+async function monthUsage(force = false): Promise<Usage> {
+  if (!force && usage && Date.now() - usage.at < 5 * 60_000) return usage;
+  const res = await fetch(`${BASE}/usage`, { headers: { "x-api-key": apiKey() }, signal: AbortSignal.timeout(15_000) });
+  const j = (await res.json().catch(() => ({}))) as any;
+  if (res.status === 401) throw new HttpError(503, "Podchaser didn't accept our API key.");
+  if (!res.ok) throw new HttpError(502, `Couldn't reach Podchaser (${res.status}).`);
+  const d = j?.data ?? j;
+  // quota and remaining arrive as numbers or as small objects of numbers.
+  const num = (v: unknown) => {
+    if (typeof v === "number") return v;
+    if (v && typeof v === "object") { const x = Object.values(v as Record<string, unknown>).find((y) => typeof y === "number"); return typeof x === "number" ? x : null; }
+    return null;
+  };
+  usage = { at: Date.now(), tier: String(d?.tier ?? ""), used: Number(d?.used ?? 0), remaining: num(d?.remaining), quota: num(d?.quota), cycleEnd: String(d?.cycle_end ?? "") };
+  return usage;
+}
+
+async function get(path: string, params: Record<string, string | number | boolean | null | undefined> = {}): Promise<any> {
   if (!podchaserOn()) throw new HttpError(503, "Podcast search isn't connected yet.");
-  if (!fresh && token && token.exp > Date.now()) return token.value;
-  if (!fresh) {
-    const kept = await readCache<{ value: string; exp: number }>("podchaser:token", 360 * DAY);
-    if (kept && kept.exp > Date.now()) return (token = kept).value;
-  }
-  const res = await fetch(API, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    signal: AbortSignal.timeout(20_000),
-    body: JSON.stringify({
-      query: "mutation Token($id: String!, $secret: String!) { requestAccessToken(input: { grant_type: CLIENT_CREDENTIALS, client_id: $id, client_secret: $secret }) { access_token expires_in } }",
-      variables: { id: clientId(), secret: clientSecret() },
-    }),
-  });
-  const j = (await res.json().catch(() => ({}))) as { data?: { requestAccessToken?: { access_token?: string; expires_in?: number } }; errors?: { message: string }[] };
-  const t = j.data?.requestAccessToken;
-  if (!t?.access_token) {
-    console.error("podchaser token:", res.status, JSON.stringify(j.errors ?? j).slice(0, 300));
-    throw new HttpError(503, "Podcast search couldn't sign in to Podchaser.");
-  }
-  // A day short of what they give, so it's never used on its last day.
-  token = { value: t.access_token, exp: Date.now() + Math.max(DAY, ((t.expires_in ?? 31_536_000) - 86_400) * 1000) };
-  await writeCache("podchaser:token", token);
-  return token.value;
+  const u = await monthUsage();
+  if (u.remaining != null && u.remaining <= RESERVE) throw new HttpError(429, "Podcast search has used this month's lookups. Saved searches and profiles still open.");
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== null && v !== undefined && v !== "") qs.set(k, String(v));
+  const q = qs.toString();
+  const res = await fetch(`${BASE}${path}${q ? `?${q}` : ""}`, { headers: { "x-api-key": apiKey(), accept: "application/json" }, signal: AbortSignal.timeout(30_000) });
+  if (usage && usage.remaining != null) usage.remaining -= 1;
+  const text = await res.text();
+  let j: any = null;
+  try { j = JSON.parse(text); } catch { /* not JSON */ }
+  if (res.ok) return j;
+  const code = String(j?.error?.code ?? j?.code ?? "");
+  const msg = String(j?.error?.message ?? j?.message ?? text.slice(0, 200));
+  console.warn("podchaser", res.status, path, code, msg.slice(0, 300));
+  if (res.status === 401) throw new HttpError(503, "Podchaser didn't accept our API key.");
+  if (res.status === 403) throw new HttpError(403, "That's not on our Podchaser plan.");
+  if (res.status === 404) throw new HttpError(404, "That isn't in the podcast index any more.");
+  if (res.status === 429) throw new HttpError(429, /quota|month/i.test(msg) ? "Podcast search has used this month's lookups." : "Podcast search is busy for a moment. Try again in a few seconds.");
+  if (res.status === 400) throw new HttpError(400, "The podcast index couldn't read that search. Try other words.");
+  throw new HttpError(502, `Couldn't reach the podcast index (${res.status}).`);
 }
-
-let points: number | null = null;
-let denied: Set<string> | null = null;
-async function deniedFields(): Promise<Set<string>> {
-  if (!denied) denied = new Set(await readCache<string[]>("podchaser:denied", 30 * DAY) ?? []);
-  return denied;
-}
-
-type Gql = { data?: any; errors?: { message: string; path?: (string | number)[]; extensions?: Record<string, unknown> }[] };
-async function post(query: string, variables: Record<string, unknown>): Promise<Gql> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch(API, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${await accessToken(attempt > 0)}` },
-      signal: AbortSignal.timeout(30_000),
-      body: JSON.stringify({ query, variables }),
-    });
-    const left = Number(res.headers.get("x-podchaser-points-remaining"));
-    if (Number.isFinite(left) && res.headers.get("x-podchaser-points-remaining") !== null) points = left;
-    if (res.status === 401 && attempt === 0) { token = null; continue; }
-    if (res.status === 429) throw new HttpError(429, "Podcast search is busy for a moment. Try again in a few seconds.");
-    const j = (await res.json().catch(() => ({}))) as Gql;
-    // A token they no longer take comes back as a 200 with this: sign in again, once.
-    if (attempt === 0 && (j.errors ?? []).some((e) => /invalid authorization|unauthenticated/i.test(e.message))) { token = null; continue; }
-    if (!res.ok && !j.data) {
-      console.error("podchaser:", res.status, JSON.stringify(j).slice(0, 400));
-      if (/points|quota|limit/i.test(JSON.stringify(j.errors ?? ""))) throw new HttpError(402, "Podcast search is out of searches for this month.");
-      throw new HttpError(502, `Couldn't reach the podcast index (${res.status}).`);
-    }
-    return j;
-  }
-  throw new HttpError(502, "Couldn't sign in to the podcast index.");
-}
-
-/**
- * A query with some fields the plan may not allow. `build(allowed)` writes the
- * query from the optional fields still allowed; a refusal naming one drops it
- * and asks again (and it stays dropped).
- */
-async function ask(build: (allowed: (name: string) => boolean) => string, variables: Record<string, unknown>, optional: string[]): Promise<any> {
-  const no = await deniedFields();
-  for (let round = 0; round < 4; round++) {
-    const j = await post(build((n) => !no.has(n)), variables);
-    const errs = j.errors ?? [];
-    if (!errs.length) return j.data;
-    // Which optional field did it refuse? By its path, or by name in the message.
-    const refused = new Set<string>();
-    for (const e of errs) {
-      const where = [...(e.path ?? []).map(String), e.message];
-      for (const f of optional) if (!no.has(f) && where.some((w) => w === f || new RegExp(`\\b${f}\\b`).test(w))) refused.add(f);
-    }
-    const permission = errs.some((e) => /permission|not authori[sz]ed|unauthori[sz]ed|access|plan/i.test(e.message));
-    if (!refused.size && permission) for (const f of optional) if (!no.has(f)) refused.add(f);
-    if (!refused.size) {
-      // Partial answers are still answers.
-      if (j.data && Object.values(j.data).some((v) => v)) return j.data;
-      console.error("podchaser query:", JSON.stringify(errs).slice(0, 500));
-      if (/points|quota/i.test(JSON.stringify(errs))) throw new HttpError(402, "Podcast search is out of searches for this month.");
-      throw new HttpError(502, "The podcast index couldn't answer that one. Try other words.");
-    }
-    refused.forEach((f) => no.add(f));
-    console.warn("podchaser: plan leaves out", Array.from(refused).join(", "));
-    await writeCache("podchaser:denied", Array.from(no));
-  }
-  throw new HttpError(502, "The podcast index couldn't answer that one.");
+/** A part of a profile the plan may not include: missing, not fatal. */
+async function maybe(path: string, params: Record<string, string | number> = {}): Promise<any> {
+  try { return await get(path, params); } catch (err) { if (err instanceof HttpError && [400, 403, 404].includes(err.status)) return null; throw err; }
 }
 
 // ---------------------------------------------------------------------------
@@ -154,62 +107,63 @@ export type PodShow = {
   episodes: number | null; latest: string; since: string; categories: string[]; host: string;
   rating: number | null; ratings: number | null; language: string;
   audience: number | null; audienceRange: { from: number; to: number } | null; powerScore: number | null; hasGuests: boolean | null;
-  socials: { platform: string; url: string }[]; apple: string; spotify: string;
+  socials: { platform: string; url: string }[]; apple: string; spotify: string; status: string; everyDays: number | null;
 };
 export type PodPerson = {
   kind: "person"; pcid: string; name: string; subtitle: string; bio: string; image: string; web: string; location: string;
   followers: number | null; appearances: number | null; socials: { platform: string; url: string }[];
 };
-export type PodCredit = { id: string; title: string; image: string; web: string; role: string; episodes: number | null };
-export type PodShowFull = PodShow & { contacts: { name: string; email: string; url: string; type: string }[]; email: string; people: (Pick<PodPerson, "pcid" | "name" | "image"> & { role: string; episodes: number | null })[]; locked: string[] };
-export type PodPersonFull = PodPerson & { shows: PodCredit[]; recent: { title: string; date: string; web: string; show: string; showId: string; image: string; role: string }[] };
+type PodShowFull = PodShow & { contacts: { name: string; email: string; url: string; type: string }[]; email: string; people: { pcid: string; name: string; image: string; role: string; episodes: number | null }[]; locked: string[] };
+type PodPersonFull = PodPerson & { shows: { id: string; title: string; image: string; web: string; role: string; episodes: number | null }[]; recent: { title: string; date: string; web: string; show: string; showId: string; image: string; role: string }[] };
 
 const trim = (s: unknown, n: number) => {
   const t = String(s ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
 };
 const n = (v: unknown) => (v == null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
-const socialsOf = (s: Record<string, string | null> | null | undefined) =>
+/** "2026-05-14 08:00:00" (UTC, no zone) as an ISO time. */
+const iso = (v: unknown) => { const s = String(v ?? "").trim(); return s ? s.replace(" ", "T") + (/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? "" : "Z") : ""; };
+const socialsOf = (s: Record<string, unknown> | null | undefined) =>
   Object.entries(s ?? {}).filter(([, u]) => typeof u === "string" && /^https?:\/\//.test(u)).map(([platform, url]) => ({ platform, url: url as string }));
+/** Lists come as `{ data: [...], pagination }`, single things as `{ data: {...} }`: read either. */
+const list = (j: any): any[] => (Array.isArray(j) ? j : Array.isArray(j?.data) ? j.data : []);
+const one = (j: any): any => (j && typeof j === "object" && !Array.isArray(j) && j.data && typeof j.data === "object" && !Array.isArray(j.data) ? j.data : j);
 
 function toShow(p: any, about = 220): PodShow {
   return {
-    kind: "show", id: String(p.id), title: trim(p.title, 160), about: trim(p.description, about), image: p.imageUrl ?? "", web: p.webUrl ?? "", site: p.url ?? "", rss: p.rssUrl ?? "",
-    episodes: n(p.numberOfEpisodes), latest: p.latestEpisodeDate ?? "", since: p.startDate ?? "", categories: (p.categories ?? []).map((c: any) => c?.title).filter(Boolean).slice(0, 4),
-    host: trim(p.author?.name, 120), rating: n(p.ratingAverage), ratings: n(p.ratingCount), language: p.language ?? "",
-    audience: n(p.audienceEstimate), audienceRange: p.audienceEstimateRange?.from != null ? { from: Number(p.audienceEstimateRange.from), to: Number(p.audienceEstimateRange.to) } : null,
-    powerScore: n(p.powerScore), hasGuests: typeof p.hasGuests === "boolean" ? p.hasGuests : null,
-    socials: socialsOf(p.socialLinks), apple: p.applePodcastsId ? `https://podcasts.apple.com/podcast/id${p.applePodcastsId}` : "", spotify: p.spotifyId ? `https://open.spotify.com/show/${p.spotifyId}` : "",
+    kind: "show", id: String(p.id), title: trim(p.title, 160), about: trim(p.description, about), image: p.imageUrl ?? "",
+    web: p.id ? `https://www.podchaser.com/podcasts/${p.id}` : "", site: p.webUrl ?? "", rss: p.rssUrl ?? "",
+    episodes: n(p.numberOfEpisodes), latest: iso(p.latestEpisodeDate), since: iso(p.startDate), categories: (p.categories ?? []).map((c: any) => c?.title).filter(Boolean).slice(0, 4),
+    host: trim(p.author?.name, 120), rating: null, ratings: null, language: p.language ?? "",
+    audience: null, audienceRange: null, powerScore: null, hasGuests: typeof p.hasGuests === "boolean" ? p.hasGuests : null,
+    socials: [], apple: p.applePodcastsId ? `https://podcasts.apple.com/podcast/id${p.applePodcastsId}` : "", spotify: p.spotifyId ? `https://open.spotify.com/show/${p.spotifyId}` : "",
+    status: String(p.status ?? ""), everyDays: n(p.episodeFrequency),
   };
 }
 function toPerson(c: any): PodPerson {
   return {
     kind: "person", pcid: String(c.pcid), name: trim(c.name, 120), subtitle: trim(c.subtitle, 160), bio: trim(c.bio, 600), image: c.imageUrl ?? "", web: c.url ?? "", location: trim(c.location, 80),
-    followers: n(c.followerCount), appearances: n(c.episodeAppearanceCount), socials: socialsOf(c.socialLinks),
+    followers: null, appearances: n(c.episodeAppearanceCount), socials: socialsOf(c.socialLinks),
   };
 }
-
-const SHOW_FIELDS = "id title description imageUrl webUrl url rssUrl numberOfEpisodes latestEpisodeDate startDate language ratingAverage ratingCount categories { title } author { name } socialLinks { twitter facebook instagram youtube linkedin tiktok patreon twitch } applePodcastsId spotifyId";
-const SHOW_OPTIONAL = ["powerScore", "audienceEstimate", "hasGuests"];
-const PERSON_FIELDS = "pcid name subtitle bio imageUrl url location followerCount episodeAppearanceCount socialLinks { twitter wikipedia }";
 
 // ---------------------------------------------------------------------------
 // The search words: theirs, kept to the military and veteran community
 // ---------------------------------------------------------------------------
 
-const COMMUNITY = "(veteran | veterans | military | army | navy | marine | marines | \"air force\" | \"coast guard\" | \"space force\" | milspouse | \"military spouse\")";
-const BRANCH_WORDS: Record<string, string> = {
-  Army: "army", Navy: "navy", "Air Force": "\"air force\"", "Marine Corps": "(marine | marines | usmc)", "Coast Guard": "\"coast guard\"", "Space Force": "\"space force\"", "Military spouse": "(\"military spouse\" | milspouse)",
+const COMMUNITY = "(veteran OR veterans OR military OR army OR navy OR marines OR USMC OR airman OR soldier OR milspouse)";
+const BRANCH_WORDS: Record<string, string[]> = {
+  Army: ["army"], Navy: ["navy"], "Air Force": ["airforce", "USAF"], "Marine Corps": ["marine", "marines", "USMC"], "Coast Guard": ["coastguard", "USCG"], "Space Force": ["spaceforce"], "Military spouse": ["milspouse", "milspouses"],
 };
-/** Their words as a boolean search: every word, plus a branch (any of them) or the community. */
+/** Their words (all of them), and a branch (any of them) or else the community. */
 export function searchTerm(q: string, branches: string[], community: boolean): string {
-  const words = q.replace(/[+|\-()"*~]/g, " ").split(/\s+/).map((w) => w.trim()).filter((w) => w.length > 1).slice(0, 8);
-  const parts = words.length ? [words.join(" + ")] : [];
-  const bs = branches.map((b) => BRANCH_WORDS[b]).filter(Boolean);
+  const words = q.replace(/[()"*~:]/g, " ").split(/\s+/).map((w) => w.trim()).filter((w) => w.length > 1 && !/^(and|or|not)$/i.test(w)).slice(0, 8);
+  const parts = words.length ? [words.length > 1 ? `(${words.join(" AND ")})` : words[0]] : [];
+  const bs = branches.flatMap((b) => BRANCH_WORDS[b] ?? []);
   const mentions = /\b(veteran|military|army|navy|marine|usmc|air force|coast guard|space force|milspouse|spouse)\b/i.test(q);
-  if (bs.length) parts.push(bs.length > 1 ? `(${bs.join(" | ")})` : bs[0]);
+  if (bs.length) parts.push(`(${bs.join(" OR ")})`);
   else if (community && !mentions) parts.push(COMMUNITY);
-  return parts.join(" + ") || COMMUNITY;
+  return parts.join(" AND ") || COMMUNITY;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,138 +180,141 @@ function send(res: Response, fn: () => Promise<unknown>) {
     });
 }
 
-const SHOW_SORTS: Record<string, string> = { best: "RELEVANCE", audience: "AUDIENCE_ESTIMATE", power: "POWER_SCORE", recent: "LATEST_EPISODE", episodes: "EPISODE_COUNT" };
-const PERSON_SORTS: Record<string, string> = { best: "RELEVANCE", appearances: "APPEARANCE_COUNT", followers: "FOLLOWER_COUNT", recent: "RECENT_EPISODE" };
+const SHOW_SORTS: Record<string, string> = { best: "relevance", power: "power_score", newest: "date_of_first_episode" };
+const PERSON_SORTS: Record<string, string> = { best: "relevance", appearances: "appearance_count", recent: "recent_episode" };
+/** Starter leaves audience numbers out of search: the page hides what would always be empty. */
+const LOCKED = ["audienceEstimate"];
+
+/** A fresh request, counted against who caused it: a visitor by address, a member by email. */
+async function spendOne(who: string, allowed: number, message: string): Promise<void> {
+  const key = `pc:fresh:${who}:${new Date().toISOString().slice(0, 10)}`;
+  const used = Number((await readCache<number>(key, DAY)) ?? 0);
+  if (used >= allowed) throw new HttpError(429, message);
+  await writeCache(key, used + 1);
+}
 
 /**
- * `member(req)` is Discovery's own check (throws when they aren't one): a
- * visitor gets the first page and five fresh searches a day, as with creators.
+ * `member(req)` is Discovery's own check (throws when they aren't one). A
+ * visitor sees what's been searched before, and two new searches a day.
  */
 export function registerPodcastRoutes(app: Express, member: (req: Request) => Promise<unknown>): void {
-  /** On, and what this plan can see. Admins also get the points left this month. */
+  const who = async (req: Request): Promise<{ visitor: boolean; id: string }> => {
+    try {
+      await member(req);
+      return { visitor: false, id: ((getSessionEmail(req) ?? "") || (getAdminEmail(req) ?? "") || "admin").toLowerCase() };
+    } catch {
+      return { visitor: true, id: (String(req.headers["x-forwarded-for"] || "").split(",")[0] || req.ip || "?").trim() };
+    }
+  };
+
+  /** On, and working. Admins also see the month: used, left, when it resets. */
   app.get("/api/discover/podcasts/status", (req, res) =>
     send(res, async () => {
       res.set("Cache-Control", "no-store");
-      // Which half is missing, never its value.
-      if (!podchaserOn()) return { on: false, key: Boolean(clientId()), secret: Boolean(clientSecret()) };
-      await accessToken();
-      const no = await deniedFields();
-      return { on: true, ok: true, locked: Array.from(no), ...(getAdminEmail(req) ? { points } : {}) };
+      if (!podchaserOn()) return { on: false };
+      try {
+        const u = await monthUsage(true);
+        return { on: true, ok: true, locked: LOCKED, ...(getAdminEmail(req) ? { month: { tier: u.tier, used: u.used, left: u.remaining, quota: u.quota, resets: u.cycleEnd } } : {}) };
+      } catch (err) {
+        return { on: true, ok: false, why: (err as Error).message };
+      }
     }),
   );
 
   app.post("/api/discover/podcasts/search", (req, res) =>
     send(res, async () => {
-      let preview = false;
-      try { await member(req); } catch { preview = true; }
+      const w = await who(req);
       const page = Math.max(0, Math.min(20, Number(req.body?.page) || 0));
-      if (preview && page > 0) throw new HttpError(403, "Create a free account to see more.");
+      if (w.visitor && page > 0) throw new HttpError(403, "Create a free account to see more.");
       const kind = req.body?.kind === "people" ? "people" : "shows";
       const q = String(req.body?.q ?? "").trim().slice(0, 200);
       const branches = String(req.body?.branch ?? "").split(",").map((b) => b.trim()).filter((b) => BRANCH_WORDS[b]).slice(0, 7);
-      const community = req.body?.community !== false;
-      const term = searchTerm(q, branches, community);
-      const sorts = kind === "shows" ? SHOW_SORTS : PERSON_SORTS;
-      // Sorting by a number this plan can't see would be a sort by nothing: best match instead.
-      const asked = sorts[String(req.body?.sort)] ?? "RELEVANCE";
-      const needs = asked === "AUDIENCE_ESTIMATE" ? "audienceEstimate" : asked === "POWER_SCORE" ? "powerScore" : "";
-      const sort = needs && (await deniedFields()).has(needs) ? "RELEVANCE" : asked;
+      // People are found by what they're known for: their words and a branch, never the whole community list.
+      const term = kind === "shows" ? searchTerm(q, branches, req.body?.community !== false) : [q.replace(/[()"*~:]/g, " "), ...branches.map((b) => BRANCH_WORDS[b][0])].join(" ").replace(/\s+/g, " ").trim() || "veteran";
+      const sort = (kind === "shows" ? SHOW_SORTS : PERSON_SORTS)[String(req.body?.sort)] ?? "relevance";
       const guests = kind === "shows" && req.body?.hasGuests === true;
-      const minAudience = kind === "shows" ? n(req.body?.minAudience) : null;
-      const k = `pc:search:${kind}:${JSON.stringify({ term, sort, page, guests, minAudience })}`;
+      const active = kind === "shows" && req.body?.active === true;
+      const k = `pc2:search:${kind}:${JSON.stringify({ term, sort, page, guests, active })}`;
 
-      if (preview && !(await readCache(k, 7 * DAY))) {
-        const ip = (String(req.headers["x-forwarded-for"] || "").split(",")[0] || req.ip || "?").trim();
-        const key = `pc:preview:${ip}:${new Date().toISOString().slice(0, 10)}`;
-        const used = Number((await readCache<number>(key, DAY)) ?? 0);
-        if (used >= 5) throw new HttpError(403, "Create a free account to keep searching.");
-        await writeCache(key, used + 1);
+      let found = await readCache<{ total: number; perPage: number; results: (PodShow | PodPerson)[] }>(k, 7 * DAY);
+      if (!found) {
+        await spendOne(w.id, w.visitor ? VISITOR_FRESH : MEMBER_FRESH, w.visitor ? "Create a free account to keep searching podcasts." : "That's a lot of new podcast searches today. Try again tomorrow, or reopen one you've run.");
+        const since = new Date(Date.now() - 90 * DAY).toISOString().slice(0, 10);
+        const j = kind === "people"
+          ? await get("/search/creators", { q: term, page: page + 1, sort, sort_direction: sort === "relevance" ? undefined : "desc" })
+          : await get("/search/podcasts", { q: term, bool_search: true, page: page + 1, sort, sort_direction: sort === "relevance" ? undefined : "desc", language: "en", has_guests: guests ? true : undefined, latest_episode_from: active ? since : undefined });
+        const rows = list(j);
+        const results = kind === "people" ? rows.map(toPerson) : rows.map((p) => toShow(p));
+        found = { total: n(j?.pagination?.total_results) ?? rows.length, perPage: n(j?.pagination?.per_page) ?? (rows.length || 25), results };
+        await writeCache(k, found);
+        // Each one found is kept on its own too, so opening it asks for less.
+        await Promise.all(rows.map((r) => writeCache(kind === "people" ? `pc2:person-base:${r.pcid}` : `pc2:show-base:${r.id}`, r))).catch(() => {});
       }
-
-      const found = await cached(k, 7 * DAY, async () => {
-        if (kind === "people") {
-          const d = await ask(
-            () => `query People($term: String, $page: Int, $sort: CreatorSortType!) { creators(searchTerm: $term, first: ${PAGE}, page: $page, sort: { sortBy: $sort, direction: DESCENDING }) { paginatorInfo { total } data { ${PERSON_FIELDS} } } }`,
-            // People search is plain words, and a person is found by what they're known for:
-            // their words and a branch, never the whole community list.
-            { term: [q.replace(/[+|\-()"*~]/g, " "), ...branches.map((b) => BRANCH_WORDS[b].replace(/[()"|]/g, " ").trim().split(/\s+/)[0])].join(" ").replace(/\s+/g, " ").trim() || "veteran", page: page + 1, sort },
-            [],
-          );
-          return { total: n(d?.creators?.paginatorInfo?.total) ?? 0, results: (d?.creators?.data ?? []).map(toPerson) as (PodShow | PodPerson)[] };
-        }
-        const d = await ask(
-          (allowed) => {
-            const opt = SHOW_OPTIONAL.filter(allowed).join(" ");
-            const filters = [guests && allowed("hasGuests") ? "hasGuests: true" : "", minAudience != null && allowed("audienceEstimate") ? `audienceEstimate: { from: ${Math.round(minAudience)} }` : "", "language: \"en\""].filter(Boolean).join(", ");
-            return `query Shows($term: String, $page: Int, $sort: PodcastSortType!) { podcasts(searchTerm: $term, options: { boolSearch: true }, filters: { ${filters} }, first: ${PAGE}, page: $page, sort: { sortBy: $sort, direction: DESCENDING }) { paginatorInfo { total } data { ${SHOW_FIELDS} ${opt} } } }`;
-          },
-          { term, page: page + 1, sort },
-          SHOW_OPTIONAL,
-        );
-        return { total: n(d?.podcasts?.paginatorInfo?.total) ?? 0, results: (d?.podcasts?.data ?? []).map((p: any) => toShow(p)) as (PodShow | PodPerson)[] };
-      });
-      const locked = Array.from(await deniedFields());
-      return { kind, term, page, pageSize: PAGE, total: found.total, results: found.results, preview, locked };
+      return { kind, term, page, pageSize: found.perPage, total: found.total, results: found.results, preview: w.visitor, locked: LOCKED };
     }),
   );
 
-  /** One show: all we can see, hosts and guests, and how to reach them. A month in the cache. */
+  /** One show: who hosts it and who's been on, how to reach them, its socials. A month in the cache. */
   app.get("/api/discover/podcasts/show", (req, res) =>
     send(res, async () => {
-      await member(req);
+      const w = await who(req);
+      if (w.visitor) throw new HttpError(401, "Create a free account to open a show.");
       const id = String(req.query.id ?? "").replace(/[^0-9]/g, "").slice(0, 20);
       if (!id) throw new HttpError(400, "Which show?");
-      return cached(`pc:show:${id}`, 30 * DAY, async () => {
-        const optional = [...SHOW_OPTIONAL, "audienceEstimateRange", "contacts", "credits", "authorContact"];
-        const d = await ask(
-          (allowed) => `query Show($id: String!) { podcast(identifier: { id: $id, type: PODCHASER }) { ${SHOW_FIELDS} ${SHOW_OPTIONAL.filter(allowed).join(" ")}
-            ${allowed("audienceEstimateRange") ? "audienceEstimateRange { from to }" : ""}
-            ${allowed("authorContact") ? "authorContact: author { email }" : ""}
-            ${allowed("contacts") ? "contacts { email url fullName type }" : ""}
-            ${allowed("credits") ? "credits(first: 20) { data { creator { pcid name imageUrl } role { code title } episodeCount } }" : ""} } }`,
-          { id },
-          optional,
-        );
-        const p = d?.podcast;
-        if (!p) throw new HttpError(404, "That show isn't in the index any more.");
-        const no = await deniedFields();
-        const people = (p.credits?.data ?? [])
+      return cached(`pc2:show:${id}`, 30 * DAY, async () => {
+        await spendOne(w.id, MEMBER_FRESH * 2, "That's a lot of new profiles today. Try again tomorrow.");
+        const base = (await readCache<any>(`pc2:show-base:${id}`, 30 * DAY)) ?? one(await get(`/podcasts/${id}`));
+        const [credits, contacts, socials, reach] = await Promise.all([
+          maybe(`/podcasts/${id}/credits`),
+          maybe(`/podcasts/${id}/contacts`),
+          maybe(`/podcasts/${id}/socials`),
+          maybe(`/podcasts/${id}/reach`),
+        ]);
+        const s = one(socials) ?? {};
+        const r = one(reach) ?? {};
+        const show = toShow(base, 1200);
+        show.socials = socialsOf(s.socialLinks);
+        show.powerScore = n(r.powerScore);
+        const avg = r.avgEpisodeReach;
+        show.audienceRange = avg?.from != null && avg?.to != null ? { from: Number(avg.from), to: Number(avg.to) } : null;
+        show.audience = show.audienceRange ? Math.round((show.audienceRange.from + show.audienceRange.to) / 2) : null;
+        const people = list(credits)
           .filter((c: any) => c?.creator?.pcid)
           .map((c: any) => ({ pcid: String(c.creator.pcid), name: trim(c.creator.name, 120), image: c.creator.imageUrl ?? "", role: c.role?.title ?? "", episodes: n(c.episodeCount) }));
         return {
-          ...toShow(p, 1200),
-          email: String(p.authorContact?.email ?? "").trim(),
-          contacts: (p.contacts ?? []).map((c: any) => ({ name: trim(c.fullName, 120), email: String(c.email ?? ""), url: String(c.url ?? ""), type: String(c.type ?? "") })).filter((c: any) => c.email || c.url),
+          ...show,
+          email: String(base?.author?.email ?? "").trim(),
+          contacts: list(contacts)
+            .map((c: any) => ({ name: trim(c.fullName, 120), email: String(c.email || c.rssEmail || ""), url: String(c.url ?? ""), type: [c.role, c.type].filter(Boolean).join(" · ") }))
+            .filter((c: any) => c.email || c.url),
           people,
-          locked: optional.filter((f) => no.has(f)),
+          locked: [...(credits ? [] : ["credits"]), ...(contacts ? [] : ["contacts"])],
         } satisfies PodShowFull;
       });
     }),
   );
 
-  /** One person: the shows they host, the episodes they've been a guest on. */
+  /** One person: the shows they host or guest on, the latest episodes they're in. */
   app.get("/api/discover/podcasts/person", (req, res) =>
     send(res, async () => {
-      await member(req);
+      const w = await who(req);
+      if (w.visitor) throw new HttpError(401, "Create a free account to open a profile.");
       const pcid = String(req.query.pcid ?? "").replace(/[^0-9A-Za-z]/g, "").slice(0, 30);
       if (!pcid) throw new HttpError(400, "Who?");
-      return cached(`pc:person:${pcid}`, 30 * DAY, async () => {
-        const d = await ask(
-          (allowed) => `query Person($id: String!) { creator(identifier: { id: $id, type: PCID }) { ${PERSON_FIELDS}
-            ${allowed("creatorCredits") ? "credits(first: 20) { data { podcast { id title imageUrl webUrl } role { code title } episodeCount } }" : ""}
-            ${allowed("episodeCredits") ? "episodeCredits(first: 12) { data { episode { title airDate webUrl podcast { id title imageUrl } } role { code title } } }" : ""} } }`,
-          { id: pcid },
-          ["creatorCredits", "episodeCredits"],
-        );
-        const c = d?.creator;
-        if (!c) throw new HttpError(404, "That person isn't in the index any more.");
-        const shows: PodCredit[] = (c.credits?.data ?? [])
-          .filter((x: any) => x?.podcast?.id)
-          .map((x: any) => ({ id: String(x.podcast.id), title: trim(x.podcast.title, 160), image: x.podcast.imageUrl ?? "", web: x.podcast.webUrl ?? "", role: x.role?.title ?? "", episodes: n(x.episodeCount) }));
-        const recent = (c.episodeCredits?.data ?? [])
-          .filter((x: any) => x?.episode?.title)
-          .map((x: any) => ({ title: trim(x.episode.title, 160), date: x.episode.airDate ?? "", web: x.episode.webUrl ?? "", show: trim(x.episode.podcast?.title, 120), showId: String(x.episode.podcast?.id ?? ""), image: x.episode.podcast?.imageUrl ?? "", role: x.role?.title ?? "" }));
-        return { ...toPerson(c), shows, recent } satisfies PodPersonFull;
+      return cached(`pc2:person:${pcid}`, 30 * DAY, async () => {
+        await spendOne(w.id, MEMBER_FRESH * 2, "That's a lot of new profiles today. Try again tomorrow.");
+        const base = (await readCache<any>(`pc2:person-base:${pcid}`, 30 * DAY)) ?? one(await get(`/creators/${pcid}`));
+        const [shows, episodes] = await Promise.all([maybe(`/creators/${pcid}/podcasts`), maybe(`/creators/${pcid}/episodes`, { per_page: 12 })]);
+        return {
+          ...toPerson(base),
+          shows: list(shows)
+            .filter((x: any) => x?.podcast?.id)
+            .map((x: any) => ({ id: String(x.podcast.id), title: trim(x.podcast.title, 160), image: x.podcast.imageUrl ?? "", web: "", role: x.role?.title ?? "", episodes: n(x.episodeCount) })),
+          recent: list(episodes)
+            .filter((x: any) => x?.episode?.title)
+            .slice(0, 12)
+            .map((x: any) => ({ title: trim(x.episode.title, 160), date: iso(x.episode.airDate), web: "", show: trim(x.podcast?.title, 120), showId: String(x.podcast?.id ?? ""), image: x.podcast?.imageUrl ?? "", role: x.role?.title ?? "" })),
+        } satisfies PodPersonFull;
       });
     }),
   );

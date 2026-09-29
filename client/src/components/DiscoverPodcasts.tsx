@@ -12,7 +12,7 @@ export type PodShow = {
   episodes: number | null; latest: string; since: string; categories: string[]; host: string;
   rating: number | null; ratings: number | null; language: string;
   audience: number | null; audienceRange: { from: number; to: number } | null; powerScore: number | null; hasGuests: boolean | null;
-  socials: { platform: string; url: string }[]; apple: string; spotify: string;
+  socials: { platform: string; url: string }[]; apple: string; spotify: string; status?: string; everyDays?: number | null;
 };
 export type PodPerson = {
   kind: "person"; pcid: string; name: string; subtitle: string; bio: string; image: string; web: string; location: string;
@@ -24,28 +24,19 @@ type PodItem = PodShow | PodPerson;
 type Page = { kind: "shows" | "people"; page: number; pageSize: number; total: number; results: PodItem[]; preview: boolean; locked: string[] };
 
 /** What a podcast search asks. */
-export type PodAsk = { q: string; kind: "shows" | "people"; branch: string; sort: string; minAudience: number | null; hasGuests: boolean };
+export type PodAsk = { q: string; kind: "shows" | "people"; branch: string; sort: string; hasGuests: boolean; active: boolean };
 /** Something the drawer opens: a show by id, a person by pcid (with what we know so far). */
 export type PodOpen = { kind: "show"; id: string; seed?: Partial<PodShow> } | { kind: "person"; pcid: string; seed?: Partial<PodPerson> };
 
 export const POD_SHOW_SORTS = [
   { v: "best", label: "Best match" },
-  { v: "audience", label: "Biggest audience", needs: "audienceEstimate" },
-  { v: "power", label: "Power Score", needs: "powerScore" },
-  { v: "recent", label: "Newest episode" },
-  { v: "episodes", label: "Most episodes" },
+  { v: "power", label: "Biggest (Power Score)" },
+  { v: "newest", label: "Newest shows" },
 ];
 export const POD_PEOPLE_SORTS = [
   { v: "best", label: "Best match" },
-  { v: "appearances", label: "Most guest spots" },
-  { v: "followers", label: "Most followers" },
+  { v: "appearances", label: "Most episodes" },
   { v: "recent", label: "Recently on a show" },
-];
-export const POD_AUDIENCE = [
-  { label: "Any audience", min: null as number | null },
-  { label: "1K+ an episode", min: 1_000 },
-  { label: "10K+ an episode", min: 10_000 },
-  { label: "100K+ an episode", min: 100_000 },
 ];
 
 const compact = (v: number | null | undefined) => (v == null ? "–" : Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(v));
@@ -98,7 +89,7 @@ export function PodcastResults({ ask, isMember, onJoin, onOpen, saved, onSave }:
     return (search.data?.pages ?? []).flatMap((p) => p.results).filter((x) => { const k = x.kind === "show" ? x.id : x.pcid; if (seen.has(k)) return false; seen.add(k); return true; });
   }, [search.data]);
   const opens: PodOpen[] = rows.map((x) => (x.kind === "show" ? { kind: "show", id: x.id, seed: x } : { kind: "person", pcid: x.pcid, seed: x }));
-  const lockAfter = isMember ? Infinity : 5;
+  const lockAfter = isMember ? Infinity : 8;
   const people = ask.kind === "people";
 
   return (
@@ -183,7 +174,7 @@ export function PodcastResults({ ask, isMember, onJoin, onOpen, saved, onSave }:
         {search.hasNextPage && (
           <div className="mt-6 flex flex-col items-center gap-1">
             <Button variant="outline" className="h-11 gap-2 rounded-full px-6" onClick={() => (isMember ? void search.fetchNextPage() : onJoin())} disabled={search.isFetchingNextPage} data-testid="pod-more">
-              {search.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Load 10 more
+              {search.isFetchingNextPage ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Load more
             </Button>
             <span className="text-xs text-muted-foreground">Showing {rows.length} of {first!.total.toLocaleString()}</span>
           </div>
@@ -292,9 +283,9 @@ export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, sav
               {show && (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {show.audience != null ? <Stat label="Listeners" value={compact(show.audience)} sub={show.audienceRange ? `${compact(show.audienceRange.from)}–${compact(show.audienceRange.to)} an episode` : "an episode"} /> : null}
-                  {show.powerScore != null ? <Stat label="Power Score" value={String(Math.round(show.powerScore))} sub="out of 100" /> : null}
+                  {show.powerScore != null ? <Stat label="Power Score" value={String(Math.round(show.powerScore))} sub="Podchaser's reach score" /> : null}
                   <Stat label="Episodes" value={show.episodes != null ? show.episodes.toLocaleString() : "–"} sub={show.since ? `since ${new Date(show.since).getFullYear()}` : undefined} />
-                  <Stat label="Last episode" value={show.latest ? ago(show.latest) : "–"} sub={show.latest && quiet(show.latest) ? "gone quiet" : undefined} />
+                  <Stat label="Last episode" value={show.latest ? ago(show.latest) : "–"} sub={show.status === "complete" ? "show has ended" : show.latest && quiet(show.latest) ? "gone quiet" : show.everyDays ? `every ${Math.round(show.everyDays)} ${Math.round(show.everyDays) === 1 ? "day" : "days"}` : undefined} />
                   {show.rating != null && show.ratings ? <Stat label="Rating" value={`${show.rating.toFixed(1)} ★`} sub={`${show.ratings.toLocaleString()} ratings`} /> : null}
                   {show.hasGuests != null ? <Stat label="Guests" value={show.hasGuests ? "Yes" : "No"} sub={show.hasGuests ? "takes guests" : "host only"} /> : null}
                 </div>
@@ -302,7 +293,6 @@ export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, sav
               {person && (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   <Stat label="Episodes" value={person.appearances != null ? person.appearances.toLocaleString() : "–"} sub="hosted or a guest on" />
-                  {person.followers ? <Stat label="Followers" value={compact(person.followers)} sub="on Podchaser" /> : null}
                   {person.shows?.length ? <Stat label="Shows" value={String(person.shows.length)} sub="they're credited on" /> : null}
                 </div>
               )}

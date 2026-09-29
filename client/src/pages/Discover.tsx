@@ -20,7 +20,7 @@ import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { CreatorProfileSections, type Profile, type ProfilePerson } from "@/components/CreatorProfileSections";
 import { DiscoverEnrich, type EnrichCard } from "@/components/DiscoverEnrich";
 import { FiltersPanel, FilterChips, activeFilters, filtersForServer, type Filters } from "@/components/DiscoverFilters";
-import { PodcastResults, PodcastDrawer, POD_AUDIENCE, POD_PEOPLE_SORTS, POD_SHOW_SORTS, type PodOpen } from "@/components/DiscoverPodcasts";
+import { PodcastResults, PodcastDrawer, POD_PEOPLE_SORTS, POD_SHOW_SORTS, type PodOpen } from "@/components/DiscoverPodcasts";
 
 const NAVY = "#04102b";
 const GOLD = "#F0A71F";
@@ -236,12 +236,14 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
   const [tab, setTab] = useState<"search" | "enrich" | "lists">("search");
   // Podcasts: their own sort, audience floor and guests switch, and the show or person open.
   const [pcSort, setPcSort] = useState("best");
-  const [pcMin, setPcMin] = useState(0);
+  const [pcActive, setPcActive] = useState(false);
   const [pcGuests, setPcGuests] = useState(false);
   const [podOpen, setPodOpen] = useState<PodOpen | null>(null);
   const [podFrom, setPodFrom] = useState<PodOpen[]>([]);
   const pcStatus = useQuery<{ on: boolean; locked?: string[] }>({ queryKey: ["/api/discover/podcasts/status"], enabled: platform === "podcasts", queryFn: async () => (await fetch("/api/discover/podcasts/status")).json(), staleTime: 10 * 60_000 });
   const pcLocked = new Set(pcStatus.data?.locked ?? []);
+  // Shows and people sort by different things.
+  useEffect(() => { setPcSort("best"); }, [mode]);
   // Crossing between creators and podcasts changes what the search asks, so it starts over.
   const choosePlatform = (p: string) => {
     const was = platform === "podcasts";
@@ -507,13 +509,11 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
                         {mode === "shows" && !pcLocked.has("hasGuests") && (
                           <button type="button" aria-pressed={pcGuests} onClick={() => setPcGuests((v) => !v)} className={`h-9 rounded-full border px-3 text-sm font-medium transition-colors ${pcGuests ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card hover:border-[#053877]/40"}`} data-testid="pod-guests">Takes guests</button>
                         )}
-                        {mode === "shows" && !pcLocked.has("audienceEstimate") && (
-                          <select value={pcMin} onChange={(e) => setPcMin(Number(e.target.value))} className="h-9 rounded-full border border-border bg-card px-3 text-sm" aria-label="Audience size" data-testid="pod-audience">
-                            {POD_AUDIENCE.map((a, i) => <option key={a.label} value={i}>{a.label}</option>)}
-                          </select>
+                        {mode === "shows" && (
+                          <button type="button" aria-pressed={pcActive} onClick={() => setPcActive((v) => !v)} className={`h-9 rounded-full border px-3 text-sm font-medium transition-colors ${pcActive ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card hover:border-[#053877]/40"}`} title="A new episode in the last 90 days" data-testid="pod-active">Active lately</button>
                         )}
                         <select value={pcSort} onChange={(e) => setPcSort(e.target.value)} className="h-9 rounded-full border border-border bg-card px-3 text-sm" aria-label="Sort" data-testid="pod-sort">
-                          {(mode === "shows" ? POD_SHOW_SORTS.filter((o) => !o.needs || !pcLocked.has(o.needs)) : POD_PEOPLE_SORTS).map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+                          {(mode === "shows" ? POD_SHOW_SORTS : POD_PEOPLE_SORTS).map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
                         </select>
                       </>
                     ) : (<>
@@ -570,7 +570,7 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
           </>
         ) : submitted && isPodMode(submitted.mode) ? (
           <PodcastResults
-            ask={{ q: submitted.q, kind: submitted.mode, branch: submitted.branch, sort: pcSort, minAudience: submitted.mode === "shows" ? POD_AUDIENCE[pcMin].min : null, hasGuests: submitted.mode === "shows" && pcGuests }}
+            ask={{ q: submitted.q, kind: submitted.mode, branch: submitted.branch, sort: pcSort, hasGuests: submitted.mode === "shows" && pcGuests, active: submitted.mode === "shows" && pcActive }}
             isMember={isMember}
             onJoin={() => setGate(true)}
             onOpen={(o, from) => { setPodFrom(from); setPodOpen(o); }}
