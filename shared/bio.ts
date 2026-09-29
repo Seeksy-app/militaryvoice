@@ -510,11 +510,13 @@ export const RESERVED_HANDLES = new Set([
 export const handleOk = (h: string) => /^[a-z0-9][a-z0-9._-]{2,29}$/.test(h) && !RESERVED_HANDLES.has(h);
 
 /** The AI voices for a talking intro (ElevenLabs on fal); a sample of each is at /voices/<id>.mp3. */
-export const INTRO_VOICES: { id: string; man: boolean; note: string }[] = [
+/** `eleven`: a voice from ElevenLabs' community library, spoken through ElevenLabs directly by its id (fal only has the stock ones). */
+export const INTRO_VOICES: { id: string; man: boolean; note: string; eleven?: string }[] = [
   { id: "Brian", man: true, note: "deep, steady" }, { id: "Bill", man: true, note: "older, trustworthy" }, { id: "Roger", man: true, note: "confident" },
   { id: "Daniel", man: true, note: "British, newsreader" }, { id: "George", man: true, note: "warm, British" }, { id: "Chris", man: true, note: "easy-going" },
   { id: "Eric", man: true, note: "friendly" }, { id: "Will", man: true, note: "young, relaxed" }, { id: "Liam", man: true, note: "young, clear" },
   { id: "Callum", man: true, note: "gravelly" }, { id: "Charlie", man: true, note: "Australian, casual" },
+  { id: "Brock", man: true, note: "loud Marine sergeant", eleven: "DGzg6RaUqxGRTHSBjfgF" }, { id: "Sarge", man: true, note: "rough, war-torn sergeant", eleven: "GLSWsaquVBsIPLPPRi2s" }, { id: "Jerry", man: true, note: "gruff, gritty commander", eleven: "TxWZERZ5Hc6h9dGxVmXa" },
   { id: "Sarah", man: false, note: "soft, calm" }, { id: "Matilda", man: false, note: "warm" }, { id: "Jessica", man: false, note: "bright" },
   { id: "Laura", man: false, note: "upbeat" }, { id: "Aria", man: false, note: "expressive" }, { id: "Alice", man: false, note: "clear, British" },
   { id: "Lily", man: false, note: "British, gentle" }, { id: "Charlotte", man: false, note: "smooth" },

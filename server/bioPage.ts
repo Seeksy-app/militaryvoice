@@ -678,10 +678,20 @@ export function registerBioPage(app: Express) {
         const text = String(req.body?.script ?? "").trim().slice(0, 600);
         if (text.length < 10) return res.status(400).json({ message: "Write what you'd like to say." });
         const voice = VOICES.includes(String(req.body?.voice)) ? String(req.body.voice) : "Brian";
-        const t = await fetch("https://fal.run/fal-ai/elevenlabs/tts/turbo-v2.5", { method: "POST", headers: FAL(), signal: AbortSignal.timeout(60_000), body: JSON.stringify({ text, voice, stability: 0.5, similarity_boost: 0.75, speed: 1 }) });
-        const tj = (await t.json().catch(() => ({}))) as { audio?: { url?: string } };
-        if (!t.ok || !tj.audio?.url) throw new Error(`tts ${t.status}`);
-        audio = tj.audio.url;
+        const community = INTRO_VOICES.find((v) => v.id === voice)?.eleven;
+        const elevenKey = (process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY || "").trim();
+        if (community && elevenKey) {
+          // A community voice: spoken by ElevenLabs itself, kept with us so the avatar model can fetch it.
+          const t = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${community}?output_format=mp3_44100_128`, { method: "POST", signal: AbortSignal.timeout(60_000), headers: { "xi-api-key": elevenKey, "content-type": "application/json" }, body: JSON.stringify({ text, model_id: "eleven_turbo_v2_5", voice_settings: { stability: 0.4, similarity_boost: 0.8 } }) });
+          if (!t.ok) throw new Error(`tts ${t.status}`);
+          audio = await uploadShowAsset(`bio/${row.id}-voice-${Date.now()}.mp3`, Buffer.from(await t.arrayBuffer()), "audio/mpeg");
+        } else {
+          // A stock voice through fal (or, with no ElevenLabs key, the gravelly stock one standing in).
+          const t = await fetch("https://fal.run/fal-ai/elevenlabs/tts/turbo-v2.5", { method: "POST", headers: FAL(), signal: AbortSignal.timeout(60_000), body: JSON.stringify({ text, voice: community ? "Callum" : voice, stability: 0.5, similarity_boost: 0.75, speed: 1 }) });
+          const tj = (await t.json().catch(() => ({}))) as { audio?: { url?: string } };
+          if (!t.ok || !tj.audio?.url) throw new Error(`tts ${t.status}`);
+          audio = tj.audio.url;
+        }
       }
       introRuns.set(row.id, [...hits, Date.now()]);
       const r = await fetch(`https://queue.fal.run/${INTRO}`, {
