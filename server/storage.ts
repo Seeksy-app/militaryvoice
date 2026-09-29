@@ -3217,6 +3217,17 @@ class DatabaseStorage implements IStorage {
     return rows;
   }
 
+  /** Subscribed contacts carrying one tag (tags are a JSON list, compared lower-case). */
+  async listActiveContactsWithTag(tag: string): Promise<{ id: number; email: string; firstName: string }[]> {
+    await ready();
+    const rows = await db.select({ id: contacts.id, email: contacts.email, firstName: contacts.firstName, tags: contacts.tags })
+      .from(contacts).where(eq(contacts.status, "active")).orderBy(contacts.id);
+    const want = tag.trim().toLowerCase();
+    return rows
+      .filter((r) => { try { return (JSON.parse(r.tags || "[]") as string[]).some((t) => String(t).trim().toLowerCase() === want); } catch { return false; } })
+      .map(({ id, email, firstName }) => ({ id, email, firstName }));
+  }
+
   // -------------------------------------------------------------------------
   // CRM — broadcasts
   // -------------------------------------------------------------------------
@@ -3243,7 +3254,7 @@ class DatabaseStorage implements IStorage {
     return rows.map((r) => ({ email: r.email, firstName: r.hostName.split(" ")[0] }));
   }
 
-  async createBroadcast(data: { subject: string; bodyText: string; eventId?: number | null; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null; source?: string }): Promise<BroadcastRow> {
+  async createBroadcast(data: { subject: string; bodyText: string; eventId?: number | null; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null; source?: string; preheader?: string }): Promise<BroadcastRow> {
     await ready();
     const isScheduled = !!data.scheduledFor;
     const [row] = await db.insert(broadcasts).values({
@@ -3256,12 +3267,13 @@ class DatabaseStorage implements IStorage {
       status: isScheduled ? "scheduled" : "draft",
       scheduledFor: data.scheduledFor ?? null,
       source: data.source ?? "manual",
+      preheader: data.preheader ?? "",
       createdAt: new Date().toISOString(),
     }).returning();
     return row;
   }
 
-  async updateBroadcast(id: number, data: { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null; source?: string }): Promise<BroadcastRow | null> {
+  async updateBroadcast(id: number, data: { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null; source?: string; preheader?: string }): Promise<BroadcastRow | null> {
     await ready();
     const patch: Partial<BroadcastRow> = {};
     if (data.subject !== undefined) patch.subject = data.subject;
@@ -3270,6 +3282,7 @@ class DatabaseStorage implements IStorage {
     if (data.sender !== undefined) patch.sender = data.sender;
     if (data.banner !== undefined) patch.banner = data.banner;
     if (data.source !== undefined) patch.source = data.source;
+    if (data.preheader !== undefined) patch.preheader = data.preheader;
     if ("scheduledFor" in data) {
       patch.scheduledFor = data.scheduledFor ?? null;
       patch.status = data.scheduledFor ? "scheduled" : "draft";

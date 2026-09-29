@@ -672,6 +672,11 @@ async function resolveBroadcastRecipients(
       for (const r of await storage.resolveSegment(filter)) deduped.set(r.email.toLowerCase(), r);
     }
   }
+  // Everyone we've tagged (Contact profile > Tags), still subscribed.
+  if (seg.startsWith("tag:")) {
+    const tag = seg.slice(4).trim().toLowerCase();
+    for (const r of await storage.listActiveContactsWithTag(tag)) deduped.set(r.email.toLowerCase(), r);
+  }
   if (seg.startsWith("engagement:")) {
     const [, bId, engType] = seg.split(":");
     for (const r of await storage.getEngagementRecipients(Number(bId), engType as any)) {
@@ -1155,7 +1160,8 @@ export function registerRoutes(app: Express): void {
             slotLabel: r.slotLabel,
             subject: broadcast.subject,
             bodyText: broadcast.bodyText,
-            unsubscribeUrl: `${origin}/unsubscribe?token=scheduled`,
+            preheader: broadcast.preheader,
+            unsubscribeUrl: unsubscribeUrl(req, r.email),
             sender: broadcast.sender ?? "team",
             banner: broadcast.banner ?? "welcome",
             senderMember: senderMember ?? undefined,
@@ -1210,7 +1216,8 @@ export function registerRoutes(app: Express): void {
           slotLabel: await slotLabelForEmail(broadcast.eventId, f.email),
           subject: broadcast.subject,
           bodyText: broadcast.bodyText,
-          unsubscribeUrl: `${origin}/unsubscribe?token=followup`,
+          preheader: broadcast.preheader,
+          unsubscribeUrl: unsubscribeUrl(req, f.email),
           sender: broadcast.sender ?? "team",
           banner: broadcast.banner ?? "welcome",
           senderMember: senderMember ?? undefined,
@@ -9372,16 +9379,16 @@ export function registerRoutes(app: Express): void {
   });
 
   app.post("/api/admin/broadcasts", requireAdmin, async (req, res) => {
-    const { subject, bodyText, eventId, segment, sender, banner, scheduledFor, source } = req.body as { subject?: string; bodyText?: string; eventId?: number | null; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null; source?: string };
+    const { subject, bodyText, eventId, segment, sender, banner, scheduledFor, source, preheader } = req.body as { subject?: string; bodyText?: string; eventId?: number | null; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null; source?: string; preheader?: string };
     if (!subject?.trim() || !bodyText?.trim()) return res.status(400).json({ error: "subject and bodyText are required." });
-    const row = await storage.createBroadcast({ subject: subject.trim(), bodyText: bodyText.trim(), eventId: eventId ?? null, segment: segment ?? "contacts", sender: sender ?? "team", banner: banner ?? "welcome", scheduledFor: scheduledFor ?? null, source });
+    const row = await storage.createBroadcast({ subject: subject.trim(), bodyText: bodyText.trim(), eventId: eventId ?? null, segment: segment ?? "contacts", sender: sender ?? "team", banner: banner ?? "welcome", scheduledFor: scheduledFor ?? null, source, preheader: preheader?.trim().slice(0, 200) });
     res.json(row);
   });
 
   app.put("/api/admin/broadcasts/:id", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
-    const { subject, bodyText, segment, sender, banner, scheduledFor, source } = req.body as { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null; source?: string };
-    const row = await storage.updateBroadcast(id, { subject: subject?.trim(), bodyText: bodyText?.trim(), segment, sender, banner, scheduledFor: scheduledFor ?? null, source });
+    const { subject, bodyText, segment, sender, banner, scheduledFor, source, preheader } = req.body as { subject?: string; bodyText?: string; segment?: string; sender?: string; banner?: string; scheduledFor?: string | null; source?: string; preheader?: string };
+    const row = await storage.updateBroadcast(id, { subject: subject?.trim(), bodyText: bodyText?.trim(), segment, sender, banner, scheduledFor: scheduledFor ?? null, source, preheader: preheader?.trim().slice(0, 200) });
     if (!row) return res.status(404).json({ error: "Broadcast not found or already sent." });
     res.json(row);
   });
@@ -9410,6 +9417,7 @@ export function registerRoutes(app: Express): void {
       banner: source.banner,
       scheduledFor: null,
       source: "manual",
+      preheader: source.preheader,
     });
     res.json(row);
   });
@@ -9469,6 +9477,7 @@ export function registerRoutes(app: Express): void {
           slotLabel: (await slotLabelForEmail(broadcast.eventId, to)) || sampleSlotLabel,
           subject: `[TEST] ${broadcast.subject}`,
           bodyText: broadcast.bodyText,
+          preheader: broadcast.preheader,
           unsubscribeUrl: `${origin}/unsubscribe?token=test`,
           // Signed for the tester's own address, so the remind-me link in a
           // test is the real one and can actually be clicked. A preview that
@@ -9510,6 +9519,7 @@ export function registerRoutes(app: Express): void {
         slotLabel: r.slotLabel,
         subject: broadcast.subject,
         bodyText: broadcast.bodyText,
+        preheader: broadcast.preheader,
         unsubscribeUrl: unsubscribeUrl(req, r.email),
         remindUrl: followUpUrl(req, r.email, id),
         sender: broadcast.sender ?? "team",
@@ -9548,8 +9558,8 @@ export function registerRoutes(app: Express): void {
    * because it is displayed in an iframe — the shell carries its own styles.
    */
   app.post("/api/admin/broadcasts/preview", requireAdmin, async (req, res) => {
-    const { subject, bodyText, sender, banner, firstName } = req.body as {
-      subject?: string; bodyText?: string; sender?: string; banner?: string; firstName?: string;
+    const { subject, bodyText, sender, banner, firstName, preheader } = req.body as {
+      subject?: string; bodyText?: string; sender?: string; banner?: string; firstName?: string; preheader?: string;
     };
     const senderMember = await resolveTeamSender(sender ?? "team");
     const rendered = renderBroadcastEmail({
@@ -9562,6 +9572,7 @@ export function registerRoutes(app: Express): void {
       banner,
       senderMember,
       bannerTitle: await broadcastBannerTitle(),
+      preheader,
     });
     res.type("html").send(rendered.html);
   });

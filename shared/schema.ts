@@ -1940,6 +1940,8 @@ export const broadcasts = pgTable("broadcasts", {
   sentAt: text("sent_at"),
   scheduledFor: text("scheduled_for"),
   source: text("source").notNull().default("manual"),
+  /** The grey line an inbox shows after the subject. Empty: the inbox takes the first words of the email. */
+  preheader: text("preheader").notNull().default(""),
   /**
    * Reusable copy rather than something that goes out.
    *

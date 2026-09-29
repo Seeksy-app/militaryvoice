@@ -33,7 +33,6 @@ import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
 import { RiccohPosts } from "@/components/RiccohPosts";
 import { RiccohImages } from "@/components/RiccohImages";
-import { RichBody } from "@/components/RichBody";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
 import { AdminClips } from "@/components/AdminClips";
@@ -44,6 +43,7 @@ import { ShowSponsorsCard } from "@/components/ShowSponsors";
 import { AdminChat } from "@/components/AdminChat";
 import { AdminMail } from "@/components/AdminMail";
 import { ContactProfile } from "@/components/AdminContact";
+import { CampaignBuilder } from "@/components/CampaignBuilder";
 import { AudienceFigures } from "@/components/AudienceFigures";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
@@ -1218,77 +1218,6 @@ function SponsorPackagesCard({ eventId }: { eventId: number }) {
         </DialogContent>
       </Dialog>
     </Card>
-  );
-}
-
-/**
- * The email as it will arrive.
- *
- * Rendered server-side by the same function the send path uses and shown in an
- * iframe, because the email's HTML carries its own styles and would otherwise
- * inherit the admin page's. Debounced: it re-renders while someone types, and
- * a request per keystroke is a request per keystroke.
- */
-function EmailPreview({ subject, bodyText, sender, banner }: {
-  subject: string;
-  bodyText: string;
-  sender: string;
-  banner: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [html, setHtml] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setLoading(true);
-    const t = window.setTimeout(async () => {
-      try {
-        const res = await adminSend("POST", "/api/admin/broadcasts/preview", { subject, bodyText, sender, banner });
-        const text = await res.text();
-        if (!cancelled) setHtml(text);
-      } catch {
-        if (!cancelled) setHtml("<p style='font-family:sans-serif;padding:24px;'>Couldn't render the preview.</p>");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }, 600);
-    return () => { cancelled = true; window.clearTimeout(t); };
-  }, [open, subject, bodyText, sender, banner]);
-
-  return (
-    <div className="rounded-xl border border-border">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm font-medium hover-elevate"
-        data-testid="button-toggle-preview"
-      >
-        <span className="flex items-center gap-2">
-          <Eye className="h-4 w-4 text-primary" /> Preview
-          <span className="text-xs font-normal text-muted-foreground">
-            exactly how it arrives, with {"{{First_Name}}"} filled in
-          </span>
-        </span>
-        <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-90" : ""}`} />
-      </button>
-      {open && (
-        <div className="border-t border-border bg-muted/30 p-3">
-          {loading && !html ? (
-            <Skeleton className="h-[480px] w-full rounded-lg" />
-          ) : (
-            <iframe
-              title="Email preview"
-              srcDoc={html}
-              sandbox=""
-              className="h-[560px] w-full rounded-lg border border-border bg-white"
-              data-testid="iframe-email-preview"
-            />
-          )}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -4073,25 +4002,13 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
   // ── compose / send ──────────────────────────────────────────────────────
 
   const [editingBroadcast, setEditingBroadcast] = useState<BroadcastRow | null>(null);
-  const [bSubject, setBSubject] = useState("");
-  const [bBody, setBBody] = useState("");
   const [bSegment, setBSegment] = useState<string>("signups");
-  const [bSender, setBSender] = useState("team");
-  const [bBanner, setBBanner] = useState("welcome");
-  const [bScheduledFor, setBScheduledFor] = useState("");
   const [bBusy, setBBusy] = useState(false);
-  const [bShowPreview, setBShowPreview] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
 
   function openCompose(prefillSegment?: string, source?: string) {
     setEditingBroadcast(null);
     setBSource(source ?? "");
-    setBSubject(""); setBBody("");
     setBSegment((prefillSegment ?? "signups") as any);
-    setBSender("team"); setBBanner("welcome"); setBScheduledFor("");
-    setBShowPreview(false);
     setView("compose");
   }
 
@@ -4103,47 +4020,8 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
   function openEdit(b: BroadcastRow) {
     setEditingBroadcast(b);
     setBSource(b.source ?? "");
-    setBSubject(b.subject); setBBody(b.bodyText);
     setBSegment(b.segment as "signups" | "contacts" | "all");
-    setBSender(b.sender ?? "team");
-    setBBanner(b.banner ?? "welcome");
-    setBScheduledFor(b.scheduledFor ? b.scheduledFor.slice(0, 16) : "");
-    setBShowPreview(false);
     setView("compose");
-  }
-
-  async function saveDraft(e: React.FormEvent) {
-    e.preventDefault();
-    if (!bSubject.trim() || !bBody.trim()) return;
-    setBBusy(true);
-    const scheduledFor = bScheduledFor ? new Date(bScheduledFor).toISOString() : null;
-    try {
-      if (!editingBroadcast) {
-        await adminSend("POST", "/api/admin/broadcasts", { subject: bSubject.trim(), bodyText: bBody.trim(), eventId, segment: bSegment, sender: bSender ?? "team", banner: bBanner, scheduledFor, ...(bSource ? { source: bSource } : {}) });
-      } else {
-        await adminSend("PUT", `/api/admin/broadcasts/${editingBroadcast.id}`, { subject: bSubject.trim(), bodyText: bBody.trim(), segment: bSegment, sender: bSender ?? "team", banner: bBanner, scheduledFor });
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/broadcasts", eventId] });
-      toast({ title: scheduledFor ? "Scheduled ✓" : "Draft saved", description: scheduledFor ? `Will send at ${new Date(scheduledFor).toLocaleString()}` : undefined });
-      setView("campaigns");
-    } catch (err) {
-      toast({ title: "Save failed", description: (err as Error).message, variant: "destructive" });
-    } finally { setBBusy(false); }
-  }
-
-  async function draftWithAI() {
-    if (!aiPrompt.trim()) return;
-    setAiLoading(true);
-    try {
-      const res = await adminSend("POST", "/api/admin/ai/draft-email", { prompt: aiPrompt });
-      const result = await res.json() as { subject: string; body: string };
-      setBSubject(result.subject ?? "");
-      setBBody(result.body ?? "");
-      setAiOpen(false);
-      setAiPrompt("");
-    } catch (err) {
-      toast({ title: "AI draft failed", description: (err as Error).message, variant: "destructive" });
-    } finally { setAiLoading(false); }
   }
 
   const [confirmBroadcast, setConfirmBroadcast] = useState<BroadcastRow | null>(null);
@@ -4228,30 +4106,6 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
       });
     } catch (err) {
       toast({ title: "Couldn't change that", description: (err as Error).message, variant: "destructive" });
-    } finally { setBBusy(false); }
-  }
-
-  async function sendTest() {
-    if (!editingBroadcast) {
-      toast({ title: "Save draft first", description: "Save the draft before sending a test email." });
-      return;
-    }
-    setBBusy(true);
-    try {
-      const result: { ok: boolean; to: string } = await adminSend("POST", `/api/admin/broadcasts/${editingBroadcast.id}/test?eventId=${eventId}`).then((r) => r.json());
-      // The endpoint reports whether the provider accepted it. Saying "sent"
-      // regardless is how a dead mail provider stays invisible.
-      if (result.ok) {
-        toast({ title: "Test sent ✓", description: `Preview email sent to ${result.to}` });
-      } else {
-        toast({
-          title: "Test not sent",
-          description: `The mail provider rejected it. Nothing arrived at ${result.to}.`,
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      toast({ title: "Test failed", description: (err as Error).message, variant: "destructive" });
     } finally { setBBusy(false); }
   }
 
@@ -4813,246 +4667,16 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
 
       {/* ── COMPOSE ── */}
       {view === "compose" && (
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setView("campaigns")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="h-3.5 w-3.5" /> Broadcasts
-            </button>
-            <span className="text-sm font-semibold">{editingBroadcast ? "Edit draft" : "New broadcast"}</span>
-            <div className="ml-auto flex rounded-md border overflow-hidden text-xs">
-              <button
-                type="button"
-                onClick={() => setBShowPreview(false)}
-                className={`px-3 py-1.5 font-medium transition-colors ${!bShowPreview ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-              >Compose</button>
-              <button
-                type="button"
-                onClick={() => setBShowPreview(true)}
-                className={`px-3 py-1.5 font-medium transition-colors ${bShowPreview ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
-              >Preview</button>
-            </div>
-          </div>
-
-          {bShowPreview ? (
-            <div className="flex flex-col gap-3">
-              <p className="text-xs text-muted-foreground">Preview — <code>{"{{First_Name}}"}</code> shown as "Friend"</p>
-              <div className="border rounded-xl overflow-hidden max-w-[600px] shadow-sm">
-                <div className="relative h-36 overflow-hidden">
-                  <img
-                    src={{ welcome: "/listeners-bg.jpg", podcasters: "/podcasters-bg.jpg", marathon: "/hero-3.jpg", schedule: "/agenda-bg.jpg" }[bBanner] ?? "/listeners-bg.jpg"}
-                    alt=""
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                  {(() => {
-                    const previewMember = bSender.startsWith("member:") ? teamMembers.find((m) => m.id === Number(bSender.split(":")[1])) : null;
-                    return (
-                      <div className="absolute inset-0 flex flex-col justify-end p-6" style={{ background: "linear-gradient(135deg,rgba(5,56,119,0.90) 0%,rgba(5,56,119,0.60) 100%)" }}>
-                        <p className="text-[#F0A71F] text-xs font-bold uppercase tracking-widest opacity-75">
-                          {previewMember ? `${previewMember.name} · MilitaryVoices.ai` : "MilitaryVoices.ai"}
-                        </p>
-                      </div>
-                    );
-                  })()}
-                </div>
-                {(() => {
-                  const previewMember = bSender.startsWith("member:") ? teamMembers.find((m) => m.id === Number(bSender.split(":")[1])) : null;
-                  return (
-                    <div className="bg-white p-6 flex flex-col gap-3 text-gray-800 text-sm">
-                      <h2 className="text-xl font-bold text-gray-900">{bSubject.replace(/\{\{First_Name\}\}/gi, "Friend") || "Subject line"}</h2>
-                      <div className="space-y-3">
-                        <p>Hi Friend,</p>
-                        {bBody.replace(/\{\{First_Name\}\}/gi, "Friend").split(/\n\n+/).map((para, i) => (
-                          <p key={i}>{para}</p>
-                        ))}
-                      </div>
-                      {previewMember && (
-                        <div className="flex items-center gap-3 mt-4 pt-4 border-t border-gray-200">
-                          {previewMember.photoUrl && <img src={previewMember.photoUrl} alt={previewMember.name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />}
-                          <div>
-                            <p className="font-semibold text-sm">{previewMember.name}</p>
-                            <p className="text-xs text-gray-500">{previewMember.title}, MilitaryVoices.ai</p>
-                          </div>
-                        </div>
-                      )}
-                      <p className="text-xs text-gray-400 mt-2">Unsubscribe link appears here in the actual email.</p>
-                    </div>
-                  );
-                })()}
-              </div>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => setBShowPreview(false)}>Back to compose</Button>
-                <Button type="button" variant="outline" disabled={bBusy || !editingBroadcast} onClick={sendTest} className="gap-1.5">
-                  <Send className="h-3.5 w-3.5" /> Send test to me
-                </Button>
-              </div>
-            </div>
-          ) : (
-          <Card>
-            <CardContent className="pt-5">
-              <form onSubmit={saveDraft} className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label className="mb-1.5 block">Send to</Label>
-                    {bSegment.startsWith("engagement:") ? (
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 rounded-md border px-3 py-2 text-sm bg-muted/30 text-muted-foreground truncate">{segmentLabel(bSegment)}</div>
-                        <Button type="button" size="sm" variant="ghost" className="h-9 text-xs" onClick={() => setBSegment("signups")}>Change</Button>
-                      </div>
-                    ) : (
-                      <Select value={bSegment} onValueChange={setBSegment}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="signups">Signed-up podcasters ({signupContacts.length})</SelectItem>
-                          <SelectItem value="contacts">Imported contacts ({activeContacts.length})</SelectItem>
-                          {/* The recruitment audience: on the list, hasn't taken a
-                              slot. Asking someone to sign up when they already
-                              have is the fastest way to look like nobody's home. */}
-                          <SelectItem value="not-signed-up">On the list, no slot yet ({notSignedUpCount})</SelectItem>
-                          {/* Empties itself: the moment a link comes in and is
-                              looked up, that person drops out, so this can be
-                              sent again without nagging anyone who complied. */}
-                          <SelectItem value="no-audience-link">Booked, but no social link on file</SelectItem>
-                          <SelectItem value="all">Both — {signupContacts.length + activeContacts.length} total</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                  <div>
-                    <Label className="mb-1.5 block">From</Label>
-                    <Select value={bSender} onValueChange={setBSender}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="team">MilitaryVoices.ai Team</SelectItem>
-                        {teamMembers.map((m) => (
-                          <SelectItem key={m.id} value={`member:${m.id}`}>
-                            {m.name} — {m.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="mb-2 block">
-                    Header image
-                    <span className="ml-2 text-xs font-normal text-muted-foreground">
-                      each one is the real file, cropped as it will arrive
-                    </span>
-                  </Label>
-                  {/* The preview used to show /hero-3.jpg while the email sent
-                      /email/studio.jpg — so what you picked was not what you
-                      saw. Every tile now points at the file that actually
-                      ships. */}
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                    {[
-                      { key: "welcome", label: "Listeners", src: "/email/welcome.jpg" },
-                      { key: "podcasters", label: "Podcasters", src: "/email/podcasters.jpg" },
-                      { key: "marathon", label: "Studio", src: "/email/studio.jpg" },
-                      { key: "conversation", label: "Conversation", src: "/email/conversation.jpg" },
-                      { key: "desk", label: "Desk", src: "/email/desk.jpg" },
-                      { key: "mic", label: "Microphone", src: "/email/mic.jpg" },
-                      { key: "headphones", label: "Headphones", src: "/email/headphones.jpg" },
-                      { key: "board", label: "Mixing board", src: "/email/board.jpg" },
-                      { key: "schedule", label: "Agenda", src: "/email/schedule.jpg" },
-                    ].map((t) => (
-                      <button
-                        key={t.key}
-                        type="button"
-                        onClick={() => setBBanner(t.key)}
-                        className={`rounded-lg overflow-hidden border-2 transition-all ${bBanner === t.key ? "border-primary shadow-md" : "border-transparent hover:border-muted-foreground/30"}`}
-                      >
-                        <img src={t.src} alt={t.label} loading="lazy" className="h-16 w-full object-cover" />
-                        <p className={`text-xs py-1.5 text-center font-medium ${bBanner === t.key ? "text-primary" : "text-muted-foreground"}`}>{t.label}</p>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Schedule send */}
-                <div>
-                  <Label className="mb-1.5 block">Schedule send <span className="text-muted-foreground font-normal">(optional — leave blank to save as draft)</span></Label>
-                  <input
-                    type="datetime-local"
-                    value={bScheduledFor}
-                    onChange={(e) => setBScheduledFor(e.target.value)}
-                    min={new Date().toISOString().slice(0, 16)}
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  />
-                  {bScheduledFor && (
-                    <p className="mt-1 text-xs text-muted-foreground">Will send automatically at {new Date(bScheduledFor).toLocaleString()}</p>
-                  )}
-                </div>
-
-                {/* AI draft assistant */}
-                {aiOpen ? (
-                  <div className="rounded-xl border border-violet-200 bg-violet-50 dark:bg-violet-950/30 dark:border-violet-800 p-4 space-y-3">
-                    <p className="text-sm font-semibold text-violet-800 dark:text-violet-300">✨ Draft with AI</p>
-                    <p className="text-xs text-violet-700 dark:text-violet-400">Describe what you want to say and Claude will write the subject line and body for you.</p>
-                    <Textarea
-                      autoFocus
-                      rows={3}
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      placeholder="Invite military podcasters to claim a slot for the October 5 Marathtathon. Keep it warm and personal. Mention it's one slot per show."
-                      className="text-sm"
-                    />
-                    <div className="flex gap-2">
-                      <Button type="button" size="sm" disabled={aiLoading || !aiPrompt.trim()} onClick={draftWithAI} className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white">
-                        {aiLoading ? "Writing…" : "✨ Generate"}
-                      </Button>
-                      <Button type="button" size="sm" variant="ghost" onClick={() => { setAiOpen(false); setAiPrompt(""); }}>Cancel</Button>
-                    </div>
-                  </div>
-                ) : (
-                  <Button type="button" variant="outline" size="sm" className="gap-1.5 text-violet-700 border-violet-300 hover:bg-violet-50 dark:text-violet-400 dark:border-violet-700" onClick={() => setAiOpen(true)}>
-                    ✨ Draft with AI
-                  </Button>
-                )}
-
-                <div>
-                  <Label className="mb-1.5 block">Subject line</Label>
-                  <Input value={bSubject} onChange={(e) => setBSubject(e.target.value)} placeholder="You're invited to the Podcast Marathon" />
-                </div>
-                <div>
-                  <Label className="mb-1.5 block">Body</Label>
-                  {/* Edits the rendered email, stores the marker text the
-                      send path already reads — so nothing about how these go
-                      out changed, and every email already written still
-                      opens. See RichBody for the conversion both ways. */}
-                  <RichBody
-                    value={bBody}
-                    onChange={setBBody}
-                    placeholder="Hi {{First_Name}}, …"
-                  />
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                    Highlight text and use the toolbar, or ⌘B for bold and ⌘K for a link. Type{" "}
-                    <code className="rounded bg-muted px-1 py-0.5 font-mono">{"{{First_Name}}"}</code> anywhere to drop
-                    in the recipient's first name. Unsubscribe link is added automatically.
-                  </p>
-                </div>
-                {/* The real renderer, in an iframe. A preview built by a
-                    second code path is a preview of something nobody gets. */}
-                <EmailPreview subject={bSubject} bodyText={bBody} sender={bSender} banner={bBanner} />
-
-                <div className="flex gap-2 flex-wrap pt-1">
-                  <Button type="submit" disabled={bBusy || !bSubject.trim() || !bBody.trim()} className="gap-1.5">
-                    Save draft
-                  </Button>
-                  <Button type="button" variant="outline" disabled={bBusy || !editingBroadcast} onClick={sendTest} className="gap-1.5">
-                    <Send className="h-3.5 w-3.5" /> Send test to me
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => setView("campaigns")}>Cancel</Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-          )}
-        </div>
+        <CampaignBuilder
+          key={editingBroadcast?.id ?? `new-${bSource}`}
+          eventId={eventId}
+          initial={editingBroadcast}
+          source={bSource || undefined}
+          initialSegment={bSegment}
+          segmentOptions={segmentOptions}
+          teamMembers={teamMembers}
+          onClose={() => setView("campaigns")}
+        />
       )}
     </div>
   );

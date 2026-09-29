@@ -39,11 +39,16 @@ export function emailShell(o: {
   cta?: { href: string; label: string };
   secondary?: string; // extra html under the button (calendar links, etc.)
   footerNote?: string;
+  /** Shown by the inbox after the subject, never in the email itself. */
+  preheader?: string;
 }): string {
   const cta = o.cta
     ? `<a href="${o.cta.href}" style="display:inline-block;background:#F0A71F;color:#1a1200;text-decoration:none;font-size:13px;font-weight:600;padding:9px 20px;border-radius:9999px;">${escapeHtml(o.cta.label)}</a>`
     : "";
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#eef2f8;">
+  const pre = o.preheader?.trim()
+    ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${escapeHtml(o.preheader.trim())}${"&#847;&zwnj;&nbsp;".repeat(40)}</div>`
+    : "";
+  return `<!doctype html><html><body style="margin:0;padding:0;background:#eef2f8;">${pre}
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f8;">
     <tr><td align="center" style="padding:24px 12px;">
       <table role="presentation" width="700" cellpadding="0" cellspacing="0" style="max-width:700px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
@@ -1182,6 +1187,7 @@ export function renderBroadcastEmail(opts: BroadcastEmailOptions): { subject: st
       body: bodyHtml,
       cta: { href: SITE, label: "Visit MilitaryVoices.ai" },
       footerNote: `Questions? Reply to this email. · <a href="${opts.unsubscribeUrl}" style="color:#6b7280;">Unsubscribe</a>`,
+      preheader: (opts.preheader ?? "").replace(/\{\{First_Name\}\}/gi, resolvedName),
     }),
     text: `${resolvedBodyText}${member ? `\n\n— ${member.name}\n${member.title}, MilitaryVoices.ai` : isRico ? "\n\n— Riccoh Player\nHost, MilitaryVoices.ai" : ""}\n\n---\nVisit: ${SITE}\nUnsubscribe: ${opts.unsubscribeUrl}`,
   };
@@ -1201,6 +1207,7 @@ export interface BroadcastEmailOptions {
   banner?: string;
   senderMember?: { name: string; title: string; photoUrl: string } | null;
   bannerTitle?: string;
+  preheader?: string;
 }
 
 export async function sendBroadcastEmail(opts: BroadcastEmailOptions): Promise<string | null> {
