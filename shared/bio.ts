@@ -35,6 +35,8 @@ export interface BioTheme {
   podcast: BioPodcastOptions;
   /** The link buttons' colour ("" = the theme colour). */
   linkColor: string;
+  /** Their social icons above their bio (else under it). */
+  socialsFirst?: boolean;
   /** Their name's size at the top, percent (100 = as drawn). */
   nameSize?: number;
   /** The cut-out tops' background: the colour behind them, the circle, the stripes, the cover ("" = their colour). */

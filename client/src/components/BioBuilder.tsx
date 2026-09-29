@@ -454,7 +454,16 @@ function SocialTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: bo
   return (
     <div className="space-y-4">
       <Card icon={Share2} tone="violet" title="Your social icons">
-        <p className="-mt-1 text-xs text-muted-foreground">They sit under your name{shown ? `: ${shown} showing` : ""}. Move them into the order you like; switch off any you'd rather not show.</p>
+        <p className="-mt-1 text-xs text-muted-foreground">{shown ? `${shown} showing. ` : ""}Move them into the order you like; switch off any you'd rather not show.</p>
+        <div>
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Where they go</p>
+          <div className="flex gap-1 rounded-full border border-border p-1" role="radiogroup" aria-label="Where your icons go">
+            {([[true, "Above your bio"], [false, "Below your bio"]] as const).map(([v, l]) => {
+              const on = (d.theme.socialsFirst ?? false) === v;
+              return <button key={l} type="button" role="radio" aria-checked={on} onClick={() => change({ theme: { ...d.theme, socialsFirst: v } }, true)} className={`flex-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${on ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`bio-socials-${v ? "above" : "below"}`}>{l}</button>;
+            })}
+          </div>
+        </div>
         {d.socials.length ? (
           <ul className="space-y-2">
             {d.socials.map((s, i) => (

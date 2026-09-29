@@ -81,8 +81,9 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
     <>
       {!hideName && !noName && <h1 className="text-balance font-bold leading-tight tracking-tight" style={{ fontSize: Math.round((onPhoto ? 34 : 26) * (t.nameSize ?? 100) / 100) }}>{data.displayName || "Your name"}</h1>}
       <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>@{data.handle}{data.branch ? ` · ${data.branch}` : ""}</p>
+      {t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} />}
       {data.bio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{styled(data.bio)}</p>}
-      <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} />
+      {!t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} />}
     </>
   );
 
@@ -211,12 +212,6 @@ function CutoutTop({ kind, src, name, bg, paper, dark, bigName, dy, size, latest
       <div className="relative flex min-h-[520px] flex-col overflow-hidden" style={{ background: `linear-gradient(180deg, ${bg} 0%, ${bg} 70%, ${paper} 100%)` }} data-testid="bio-magazine-header">
         {name ? <h1 className="z-0 break-words px-3 pt-7 text-center font-black uppercase leading-[0.82] tracking-tight" style={{ fontSize: bigName * 1.05, color: ink, fontFamily: FONTS.playfair.css }}>{name}</h1> : <div className="h-20" />}
         <img src={src} alt="" className="relative z-10 mx-auto -mt-12 block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={move} />
-        {latest && (
-          <div className="absolute bottom-10 left-4 z-20 max-w-[48%] text-left" style={{ color: "#fff", textShadow: "0 2px 10px rgba(0,0,0,0.6)" }}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: bg === "#000000" ? "#F0A71F" : "#ffffff" }}>New episode</p>
-            <p className="text-[15px] font-black uppercase leading-tight">{latest}</p>
-          </div>
-        )}
         <p className="absolute right-4 top-3 z-20 text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: ink, opacity: 0.8 }}>@{handle}</p>
         {fade}
       </div>
