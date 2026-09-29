@@ -252,6 +252,13 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
     setPlatform(p);
     if (was !== now) { setMode(now ? "shows" : "ai"); setPcSort("best"); setSubmitted(null); }
   };
+  // Book guests opens on podcast hosts and guests: people who've already been on shows.
+  // The other doors go back to creators if that's where they'd been taken.
+  const pickDoor = (k: (typeof DOORS)[number]["key"]) => {
+    setDoor(k);
+    if (k === "podcaster") { if (platform !== "podcasts") choosePlatform("podcasts"); setMode("people"); setSubmitted(null); }
+    else if (door === "podcaster" && platform === "podcasts") choosePlatform("instagram");
+  };
   const [open, setOpenRaw] = useState<Card | null>(null);
   // The list a creator was opened from, for back and next in the panel.
   const [openFrom, setOpenFrom] = useState<Card[]>([]);
@@ -477,9 +484,9 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
                 </div>
               </div>
             ) : heroVariant === "a" ? (
-              <HeroA raised={false} door={door} setDoor={setDoor} bar={null} tries={null} onEnrich={toEnrich} allowance={isMember ? me?.reveals ?? null : null} />
+              <HeroA raised={false} door={door} setDoor={pickDoor} bar={null} tries={null} onEnrich={toEnrich} allowance={isMember ? me?.reveals ?? null : null} />
             ) : (
-              <HeroB raised={false} door={door} setDoor={setDoor} bar={null} tries={null} onEnrich={toEnrich} verified={verified} onOpen={openIn(verified)} />
+              <HeroB raised={false} door={door} setDoor={pickDoor} bar={null} tries={null} onEnrich={toEnrich} verified={verified} onOpen={openIn(verified)} />
             )}
             {/* The search, the suggestions and the filters: one block, straight under the hero. */}
             <section className={`relative bg-background ${menuOpen ? "z-30" : "z-10"}`}>
