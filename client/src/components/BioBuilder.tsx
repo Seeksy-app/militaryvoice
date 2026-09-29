@@ -482,25 +482,25 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { 
       </Card>
       <Card icon={MessageCircle} tone="green" title="Your listeners">
       <div className="flex items-center justify-between rounded-xl border border-border p-3">
-        <div><p className="text-sm font-semibold">Let listeners message you</p><p className="text-xs text-muted-foreground">A chat button on your page. You reply from Messages; they see it on your page, and by email if they left one.</p></div>
+        <div><p className="text-sm font-semibold">Let listeners message you</p><p className="text-xs text-muted-foreground">You reply from Messages; they see your reply on your page, and by email if they left one.</p></div>
         <Switch checked={d.askEnabled} onCheckedChange={(v) => change({ askEnabled: v }, true)} />
       </div>
+      {d.askEnabled && (
+        <Field label="Your welcome message" hint="The first thing your chat says, from you.">
+          <Input value={d.welcome ?? ""} onChange={(e) => change({ welcome: e.target.value })} maxLength={280} placeholder="Hi! Thanks for listening. What's on your mind?" data-testid="bio-welcome" />
+        </Field>
+      )}
       {d.askEnabled && (
         <div>
           <p className="mb-1.5 text-sm font-semibold">Where the chat button goes</p>
           <SpotPicker value={(d.theme.chatAt ?? "top-right") as Spot} spots={["top-left", "top-right", "socials", "bottom-left", "bottom-right"]} onPick={(v) => change({ theme: { ...d.theme, chatAt: v as NonNullable<BioTheme["chatAt"]> } }, true)} testid="bio-chat-at" />
         </div>
       )}
-      {d.askEnabled && (
-        <Field label="Your welcome message" hint="The first thing your chat says, from you.">
-          <Input value={d.welcome ?? ""} onChange={(e) => change({ welcome: e.target.value })} maxLength={280} placeholder="Hi! Thanks for listening. What's on your mind?" data-testid="bio-welcome" />
-        </Field>
-      )}
       <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3" data-testid="bio-ai">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-[#b36b00]" /> Ask my show (AI)</p>
           <p className="text-xs text-muted-foreground">
-            {!view.podcast ? "Add your podcast first: it learns from your episodes." : !knowledge?.total ? "It starts learning your episodes as soon as your podcast is here." : knowledge.done < knowledge.total ? `Learning your episodes: ${knowledge.done} of ${knowledge.total} so far. It shows on your page once it knows one.` : `Knows all ${knowledge.done} of your episodes. Listeners ask; it answers from what you said, with the episode and minute.`}
+            {!view.podcast ? "Add your podcast first: it learns from your episodes." : !knowledge?.total ? "It starts learning your episodes as soon as your podcast is here." : knowledge.done < knowledge.total ? `Learning your episodes: ${knowledge.done} of ${knowledge.total} so far. It shows on your page once it knows one.` : `${knowledge.done === 1 ? "Knows your episode" : `Knows all ${knowledge.done} of your episodes`}. Listeners ask; it answers from what you said, with the episode and minute.`}
           </p>
         </div>
         <Switch checked={d.aiEnabled} onCheckedChange={(v) => change({ aiEnabled: v }, true)} />
