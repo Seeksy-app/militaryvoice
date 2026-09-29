@@ -7,7 +7,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 /**
- * Your own studio ("Go live"): check your camera and mic, then you're in.
+ * Your room: quick, like Zoom. Check your camera and mic, then you're in.
  * The owner records to their Library, goes live to YouTube or their streaming
  * keys, and invites guests; a guest on the invite link just joins.
  */
@@ -34,7 +34,7 @@ export default function MyStudio({ invite }: { invite?: string }) {
       setChoices(c);
       setConn(await r.json());
     } catch (e) {
-      setError((e as { status?: number }).status === 401 ? "Sign in to open your studio." : say(e));
+      setError((e as { status?: number }).status === 401 ? "Sign in to open your room." : say(e));
     }
   };
 
@@ -42,7 +42,7 @@ export default function MyStudio({ invite }: { invite?: string }) {
   if (left) {
     return (
       <div data-lk-theme="default" className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#04102b] p-6 text-center text-white">
-        <p className="text-2xl font-bold">{owner ? "You've left your studio" : "Thanks for joining"}</p>
+        <p className="text-2xl font-bold">{owner ? "You've left your room" : "Thanks for joining"}</p>
         {owner ? (
           <div className="flex flex-wrap justify-center gap-3">
             <button type="button" onClick={() => { setLeft(false); setConn(null); }} className="rounded-full bg-white px-5 py-2.5 font-semibold text-[#04102b]">Go back in</button>
@@ -54,23 +54,23 @@ export default function MyStudio({ invite }: { invite?: string }) {
   }
 
   if (!conn) {
-    const blocked = owner ? (studio.error ? "Sign in to open your studio." : "") : guestInfo.error ? say(guestInfo.error) : "";
+    const blocked = owner ? (studio.error ? "Sign in to open your room." : "") : guestInfo.error ? say(guestInfo.error) : "";
     return (
       <div data-lk-theme="default" className="flex min-h-screen flex-col items-center justify-center gap-5 bg-[#04102b] p-4 text-white">
-        {owner && <a href="/host/dashboard/studio" className="absolute left-4 top-4 flex items-center gap-1.5 text-sm text-white/70 hover:text-white"><ArrowLeft className="h-4 w-4" /> Studio settings</a>}
+        {owner && <a href="/host/dashboard/rooms" className="absolute left-4 top-4 flex items-center gap-1.5 text-sm text-white/70 hover:text-white"><ArrowLeft className="h-4 w-4" /> Room settings</a>}
         <div className="text-center">
-          <p className="text-sm uppercase tracking-[0.12em] text-white/60">{owner ? "Your studio" : "You're invited to"}</p>
-          <h1 className="mt-1 text-2xl font-bold">{title || (owner ? "Your studio" : "a studio")}</h1>
+          <p className="text-sm uppercase tracking-[0.12em] text-white/60">{owner ? "Your room" : "You're invited to"}</p>
+          <h1 className="mt-1 text-2xl font-bold">{title || (owner ? "Your room" : "a room")}</h1>
           <p className="mt-1 text-sm text-white/60">Check your camera and microphone, then join.</p>
         </div>
         {blocked ? (
           <div className="rounded-2xl bg-white/10 p-5 text-center">
             <p>{blocked}</p>
-            {owner && <a href="/host/dashboard/studio" className="mt-3 inline-block rounded-full bg-white px-5 py-2 font-semibold text-[#04102b]">Sign in</a>}
+            {owner && <a href="/host/dashboard/rooms" className="mt-3 inline-block rounded-full bg-white px-5 py-2 font-semibold text-[#04102b]">Sign in</a>}
           </div>
         ) : (
           <div className="w-full max-w-xl" data-testid="my-studio-prejoin">
-            <PreJoin key={studio.data?.you ?? ""} defaults={{ username: owner ? studio.data?.you ?? "" : "" }} persistUserChoices={false} joinLabel={owner ? "Enter my studio" : "Join"} userLabel="Your name" onSubmit={(c) => void join(c)} onError={(e) => setError(/permission/i.test(e.message) ? "Allow your camera and microphone for this site (the icon in the address bar), then reload." : e.message)} />
+            <PreJoin key={studio.data?.you ?? ""} defaults={{ username: owner ? studio.data?.you ?? "" : "" }} persistUserChoices={false} joinLabel={owner ? "Enter my room" : "Join"} userLabel="Your name" onSubmit={(c) => void join(c)} onError={(e) => setError(/permission/i.test(e.message) ? "Allow your camera and microphone for this site (the icon in the address bar), then reload." : e.message)} />
           </div>
         )}
         {error && <p className="max-w-md text-center text-sm text-red-300">{error}</p>}

@@ -91,7 +91,7 @@ export function HostNav({
     {
       title: "Content",
       items: [
-        { key: "studio", label: "Studio", hint: "Your own studio, any time: record your podcast or film something, with guests, and go live", icon: Video },
+        { key: "studio", label: "Rooms", hint: "Quick, like Zoom: hop in with guests, record it or don't, and go live", icon: Video },
         { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },
         { key: "postify", label: "Pōstify", hint: "Create short clips from your video podcast, and clean up the full episode", icon: Wand2, tag: "Beta" },
         { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
@@ -431,7 +431,7 @@ function CreatePostMenu({ onGo, children }: { onGo: (s: HostScreen) => void; chi
         <DropdownMenuItem onSelect={() => start("clips")} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="nav-create-clip"><Clapperboard className="h-5 w-5" /> Choose a clip</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => start("episodes")} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="nav-create-episode"><Film className="h-5 w-5" /> Choose an episode</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => start("upload")} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="nav-create-upload"><Upload className="h-5 w-5" /> Upload new</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => { window.location.href = "/my-studio"; }} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="nav-create-live"><Radio className="h-5 w-5" /> Go live</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => { window.location.href = "/room"; }} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="nav-create-live"><Radio className="h-5 w-5" /> Go live</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

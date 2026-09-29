@@ -11,9 +11,9 @@ type Studio = { id: number; name: string; inviteLink: string; recording: { since
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
 
 /**
- * Studio: your own, any time. Record your podcast or just film something (it lands in
- * your Library for Pōstify), invite guests on a link, and go live to YouTube or any
- * streaming key. One button in, the rest is set once.
+ * Rooms: quick, like Zoom. Hop in any time, with guests on a link; record it (it lands in
+ * your Library for Pōstify) or don't, and go live to YouTube or any streaming key if you like.
+ * One button in, the rest is set once. (Studio, the full marathon set-up, is its own thing.)
  */
 export function StudioHome() {
   const { toast } = useToast();
@@ -36,8 +36,8 @@ export function StudioHome() {
   return (
     <div className="mx-auto max-w-3xl space-y-5" data-testid="studio-home">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Studio</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Your own studio, any time: record your podcast or just film something, with guests, and go live if you like. Recordings land in your Library, ready for Pōstify.</p>
+        <h1 className="text-2xl font-bold tracking-tight">Rooms</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Quick, like Zoom: hop in any time, bring guests on a link, record it or don't, and go live if you like. Recordings land in your Library, ready for Pōstify.</p>
       </div>
 
       <section className="flex flex-wrap items-center gap-4 rounded-2xl bg-[#04102b] p-6 text-white shadow-sm">
@@ -46,7 +46,7 @@ export function StudioHome() {
           <p className="text-lg font-bold">{s.name}</p>
           <p className="text-sm text-white/70">{s.live ? "You're live now." : s.recording ? "Recording now." : "Check your camera and mic, then you're in."}</p>
         </div>
-        <a href="/my-studio" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#F0A71F] px-6 font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="studio-enter"><Radio className="h-5 w-5" /> Enter my studio</a>
+        <a href="/room" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#F0A71F] px-6 font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="studio-enter"><Radio className="h-5 w-5" /> Enter my room</a>
       </section>
 
       <section className={card}>
@@ -61,7 +61,7 @@ export function StudioHome() {
 
       <section className={card}>
         <p className="font-semibold">When you go live</p>
-        <p className="mt-0.5 text-sm text-muted-foreground">Go live streams your studio to everywhere switched on here, all at once.</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">Go live streams your room to everywhere switched on here, all at once.</p>
         <div className="mt-3 divide-y divide-border rounded-xl border border-border">
           <div className="flex items-center gap-3 px-3 py-2.5">
             <Youtube className="h-5 w-5 shrink-0 text-red-600" />

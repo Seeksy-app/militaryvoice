@@ -113,6 +113,8 @@ function AppRouter() {
       <Route path="/event/:slug/watch">{(params) => <Watch slug={params.slug} />}</Route>
       <Route path="/directory">{() => <Directory />}</Route>
       <Route path="/podcast/:slug">{(p) => <PodcastPage slug={p.slug} />}</Route>
+      <Route path="/room">{() => <MyStudio />}</Route>
+      <Route path="/room/join/:token">{(p) => <MyStudio invite={p.token} />}</Route>
       <Route path="/my-studio">{() => <MyStudio />}</Route>
       <Route path="/my-studio/join/:token">{(p) => <MyStudio invite={p.token} />}</Route>
       <Route path="/studio">{() => <Studio />}</Route>

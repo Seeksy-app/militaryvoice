@@ -599,7 +599,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   postify: "postify",
   billing: "billing",
   trash: "recently-deleted",
-  studio: "studio",
+  studio: "rooms",
   social: "social",
   podcast: "podcast",
   page: "page",
@@ -1732,7 +1732,7 @@ function CreateMenu({ goTo, children }: { goTo: (s: Screen) => void; children: R
         >
           <SquarePlay className="h-5 w-5" /> Upload video
         </DropdownMenuItem>
-        <DropdownMenuItem className="gap-3 rounded-lg px-3 py-2.5 text-sm" onSelect={() => { window.location.href = "/my-studio"; }} data-testid="create-live">
+        <DropdownMenuItem className="gap-3 rounded-lg px-3 py-2.5 text-sm" onSelect={() => { window.location.href = "/room"; }} data-testid="create-live">
           <Radio className="h-5 w-5" /> Go live
         </DropdownMenuItem>
         <DropdownMenuItem className="gap-3 rounded-lg px-3 py-2.5 text-sm" onSelect={() => goTo("social")} data-testid="create-post">
