@@ -51,6 +51,10 @@ export interface BioTheme {
   living?: boolean;
   /** A scene behind their cut-out (an image), in place of the colour ("" = the colour). */
   scene?: string;
+  /** Which scene tile made it ("base", "own:…", "upload"), so the builder can show it chosen. */
+  sceneKey?: string;
+  /** Their name, moved up (negative) or down, in pixels. */
+  nameY?: number;
   /** Their social icons above their bio (else under it). */
   socialsFirst?: boolean;
   /** Their name's size at the top, percent (100 = as drawn). */

@@ -373,6 +373,8 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     introAt: (["top-left", "top-right", "bottom-left", "bottom-right", "bio"] as const).includes(x.introAt as never) ? (x.introAt as BioTheme["introAt"]) : prev.introAt ?? "bottom-left",
     chatAt: (["top-left", "top-right", "bottom-left", "bottom-right", "socials"] as const).includes(x.chatAt as never) ? (x.chatAt as BioTheme["chatAt"]) : prev.chatAt ?? "top-right",
     scene: typeof x.scene === "string" ? httpUrl(x.scene) : prev.scene ?? "",
+    sceneKey: typeof x.sceneKey === "string" ? x.sceneKey.slice(0, 120) : prev.sceneKey ?? "",
+    nameY: Number.isFinite(Number(x.nameY)) && x.nameY !== undefined ? Math.max(-120, Math.min(120, Math.round(Number(x.nameY)))) : prev.nameY ?? 0,
     nameSize: Number.isFinite(Number(x.nameSize)) && x.nameSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.nameSize)))) : prev.nameSize ?? 100,
     cutoutSize: Number.isFinite(Number(x.cutoutSize)) && x.cutoutSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.cutoutSize)))) : prev.cutoutSize ?? 100,
     bgWash: Number.isFinite(Number(x.bgWash)) && x.bgWash !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.bgWash)))) : prev.bgWash ?? 65,

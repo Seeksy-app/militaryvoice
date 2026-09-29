@@ -88,7 +88,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   // Their name, handle, bio and socials: on the page, or in white over their photo (hero).
   const who = (onPhoto: boolean, hideName = false) => (
     <>
-      {!hideName && !noName && <h1 className="text-balance font-bold leading-tight tracking-tight" style={{ fontSize: Math.round((onPhoto ? 34 : 26) * (t.nameSize ?? 100) / 100) }}>{data.displayName || "Your name"}</h1>}
+      {!hideName && !noName && <h1 className="text-balance font-bold leading-tight tracking-tight" style={{ fontSize: Math.round((onPhoto ? 34 : 26) * (t.nameSize ?? 100) / 100), translate: `0 ${t.nameY ?? 0}px` }}>{data.displayName || "Your name"}</h1>}
       <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>@{data.handle}{data.branch ? ` · ${data.branch}` : ""}</p>
       {t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} onChat={data.askEnabled && chatAt === "socials" ? () => setChat(true) : undefined} chatColor={accent} />}
       {data.bio && !t.hideBio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{styled(data.bio)}</p>}
@@ -159,7 +159,7 @@ export function PageTop({ t, avatar, hero, cutoutUrl, living = "", name, handle,
     <>
       {CUTOUT_LAYOUTS.includes(t.layout) && cutoutUrl ? (
         <>
-          <CutoutTop kind={t.layout} src={cutoutUrl} name={name} scene={t.scene ?? ""} bg={/^#[0-9a-f]{6}$/i.test(t.stickerColor ?? "") ? t.stickerColor! : theirs} paper={paper} dark={dark} bigName={bigName} dy={t.cutoutY ?? 0} size={(t.cutoutSize ?? 100) / 100} latest={latest} handle={handle} />
+          <CutoutTop kind={t.layout} src={cutoutUrl} name={name} scene={t.scene ?? ""} bg={/^#[0-9a-f]{6}$/i.test(t.stickerColor ?? "") ? t.stickerColor! : theirs} paper={paper} dark={dark} bigName={bigName} nameY={t.nameY ?? 0} dy={t.cutoutY ?? 0} size={(t.cutoutSize ?? 100) / 100} latest={latest} handle={handle} />
           {/* Pop-out and Shape show the name under the photo; the others draw it big behind. */}
           <div className={`relative z-30 mx-auto max-w-[560px] px-5 text-center ${t.layout === "popout" || t.layout === "shape" ? "pt-5" : "-mt-4"}`}>{children(false, t.layout !== "popout" && t.layout !== "shape")}</div>
         </>
@@ -250,7 +250,7 @@ function SignupBlock({ s, btn, ink, sub, card, line, accent, preview, handle, on
  * breaking out of a circle (popout), a sticker on stripes (sticker), or on a
  * magazine cover under a masthead (magazine). dy and size are their adjusters.
  */
-function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, dy, size, latest, handle }: { kind: string; src: string; name: string; bg: string; scene: string; paper: string; dark: boolean; bigName: number; dy: number; size: number; latest?: string; handle: string }) {
+function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, nameY = 0, dy, size, latest, handle }: { kind: string; src: string; name: string; bg: string; scene: string; paper: string; dark: boolean; bigName: number; nameY?: number; dy: number; size: number; latest?: string; handle: string }) {
   const move: React.CSSProperties = { transform: `translateY(${dy}px) scale(${size})`, transformOrigin: "bottom center" };
   // A scene behind them (an image) in place of the colour: the background, the circle, the blob, the cover.
   const fill = (fallback: string) => (scene ? `center/cover url(${scene})` : fallback);
@@ -294,7 +294,7 @@ function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, dy, size,
     const edge = "drop-shadow(4px 0 0 #fff) drop-shadow(-4px 0 0 #fff) drop-shadow(0 4px 0 #fff) drop-shadow(0 -4px 0 #fff) drop-shadow(0 14px 18px rgba(0,0,0,0.35))";
     return (
       <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `repeating-linear-gradient(135deg, ${bg} 0 26px, ${bg}d9 26px 52px)` }} data-testid="bio-sticker-header">
-        {name && <h1 className="absolute inset-x-0 top-14 z-0 -rotate-6 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName * 0.9, color: onColor(bg), textShadow: onColor(bg) === "#ffffff" ? "0 4px 0 rgba(0,0,0,0.25)" : "0 3px 0 rgba(255,255,255,0.5)" }}>{name}</h1>}
+        {name && <h1 className="absolute inset-x-0 top-14 z-0 -rotate-6 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName * 0.9, translate: `0 ${nameY}px`, color: onColor(bg), textShadow: onColor(bg) === "#ffffff" ? "0 4px 0 rgba(0,0,0,0.25)" : "0 3px 0 rgba(255,255,255,0.5)" }}>{name}</h1>}
         <img src={src} alt="" className="relative z-10 mx-auto block h-[380px] w-auto max-w-[90%] object-contain object-bottom" style={{ ...move, filter: edge }} />
         {fade}
       </div>
@@ -304,7 +304,7 @@ function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, dy, size,
     const ink = onColor(bg);
     return (
       <div className="relative flex min-h-[520px] flex-col overflow-hidden" style={{ background: scene ? `linear-gradient(180deg, transparent 60%, ${paper} 100%), center/cover url(${scene})` : `linear-gradient(180deg, ${bg} 0%, ${bg} 70%, ${paper} 100%)` }} data-testid="bio-magazine-header">
-        {name ? <h1 className="z-0 break-words px-3 pt-7 text-center font-black uppercase leading-[0.82] tracking-tight" style={{ fontSize: bigName * 1.05, color: ink, fontFamily: FONTS.playfair.css, ...onScene }}>{name}</h1> : <div className="h-20" />}
+        {name ? <h1 className="z-0 break-words px-3 pt-7 text-center font-black uppercase leading-[0.82] tracking-tight" style={{ fontSize: bigName * 1.05, translate: `0 ${nameY}px`, color: ink, fontFamily: FONTS.playfair.css, ...onScene }}>{name}</h1> : <div className="h-20" />}
         <img src={src} alt="" className="relative z-10 mx-auto -mt-12 block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={move} />
         <p className="absolute right-4 top-3 z-20 text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: ink, opacity: 0.8 }}>@{handle}</p>
         {fade}
@@ -313,7 +313,7 @@ function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, dy, size,
   }
   return (
     <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: scene ? `linear-gradient(180deg, transparent 55%, ${paper} 100%), center/cover url(${scene})` : `radial-gradient(120% 80% at 50% 30%, ${bg} 0%, ${bg} 45%, ${paper} 100%)` }} data-testid="bio-cutout-header">
-      {name && <h1 className="absolute inset-x-0 top-16 z-0 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName, color: onColor(bg), opacity: 0.92, ...onScene }}>{name}</h1>}
+      {name && <h1 className="absolute inset-x-0 top-16 z-0 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName, translate: `0 ${nameY}px`, color: onColor(bg), opacity: 0.92, ...onScene }}>{name}</h1>}
       <img src={src} alt="" className="relative z-10 mx-auto block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={move} />
       {fade}
     </div>

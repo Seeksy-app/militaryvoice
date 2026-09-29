@@ -1007,17 +1007,33 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
           {/* Sizes: their name, and their cut-out photo's place and size. */}
           {(!t.hideName || (CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl)) && (
             <div className="mt-3 space-y-3 rounded-xl bg-muted/40 p-3" data-testid="bio-cutout-adjust">
-              {!t.hideName && <RangeRow label="Name size" hint="Smaller or bigger" value={t.nameSize ?? 100} min={60} max={150} onChange={(v) => set({ nameSize: v })} unit="%" testid="bio-name-size" />}
+              {!t.hideName && <>
+                <RangeRow label="Name size" hint="Smaller or bigger" value={t.nameSize ?? 100} min={60} max={150} onChange={(v) => set({ nameSize: v })} unit="%" testid="bio-name-size" />
+                <RangeRow label="Name position" hint="Up or down" value={t.nameY ?? 0} min={-120} max={120} onChange={(v) => set({ nameY: v })} testid="bio-name-y" />
+              </>}
               {CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <>
                 <RangeRow label="Photo position" hint="Up or down" value={t.cutoutY ?? 0} min={-160} max={160} onChange={(v) => set({ cutoutY: v })} testid="bio-cutout-y" />
                 <RangeRow label="Photo size" hint="Smaller or bigger" value={t.cutoutSize ?? 100} min={60} max={150} onChange={(v) => set({ cutoutSize: v })} unit="%" testid="bio-cutout-size" />
               </>}
-              {((t.nameSize ?? 100) !== 100 || (t.cutoutY ?? 0) !== 0 || (t.cutoutSize ?? 100) !== 100) && <button type="button" onClick={() => set({ nameSize: 100, cutoutY: 0, cutoutSize: 100 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
+              {((t.nameSize ?? 100) !== 100 || (t.nameY ?? 0) !== 0 || (t.cutoutY ?? 0) !== 0 || (t.cutoutSize ?? 100) !== 100) && <button type="button" onClick={() => set({ nameSize: 100, nameY: 0, cutoutY: 0, cutoutSize: 100 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
             </div>
           )}
           <PhotoStyle d={d} change={change} />
-          {CUTOUT_LAYOUTS.includes(t.layout) && t.layout !== "sticker" && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <ScenePicker scene={t.scene ?? ""} onPick={(scene) => set({ scene })} />}
-          {(t.layout === "hero" || t.layout === "blend" || (t.layout === "portrait" && !d.heroUrl)) && hasPhoto && <LivingPhoto on={t.living ?? false} setOn={(v) => set({ living: v })} st={living} start={startLiving} />}
+          {CUTOUT_LAYOUTS.includes(t.layout) && t.layout !== "sticker" && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <ScenePicker scene={t.scene ?? ""} sceneKey={t.sceneKey ?? ""} onPick={(scene, sceneKey) => set({ scene, sceneKey })} />}
+          {(t.layout === "hero" || t.layout === "blend" || (t.layout === "portrait" && !d.heroUrl)) && hasPhoto ? <LivingPhoto on={t.living ?? false} setOn={(v) => set({ living: v })} st={living} start={startLiving} />
+            : hasPhoto && (living.status === "done" || living.status === "running") ? (
+              // Made (or on its way) but this top can't play it: say where it plays, one tap to get there.
+              <div className="mt-4 rounded-xl border-2 border-[#F0A71F]/40 bg-[#F0A71F]/5 p-3" data-testid="bio-living-elsewhere">
+                <div className="flex items-center gap-3">
+                  {living.status === "done" && living.url ? <video src={living.url} autoPlay muted loop playsInline className="h-12 w-12 shrink-0 rounded-xl object-cover" /> : <Loader2 className="h-5 w-5 shrink-0 animate-spin text-[#b36b00]" />}
+                  <p className="min-w-0 flex-1 text-xs text-muted-foreground"><b className="text-foreground">{living.status === "done" ? "Your living photo is ready." : "Your living photo is on its way."}</b> It plays with the Classic, Hero and Cover photo tops, not this one.</p>
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Button type="button" size="sm" onClick={() => set({ layout: "hero", living: true })} className="h-8 rounded-full bg-[#053877] px-3 text-xs hover:bg-[#0a4a99]" data-testid="bio-living-use-hero">Use Hero</Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => set({ layout: "blend", living: true })} className="h-8 rounded-full px-3 text-xs">Use Cover photo</Button>
+                </div>
+              </div>
+            ) : null}
           {cutError && CUTOUT_LAYOUTS.includes(t.layout) && <p className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{cutError}</p>}
           {hasPhoto && !CUTOUT_LAYOUTS.includes(t.layout) && (
             <div className="mt-5">
@@ -1164,20 +1180,21 @@ function DesignSection({ id, title, sub, bind, children }: { id: string; title: 
  * first time they pick it), one they describe, or a photo of their own.
  */
 const SCENE_PICKS = [["flag", "Flag", "🇺🇸"], ["base", "Airfield", "✈️"], ["studio", "Studio", "🎙️"], ["sea", "At sea", "⚓"], ["mountains", "Mountains", "🏔️"], ["city", "City night", "🌃"], ["beach", "Beach", "🏖️"], ["camo", "Camo", "🪖"]] as const;
-function ScenePicker({ scene, onPick }: { scene: string; onPick: (url: string) => void }) {
+function ScenePicker({ scene, sceneKey, onPick }: { scene: string; sceneKey: string; onPick: (url: string, key: string) => void }) {
   const { toast } = useToast();
-  const [made, setMade] = useState<Record<string, string>>({});
+  // The one in use counts as made, so it shows chosen after a reload and comes back instantly.
+  const [made, setMade] = useState<Record<string, string>>(() => (scene && sceneKey ? { [sceneKey]: scene } : {}));
   const [busy, setBusy] = useState<string | null>(null);
   const [own, setOwn] = useState("");
   const fileIn = useRef<HTMLInputElement>(null);
   const make = async (key: string, body: { preset?: string; prompt?: string }) => {
-    if (made[key]) { onPick(made[key]); return; }
+    if (made[key]) { onPick(made[key], key); return; }
     setBusy(key);
     try {
       const r = await again(() => apiRequest("POST", "/api/host/bio/scene", body));
       const j = (await r.json()) as { url: string };
       setMade((m) => ({ ...m, [key]: j.url }));
-      onPick(j.url);
+      onPick(j.url, key);
     } catch (e) {
       toast({ title: "No scene this time", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
     } finally { setBusy(null); }
@@ -1190,7 +1207,7 @@ function ScenePicker({ scene, onPick }: { scene: string; onPick: (url: string) =
       const r = await again(() => fetch("/api/host/bio/image/bg", { method: "POST", body: fd, credentials: "include" }));
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.message || "Couldn't use that image.");
-      onPick(j.url);
+      onPick(j.url, "upload");
     } catch (e) {
       toast({ title: "Photo not used", description: (e as Error).message, variant: "destructive" });
     } finally { setBusy(null); if (fileIn.current) fileIn.current.value = ""; }
@@ -1200,7 +1217,7 @@ function ScenePicker({ scene, onPick }: { scene: string; onPick: (url: string) =
     <div className="mt-4 space-y-2 rounded-xl bg-muted/40 p-3" data-testid="bio-scene">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-semibold">Scene behind you</p>
-        {scene && <button type="button" onClick={() => onPick("")} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Back to the colour</button>}
+        {scene && <button type="button" onClick={() => onPick("", "")} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Back to the colour</button>}
       </div>
       <p className="text-[11px] text-muted-foreground">Made for you by AI in a few seconds. Pick one, describe your own, or use a photo.</p>
       <div className="grid grid-cols-4 gap-2">
@@ -1216,6 +1233,14 @@ function ScenePicker({ scene, onPick }: { scene: string; onPick: (url: string) =
           );
         })}
       </div>
+      {/* Their own (described or uploaded) scene has no tile: show it, so they can see what's in use. */}
+      {scene && !SCENE_PICKS.some(([k]) => made[k] === scene) && (
+        <div className="flex items-center gap-2.5 rounded-xl border-2 border-[#053877] bg-background p-1.5 pr-3 text-xs" data-testid="bio-scene-current">
+          <span className="h-10 w-16 shrink-0 rounded-lg bg-muted" style={{ background: `center/cover url(${scene})` }} />
+          <span className="min-w-0 flex-1 truncate font-semibold">{sceneKey.startsWith("own:") ? `"${sceneKey.slice(4)}"` : sceneKey === "upload" ? "Your photo" : "Your scene"}</span>
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#053877] text-white"><Check className="h-3 w-3" /></span>
+        </div>
+      )}
       <div className="flex gap-2">
         <Input value={own} onChange={(e) => setOwn(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && own.trim().length > 2) void make(`own:${own.trim()}`, { prompt: own.trim() }); }} maxLength={300} placeholder="Or describe one: a hangar at dawn, Fenway Park…" className="h-9 flex-1 text-xs" data-testid="bio-scene-own" />
         <Button type="button" onClick={() => void make(`own:${own.trim()}`, { prompt: own.trim() })} disabled={busy != null || own.trim().length < 3} className="h-9 rounded-full bg-[#053877] px-3 text-xs hover:bg-[#0a4a99]">{busy?.startsWith("own:") ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Make it"}</Button>
