@@ -466,7 +466,7 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro, onGo
       </div>
       </Card>
       {intro}
-      <Card icon={User} tone="blue" title="About you">
+      <Card icon={User} tone="blue" title="About you" photo={d.avatarUrl || undefined}>
       <div>
         <span className="mb-1 flex items-center gap-2.5 text-sm font-semibold">
           Name on the page
@@ -611,13 +611,13 @@ function LayoutTiles({ d, value, onPick, cutting = false, own, photo }: { d: Pag
  * A card of the builder. It can fold (the title or the arrow), carry a switch
  * for its section right in its header (on), and a handle to drag it (grip).
  */
-function Card({ icon: I, tone, title, action, fold, on, grip, testid, children }: { icon: typeof User; tone: keyof typeof TONES; title: string; action?: React.ReactNode; fold?: { open: boolean; toggle: () => void }; on?: { checked: boolean; set: (v: boolean) => void }; grip?: React.ReactNode; testid?: string; children: React.ReactNode }) {
+function Card({ icon: I, tone, title, action, fold, on, grip, testid, photo, children }: { icon: typeof User; tone: keyof typeof TONES; title: string; /** Their photo in place of the icon (About you). */ photo?: string; action?: React.ReactNode; fold?: { open: boolean; toggle: () => void }; on?: { checked: boolean; set: (v: boolean) => void }; grip?: React.ReactNode; testid?: string; children: React.ReactNode }) {
   const open = fold ? fold.open : true;
   return (
     <section className={`rounded-2xl border border-border bg-card p-4 shadow-sm ${open ? "space-y-3" : ""} ${on && !on.checked ? "opacity-70" : ""}`} data-testid={testid}>
       <div className="flex items-center gap-2">
         {grip}
-        <button type="button" onClick={fold?.toggle} disabled={!fold} className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-bold disabled:cursor-default" aria-expanded={fold ? open : undefined}><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONES[tone]}`}><I className="h-4 w-4" /></span> <span className="truncate">{title}</span></button>
+        <button type="button" onClick={fold?.toggle} disabled={!fold} className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm font-bold disabled:cursor-default" aria-expanded={fold ? open : undefined}>{photo ? <img src={photo} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover ring-2 ring-[#F0A71F] ring-offset-2 ring-offset-card" /> : <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${TONES[tone]}`}><I className="h-4 w-4" /></span>} <span className="truncate">{title}</span></button>
         {action}
         {on && <Switch checked={on.checked} onCheckedChange={on.set} aria-label={`${title} ${on.checked ? "on" : "off"}`} />}
         {fold && <button type="button" onClick={fold.toggle} className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={open ? `Fold ${title}` : `Open ${title}`}><ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} /></button>}
