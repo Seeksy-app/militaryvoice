@@ -32,12 +32,15 @@ import {
   discoveryLookups,
   podcasterProfiles,
   socialMetrics,
+  postifyTokens,
 } from "../shared/schema.js";
 
 const BASE = "https://api-dashboard.influencers.club/public/v1";
 export const PLATFORMS = ["instagram", "youtube", "tiktok", "twitter", "twitch"] as const;
 type Platform = (typeof PLATFORMS)[number];
 const FREE_REVEALS_PER_MONTH = FREE_DISCOVERY.reveals;
+/** Credits a contact costs once the month's allowance is used. */
+const REVEAL_CREDITS = 1;
 /** This member's monthly allowances: the free ones, or Discovery Pro's. */
 async function allowanceFor(email: string): Promise<{ reveals: number; lookups: number; pro: boolean }> {
   const a = await storage.getAddon(email, "discovery");
@@ -632,6 +635,7 @@ export function registerDiscoveryRoutes(app: Express): void {
         isPodcaster: !!profile,
         member: member ? { role: member.role, orgName: member.orgName, since: member.createdAt } : null,
         reveals: member ? { used: await revealsThisMonth(email), allowance: (await allowanceFor(email)).reveals } : null,
+        credits: member ? await storage.tokenBalance(email) : 0,
         discoveryPro: member ? (await allowanceFor(email)).pro : false,
         lookups: member && member.role !== "admin" ? { used: await lookupsThisMonth(email), allowance: (await allowanceFor(email)).lookups } : null,
         // Signed in to the admin too: they can spend credits on filling a page.
@@ -982,10 +986,18 @@ export function registerDiscoveryRoutes(app: Express): void {
         .select({ id: discoveryReveals.id })
         .from(discoveryReveals)
         .where(and(eq(discoveryReveals.email, email), eq(discoveryReveals.platform, platform), eq(discoveryReveals.handle, handle.toLowerCase())));
-      if (!again) {
+      // Each new contact costs us, so it comes from the month's allowance (10 free, 100 with
+      // Discovery Pro) and, once that's used, from their credits: one a contact.
+      let byCredit = false;
+      // One paid for with a credit is theirs to see again, free, like any other.
+      const [paid] = again ? [] : await db.select({ id: postifyTokens.id }).from(postifyTokens).where(eq(postifyTokens.ref, `reveal:${email}:${platform}:${handle.toLowerCase()}`)).limit(1);
+      if (!again && !paid) {
         const used = await revealsThisMonth(email);
         const { reveals, pro } = await allowanceFor(email);
-        if (used >= reveals) throw new HttpError(429, pro ? `You've used your ${reveals} contacts this month. They reset on the 1st.` : `You've used your ${reveals} free contacts this month. Discovery Pro gives you ${ADDONS.discovery.reveals}: militaryvoices.ai/pricing`);
+        if (used >= reveals) {
+          if ((await storage.tokenBalance(email)) >= REVEAL_CREDITS) byCredit = true;
+          else throw new HttpError(402, pro ? `You've used your ${reveals} contacts this month. Each one after that is ${REVEAL_CREDITS} credit, and you're out of credits: add some under Pōstify, Plan.` : `You've used your ${reveals} free contacts this month. Discovery Pro gives you ${ADDONS.discovery.reveals} a month, or use credits (${REVEAL_CREDITS} a contact).`);
+        }
       }
       const contact = await cached(`contact:${platform}:${handle.toLowerCase()}`, 3650 * DAY, async () => {
         const r = await ic("/creators/enrich/handle/profile/", { handle, platform, email_required: "preferred" });
@@ -997,8 +1009,12 @@ export function registerDiscoveryRoutes(app: Express): void {
           website: pick(res0, "website", `${platform}.external_url`, `${platform}.website`) ?? null,
         };
       });
-      if (!again) await db.insert(discoveryReveals).values({ email, platform, handle: handle.toLowerCase(), createdAt: new Date().toISOString() });
-      return { ...contact, reveals: { used: await revealsThisMonth(email), allowance: (await allowanceFor(email)).reveals } };
+      if (!again && !paid) {
+        // Past the allowance: the credit comes off only once we have the contact to show.
+        if (byCredit) await storage.addTokens({ email, delta: -REVEAL_CREDITS, reason: `Contact: @${handle} (${platform})`, ref: `reveal:${email}:${platform}:${handle.toLowerCase()}` });
+        else await db.insert(discoveryReveals).values({ email, platform, handle: handle.toLowerCase(), createdAt: new Date().toISOString() });
+      }
+      return { ...contact, byCredit, credits: await storage.tokenBalance(email), reveals: { used: await revealsThisMonth(email), allowance: (await allowanceFor(email)).reveals } };
     }),
   );
 

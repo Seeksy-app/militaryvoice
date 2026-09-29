@@ -434,6 +434,8 @@ function GuestActions({ person, saved, onSave, reveals, onRevealed }: { person: 
       if (!res.ok) throw new Error(j.message);
       setContact({ email: j.email ?? null, website: j.website ?? null });
       onRevealed?.();
+      void me.refetch();
+      if (j.byCredit) toast({ title: "1 credit used", description: `${j.credits} left.` });
       if (!j.email) toast({ title: "No public email for them", description: j.website ? "Their website is below: most have a contact page." : "Try their X account or one of their shows." });
     } catch (e) { toast({ title: "Couldn't look them up", description: (e as Error).message, variant: "destructive" }); } finally { setFinding(false); }
   };
@@ -464,15 +466,27 @@ function GuestActions({ person, saved, onSave, reveals, onRevealed }: { person: 
     } catch (e) { toast({ title: "Not sent", description: (e as Error).message, variant: "destructive" }); } finally { setSending(false); }
   };
   const left = reveals ? Math.max(0, reveals.allowance - reveals.used) : null;
+  // Past the month's reveals, a contact is a credit: how many they have.
+  const me = useQuery<{ credits?: number; discoveryPro?: boolean }>({ queryKey: ["/api/discover/me"], queryFn: async () => (await fetch("/api/discover/me", { credentials: "include" })).json(), staleTime: 30_000 });
+  const credits = me.data?.credits ?? 0;
+  const outOfAll = left === 0 && credits < 1;
   return (
     <section className="space-y-3 rounded-2xl border border-[#053877]/20 bg-[#053877]/[0.03] p-4 dark:border-white/10 dark:bg-white/[0.03]" data-testid="pod-guest-actions">
       <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Book them</h3>
       <div className="flex flex-wrap gap-2">
         <Button onClick={() => setInviting((v) => !v)} className="h-9 gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="pod-invite"><Mic2 className="h-4 w-4" /> Invite to my show</Button>
-        <Button variant="outline" onClick={() => void find()} disabled={!handle || finding || !!contact} title={handle ? undefined : "No X account on file for them"} className="h-9 gap-1.5 rounded-full" data-testid="pod-find-email">{finding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Find their email</Button>
+        <Button variant="outline" onClick={() => void find()} disabled={!handle || finding || !!contact || outOfAll} title={handle ? undefined : "No X account on file for them"} className="h-9 gap-1.5 rounded-full" data-testid="pod-find-email">{finding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Find their email</Button>
         <Button variant="outline" onClick={onSave} disabled={saved} className="h-9 gap-1.5 rounded-full" data-testid="pod-save-guest">{saved ? <BookmarkCheck className="h-4 w-4 text-[#053877]" /> : <Bookmark className="h-4 w-4" />} {saved ? "In Guests" : "Save to Guests"}</Button>
       </div>
-      {!contact && <p className="text-xs text-muted-foreground">{handle ? `Find their email looks them up by their X account (@${handle})${left != null ? `: ${left} of ${reveals!.allowance} look-ups left this month` : ""}.` : "No X account on file, so their email can't be looked up here. Their shows below list how to reach them."}</p>}
+      {!contact && (
+        <p className="text-xs text-muted-foreground">
+          {!handle ? "No X account on file, so their email can't be looked up here. Their shows below list how to reach them."
+            : left == null ? `Find their email looks them up by their X account (@${handle}).`
+            : left > 0 ? <>Find their email looks them up by their X account (@{handle}). It uses one of your contact reveals: <b className="text-foreground">{left} of {reveals!.allowance}</b> left this month{me.data?.discoveryPro ? "" : " (Discovery Pro: 100 a month)"}.</>
+            : credits >= 1 ? <>This month's contact reveals are used, so this one is <b className="text-foreground">1 credit</b> (you have {credits}).</>
+            : <>This month's contact reveals are used. <a href="/pricing#discovery" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Discovery Pro</a> gives 100 a month, or <a href="/host/dashboard/postify" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">add credits</a> (1 a contact).</>}
+        </p>
+      )}
       {contact && (
         <div className="space-y-1 rounded-xl bg-background p-3 text-sm">
           {contact.email ? <p className="flex items-center gap-2"><Mail className="h-4 w-4 text-[#053877]" /><a href={`mailto:${contact.email}`} className="font-medium hover:underline">{contact.email}</a><button type="button" onClick={() => void navigator.clipboard.writeText(contact.email!).then(() => toast({ title: "Copied" }))} className="rounded p-1 text-muted-foreground hover:text-foreground" aria-label="Copy"><Copy className="h-3.5 w-3.5" /></button></p> : <p className="text-muted-foreground">No public email.</p>}
@@ -511,8 +525,10 @@ export function GuestFinder({ showTitle = "" }: { showTitle?: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const me = useQuery<{ signedIn?: boolean; member?: unknown; reveals?: { used: number; allowance: number } | null }>({ queryKey: ["/api/discover/me"], queryFn: async () => (await fetch("/api/discover/me", { credentials: "include" })).json() });
-  const lists = useQuery<{ id: number; name: string; items: { platform: string; handle: string }[] }[]>({ queryKey: ["/api/discover/lists"], enabled: !!me.data?.member, queryFn: async () => (await fetch("/api/discover/lists", { credentials: "include" })).json() });
+  const lists = useQuery<SavedList[]>({ queryKey: ["/api/discover/lists"], enabled: !!me.data?.member, queryFn: async () => (await fetch("/api/discover/lists", { credentials: "include" })).json() });
   const saved = useMemo(() => new Set((lists.data ?? []).flatMap((l) => l.items.map((i) => `${i.platform}:${i.handle}`))), [lists.data]);
+  const guestList = lists.data?.find((l) => l.name === "Guests");
+  const [view, setView] = useState<"search" | "saved">("search");
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("appearances");
   const [ask, setAsk] = useState<PodAsk | null>(null);
@@ -545,6 +561,8 @@ export function GuestFinder({ showTitle = "" }: { showTitle?: string }) {
   const tries = ["Veteran authors", "Special operations", "Military historians", "Medal of Honor", showTitle && showTitle.split(/\s+/).slice(0, 3).join(" ")].filter(Boolean) as string[];
   return (
     <div className="space-y-4" data-testid="book-a-guest">
+      <ViewSwitch view={view} setView={setView} saved={guestList?.items.filter((i) => i.platform === "podperson").length ?? 0} label="Saved guests" />
+      {view === "saved" ? <SavedPanel list={guestList} kind="person" onOpen={(o, f) => { setFrom(f); setOpen(o); }} onRemoved={() => void qc.invalidateQueries({ queryKey: ["/api/discover/lists"] })} /> : <>
       <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
         <h2 className="text-sm font-semibold">Find a guest</h2>
         <p className="text-xs text-muted-foreground">People who've been guests on podcasts, the most-booked first. Open one to invite them onto your show, find their email, or save them for later.</p>
@@ -561,6 +579,7 @@ export function GuestFinder({ showTitle = "" }: { showTitle?: string }) {
         </div>
       </div>
       {ask && <PodcastResults ask={ask} isMember={!!me.data?.member} onJoin={() => void run(q)} onOpen={(o, f) => { setFrom(f); setOpen(o); }} saved={saved} onSave={(card) => void saveGuest(card)} />}
+      </>}
       <PodcastDrawer open={open} from={from} onGo={setOpen} onClose={() => setOpen(null)} isMember={!!me.data?.member} onJoin={() => void run(q)} saved={saved} onSave={(card) => void saveGuest(card)} reveals={me.data?.reveals ?? null} onRevealed={() => void qc.invalidateQueries({ queryKey: ["/api/discover/me"] })} />
     </div>
   );
@@ -617,8 +636,10 @@ export function ShowFinder({ topics = [] }: { topics?: string[] }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const me = useQuery<{ member?: unknown }>({ queryKey: ["/api/discover/me"], queryFn: async () => (await fetch("/api/discover/me", { credentials: "include" })).json() });
-  const lists = useQuery<{ id: number; name: string; items: { platform: string; handle: string }[] }[]>({ queryKey: ["/api/discover/lists"], enabled: !!me.data?.member, queryFn: async () => (await fetch("/api/discover/lists", { credentials: "include" })).json() });
+  const lists = useQuery<SavedList[]>({ queryKey: ["/api/discover/lists"], enabled: !!me.data?.member, queryFn: async () => (await fetch("/api/discover/lists", { credentials: "include" })).json() });
   const saved = useMemo(() => new Set((lists.data ?? []).flatMap((l) => l.items.map((i) => `${i.platform}:${i.handle}`))), [lists.data]);
+  const pitchList = lists.data?.find((l) => l.name === "Shows to pitch");
+  const [view, setView] = useState<"search" | "saved">("search");
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("best");
   const [ask, setAsk] = useState<PodAsk | null>(null);
@@ -650,6 +671,8 @@ export function ShowFinder({ topics = [] }: { topics?: string[] }) {
   const tries = [...topics, "Leadership", "Transition", "Entrepreneurs", "Mental health", "Fitness"].filter((t, i, a) => t && a.indexOf(t) === i).slice(0, 6);
   return (
     <div className="space-y-4" data-testid="be-a-guest">
+      <ViewSwitch view={view} setView={setView} saved={pitchList?.items.filter((i) => i.platform === "podcast").length ?? 0} label="Saved shows" />
+      {view === "saved" ? <SavedPanel list={pitchList} kind="show" onOpen={(o, f) => { setFrom(f); setOpen(o); }} onRemoved={() => void qc.invalidateQueries({ queryKey: ["/api/discover/lists"] })} /> : <>
       <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
         <h2 className="text-sm font-semibold">Find shows to be a guest on</h2>
         <p className="text-xs text-muted-foreground">Podcasts that have guests and put out an episode in the last 90 days. Open one to see its host and how to reach them, then write your pitch.</p>
@@ -666,7 +689,46 @@ export function ShowFinder({ topics = [] }: { topics?: string[] }) {
         </div>
       </div>
       {ask && <PodcastResults ask={ask} isMember={!!me.data?.member} onJoin={() => void run(q)} onOpen={(o, f) => { setFrom(f); setOpen(o); }} saved={saved} onSave={(card) => void saveShow(card)} />}
+      </>}
       <PodcastDrawer open={open} from={from} onGo={setOpen} onClose={() => setOpen(null)} isMember={!!me.data?.member} onJoin={() => void run(q)} saved={saved} onSave={(card) => void saveShow(card)} pitch />
+    </div>
+  );
+}
+
+type SavedList = { id: number; name: string; items: { id: number; platform: string; handle: string; snapshot: { name?: string; picture?: string; category?: string; followers?: number | null } }[] };
+
+/** A saved list (Guests, or Shows to pitch): open one, or take it off. */
+function SavedPanel({ list, kind, onOpen, onRemoved }: { list: SavedList | undefined; kind: "person" | "show"; onOpen: (o: PodOpen, from: PodOpen[]) => void; onRemoved: () => void }) {
+  const { toast } = useToast();
+  const items = (list?.items ?? []).filter((i) => i.platform === (kind === "person" ? "podperson" : "podcast"));
+  const opens: PodOpen[] = items.map((i) => (kind === "person" ? { kind: "person", pcid: i.handle, seed: { name: i.snapshot.name, image: i.snapshot.picture } } : { kind: "show", id: i.handle, seed: { title: i.snapshot.name, image: i.snapshot.picture } }));
+  const remove = async (itemId: number) => {
+    const r = await fetch(`/api/discover/lists/${list!.id}/items/${itemId}`, { method: "DELETE", credentials: "include" });
+    if (r.ok) { onRemoved(); toast({ title: "Taken off the list" }); }
+  };
+  if (!items.length) return <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">{kind === "person" ? "No saved guests yet. Open someone and press Save to Guests." : "No saved shows yet. Open a show and press Save."}</div>;
+  return (
+    <ul className="overflow-hidden rounded-2xl border border-border bg-card" data-testid="saved-list">
+      {items.map((i, n) => (
+        <li key={i.id} className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-0">
+          <button type="button" onClick={() => onOpen(opens[n], opens)} className="flex min-w-0 flex-1 items-center gap-4 text-left">
+            <Art src={i.snapshot.picture ?? ""} name={i.snapshot.name ?? ""} round={kind === "person"} />
+            <span className="min-w-0 flex-1"><span className="block truncate font-semibold hover:underline">{i.snapshot.name || "Saved"}</span><span className="block truncate text-sm text-muted-foreground">{i.snapshot.category || (kind === "person" ? "Guest" : "Podcast")}</span></span>
+          </button>
+          <button type="button" onClick={() => void remove(i.id)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-muted-foreground hover:border-destructive/40 hover:text-destructive" aria-label="Take off the list" title="Take off the list"><X className="h-4 w-4" /></button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Search, or what's saved: the two views at the top of Book a guest and Be a guest. */
+function ViewSwitch({ view, setView, saved, label }: { view: "search" | "saved"; setView: (v: "search" | "saved") => void; saved: number; label: string }) {
+  const seg = (on: boolean) => `rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${on ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`;
+  return (
+    <div className="inline-flex gap-1 rounded-full border border-border bg-card p-1" role="tablist">
+      <button type="button" role="tab" aria-selected={view === "search"} onClick={() => setView("search")} className={seg(view === "search")} data-testid="view-search">Search</button>
+      <button type="button" role="tab" aria-selected={view === "saved"} onClick={() => setView("saved")} className={seg(view === "saved")} data-testid="view-saved">{label}{saved ? ` (${saved})` : ""}</button>
     </div>
   );
 }

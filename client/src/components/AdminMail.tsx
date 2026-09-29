@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { ContactProfile } from "@/components/AdminContact";
 
 /**
  * Mail: our side of email, like a mail app. Folders on the left (Needs a reply, Inbox, Sent,
@@ -65,6 +66,7 @@ export function AdminMail() {
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState<Item | null>(null);
   const [composing, setComposing] = useState(false);
+  const [profile, setProfile] = useState<string | null>(null);
   const { toast } = useToast();
   // Ticked items, for doing several at once (as in a mail app).
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -100,6 +102,8 @@ export function AdminMail() {
   const anyIn = pickedItems.some((i) => i.dir === "in");
   const anyWaiting = pickedItems.some((i) => i.dir === "in" && (i.status === "new" || i.status === "drafted"));
   return (
+    <>
+    {profile && <ContactProfile email={profile} onClose={() => setProfile(null)} />}
     <div className="grid min-h-[70vh] gap-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm lg:grid-cols-[13rem_minmax(18rem,26rem)_1fr]" data-testid="admin-mail">
       {/* Folders */}
       <aside className="border-b border-border bg-muted/30 p-3 lg:border-b-0 lg:border-r">
@@ -173,15 +177,16 @@ export function AdminMail() {
       <section className="min-h-0 overflow-y-auto" style={{ maxHeight: "82vh" }}>
         {composing ? <Compose onSent={() => { setComposing(false); refresh(); }} />
           : open?.dir === "campaign" && open.broadcastId ? <CampaignView id={open.broadcastId} />
-          : open ? <ThreadView email={open.email} focus={open.key} onChanged={refresh} />
+          : open ? <ThreadView email={open.email} focus={open.key} onChanged={refresh} onProfile={setProfile} />
           : <div className="flex h-full min-h-[40vh] items-center justify-center p-8 text-center text-sm text-muted-foreground">Pick an email to read the whole conversation.</div>}
       </section>
     </div>
+    </>
   );
 }
 
 /** One person: every email both ways, oldest first, and a box to write back. */
-function ThreadView({ email, focus, onChanged }: { email: string; focus: string; onChanged: () => void }) {
+export function ThreadView({ email, focus, onChanged, onProfile }: { email: string; focus: string; onChanged: () => void; onProfile?: (email: string) => void }) {
   const { toast } = useToast();
   const t = useQuery<Thread>({ queryKey: ["/api/admin/mail/thread", email], queryFn: async () => (await apiRequest("GET", `/api/admin/mail/thread?email=${encodeURIComponent(email)}`)).json() });
   const waiting = [...(t.data?.messages ?? [])].reverse().find((m) => m.dir === "in" && m.inbound && (m.inbound.status === "new" || m.inbound.status === "drafted"));
@@ -221,7 +226,7 @@ function ThreadView({ email, focus, onChanged }: { email: string; focus: string;
   return (
     <div className="flex min-h-full flex-col" data-testid="mail-thread">
       <header className="sticky top-0 z-10 border-b border-border bg-card/95 px-5 py-3 backdrop-blur">
-        <p className="text-base font-semibold">{t.data.name}</p>
+        {onProfile ? <button type="button" onClick={() => onProfile(email)} className="text-base font-semibold hover:underline" data-testid="mail-open-profile">{t.data.name}</button> : <p className="text-base font-semibold">{t.data.name}</p>}
         <p className="text-xs text-muted-foreground">{t.data.email}{t.data.contact ? ` · ${t.data.contact.lifecycleStage || t.data.contact.status}` : ""} · {t.data.messages.length} {t.data.messages.length === 1 ? "email" : "emails"}</p>
       </header>
       <ol className="flex-1 space-y-3 p-5">

@@ -43,6 +43,7 @@ import { SponsorFinder } from "@/components/SponsorFinder";
 import { ShowSponsorsCard } from "@/components/ShowSponsors";
 import { AdminChat } from "@/components/AdminChat";
 import { AdminMail } from "@/components/AdminMail";
+import { ContactProfile } from "@/components/AdminContact";
 import { AudienceFigures } from "@/components/AudienceFigures";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
@@ -4325,7 +4326,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
   return (
     <div className="flex flex-col gap-0">
       {selectedContact && (
-        <ContactDrawer contact={selectedContact} onClose={() => setSelectedContact(null)} broadcastList={broadcastList} eventId={eventId} />
+        <ContactProfile email={selectedContact.email} onClose={() => setSelectedContact(null)} />
       )}
       {/* Horizontal sub-nav */}
       <div className="flex border-b mb-6">
