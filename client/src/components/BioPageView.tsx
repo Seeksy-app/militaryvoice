@@ -334,10 +334,9 @@ function SignupBlock({ s, btn, ink, sub, card, line, accent, preview, handle, on
         <p className="mt-3 flex items-center justify-center gap-2 text-sm font-semibold" data-testid="bio-signup-done"><Check className="h-4 w-4" style={{ color: accent }} /> You're in. Thanks!</p>
       ) : (
         <form onSubmit={go} className="mx-auto mt-3 flex max-w-sm flex-col gap-2">
-          <div className="flex gap-2">
-            <input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="First name" autoComplete="given-name" maxLength={80} className="h-11 w-[38%] min-w-0 px-3 text-sm outline-none" style={field} />
-            <input value={f.email} onChange={(e) => { setF({ ...f, email: e.target.value }); setErr(""); }} type="email" placeholder="Your email" autoComplete="email" required maxLength={200} className="h-11 min-w-0 flex-1 px-3 text-sm outline-none" style={field} data-testid="bio-signup-email" />
-          </div>
+          {/* One above the other, like the pop-up: each full width, easy on a phone. */}
+          <input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="First name" autoComplete="given-name" maxLength={80} className="h-11 min-w-0 px-3 text-sm outline-none" style={field} data-testid="bio-signup-name" />
+          <input value={f.email} onChange={(e) => { setF({ ...f, email: e.target.value }); setErr(""); }} type="email" placeholder="Your email" autoComplete="email" required maxLength={200} className="h-11 min-w-0 px-3 text-sm outline-none" style={field} data-testid="bio-signup-email" />
           <input value={f.website} onChange={(e) => setF({ ...f, website: e.target.value })} tabIndex={-1} autoComplete="off" aria-hidden className="hidden" name="website" />
           <button type="submit" disabled={busy} className="h-11 px-4 text-sm font-semibold disabled:opacity-60" style={btn()} data-testid="bio-signup-go">{busy ? "One moment…" : s.button || "Sign me up"}</button>
           {err && <p className="text-xs text-red-500">{err}</p>}

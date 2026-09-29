@@ -468,7 +468,7 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro, onGo
       {intro}
       <Card icon={User} tone="blue" title="About you" photo={d.avatarUrl || undefined}>
       <div>
-        <span className="mb-1 flex items-center gap-2.5 text-sm font-semibold">
+        <span className="mb-2.5 flex items-center gap-3 text-sm font-semibold">
           Name on the page
           <Switch checked={!(d.theme.hideName ?? false)} onCheckedChange={(v) => change({ theme: { ...d.theme, hideName: !v } }, true)} aria-label="Show my name on the page" data-testid="bio-about-name-on" />
         </span>
@@ -482,7 +482,7 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro, onGo
         </div>
       </Field>
       <div>
-        <span className="mb-1 flex items-center gap-2.5 text-sm font-semibold">
+        <span className="mb-2.5 flex items-center gap-3 text-sm font-semibold">
           Bio
           <Switch checked={!(d.theme.hideBio ?? false)} onCheckedChange={(v) => change({ theme: { ...d.theme, hideBio: !v } }, true)} aria-label="Show my bio on the page" data-testid="bio-about-bio-on" />
         </span>
