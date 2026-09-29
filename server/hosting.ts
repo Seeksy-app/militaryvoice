@@ -8,6 +8,7 @@ import { requireHostSession, getSessionEmail } from "./session.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { sendPodcastOwnerCodeEmail } from "./email.js";
+import { isUploadPostConfigured, publishVideo } from "./uploadPost.js";
 import { XMLParser } from "fast-xml-parser";
 import { bioPages, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
 
@@ -540,6 +541,19 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       ...(typeof b.explicit === "boolean" ? { explicit: b.explicit } : {}),
       ...(b.showType === "serial" || b.showType === "episodic" ? { showType: b.showType } : {}),
       ...(typeof b.language === "string" && /^[a-z]{2}(-[a-z]{2})?$/i.test(b.language) ? { language: b.language.toLowerCase() } : {}),
+      // Directories: each app's state and link. Apple's and Spotify's links also fill the follow buttons.
+      ...(b.directories && typeof b.directories === "object" ? (() => {
+        const clean: Record<string, { state: string; url: string; at: string }> = {};
+        for (const [k, raw] of Object.entries(b.directories as Record<string, Record<string, unknown>>).slice(0, 20)) {
+          if (!/^[a-z]{2,20}$/.test(k) || !raw || typeof raw !== "object") continue;
+          const state = ["submitted", "live"].includes(String(raw.state)) ? String(raw.state) : "";
+          const url = typeof raw.url === "string" && /^https:\/\/[^\s]+$/.test(raw.url.trim()) ? raw.url.trim().slice(0, 500) : "";
+          if (state || url) clean[k] = { state: url ? "live" : state, url, at: typeof raw.at === "string" ? raw.at.slice(0, 40) : now() };
+        }
+        const apple = clean.apple?.url && /^https:\/\/podcasts\.apple\.com\//.test(clean.apple.url) ? { appleUrl: clean.apple.url } : {};
+        const spotify = clean.spotify?.url && /^https:\/\/open\.spotify\.com\//.test(clean.spotify.url) ? { spotifyUrl: clean.spotify.url } : {};
+        return { directories: JSON.stringify(clean), ...apple, ...spotify };
+      })() : {}),
       updatedAt: now(),
     }).where(eq(hostedShows.id, s.id)).returning();
     res.json(out);
@@ -644,6 +658,42 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       ...(!publish && at ? { publishedAt: at } : {}),
     }).where(eq(hostedEpisodes.id, e.id)).returning();
     res.json(out);
+  });
+
+  // An episode to their YouTube channel, as a video (Upload-Post, the account they connected on
+  // the Social screen). The video: the MP4 they uploaded, or the Library recording it came from.
+  app.post("/api/host/hosting/episodes/:id/youtube", requireHostSession, async (req, res) => {
+    const email = emailOf(req);
+    const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
+    const show = e ? await ownShow(email, e.showId) : null;
+    if (!e || !show) return res.status(404).json({ message: "No such episode." });
+    if (!isUploadPostConfigured()) return res.status(503).json({ message: "Posting to YouTube isn't switched on yet." });
+    let key = e.mime.startsWith("video/") && e.audioKey ? e.audioKey : "";
+    if (!key && e.recordingId) {
+      const rec = await storage.getRecording(e.recordingId);
+      if (rec && rec.status === "Ready" && rec.url && rec.email.trim().toLowerCase() === email) key = rec.url;
+    }
+    if (!key) return res.status(400).json({ message: "This episode is audio only. YouTube needs the video: upload the MP4, or make the episode from its Library recording." });
+    const profile = await storage.getProfileByEmail(email);
+    if (!profile?.uploadPostUsername) return res.status(400).json({ message: "Connect your YouTube channel on the Social screen first." });
+    const privacy = ["public", "unlisted", "private"].includes(String(req.body?.privacy)) ? String(req.body.privacy) as "public" : "public";
+    const plain = e.description.replace(/<[^>]+>/g, " ").replace(/\s+\n/g, "\n").trim();
+    const description = [plain, `Listen wherever you get podcasts: ${ORIGIN}/podcast/${show.slug}`].filter(Boolean).join("\n\n").slice(0, 4900);
+    const post = await storage.addHostPost({ email, kind: "episode", refId: e.id, shape: "", title: e.title, description, platforms: "youtube", scheduledAt: "", status: "sending", error: "", jobId: "", requestId: "", results: "", mediaKey: "", metrics: "", metricsAt: "" });
+    try {
+      const videoUrl = await signedRecordingUrl(key, 21_600);
+      const r = await publishVideo({ username: profile.uploadPostUsername, platforms: ["youtube"], videoUrl, title: e.title, description, externalId: `hp-${post.id}`,
+        youtube: { title: e.title.slice(0, 100), description, privacyStatus: privacy, thumbnailUrl: e.artworkUrl || show.artworkUrl || undefined, madeForKids: false, notifySubscribers: privacy === "public" } });
+      await storage.updateHostPost(post.id, { status: "sent", requestId: r.requestId ?? `hp-${post.id}`, jobId: r.jobId ?? "" });
+      const yt = JSON.stringify({ state: "sent", at: now(), privacy, post: post.id });
+      await db.update(hostedEpisodes).set({ youtube: yt }).where(eq(hostedEpisodes.id, e.id));
+      res.json({ ok: true, youtube: yt });
+    } catch (err) {
+      await storage.deleteHostPost(post.id);
+      const msg = (err as Error).message;
+      console.error("Episode to YouTube failed:", msg);
+      res.status(502).json({ message: /not connected|no .*account|youtube.*(missing|not found)/i.test(msg) ? "Connect your YouTube channel on the Social screen first." : "YouTube didn't take it just now. Try again in a few minutes." });
+    }
   });
 
   // Confirm the owner email with a code, before it goes in the feed.

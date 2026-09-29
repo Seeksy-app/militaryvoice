@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { PostDialog } from "@/components/PostDialog";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import type { LibraryFolderRow, RecordingRow } from "@shared/schema";
-import { Check, Download, Folder, FolderInput, FolderOpen, FolderPlus, Library, Loader2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X } from "lucide-react";
+import { Check, Download, Folder, FolderInput, FolderOpen, FolderPlus, Library, Loader2, Mic2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X } from "lucide-react";
 
 // A podcaster's own sessions. The studio writes them; nothing here is uploaded
 // by hand. The bucket is private, so every download is a fresh signed link.
@@ -87,6 +87,21 @@ export function MyRecordings({
   showEmpty?: boolean;
 }) {
   const [publishing, setPublishing] = useState<RecordingRow | null>(null);
+  // Their podcast shows, so a recording becomes an episode in one step (then its words, on the Podcast screen).
+  const showsQ = useQuery<{ shows: { show: { id: number; title: string } }[] }>({ queryKey: ["/api/host/hosting"], queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000 });
+  const podShows = showsQ.data?.shows ?? [];
+  const [makingEp, setMakingEp] = useState(false);
+  const { toast: epToast } = useToast();
+  async function toEpisode(recId: number, showId: number) {
+    setMakingEp(true);
+    try {
+      const e = (await (await apiRequest("POST", `/api/host/hosting/shows/${showId}/episodes`, { recordingId: recId })).json()) as { id: number };
+      window.location.href = `/host/dashboard/podcast?ep=${e.id}`;
+    } catch (err) {
+      epToast({ title: "Couldn't make the episode", description: (err as Error).message.replace(/^\d+:\s*/, ""), variant: "destructive" });
+      setMakingEp(false);
+    }
+  }
   const [playing, setPlaying] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<RecordingRow | null>(null);
   /** Which version each episode's card shows, by the episode's id. */
@@ -330,6 +345,19 @@ export function MyRecordings({
                     <DropdownMenuItem onSelect={() => setRenaming({ id: main.id, title: plainTitle(main.title) })} className="gap-2" data-testid={`button-rename-recording-${main.id}`}>
                       <Pencil className="h-4 w-4" /> Rename
                     </DropdownMenuItem>
+                    {/* An episode of their podcast: one show, straight in; more, pick one; none, start one. */}
+                    {podShows.length > 1 ? (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="gap-2" disabled={makingEp} data-testid={`button-episode-recording-${r.id}`}><Mic2 className="h-4 w-4" /> Add to my podcast</DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="w-56">
+                          {podShows.map((x) => <DropdownMenuItem key={x.show.id} onSelect={() => void toEpisode(r.id, x.show.id)} className="truncate">{x.show.title || "Untitled show"}</DropdownMenuItem>)}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    ) : (
+                      <DropdownMenuItem disabled={makingEp} onSelect={() => { if (podShows[0]) void toEpisode(r.id, podShows[0].show.id); else window.location.href = "/host/dashboard/podcast"; }} className="gap-2" data-testid={`button-episode-recording-${r.id}`}>
+                        {makingEp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic2 className="h-4 w-4" />} {podShows[0] ? "Add to my podcast" : "Start my podcast"}
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem onSelect={() => setPublishing(r)} className="gap-2" data-testid={`button-publish-recording-${r.id}`}>
                       <Share2 className="h-4 w-4" /> Post it
                     </DropdownMenuItem>

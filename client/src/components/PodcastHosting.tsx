@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { durationOf, uploadToStorage } from "@/lib/upload";
 import type { HostedEpisodeRow, HostedShowRow, RecordingRow } from "@shared/schema";
-import { AlertCircle, BarChart3, Check, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Trash2, Upload } from "lucide-react";
+import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Trash2, Upload } from "lucide-react";
 
 /**
  * Podcast: the show hosted on MilitaryVoices. A feed Apple, Spotify and every
@@ -34,22 +34,34 @@ export function PodcastHosting() {
   const refresh = () => { void qc.invalidateQueries({ queryKey: KEY }); void qc.invalidateQueries({ queryKey: ["/api/host/podcast-stats"] }); };
   const create = useMutation({
     mutationFn: async () => (await apiRequest("POST", "/api/host/hosting/shows", {})).json(),
-    onSuccess: () => { refresh(); setEditing(true); },
+    onSuccess: (r: { id?: number }) => { refresh(); if (r?.id) { setOpenId(r.id); go("details"); } },
     onError: (e: Error) => toast({ title: "Couldn't set that up", description: e.message, variant: "destructive" }),
   });
-  const [editing, setEditing] = useState(false);
+  // Which show is open (none: the grid of shows), and which of its tabs.
+  const [openId, setOpenId] = useState<number | null>(null);
+  const [tab, setTab] = useState<PodTab>(() => { try { const t = localStorage.getItem("mv_pod_tab"); return t === "directories" || t === "details" ? t : "episodes"; } catch { return "episodes"; } });
+  const go = (t: PodTab) => { setTab(t); try { localStorage.setItem("mv_pod_tab", t); } catch { /* fine */ } };
   // The field Show details opens on (from the checklist): the description, the name, the owner email.
   const [focus, setFocus] = useState<"" | "title" | "description" | "ownerEmail">("");
   const [adding, setAdding] = useState(false);
-  // Which of their shows is open, and the way to add another.
-  const [pick, setPick] = useState<number | null>(null);
   const [newShow, setNewShow] = useState(false);
   const [editEp, setEditEp] = useState<Ep | null>(null);
+  // From the Library ("Add to my podcast"): ?ep=<id> opens that episode, ready for its words.
+  const [wantEp, setWantEp] = useState<number | null>(() => { try { return Number(new URLSearchParams(window.location.search).get("ep")) || null; } catch { return null; } });
+  useEffect(() => {
+    if (!wantEp || !q.data) return;
+    const host = q.data.shows.find((x) => x.episodes.some((e) => e.id === wantEp));
+    const ep = host?.episodes.find((e) => e.id === wantEp);
+    if (host && ep) { setOpenId(host.show.id); go("episodes"); setEditEp(ep); }
+    setWantEp(null);
+    try { const u = new URL(window.location.href); u.searchParams.delete("ep"); window.history.replaceState(null, "", u.pathname + u.search); } catch { /* fine */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantEp, q.data]);
 
   if (q.isLoading) return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
-  const h = q.data?.shows.find((x) => x.show.id === pick) ?? q.data?.shows[0];
+  const shows = q.data?.shows ?? [];
 
-  if (!h) {
+  if (!shows.length) {
     return (
       <section className="mt-2" data-testid="podcast-hosting">
         <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
@@ -58,8 +70,8 @@ export function PodcastHosting() {
           <p className="mx-auto mt-2 max-w-xl text-balance text-muted-foreground">Your show's feed for Apple Podcasts, Spotify and every other app, with your downloads counted the way sponsors count them, and shown on your profile.</p>
           <ul className="mx-auto mt-5 grid max-w-2xl gap-3 text-left text-sm sm:grid-cols-3">
             {[
-              [Upload, "Publish from anywhere", "Upload the audio, or use a clean episode from your Library."],
-              [Radio, "One feed, every app", "Submit it to Apple and Spotify once; new episodes go out on their own."],
+              [Upload, "Publish from anywhere", "Upload the audio or the video, or use a recording from your Library."],
+              [Radio, "One feed, every app", "List it on Apple, Spotify and the rest once; new episodes go out on their own."],
               [BarChart3, "Downloads sponsors trust", "Counted once per listener a day, bots left out, by app and episode."],
             ].map(([I, t, d]) => {
               const Icon = I as typeof Upload;
@@ -82,141 +94,296 @@ export function PodcastHosting() {
     );
   }
 
+  // One show opens straight to it; more than one starts on the grid.
+  const h = shows.find((x) => x.show.id === openId) ?? (shows.length === 1 ? shows[0] : undefined);
+  const addShowDialog = (
+    <Dialog open={newShow} onOpenChange={setNewShow}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add a show</DialogTitle>
+          <DialogDescription>Start a new one here, or move one you host somewhere else.</DialogDescription>
+        </DialogHeader>
+        <Button onClick={() => create.mutate(undefined, { onSuccess: () => setNewShow(false) })} disabled={create.isPending} className="h-11 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-new-show">{create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Start a new show</Button>
+        <ImportShow onDone={() => { setNewShow(false); refresh(); }} />
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (!h) {
+    return (
+      <section className="mt-2" data-testid="podcast-hosting">
+        <h1 className="text-2xl font-bold tracking-tight">Your shows</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Each one has its own feed for Apple, Spotify and every podcast app.</p>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="hosting-shows">
+          {shows.map((x) => {
+            const live = x.episodes.filter((e) => e.live).length;
+            const listed = Object.values(parseDirs(x.show.directories)).filter((d) => d.state === "live").length;
+            return (
+              <button key={x.show.id} type="button" onClick={() => setOpenId(x.show.id)} className="group overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#053877]/40 hover:shadow-md" data-testid={`hosting-show-${x.show.id}`}>
+                <div className="aspect-square w-full bg-muted">{x.show.artworkUrl ? <img src={x.show.artworkUrl} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-muted-foreground"><Podcast className="h-10 w-10" /></span>}</div>
+                <div className="p-4">
+                  <p className="line-clamp-2 text-balance font-semibold leading-snug group-hover:text-[#053877] dark:group-hover:text-[#8fb5e8]">{x.show.title || "Untitled show"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{live} {live === 1 ? "episode" : "episodes"} out{x.stats.last30 ? ` · ${compact(x.stats.last30)} downloads this month` : ""}</p>
+                  <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${listed ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : x.missing.length ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"}`}>{listed ? `Listed on ${listed} ${listed === 1 ? "app" : "apps"}` : x.missing.length ? "Getting set up" : "Ready to list"}</span>
+                </div>
+              </button>
+            );
+          })}
+          <button type="button" onClick={() => setNewShow(true)} className="flex min-h-[16rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-[#053877]/40 hover:text-[#053877] dark:hover:text-[#8fb5e8]" data-testid="hosting-add-show">
+            <Plus className="h-7 w-7" /><span className="font-semibold">Add a show</span>
+          </button>
+        </div>
+        {addShowDialog}
+      </section>
+    );
+  }
+
   const s = h.show;
   const ready = h.missing.length === 0;
   // Each thing the apps need, one tap from where it's added.
   const fix = (m: string) => {
     if (/cover art/i.test(m)) return document.getElementById(`hosting-art-input-${s.id}`)?.click();
-    if (/published episode/i.test(m)) return setAdding(true);
+    if (/published episode/i.test(m)) { go("episodes"); return setAdding(true); }
     if (/confirm the owner/i.test(m)) return document.getElementById("hosting-owner")?.scrollIntoView({ behavior: "smooth", block: "center" });
     setFocus(/description/i.test(m) ? "description" : /show name/i.test(m) ? "title" : /owner email/i.test(m) ? "ownerEmail" : "");
-    setEditing(true);
+    go("details");
   };
-  const topApp = Object.entries(h.stats.apps).sort((a, b) => b[1] - a[1])[0];
+  const tabBtn = (t: PodTab, label: string) => (
+    <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => go(t)} className={`border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors ${tab === t ? "border-[#053877] text-foreground dark:border-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`hosting-tab-${t}`}>{label}</button>
+  );
 
   return (
     <section className="mt-2 space-y-4" data-testid="podcast-hosting">
-      {/* Their shows (when there's more than one), and adding another. */}
-      <div className="flex flex-wrap items-center gap-2">
-        {(q.data?.shows.length ?? 0) > 1 && q.data!.shows.map((x) => (
-          <button key={x.show.id} type="button" onClick={() => setPick(x.show.id)} className={`rounded-full border-2 px-3 py-1.5 text-xs font-semibold transition-colors ${x.show.id === s.id ? "border-[#053877] bg-[#053877] text-white" : "border-border text-muted-foreground hover:border-[#053877]/40"}`} data-testid={`hosting-pick-${x.show.id}`}>{x.show.title}</button>
-        ))}
-        <button type="button" onClick={() => setNewShow(true)} className="ml-auto inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]" data-testid="hosting-add-show"><Plus className="h-3.5 w-3.5" /> Add a show</button>
-      </div>
-      {/* The show: its art, its name, its feed, and what's left before Apple takes it. */}
-      <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-        <div className="flex flex-wrap items-start gap-5">
-          <ArtworkButton show={s} onDone={refresh} />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Your podcast</p>
-            <h1 className="mt-0.5 text-2xl font-bold tracking-tight">{s.title}</h1>
-            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{s.description || "No description yet."}</p>
-            <div id="hosting-owner"><OwnerEmail h={h} onDone={refresh} /></div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <FeedLink url={h.feedUrl} />
-              <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-full" onClick={() => setEditing(true)} data-testid="hosting-edit-show"><Pencil className="h-3.5 w-3.5" /> Show details</Button>
-              {h.episodes.some((e) => e.live) && <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 rounded-full"><a href={`/podcast/${s.slug}`} target="_blank" rel="noreferrer" data-testid="hosting-public-page">Your show page <ExternalLink className="h-3 w-3" /></a></Button>}
-            </div>
+      {shows.length > 1 && <button type="button" onClick={() => setOpenId(null)} className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="hosting-all-shows"><ChevronLeft className="h-4 w-4" /> All shows</button>}
+      {/* The show: its art, its name, its feed. */}
+      <div className="flex flex-wrap items-start gap-5">
+        <ArtworkButton show={s} onDone={refresh} />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Your podcast</p>
+          <h1 className="mt-0.5 text-balance text-2xl font-bold tracking-tight">{s.title}</h1>
+          <div id="hosting-owner"><OwnerEmail h={h} onDone={refresh} /></div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <FeedLink url={h.feedUrl} />
+            {h.episodes.some((e) => e.live) && <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 rounded-full"><a href={`/podcast/${s.slug}`} target="_blank" rel="noreferrer" data-testid="hosting-public-page">Your show page <ExternalLink className="h-3 w-3" /></a></Button>}
           </div>
         </div>
-        {!ready ? (
-          <div className="mt-4 max-w-xl rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/[0.07] p-3.5" data-testid="hosting-missing">
-            <p className="flex items-center gap-2 text-sm font-semibold"><AlertCircle className="h-4 w-4 text-[#b36b00]" /> Before Apple and Spotify will list it
-              <a href="/help/podcast#ready" target="_blank" rel="noreferrer" className="flex h-5 w-5 items-center justify-center rounded-full border border-current text-[11px] font-bold text-[#b36b00] hover:bg-[#F0A71F]/20" title="How your show gets to Apple and Spotify" aria-label="How your show gets to Apple and Spotify">?</a>
-            </p>
-            <ul className="mt-2 space-y-1">
-              {h.missing.map((m) => (
-                <li key={m}>
-                  <button type="button" onClick={() => fix(m)} className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-foreground/85 transition-colors hover:bg-[#F0A71F]/15" data-testid="hosting-missing-item">
-                    <span className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-[#b36b00]/60" />
-                    <span className="min-w-0 flex-1">{m}</span>
-                    <span className="shrink-0 text-xs font-semibold text-[#b36b00] opacity-70 group-hover:opacity-100">Add it →</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/[0.06] p-3.5" data-testid="hosting-ready">
-            <Check className="h-4 w-4 text-emerald-600" />
-            {s.importedFrom ? (
-              // A moved show is already in the apps: the redirect carries it, nothing to submit.
-              <p className="min-w-0 flex-1 text-sm"><span className="font-semibold">Ready.</span> Your show is already in Apple Podcasts and Spotify; forwarding your old feed moves them here, with nothing to submit again.</p>
-            ) : (
-              <>
-                <p className="min-w-0 flex-1 text-sm"><span className="font-semibold">Ready for the apps.</span> Submit your feed once to each; new episodes reach them on their own. <a href="/help/podcast#list" target="_blank" rel="noreferrer" className="font-semibold text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-400">How?</a></p>
-                <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-full"><a href="https://podcastsconnect.apple.com/my-podcasts/new-feed" target="_blank" rel="noreferrer">Apple Podcasts <ExternalLink className="h-3 w-3" /></a></Button>
-                <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-full"><a href="https://creators.spotify.com/pod/dashboard/import" target="_blank" rel="noreferrer">Spotify <ExternalLink className="h-3 w-3" /></a></Button>
-              </>
-            )}
-          </div>
-        )}
+        {shows.length === 1 && <button type="button" onClick={() => setNewShow(true)} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]" data-testid="hosting-add-show"><Plus className="h-3.5 w-3.5" /> Add a show</button>}
       </div>
 
-      {s.importedFrom && <MoveSubscribers h={h} onDone={refresh} />}
+      <div className="flex gap-6 border-b border-border" role="tablist">
+        {tabBtn("episodes", "Episodes")}
+        {tabBtn("directories", ready ? "Directories" : "Directories · to do")}
+        {tabBtn("details", "Show details")}
+      </div>
+
       {s.newFeedUrl && (
         <div className="rounded-2xl border border-destructive/40 bg-destructive/[0.05] p-4 text-sm" data-testid="hosting-leaving">
           <span className="font-semibold">This show is moving to another host.</span> The feed forwards apps to <span className="font-mono text-xs">{s.newFeedUrl}</span>. Clear it in Show details to stay.
         </div>
       )}
 
-      {/* The numbers that matter. */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          ["Downloads, last 30 days", compact(h.stats.last30)],
-          ["Downloads, all time", compact(h.stats.total)],
-          ["Episodes published", String(h.episodes.filter((e) => e.live).length)],
-          ["Top app", topApp ? topApp[0] : "—"],
-        ].map(([label, v]) => (
-          <div key={label} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <p className="text-xs font-semibold text-muted-foreground">{label}</p>
-            <p className="mt-1 truncate text-2xl font-bold tabular-nums">{v}</p>
+      {tab === "episodes" && (
+        <>
+          {s.importedFrom && <MoveSubscribers h={h} onDone={refresh} />}
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="flex items-center gap-2 text-sm font-semibold"><Mic2 className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" /> Episodes</h2>
+                <p className="text-xs text-muted-foreground">{compact(h.stats.last30)} downloads in the last 30 days · {compact(h.stats.total)} in all</p>
+              </div>
+              <Button onClick={() => setAdding(true)} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-new-episode"><Plus className="h-4 w-4" /> New episode</Button>
+            </div>
+            {h.episodes.length ? (
+              <ul className="divide-y divide-border">
+                {h.episodes.map((e) => (
+                  <li key={e.id} className="flex items-center gap-3 py-2.5" data-testid={`hosting-episode-${e.id}`}>
+                    <EpisodeArt ep={e} fallback={s.artworkUrl} onDone={refresh} />
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${e.audioJob === "failed" ? "bg-destructive/10 text-destructive" : e.audioJob ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : e.live ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : e.status === "published" ? "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]" : "bg-muted text-muted-foreground"}`}>
+                      {e.audioJob === "failed" ? "Audio failed" : e.audioJob ? <span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Preparing audio</span> : e.live ? "Live" : e.status === "published" ? "Scheduled" : "Draft"}
+                    </span>
+                    <button type="button" onClick={() => setEditEp(e)} className="min-w-0 flex-1 text-left">
+                      <span className="block truncate text-sm font-medium">{e.episodeNumber != null ? `${e.episodeNumber}. ` : ""}{e.title}</span>
+                      <span className="block text-xs text-muted-foreground">{e.publishedAt ? dateOf(e.publishedAt) : "Not published"}{e.durationSec ? ` · ${hms(e.durationSec)}` : ""}{e.youtube ? " · on YouTube" : ""}</span>
+                    </button>
+                    <span className="hidden w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:block"><b className="text-foreground">{compact(e.downloads)}</b> downloads</span>
+                    <Button size="sm" variant="outline" className="h-8 shrink-0 rounded-full" onClick={() => setEditEp(e)}>{e.status === "draft" ? "Publish" : "Edit"}</Button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="py-6 text-center text-sm text-muted-foreground">No episodes yet. Add your first: upload the audio or the video, or use a recording from your Library.</p>
+            )}
           </div>
-        ))}
-      </div>
+        </>
+      )}
 
-      {/* The episodes. */}
-      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-sm font-semibold"><Mic2 className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" /> Episodes</h2>
-          <Button onClick={() => setAdding(true)} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-new-episode"><Plus className="h-4 w-4" /> New episode</Button>
-        </div>
-        {h.episodes.length ? (
-          <ul className="divide-y divide-border">
-            {h.episodes.map((e) => (
-              <li key={e.id} className="flex items-center gap-3 py-2.5" data-testid={`hosting-episode-${e.id}`}>
-                <EpisodeArt ep={e} fallback={s.artworkUrl} onDone={refresh} />
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${e.audioJob === "failed" ? "bg-destructive/10 text-destructive" : e.audioJob ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : e.live ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : e.status === "published" ? "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]" : "bg-muted text-muted-foreground"}`}>
-                  {e.audioJob === "failed" ? "Audio failed" : e.audioJob ? <span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Preparing audio</span> : e.live ? "Live" : e.status === "published" ? "Scheduled" : "Draft"}
-                </span>
-                <button type="button" onClick={() => setEditEp(e)} className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-sm font-medium">{e.episodeNumber != null ? `${e.episodeNumber}. ` : ""}{e.title}</span>
-                  <span className="block text-xs text-muted-foreground">{e.publishedAt ? dateOf(e.publishedAt) : "Not published"}{e.durationSec ? ` · ${hms(e.durationSec)}` : ""}</span>
-                </button>
-                <span className="w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground"><b className="text-foreground">{compact(e.downloads)}</b> downloads</span>
-                <Button size="sm" variant="outline" className="h-8 shrink-0 rounded-full" onClick={() => setEditEp(e)}>{e.status === "draft" ? "Publish" : "Edit"}</Button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="py-6 text-center text-sm text-muted-foreground">No episodes yet. Add your first: upload the audio or the video, or use a clean episode from your Library.</p>
-        )}
-      </div>
+      {tab === "directories" && (
+        <>
+          {!ready ? (
+            <div className="max-w-2xl rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/[0.07] p-3.5" data-testid="hosting-missing">
+              <p className="flex items-center gap-2 text-sm font-semibold"><AlertCircle className="h-4 w-4 text-[#b36b00]" /> First, what the apps need
+                <a href="/help/podcast#ready" target="_blank" rel="noreferrer" className="flex h-5 w-5 items-center justify-center rounded-full border border-current text-[11px] font-bold text-[#b36b00] hover:bg-[#F0A71F]/20" title="How your show gets to Apple and Spotify" aria-label="How your show gets to Apple and Spotify">?</a>
+              </p>
+              <ul className="mt-2 space-y-1">
+                {h.missing.map((m) => (
+                  <li key={m}>
+                    <button type="button" onClick={() => fix(m)} className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-foreground/85 transition-colors hover:bg-[#F0A71F]/15" data-testid="hosting-missing-item">
+                      <span className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-[#b36b00]/60" />
+                      <span className="min-w-0 flex-1">{m}</span>
+                      <span className="shrink-0 text-xs font-semibold text-[#b36b00] opacity-70 group-hover:opacity-100">Add it →</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : s.importedFrom ? (
+            <div className="flex items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/[0.06] p-3.5 text-sm"><Check className="h-4 w-4 text-emerald-600" /> <span><b>Already listed.</b> Your show moved here from another host, so the apps follow the forwarded feed; nothing to submit again. Add each app's link below for your show page and SmartLink.</span></div>
+          ) : null}
+          <Directories h={h} ready={ready} onSaved={refresh} />
+          <YouTubeEpisodes h={h} onDone={refresh} />
+        </>
+      )}
 
-      <ShowDialog open={editing} focus={focus} onClose={() => { setEditing(false); setFocus(""); }} show={s} categories={q.data?.categories ?? {}} onSaved={refresh} onDeleted={() => { setPick(null); refresh(); }} />
-      <Dialog open={newShow} onOpenChange={setNewShow}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Add a show</DialogTitle>
-            <DialogDescription>Start a new one here, or move one you host somewhere else.</DialogDescription>
-          </DialogHeader>
-          <Button onClick={() => create.mutate(undefined, { onSuccess: (r: { id?: number }) => { setNewShow(false); if (r?.id) setPick(r.id); } })} disabled={create.isPending} className="h-11 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-new-show">{create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Start a new show</Button>
-          <ImportShow onDone={() => { setNewShow(false); refresh(); }} />
-        </DialogContent>
-      </Dialog>
+      {tab === "details" && <ShowForm key={s.id} show={s} focus={focus} categories={q.data?.categories ?? {}} onSaved={() => { refresh(); setFocus(""); }} onDeleted={() => { setOpenId(null); refresh(); }} />}
+
+      {addShowDialog}
       <NewEpisodeDialog open={adding} onClose={() => setAdding(false)} show={s} onCreated={(e) => { refresh(); setAdding(false); setEditEp({ ...e, downloads: 0, live: false }); }} />
       <EpisodeDialog ep={editEp} onClose={() => setEditEp(null)} onSaved={refresh} />
     </section>
+  );
+}
+
+type PodTab = "episodes" | "directories" | "details";
+type DirState = { state: "" | "submitted" | "live"; url: string; at?: string };
+const parseDirs = (raw: string | null | undefined): Record<string, DirState> => { try { const v = raw ? JSON.parse(raw) : {}; return v && typeof v === "object" ? v : {}; } catch { return {}; } };
+
+/**
+ * The podcast apps, each listed once from the feed: where to go, the few steps there, and the
+ * show's link once it's live (Apple's and Spotify's also fill the follow buttons everywhere).
+ */
+const DIRS: { key: string; name: string; reach: string; url: string; steps: string[]; link: string }[] = [
+  { key: "apple", name: "Apple Podcasts", reach: "Apple Podcasts, and the apps that read Apple's list (Overcast, Castro)", url: "https://podcastsconnect.apple.com/my-podcasts/new-feed", steps: ["Sign in with your Apple ID.", "Choose to add a show with an RSS feed, and paste your feed (it's copied).", "Submit. Apple reviews it, usually in a day or two, and writes to your owner email."], link: "https://podcasts.apple.com/…" },
+  { key: "spotify", name: "Spotify", reach: "Spotify", url: "https://creators.spotify.com/pod/dashboard/import", steps: ["Sign in to Spotify for Creators.", "Pick the option to add an existing podcast, and paste your feed.", "Spotify emails a code to your owner email: type it in. It's live within hours."], link: "https://open.spotify.com/show/…" },
+  { key: "youtube", name: "YouTube Music", reach: "YouTube and YouTube Music, as an audio podcast", url: "https://studio.youtube.com", steps: ["Open YouTube Studio on your channel.", "Create, then New podcast, then submit an RSS feed. Paste your feed.", "Confirm with the code YouTube emails to your owner email."], link: "https://music.youtube.com/playlist?list=…" },
+  { key: "amazon", name: "Amazon Music & Audible", reach: "Amazon Music, Audible and Alexa", url: "https://podcasters.amazon.com/", steps: ["Sign in with an Amazon account.", "Add your podcast and paste your feed.", "Confirm with the code sent to your owner email."], link: "https://music.amazon.com/podcasts/…" },
+  { key: "iheart", name: "iHeartRadio", reach: "iHeartRadio", url: "https://www.iheart.com/content/submit-your-podcast/", steps: ["Open iHeart's podcast submission page and sign in.", "Paste your feed and submit."], link: "https://www.iheart.com/podcast/…" },
+  { key: "pocketcasts", name: "Pocket Casts", reach: "Pocket Casts", url: "https://pocketcasts.com/submit/", steps: ["Paste your feed and press Submit. No account needed."], link: "https://pca.st/…" },
+  { key: "podcastindex", name: "Podcast Index", reach: "Dozens of newer apps (Fountain, Podverse, Castamatic and more)", url: "https://podcastindex.org/add", steps: ["Paste your feed and press Submit. That's all."], link: "https://podcastindex.org/podcast/…" },
+];
+
+function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved: () => void }) {
+  const { toast } = useToast();
+  const s = h.show;
+  const dirs = parseDirs(s.directories);
+  // Apple's and Spotify's links may already be in from before.
+  if (s.appleUrl && !dirs.apple?.url) dirs.apple = { state: "live", url: s.appleUrl };
+  if (s.spotifyUrl && !dirs.spotify?.url) dirs.spotify = { state: "live", url: s.spotifyUrl };
+  const [open, setOpen] = useState<string | null>(null);
+  const [links, setLinks] = useState<Record<string, string>>({});
+  const save = useMutation({
+    mutationFn: async (next: Record<string, DirState>) => (await apiRequest("PATCH", `/api/host/hosting/shows/${s.id}`, { directories: next })).json(),
+    onSuccess: onSaved,
+    onError: (e: Error) => toast({ title: "Couldn't save that", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
+  });
+  const put = (key: string, v: DirState | null) => { const next = { ...dirs }; if (v) next[key] = v; else delete next[key]; save.mutate(next); };
+  const listIt = async (d: (typeof DIRS)[number]) => {
+    await navigator.clipboard.writeText(h.feedUrl).catch(() => {});
+    window.open(d.url, "_blank", "noopener");
+    setOpen(d.key);
+    if (!dirs[d.key]?.state) put(d.key, { state: "submitted", url: "", at: new Date().toISOString() });
+    toast({ title: "Your feed is copied", description: `Paste it into ${d.name}.` });
+  };
+  const listed = DIRS.filter((d) => dirs[d.key]?.state === "live").length;
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="hosting-directories">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold">Where your show is listed</h2>
+          <p className="text-xs text-muted-foreground">List it once in each; new episodes reach them on their own. {listed ? `Live on ${listed} of ${DIRS.length}.` : ""}</p>
+        </div>
+        <FeedLink url={h.feedUrl} />
+      </div>
+      <ul className="divide-y divide-border">
+        {DIRS.map((d) => {
+          const st = dirs[d.key];
+          const isOpen = open === d.key;
+          return (
+            <li key={d.key} className="py-3" data-testid={`hosting-dir-${d.key}`}>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-sm font-bold text-[#053877] dark:bg-white/10 dark:text-[#8fb5e8]">{d.name[0]}</span>
+                <button type="button" onClick={() => setOpen(isOpen ? null : d.key)} className="min-w-0 flex-1 text-left">
+                  <span className="block text-sm font-semibold">{d.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">{d.reach}</span>
+                </button>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st?.state === "live" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground"}`}>{st?.state === "live" ? "Live" : st?.state === "submitted" ? "Submitted" : "Not listed"}</span>
+                {st?.state === "live" && st.url ? (
+                  <Button asChild size="sm" variant="outline" className="h-8 gap-1 rounded-full"><a href={st.url} target="_blank" rel="noreferrer">Open <ExternalLink className="h-3 w-3" /></a></Button>
+                ) : (
+                  <Button size="sm" onClick={() => void listIt(d)} disabled={!ready} title={ready ? undefined : "Finish what the apps need first (above)"} className="h-8 gap-1 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid={`hosting-dir-list-${d.key}`}>{st?.state === "submitted" ? "Open again" : "List it"} <ExternalLink className="h-3 w-3" /></Button>
+                )}
+              </div>
+              {(isOpen || st?.state === "submitted") && (
+                <div className="ml-12 mt-2 space-y-2 text-sm">
+                  <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">{d.steps.map((x) => <li key={x}>{x}</li>)}</ol>
+                  <form onSubmit={(e) => { e.preventDefault(); const u = (links[d.key] ?? "").trim(); if (!/^https:\/\//.test(u)) return toast({ title: "Paste your show's link", description: `It starts with https:// (like ${d.link}).` }); put(d.key, { state: "live", url: u, at: new Date().toISOString() }); }} className="flex flex-wrap gap-2">
+                    <Input value={links[d.key] ?? st?.url ?? ""} onChange={(e) => setLinks((x) => ({ ...x, [d.key]: e.target.value }))} placeholder={`Once it's live: your link, ${d.link}`} className="h-9 min-w-0 flex-1 text-xs" />
+                    <Button type="submit" size="sm" variant="outline" className="h-9 rounded-lg">It's live</Button>
+                    {st && <button type="button" onClick={() => put(d.key, null)} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
+                  </form>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** Episodes to their YouTube channel as videos (Upload-Post; their channel is connected on the Social screen). */
+function YouTubeEpisodes({ h, onDone }: { h: Hosted; onDone: () => void }) {
+  const { toast } = useToast();
+  const [privacy, setPrivacy] = useState<"public" | "unlisted">("public");
+  const [busy, setBusy] = useState<number | null>(null);
+  const videos = h.episodes.filter((e) => (e.mime.startsWith("video/") && e.audioKey) || e.recordingId);
+  const post = async (e: Ep) => {
+    setBusy(e.id);
+    try {
+      await apiRequest("POST", `/api/host/hosting/episodes/${e.id}/youtube`, { privacy });
+      toast({ title: "On its way to YouTube", description: "It uploads in the next few minutes. Its status is on the Social screen." });
+      onDone();
+    } catch (err) {
+      const msg = (err as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "");
+      toast({ title: /Social screen/.test(msg) ? "Connect YouTube first" : "Not posted", description: msg, variant: /Social screen/.test(msg) ? undefined : "destructive" });
+    } finally { setBusy(null); }
+  };
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="hosting-youtube">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold">Your episodes as videos on YouTube</h2>
+          <p className="text-xs text-muted-foreground">Posted to your channel with their title, notes and picture. Your channel is connected on the <a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Social</a> screen.</p>
+        </div>
+        <select value={privacy} onChange={(e) => setPrivacy(e.target.value as "public")} className="h-9 rounded-md border border-input bg-background px-2 text-sm" aria-label="Who can see it">
+          <option value="public">Public</option>
+          <option value="unlisted">Unlisted (only with the link)</option>
+        </select>
+      </div>
+      {videos.length ? (
+        <ul className="mt-2 divide-y divide-border">
+          {videos.map((e) => {
+            let yt: { at?: string } = {};
+            try { yt = e.youtube ? JSON.parse(e.youtube) : {}; } catch { yt = {}; }
+            return (
+              <li key={e.id} className="flex items-center gap-3 py-2.5">
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{e.title}</span><span className="block text-xs text-muted-foreground">{yt.at ? `Sent to YouTube ${dateOf(yt.at)}` : "Not on YouTube yet"}</span></span>
+                <Button size="sm" variant="outline" onClick={() => void post(e)} disabled={busy != null} className="h-8 gap-1.5 rounded-full" data-testid={`hosting-yt-${e.id}`}>{busy === e.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} {yt.at ? "Post again" : "Post to YouTube"}</Button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : <p className="mt-2 text-sm text-muted-foreground">Episodes made from a video (an MP4 you upload, or a Library recording) can go to YouTube too. This show's are audio only so far.</p>}
+    </div>
   );
 }
 
@@ -387,14 +554,14 @@ function ArtworkButton({ show, onDone }: { show: HostedShowRow; onDone: () => vo
   );
 }
 
-function ShowDialog({ open, onClose, show, categories, onSaved, onDeleted, focus = "" }: { open: boolean; onClose: () => void; show: HostedShowRow; categories: Record<string, string[]>; onSaved: () => void; onDeleted: () => void; focus?: string }) {
+function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: HostedShowRow; categories: Record<string, string[]>; onSaved: () => void; onDeleted: () => void; focus?: string }) {
   const { toast } = useToast();
   // Deleting: they type the show's name to be sure.
   const [deleting, setDeleting] = useState(false);
   const [sure, setSure] = useState("");
   const del = useMutation({
     mutationFn: async () => (await apiRequest("DELETE", `/api/host/hosting/shows/${show.id}`, { confirm: sure })).json(),
-    onSuccess: () => { setDeleting(false); setSure(""); onClose(); onDeleted(); toast({ title: "Show deleted", description: "Its feed has stopped." }); },
+    onSuccess: () => { setDeleting(false); setSure(""); onDeleted(); toast({ title: "Show deleted", description: "Its feed has stopped." }); },
     onError: (e: Error) => toast({ title: "Not deleted", description: e.message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" }),
   });
   const [f, setF] = useState<Partial<HostedShowRow>>({});
@@ -402,17 +569,15 @@ function ShowDialog({ open, onClose, show, categories, onSaved, onDeleted, focus
   const set = (k: keyof HostedShowRow, val: unknown) => setF((x) => ({ ...x, [k]: val }));
   const save = useMutation({
     mutationFn: async () => (await apiRequest("PATCH", `/api/host/hosting/shows/${show.id}`, f)).json(),
-    onSuccess: () => { onSaved(); setF({}); onClose(); toast({ title: "Show details saved" }); },
+    onSuccess: () => { onSaved(); setF({}); toast({ title: "Show details saved" }); },
     onError: (e: Error) => toast({ title: "Couldn't save", description: e.message, variant: "destructive" }),
   });
   const label = "block text-xs font-semibold text-muted-foreground";
+  const dirty = Object.keys(f).length > 0;
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { setF({}); onClose(); } }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Show details</DialogTitle>
-          <DialogDescription>What Apple, Spotify and every podcast app show about your podcast.</DialogDescription>
-        </DialogHeader>
+    <div className="space-y-4" data-testid="hosting-details">
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+        <p className="mb-3 text-sm text-muted-foreground">What Apple, Spotify and every podcast app show about your podcast.</p>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className={`${label} sm:col-span-2`}>Show name<Input autoFocus={focus === "title"} value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1" /></label>
           <label className={`${label} sm:col-span-2`}>Description<Textarea autoFocus={focus === "description"} value={v.description} onChange={(e) => set("description", e.target.value)} rows={4} className="mt-1" placeholder="What the show is about, who it's for, and who hosts it." /></label>
@@ -431,33 +596,31 @@ function ShowDialog({ open, onClose, show, categories, onSaved, onDeleted, focus
           </label>
           <label className={label}>Website (optional)<Input value={v.website} onChange={(e) => set("website", e.target.value)} className="mt-1" placeholder="https://" /></label>
           <label className={label}>Copyright (optional)<Input value={v.copyright} onChange={(e) => set("copyright", e.target.value)} className="mt-1" placeholder={`© ${new Date().getFullYear()} ${v.author || v.title}`} /></label>
-          <label className={label}>Apple Podcasts link (once listed)<Input value={v.appleUrl} onChange={(e) => set("appleUrl", e.target.value)} className="mt-1" placeholder="https://podcasts.apple.com/…" /></label>
-          <label className={label}>Spotify link (once listed)<Input value={v.spotifyUrl} onChange={(e) => set("spotifyUrl", e.target.value)} className="mt-1" placeholder="https://open.spotify.com/show/…" /></label>
           <label className={`${label} sm:col-span-2`}>Moving to another host? (optional)<Input value={v.newFeedUrl} onChange={(e) => set("newFeedUrl", e.target.value)} className="mt-1" placeholder="Your new host's feed address. Leave empty to stay." /><span className="mt-1 block font-normal">Your feed then forwards every app there (a 301), and your subscribers follow.</span></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.explicit} onChange={(e) => set("explicit", e.target.checked)} /> Explicit language</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.showType === "serial"} onChange={(e) => set("showType", e.target.checked ? "serial" : "episodic")} /> Listen in order (a series)</label>
         </div>
-        {/* Deleting the show: the apps first (the help says how), then here; its feed stops. */}
-        <div className="rounded-xl border border-destructive/30 p-3">
-          {deleting ? (
-            <div className="space-y-2">
-              <p className="text-sm">This deletes <b>{show.title}</b> and its episodes, and its feed stops. If it's in Apple or Spotify, <a href="/help/podcast#unlist" target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">take it down there first</a>. Type the show's name to delete it.</p>
-              <Input value={sure} onChange={(e) => setSure(e.target.value)} placeholder={show.title} data-testid="hosting-delete-confirm" />
-              <div className="flex gap-2">
-                <Button onClick={() => del.mutate()} disabled={del.isPending || sure.trim().toLowerCase() !== show.title.trim().toLowerCase()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="hosting-delete-go">{del.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Delete this show</Button>
-                <Button variant="outline" onClick={() => { setDeleting(false); setSure(""); }}>Keep it</Button>
-              </div>
-            </div>
-          ) : (
-            <button type="button" onClick={() => setDeleting(true)} className="text-sm font-semibold text-destructive hover:underline" data-testid="hosting-delete">Delete this show…</button>
-          )}
+        <div className="mt-4 flex justify-end gap-2">
+          {dirty && <Button variant="outline" onClick={() => setF({})}>Undo changes</Button>}
+          <Button onClick={() => save.mutate()} disabled={save.isPending || !dirty} className="bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-details-save">{save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}</Button>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => { setF({}); onClose(); }}>Cancel</Button>
-          <Button onClick={() => save.mutate()} disabled={save.isPending || !Object.keys(f).length} className="bg-[#053877] text-white hover:bg-[#0a4a99]">{save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </div>
+      {/* Deleting the show: the apps first (the help says how), then here; its feed stops. */}
+      <div className="rounded-2xl border border-destructive/30 p-4">
+        {deleting ? (
+          <div className="space-y-2">
+            <p className="text-sm">This deletes <b>{show.title}</b> and its episodes, and its feed stops. If it's in Apple or Spotify, <a href="/help/podcast#unlist" target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">take it down there first</a>. Type the show's name to delete it.</p>
+            <Input value={sure} onChange={(e) => setSure(e.target.value)} placeholder={show.title} data-testid="hosting-delete-confirm" />
+            <div className="flex gap-2">
+              <Button onClick={() => del.mutate()} disabled={del.isPending || sure.trim().toLowerCase() !== show.title.trim().toLowerCase()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="hosting-delete-go">{del.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Delete this show</Button>
+              <Button variant="outline" onClick={() => { setDeleting(false); setSure(""); }}>Keep it</Button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setDeleting(true)} className="text-sm font-semibold text-destructive hover:underline" data-testid="hosting-delete">Delete this show…</button>
+        )}
+      </div>
+    </div>
   );
 }
 

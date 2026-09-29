@@ -2424,6 +2424,8 @@ export const hostedShows = pgTable("hosted_shows", {
   /** Where to follow it, once it's listed (shown on its public page). */
   appleUrl: text("apple_url").notNull().default(""),
   spotifyUrl: text("spotify_url").notNull().default(""),
+  /** Where they've listed it: each app's state ("submitted", "live") and its link, as JSON by app. */
+  directories: text("directories").notNull().default("{}"),
   /** Leaving us: the new host's feed. The feed then says so (itunes:new-feed-url) and forwards there (301). */
   newFeedUrl: text("new_feed_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
@@ -2458,6 +2460,8 @@ export const hostedEpisodes = pgTable("hosted_episodes", {
   publishedAt: text("published_at").notNull().default(""),
   /** The Library recording it was made from, if any. */
   recordingId: integer("recording_id"),
+  /** Posted to their YouTube channel (as a video, through Upload-Post): when, and how it's going (JSON). */
+  youtube: text("youtube").notNull().default(""),
   /** Turning a Library video into the episode's audio (the worker): "" | queued | running | failed. */
   audioJob: text("audio_job").notNull().default(""),
   audioJobAt: text("audio_job_at").notNull().default(""),
