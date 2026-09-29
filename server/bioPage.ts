@@ -316,7 +316,9 @@ const str = (v: unknown, n: number) => String(v ?? "").slice(0, n);
 
 function cleanSections(v: unknown): BioSection[] {
   if (!Array.isArray(v)) return [];
-  return v.slice(0, 30).flatMap((raw): BioSection[] => {
+  // One podcast block, wherever they put it.
+  let podcast = false;
+  return v.slice(0, 30).filter((x) => (x as { type?: string })?.type !== "podcast" || (!podcast && (podcast = true))).flatMap((raw): BioSection[] => {
     const x = raw as Record<string, unknown>;
     const base = { id: /^[\w-]{1,40}$/.test(String(x.id)) ? String(x.id) : crypto.randomBytes(5).toString("hex"), visible: x.visible !== false, title: str(x.title, 80) };
     switch (x.type) {
@@ -326,6 +328,7 @@ function cleanSections(v: unknown): BioSection[] {
         codes: (Array.isArray(x.codes) ? x.codes : []).slice(0, 20).map((c: Record<string, unknown>) => ({ id: /^[\w-]{1,40}$/.test(String(c.id)) ? String(c.id) : crypto.randomBytes(4).toString("hex"), brand: str(c.brand, 60), code: str(c.code, 40), note: str(c.note, 200), url: httpUrl(c.url) })) }];
       case "music": return [{ ...base, type: "music", tracks: (Array.isArray(x.tracks) ? x.tracks : []).slice(0, 12).map((t: Record<string, unknown>) => ({ id: /^[\w-]{1,40}$/.test(String(t.id)) ? String(t.id) : crypto.randomBytes(4).toString("hex"), url: str(t.url, 500).trim() })).filter((t) => !t.url || /^https:\/\/\S+$/.test(t.url)) }];
       case "meeting": return [{ ...base, type: "meeting", url: httpUrl(x.url), note: str(x.note, 200) }];
+      case "podcast": return [{ ...base, type: "podcast" }];
       case "text": return [{ ...base, type: "text", body: str(x.body, 2000), align: x.align === "center" || x.align === "right" ? x.align : "left" }];
       default: return [];
     }

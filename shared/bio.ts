@@ -92,6 +92,8 @@ export type BioSection =
   | { id: string; type: "meeting"; visible: boolean; title: string; url: string; note: string }
   /** Text: **bold**, *italic* and __underline__ in the body, aligned left, centre or right. */
   | { id: string; type: "text"; visible: boolean; title: string; body: string; align?: BioAlign }
+  /** Your podcast: the latest episodes, to play right there (its look is in theme.podcast). */
+  | { id: string; type: "podcast"; visible: boolean; title: string }
   /** Music: songs, albums or playlists from Spotify, Apple Music, SoundCloud or YouTube, each a player. */
   | { id: string; type: "music"; visible: boolean; title: string; tracks: { id: string; url: string }[] };
 export type BioAlign = "left" | "center" | "right";

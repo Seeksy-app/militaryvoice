@@ -340,7 +340,7 @@ export function BioBuilder() {
         <div className="min-w-0">
           {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} intro={<IntroCard d={draft} st={intro} start={(b) => void startIntro(b)} reset={resetIntro} on={draft.theme.intro ?? false} setOn={(v) => change({ theme: { ...draft.theme, intro: v } }, true)} at={draft.theme.introAt ?? "bottom-left"} setAt={(v) => change({ theme: { ...draft.theme, introAt: v } }, true)} />} />}
           {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} living={living} startLiving={startLiving} />}
-          {tab === "content" && <ContentTab d={draft} change={change} />}
+          {tab === "content" && <ContentTab d={draft} change={change} view={view} />}
           {tab === "social" && <SocialTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} />}
           {tab === "brands" && <BrandsTab d={draft} change={change} url={url} kit={kitView} episodes={q.data?.familyPreview?.podcast?.episodes ?? []} />}
@@ -410,7 +410,7 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { 
     { label: "Claim your link", done: !!d.handle },
     { label: "Add a profile photo", done: !!d.avatarUrl },
     { label: "Write a short bio", done: d.bio.trim().length >= 10 },
-    { label: "Show your podcast or add a link", done: !!view.podcast || d.sections.length > 0 },
+    { label: "Add your podcast or a link (Content)", done: d.sections.length > 0 },
   ];
   const done = steps.filter((s) => s.done).length;
   const [hideSteps, setHideSteps] = useState(() => { try { return localStorage.getItem("mv_bio_steps_hidden") === "1"; } catch { return false; } });
@@ -469,10 +469,7 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { 
         <TextEditor body={d.bio} onBody={(bio) => change({ bio })} maxLength={500} rows={3} placeholder="Who you are, what the show is about, who it's for." testid="bio-bio" />
       </div>
       </Card>
-      <Card icon={Headphones} tone="green" title="Your podcast and listeners">
-      <Field label="Your podcast" hint={hosted ? "Hosted here on MilitaryVoices: new episodes appear on your page by themselves." : "Paste your show's RSS feed and your latest episodes appear, top and centre."}>
-        {hosted ? <p className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-emerald-600" /> {view.podcast?.title}</p> : <Input value={d.rssUrl} onChange={(e) => change({ rssUrl: e.target.value })} placeholder="https://feeds.yourhost.com/your-show" />}
-      </Field>
+      <Card icon={MessageCircle} tone="green" title="Your listeners">
       <div className="flex items-center justify-between rounded-xl border border-border p-3">
         <div><p className="text-sm font-semibold">Let listeners message you</p><p className="text-xs text-muted-foreground">A chat button on your page. You reply from Messages; they see it on your page, and by email if they left one.</p></div>
         <Switch checked={d.askEnabled} onCheckedChange={(v) => change({ askEnabled: v }, true)} />
@@ -1452,6 +1449,7 @@ function Tile({ on, onClick, label, note, testid, children }: { on: boolean; onC
 // ---- Content -----------------------------------------------------------------------
 
 const KINDS: { type: BioSectionType; label: string; hint: string; icon: typeof Link2; tone: string }[] = [
+  { type: "podcast", label: "Your podcast", hint: "Your latest episodes, to play right here", icon: Headphones, tone: "bg-[#F0A71F]/15 text-[#b36b00] dark:text-[#F0A71F]" },
   { type: "links", label: "Links", hint: "Buttons to your site, store, anything", icon: Link2, tone: "bg-[#053877]/10 text-[#053877] dark:bg-[#8fb5e8]/15 dark:text-[#8fb5e8]" },
   { type: "video", label: "Video", hint: "A YouTube or Vimeo video", icon: Video, tone: "bg-red-500/12 text-red-600 dark:text-red-400" },
   { type: "promo", label: "Promo codes", hint: "Sponsors' codes, tap to copy", icon: Tag, tone: "bg-[#F0A71F]/15 text-[#b36b00] dark:text-[#F0A71F]" },
@@ -1466,26 +1464,27 @@ function blank(type: BioSectionType): BioSection {
     case "video": return { ...base, type, url: "" };
     case "promo": return { ...base, type, title: "Promo codes", codes: [{ id: newId(), brand: "", code: "", note: "", url: "" }], code: "", url: "", note: "" };
     case "music": return { ...base, type, title: "Music", tracks: [{ id: newId(), url: "" }] };
+    case "podcast": return { ...base, type };
     case "meeting": return { ...base, type, title: "Book a time with me", url: "", note: "" };
     default: return { ...base, type: "text", body: "" };
   }
 }
 
-function ContentTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void }) {
+function ContentTab({ d, change, view }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic }) {
   // The two cards start open; each block's editor starts closed.
   const fold = useFold("content");
   const items = useFold("content-items", false);
   const put = (s: BioSection[], now = false) => change({ sections: s }, now);
   const upd = (id: string, patch: Partial<BioSection>, now = false) => put(d.sections.map((x) => (x.id === id ? ({ ...x, ...patch } as BioSection) : x)), now);
   const add = (type: BioSectionType) => { const s = blank(type); put([...d.sections, s], true); items.set(s.id, true); fold.set("list", true); };
-  const all = (open: boolean) => { fold.all(["add", "list"], open); items.all(["podcast", ...d.sections.map((x) => x.id)], open); };
+  const all = (open: boolean) => { fold.all(["add", "list"], open); items.all(d.sections.map((x) => x.id), open); };
   return (
     <div className="space-y-4">
       <FoldAll onAll={all} />
       <Card icon={Plus} tone="gold" title="Add to your page" fold={fold.of("add")}>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {KINDS.map((k) => (
-            <button key={k.type} type="button" onClick={() => add(k.type)} className="group flex items-center gap-3 rounded-2xl border-2 border-border bg-background p-2.5 text-left transition-all hover:-translate-y-0.5 hover:border-[#053877]/40 hover:shadow-md" data-testid={`bio-add-${k.type}`}>
+            <button key={k.type} type="button" onClick={() => add(k.type)} disabled={k.type === "podcast" && d.sections.some((x) => x.type === "podcast")} className="group disabled:pointer-events-none disabled:opacity-40 flex items-center gap-3 rounded-2xl border-2 border-border bg-background p-2.5 text-left transition-all hover:-translate-y-0.5 hover:border-[#053877]/40 hover:shadow-md" data-testid={`bio-add-${k.type}`}>
               <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${k.tone}`}><k.icon className="h-[18px] w-[18px]" /></span>
               <span className="min-w-0"><span className="block text-sm font-bold">{k.label}</span><span className="block text-[11px] leading-snug text-muted-foreground">{k.hint}</span></span>
             </button>
@@ -1493,7 +1492,6 @@ function ContentTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: b
         </div>
       </Card>
       <Card icon={Layers} tone="blue" title="On your page · drag to reorder" fold={fold.of("list")}>
-        <PodcastBlock d={d} change={change} open={items.of("podcast").open} toggle={items.of("podcast").toggle} />
         {d.sections.length === 0 && <p className="rounded-2xl border-2 border-dashed border-border p-4 text-center text-sm text-muted-foreground">Nothing else yet. Pick something above and it goes here.</p>}
         <Sortable ids={d.sections.map((x) => x.id)} onMove={(ids) => put(ids.map((id) => d.sections.find((x) => x.id === id)!), true)} render={(id, grip) => {
           const s = d.sections.find((x) => x.id === id)!;
@@ -1509,7 +1507,7 @@ function ContentTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: b
                 <button type="button" onClick={() => put(d.sections.filter((x) => x.id !== s.id), true)} className="rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-destructive dark:hover:bg-red-950" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
                 <button type="button" onClick={f.toggle} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted" aria-label={f.open ? "Close" : "Edit"}><ChevronDown className={`h-4 w-4 transition-transform ${f.open ? "rotate-180" : ""}`} /></button>
               </div>
-              {f.open && <div className="space-y-2 border-t border-border p-3"><SectionEditor s={s} upd={(p) => upd(s.id, p)} /></div>}
+              {f.open && <div className="space-y-2 border-t border-border p-3">{s.type === "podcast" ? <PodcastOptions d={d} change={change} view={view} /> : <SectionEditor s={s} upd={(p) => upd(s.id, p)} />}</div>}
             </div>
           );
         }} />
@@ -1519,22 +1517,22 @@ function ContentTab({ d, change }: { d: Page; change: (p: Partial<Page>, now?: b
 }
 
 /** Your podcast, always first: open it to design it (its look, frame, heading, episodes and buttons). */
-function PodcastBlock({ d, change, open, toggle }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; open: boolean; toggle: () => void }) {
+/**
+ * Your podcast, as a block on the page (added from Content like the rest):
+ * the show's feed (or the one hosted here), and how it looks.
+ */
+function PodcastOptions({ d, change, view }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic }) {
   const o = { ...DEFAULT_PODCAST, ...(d.theme.podcast ?? {}) };
   const set = (p: Partial<BioPodcastOptions>, now = false) => change({ theme: { ...d.theme, podcast: { ...o, ...p } } }, now);
   const setTheme = (p: Partial<BioTheme>) => change({ theme: { ...d.theme, ...p } }, true);
   const pal = bioPalette(d.theme);
   const pill = (on: boolean) => `rounded-full border-2 px-3 py-1.5 text-xs font-semibold transition-colors ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border text-muted-foreground hover:border-[#053877]/40"}`;
+  const hosted = /\/feed\//.test(view.podcast?.feedUrl ?? "");
   return (
-    <div className={`overflow-hidden rounded-2xl ${o.on ? "" : "opacity-70"}`} data-testid="bio-podcast-block">
-      <div className="flex items-center gap-3 bg-gradient-to-r from-[#053877] to-[#0a4a99] p-3 text-white">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F0A71F] text-[#1a1200]"><Headphones className="h-[18px] w-[18px]" /></span>
-        <button type="button" onClick={toggle} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-bold">{o.heading.trim() || "Your podcast"}</span><span className="block text-[11px] text-white/70">{o.on ? `First, under your name · ${o.count} episodes` : "Hidden"}</span></button>
-        <button type="button" onClick={() => set({ on: !o.on }, true)} className="rounded-full p-1.5 text-white/80 hover:bg-white/10" aria-label={o.on ? "Hide" : "Show"}>{o.on ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}</button>
-        <button type="button" onClick={toggle} className="rounded-full p-1.5 text-white/80 hover:bg-white/10" aria-label={open ? "Close" : "Options"} data-testid="bio-podcast-options"><ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} /></button>
-      </div>
-      {open && (
-        <div className="space-y-3 border-2 border-t-0 border-[#053877]/30 bg-background p-3">
+        <div className="space-y-3" data-testid="bio-podcast-options">
+          <Field label="Your show" hint={hosted ? "Hosted here on MilitaryVoices: new episodes appear by themselves." : "Paste your show's RSS feed and your latest episodes appear, to play right on your page."}>
+            {hosted ? <p className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-emerald-600" /> {view.podcast?.title}</p> : <Input value={d.rssUrl} onChange={(e) => change({ rssUrl: e.target.value })} placeholder="https://feeds.yourhost.com/your-show" data-testid="bio-rss" />}
+          </Field>
           <Field label="Heading" hint="Optional: a small line over your episodes. Leave it empty to keep it tight.">
             <Input value={o.heading} onChange={(e) => set({ heading: e.target.value })} maxLength={80} placeholder="Latest from the show" />
           </Field>
@@ -1582,8 +1580,6 @@ function PodcastBlock({ d, change, open, toggle }: { d: Page; change: (p: Partia
             ))}
           </div>
         </div>
-      )}
-    </div>
   );
 }
 
