@@ -132,6 +132,7 @@ import { registerHosting, claimEpisodeAudio, claimEpisodeStill } from "./hosting
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor } from "./bioPage.js";
 import { registerGuests, guestByToken, markGuestJoined } from "./guests.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
+import { registerMail } from "./mail.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
 import { episodeCredits, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
@@ -919,7 +920,7 @@ export function registerRoutes(app: Express): void {
     if (fromRaw && !/@militaryvoices?\.(ai|io)$/.test(fromAddr)) return res.status(400).json({ message: "The sender has to be on our domain." });
     const headers: Record<string, string> = {};
     if (req.body?.inReplyTo) { headers["In-Reply-To"] = String(req.body.inReplyTo); headers["References"] = String(req.body.inReplyTo); }
-    const id = await sendOneOffEmail({ to, subject, html, text, replyTo: String(req.body?.replyTo ?? "") || undefined, from: fromRaw || undefined, headers });
+    const id = await sendOneOffEmail({ kind: "admin-send", to, subject, html, text, replyTo: String(req.body?.replyTo ?? "") || undefined, from: fromRaw || undefined, headers });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     console.log(`One-off email sent to ${to}: ${subject}`);
     // Filed under a campaign row so the activity log and each contact's
@@ -1938,7 +1939,7 @@ export function registerRoutes(app: Express): void {
     const paragraphs = text.split(/\n{2,}/).map((para) => `<p>${esc(para).replace(/\n/g, "<br>")}</p>`).join("\n");
     const subject = `An invitation: ${event.name.trim()}`;
     const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: `${event.name.trim()} · ${when}`, heading: "You're invited", body: paragraphs, cta: { href: link, label: "Set up your show" } });
-    const id = await sendOneOffEmail({ to: profile.email, subject, html, text });
+    const id = await sendOneOffEmail({ kind: "directory-invite", to: profile.email, subject, html, text });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     try {
       await storage.recordOneOffSend({ eventId: event.id, subject, bodyText: text, sender: "team", banner: "podcasters", email: profile.email, resendId: id });
@@ -5548,6 +5549,7 @@ export function registerRoutes(app: Express): void {
   registerBioAgent(app, requireAgent);
   registerGuests(app, requireAdmin);
   registerCaptures(app, requireAdmin, (req) => getAdminEmail(req) ?? "");
+  registerMail(app, requireAdmin);
   registerBioPage(app);
   registerAskShow(app, requireAgent);
 
@@ -7041,7 +7043,7 @@ export function registerRoutes(app: Express): void {
       }
 
       const header = `From: ${from}\nTo: ${to}\nSubject: ${subject}\n\n`;
-      await sendOneOffEmail({
+      await sendOneOffEmail({ kind: "inbound-forward",
         to: process.env.FORWARD_INBOX || "andrew@podlogix.co",
         subject: `Fwd: ${subject}`,
         text: header + body,
@@ -7134,7 +7136,7 @@ export function registerRoutes(app: Express): void {
         const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: "We got your email", body });
         const headers: Record<string, string> = {};
         if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
-        const id = await sendOneOffEmail({ to: row.fromEmail, subject, html, text, headers });
+        const id = await sendOneOffEmail({ kind: "ack", to: row.fromEmail, subject, html, text, headers });
         if (!id) return;
         const now = new Date().toISOString();
         await storage.updateInbound(row.id, { ackAt: now, ackResendId: id, ackText: text });
@@ -7234,7 +7236,7 @@ export function registerRoutes(app: Express): void {
     const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: subject.replace(/^re:\s*/i, ""), body: paragraphs });
     const headers: Record<string, string> = {};
     if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
-    const id = await sendOneOffEmail({ to: row.fromEmail, subject, html, text, headers, bcc: bccFor(from, row.fromEmail) });
+    const id = await sendOneOffEmail({ kind: "reply", to: row.fromEmail, subject, html, text, headers, bcc: bccFor(from, row.fromEmail) });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     const now = new Date().toISOString();
     await storage.updateInbound(row.id, { status: "sent", repliedAt: now, replyResendId: id, replyFrom: from, replyText: text });
@@ -7933,7 +7935,7 @@ export function registerRoutes(app: Express): void {
         const who = parsed.data.name?.trim() || parsed.data.email;
         const origin = `${req.protocol}://${req.get("host")}`;
         const first = (signup.hostName || "").trim().split(/\s+/)[0] || "there";
-        await sendOneOffEmail({
+        await sendOneOffEmail({ kind: "reminder-notice",
           to: signup.email,
           subject: `${who} asked to be reminded about ${signup.podcastName}`,
           text: `${first},\n\n${who} just asked us to remind them when ${signup.podcastName} is on. That's ${total} ${total === 1 ? "person" : "people"} so far. They get the reminder from us; the list is yours, under Contacts on your dashboard.\n\n${origin}/host/dashboard/contacts`,
@@ -9865,7 +9867,7 @@ The ${eventName} team`;
 <p style="margin:22px 0"><a href="${green}" style="background:#053877;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Open the green room</a></p>
 <p>Reply to this email with any question and a person will answer.</p>
 <p>The ${esc(eventName)} team</p>`;
-    const id = await sendOneOffEmail({ to, subject, text, html: emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: `${eventName} · crew`, heading: subject, body: html }) });
+    const id = await sendOneOffEmail({ kind: "crew-invite", to, subject, text, html: emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: `${eventName} · crew`, heading: subject, body: html }) });
     if (id) {
       try { await storage.recordOneOffSend({ eventId, subject, bodyText: text, sender: "team", banner: "podcasters", email: to, resendId: id }); } catch (err) { console.error("Crew invite sent but not logged:", err); }
     }
@@ -9901,7 +9903,7 @@ The ${eventName} team`;
     const latest = req.body?.standalone ? undefined : (await storage.listInboundByEmail(to))[0];
     const headers: Record<string, string> = {};
     if (latest?.messageId) { headers["In-Reply-To"] = latest.messageId; headers["References"] = latest.messageId; }
-    const id = await sendOneOffEmail({ to, subject, html, text, headers, ...named, bcc: bccFor(from, to) });
+    const id = await sendOneOffEmail({ kind: "chat-send", to, subject, html, text, headers, ...named, bcc: bccFor(from, to) });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     const featured = await storage.getFeaturedEvent();
     const team = await storage.listEventTeam(featured.id);

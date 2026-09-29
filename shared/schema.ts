@@ -2012,6 +2012,26 @@ export type PresentationSlideRow = typeof presentationSlides.$inferSelect;
  * log next to the email it answers, with a draft reply written for it and a
  * record of what went back and when.
  */
+/**
+ * Every email we send, whatever sent it (a reply, a campaign, a guest invite, a sign-in code),
+ * in one place: the Mail screen's Sent. Codes are logged without their code.
+ */
+export const mailLog = pgTable("mail_log", {
+  id: serial("id").primaryKey(),
+  toEmail: text("to_email").notNull(),
+  fromAddr: text("from_addr").notNull().default(""),
+  subject: text("subject").notNull().default(""),
+  /** What sent it: reply, ack, sendGuestInviteEmail, sendBroadcastEmail, … */
+  kind: text("kind").notNull().default("other"),
+  bodyText: text("body_text").notNull().default(""),
+  resendId: text("resend_id").notNull().default(""),
+  ok: boolean("ok").notNull().default(true),
+  error: text("error").notNull().default(""),
+  replyTo: text("reply_to").notNull().default(""),
+  sentAt: text("sent_at").notNull(),
+}, (t) => [index("mail_log_to_idx").on(t.toEmail), index("mail_log_sent_idx").on(t.sentAt), index("mail_log_resend_idx").on(t.resendId)]);
+export type MailLogRow = typeof mailLog.$inferSelect;
+
 export const inboundEmails = pgTable("inbound_emails", {
   id: serial("id").primaryKey(),
   resendId: text("resend_id").notNull().default(""),

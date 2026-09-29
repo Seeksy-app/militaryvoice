@@ -202,7 +202,26 @@ function buildText(input: ConfirmationEmailInput): string {
 
 /** Low-level Resend sender shared by every email type. Never throws — logs and
  *  returns false on failure so a flaky email provider never blocks a user flow. */
-async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[] }): Promise<string | null> {
+async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; kind?: string }): Promise<string | null> {
+  let id: string | null = null;
+  let error = "";
+  try {
+    id = await sendRawEmailNow(opts);
+    if (!id) error = "The email service didn't take it.";
+    return id;
+  } finally {
+    // Every email we send goes in the mail log (the Mail screen's Sent), whatever sent it.
+    if (mailLogger) await mailLogger({ to: opts.to, from: opts.from ?? FROM_ADDRESS, subject: opts.subject, text: opts.text, kind: opts.kind ?? "other", resendId: id ?? "", ok: !!id, error, replyTo: opts.replyTo ?? "" }).catch((err) => console.warn("Mail log failed:", (err as Error).message));
+  }
+}
+
+/** What the mail log keeps of one sent email. */
+export type SentMail = { to: string; from: string; subject: string; text: string; kind: string; resendId: string; ok: boolean; error: string; replyTo: string };
+let mailLogger: ((m: SentMail) => Promise<void>) | null = null;
+/** The server hands its database writer in here (this file keeps no database of its own). */
+export function setMailLogger(fn: (m: SentMail) => Promise<void>) { mailLogger = fn; }
+
+async function sendRawEmailNow(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[] }): Promise<string | null> {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (RESEND_API_KEY) {
@@ -266,8 +285,10 @@ export async function sendOneOffEmail(o: {
   from?: string;
   /** Hidden copies: whoever the mail speaks for sees what was said in their name. */
   bcc?: string[];
+  /** What kind of email it is, for the mail log (a reply, an acknowledgement…). */
+  kind?: string;
 }): Promise<string | null> {
-  return sendRawEmail(o);
+  return sendRawEmail({ ...o, kind: o.kind ?? "one-off" });
 }
 
 /** Riccoh's own address: mail sent in his name is blind-copied to him. */
@@ -302,7 +323,7 @@ export function renderConfirmationEmail(input: ConfirmationEmailInput): { subjec
  * the caller can file the send and its opens count like a campaign's.
  */
 export async function sendConfirmationEmail(input: ConfirmationEmailInput): Promise<string | null> {
-  return sendRawEmail({ to: input.to, ...renderConfirmationEmail(input) });
+  return sendRawEmail({ kind: "sendConfirmationEmail", to: input.to, ...renderConfirmationEmail(input) });
 }
 
 export interface LoginCodeEmailInput {
@@ -317,7 +338,7 @@ export async function sendLoginCodeEmail(input: LoginCodeEmailInput): Promise<bo
       <p style="margin:0 0 6px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">Your code</p>
       <p style="margin:0;color:#053877;font-size:36px;font-weight:800;letter-spacing:0.25em;font-family:monospace;">${escapeHtml(input.code)}</p>
     </div>`;
-  return sendEmail({
+  return sendEmail({ kind: "sendLoginCodeEmail",
     to: input.to,
     subject: `Your sign-in code: ${input.code}`,
     html: emailShell({
@@ -337,7 +358,7 @@ export async function sendListenerQuestionEmail(input: { to: string; show: strin
   const who = input.name || (input.fromEmail ? input.fromEmail : "A listener");
   const quote = `<div style="background:#f5f7fb;border-left:4px solid #f0a71f;border-radius:0 12px 12px 0;padding:14px 18px;margin:0 0 16px;color:#1f2937;font-size:15px;line-height:1.55;white-space:pre-wrap;">${escapeHtml(input.question)}</div>`;
   const reply = input.fromEmail ? `Reply from your SmartLink and they'll see it on your page and by email.` : "Reply from your SmartLink and they'll see it next time they visit your page.";
-  return sendRawEmail({
+  return sendRawEmail({ kind: "sendListenerQuestionEmail",
     to: input.to,
     ...(input.fromEmail ? { replyTo: input.fromEmail } : {}),
     subject: `${who} sent you a message`,
@@ -356,7 +377,7 @@ export async function sendListenerQuestionEmail(input: { to: string; show: strin
 /** The podcaster answered a listener's message from their page. */
 export async function sendListenerReplyEmail(input: { to: string; show: string; question: string; reply: string; pageUrl: string }): Promise<boolean> {
   const bubble = (text: string, mine: boolean) => `<div style="background:${mine ? "#f5f7fb" : "#fff7e6"};border-left:4px solid ${mine ? "#d1d5db" : "#f0a71f"};border-radius:0 12px 12px 0;padding:12px 16px;margin:0 0 12px;color:#1f2937;font-size:15px;line-height:1.55;white-space:pre-wrap;">${escapeHtml(text)}</div>`;
-  return sendRawEmail({
+  return sendRawEmail({ kind: "sendListenerReplyEmail",
     to: input.to,
     subject: `${input.show} replied to you`,
     html: emailShell({
@@ -381,7 +402,7 @@ export async function sendGuestInviteEmail(input: { to: string; guestName: strin
   const who = input.hostName || input.show || "Your host";
   const btn = `<p style="margin:18px 0 6px;"><a href="${input.link}" style="display:inline-block;background:#F0A71F;color:#1a1200;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;">Your link to the green room</a></p>`;
   const tips = `<ul style="margin:14px 0 0;padding-left:18px;color:#374151;font-size:14px;line-height:1.6;"><li>Open it on a laptop with Chrome or Edge, 10 minutes before.</li><li>Headphones help, and a quiet room.</li><li>Your name and title are filled in; change them if you like.</li></ul>`;
-  return sendRawEmail({
+  return sendRawEmail({ kind: "sendGuestInviteEmail",
     to: input.to,
     ...(input.replyTo ? { replyTo: input.replyTo } : {}),
     subject: `${who} invited you on ${input.show || "their show"} at ${input.eventName}`,
@@ -404,7 +425,7 @@ export async function sendPodcastOwnerCodeEmail(input: { to: string; code: strin
       <p style="margin:0 0 6px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">Your code</p>
       <p style="margin:0;color:#053877;font-size:36px;font-weight:800;letter-spacing:0.25em;font-family:monospace;">${escapeHtml(input.code)}</p>
     </div>`;
-  return sendEmail({
+  return sendEmail({ kind: "sendPodcastOwnerCodeEmail",
     to: input.to,
     subject: `Confirm your podcast email: ${input.code}`,
     html: emailShell({
@@ -462,7 +483,7 @@ export async function sendReminderConfirmationEmail(raw: ReminderEmailInput): Pr
     <p style="margin:28px 0 0;color:#9ca3af;font-size:12px;">Didn't ask for this? Ignore it and we won't email you again.</p>
   </div>`;
   const text = `You're set, ${raw.name}.\n\nWe'll email you before ${raw.podcastName} with ${raw.hostName} goes live${raw.wantsText ? ", and text you too" : ""}.\n\nOn air: ${raw.whenLabel} (${raw.timezoneLabel})\n\n${calendarText(raw.calendar)}\nView the agenda: ${raw.agendaUrl}\n`;
-  return sendEmail({ to: raw.to, subject: `Reminder set: ${raw.podcastName} · ${raw.whenLabel}`, html, text });
+  return sendEmail({ kind: "sendReminderConfirmationEmail", to: raw.to, subject: `Reminder set: ${raw.podcastName} · ${raw.whenLabel}`, html, text });
 }
 
 /** Tell the admin team a sponsor asked to get involved. Never throws. */
@@ -501,7 +522,7 @@ export async function sendSponsorThanksEmail(input: {
       ? `You asked about ${input.packageName}. When you're ready:\n${input.checkoutUrl}\n`
       : "A member of our sponsor team will be in touch shortly to walk you through the packages.\n"
   }\nReply to this email and it reaches us directly.\n`;
-  return sendEmail({ to: input.to, subject: "Thanks for your interest in sponsoring", html, text });
+  return sendEmail({ kind: "sendSponsorThanksEmail", to: input.to, subject: "Thanks for your interest in sponsoring", html, text });
 }
 
 export async function sendSponsorInquiryEmail(input: {
@@ -526,7 +547,7 @@ export async function sendSponsorInquiryEmail(input: {
   </div>`;
   const text = `New sponsor inquiry\n\nName: ${input.name}\nCompany: ${input.company}\nEmail: ${input.email}\nPhone: ${input.phone}\n\n${input.message}\n`;
   const results = await Promise.all(
-    input.to.map((to) => sendEmail({ to, subject: `Sponsor inquiry: ${input.company || input.name}`, html, text })),
+    input.to.map((to) => sendEmail({ kind: "sendSponsorInquiryEmail", to, subject: `Sponsor inquiry: ${input.company || input.name}`, html, text })),
   );
   return results.some(Boolean);
 }
@@ -564,7 +585,7 @@ export async function sendPlatformInterestEmail(v: PlatformInterestInput): Promi
     </table>
   </div>`;
   const text = `${heading}\n\n` + rows.map(([k, val]) => `${k}: ${val}`).join("\n") + "\n";
-  return sendEmail({ to: "hello@militaryvoice.ai", subject: `${heading}: ${v.name}`, html, text });
+  return sendEmail({ kind: "sendPlatformInterestEmail", to: "hello@militaryvoice.ai", subject: `${heading}: ${v.name}`, html, text });
 }
 
 // ---------------------------------------------------------------------------
@@ -683,17 +704,17 @@ export function renderNudge(kind: NudgeKind, v: NudgeInput): { subject: string; 
 
 /** Two weeks out: time to send us things. */
 export async function sendPrepNudge(v: NudgeInput): Promise<string | null> {
-  return sendRawEmail({ to: v.to, ...renderNudge("prep", v) });
+  return sendRawEmail({ kind: "sendPrepNudge", to: v.to, ...renderNudge("prep", v) });
 }
 
 /** Two days out: the practical details. */
 export async function sendFinalNudge(v: NudgeInput): Promise<string | null> {
-  return sendRawEmail({ to: v.to, ...renderNudge("final", v) });
+  return sendRawEmail({ kind: "sendFinalNudge", to: v.to, ...renderNudge("final", v) });
 }
 
 /** An hour out: one link, nothing else. */
 export async function sendOnAirNudge(v: NudgeInput): Promise<string | null> {
-  return sendRawEmail({ to: v.to, ...renderNudge("onair", v) });
+  return sendRawEmail({ kind: "sendOnAirNudge", to: v.to, ...renderNudge("onair", v) });
 }
 
 // ---------------------------------------------------------------------------
@@ -746,7 +767,7 @@ export async function sendBookingAlert(v: BookingAlertInput): Promise<boolean> {
     (v.needsInterviewer ? "Needs: an interviewer\n" : "") +
     `Lineup: ${v.taken} of ${v.total} slots taken\n\n${v.adminUrl}`;
 
-  return sendEmail({
+  return sendEmail({ kind: "sendBookingAlert",
     to: v.to,
     subject: `New booking: ${v.podcastName} — ${v.onAirLabel}`,
     html,
@@ -785,7 +806,7 @@ export async function sendScheduleReference(to: string): Promise<boolean> {
     "Podcaster nudges (relative to each slot): Get ready 14 days before; Two days to go 2 days before; You're on in an hour 60 min before. Only the most urgent goes out.\n" +
     "Posting plan (only what they tick): Join me Aug 31 (past, next run); Share this Sep 7 (past, +2d); What is the day? Sep 14 (past, +4d); Two weeks Sep 21 10am ET; This week Sep 28 10am ET; I'm on today 3h before slot.\n" +
     "Listeners: calendar links at sign-up; no pre-show email yet.\nCron: every hour on the hour.";
-  return sendEmail({
+  return sendEmail({ kind: "sendScheduleReference",
     to,
     subject: "Your automatic sends: nudges and posting plan dates",
     html: emailShell({
@@ -816,7 +837,7 @@ export async function sendHelpRequestAlert(v: {
     .filter(Boolean)
     .map((l) => `<p style="margin:0 0 6px;">${escapeHtml(l)}</p>`)
     .join("");
-  return sendEmail({
+  return sendEmail({ kind: "sendHelpRequestAlert",
     to: v.to,
     replyTo: v.email,
     subject: `Help request from ${v.name || v.email}: ${v.question.slice(0, 60)}`,
@@ -853,7 +874,7 @@ export interface StartingSoonInput {
 export async function sendListenerStartingSoon(v: StartingSoonInput): Promise<boolean> {
   const soon = v.minutesAway <= 5 ? "right now" : `in about ${v.minutesAway} minutes`;
   const first = v.name.trim().split(/\s+/)[0] || "there";
-  return sendEmail({
+  return sendEmail({ kind: "sendListenerStartingSoon",
     to: v.to,
     subject: `${v.podcastName} is on ${soon} — ${v.timeLabel}`,
     html: emailShell({
@@ -918,7 +939,7 @@ export async function sendImportReadyEmail(v: ImportReadyInput): Promise<boolean
     ? { lead: "You're getting this because automatic import is on.", link: "Turn it off on the Zoom card in Integrations" }
     : { lead: "You're getting this because a recording was sent to your import link.", link: "Manage or replace the import link in Integrations" };
   const facts = [date, length ? `Length ${length}` : ""].filter(Boolean);
-  return sendEmail({
+  return sendEmail({ kind: "sendImportReadyEmail",
     to: v.to,
     subject,
     html: emailShell({
@@ -1184,7 +1205,7 @@ export interface BroadcastEmailOptions {
 
 export async function sendBroadcastEmail(opts: BroadcastEmailOptions): Promise<string | null> {
   const rendered = renderBroadcastEmail(opts);
-  return sendRawEmail({
+  return sendRawEmail({ kind: "sendBroadcastEmail",
     to: opts.to,
     from: `${rendered.fromName} <hello@militaryvoices.ai>`,
     subject: rendered.subject,

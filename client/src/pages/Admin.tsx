@@ -42,6 +42,7 @@ import { SponsorLeads } from "@/components/SponsorLeads";
 import { SponsorFinder } from "@/components/SponsorFinder";
 import { ShowSponsorsCard } from "@/components/ShowSponsors";
 import { AdminChat } from "@/components/AdminChat";
+import { AdminMail } from "@/components/AdminMail";
 import { AudienceFigures } from "@/components/AudienceFigures";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
@@ -2992,7 +2993,7 @@ function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onCo
 // a campaign is one email that goes out once, an automation is a series that
 // fires off a trigger, and a template is copy you pick from when building
 // either. "Cadence" was doing two of those jobs at once.
-type CrmView = "contacts" | "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "campaigns" | "templates" | "automation" | "replies" | "activity" | "chat" | "compose";
+type CrmView = "mail" | "contacts" | "lists" | "list-signups" | "list-contacts" | "list-engagement" | "list-segment" | "campaigns" | "templates" | "automation" | "replies" | "activity" | "chat" | "compose";
 
 /**
  * Everything that has actually gone out, in the order it went.
@@ -3393,7 +3394,7 @@ function ActivityLog({
                   {m.ackAt && <span className="text-emerald-700 dark:text-emerald-400">⚡ Alex acknowledged</span>}
                   {m.status === "sent" ? <span className="text-emerald-700 dark:text-emerald-400">✓ Answered by {m.replyFrom === "riccoh" ? "Riccoh" : m.replyFrom === "michael" ? "Michael" : "the team"}</span>
                     : m.status === "ignored" ? <span className="text-muted-foreground">No follow-up needed</span>
-                    : <span className="text-muted-foreground">A person still owes a reply · {onReplies ? <button type="button" onClick={onReplies} className="font-semibold text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]" data-testid="activity-to-replies">Open in Replies to send</button> : "see Replies"}</span>}
+                    : <span className="text-muted-foreground">A person still owes a reply · {onReplies ? <button type="button" onClick={onReplies} className="font-semibold text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]" data-testid="activity-to-replies">Open in Mail to send</button> : "see Replies"}</span>}
                 </div>
               </div>
             ) });
@@ -3919,7 +3920,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const [view, setView] = useState<CrmView>("contacts");
+  const [view, setView] = useState<CrmView>("mail");
   const [search, setSearch] = useState("");
   const [selectedContact, setSelectedContact] = useState<ContactRow | EngagementRecipient | null>(null);
   const [engagementCtx, setEngagementCtx] = useState<{ broadcastId: number; type: string; label: string } | null>(null);
@@ -4308,10 +4309,11 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
   // One CRM, five doors: who, grouped how, what we send, what came back,
   // what happened. Campaigns keeps its own second row for automation and
   // templates; everything else is one level deep.
+  // Mail first: what came in, what went out, and what needs an answer, like a mail app.
   const navItems: { id: CrmView; label: string; badge?: number }[] = [
+    { id: "mail", label: "Mail", badge: repliesWaiting || undefined },
     { id: "contacts", label: "Contacts" },
     { id: "campaigns", label: "Campaigns" },
-    { id: "replies", label: "Replies", badge: repliesWaiting || undefined },
     { id: "activity", label: "Activity" },
     { id: "chat", label: "Chat with Alex" },
   ];
@@ -4359,6 +4361,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
       {view === "chat" && <AdminChat eventId={eventId} />}
 
       {/* ── REPLIES: what came back, with an answer drafted ── */}
+      {view === "mail" && <AdminMail />}
       {view === "replies" && (
         <div className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground">
@@ -4714,7 +4717,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
       {/* ── ACTIVITY LOG ── */}
       {view === "activity" && (
         <div className="flex flex-col gap-4">
-          <ActivityLog broadcasts={broadcastList} eventId={eventId} onViewEngagement={openEngagementView} onSelectContact={setSelectedContact} onReplies={() => setView("replies")} />
+          <ActivityLog broadcasts={broadcastList} eventId={eventId} onViewEngagement={openEngagementView} onSelectContact={setSelectedContact} onReplies={() => setView("mail")} />
         </div>
       )}
 
