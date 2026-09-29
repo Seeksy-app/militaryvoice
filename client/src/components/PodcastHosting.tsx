@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { durationOf, uploadToStorage } from "@/lib/upload";
-import { GuestFinder } from "@/components/DiscoverPodcasts";
+import { GuestFinder, ShowFinder } from "@/components/DiscoverPodcasts";
 import type { HostedEpisodeRow, HostedShowRow, RecordingRow } from "@shared/schema";
 import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Trash2, Upload } from "lucide-react";
 
@@ -40,7 +40,7 @@ export function PodcastHosting() {
   });
   // Which show is open (none: the grid of shows), and which of its tabs.
   const [openId, setOpenId] = useState<number | null>(null);
-  const [tab, setTab] = useState<PodTab>(() => { try { const t = localStorage.getItem("mv_pod_tab"); return t === "directories" || t === "details" || t === "guests" ? t : "episodes"; } catch { return "episodes"; } });
+  const [tab, setTab] = useState<PodTab>(() => { try { const t = localStorage.getItem("mv_pod_tab"); return t === "directories" || t === "details" || t === "guests" || t === "pitch" ? t : "episodes"; } catch { return "episodes"; } });
   const go = (t: PodTab) => { setTab(t); try { localStorage.setItem("mv_pod_tab", t); } catch { /* fine */ } };
   // The field Show details opens on (from the checklist): the description, the name, the owner email.
   const [focus, setFocus] = useState<"" | "title" | "description" | "ownerEmail">("");
@@ -171,11 +171,12 @@ export function PodcastHosting() {
         {shows.length === 1 && <button type="button" onClick={() => setNewShow(true)} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]" data-testid="hosting-add-show"><Plus className="h-3.5 w-3.5" /> Add a show</button>}
       </div>
 
-      <div className="flex gap-6 border-b border-border" role="tablist">
+      <div className="flex gap-6 overflow-x-auto whitespace-nowrap border-b border-border [scrollbar-width:none]" role="tablist">
         {tabBtn("episodes", "Episodes")}
         {tabBtn("directories", ready ? "Directories" : "Directories · to do")}
         {tabBtn("details", "Show details")}
         {tabBtn("guests", "Book a guest")}
+        {tabBtn("pitch", "Be a guest")}
       </div>
 
       {s.newFeedUrl && (
@@ -246,6 +247,7 @@ export function PodcastHosting() {
       )}
 
       {tab === "guests" && <GuestFinder showTitle={s.title} />}
+      {tab === "pitch" && <ShowFinder topics={[s.category, s.subcategory].filter(Boolean) as string[]} />}
 
       {tab === "details" && <ShowForm key={s.id} show={s} focus={focus} categories={q.data?.categories ?? {}} onSaved={() => { refresh(); setFocus(""); }} onDeleted={() => { setOpenId(null); refresh(); }} />}
 
@@ -256,7 +258,7 @@ export function PodcastHosting() {
   );
 }
 
-type PodTab = "episodes" | "directories" | "details" | "guests";
+type PodTab = "episodes" | "directories" | "details" | "guests" | "pitch";
 type DirState = { state: "" | "submitted" | "live"; url: string; at?: string };
 const parseDirs = (raw: string | null | undefined): Record<string, DirState> => { try { const v = raw ? JSON.parse(raw) : {}; return v && typeof v === "object" ? v : {}; } catch { return {}; } };
 

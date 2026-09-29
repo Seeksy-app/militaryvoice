@@ -931,6 +931,39 @@ export function registerBioPage(app: Express) {
     }
   });
 
+  // Be a guest: a short pitch to a show's host, from what we know about this podcaster. They send it themselves.
+  app.post("/api/host/pitch", requireHostSession, async (req, res) => {
+    const row = await pageFor(emailOf(req));
+    const p = await storage.getProfileByEmail(row.email).catch(() => undefined);
+    const pod = await podcastFor(row).catch(() => null);
+    const show = { title: str(req.body?.show?.title, 200), about: str(req.body?.show?.about, 1200), host: str(req.body?.show?.host, 120) };
+    const angle = str(req.body?.angle, 400);
+    if (!show.title) return res.status(400).json({ message: "Which show?" });
+    const me = [
+      `Name: ${p?.hostName || row.displayName || ""}`,
+      p?.branch ? `Branch: ${p.branch}${p.serviceStatus ? ` (${p.serviceStatus})` : ""}` : "",
+      row.bio ? `Their bio: ${row.bio.replace(/\*\*|__|\*/g, "")}` : "",
+      pod ? `Their podcast: ${pod.title} (${pod.episodeCount} episodes)` : "",
+      `Their page: ${ORIGIN}/${row.handle}`,
+      angle ? `What they want to talk about: ${angle}` : "",
+    ].filter(Boolean).join("\n");
+    try {
+      const client = new Anthropic();
+      const out = await client.messages.create({
+        model: "claude-sonnet-5",
+        max_tokens: 600,
+        system: "You write short, warm cold pitches from a military or veteran podcaster asking to be a guest on someone else's podcast. Plain email, first person, under 150 words: a subject line, a greeting to the host by first name if known, why this show (one specific line from its description), who they are in one or two sentences, two or three concrete topics they'd bring for that show's listeners, and an easy ask. No flattery, no hashtags, no emoji, no placeholders in brackets. Use only the facts given; never invent ranks, units, awards, numbers or episodes. Reply as: Subject: <line>, a blank line, then the body, ending with their name and page link.",
+        messages: [{ role: "user", content: `The show:\nTitle: ${show.title}\nHost: ${show.host || "unknown"}\nAbout: ${show.about || "(no description)"}\n\nThe podcaster pitching:\n${me}\n\nWrite the pitch.` }],
+      });
+      const text = out.content.filter((c) => c.type === "text").map((c) => (c as { text: string }).text).join("").trim();
+      const m = text.match(/^Subject:\s*(.+)\n+([\s\S]+)$/i);
+      res.json({ subject: (m?.[1] ?? `Guest idea for ${show.title}`).trim().slice(0, 150), body: (m?.[2] ?? text).trim().slice(0, 3000) });
+    } catch (err) {
+      console.error("Pitch draft failed:", (err as Error).message);
+      res.status(502).json({ message: "Couldn't write one just now. Try again in a moment." });
+    }
+  });
+
   app.patch("/api/host/bio/questions/:id", requireHostSession, async (req, res) => {
     const row = await pageFor(emailOf(req));
     const status = ["new", "answered", "archived"].includes(req.body?.status) ? req.body.status : "answered";

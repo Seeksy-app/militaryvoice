@@ -2,9 +2,10 @@
 // host them or have been on them (Podchaser's index, through our cache).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bookmark, BookmarkCheck, CalendarDays, Check, ChevronRight, Copy, ExternalLink, Globe, Loader2, Lock, Mail, MapPin, Mic2, Rss, Search, Users, X } from "lucide-react";
+import { Bookmark, BookmarkCheck, CalendarDays, Check, ChevronRight, Copy, ExternalLink, Globe, Loader2, Lock, Mail, MapPin, Mic2, Rss, Search, Sparkles, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 
@@ -203,11 +204,13 @@ function LinkChip({ href, children }: { href: string; children: React.ReactNode 
 }
 
 /** A show or a person, opened: what we know, who's on it, how to reach them. */
-export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, saved, onSave, reveals, onRevealed }: {
+export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, saved, onSave, reveals, onRevealed, pitch = false }: {
   open: PodOpen | null; from: PodOpen[]; onGo: (o: PodOpen) => void; onClose: () => void;
   isMember: boolean; onJoin: () => void; saved: Set<string>; onSave: (card: ReturnType<typeof podCard>) => void;
   /** Contact look-ups left this month (Find their email uses one). */
   reveals?: { used: number; allowance: number } | null; onRevealed?: () => void;
+  /** Be a guest: a show opens with a pitch to write and send to its host. */
+  pitch?: boolean;
 }) {
   const { toast } = useToast();
   const scroller = useRef<HTMLDivElement>(null);
@@ -300,6 +303,9 @@ export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, sav
                   {person.shows?.length ? <Stat label="Shows" value={String(person.shows.length)} sub="they're credited on" /> : null}
                 </div>
               )}
+
+              {/* Be a guest: a pitch to this show's host, written for them, sent from their own email. */}
+              {show && pitch && isMember && full && <PitchBox key={id} show={show as PodShowFull} />}
 
               {/* Book them: invite to your show, find their email, keep them in Guests. */}
               {person && isMember && full && <GuestActions key={id} person={person as PodPersonFull} saved={saved.has(saveKey)} onSave={() => onSave(podCard({ kind: "person", ...person } as PodItem))} reveals={reveals ?? null} onRevealed={onRevealed} />}
@@ -556,6 +562,111 @@ export function GuestFinder({ showTitle = "" }: { showTitle?: string }) {
       </div>
       {ask && <PodcastResults ask={ask} isMember={!!me.data?.member} onJoin={() => void run(q)} onOpen={(o, f) => { setFrom(f); setOpen(o); }} saved={saved} onSave={(card) => void saveGuest(card)} />}
       <PodcastDrawer open={open} from={from} onGo={setOpen} onClose={() => setOpen(null)} isMember={!!me.data?.member} onJoin={() => void run(q)} saved={saved} onSave={(card) => void saveGuest(card)} reveals={me.data?.reveals ?? null} onRevealed={() => void qc.invalidateQueries({ queryKey: ["/api/discover/me"] })} />
+    </div>
+  );
+}
+
+/** A pitch to a show's host: written from their SmartLink and podcast, theirs to edit, sent from their own email. */
+function PitchBox({ show }: { show: PodShowFull }) {
+  const { toast } = useToast();
+  const to = show.email || show.contacts?.find((c) => c.email)?.email || "";
+  const [angle, setAngle] = useState("");
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const write = async () => {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/host/pitch", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ show: { title: show.title, about: show.about, host: show.host }, angle }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.message);
+      setSubject(j.subject); setBody(j.body);
+    } catch (e) { toast({ title: "No pitch this time", description: (e as Error).message, variant: "destructive" }); } finally { setBusy(false); }
+  };
+  const copy = async () => { await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`).catch(() => {}); toast({ title: "Pitch copied" }); };
+  return (
+    <section className="space-y-3 rounded-2xl border border-[#F0A71F]/40 bg-[#F0A71F]/[0.05] p-4" data-testid="pod-pitch">
+      <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8a5a00] dark:text-[#F0A71F]">Pitch yourself</h3>
+      {!body ? (
+        <>
+          <Input value={angle} onChange={(e) => setAngle(e.target.value)} maxLength={300} placeholder="What would you talk about? (optional: leave it and we'll suggest)" className="h-10 bg-background" data-testid="pod-pitch-angle" />
+          <Button onClick={() => void write()} disabled={busy} className="h-10 gap-2 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="pod-pitch-write">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Write my pitch</Button>
+          <p className="text-xs text-muted-foreground">Written from your SmartLink and your show, for {show.title}. You read it and send it yourself.</p>
+        </>
+      ) : (
+        <>
+          <Input value={subject} onChange={(e) => setSubject(e.target.value)} className="h-10 bg-background font-semibold" aria-label="Subject" />
+          <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={10} className="bg-background text-sm leading-relaxed" aria-label="Your pitch" data-testid="pod-pitch-body" />
+          <div className="flex flex-wrap items-center gap-2">
+            {to ? <Button asChild className="h-9 gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]"><a href={`mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`} data-testid="pod-pitch-send"><Mail className="h-4 w-4" /> Open in my email</a></Button> : null}
+            <Button variant="outline" onClick={() => void copy()} className="h-9 gap-1.5 rounded-full"><Copy className="h-4 w-4" /> Copy</Button>
+            <button type="button" onClick={() => void write()} disabled={busy} className="text-xs font-semibold text-muted-foreground underline underline-offset-2 hover:text-foreground">{busy ? "Writing…" : "Write another"}</button>
+          </div>
+          <p className="text-xs text-muted-foreground">{to ? `It goes to ${to}, from your own email.` : "No email for this show: paste it into their website's contact form, or send it to them on social."}</p>
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Be a guest (the Podcast screen's tab): shows that take guests and are putting out episodes,
+ * by topic. Open one to see its host and how to reach them, and write a pitch to send.
+ */
+export function ShowFinder({ topics = [] }: { topics?: string[] }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const me = useQuery<{ member?: unknown }>({ queryKey: ["/api/discover/me"], queryFn: async () => (await fetch("/api/discover/me", { credentials: "include" })).json() });
+  const lists = useQuery<{ id: number; name: string; items: { platform: string; handle: string }[] }[]>({ queryKey: ["/api/discover/lists"], enabled: !!me.data?.member, queryFn: async () => (await fetch("/api/discover/lists", { credentials: "include" })).json() });
+  const saved = useMemo(() => new Set((lists.data ?? []).flatMap((l) => l.items.map((i) => `${i.platform}:${i.handle}`))), [lists.data]);
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState("best");
+  const [ask, setAsk] = useState<PodAsk | null>(null);
+  const [open, setOpen] = useState<PodOpen | null>(null);
+  const [from, setFrom] = useState<PodOpen[]>([]);
+  const [joining, setJoining] = useState(false);
+  const run = async (words: string) => {
+    if (!me.data?.member) {
+      setJoining(true);
+      try {
+        const r = await fetch("/api/discover/join", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: "podcaster", source: "be-a-guest" }) });
+        if (r.ok) await qc.invalidateQueries({ queryKey: ["/api/discover/me"] });
+      } finally { setJoining(false); }
+    }
+    setQ(words);
+    setAsk({ q: words.trim(), kind: "shows", branch: "", sort, hasGuests: true, active: true });
+  };
+  useEffect(() => { if (ask) setAsk({ ...ask, sort }); }, [sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  const saveShow = async (card: ReturnType<typeof podCard>) => {
+    try {
+      let id = lists.data?.find((l) => l.name === "Shows to pitch")?.id;
+      if (!id) id = (await (await fetch("/api/discover/lists", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Shows to pitch" }) })).json()).id;
+      const r = await fetch(`/api/discover/lists/${id}/items`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ card }) });
+      if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message || "Not saved");
+      void qc.invalidateQueries({ queryKey: ["/api/discover/lists"] });
+      toast({ title: `${card.name} saved to Shows to pitch` });
+    } catch (e) { toast({ title: "Couldn't save that", description: (e as Error).message, variant: "destructive" }); }
+  };
+  const tries = [...topics, "Leadership", "Transition", "Entrepreneurs", "Mental health", "Fitness"].filter((t, i, a) => t && a.indexOf(t) === i).slice(0, 6);
+  return (
+    <div className="space-y-4" data-testid="be-a-guest">
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <h2 className="text-sm font-semibold">Find shows to be a guest on</h2>
+        <p className="text-xs text-muted-foreground">Podcasts that have guests and put out an episode in the last 90 days. Open one to see its host and how to reach them, then write your pitch.</p>
+        <form onSubmit={(e) => { e.preventDefault(); void run(q); }} className="mt-3 flex flex-wrap gap-2">
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="What you'd talk about: leadership, transition, faith…" className="h-11 min-w-0 flex-1" data-testid="show-q" />
+          <select value={sort} onChange={(e) => setSort(e.target.value)} className="h-11 rounded-md border border-input bg-background px-3 text-sm" aria-label="Sort">
+            {POD_SHOW_SORTS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+          </select>
+          <Button type="submit" disabled={joining} className="h-11 gap-2 rounded-lg bg-[#053877] px-5 text-white hover:bg-[#0a4a99]" data-testid="show-go">{joining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Search</Button>
+        </form>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Try</span>
+          {tries.map((t) => <button key={t} type="button" onClick={() => void run(t)} className="rounded-full bg-[#2563eb] px-3 py-1 text-xs font-medium text-white hover:bg-[#1d4ed8]">{t}</button>)}
+        </div>
+      </div>
+      {ask && <PodcastResults ask={ask} isMember={!!me.data?.member} onJoin={() => void run(q)} onOpen={(o, f) => { setFrom(f); setOpen(o); }} saved={saved} onSave={(card) => void saveShow(card)} />}
+      <PodcastDrawer open={open} from={from} onGo={setOpen} onClose={() => setOpen(null)} isMember={!!me.data?.member} onJoin={() => void run(q)} saved={saved} onSave={(card) => void saveShow(card)} pitch />
     </div>
   );
 }
