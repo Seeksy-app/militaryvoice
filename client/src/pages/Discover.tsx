@@ -20,7 +20,7 @@ import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { CreatorProfileSections, type Profile, type ProfilePerson } from "@/components/CreatorProfileSections";
 import { DiscoverEnrich, type EnrichCard } from "@/components/DiscoverEnrich";
 import { FiltersPanel, FilterChips, activeFilters, filtersForServer, type Filters } from "@/components/DiscoverFilters";
-import { PodcastResults, PodcastDrawer, POD_PEOPLE_SORTS, POD_SHOW_SORTS, type PodOpen } from "@/components/DiscoverPodcasts";
+import { PodcastResults, PodcastDrawer, POD_PEOPLE_SORTS, POD_SHOW_SORTS, podCard, type PodOpen } from "@/components/DiscoverPodcasts";
 
 const NAVY = "#04102b";
 const GOLD = "#F0A71F";
@@ -244,7 +244,8 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
   const pcStatus = useQuery<{ on: boolean; locked?: string[] }>({ queryKey: ["/api/discover/podcasts/status"], enabled: platform === "podcasts", queryFn: async () => (await fetch("/api/discover/podcasts/status")).json(), staleTime: 10 * 60_000 });
   const pcLocked = new Set(pcStatus.data?.locked ?? []);
   // Shows and people sort by different things.
-  useEffect(() => { setPcSort("best"); }, [mode]);
+  // Shows and people sort by different things: a sort the new kind hasn't got goes back to Best match.
+  useEffect(() => { if (!(mode === "people" ? POD_PEOPLE_SORTS : POD_SHOW_SORTS).some((o) => o.v === pcSort)) setPcSort("best"); }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
   // Crossing between creators and podcasts changes what the search asks, so it starts over.
   const choosePlatform = (p: string) => {
     const was = platform === "podcasts";
@@ -256,8 +257,29 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
   // The other doors go back to creators if that's where they'd been taken.
   const pickDoor = (k: (typeof DOORS)[number]["key"]) => {
     setDoor(k);
-    if (k === "podcaster") { if (platform !== "podcasts") choosePlatform("podcasts"); setMode("people"); setSubmitted(null); }
+    // Guests: people who've been on shows, the most-booked first.
+    if (k === "podcaster") { if (platform !== "podcasts") choosePlatform("podcasts"); setMode("people"); setPcSort("appearances"); setSubmitted(null); }
     else if (door === "podcaster" && platform === "podcasts") choosePlatform("instagram");
+  };
+  // A podcaster opens on Book guests (and ?door=guests, brands or speakers opens that door for anyone).
+  const doorPicked = useRef(false);
+  useEffect(() => {
+    if (doorPicked.current || meLoading) return;
+    doorPicked.current = true;
+    const want = (() => { try { return new URLSearchParams(window.location.search).get("door") ?? ""; } catch { return ""; } })();
+    const k = want === "guests" ? "podcaster" : want === "brands" ? "brand" : want === "speakers" ? "event" : me?.isPodcaster ? "podcaster" : "";
+    if (k && k !== door) pickDoor(k as (typeof DOORS)[number]["key"]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meLoading, me?.isPodcaster]);
+  // Book guests: people saved into a list of their own, "Guests" (made the first time).
+  const saveGuest = async (card: ReturnType<typeof podCard>) => {
+    try {
+      let id = lists.data?.find((l) => l.name === "Guests")?.id;
+      if (!id) id = (await (await apiRequest("POST", "/api/discover/lists", { name: "Guests" })).json()).id;
+      await apiRequest("POST", `/api/discover/lists/${id}/items`, { card });
+      queryClient.invalidateQueries({ queryKey: ["/api/discover/lists"] });
+      toast({ title: `${card.name} saved to Guests` });
+    } catch (e) { toast({ title: "Couldn't save that", description: (e as Error).message, variant: "destructive" }); }
   };
   const [open, setOpenRaw] = useState<Card | null>(null);
   // The list a creator was opened from, for back and next in the panel.
@@ -650,7 +672,7 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
       </main>
 
       <ProfileDrawer freeKeys={sampleKeys} card={open} siblings={openFrom} sharedKey={sharedKey} allowance={me?.reveals} onOpenCreator={setOpenRaw} onClose={() => setOpenRaw(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
-      <PodcastDrawer open={podOpen} from={podFrom} onGo={setPodOpen} onClose={() => setPodOpen(null)} isMember={isMember} onJoin={() => setGate(true)} saved={saved} onSave={(card) => saveTo.mutate({ card })} />
+      <PodcastDrawer open={podOpen} from={podFrom} onGo={setPodOpen} onClose={() => setPodOpen(null)} isMember={isMember} onJoin={() => setGate(true)} saved={saved} onSave={(card) => (card.platform === "podperson" ? void saveGuest(card) : saveTo.mutate({ card }))} reveals={me?.reveals ?? null} onRevealed={() => queryClient.invalidateQueries({ queryKey: ["/api/discover/me"] })} />
       <JoinDialog
         open={gate}
         me={me}
