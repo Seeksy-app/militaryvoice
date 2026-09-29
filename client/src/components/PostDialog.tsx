@@ -107,10 +107,14 @@ function YouTubeFields({ target, yt, onChange }: { target: PostTarget; yt: YouTu
 
 /** What's being posted: a whole recording from the Library, or one clip in one shape. */
 export type PostTarget =
-  | { kind: "recording"; id: number; title: string }
+  | { kind: "recording"; id: number; title: string; durationSec?: number }
   | { kind: "clip"; id: number; title: string; caption?: string; shapes: ("vertical" | "square" | "wide")[] }
   /** A picture uploaded just for this post (not kept in the Library). */
   | { kind: "photo"; id: 0; title: string; storageKey: string; preview: string };
+
+/** The longest video each app takes from a posting tool, in seconds. A longer one is refused after processing. */
+const MAX_SECONDS: Partial<Record<string, number>> = { instagram: 15 * 60 };
+const mins = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
 const SHAPE_LABEL = { vertical: "Vertical 9:16", square: "Square 1:1", wide: "Wide 16:9" } as const;
 
@@ -161,7 +165,9 @@ export function PostDialog({ target, onClose, at }: { target: PostTarget | null;
     setYt(blankYt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
-  useEffect(() => setPicked(platforms), [platforms.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Too long for an app: not ticked, and it can't be.
+  const tooLong = (p: SocialPlatform) => { const max = MAX_SECONDS[p]; const d = target?.kind === "recording" ? target.durationSec ?? 0 : 0; return !!max && d > max; };
+  useEffect(() => setPicked(platforms.filter((p) => !tooLong(p))), [platforms.join(","), target?.kind === "recording" ? target.durationSec : 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = useMutation({
     mutationFn: async () => {
@@ -245,13 +251,18 @@ export function PostDialog({ target, onClose, at }: { target: PostTarget | null;
               <p className="text-sm font-medium">Where it goes</p>
               <div className="mt-2 grid grid-cols-2 gap-2">
                 {platforms.map((p) => (
-                  <label key={p} className="flex cursor-pointer items-center gap-2.5 text-sm">
-                    <Checkbox checked={picked.includes(p)} onCheckedChange={(v) => setPicked((cur) => (v ? [...cur, p] : cur.filter((x) => x !== p)))} data-testid={`checkbox-publish-${p}`} />
+                  <label key={p} className={`flex items-center gap-2.5 text-sm ${tooLong(p) ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`} title={tooLong(p) ? `${platformLabel(p)} takes videos up to ${mins(MAX_SECONDS[p]!)}` : undefined}>
+                    <Checkbox checked={picked.includes(p)} disabled={tooLong(p)} onCheckedChange={(v) => setPicked((cur) => (v ? [...cur, p] : cur.filter((x) => x !== p)))} data-testid={`checkbox-publish-${p}`} />
                     <PlatformIcon platform={p} className="h-4 w-4 text-muted-foreground" />
                     {platformLabel(p)}
                   </label>
                 ))}
               </div>
+              {platforms.some(tooLong) && target?.kind === "recording" && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {platforms.filter(tooLong).map(platformLabel).join(" and ")} takes videos up to {mins(MAX_SECONDS[platforms.find(tooLong)!]!)}, and this one is {mins(target.durationSec ?? 0)}. Post one of its clips there instead.
+                </p>
+              )}
             </div>
             {target && picked.includes("youtube" as SocialPlatform) && <YouTubeFields key={key} target={target} yt={yt} onChange={setYt} />}
             <div>

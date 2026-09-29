@@ -101,7 +101,7 @@ export function SocialScreen() {
   const refresh = () => { void qc.invalidateQueries({ queryKey: ["/api/host/posts"] }); void qc.invalidateQueries({ queryKey: ["/api/host/social/queue"] }); };
   const shapesOf = (c: ClipRow) => ([["vertical", c.verticalUrl], ["square", c.squareUrl], ["wide", c.url]] as const).filter(([, u]) => u).map(([s]) => s);
   const postClip = (c: ClipRow, at?: string) => { setTargetAt(at); setTarget({ kind: "clip", id: c.id, title: c.title, caption: c.caption, shapes: [...shapesOf(c)] }); };
-  const postEpisode = (r: RecordingRow, at?: string) => { setTargetAt(at); setTarget({ kind: "recording", id: r.id, title: r.title }); };
+  const postEpisode = (r: RecordingRow, at?: string) => { setTargetAt(at); setTarget({ kind: "recording", id: r.id, title: r.title, durationSec: r.durationSec }); };
 
   const move = useMutation({
     mutationFn: async (v: { id: number; at: number }) => (await apiRequest("PATCH", `/api/host/posts/${v.id}`, { scheduledAt: new Date(v.at).toISOString() })).json(),
@@ -491,16 +491,24 @@ function LibraryPicker({ initial = "clips", initialFile = null, clips, episodes,
   );
 }
 
+/** An app's refusal in plain words; the ones we know, said simply. */
+function plainError(pl: string, raw: string): string {
+  if (pl === "instagram" && /not ready for publishing|container status/i.test(raw)) return "Instagram couldn't finish processing it. It takes videos up to 15 minutes, so post one of the clips there instead.";
+  if (/rate.?limit|too many/i.test(raw)) return `${platformLabel(pl as SocialPlatform)} asked us to slow down. Try again in an hour.`;
+  const first = (raw || "It was refused.").split(/(?<=\.)\s/)[0];
+  return first.length > 160 ? `${first.slice(0, 157)}…` : first;
+}
+
 function PostDetail({ p, onClose, onMove, onCancel, busy }: { p: Post | null; onClose: () => void; onMove: (p: Post, t: number) => void; onCancel: (p: Post) => void; busy: boolean }) {
   const [when, setWhen] = useState("");
   const waiting = !!p && p.status === "scheduled" && p.at > Date.now();
   return (
     <Dialog open={!!p} onOpenChange={(v) => { if (!v) { onClose(); setWhen(""); } }}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md [&>*]:min-w-0">
         {p && (
           <>
-            <DialogHeader>
-              <DialogTitle className="pr-6">{p.title || "Untitled"}</DialogTitle>
+            <DialogHeader className="min-w-0">
+              <DialogTitle className="break-words pr-6">{p.title || "Untitled"}</DialogTitle>
               <DialogDescription>{waiting ? `Goes out ${fmtWhen(p.at)}` : p.status === "failed" ? "Didn't go out" : `Posted ${fmtWhen(p.at)}`}</DialogDescription>
             </DialogHeader>
             <div className="flex gap-3">
@@ -511,13 +519,16 @@ function PostDetail({ p, onClose, onMove, onCancel, busy }: { p: Post | null; on
                   {(p.platforms.split(",").filter(Boolean) as SocialPlatform[]).map((pl) => {
                     const r = p.results_.find((x) => x.platform === pl);
                     return (
-                      <p key={pl} className="flex items-center gap-2 text-xs">
-                        <PlatformIcon platform={pl} className="h-3.5 w-3.5" /> {platformLabel(pl)}
-                        {r?.ok && r.url ? <a href={r.url} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 font-semibold text-emerald-600 hover:underline dark:text-emerald-400">Live <ExternalLink className="h-3 w-3" /></a>
-                          : r && !r.ok ? <span className="ml-auto truncate text-destructive" title={r.error}>{r.error || "Failed"}</span>
-                          : r?.inbox ? <span className="ml-auto text-amber-600">In drafts</span>
-                          : <span className="ml-auto text-muted-foreground">{waiting ? "Waiting" : "Checking…"}</span>}
-                      </p>
+                      <div key={pl} className="text-xs">
+                        <p className="flex items-center gap-2">
+                          <PlatformIcon platform={pl} className="h-3.5 w-3.5" /> {platformLabel(pl)}
+                          {r?.ok && r.url ? <a href={r.url} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 font-semibold text-emerald-600 hover:underline dark:text-emerald-400">Live <ExternalLink className="h-3 w-3" /></a>
+                            : r && !r.ok ? <span className="ml-auto font-semibold text-destructive">Didn't post</span>
+                            : r?.inbox ? <span className="ml-auto text-amber-600">In drafts</span>
+                            : <span className="ml-auto text-muted-foreground">{waiting ? "Waiting" : "Checking…"}</span>}
+                        </p>
+                        {r && !r.ok && <p className="mt-0.5 break-words pl-5 text-destructive/90">{plainError(pl, r.error)}</p>}
+                      </div>
                     );
                   })}
                 </div>
