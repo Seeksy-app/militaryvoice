@@ -1,3 +1,4 @@
+import { useToast } from "@/hooks/use-toast";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
@@ -24,6 +25,8 @@ interface Item {
   href?: string;
   /** A small word after the label, e.g. "Beta". */
   tag?: string;
+  /** Not built yet: a click says when, and goes nowhere. */
+  soon?: string;
 }
 
 /**
@@ -76,6 +79,7 @@ export function HostNav({
    *  only for the organisers' own account until the previews are worth it. */
   proOpen?: boolean;
 }) {
+  const { toast } = useToast();
   const groups: { title: string; items: Item[] }[] = [
     // Most-used first. Promotion lives inside Events (it's about an event);
     // Profile lives in the account card at the foot; Integrations is in both.
@@ -92,6 +96,7 @@ export function HostNav({
       title: "Content",
       items: [
         { key: "studio", label: "Rooms", hint: "Quick, like Zoom: hop in with guests, record it or don't, and go live", icon: Video },
+        { key: "pro", feature: "studio", label: "Studio", hint: "The full marathon studio for your own show: scenes, layouts, lower thirds and a producer console. Coming Oct 5th.", icon: MonitorPlay, tag: "Oct 5", soon: "Studio is coming Oct 5th" },
         { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },
         { key: "postify", label: "Pōstify", hint: "Create short clips from your video podcast, and clean up the full episode", icon: Wand2, tag: "Beta" },
         { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
@@ -147,14 +152,15 @@ export function HostNav({
         </Link>
       );
     }
-    const active = it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "events" && (screen === "promotion" || (screen === "greenroom" && !compact)));
+    const active = it.soon ? false : it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "events" && (screen === "promotion" || (screen === "greenroom" && !compact)));
     const inert = !!it.locked && !proOpen;
     return (
       <a
         key={`${it.key}-${it.feature ?? ""}`}
-        href={inert ? undefined : it.locked ? `${pathFor("pro")}#${it.feature}` : pathFor(it.key)}
+        href={inert || it.soon ? undefined : it.locked ? `${pathFor("pro")}#${it.feature}` : pathFor(it.key)}
         aria-disabled={inert || undefined}
         onClick={(e) => {
+          if (it.soon) { e.preventDefault(); toast({ title: it.soon, description: "The full marathon studio for your own show. Until then, Rooms has you covered for recording and going live." }); return; }
           if (inert) { e.preventDefault(); return; }
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
           e.preventDefault();
@@ -221,7 +227,7 @@ export function HostNav({
         screen={screen}
         onGo={onGo}
         pathFor={pathFor}
-        more={[...groups.flatMap((g) => g.items).flatMap((it) => (it.key === "events" ? [it, greenRoomItem] : [it]))].filter((it) => it.href || !PHONE_TABS.some((t) => t.key === it.key))}
+        more={[...groups.flatMap((g) => g.items).flatMap((it) => (it.key === "events" ? [it, greenRoomItem] : [it]))].filter((it) => !it.soon && (it.href || !PHONE_TABS.some((t) => t.key === it.key)))}
         badge={eventsCount}
         proOpen={proOpen}
       />
