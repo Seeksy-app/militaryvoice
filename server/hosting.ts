@@ -9,6 +9,7 @@ import { signedRecordingUrl } from "./recordingStorage.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { sendPodcastOwnerCodeEmail } from "./email.js";
 import { isUploadPostConfigured, publishVideo } from "./uploadPost.js";
+import { toTrash } from "./trash.js";
 import { XMLParser } from "fast-xml-parser";
 import { bioPages, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
 
@@ -910,6 +911,8 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     const s = await ownShow(email, Number(req.params.id));
     if (!s) return res.status(404).json({ message: "No such show." });
     if (String(req.body?.confirm ?? "").trim().toLowerCase() !== s.title.trim().toLowerCase()) return res.status(400).json({ message: "Type the show's name to delete it." });
+    const eps = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.showId, s.id));
+    await toTrash({ email, kind: "show", label: s.title || "Your show", rows: { hostedShows: [s], hostedEpisodes: eps } });
     await db.delete(hostedEpisodes).where(eq(hostedEpisodes.showId, s.id));
     await db.delete(hostedShows).where(eq(hostedShows.id, s.id));
     res.json({ ok: true });
@@ -919,6 +922,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     const email = emailOf(req);
     const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
     if (!e || !(await ownShow(email, e.showId))) return res.status(404).json({ message: "No such episode." });
+    await toTrash({ email, kind: "episode", label: e.title || "An episode", rows: { hostedEpisodes: [e] } });
     await db.delete(hostedEpisodes).where(eq(hostedEpisodes.id, e.id));
     res.json({ ok: true });
   });

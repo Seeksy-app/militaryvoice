@@ -7,7 +7,7 @@ import { storage } from "./storage.js";
 import { requireHuman, turnstileSiteKey } from "./turnstile.js";
 import { answerHelp, isHelpAgentConfigured, type HelpTurn } from "./help.js";
 import { KINDS, effectiveSchedule, cardInput, caption as campaignCaption, isKind, type CampaignContext } from "./campaign.js";
-import { uploadPhoto, uploadShowAsset, signedAssetUpload, deleteShowAsset } from "./photoStorage.js";
+import { uploadPhoto, uploadShowAsset, signedAssetUpload } from "./photoStorage.js";
 import {
   insertSignupSchema,
   insertReminderSchema,
@@ -90,7 +90,7 @@ import {
   listIngressForRoom,
   webhooks,
 } from "./livekit.js";
-import { ensureRecordingsBucket, signedRecordingUrl, signedRecordingUpload, deleteRecordingObject, putRecordingObject, startMultipart, signedPartUrl, completeMultipart, abortMultipart } from "./recordingStorage.js";
+import { ensureRecordingsBucket, signedRecordingUrl, signedRecordingUpload, putRecordingObject, startMultipart, signedPartUrl, completeMultipart, abortMultipart } from "./recordingStorage.js";
 import {
   isYoutubeConfigured,
   consentUrl,
@@ -134,6 +134,7 @@ import { registerGuests, guestByToken, markGuestJoined } from "./guests.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
 import { registerMail } from "./mail.js";
 import { registerAutomations } from "./automations.js";
+import { registerTrash, toTrash } from "./trash.js";
 import { registerContactProfile } from "./contactProfile.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
@@ -3381,17 +3382,10 @@ export function registerRoutes(app: Express): void {
       res.status(404).json({ message: "Not found" });
       return;
     }
+    // Into Recently deleted; its file goes when the 15 days are up. Two stores, two ways out:
+    // an R2-backed asset's fileUrl is our own redirect, so it's removed by its key.
+    await toTrash({ email, kind: "asset", label: mine.label || mine.fileName || "A file", rows: { showAssets: [mine] }, files: mine.storageKey ? { r2: [mine.storageKey] } : mine.fileUrl ? { supabase: [mine.fileUrl] } : {} });
     await storage.deleteAsset(id, email);
-    // Two stores, two ways out. deleteShowAsset parses a Supabase URL, and an
-    // R2-backed asset's fileUrl is our own redirect — so without the key
-    // branch the row would vanish and the object would sit in the bucket for
-    // good, paid for and unreachable.
-    try {
-      if (mine.storageKey) await deleteRecordingObject(mine.storageKey);
-      else if (mine.fileUrl) await deleteShowAsset(mine.fileUrl);
-    } catch (err) {
-      console.error("Couldn't remove the stored file:", err);
-    }
     res.json({ ok: true });
   });
 
@@ -5560,6 +5554,7 @@ export function registerRoutes(app: Express): void {
   registerCaptures(app, requireAdmin, (req) => getAdminEmail(req) ?? "");
   registerMail(app, requireAdmin);
   registerContactProfile(app, requireAdmin);
+  registerTrash(app, requireHostSession);
   registerAutomations(app, requireAdmin, {
     unsubscribeUrl: (req, email) => unsubscribeUrl(req, email),
     resolveRecipients: (segment, eventId) => resolveBroadcastRecipients({ segment, eventId } as BroadcastRow),
@@ -6205,13 +6200,13 @@ export function registerRoutes(app: Express): void {
     const staged = rec.egressId.startsWith("STAGED_");
     if (!upload && !staged && !rec.egressId.startsWith("CLEAN_")) return res.status(403).json({ message: "Studio recordings stay with the event, so they can't be deleted here." });
     if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.status(409).json({ message: "Pōstify is still working on this one." });
-    await storage.deleteRecordingAndClips(rec.id);
     // The episode goes as a whole: its clean and edited copies share its Library card.
-    if (upload || staged) {
-      const copies = (await storage.listRecordingsByEmail(rec.email)).filter((r) => new RegExp(`^CLEAN_(EDIT_)?${rec.id}(_|$)`).test(r.egressId));
-      for (const c of copies) await storage.deleteRecordingAndClips(c.id);
-    }
-    if (upload && rec.url && !/^https?:\/\//.test(rec.url)) await deleteRecordingObject(rec.url).catch((err) => console.error("Couldn't delete an upload's file:", err));
+    const copies = upload || staged ? (await storage.listRecordingsByEmail(rec.email)).filter((r) => new RegExp(`^CLEAN_(EDIT_)?${rec.id}(_|$)`).test(r.egressId)) : [];
+    const all = [rec, ...copies];
+    // Into Recently deleted first, clips and all; the upload's file stays until the 15 days are up.
+    const theirClips = (await Promise.all(all.map((r) => storage.listClips(r.id)))).flat();
+    await toTrash({ email, kind: "recording", label: rec.title || "A recording", rows: { recordings: all, clips: theirClips }, files: upload && rec.url && !/^https?:\/\//.test(rec.url) ? { r2: [rec.url] } : {} });
+    for (const r of all) await storage.deleteRecordingAndClips(r.id);
     res.json({ ok: true });
   });
 
@@ -6221,6 +6216,7 @@ export function registerRoutes(app: Express): void {
     const clip = await storage.getClip(Number(req.params.id));
     if (!clip || clip.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such clip." });
     if (clip.editStatus === "running") return res.status(409).json({ message: "That clip is being made right now. Try again in a minute." });
+    await toTrash({ email, kind: "clip", label: clip.title || "A clip", rows: { clips: [clip] } });
     await storage.deleteClip(clip.id);
     res.json({ ok: true });
   });

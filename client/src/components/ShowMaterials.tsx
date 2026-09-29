@@ -229,7 +229,7 @@ export function ShowMaterials({
     mutationFn: async (id: number) => apiRequest("DELETE", `/api/host/assets/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/host/assets"] });
-      toast({ title: "Removed" });
+      toast({ title: "Moved to Recently deleted", description: "Put it back within 15 days from your account menu." });
     },
     onError: (err: Error) => toast({ title: "Couldn't remove that", description: err.message, variant: "destructive" }),
   });

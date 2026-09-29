@@ -1354,7 +1354,7 @@ function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
       </div>
     </div>
     <EditTextDialog c={c} open={editing} onOpenChange={setEditing} />
-    <ConfirmDelete open={deleting} onOpenChange={setDeleting} title={`Delete "${c.title}"?`} description="All its shapes go for good. The episode isn't touched." url={`/api/host/clips/${c.id}`} />
+    <ConfirmDelete open={deleting} onOpenChange={setDeleting} title={`Delete "${c.title}"?`} description="It moves to Recently deleted, where you can put it back for 15 days. The episode isn't touched." url={`/api/host/clips/${c.id}`} restorable />
     <PostDialog
       target={posting ? { kind: "clip", id: c.id, title: c.title, caption: c.caption, shapes: ([["vertical", c.verticalUrl], ["square", c.squareUrl], ["wide", c.url]] as const).filter(([, u]) => u).map(([s]) => s) } : null}
       onClose={() => setPosting(false)}

@@ -412,8 +412,9 @@ export function MyRecordings({
         open={!!deleting}
         onOpenChange={(v) => !v && setDeleting(null)}
         title={`Delete "${deleting?.title || "this recording"}"?`}
-        description={deleting?.egressId.startsWith("CLEAN_") ? "This version leaves your Library. The original episode and its clips aren't touched." : "The video, its clean copy and any clips made from it are deleted for good."}
+        description={deleting?.egressId.startsWith("CLEAN_") ? "This version leaves your Library. The original episode and its clips aren't touched." : "The video, its clean copy and any clips made from it move to Recently deleted. You can put them back for 15 days."}
         url={`/api/host/recordings/${deleting?.id}`}
+        restorable
       />
     </section>
   );

@@ -620,7 +620,7 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
   const [sure, setSure] = useState("");
   const del = useMutation({
     mutationFn: async () => (await apiRequest("DELETE", `/api/host/hosting/shows/${show.id}`, { confirm: sure })).json(),
-    onSuccess: () => { setDeleting(false); setSure(""); onDeleted(); toast({ title: "Show deleted", description: "Its feed has stopped." }); },
+    onSuccess: () => { setDeleting(false); setSure(""); onDeleted(); toast({ title: "Show deleted", description: "Its feed has stopped. Put it back from Recently deleted within 15 days." }); },
     onError: (e: Error) => toast({ title: "Not deleted", description: e.message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" }),
   });
   const [f, setF] = useState<Partial<HostedShowRow>>({});
@@ -668,7 +668,7 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
       <div className="rounded-2xl border border-destructive/30 p-4">
         {deleting ? (
           <div className="space-y-2">
-            <p className="text-sm">This deletes <b>{show.title}</b> and its episodes, and its feed stops. If it's in Apple or Spotify, <a href="/help/podcast#unlist" target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">take it down there first</a>. Type the show's name to delete it.</p>
+            <p className="text-sm">This deletes <b>{show.title}</b> and its episodes, and its feed stops. If it's in Apple or Spotify, <a href="/help/podcast#unlist" target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">take it down there first</a>. You can put it back from Recently deleted for 15 days. Type the show's name to delete it.</p>
             <Input value={sure} onChange={(e) => setSure(e.target.value)} placeholder={show.title} data-testid="hosting-delete-confirm" />
             <div className="flex gap-2">
               <Button onClick={() => del.mutate()} disabled={del.isPending || sure.trim().toLowerCase() !== show.title.trim().toLowerCase()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="hosting-delete-go">{del.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Delete this show</Button>
@@ -787,7 +787,7 @@ function EpisodeDialog({ ep, show, youtubeReady, onClose, onSaved }: { ep: Ep | 
     }
   };
   const remove = async () => {
-    if (!window.confirm(`Delete "${ep.title}"? It leaves your feed, and the apps drop it on their next check.`)) return;
+    if (!window.confirm(`Delete "${ep.title}"? It leaves your feed, and the apps drop it on their next check. You can put it back from Recently deleted for 15 days.`)) return;
     await apiRequest("DELETE", `/api/host/hosting/episodes/${ep.id}`);
     onSaved();
     close();

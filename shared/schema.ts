@@ -1974,6 +1974,22 @@ export const automationSends = pgTable("automation_sends", {
   sentAt: text("sent_at").notNull(),
 }, (t) => [index("automation_sends_auto_idx").on(t.automationId)]);
 
+/**
+ * Recently deleted: what a member deleted, kept for 15 days so it can be put back.
+ * `rows` holds the deleted rows by table, exactly as they were; `files` the stored files
+ * to remove once the 15 days are up.
+ */
+export const trash = pgTable("trash", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  kind: text("kind").notNull(), // recording | clip | episode | show | asset
+  label: text("label").notNull().default(""),
+  rows: text("rows").notNull().default("{}"),
+  files: text("files").notNull().default("{}"),
+  deletedAt: text("deleted_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+}, (t) => [index("trash_email_idx").on(t.email), index("trash_expires_idx").on(t.expiresAt)]);
+
 // Saved segment — a named filter that can be used as a broadcast target
 export const segments = pgTable("segments", {
   id: serial("id").primaryKey(),

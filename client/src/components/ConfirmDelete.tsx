@@ -5,13 +5,15 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
 /** "Delete this?" with the consequence spelled out, then the DELETE, then fresh lists. */
-export function ConfirmDelete({ open, onOpenChange, title, description, url, onDeleted }: {
+export function ConfirmDelete({ open, onOpenChange, title, description, url, onDeleted, restorable = false }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   title: string;
   description: string;
   url: string;
   onDeleted?: () => void;
+  /** It goes to Recently deleted, not for good. */
+  restorable?: boolean;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -23,7 +25,7 @@ export function ConfirmDelete({ open, onOpenChange, title, description, url, onD
       for (const k of ["/api/host/recordings", "/api/host/clips", "/api/host/posts"]) void qc.invalidateQueries({ queryKey: [k] });
       onDeleted?.();
       onOpenChange(false);
-      toast({ title: "Deleted" });
+      toast(restorable ? { title: "Moved to Recently deleted", description: "Put it back within 15 days: your picture, top right, then Recently deleted." } : { title: "Deleted" });
     } catch (e) {
       toast({ title: "Couldn't delete that", description: (e as Error).message, variant: "destructive" });
     } finally {
