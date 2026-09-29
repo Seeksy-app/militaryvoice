@@ -4,10 +4,10 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PLANS, CREDIT_PACKS, OVERAGE_CAP_CHOICES, episodeCredits, cents, type PlanKey } from "@shared/tokens";
-import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, parseMusicMix, parseEditSuggest, type ClipFormat, type ClipOptions, type EpisodeEdit, type EditSuggestion, type EditTransition } from "@shared/schema";
+import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, parseMusicMix, parseEditSuggest, type ClipFormat, type ClipOptions, type EpisodeEdit, type EpisodeMusic, type EditSuggestion, type EditTransition } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { startPlanCheckout, openBillingPortal, startTokenCheckout } from "@/lib/tokens";
@@ -732,7 +732,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   // Edit the episode
   const remember = (k: string) => { try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as Bookend) : null; } catch { return null; } };
   // Work in progress, saved as they go (on the recording): they can close and come back to cut more.
-  type Draft = { source: "clean" | "original"; trimStart: number; trimEnd: number; cuts: Cut[]; intro: Bookend | null; outro: Bookend | null; introT: EditTransition; outroT: EditTransition; at: string };
+  type Draft = { source: "clean" | "original"; trimStart: number; trimEnd: number; cuts: Cut[]; intro: Bookend | null; outro: Bookend | null; introT: EditTransition; outroT: EditTransition; music?: EpisodeMusic[]; at: string };
   const draft0 = useMemo<Draft | null>(() => { try { const d = rec.editDraft ? (JSON.parse(rec.editDraft) as Draft) : null; return d && d.source === source ? d : null; } catch { return null; } }, [rec.id, source]); // eslint-disable-line react-hooks/exhaustive-deps
   const [intro, setIntroState] = useState(() => (draft0 ? draft0.intro : remember("mv_intro")));
   const [outro, setOutroState] = useState(() => (draft0 ? draft0.outro : remember("mv_outro")));
@@ -744,6 +744,9 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   const [trim, setTrim] = useState<{ start: number; end: number }>(() => ({ start: draft0?.trimStart ?? 0, end: draft0?.trimEnd ?? 0 }));
   // Sections taken out of the middle.
   const [cuts, setCuts] = useState<Cut[]>(() => draft0?.cuts ?? []);
+  // Music under parts of the episode.
+  const [music, setMusic] = useState<EpisodeMusic[]>(() => draft0?.music ?? []);
+  const [musicDlg, setMusicDlg] = useState(false);
   // Another episode, or the other version: pick up its own draft.
   const loadedFor = useRef(`${rec.id}:${source}`);
   useEffect(() => {
@@ -752,6 +755,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
     loadedFor.current = k;
     setTrim({ start: draft0?.trimStart ?? 0, end: draft0?.trimEnd ?? 0 });
     setCuts(draft0?.cuts ?? []);
+    setMusic(draft0?.music ?? []);
     if (draft0) { setIntroState(draft0.intro); setOutroState(draft0.outro); setIntroT(draft0.introT); setOutroT(draft0.outroT); }
   }, [rec.id, source, draft0]);
   // Saved a moment after each change.
@@ -760,10 +764,10 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   const saveDraft = useCallback(async () => {
     setDraftSaving(true);
     try {
-      await apiRequest("PUT", `/api/host/recordings/${rec.id}/edit-draft`, { source, trimStart: trim.start, trimEnd: trim.end, cuts, intro, outro, introT, outroT });
+      await apiRequest("PUT", `/api/host/recordings/${rec.id}/edit-draft`, { source, trimStart: trim.start, trimEnd: trim.end, cuts, intro, outro, introT, outroT, music });
       setDraftAt(new Date().toISOString());
     } catch { /* the next change tries again */ } finally { setDraftSaving(false); }
-  }, [rec.id, source, trim.start, trim.end, cuts, intro, outro, introT, outroT]);
+  }, [rec.id, source, trim.start, trim.end, cuts, intro, outro, introT, outroT, music]);
   const firstDraftRun = useRef(true);
   useEffect(() => {
     if (firstDraftRun.current) { firstDraftRun.current = false; return; }
@@ -799,6 +803,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
     mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/episode-edit`, {
       source, trimStart: trim.start, trimEnd: trim.end, cuts, introKey: intro?.key, introName: intro?.name, outroKey: outro?.key, outroName: outro?.name,
       introTransition: intro ? introT : undefined, outroTransition: outro ? outroT : undefined,
+      music: music.length ? music : undefined,
     })).json(),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
@@ -905,7 +910,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   // The foot of the timeline, where the hands already are: what's being cut, music, and the one
   // button that finishes. "Save to Library", not "Publish": it makes a copy there, and nothing
   // reaches the podcast until they add it.
-  const nothingToSave = (!trim.start && !trim.end && !cuts.length && !intro && !outro) || (trim.end > 0 && trim.end < trim.start + 5);
+  const nothingToSave = (!trim.start && !trim.end && !cuts.length && !intro && !outro && !music.length) || (trim.end > 0 && trim.end < trim.start + 5);
   // What they've done, in words, in the order it plays; each can be undone on its own.
   const words = (n: number) => { const t = Math.round(n); return t < 60 ? `${t} sec` : `${Math.floor(t / 60)} min${t % 60 ? ` ${t % 60} sec` : ""}`; };
   const log: { key: string; text: string; at?: number; undo: () => void }[] = [
@@ -914,9 +919,20 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
     ...mergeCuts(cuts).map((c, i) => ({ key: `cut${i}`, text: `${words(c[1] - c[0])} taken out at ${hms(c[0])}`, at: c[0], undo: () => setCuts((cs) => cs.filter((x) => !(x[0] === c[0] && x[1] === c[1]))) })),
     ...(trim.end > 0 ? [{ key: "end", text: `${words(pos.d - trim.end)} trimmed from the end`, at: trim.end, undo: () => setTrim((t) => ({ ...t, end: 0 })) }] : []),
     ...(outro ? [{ key: "outro", text: `Outro added: ${outro.name}`, undo: () => setOutro(null) }] : []),
+    ...music.map((m, i) => ({ key: `music${i}`, text: `Music ${m.level === "full" ? "at full level" : "under"} ${hms(m.from)}–${hms(m.to)}: ${m.name}`, at: m.from, undo: () => setMusic((ms) => ms.filter((_, j) => j !== i)) })),
   ];
   const [, go] = useLocation();
   const saveAndClose = async () => { await saveDraft(); toast({ title: "Draft saved", description: "Open this episode again to carry on where you left off." }); go("/host/dashboard/library"); };
+  const musicDialog = (
+    <EpisodeMusicDialog
+      open={musicDlg}
+      onOpenChange={setMusicDlg}
+      start={trim.start}
+      end={keepEnd}
+      picked={sel}
+      onAdd={(m) => { setMusic((ms) => [...ms, m]); setSel(null); setMusicDlg(false); toast({ title: "Music added", description: `${m.name}, ${hms(m.from)}–${hms(m.to)}. It's mixed in when you save to your Library.` }); }}
+    />
+  );
   const footer = (
     <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-border pt-3" data-testid="edit-footer">
       {tab === "edit" && (
@@ -924,7 +940,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
           <p className="flex flex-wrap items-baseline gap-x-2 text-xs font-semibold text-muted-foreground">
             Your edits
             {log.length > 0 && <span className="font-normal tabular-nums">· {hms(pos.d)} → {hms(Math.max(0, keepLen - cutTotal))}</span>}
-            {log.length > 1 && <button type="button" onClick={() => { setTrim({ start: 0, end: 0 }); setCuts([]); setSplits([]); setSel(null); setIntro(null); setOutro(null); }} className="font-normal underline underline-offset-2 hover:text-foreground" data-testid="trim-undo">Undo all</button>}
+            {log.length > 1 && <button type="button" onClick={() => { setTrim({ start: 0, end: 0 }); setCuts([]); setSplits([]); setSel(null); setIntro(null); setOutro(null); setMusic([]); }} className="font-normal underline underline-offset-2 hover:text-foreground" data-testid="trim-undo">Undo all</button>}
             <span className="font-normal">{draftSaving ? "· Saving…" : draftAt ? "· Draft saved" : ""}</span>
           </p>
           {log.length ? (
@@ -944,8 +960,8 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
         {tab === "edit" && tip("Keeps your edits so you can come back and carry on. Nothing is made yet.", (
           <Button type="button" variant="outline" onClick={() => void saveAndClose()} className="h-10 rounded-lg" data-testid="edit-save-close">Save & close</Button>
         ))}
-        {onMusic && tip("Music for your clips", (
-          <button type="button" onClick={onMusic} aria-label="Music for your clips" className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm font-semibold hover:bg-muted" data-testid="edit-music"><Music2 className="h-4 w-4" /> Music</button>
+        {(tab === "edit" || onMusic) && tip(tab === "edit" ? "Music under part of the episode: the opening, the close, a piece you picked, or all of it" : "Music for your clips", (
+          <button type="button" onClick={() => (tab === "edit" ? setMusicDlg(true) : onMusic?.())} aria-label={tab === "edit" ? "Music for the episode" : "Music for your clips"} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm font-semibold hover:bg-muted" data-testid="edit-music"><Music2 className="h-4 w-4" /> Music</button>
         ))}
         {tab === "edit" && tip(nothingToSave ? "Make a change first: trim, split, or add an intro or outro" : "Saves the edited episode to your Library as a new copy. Your original stays, and nothing goes to your podcast until you add it there.", (
           <span className="inline-flex">
@@ -1141,6 +1157,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
           />
         )}
         {footer}
+        {musicDialog}
       </div>
       {tab === "edit" && (ed?.status === "failed" || sug?.status === "failed" || (sug?.status === "done" && sug.source === source && !(sug.items ?? []).length)) && (
         <p className="mt-2 text-xs text-muted-foreground">
@@ -1185,6 +1202,69 @@ function CardIcon({ tip, onClick, testid, children }: { tip: string; onClick: ()
 }
 
 /** A timeline tool, like Canva's: icon and word, pressed while it's on. */
+/** Music for the episode: a track, where it goes, and how loud. */
+function EpisodeMusicDialog({ open, onOpenChange, start, end, picked, onAdd }: { open: boolean; onOpenChange: (v: boolean) => void; start: number; end: number; picked: Cut | null; onAdd: (m: EpisodeMusic) => void }) {
+  const tracks = useQuery<{ key: string; name: string; mood: string; durationSec: number }[]>({ queryKey: ["/api/music"], queryFn: async () => (await apiRequest("GET", "/api/music")).json(), staleTime: 300_000, enabled: open });
+  const [key, setKey] = useState("");
+  const [where, setWhere] = useState<"open" | "close" | "picked" | "all">("open");
+  const [level, setLevel] = useState<"under" | "full">("under");
+  const [playing, setPlaying] = useState("");
+  const audio = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => { if (open) setWhere(picked ? "picked" : "open"); else { audio.current?.pause(); setPlaying(""); } }, [open, picked]);
+  const play = (k: string) => {
+    audio.current?.pause();
+    if (playing === k) { setPlaying(""); return; }
+    const a = new Audio(`/api/music/${k}/audio`);
+    a.volume = 0.6;
+    a.onended = () => setPlaying("");
+    void a.play();
+    audio.current = a;
+    setPlaying(k);
+  };
+  const range: [number, number] = where === "open" ? [start, Math.min(end, start + 30)] : where === "close" ? [Math.max(start, end - 30), end] : where === "picked" && picked ? picked : [start, end];
+  const track = tracks.data?.find((t) => t.key === key);
+  const opt = (on: boolean) => `rounded-xl border px-3 py-2 text-left text-sm ${on ? "border-[#053877] bg-[#053877]/5 ring-1 ring-[#053877]/30" : "border-border hover:bg-muted"}`;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Music for the episode</DialogTitle>
+          <DialogDescription>Our own tracks, cleared for podcasts and YouTube. It's mixed in when you save to your Library.</DialogDescription>
+        </DialogHeader>
+        <p className="text-xs font-semibold text-muted-foreground">Where</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setWhere("open")} className={opt(where === "open")}><span className="block font-semibold">The opening</span><span className="text-xs text-muted-foreground">First 30 seconds</span></button>
+          <button type="button" onClick={() => setWhere("close")} className={opt(where === "close")}><span className="block font-semibold">The close</span><span className="text-xs text-muted-foreground">Last 30 seconds</span></button>
+          <button type="button" onClick={() => picked && setWhere("picked")} disabled={!picked} className={`${opt(where === "picked")} disabled:opacity-50`}><span className="block font-semibold">The piece I picked</span><span className="text-xs text-muted-foreground">{picked ? `${hms(picked[0])}–${hms(picked[1])}` : "Split, then click a piece"}</span></button>
+          <button type="button" onClick={() => setWhere("all")} className={opt(where === "all")}><span className="block font-semibold">The whole episode</span><span className="text-xs text-muted-foreground">Quietly, all the way through</span></button>
+        </div>
+        <p className="text-xs font-semibold text-muted-foreground">How loud</p>
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" onClick={() => setLevel("under")} className={opt(level === "under")}><span className="block font-semibold">Under the voices</span><span className="text-xs text-muted-foreground">Soft, while people talk</span></button>
+          <button type="button" onClick={() => setLevel("full")} className={opt(level === "full")}><span className="block font-semibold">Full</span><span className="text-xs text-muted-foreground">For a part with no talking</span></button>
+        </div>
+        <p className="text-xs font-semibold text-muted-foreground">Track</p>
+        {tracks.isLoading ? <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" /> : (
+          <ul className="max-h-60 divide-y divide-border overflow-y-auto rounded-xl border border-border">
+            {(tracks.data ?? []).map((t) => (
+              <li key={t.key} className={`flex items-center gap-2 px-2 py-1.5 ${key === t.key ? "bg-[#053877]/5" : ""}`}>
+                <button type="button" onClick={() => play(t.key)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border hover:bg-muted" aria-label={playing === t.key ? "Stop" : `Play ${t.name}`}>{playing === t.key ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}</button>
+                <button type="button" onClick={() => setKey(t.key)} className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left text-sm">
+                  <span className="truncate font-medium">{t.name}</span>
+                  <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">{t.mood}{key === t.key && <Check className="h-4 w-4 text-[#053877] dark:text-white" />}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <DialogFooter>
+          <Button onClick={() => track && onAdd({ key: track.key, name: track.name, from: range[0], to: range[1], level })} disabled={!track || range[1] - range[0] < 1} className="gap-2 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="episode-music-add"><Music2 className="h-4 w-4" />{track ? `Add ${track.name}, ${hms(range[0])}–${hms(range[1])}` : "Choose a track"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function TimelineButton({ tip, on, onClick, disabled, testid, tone, square, children }: { tip: string; on?: boolean; onClick: () => void; disabled?: boolean; testid: string; tone?: "violet"; square?: boolean; children: React.ReactNode }) {
   return (
     <Tooltip>

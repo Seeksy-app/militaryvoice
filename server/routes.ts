@@ -47,6 +47,7 @@ import {
   CLIP_FORMATS,
   toCleanTime,
   type EpisodeEdit,
+  type EpisodeMusic,
   EDIT_TRANSITIONS,
   type EditSuggest,
   type EditSuggestion,
@@ -5710,7 +5711,11 @@ export function registerRoutes(app: Express): void {
           return res.json({
             job: {
               recordingId: ed.id, title: ed.title, durationSec: ed.durationSec, downloadUrl: src, show: "", host: "", transcript: [],
-              episodeEdit: { trimStart: e.trimStart, trimEnd: e.trimEnd, cuts: e.cuts ?? [], introUrl: await sign(e.introKey), outroUrl: await sign(e.outroKey), introTransition: e.introTransition ?? "fade", outroTransition: e.outroTransition ?? "fade" },
+              episodeEdit: {
+                trimStart: e.trimStart, trimEnd: e.trimEnd, cuts: e.cuts ?? [], introUrl: await sign(e.introKey), outroUrl: await sign(e.outroKey), introTransition: e.introTransition ?? "fade", outroTransition: e.outroTransition ?? "fade",
+                // Music under parts of it: each track's file, signed, with where it goes in the episode.
+                music: (await Promise.all((e.music ?? []).map(async (m) => { const t = await storage.getMusic(m.key); const url = t?.url ? await sign(t.url) : ""; return url ? { url, from: m.from, to: m.to, level: m.level } : null; }))).filter(Boolean),
+              },
             },
           });
         }
@@ -6236,6 +6241,7 @@ export function registerRoutes(app: Express): void {
       intro: bookend(b.intro), outro: bookend(b.outro),
       introT: ["fade", "black", "cut"].includes(b.introT) ? b.introT : "fade",
       outroT: ["fade", "black", "cut"].includes(b.outroT) ? b.outroT : "fade",
+      music: (Array.isArray(b.music) ? b.music : []).slice(0, 10).filter((m: any) => typeof m?.key === "string" && /^[a-z0-9-]{1,40}$/.test(m.key)).map((m: any) => ({ key: m.key, name: String(m.name ?? "").slice(0, 80), from: n(m.from), to: n(m.to), level: m.level === "full" ? "full" : "under" })),
       at: new Date().toISOString(),
     });
     await storage.setEditDraft(rec.id, draft);
@@ -6281,9 +6287,20 @@ export function registerRoutes(app: Express): void {
       outroKey: key(b.outroKey), outroName: String(b.outroName ?? "").slice(0, 120) || undefined,
       introTransition: EDIT_TRANSITIONS.includes(b.introTransition) ? b.introTransition : undefined,
       outroTransition: EDIT_TRANSITIONS.includes(b.outroTransition) ? b.outroTransition : undefined,
+      music: await (async () => {
+        const out: EpisodeMusic[] = [];
+        for (const m of (Array.isArray(b.music) ? b.music : []).slice(0, 10)) {
+          const from = Math.max(0, Number(m?.from) || 0);
+          const to = Number(m?.to) || 0;
+          const track = typeof m?.key === "string" ? await storage.getMusic(m.key) : undefined;
+          if (!track || to - from < 1) continue;
+          out.push({ key: track.key, name: track.name, from, to, level: m?.level === "full" ? "full" : "under" });
+        }
+        return out.length ? out : undefined;
+      })(),
       status: "queued", at: new Date().toISOString(),
     };
-    if (!e.trimStart && !e.trimEnd && !e.cuts && !e.introKey && !e.outroKey) return res.status(400).json({ message: "Trim it, cut a section, or add an intro or outro, first." });
+    if (!e.trimStart && !e.trimEnd && !e.cuts && !e.introKey && !e.outroKey && !e.music) return res.status(400).json({ message: "Trim it, cut a section, add music, or add an intro or outro, first." });
     await storage.setEpisodeEdit(rec.id, JSON.stringify(e));
     res.json(e);
   });

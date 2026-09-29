@@ -1487,6 +1487,9 @@ export function parseEditSuggest(raw: string): EditSuggest | null {
 export type EditTransition = "fade" | "black" | "cut";
 export const EDIT_TRANSITIONS: EditTransition[] = ["fade", "black", "cut"];
 
+/** A track under part of an episode: "under" sits beneath the voices; "full" is for a stretch with no talking. */
+export interface EpisodeMusic { key: string; name: string; from: number; to: number; level: "under" | "full" }
+
 export interface EpisodeEdit {
   source: "clean" | "original";
   trimStart: number;
@@ -1501,6 +1504,8 @@ export interface EpisodeEdit {
   /** How the intro hands over to the episode, and the episode to the outro. Fade when not said. */
   introTransition?: EditTransition;
   outroTransition?: EditTransition;
+  /** Music under parts of the episode: [from, to] in the episode's own seconds (before cuts), a track from the library. */
+  music?: EpisodeMusic[];
   status: "queued" | "running" | "done" | "failed";
   error?: string;
   resultId?: number;

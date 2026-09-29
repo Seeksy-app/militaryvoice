@@ -122,7 +122,7 @@ interface Job {
   episodeStill?: { episodeId: number };
   /** A SmartLink's living photo (downloadUrl) made small enough for phones. */
   livingSqueeze?: { pageId: number; kind?: "living" | "intro" };
-  episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut" };
+  episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut"; music?: { url: string; from: number; to: number; level: "under" | "full" }[] };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
   /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
@@ -1637,6 +1637,10 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
       console.log(`${tag}: ${cuts.length} cut${cuts.length === 1 ? "" : "s"} from the middle, ${parts.length - (e.introUrl ? 1 : 0)} pieces kept`);
     }
     if (e.outroUrl) parts.push({ url: e.outroUrl });
+    // The kept pieces, as [from, to] in the episode's own seconds: where each music range lands after the cuts.
+    const epEnd = e.trimEnd || (await probe(job.downloadUrl)).dur;
+    const kept = parts.filter((p) => p.url === job.downloadUrl).map((p) => [p.ss ?? 0, p.t !== undefined ? (p.ss ?? 0) + p.t : epEnd] as [number, number]);
+    const toOut = (t: number) => { let acc = 0; for (const [a, b] of kept) { if (t <= a) return acc; if (t < b) return acc + (t - a); acc += b - a; } return acc; };
 
     const args: string[] = ["-y", "-v", "error"];
     const graph: string[] = [];
@@ -1682,8 +1686,29 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
     graph.push(`[mv]null[mainv]`, `[ma]anull[maina]`);
     cur = "main";
     if (e.introUrl) { total = join(lbl(0), cur, durs[0], total, e.introTransition, "j1"); cur = "j1"; }
+    const bodyLen = ep.reduce((n, i) => n + durs[i], 0);
+    // Where the episode itself starts in the finished video: after the intro, less the crossfade.
+    const bodyAt = e.introUrl ? total - bodyLen : 0;
     if (e.outroUrl) { const o = parts.length - 1; total = join(cur, lbl(o), total, durs[o], e.outroTransition, "j2"); cur = "j2"; }
-    graph.push(`[${cur}v]null[v]`, `[${cur}a]anull[a]`);
+    // Music under parts of the episode: each track looped to its stretch, faded in and out,
+    // quiet under the voices (or fuller for a stretch with no talking), laid in at its place.
+    const music = (e.music ?? []).map((m) => ({ ...m, start: bodyAt + toOut(m.from), end: bodyAt + toOut(m.to) })).filter((m) => m.end - m.start >= 1);
+    if (music.length) {
+      let at = silentAt;
+      const labels: string[] = [];
+      for (const [k, m] of music.entries()) {
+        args.push("-stream_loop", "-1", "-i", m.url);
+        const len = m.end - m.start;
+        const fade = Math.min(2, len / 3);
+        graph.push(`[${at}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,atrim=0:${len.toFixed(3)},asetpts=PTS-STARTPTS,volume=${m.level === "full" ? "0.6" : "0.12"},afade=t=in:d=${fade.toFixed(2)},afade=t=out:st=${(len - fade).toFixed(3)}:d=${fade.toFixed(2)},adelay=${Math.round(m.start * 1000)}:all=1[mu${k}]`);
+        labels.push(`[mu${k}]`);
+        at++;
+      }
+      graph.push(`[${cur}a]${labels.join("")}amix=inputs=${labels.length + 1}:duration=first:normalize=0[a]`, `[${cur}v]null[v]`);
+      console.log(`${tag}: music under ${music.length} part${music.length === 1 ? "" : "s"}`);
+    } else {
+      graph.push(`[${cur}v]null[v]`, `[${cur}a]anull[a]`);
+    }
     const script = path.join(dir, "graph.txt");
     await fs.writeFile(script, graph.join(";"));
     const out = path.join(dir, `${job.recordingId}-edited.mp4`);
