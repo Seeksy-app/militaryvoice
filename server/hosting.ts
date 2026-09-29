@@ -591,7 +591,8 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
         for (const [k, raw] of Object.entries(b.directories as Record<string, Record<string, unknown>>).slice(0, 20)) {
           if (!/^[a-z]{2,20}$/.test(k) || !raw || typeof raw !== "object") continue;
           const state = ["submitted", "live"].includes(String(raw.state)) ? String(raw.state) : "";
-          const url = typeof raw.url === "string" && /^https:\/\/[^\s]+$/.test(raw.url.trim()) ? raw.url.trim().slice(0, 500) : "";
+          // The app's page for the show; never their own feed.
+          const url = typeof raw.url === "string" && /^https:\/\/[^\s]+$/.test(raw.url.trim()) && !/militaryvoices\.ai/i.test(raw.url) ? raw.url.trim().slice(0, 500) : "";
           if (state || url) clean[k] = { state: url ? "live" : state, url, at: typeof raw.at === "string" ? raw.at.slice(0, 40) : now() };
         }
         const apple = clean.apple?.url && /^https:\/\/podcasts\.apple\.com\//.test(clean.apple.url) ? { appleUrl: clean.apple.url } : {};

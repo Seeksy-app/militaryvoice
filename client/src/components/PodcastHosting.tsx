@@ -260,6 +260,16 @@ const parseDirs = (raw: string | null | undefined): Record<string, DirState> => 
  * The podcast apps, each listed once from the feed: where to go, the few steps there, and the
  * show's link once it's live (Apple's and Spotify's also fill the follow buttons everywhere).
  */
+/** Where to search each app for the show, to find its page once it's approved. */
+const FIND: Record<string, (t: string) => string> = {
+  apple: (t) => `https://podcasts.apple.com/us/search?term=${encodeURIComponent(t)}`,
+  spotify: (t) => `https://open.spotify.com/search/${encodeURIComponent(t)}/podcasts`,
+  youtube: (t) => `https://music.youtube.com/search?q=${encodeURIComponent(t)}`,
+  amazon: (t) => `https://music.amazon.com/search/${encodeURIComponent(t)}?filter=IsLibrary%7Cfalse&sc=none`,
+  iheart: (t) => `https://www.iheart.com/search/?q=${encodeURIComponent(t)}`,
+  pocketcasts: (t) => `https://pocketcasts.com/search?q=${encodeURIComponent(t)}`,
+  podcastindex: (t) => `https://podcastindex.org/search?q=${encodeURIComponent(t)}&type=all`,
+};
 const DIRS: { key: string; name: string; reach: string; url: string; steps: string[]; link: string }[] = [
   { key: "apple", name: "Apple Podcasts", reach: "Apple Podcasts, and the apps that read Apple's list (Overcast, Castro)", url: "https://podcastsconnect.apple.com/my-podcasts/new-feed", steps: ["Sign in with your Apple ID.", "Choose to add a show with an RSS feed, and paste your feed (it's copied).", "Submit. Apple reviews it, usually in a day or two, and writes to your owner email."], link: "https://podcasts.apple.com/…" },
   { key: "spotify", name: "Spotify", reach: "Spotify", url: "https://creators.spotify.com/pod/dashboard/import", steps: ["Sign in to Spotify for Creators.", "Pick the option to add an existing podcast, and paste your feed.", "Spotify emails a code to your owner email: type it in. It's live within hours."], link: "https://open.spotify.com/show/…" },
@@ -319,24 +329,36 @@ function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved
             <li key={d.key} className="py-3" data-testid={`hosting-dir-${d.key}`}>
               <div className="flex flex-wrap items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-sm font-bold text-[#053877] dark:bg-white/10 dark:text-[#8fb5e8]">{d.name[0]}</span>
-                <button type="button" onClick={() => setOpen(isOpen ? null : d.key)} className="min-w-0 flex-1 text-left">
+                <button type="button" onClick={() => setOpen(isOpen || st?.state === "submitted" ? `-${d.key}` : d.key)} className="min-w-0 flex-1 text-left">
                   <span className="block text-sm font-semibold">{d.name}</span>
                   <span className="block truncate text-xs text-muted-foreground">{d.reach}</span>
                 </button>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st?.state === "live" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground"}`}>{st?.state === "live" ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "submitted" ? "Submitted" : moved ? "Moves with your forward" : "Not listed"}</span>
-                {st?.state === "live" && st.url ? (
-                  <Button asChild size="sm" variant="outline" className="h-8 gap-1 rounded-full"><a href={st.url} target="_blank" rel="noreferrer">Open <ExternalLink className="h-3 w-3" /></a></Button>
+                {st?.state === "live" ? (st.url
+                  ? <Button asChild size="sm" variant="outline" className="h-8 gap-1 rounded-full"><a href={st.url} target="_blank" rel="noreferrer">Open <ExternalLink className="h-3 w-3" /></a></Button>
+                  : <Button size="sm" variant="outline" onClick={() => setOpen(d.key)} className="h-8 rounded-full">Add its link</Button>
                 ) : (
                   <Button size="sm" variant={moved ? "outline" : "default"} onClick={() => void listIt(d)} disabled={!ready} title={ready ? undefined : "Finish what the apps need first (above)"} className={`h-8 gap-1 rounded-full ${moved ? "" : "bg-[#053877] text-white hover:bg-[#0a4a99]"}`} data-testid={`hosting-dir-list-${d.key}`}>{st?.state === "submitted" ? "Open again" : moved ? "Not there? List it" : "List it"} <ExternalLink className="h-3 w-3" /></Button>
                 )}
               </div>
-              {(isOpen || st?.state === "submitted") && (
+              {(isOpen || (st?.state === "submitted" && open !== `-${d.key}`)) && (
                 <div className="ml-12 mt-2 space-y-2 text-sm">
                   <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">{d.steps.map((x) => <li key={x}>{x}</li>)}</ol>
-                  <form onSubmit={(e) => { e.preventDefault(); const u = (links[d.key] ?? "").trim(); if (!/^https:\/\//.test(u)) return toast({ title: "Paste your show's link", description: `It starts with https:// (like ${d.link}).` }); put(d.key, { state: "live", url: u, at: new Date().toISOString() }); }} className="flex flex-wrap gap-2">
-                    <Input value={links[d.key] ?? st?.url ?? ""} onChange={(e) => setLinks((x) => ({ ...x, [d.key]: e.target.value }))} placeholder={`Once it's live: your link, ${d.link}`} className="h-9 min-w-0 flex-1 text-xs" />
-                    <Button type="submit" size="sm" variant="outline" className="h-9 rounded-lg">It's live</Button>
-                    {st && <button type="button" onClick={() => put(d.key, null)} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
+                  <p className="text-xs text-muted-foreground">Approved (usually a few days)? <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Find it on {d.name}</a>, open your show there, and copy its address into the box. The link is optional: it adds a {d.name} button to your show page.</p>
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    const u = (links[d.key] ?? st?.url ?? "").trim();
+                    // Their own feed isn't the app's page for the show.
+                    if (/militaryvoices\.ai/i.test(u)) return toast({ title: "That's your feed", description: `Paste your show's page on ${d.name} (like ${d.link}), or leave the box empty.` });
+                    if (u && !/^https:\/\//.test(u)) return toast({ title: "Paste the whole link", description: `It starts with https:// (like ${d.link}).` });
+                    put(d.key, { state: "live", url: u, at: new Date().toISOString() });
+                    setOpen(null);
+                    setLinks((x) => { const n = { ...x }; delete n[d.key]; return n; });
+                    toast({ title: `${d.name}: live`, description: u ? "Its button is on your show page now." : "Add its link any time." });
+                  }} className="flex flex-wrap gap-2">
+                    <Input value={links[d.key] ?? st?.url ?? ""} onChange={(e) => setLinks((x) => ({ ...x, [d.key]: e.target.value }))} placeholder={`Your show on ${d.name}: ${d.link}`} className="h-9 min-w-0 flex-1 text-xs" data-testid={`hosting-dir-link-${d.key}`} />
+                    <Button type="submit" size="sm" variant="outline" className="h-9 rounded-lg" data-testid={`hosting-dir-live-${d.key}`}>It's live</Button>
+                    {st && <button type="button" onClick={() => { put(d.key, null); setOpen(null); }} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
                   </form>
                 </div>
               )}
