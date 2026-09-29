@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Calendar, Check, Copy, ExternalLink, Mail, MessageCircle, Music, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
-import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, musicEmbed, onColor, promoCodes, standOut, videoEmbed, type BioChatAt, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
+import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, musicEmbed, onColor, promoCodes, standOut, videoEmbed, type BioChatAt, type BioPodcastOptions, type BioPopup, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
 import { useBioFont } from "@/lib/bioFont";
 import type { SocialPlatform } from "@shared/schema";
 
@@ -27,7 +27,7 @@ export type AiAnswer = { answer: string; sources: { n: number; title: string; st
 export type ChatMsg = { token: string; question: string; reply: string; repliedAt: string; createdAt: string };
 type AskInput = { name: string; email: string; question: string; episode: string; website: string };
 
-export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, onLoadMessages, onSubscribe, shareBase }: {
+export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, onLoadMessages, onSubscribe, shareBase, popupPeek = false, onPopupClose }: {
   data: BioPublic;
   /** In the builder: nothing is counted, nothing is sent. */
   preview?: boolean;
@@ -42,6 +42,9 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   shareBase: string;
   /** Stay in touch: a listener's email, to the podcaster's Contacts. */
   onSubscribe?: (x: { email: string; name: string; website: string }) => Promise<void>;
+  /** The builder showing their pop-up while they edit it. */
+  popupPeek?: boolean;
+  onPopupClose?: () => void;
 }) {
   const t = data.theme;
   // The page's colours, from the theme (shade, background, their colour, the link colour); see bioPalette.
@@ -82,8 +85,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   // Their name, handle, bio and socials: on the page, or in white over their photo (hero).
   const who = (onPhoto: boolean, hideName = false) => (
     <>
-      {!hideName && !noName && <h1 className="text-balance font-bold leading-tight tracking-tight" style={{ fontSize: Math.round((onPhoto ? 34 : 26) * (t.nameSize ?? 100) / 100), translate: `0 ${t.nameY ?? 0}px` }}>{data.displayName || "Your name"}</h1>}
-      <p className="mt-0.5 text-sm" style={{ color: onPhoto ? "rgba(255,255,255,0.8)" : sub }}>@{data.handle}{data.branch ? ` · ${data.branch}` : ""}</p>
+      {!hideName && !noName && <h1 className="text-balance font-bold leading-tight tracking-tight" style={{ fontSize: Math.round((onPhoto ? 34 : 26) * (t.nameSize ?? 100) / 100) }}>{data.displayName || "Your name"}</h1>}
       {t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} onChat={data.askEnabled && chatAt === "socials" ? () => setChat(true) : undefined} chatColor={accent} />}
       {data.bio && !t.hideBio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub }}>{styled(data.bio)}</p>}
       {intro("bio")}
@@ -105,6 +107,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       </div>
       {/* At the foot of the screen, however short the page: it reads as the page's footer, not part of their icons. */}
       {(t.branding ?? true) && <p className="mt-auto pt-12 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>}
+      {t.popup && t.popup.kind !== "none" && <PagePopup p={t.popup} handle={data.handle} preview={preview} peek={popupPeek} onPeekClose={onPopupClose} solid={dark ? "#141a2c" : "#ffffff"} ink={ink} sub={sub} card={card} line={line} accent={accent} btn={btn} ev={ev} onSubscribe={onSubscribe} />}
       {/* Last on the page so they stick to the foot of the screen: the chat bubble, and the sheet for asking about an episode. */}
       {(chat || askEp) && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20 ${askEp ? "bg-black/40" : ""}`} onClick={() => { setChat(false); setAskEp(null); }} aria-hidden />}
       {intro("bottom")}
@@ -200,6 +203,71 @@ export function PageTop({ t, avatar, hero, cutoutUrl, living = "", name, handle,
  * Stay in touch: an email (and a first name, if they like) to the podcaster,
  * who finds it in their Contacts. Remembered in this browser once they're in.
  */
+/**
+ * The page's pop-up: a few seconds after a listener arrives, once a week each. Something
+ * to promote (a picture, a line, a button to it) or a sign-up (their email, to Contacts).
+ * In the builder it shows while they edit it.
+ */
+function PagePopup({ p, handle, preview, peek, onPeekClose, solid, ink, sub, card, line, accent, btn, ev, onSubscribe }: { p: BioPopup; handle: string; preview: boolean; peek: boolean; onPeekClose?: () => void; solid: string; ink: string; sub: string; card: string; line: string; accent: string; btn: (primary?: boolean) => React.CSSProperties; ev: Ev; onSubscribe?: (x: { email: string; name: string; website: string }) => Promise<void> }) {
+  const key = `mv_popup_${handle}`;
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [website, setWebsite] = useState("");
+  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (preview) return;
+    try {
+      const last = Number(localStorage.getItem(key) || 0);
+      if (Date.now() - last < 7 * 86_400_000 || (p.kind === "email" && localStorage.getItem(`mv_joined_${handle}`) === "1")) return;
+    } catch { /* private window: show it */ }
+    const t = window.setTimeout(() => { setOpen(true); try { localStorage.setItem(key, String(Date.now())); } catch { /* fine */ } }, 4000);
+    return () => clearTimeout(t);
+  }, [preview, key, p.kind, handle]);
+  const shown = preview ? peek : open;
+  if (!shown) return null;
+  const close = () => { if (preview) onPeekClose?.(); else setOpen(false); };
+  const join = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (preview || !onSubscribe || state === "busy") return;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())) { setErr("That email doesn't look right."); return; }
+    setState("busy"); setErr("");
+    try {
+      await onSubscribe({ email: email.trim(), name: "", website });
+      setState("done");
+      try { localStorage.setItem(`mv_joined_${handle}`, "1"); } catch { /* fine */ }
+    } catch (x) { setErr((x as Error).message); setState("idle"); }
+  };
+  // On the page: over everything, the page dimmed. In the builder's phone: pinned to the foot of
+  // its screen as it scrolls, the rest dimmed by the card's own shadow.
+  const box = (inner: React.ReactNode) => preview
+    ? <div className="sticky bottom-0 z-40 h-0" data-testid="bio-popup"><div className="absolute inset-x-0 bottom-0 flex justify-center p-4">{inner}</div></div>
+    : <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/50 p-4 sm:items-center" onClick={close} data-testid="bio-popup">{inner}</div>;
+  return box(
+      <div role="dialog" aria-modal aria-label={p.heading || "Pop-up"} onClick={(e) => e.stopPropagation()} className={`relative w-full max-w-sm overflow-hidden rounded-3xl animate-in fade-in slide-in-from-bottom-4 duration-300 ${preview ? "shadow-[0_0_0_2000px_rgba(0,0,0,0.5)]" : "shadow-2xl"}`} style={{ background: solid, color: ink, border: `1px solid ${line}` }}>
+        <button type="button" onClick={close} className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/40 text-white" aria-label="Close"><X className="h-4 w-4" /></button>
+        {p.kind === "promo" && p.image && <img src={p.image} alt="" className="aspect-[4/3] w-full object-cover" />}
+        <div className="p-6 text-center">
+          {p.pre && <p className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>{p.pre}</p>}
+          {p.heading && <p className="mt-1 text-balance text-2xl font-extrabold leading-tight">{p.heading}</p>}
+          {p.note && <p className="mt-2 text-sm" style={{ color: sub }}>{p.note}</p>}
+          {p.kind === "promo" ? (
+            <a href={preview || !p.url ? undefined : p.url} target="_blank" rel="noopener noreferrer" onClick={() => { ev("click", `Pop-up: ${p.heading || p.button}`); if (!preview) setOpen(false); }} className="mt-4 flex h-11 items-center justify-center px-4 text-sm font-semibold" style={btn()} data-testid="bio-popup-go">{p.button || "Take a look"}</a>
+          ) : state === "done" ? (
+            <p className="mt-4 flex items-center justify-center gap-2 text-sm font-semibold"><Check className="h-4 w-4" style={{ color: accent }} /> You're in. Thanks!</p>
+          ) : (
+            <form onSubmit={join} className="mt-4 flex flex-col gap-2">
+              <input value={email} onChange={(e) => { setEmail(e.target.value); setErr(""); }} type="email" placeholder="Your email" autoComplete="email" required maxLength={200} className="h-11 rounded-xl px-3 text-sm outline-none" style={{ background: "transparent", border: `1px solid ${line}`, color: ink }} data-testid="bio-popup-email" />
+              <input value={website} onChange={(e) => setWebsite(e.target.value)} tabIndex={-1} autoComplete="off" aria-hidden className="hidden" name="website" />
+              <button type="submit" disabled={state === "busy"} className="h-11 px-4 text-sm font-semibold disabled:opacity-60" style={btn()}>{state === "busy" ? "One moment…" : p.button || "Sign me up"}</button>
+              {err && <p className="text-xs text-red-500">{err}</p>}
+            </form>
+          )}
+        </div>
+      </div>
+  );
+}
+
 function SignupBlock({ s, btn, ink, sub, card, line, accent, preview, handle, onSubscribe }: { s: Extract<BioSection, { type: "signup" }>; btn: (primary?: boolean) => React.CSSProperties; ink: string; sub: string; card: string; line: string; accent: string; preview: boolean; handle: string; onSubscribe?: (x: { email: string; name: string; website: string }) => Promise<void> }) {
   const key = `mv_joined_${handle}`;
   const [done, setDone] = useState(() => { if (preview) return false; try { return localStorage.getItem(key) === "1"; } catch { return false; } });
@@ -304,7 +372,6 @@ function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, nameY = 0
       <div className="relative flex min-h-[520px] flex-col overflow-hidden" style={{ background: scene ? `linear-gradient(180deg, transparent 60%, ${paper} 100%), center/cover url(${scene})` : `linear-gradient(180deg, ${bg} 0%, ${bg} 70%, ${paper} 100%)` }} data-testid="bio-magazine-header">
         {name ? <h1 className="z-0 break-words px-3 pt-7 text-center font-black uppercase leading-[0.82] tracking-tight" style={{ fontSize: bigName * 1.05, translate: `0 ${nameY}px`, color: ink, fontFamily: FONTS.playfair.css, ...onScene }}>{name}</h1> : <div className="h-20" />}
         <img src={src} alt="" className="relative z-10 mx-auto -mt-12 block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={move} />
-        <p className="absolute right-4 top-3 z-20 text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: ink, opacity: 0.8 }}>@{handle}</p>
         {fade}
       </div>
     );
@@ -433,6 +500,13 @@ export function styled(body: string): React.ReactNode[] {
 }
 
 function Section({ s, btn, ink, sub, card, line, accent, preview, ev, handle = "", onSubscribe }: { s: BioSection; btn: (primary?: boolean) => React.CSSProperties; ink: string; sub: string; card: string; line: string; accent: string; preview: boolean; ev: Ev; handle?: string; onSubscribe?: (x: { email: string; name: string; website: string }) => Promise<void> }) {
+  // Space, with a line across the middle of it (or not).
+  if (s.type === "divider") return (
+    <div className="flex items-center justify-center" style={{ minHeight: Math.max(1, s.space), marginTop: -8, marginBottom: -8 }} aria-hidden data-testid="bio-divider">
+      {s.line === "dots" ? <span className="text-lg leading-none tracking-[0.5em]" style={{ color: sub }}>•••</span>
+        : s.line !== "none" && <span className="w-full" style={{ borderTop: `${s.line === "thick" ? 3 : 1}px ${s.line === "dashed" ? "dashed" : "solid"} ${line}`, opacity: s.line === "thick" ? 1 : 0.9 }} />}
+    </div>
+  );
   if (s.type === "signup") return <SignupBlock s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} handle={handle} onSubscribe={onSubscribe} />;
   const [copied, setCopied] = useState<string | null>(null);
   const title = s.title ? <p className="mb-2 mt-1 text-center text-xs font-bold uppercase tracking-[0.12em]" style={{ color: sub }}>{s.title}</p> : null;

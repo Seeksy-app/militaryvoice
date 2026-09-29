@@ -332,6 +332,7 @@ function cleanSections(v: unknown): BioSection[] {
       case "podcast": return [{ ...base, type: "podcast" }];
       case "signup": return [{ ...base, type: "signup", note: str(x.note, 200), button: str(x.button, 40) }];
       case "text": return [{ ...base, type: "text", body: str(x.body, 2000), align: x.align === "center" || x.align === "right" ? x.align : "left" }];
+      case "divider": return [{ ...base, type: "divider", space: Number.isFinite(Number(x.space)) ? Math.max(0, Math.min(160, Math.round(Number(x.space)))) : 24, line: (["none", "thin", "thick", "dashed", "dots"] as const).includes(x.line as never) ? (x.line as "none") : "thin" }];
       default: return [];
     }
   });
@@ -375,6 +376,11 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     chatAt: (["top-left", "top-right", "bottom-left", "bottom-right", "socials"] as const).includes(x.chatAt as never) ? (x.chatAt as BioTheme["chatAt"]) : prev.chatAt ?? "top-right",
     scene: typeof x.scene === "string" ? httpUrl(x.scene) : prev.scene ?? "",
     sceneKey: typeof x.sceneKey === "string" ? x.sceneKey.slice(0, 120) : prev.sceneKey ?? "",
+    popup: x.popup && typeof x.popup === "object" ? (() => {
+      const p = x.popup as Record<string, unknown>;
+      const kind = (["none", "promo", "email"] as const).includes(p.kind as never) ? (p.kind as "none") : "none";
+      return { kind, pre: str(p.pre, 60), heading: str(p.heading, 80), note: str(p.note, 200), button: str(p.button, 40), image: httpUrl(p.image), url: httpUrl(p.url) };
+    })() : prev.popup,
     nameY: Number.isFinite(Number(x.nameY)) && x.nameY !== undefined ? Math.max(-120, Math.min(120, Math.round(Number(x.nameY)))) : prev.nameY ?? 0,
     nameSize: Number.isFinite(Number(x.nameSize)) && x.nameSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.nameSize)))) : prev.nameSize ?? 100,
     cutoutSize: Number.isFinite(Number(x.cutoutSize)) && x.cutoutSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.cutoutSize)))) : prev.cutoutSize ?? 100,
@@ -1088,7 +1094,7 @@ export function registerBioPage(app: Express) {
   app.post("/api/public/bio/:handle/subscribe", async (req, res) => {
     await schemaIsReady();
     const [row] = await db.select().from(bioPages).where(eq(bioPages.handle, String(req.params.handle).toLowerCase())).limit(1);
-    if (!row || !row.published || !parseSections(row.sections).some((x) => x.type === "signup" && x.visible)) return res.status(404).json({ message: "Sign-ups are off for this page." });
+    if (!row || !row.published || !(parseSections(row.sections).some((x) => x.type === "signup" && x.visible) || parseTheme(row.theme).popup?.kind === "email")) return res.status(404).json({ message: "Sign-ups are off for this page." });
     const ip = String(req.ip ?? "");
     const hits = (joins.get(ip) ?? []).filter((t) => Date.now() - t < 3600_000);
     if (hits.length >= 10) return res.status(429).json({ message: "Try again in a little while." });

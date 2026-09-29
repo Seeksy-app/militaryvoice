@@ -53,6 +53,8 @@ export interface BioTheme {
   scene?: string;
   /** Which scene tile made it ("base", "own:…", "upload"), so the builder can show it chosen. */
   sceneKey?: string;
+  /** A pop-up a few seconds after a listener arrives (once a week each): promote something, or collect emails. */
+  popup?: BioPopup;
   /** Their name, moved up (negative) or down, in pixels. */
   nameY?: number;
   /** Their social icons above their bio (else under it). */
@@ -107,7 +109,15 @@ export type BioSection =
   /** Your podcast: the latest episodes, to play right there (its look is in theme.podcast). */
   | { id: string; type: "podcast"; visible: boolean; title: string }
   /** Music: songs, albums or playlists from Spotify, Apple Music, SoundCloud or YouTube, each a player. */
-  | { id: string; type: "music"; visible: boolean; title: string; tracks: { id: string; url: string }[] };
+  | { id: string; type: "music"; visible: boolean; title: string; tracks: { id: string; url: string }[] }
+  /** Space and dividers: room between blocks (pixels), with a line or not. */
+  | { id: string; type: "divider"; visible: boolean; title: string; space: number; line: BioDividerLine };
+export type BioDividerLine = "none" | "thin" | "thick" | "dashed" | "dots";
+export type BioPopup = { kind: "none" | "promo" | "email"; pre: string; heading: string; note: string; button: string; image: string; url: string };
+export const DEFAULT_POPUPS: Record<"promo" | "email", BioPopup> = {
+  promo: { kind: "promo", pre: "New", heading: "Get my latest", note: "Out now.", button: "Take a look", image: "", url: "" },
+  email: { kind: "email", pre: "Want the latest?", heading: "Get on the list", note: "New episodes and news, straight to your inbox.", button: "Sign me up", image: "", url: "" },
+};
 export type BioAlign = "left" | "center" | "right";
 export type BioChatAt = "top-left" | "top-right" | "bottom-left" | "bottom-right" | "socials";
 export type BioPromoCode = { id: string; brand: string; code: string; note: string; url: string };

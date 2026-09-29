@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -16,9 +16,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useBioFont } from "@/lib/bioFont";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
 import { ratesFor } from "@/components/BioBrandsView";
-import { BRANDS_SECTIONS, FAMILY_SECTIONS, arrange, type BioLayout, type BrandsSectionId, type FamilySectionId, CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, INTRO_VOICES, INTRO_SAYS, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { BRANDS_SECTIONS, FAMILY_SECTIONS, arrange, type BioLayout, type BrandsSectionId, type FamilySectionId, CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, INTRO_VOICES, INTRO_SAYS, DEFAULT_POPUPS, type BioPopup, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, Mic, Square, Smile, GripVertical, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music } from "lucide-react";
+import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, Mic, Square, Smile, GripVertical, SeparatorHorizontal, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music } from "lucide-react";
 
 /**
  * SmartLink (was "My page", then "Rally Point"): the podcaster's bio page builder. Profile, Design, Content and
@@ -294,9 +294,11 @@ export function BioBuilder() {
     return { ...srv, displayName: draft.displayName, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl, theme: draft.theme, askEnabled: draft.askEnabled, family: { ...DEFAULT_FAMILY, ...family },
       socials: draft.socials.filter((s) => s.on && s.url), cutoutUrl: draft.cutoutFrom && draft.cutoutFrom === draft.avatarUrl ? draft.cutoutUrl : "" };
   }, [draft, q.data?.familyPreview, famSrv]);
+  // Their pop-up, shown on the phone while they edit it.
+  const [popPeek, setPopPeek] = useState(false);
   const page = () => tab === "brands" && kitView ? <BioBrandsView data={kitView} preview listenUrl={url} />
     : tab === "family" && famView ? <BioFamilyView data={famView} preview />
-    : <BioPageView data={view!} preview shareBase={url} />;
+    : <BioPageView data={view!} preview shareBase={url} popupPeek={popPeek && tab === "content"} onPopupClose={() => setPopPeek(false)} />;
 
   if (q.isLoading || !draft || !view) return <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   const newQs = (q.data?.questions ?? []).filter((x) => x.status === "new").length;
@@ -344,9 +346,9 @@ export function BioBuilder() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
         <div className="min-w-0">
-          {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} intro={<IntroCard d={draft} st={intro} start={(b) => void startIntro(b)} reset={resetIntro} on={draft.theme.intro ?? false} setOn={(v) => change({ theme: { ...draft.theme, intro: v } }, true)} at={draft.theme.introAt ?? "bottom-left"} setAt={(v) => change({ theme: { ...draft.theme, introAt: v } }, true)} patch={(p, now) => change({ theme: { ...draft.theme, ...p } }, now)} />} />}
+          {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} onGo={(t) => { go(t); window.scrollTo({ top: 0, behavior: "smooth" }); }} intro={<IntroCard d={draft} st={intro} start={(b) => void startIntro(b)} reset={resetIntro} on={draft.theme.intro ?? false} setOn={(v) => change({ theme: { ...draft.theme, intro: v } }, true)} at={draft.theme.introAt ?? "bottom-left"} setAt={(v) => change({ theme: { ...draft.theme, introAt: v } }, true)} patch={(p, now) => change({ theme: { ...draft.theme, ...p } }, now)} />} />}
           {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} living={living} startLiving={startLiving} />}
-          {tab === "content" && <ContentTab d={draft} change={change} view={view} knowledge={q.data?.knowledge} />}
+          {tab === "content" && <ContentTab d={draft} change={change} view={view} knowledge={q.data?.knowledge} onPeek={setPopPeek} />}
           {tab === "social" && <SocialTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} />}
           {tab === "brands" && <BrandsTab d={draft} change={change} url={url} kit={kitView} episodes={q.data?.familyPreview?.podcast?.episodes ?? []} />}
@@ -408,15 +410,17 @@ export function BioBuilder() {
 
 // ---- Profile -----------------------------------------------------------------------
 
-function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { d: Page; view: BioPublic; change: (p: Partial<Page>, now?: boolean) => void; flush: () => Promise<void>; setPreview: (p: BioPublic) => void; knowledge?: { done: number; total: number }; intro?: React.ReactNode }) {
+function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro, onGo }: { d: Page; view: BioPublic; change: (p: Partial<Page>, now?: boolean) => void; flush: () => Promise<void>; setPreview: (p: BioPublic) => void; knowledge?: { done: number; total: number }; intro?: React.ReactNode; onGo?: (t: Tab) => void }) {
   const [handle, setHandle] = useState(d.handle);
   useEffect(() => setHandle(d.handle), [d.handle]);
+  // Each step not done yet is a tap to the place it's done: a field here, or the Content tab.
+  const focus = (testid: string) => { const el = document.querySelector<HTMLElement>(`[data-testid="${testid}"]`); el?.scrollIntoView({ behavior: "smooth", block: "center" }); window.setTimeout(() => el?.focus(), 350); };
   const steps = [
-    { label: "Add your name", done: !!d.displayName.trim() },
-    { label: "Claim your link", done: !!d.handle },
-    { label: "Add a profile photo", done: !!d.avatarUrl },
-    { label: "Write a short bio", done: d.bio.trim().length >= 10 },
-    { label: "Add your podcast or a link (Content)", done: d.sections.length > 0 },
+    { label: "Add your name", done: !!d.displayName.trim(), to: () => focus("bio-name") },
+    { label: "Claim your link", done: !!d.handle, to: () => focus("bio-handle") },
+    { label: "Add a profile photo", done: !!d.avatarUrl, to: () => focus("bio-photos") },
+    { label: "Write a short bio", done: d.bio.trim().length >= 10, to: () => focus("bio-bio") },
+    { label: "Add your podcast or a link", done: d.sections.length > 0, to: () => onGo?.("content") },
   ];
   const done = steps.filter((s) => s.done).length;
   const [hideSteps, setHideSteps] = useState(() => { try { return localStorage.getItem("mv_bio_steps_hidden") === "1"; } catch { return false; } });
@@ -446,11 +450,14 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { 
           </div>
           <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-[#F0A71F]/20"><div className="h-full rounded-full bg-gradient-to-r from-[#F0A71F] to-[#e08a00] transition-all" style={{ width: `${(done / steps.length) * 100}%` }} /></div>
           <ul className="mt-3 space-y-1.5">
-            {steps.map((s) => <li key={s.label} className={`flex items-center gap-2 text-sm ${s.done ? "text-muted-foreground line-through" : ""}`}>{s.done ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4 text-muted-foreground/50" />} {s.label}</li>)}
+            {steps.map((s) => <li key={s.label}>{s.done
+              ? <span className="flex items-center gap-2 text-sm text-muted-foreground line-through"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> {s.label}</span>
+              : <button type="button" onClick={s.to} className="group flex items-center gap-2 text-left text-sm font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="bio-step"><Circle className="h-4 w-4 text-muted-foreground/50" /> {s.label} <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" /></button>}</li>)}
           </ul>
         </div>
       )}
       <Card icon={ImagePlus} tone="gold" title="Photos">
+      <span tabIndex={-1} data-testid="bio-photos" className="sr-only">Photos</span>
       {/* The cover photo is only asked for when their top shows one (Hero, Big photo, Banner). */}
       <div className="grid grid-cols-2 gap-3">
         <ImagePick label="Profile photo" kind="avatar" url={d.avatarUrl} round onDone={(u, p) => { change({ avatarUrl: u }); setPreview(p); }} onClear={() => change({ avatarUrl: "" }, true)} onFixed={(u) => change({ avatarUrl: u }, true)} />
@@ -653,30 +660,43 @@ function FoldAll({ onAll }: { onAll: (open: boolean) => void }) {
  */
 function Sortable<T extends string>({ ids, onMove, render }: { ids: T[]; onMove: (ids: T[]) => void; render: (id: T, grip: React.ReactNode) => React.ReactNode }) {
   const [live, setLive] = useState<T[] | null>(null);
-  const [drag, setDrag] = useState<{ id: T; offY: number; dy: number } | null>(null);
+  // The card being dragged, where the pointer grabbed it, and where the pointer is now.
+  const [drag, setDrag] = useState<{ id: T; offY: number; y: number } | null>(null);
   const els = useRef(new Map<T, HTMLDivElement>());
   const list = live ?? ids;
+  // After every render (a move, or the order changing under it), put the dragged card under
+  // the pointer, measured from where it now sits in the list, before the screen paints.
+  useLayoutEffect(() => {
+    if (!drag) return;
+    const el = els.current.get(drag.id);
+    if (!el) return;
+    el.style.transform = "none";
+    const top = el.getBoundingClientRect().top;
+    el.style.transform = `translateY(${drag.y - drag.offY - top}px)`;
+  });
   const start = (id: T, e: React.PointerEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     const r = els.current.get(id)!.getBoundingClientRect();
     setLive(ids);
-    setDrag({ id, offY: e.clientY - r.top, dy: 0 });
+    setDrag({ id, offY: e.clientY - r.top, y: e.clientY });
   };
   const move = (e: React.PointerEvent) => {
     if (!drag || !live) return;
-    const el = els.current.get(drag.id)!;
-    const natural = el.getBoundingClientRect().top - drag.dy;
     // Where the pointer is among the other cards: before the first whose middle is below it.
     const others = live.filter((x) => x !== drag.id);
     let at = others.length;
     for (let k = 0; k < others.length; k++) { const r = els.current.get(others[k])!.getBoundingClientRect(); if (e.clientY < r.top + r.height / 2) { at = k; break; } }
     const next = [...others.slice(0, at), drag.id, ...others.slice(at)];
     if (next.join() !== live.join()) setLive(next);
-    setDrag({ ...drag, dy: e.clientY - drag.offY - natural });
+    setDrag({ ...drag, y: e.clientY });
+    // Near the top or foot of the window, scroll so a card can go anywhere in a long list.
+    if (e.clientY < 70) window.scrollBy(0, -14);
+    else if (e.clientY > window.innerHeight - 70) window.scrollBy(0, 14);
   };
   const end = () => {
+    if (drag) { const el = els.current.get(drag.id); if (el) el.style.transform = ""; }
     if (live && live.join() !== ids.join()) onMove(live);
     setLive(null);
     setDrag(null);
@@ -689,7 +709,7 @@ function Sortable<T extends string>({ ids, onMove, render }: { ids: T[]; onMove:
         return (
           <div key={id} ref={(el) => { if (el) els.current.set(id, el); else els.current.delete(id); }}
             className={`relative rounded-2xl ${on ? "z-20 shadow-2xl ring-2 ring-[#053877]/40" : "transition-transform"}`}
-            style={on ? { transform: `translateY(${drag!.dy}px)` } : undefined} data-testid={`sortable-${id}`}>
+            data-testid={`sortable-${id}`}>
             {render(id, (
               <button type="button" onPointerDown={(e) => start(id, e)} onPointerMove={move} onPointerUp={end} onPointerCancel={end}
                 onKeyDown={(e) => { if (e.key === "ArrowUp") { e.preventDefault(); step(id, -1); } if (e.key === "ArrowDown") { e.preventDefault(); step(id, 1); } }}
@@ -1011,7 +1031,8 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
             <div className="mt-3 space-y-3 rounded-xl bg-muted/40 p-3" data-testid="bio-cutout-adjust">
               {!t.hideName && <>
                 <RangeRow label="Name size" hint="Smaller or bigger" value={t.nameSize ?? 100} min={60} max={150} onChange={(v) => set({ nameSize: v })} unit="%" testid="bio-name-size" />
-                <RangeRow label="Name position" hint="Up or down" value={t.nameY ?? 0} min={-120} max={120} onChange={(v) => set({ nameY: v })} testid="bio-name-y" />
+                {/* Only where the name is big behind their photo: elsewhere it sits in a column with the rest. */}
+                {CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <RangeRow label="Name position" hint="Up or down" value={t.nameY ?? 0} min={-120} max={120} onChange={(v) => set({ nameY: v })} testid="bio-name-y" />}
               </>}
               {CUTOUT_LAYOUTS.includes(t.layout) && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <>
                 <RangeRow label="Photo position" hint="Up or down" value={t.cutoutY ?? 0} min={-160} max={160} onChange={(v) => set({ cutoutY: v })} testid="bio-cutout-y" />
@@ -1476,12 +1497,13 @@ function Tile({ on, onClick, label, note, testid, children }: { on: boolean; onC
 const KINDS: { type: BioSectionType; label: string; hint: string; icon: typeof Link2; tone: string }[] = [
   { type: "podcast", label: "Your podcast", hint: "Your latest episodes, to play right here", icon: Headphones, tone: "bg-[#F0A71F]/15 text-[#b36b00] dark:text-[#F0A71F]" },
   { type: "links", label: "Links", hint: "Buttons to your site, store, anything", icon: Link2, tone: "bg-[#053877]/10 text-[#053877] dark:bg-[#8fb5e8]/15 dark:text-[#8fb5e8]" },
-  { type: "video", label: "Video", hint: "A YouTube or Vimeo video", icon: Video, tone: "bg-red-500/12 text-red-600 dark:text-red-400" },
+  { type: "video", label: "Video", hint: "A link, or upload your own", icon: Video, tone: "bg-red-500/12 text-red-600 dark:text-red-400" },
   { type: "promo", label: "Promo codes", hint: "Sponsors' codes, tap to copy", icon: Tag, tone: "bg-[#F0A71F]/15 text-[#b36b00] dark:text-[#F0A71F]" },
   { type: "meeting", label: "Book a meeting", hint: "Your Calendly or booking link", icon: Calendar, tone: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
   { type: "text", label: "Text", hint: "A few words of your own", icon: Type, tone: "bg-violet-500/15 text-violet-700 dark:text-violet-300" },
   { type: "signup", label: "Stay in touch", hint: "An email sign-up, into your Contacts", icon: Mail, tone: "bg-sky-500/15 text-sky-700 dark:text-sky-300" },
   { type: "music", label: "Music", hint: "Spotify, Apple Music, SoundCloud", icon: Music, tone: "bg-pink-500/15 text-pink-700 dark:text-pink-300" },
+  { type: "divider", label: "Space and dividers", hint: "Room between blocks, a line or not", icon: SeparatorHorizontal, tone: "bg-slate-500/15 text-slate-700 dark:text-slate-300" },
 ];
 function blank(type: BioSectionType): BioSection {
   const base = { id: newId(), visible: true, title: "" };
@@ -1493,11 +1515,12 @@ function blank(type: BioSectionType): BioSection {
     case "podcast": return { ...base, type };
     case "signup": return { ...base, type, title: "Stay in touch", note: "New episodes and news, straight to your inbox.", button: "Sign me up" };
     case "meeting": return { ...base, type, title: "Book a time with me", url: "", note: "" };
+    case "divider": return { ...base, type, space: 24, line: "thin" };
     default: return { ...base, type: "text", body: "" };
   }
 }
 
-function ContentTab({ d, change, view, knowledge }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic; knowledge?: { done: number; total: number } }) {
+function ContentTab({ d, change, view, knowledge, onPeek }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic; knowledge?: { done: number; total: number }; onPeek: (v: boolean) => void }) {
   // The two cards start open; each block's editor starts closed.
   const fold = useFold("content");
   const items = useFold("content-items", false);
@@ -1539,7 +1562,78 @@ function ContentTab({ d, change, view, knowledge }: { d: Page; change: (p: Parti
           );
         }} />
       </Card>
+      <PopupCard d={d} change={change} onPeek={onPeek} fold={fold.of("popup")} />
     </div>
+  );
+}
+
+/**
+ * The page's pop-up: something to promote, or an email sign-up, or none. It shows a few
+ * seconds after a listener arrives, once a week each; the phone shows it while they edit.
+ */
+function PopupCard({ d, change, onPeek, fold }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; onPeek: (v: boolean) => void; fold: ReturnType<ReturnType<typeof useFold>["of"]> }) {
+  const { toast } = useToast();
+  const p = d.theme.popup ?? { ...DEFAULT_POPUPS.email, kind: "none" as const };
+  const set = (x: Partial<BioPopup>, now = false) => { change({ theme: { ...d.theme, popup: { ...p, ...x } } }, now); onPeek(true); };
+  const pick = (kind: BioPopup["kind"]) => {
+    if (kind === "none") { change({ theme: { ...d.theme, popup: { ...p, kind } } }, true); onPeek(false); return; }
+    change({ theme: { ...d.theme, popup: p.kind === kind ? p : { ...DEFAULT_POPUPS[kind], image: p.image, url: p.url } } }, true);
+    onPeek(true);
+  };
+  const fileIn = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const upload = async (file: File) => {
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await again(() => fetch("/api/host/bio/image/bg", { method: "POST", body: fd, credentials: "include" }));
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.message || "Couldn't use that picture.");
+      set({ image: j.url }, true);
+    } catch (e) {
+      toast({ title: "Picture not added", description: (e as Error).message, variant: "destructive" });
+    } finally { setBusy(false); if (fileIn.current) fileIn.current.value = ""; }
+  };
+  const tile = (on: boolean) => `flex flex-col items-start gap-2 rounded-2xl border-2 p-3 text-left text-sm font-semibold transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.05] dark:border-[#8fb5e8]" : "border-border text-muted-foreground hover:border-[#053877]/40"}`;
+  return (
+    <Card icon={Sparkles} tone="violet" title="Pop-up" fold={fold}>
+      <p className="-mt-1 text-xs text-muted-foreground">Shows a few seconds after a listener arrives, once a week each.</p>
+      <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Pop-up">
+        {([["promo", Tag, "Promote something"], ["email", Mail, "Collect emails"], ["none", X, "No pop-up"]] as const).map(([k, Icon, l]) => (
+          <button key={k} type="button" role="radio" aria-checked={p.kind === k} onClick={() => pick(k)} className={tile(p.kind === k)} data-testid={`bio-popup-${k}`}>
+            <Icon className="h-5 w-5" />{l}
+          </button>
+        ))}
+      </div>
+      {p.kind !== "none" && (
+        <div className="space-y-2">
+          {p.kind === "promo" && (
+            <>
+              <input ref={fileIn} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
+              {p.image ? (
+                <div className="flex items-center gap-3 rounded-xl border border-border p-2">
+                  <img src={p.image} alt="" className="h-14 w-20 rounded-lg object-cover" />
+                  <button type="button" onClick={() => fileIn.current?.click()} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Change picture</button>
+                  <button type="button" onClick={() => set({ image: "" }, true)} className="ml-auto text-xs font-semibold text-muted-foreground hover:text-destructive">Remove</button>
+                </div>
+              ) : (
+                <Button type="button" variant="outline" onClick={() => fileIn.current?.click()} disabled={busy} className="w-full gap-1.5 rounded-xl border-dashed">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />} Add a picture</Button>
+              )}
+            </>
+          )}
+          <Input value={p.pre} onChange={(e) => set({ pre: e.target.value })} maxLength={60} placeholder="A small line on top: Want the latest?" aria-label="Small line on top" />
+          <Input value={p.heading} onChange={(e) => set({ heading: e.target.value })} maxLength={80} placeholder="Heading: Get on the list" aria-label="Heading" className="font-semibold" />
+          <Input value={p.note} onChange={(e) => set({ note: e.target.value })} maxLength={200} placeholder="A line under it" aria-label="A line under it" />
+          <Input value={p.button} onChange={(e) => set({ button: e.target.value })} maxLength={40} placeholder={p.kind === "promo" ? "Button: Take a look" : "Button: Sign me up"} aria-label="Button words" />
+          {p.kind === "promo" && <Input value={p.url} onChange={(e) => set({ url: e.target.value })} placeholder="Where the button goes: https://…" aria-label="Where the button goes" data-testid="bio-popup-url" />}
+          <div className="flex items-center justify-between gap-2 pt-1">
+            <p className="text-[11px] text-muted-foreground">{p.kind === "email" ? "Each email lands in Contacts on your dashboard." : "Counted with your link clicks."}</p>
+            <button type="button" onClick={() => onPeek(true)} className="shrink-0 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="bio-popup-peek">Show it on the phone</button>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -1622,6 +1716,21 @@ function PodcastOptions({ d, change, view, knowledge }: { d: Page; change: (p: P
 
 function SectionEditor({ s, upd }: { s: BioSection; upd: (p: Partial<BioSection>) => void }) {
   const title = <Input value={s.title} onChange={(e) => upd({ title: e.target.value })} placeholder="Heading (optional)" maxLength={80} />;
+  if (s.type === "divider") return (
+    <>
+      <RangeRow label="Space" hint="Room above and below" value={s.space} min={0} max={160} onChange={(v) => upd({ space: v } as Partial<BioSection>)} unit="px" testid="bio-divider-space" />
+      <div className="grid grid-cols-5 gap-1.5 pt-1" role="radiogroup" aria-label="Line">
+        {([["none", "None"], ["thin", "Thin"], ["thick", "Thick"], ["dashed", "Dashed"], ["dots", "Dots"]] as const).map(([v, l]) => (
+          <button key={v} type="button" role="radio" aria-checked={s.line === v} onClick={() => upd({ line: v } as Partial<BioSection>)} className={`flex h-14 flex-col items-center justify-center gap-1.5 rounded-xl border-2 text-[11px] font-semibold transition-colors ${s.line === v ? "border-[#053877] bg-[#053877]/[0.05] dark:border-[#8fb5e8]" : "border-border text-muted-foreground hover:border-[#053877]/40"}`} data-testid={`bio-divider-${v}`}>
+            <span className="flex h-2 w-9 items-center justify-center">
+              {v === "dots" ? <span className="text-sm leading-none tracking-[0.3em]">•••</span> : v === "none" ? <span className="h-px w-full border-t border-dotted border-muted-foreground/30" /> : <span className="w-full" style={{ borderTop: `${v === "thick" ? 3 : 1}px ${v === "dashed" ? "dashed" : "solid"} currentColor` }} />}
+            </span>
+            {l}
+          </button>
+        ))}
+      </div>
+    </>
+  );
   if (s.type === "links") return (
     <>
       {title}
@@ -1709,7 +1818,13 @@ function TextEditor({ body, align = "left", onBody, onAlign, rows = 5, maxLength
   const wrap = (mark: string) => {
     const el = box.current;
     if (!el) return;
-    const a = el.selectionStart, b = el.selectionEnd;
+    let a = el.selectionStart, b = el.selectionEnd;
+    // Nothing selected: the word the cursor is in; no word there, nothing to do (no empty "****").
+    if (a === b) {
+      while (a > 0 && /\S/.test(body[a - 1])) a--;
+      while (b < body.length && /\S/.test(body[b])) b++;
+      if (a === b) { el.focus(); return; }
+    }
     const picked = body.slice(a, b);
     // Already wrapped: take the marks off again.
     const on = picked.startsWith(mark) && picked.endsWith(mark) && picked.length >= mark.length * 2;
