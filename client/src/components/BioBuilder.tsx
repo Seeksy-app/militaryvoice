@@ -457,13 +457,25 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro, onGo
           </ul>
         </div>
       )}
-      <Card icon={ImagePlus} tone="gold" title="Photos">
+      <Card icon={ImagePlus} tone="gold" title="Your pictures">
       <span tabIndex={-1} data-testid="bio-photos" className="sr-only">Photos</span>
       {/* The cover photo is only asked for when their top shows one (Hero, Big photo, Banner). */}
       <div className="grid grid-cols-2 gap-3">
         <ImagePick label="Profile photo" kind="avatar" url={d.avatarUrl} round onDone={(u, p) => { change({ avatarUrl: u }); setPreview(p); }} onClear={() => change({ avatarUrl: "" }, true)} onFixed={(u) => change({ avatarUrl: u }, true)} />
-        {(["hero", "blend", "landscape"] as string[]).includes(d.theme.layout) && <ImagePick label="Cover photo" kind="hero" url={d.heroUrl} note="The wide picture across the top of your page. Without one, your profile photo is used." onDone={(u, p) => { change({ heroUrl: u }); setPreview(p); }} onClear={() => change({ heroUrl: "" }, true)} onFixed={(u) => change({ heroUrl: u }, true)} />}
+        {(["hero", "blend", "landscape"] as string[]).includes(d.theme.layout) && <ImagePick label="Cover photo" kind="hero" url={d.heroUrl} note="A wide picture for the top of your page." onDone={(u, p) => { change({ heroUrl: u }); setPreview(p); }} onClear={() => change({ heroUrl: "" }, true)} onFixed={(u) => change({ heroUrl: u }, true)} />}
       </div>
+      {/* Both in, on a top with one big picture: they choose which goes there (nothing swaps behind their back). */}
+      {(d.theme.layout === "hero" || d.theme.layout === "blend") && d.avatarUrl && d.heroUrl && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-muted/40 p-3" data-testid="bio-top-photo">
+          <span className="text-sm font-semibold">At the top of your page</span>
+          <div className="flex gap-1 rounded-full border border-border bg-background p-1" role="radiogroup" aria-label="At the top of your page">
+            {([["cover", "Cover photo"], ["profile", "Profile photo"]] as const).map(([v, l]) => {
+              const on = (d.theme.topPhoto ?? "cover") === v;
+              return <button key={v} type="button" role="radio" aria-checked={on} onClick={() => change({ theme: { ...d.theme, topPhoto: v } }, true)} className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${on ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`bio-top-${v}`}>{l}</button>;
+            })}
+          </div>
+        </div>
+      )}
       </Card>
       {intro}
       <Card icon={User} tone="blue" title="About you" photo={d.avatarUrl || undefined}>
@@ -819,13 +831,11 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear, onFixed }: 
         <span className={`absolute inset-0 flex items-center justify-center bg-black/45 text-xs font-semibold text-white ${busy ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>{busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Change"}</span>
       </button>
       {url && (
-        <div className="mt-1 flex items-center justify-between gap-2">
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {/-fixed-/.test(url) ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><Check className="h-3.5 w-3.5" /> Fixed up</span>
-              : !styled && <button type="button" onClick={() => void fixUp()} disabled={fixing} className="inline-flex items-center gap-1 text-xs font-semibold text-[#b36b00] hover:underline disabled:opacity-70 dark:text-[#F0A71F]" data-testid={`bio-fixup-${kind}`}>{fixing ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sharpening…</> : <><Sparkles className="h-3.5 w-3.5" /> Fix up</>}</button>}
-            {styled && kind === "avatar" && <span className="text-xs text-muted-foreground">Styled: change it in Design</span>}
-          </span>
-          <button type="button" onClick={onClear} className="text-xs text-muted-foreground hover:text-foreground">Remove</button>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+          {/-fixed-/.test(url) ? <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400"><Check className="h-3.5 w-3.5" /> Fixed up</span>
+            : !styled && <button type="button" onClick={() => void fixUp()} disabled={fixing} className="inline-flex items-center gap-1 font-semibold text-[#b36b00] underline underline-offset-2 disabled:opacity-70 dark:text-[#F0A71F]" data-testid={`bio-fixup-${kind}`}>{fixing ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sharpening…</> : <><Sparkles className="h-3.5 w-3.5" /> Fix up</>}</button>}
+          {(/-fixed-/.test(url) || !styled) && <span className="text-muted-foreground/60" aria-hidden>·</span>}
+          <button type="button" onClick={onClear} className="font-semibold text-muted-foreground underline underline-offset-2 hover:text-foreground" data-testid={`bio-remove-${kind}`}>Remove</button>
         </div>
       )}
       {note && <p className="mt-1 text-xs text-muted-foreground">{note}</p>}

@@ -375,6 +375,7 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     contactButton: typeof x.contactButton === "boolean" ? x.contactButton : prev.contactButton ?? false,
     hideName: typeof x.hideName === "boolean" ? x.hideName : prev.hideName ?? false,
     hideBio: typeof x.hideBio === "boolean" ? x.hideBio : prev.hideBio ?? false,
+    topPhoto: x.topPhoto === "profile" || x.topPhoto === "cover" ? x.topPhoto : prev.topPhoto ?? "cover",
     bgTint: Number.isFinite(Number(x.bgTint)) && x.bgTint !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.bgTint)))) : prev.bgTint ?? 0,
     bgBrightness: Number.isFinite(Number(x.bgBrightness)) && x.bgBrightness !== undefined ? Math.max(-100, Math.min(100, Math.round(Number(x.bgBrightness)))) : prev.bgBrightness ?? 0,
     cutoutY: Number.isFinite(Number(x.cutoutY)) && x.cutoutY !== undefined ? Math.max(-160, Math.min(160, Math.round(Number(x.cutoutY)))) : prev.cutoutY ?? 0,

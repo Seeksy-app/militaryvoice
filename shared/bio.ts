@@ -41,6 +41,8 @@ export interface BioTheme {
   chatAt?: BioChatAt;
   /** Their talking intro shows as a bubble on the page (tap to hear them say hello). */
   intro?: boolean;
+  /** The big picture across the top (Hero, Big photo): their cover photo, or their profile photo. */
+  topPhoto?: "cover" | "profile";
   /** Their bio is kept but not shown on the page. */
   hideBio?: boolean;
   /** What the intro bubble says; one is picked at random each visit ([] = "Say hi 👋"). */

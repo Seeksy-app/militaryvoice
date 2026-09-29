@@ -194,7 +194,8 @@ export function SocialRow({ socials, onPhoto = false, preview, onTap, onChat, ch
 export function PageTop({ t, avatar, hero, cutoutUrl, living = "", name, handle, latest, children }: { t: BioTheme; avatar: string; hero: string; cutoutUrl?: string; living?: string; name: string; handle: string; latest?: string; children: (onPhoto: boolean, hideName?: boolean) => React.ReactNode }) {
   const { theirs, paper, dark, accent } = bioPalette(t);
   const Y = Number.isFinite(t.imageY) ? t.imageY : 50;
-  const photo = hero || avatar;
+  // Across the top: their cover photo, unless they chose their profile photo there.
+  const photo = t.topPhoto === "profile" ? avatar || hero : hero || avatar;
   // The living photo is of the top's photo (the cover, or their photo when there's no cover).
   const moving = (cls: string, style: React.CSSProperties) => <video src={living} poster={photo} autoPlay muted loop playsInline preload="auto" aria-hidden className={cls} style={style} data-testid="bio-living" />;
   const longest = Math.max(4, ...(name || "Your name").split(/\s+/).map((w) => w.length));
