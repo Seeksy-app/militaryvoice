@@ -138,7 +138,8 @@ export function PageTop({ t, avatar, hero, cutoutUrl, name, handle, latest, chil
       {CUTOUT_LAYOUTS.includes(t.layout) && cutoutUrl ? (
         <>
           <CutoutTop kind={t.layout} src={cutoutUrl} name={name} bg={/^#[0-9a-f]{6}$/i.test(t.stickerColor ?? "") ? t.stickerColor! : theirs} paper={paper} dark={dark} bigName={bigName} dy={t.cutoutY ?? 0} size={(t.cutoutSize ?? 100) / 100} latest={latest} handle={handle} />
-          <div className={`relative z-30 mx-auto max-w-[560px] px-5 text-center ${t.layout === "popout" ? "pt-5" : "-mt-4"}`}>{children(false, t.layout !== "popout")}</div>
+          {/* Pop-out and Shape show the name under the photo; the others draw it big behind. */}
+          <div className={`relative z-30 mx-auto max-w-[560px] px-5 text-center ${t.layout === "popout" || t.layout === "shape" ? "pt-5" : "-mt-4"}`}>{children(false, t.layout !== "popout" && t.layout !== "shape")}</div>
         </>
       ) : t.layout === "hero" && photo ? (
         <div className="relative flex min-h-[600px] flex-col justify-end" style={{ background: `center ${Y}%/cover url(${photo})` }} data-testid="bio-hero-header">
@@ -183,14 +184,31 @@ function CutoutTop({ kind, src, name, bg, paper, dark, bigName, dy, size, latest
   const move: React.CSSProperties = { transform: `translateY(${dy}px) scale(${size})`, transformOrigin: "bottom center" };
   const fade = <div className="absolute inset-x-0 bottom-0 z-20 h-24" style={{ background: `linear-gradient(to bottom, transparent, ${paper})` }} />;
   if (kind === "popout") {
-    // The head breaks out: below the circle's top the photo shows only inside the circle.
-    const mask = "linear-gradient(#000, #000) top / 100% 280px no-repeat, radial-gradient(circle 140px at 50% calc(100% - 140px), #000 99%, transparent 100%)";
+    // The head breaks out over the circle's top edge (a window 60% wide, 50px into the circle);
+    // everything else, the shoulders included, shows only inside the circle.
+    const mask = "linear-gradient(#000, #000) top center / 60% 190px no-repeat, radial-gradient(circle 140px at 50% calc(100% - 140px), #000 99%, transparent 100%)";
     return (
       <div className="flex justify-center pt-12" data-testid="bio-popout-header">
         <div className="relative h-[420px] w-[280px]">
-          <div className="absolute bottom-0 left-0 h-[280px] w-[280px] rounded-full" style={{ background: `radial-gradient(circle at 35% 30%, ${bg}cc, ${bg})`, boxShadow: `0 20px 50px -20px ${bg}` }} />
+          <div className="absolute bottom-0 left-0 h-[280px] w-[280px] rounded-full" style={{ background: `radial-gradient(circle at 35% 30%, ${bg}, ${bg}e6)`, boxShadow: `0 20px 50px -20px ${bg}` }} />
           <div className="absolute inset-0" style={{ WebkitMask: mask, mask }}>
             <img src={src} alt="" className="absolute bottom-0 left-1/2 h-[400px] max-w-none -translate-x-1/2 object-contain object-bottom" style={{ ...move, transform: `translateX(-50%) ${move.transform}` }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (kind === "shape") {
+    // Them standing on a blob of colour: the head and shoulders rise out of its top.
+    const blob = "M152 4c52-4 104 18 130 62 25 42 22 98-4 138-27 41-78 58-128 56-50-1-100-22-125-63C0 156 2 102 26 63 51 24 101 8 152 4z";
+    const svg = (fill: string) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 260'><path d='${blob}' fill='${fill}'/></svg>`)}")`;
+    const mask = `linear-gradient(#000, #000) top center / 56% 190px no-repeat, ${svg("#000")} bottom center / 300px 260px no-repeat`;
+    return (
+      <div className="flex justify-center pt-10" data-testid="bio-shape-header">
+        <div className="relative h-[400px] w-[300px]">
+          <svg viewBox="0 0 300 260" className="absolute bottom-0 left-0 h-[260px] w-[300px] -rotate-3 drop-shadow-[0_18px_30px_rgba(0,0,0,0.3)]" aria-hidden><path d={blob} fill={bg} /></svg>
+          <div className="absolute inset-0" style={{ WebkitMask: mask, mask }}>
+            <img src={src} alt="" className="absolute bottom-0 left-1/2 h-[330px] max-w-none -translate-x-1/2 object-contain object-bottom" style={{ ...move, transform: `translateX(-50%) ${move.transform}` }} />
           </div>
         </div>
       </div>

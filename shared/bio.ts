@@ -14,7 +14,7 @@ export type BioLinkStyle = "fill" | "outline" | "soft" | "hard";
 export interface BioBackground { mode: "solid" | "gradient" | "image"; /** "" = the shade's own */ color: string; image: string }
 export type BioLayout = "portrait" | "landscape" | "blend" | "hero" | "shape" | "cutout" | "popout" | "sticker" | "magazine";
 /** The tops that stand their cut-out photo on the page. */
-export const CUTOUT_LAYOUTS: BioLayout[] = ["cutout", "popout", "sticker", "magazine"];
+export const CUTOUT_LAYOUTS: BioLayout[] = ["cutout", "popout", "sticker", "magazine", "shape"];
 /** The podcast edge to edge (full) or in a card with a margin (card). */
 export type BioPodcastFrame = "full" | "card";
 /** How the podcast shows: the latest big (spotlight), a list, or cards to swipe. */

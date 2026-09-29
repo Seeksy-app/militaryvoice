@@ -520,7 +520,9 @@ function LayoutTiles({ d, value, onPick, cutting = false, own, photo }: { d: Pag
                     : v === "hero" ? <><span className="absolute inset-0" style={{ background: face }} /><span className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" /><span className="absolute bottom-2 h-1.5 w-12 rounded bg-white" /></>
                     : v === "blend" ? <span className="h-11 w-full" style={{ background: avatar ? face : c, maskImage: "linear-gradient(to bottom, #000 50%, transparent)" }} />
                     : v === "landscape" ? <><span className="h-6 w-full" style={{ background: `linear-gradient(135deg, ${c}, #000741)` }} /><span className="-mt-3 h-6 w-6 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${ground}` }} /></>
-                    : v === "shape" ? <span className="relative mt-2 h-9 w-9"><span className="absolute -inset-1 rotate-12" style={{ background: c, borderRadius: "58% 42% 38% 62% / 45% 55% 45% 55%" }} /><span className="absolute inset-0" style={{ background: face, borderRadius: "42% 58% 63% 37% / 52% 38% 62% 48%" }} /></span>
+                    : v === "shape" ? (cut
+                      ? <><span className="absolute bottom-0 left-1/2 h-9 w-14 -translate-x-1/2 -rotate-3" style={{ background: cb, borderRadius: "58% 42% 38% 62% / 45% 55% 45% 55%" }} /><img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /></>
+                      : <span className="relative mt-2 h-9 w-9"><span className="absolute -inset-1 rotate-12" style={{ background: cb, borderRadius: "58% 42% 38% 62% / 45% 55% 45% 55%" }} /><span className="absolute inset-0" style={{ background: face, borderRadius: "42% 58% 63% 37% / 52% 38% 62% 48%" }} /></span>)
                     : <span className="mt-2.5 h-8 w-8 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${c}` }} />}
                   {v !== "hero" && !CUTOUT_LAYOUTS.includes(v) && <span className="absolute bottom-1.5 h-1 w-10 rounded" style={{ background: ink, opacity: 0.8 }} />}
                 </span>
@@ -824,7 +826,7 @@ function DesignTab({ d, change, view, cutting = false, cutError = "" }: { d: Pag
           {CUTOUT_LAYOUTS.includes(t.layout) && (
             <div className="mt-4 space-y-2 rounded-xl bg-muted/40 p-3" data-testid="bio-sticker-colour">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold">{t.layout === "sticker" ? "Stripe colour" : t.layout === "popout" ? "Circle colour" : t.layout === "magazine" ? "Cover colour" : "Background colour"}</p>
+                <p className="text-sm font-semibold">{t.layout === "sticker" ? "Stripe colour" : t.layout === "popout" ? "Circle colour" : t.layout === "shape" ? "Shape colour" : t.layout === "magazine" ? "Cover colour" : "Background colour"}</p>
                 {t.stickerColor && <button type="button" onClick={() => set({ stickerColor: "" })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Use my theme colour</button>}
               </div>
               <ColourPick value={t.stickerColor || t.color} onPick={(v) => set({ stickerColor: v })} testid="bio-sticker-colour" />
@@ -838,7 +840,7 @@ function DesignTab({ d, change, view, cutting = false, cutError = "" }: { d: Pag
               <input type="range" min={0} max={100} step={1} value={t.imageY ?? 50} onChange={(e) => set({ imageY: Number(e.target.value) })} className="mv-range mt-3" style={{ background: rangeFill(t.imageY ?? 50, 0, 100) }} data-testid="bio-image-y" />
             </div>
           )}
-          {(t.layout === "portrait" || t.layout === "shape") && (
+          {(t.layout === "portrait" || (t.layout === "shape" && !(d.cutoutUrl && d.cutoutFrom === d.avatarUrl))) && (
             <div className="mt-5">
               <p className="mb-1.5 text-xs font-medium text-muted-foreground">Profile image size</p>
               <div className="flex gap-1 rounded-full border border-border p-1">
