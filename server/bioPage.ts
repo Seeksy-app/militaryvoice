@@ -27,6 +27,12 @@ import type { PodcastStatsData } from "../shared/schema.js";
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
 const emailOf = (req: Request) => (getSessionEmail(req) ?? "").trim().toLowerCase();
+/** On a paid plan (Pōstify, active or trialing). */
+async function isPaid(email: string): Promise<boolean> {
+  const sub = await storage.getSubscription(email.trim().toLowerCase()).catch(() => undefined);
+  return !!sub && ["active", "trialing"].includes(sub.status);
+}
+
 const art = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
 
 const slugify = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/&/g, "and").replace(/[^a-z0-9]+/g, "").slice(0, 24);
@@ -499,6 +505,8 @@ export function registerBioPage(app: Express) {
       stats: Object.fromEntries(counts.map((c) => [c.kind, c.n])),
       questions: questions.map(({ token: _t, ...q }) => q),
       knowledge: await knowledgeOf(row.email),
+      // A paid plan (Pōstify): what switches off the MilitaryVoices.ai bar.
+      pro: await isPaid(row.email),
     });
   });
 
@@ -536,7 +544,12 @@ export function registerBioPage(app: Express) {
     };
     if (ours(b.avatarUrl, "avatar")) patch.avatarUrl = b.avatarUrl;
     if (ours(b.heroUrl, "hero")) patch.heroUrl = b.heroUrl;
-    if (b.theme) patch.theme = JSON.stringify(cleanTheme(b.theme, parseTheme(row.theme)));
+    if (b.theme) {
+      const t = cleanTheme(b.theme, parseTheme(row.theme));
+      // The MilitaryVoices.ai bar comes off with a paid plan only.
+      if (t.branding === false && !(await isPaid(row.email))) t.branding = true;
+      patch.theme = JSON.stringify(t);
+    }
     if (b.sections) patch.sections = JSON.stringify(cleanSections(b.sections));
     if (b.socials) patch.socials = JSON.stringify(cleanSocials(b.socials));
     const [out] = await db.update(bioPages).set(patch).where(eq(bioPages.id, row.id)).returning();

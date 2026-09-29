@@ -143,8 +143,17 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
           {t.contactButton && <button type="button" onClick={saveContact} className="inline-flex h-10 items-center gap-2 px-4 text-sm font-semibold" style={btn(false)} data-testid="bio-save-contact"><UserPlus className="h-4 w-4" /> Save my contact</button>}
         </div>
       )}
-      {/* At the foot of the screen, however short the page: it reads as the page's footer, not part of their icons. */}
-      {(t.branding ?? true) && <p className="mt-auto pt-12 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>}
+      {/* Our mark: a small bar at the foot of the page (it doesn't float, so it never sits on the chat or the intro). A paid plan can switch it off. */}
+      {(t.branding ?? true) ? (
+        <div className="mt-auto flex justify-center px-4 pt-12" data-testid="bio-branding-bar">
+          <a href={preview ? undefined : "https://www.militaryvoices.ai/?ref=smartlink"} target="_blank" rel="noopener" onClick={() => ev("click", "MilitaryVoices.ai bar")} className="inline-flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3.5 text-xs font-semibold shadow-lg backdrop-blur-md" style={{ background: dark ? "rgba(22,26,40,0.88)" : "rgba(255,255,255,0.92)", color: ink, border: `1px solid ${line}` }}>
+            <img src="/favicon.png" alt="" className="h-5 w-5 rounded-full" />
+            MilitaryVoices.ai
+            <span style={{ color: sub }}>·</span>
+            <span style={{ color: accent }}>Make yours free</span>
+          </a>
+        </div>
+      ) : <div className="pt-6" />}
       {t.popup && t.popup.kind !== "none" && <PagePopup p={t.popup} handle={data.handle} preview={preview} peek={popupPeek} onPeekClose={onPopupClose} solid={dark ? "#141a2c" : "#ffffff"} ink={ink} sub={sub} card={card} line={line} accent={accent} btn={btn} ev={ev} onSubscribe={onSubscribe} />}
       {/* Last on the page so they stick to the foot of the screen: the chat bubble, and the sheet for asking about an episode. */}
       {(chat || askEp) && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20 ${askEp ? "bg-black/40" : ""}`} onClick={() => { setChat(false); setAskEp(null); }} aria-hidden />}

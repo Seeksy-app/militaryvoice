@@ -19,7 +19,7 @@ import { PlatformIcon, platformLabel, platformBackground } from "@/components/So
 import { ratesFor } from "@/components/BioBrandsView";
 import { BRANDS_SECTIONS, FAMILY_SECTIONS, arrange, type BioLayout, type BrandsSectionId, type FamilySectionId, CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, INTRO_VOICES, INTRO_SAYS, DEFAULT_POPUPS, type BioPopup, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
-import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, Mic, Square, Smile, GripVertical, SeparatorHorizontal, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music } from "lucide-react";
+import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, Mic, Square, Smile, GripVertical, SeparatorHorizontal, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music, Crown } from "lucide-react";
 
 /**
  * SmartLink (was "My page", then "Rally Point"): the podcaster's bio page builder. Profile, Design, Content and
@@ -28,7 +28,7 @@ import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, Chevron
  */
 
 type Page = { id: number; handle: string; displayName: string; bio: string; avatarUrl: string; heroUrl: string; theme: BioTheme; sections: BioSection[]; socials: BioSocial[]; rssUrl: string; askEnabled: boolean; welcome: string; aiEnabled: boolean; published: boolean; brands: BioBrands; family: BioFamily; cutoutUrl: string; cutoutFrom: string };
-type Resp = { page: Page; url: string; preview: BioPublic; brandsPreview?: BioBrandsPublic | null; familyPreview?: BioFamilyPublic | null; stats: Record<string, number>; questions: ListenerQuestionRow[]; knowledge?: { done: number; total: number } };
+type Resp = { pro?: boolean; page: Page; url: string; preview: BioPublic; brandsPreview?: BioBrandsPublic | null; familyPreview?: BioFamilyPublic | null; stats: Record<string, number>; questions: ListenerQuestionRow[]; knowledge?: { done: number; total: number } };
 type Tab = "profile" | "design" | "content" | "social" | "share" | "brands" | "family" | "questions";
 /** Tabs shown greyed out, "Coming soon" on hover, until they launch. */
 const SOON: Tab[] = ["brands", "family"];
@@ -348,7 +348,7 @@ export function BioBuilder() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
         <div className="min-w-0">
           {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} onGo={(t) => { go(t); window.scrollTo({ top: 0, behavior: "smooth" }); }} intro={<IntroCard d={draft} st={intro} start={(b) => void startIntro(b)} reset={resetIntro} on={draft.theme.intro ?? false} setOn={(v) => change({ theme: { ...draft.theme, intro: v } }, true)} at={draft.theme.introAt ?? "bottom-left"} setAt={(v) => change({ theme: { ...draft.theme, introAt: v } }, true)} patch={(p, now) => change({ theme: { ...draft.theme, ...p } }, now)} />} />}
-          {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} living={living} startLiving={startLiving} />}
+          {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} living={living} startLiving={startLiving} pro={!!q.data?.pro} />}
           {tab === "content" && <ContentTab d={draft} change={change} view={view} knowledge={q.data?.knowledge} onPeek={setPopPeek} />}
           {tab === "social" && <SocialTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} />}
@@ -959,7 +959,7 @@ const DESIGN_RAIL = [
  * Design, as MilCrunch lays it out: a rail of sections on the left (it follows
  * you as you scroll, and jumps when clicked) and every setting in one column.
  */
-function DesignTab({ d, change, view, cutting = false, cutError = "", living, startLiving }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic; cutting?: boolean; cutError?: string; living: LivingState; startLiving: (again?: boolean) => void }) {
+function DesignTab({ d, change, view, cutting = false, cutError = "", living, startLiving, pro = false }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic; cutting?: boolean; cutError?: string; living: LivingState; startLiving: (again?: boolean) => void; pro?: boolean }) {
   const t = d.theme;
   const set = (p: Partial<BioTheme>) => change({ theme: { ...t, ...p } });
   const c = t.color;
@@ -1177,8 +1177,11 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
 
         <DesignSection bind={refs} id="brand" title="Branding" sub="Control visible branding on your page.">
           <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
-            <div><p className="text-sm font-semibold">Show "Made with MilitaryVoices.ai"</p><p className="text-xs text-muted-foreground">A small line at the foot of your page.</p></div>
-            <Switch checked={t.branding ?? true} onCheckedChange={(v) => set({ branding: v })} data-testid="bio-branding" />
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 text-sm font-semibold">Hide the MilitaryVoices.ai bar <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#F0A71F] to-[#e08a00] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#1a1200]"><Crown className="h-3 w-3" /> Pro</span></p>
+              <p className="text-xs text-muted-foreground">{pro ? "The small bar at the foot of your page." : <>The small bar at the foot of your page comes off with a paid plan. <Link href="/host/dashboard/postify" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">See plans</Link></>}</p>
+            </div>
+            <Switch checked={!(t.branding ?? true)} disabled={!pro} onCheckedChange={(v) => set({ branding: !v })} aria-label="Hide the MilitaryVoices.ai bar" data-testid="bio-branding" />
           </div>
         </DesignSection>
       </div>
