@@ -1637,7 +1637,7 @@ function PopupCard({ d, change, onPeek, fold }: { d: Page; change: (p: Partial<P
           <Input value={p.button} onChange={(e) => set({ button: e.target.value })} maxLength={40} placeholder={p.kind === "promo" ? "Button: Take a look" : "Button: Sign me up"} aria-label="Button words" />
           {p.kind === "promo" && <Input value={p.url} onChange={(e) => set({ url: e.target.value })} placeholder="Where the button goes: https://…" aria-label="Where the button goes" data-testid="bio-popup-url" />}
           <div className="flex items-center justify-between gap-2 pt-1">
-            <p className="text-[11px] text-muted-foreground">{p.kind === "email" ? "Each email lands in Contacts on your dashboard." : "Counted with your link clicks."}</p>
+            <p className="text-[11px] text-muted-foreground">{p.kind === "email" ? "Each email lands in Contacts, with a CSV. Contacts shows in your menu from the first sign-up." : "Counted with your link clicks."}</p>
             <button type="button" onClick={() => onPeek(true)} className="shrink-0 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="bio-popup-peek">Show it on the phone</button>
           </div>
         </div>
@@ -1707,11 +1707,23 @@ function PodcastOptions({ d, change, view, knowledge }: { d: Page; change: (p: P
           <div>
             <p className="mb-1.5 text-sm font-semibold">Buttons under it</p>
             <div className="flex flex-wrap gap-2">
-              {([["apple", "Apple Podcasts"], ["spotify", "Spotify"], ["all", "All episodes"], ["rss", "RSS"]] as const).map(([k, l]) => (
-                <button key={k} type="button" onClick={() => set({ [k]: !o[k] } as Partial<BioPodcastOptions>, true)} className={pill(o[k])}>{o[k] && <Check className="mr-1 inline h-3 w-3" />}{l}</button>
-              ))}
+              {/* Apple and Spotify only once the show's link is in (Podcast, Directories); the others are theirs to switch on. */}
+              {([["apple", "Apple", view.podcast?.appleUrl, "A button to your show on Apple Podcasts"], ["spotify", "Spotify", view.podcast?.spotifyUrl, "A button to your show on Spotify"], ["all", "All episodes", view.podcast?.pageUrl, "A button to your show's page, with every episode"], ["rss", "RSS", view.podcast?.feedUrl, "A button that copies your feed address, for any podcast app"]] as const).map(([k, l, have, tip]) => {
+                const on = !!o[k] && !!have;
+                const why = !have ? (k === "apple" ? "Connect Apple first: add your show's Apple link in Podcast, Directories." : k === "spotify" ? "Connect Spotify first: add your show's Spotify link in Podcast, Directories." : "Add your podcast first.") : tip;
+                return (
+                  <Tooltip key={k}>
+                    <TooltipTrigger asChild>
+                      <span tabIndex={have ? -1 : 0}>
+                        <button type="button" disabled={!have} onClick={() => set({ [k]: !o[k] } as Partial<BioPodcastOptions>, true)} className={`${pill(on)} disabled:pointer-events-none disabled:opacity-45`} aria-pressed={on} data-testid={`bio-pod-btn-${k}`}>{on && <Check className="mr-1 inline h-3 w-3" />}{l}</button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[16rem]">{why}</TooltipContent>
+                  </Tooltip>
+                );
+              })}
             </div>
-            <p className="mt-1.5 text-[11px] text-muted-foreground">Apple and Spotify show once you add your show's links on the Podcast screen.</p>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">Apple and Spotify turn on once your show's links are in <Link href="/host/dashboard/podcast" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Podcast, Directories</Link>.</p>
           </div>
           <div>
             <p className="mb-1.5 text-sm font-semibold">Look</p>
@@ -1734,7 +1746,7 @@ function PodcastOptions({ d, change, view, knowledge }: { d: Page; change: (p: P
             {(d.theme.podcastStyle ?? "spotlight") === "carousel" && (
               <div className="mt-2 flex items-center gap-2" role="radiogroup" aria-label="Card size">
                 <span className="text-xs font-semibold text-muted-foreground">Card size</span>
-                {([["s", "Small"], ["m", "Medium"], ["l", "Large"]] as const).map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={(o.cardSize ?? "m") === v} onClick={() => set({ cardSize: v }, true)} className={pill((o.cardSize ?? "m") === v)} data-testid={`bio-card-size-${v}`}>{l}</button>)}
+                {([["s", "Small"], ["m", "Medium"], ["l", "Large"]] as const).map(([v, l]) => <button key={v} type="button" role="radio" aria-checked={(o.cardSize ?? "s") === v} onClick={() => set({ cardSize: v }, true)} className={pill((o.cardSize ?? "s") === v)} data-testid={`bio-card-size-${v}`}>{l}</button>)}
               </div>
             )}
           </div>
@@ -1813,7 +1825,7 @@ function SectionEditor({ s, upd }: { s: BioSection; upd: (p: Partial<BioSection>
       {title}
       <Input value={s.note} onChange={(e) => upd({ note: e.target.value })} placeholder="A line under it: what they'll get" maxLength={200} />
       <Input value={s.button} onChange={(e) => upd({ button: e.target.value })} placeholder="Button: Sign me up" maxLength={40} />
-      <p className="text-[11px] text-muted-foreground">Each sign-up lands in <b>Contacts</b> on your dashboard, with a CSV to download.</p>
+      <p className="text-[11px] text-muted-foreground">Each sign-up lands in <b>Contacts</b>, with a CSV to download. Contacts shows in your menu from the first sign-up.</p>
     </>
   );
   if (s.type === "music") return (

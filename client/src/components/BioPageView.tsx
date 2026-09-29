@@ -497,16 +497,16 @@ function PodcastCard({ p, onAsk, opts, style, full, fallbackArt, accent, ink, su
       {first && style === "carousel" && (
         <div className="flex snap-x snap-mandatory scroll-px-4 gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
           {p.episodes.slice(0, opts.count).map((e, i) => (
-            <div key={e.id} id={`ep-${e.id}`} className={`shrink-0 snap-start ${{ s: "w-[36%]", m: "w-[50%]", l: "w-[70%]" }[opts.cardSize ?? "m"]}`}>
+            <div key={e.id} id={`ep-${e.id}`} className={`shrink-0 snap-start ${{ s: "w-[36%]", m: "w-[50%]", l: "w-[70%]" }[opts.cardSize ?? "s"]}`}>
               {thumb(e, "aspect-square w-full rounded-2xl", opts.cardSize === "l" ? "lg" : "sm")}
               {/* Small cards: the words get the width, the buttons go under them. */}
-              <div className={`mt-2 flex gap-1 ${opts.cardSize === "s" ? "flex-col" : "items-start"}`}>
+              <div className={`mt-2 flex gap-1 ${(opts.cardSize ?? "s") === "s" ? "flex-col" : "items-start"}`}>
                 <div className="min-w-0 flex-1">
                   {i === 0 && <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: accent }}>Latest</p>}
-                  <p className={`line-clamp-2 font-semibold leading-snug ${opts.cardSize === "s" ? "text-xs" : "text-sm"}`}>{e.title}</p>
+                  <p className={`line-clamp-2 font-semibold leading-snug ${(opts.cardSize ?? "s") === "s" ? "text-xs" : "text-sm"}`}>{e.title}</p>
                   <p className="text-xs" style={{ color: sub }}>{when(e)}</p>
                 </div>
-                <div className={`flex shrink-0 items-center ${opts.cardSize === "s" ? "-ml-1.5" : ""}`}>{askBtn(e)}{shareBtn(e)}</div>
+                <div className={`flex shrink-0 items-center ${(opts.cardSize ?? "s") === "s" ? "-ml-1.5" : ""}`}>{askBtn(e)}{shareBtn(e)}</div>
               </div>
             </div>
           ))}

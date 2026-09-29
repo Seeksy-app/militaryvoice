@@ -101,7 +101,8 @@ export interface BioPodcastOptions {
   /** Which show: "" = their first show hosted here, "show:<id>" = that one, "rss" = the feed in rssUrl. */
   source?: string;
 }
-export const DEFAULT_PODCAST: BioPodcastOptions = { on: true, heading: "", count: 5, apple: true, spotify: true, all: true, rss: true };
+// The buttons under it start off: Apple and Spotify can't be on until the show's links are in.
+export const DEFAULT_PODCAST: BioPodcastOptions = { on: true, heading: "", count: 5, apple: false, spotify: false, all: false, rss: false, cardSize: "s" };
 
 export type BioSection =
   | { id: string; type: "links"; visible: boolean; title: string; links: { id: string; label: string; url: string }[] }

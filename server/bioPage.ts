@@ -399,7 +399,7 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
       const b = (k: "on" | "apple" | "spotify" | "all" | "rss") => (typeof o[k] === "boolean" ? (o[k] as boolean) : pv[k]);
       return { on: b("on"), heading: typeof o.heading === "string" ? o.heading.slice(0, 80) : pv.heading, count: [3, 5, 10].includes(Number(o.count)) ? Number(o.count) : pv.count, apple: b("apple"), spotify: b("spotify"), all: b("all"), rss: b("rss"),
         source: typeof o.source === "string" && /^(|rss|show:\d{1,9})$/.test(o.source) ? o.source : pv.source ?? "",
-        cardSize: o.cardSize === "s" || o.cardSize === "m" || o.cardSize === "l" ? o.cardSize : pv.cardSize ?? "m" };
+        cardSize: o.cardSize === "s" || o.cardSize === "m" || o.cardSize === "l" ? o.cardSize : pv.cardSize ?? "s" };
     })(),
   };
 }
