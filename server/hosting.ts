@@ -430,6 +430,45 @@ export async function claimEpisodeStill(): Promise<{ id: number; title: string; 
   return { id: r.id, title: r.title, durationSec: r.duration_sec || rec.durationSec, url };
 }
 
+/** The video behind an episode, if it has one: the MP4 they uploaded, or its Library recording. */
+async function videoKeyOf(e: HostedEpisodeRow, owner: string): Promise<string> {
+  if (e.mime.startsWith("video/") && e.audioKey) return e.audioKey;
+  if (e.recordingId) {
+    const rec = await storage.getRecording(e.recordingId);
+    if (rec && rec.status === "Ready" && rec.url && rec.email.trim().toLowerCase() === owner.trim().toLowerCase()) return rec.url;
+  }
+  return "";
+}
+const hasVideo = (e: HostedEpisodeRow) => (e.mime.startsWith("video/") && !!e.audioKey) || !!e.recordingId;
+
+/** Post one episode to the owner's YouTube channel. Throws with a message fit to show them. */
+async function postEpisodeToYouTube(e: HostedEpisodeRow, show: HostedShowRow, privacyIn: string): Promise<string> {
+  const fail = (message: string, status = 400) => Object.assign(new Error(message), { status });
+  if (!isUploadPostConfigured()) throw fail("Posting to YouTube isn't switched on yet.", 503);
+  const key = await videoKeyOf(e, show.email);
+  if (!key) throw fail("This episode is audio only. YouTube needs the video: upload the MP4, or make the episode from its Library recording.");
+  const profile = await storage.getProfileByEmail(show.email);
+  if (!profile?.uploadPostUsername) throw fail("Connect your YouTube channel on the Social screen first.");
+  const privacy = (["public", "unlisted", "private"].includes(privacyIn) ? privacyIn : "public") as "public";
+  const plain = e.description.replace(/<[^>]+>/g, " ").replace(/\s+\n/g, "\n").trim();
+  const description = [plain, `Listen wherever you get podcasts: ${ORIGIN}/podcast/${show.slug}`].filter(Boolean).join("\n\n").slice(0, 4900);
+  const post = await storage.addHostPost({ email: show.email, kind: "episode", refId: e.id, shape: "", title: e.title, description, platforms: "youtube", scheduledAt: "", status: "sending", error: "", jobId: "", requestId: "", results: "", mediaKey: "", metrics: "", metricsAt: "" });
+  try {
+    const videoUrl = await signedRecordingUrl(key, 21_600);
+    const r = await publishVideo({ username: profile.uploadPostUsername, platforms: ["youtube"], videoUrl, title: e.title, description, externalId: `hp-${post.id}`,
+      youtube: { title: e.title.slice(0, 100), description, privacyStatus: privacy, thumbnailUrl: e.artworkUrl || show.artworkUrl || undefined, madeForKids: false, notifySubscribers: privacy === "public" } });
+    await storage.updateHostPost(post.id, { status: "sent", requestId: r.requestId ?? `hp-${post.id}`, jobId: r.jobId ?? "" });
+    const yt = JSON.stringify({ state: "sent", at: now(), privacy, post: post.id });
+    await db.update(hostedEpisodes).set({ youtube: yt, youtubeWanted: false }).where(eq(hostedEpisodes.id, e.id));
+    return yt;
+  } catch (err) {
+    await storage.deleteHostPost(post.id);
+    const msg = (err as Error).message;
+    console.error("Episode to YouTube failed:", msg);
+    throw fail(/not connected|no .*account|youtube.*(missing|not found)/i.test(msg) ? "Connect your YouTube channel on the Social screen first." : "YouTube didn't take it just now. Try again in a few minutes.", 502);
+  }
+}
+
 export function registerHosting(app: Express, requireAgent: import("express").RequestHandler) {
   app.post("/api/agent/episode-still/:id/done", requireAgent, async (req, res) => {
     const id = Number(req.params.id);
@@ -536,11 +575,14 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
         feedUrl: feedUrl(s.slug),
         missing: readiness(s, eps),
         ownerConfirmed: feedOwnerEmail(s) === s.ownerEmail.trim(),
-        episodes: eps.map((e) => ({ ...e, downloads: st.episodes.get(e.id) ?? 0, live: live(e) })),
+        episodes: eps.map((e) => ({ ...e, downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e) })),
         stats: { total: st.total, last30: st.series.reduce((a, d) => a + d.count, 0), series: st.series, apps: st.apps },
       });
     }
-    res.json({ shows: out, categories: CATEGORIES });
+    // YouTube connected through Upload-Post (the Social screen)?
+    const profile = await storage.getProfileByEmail(email);
+    const youtubeReady = !!profile?.uploadPostUsername && /youtube/i.test(profile.socialAccounts ?? "");
+    res.json({ shows: out, categories: CATEGORIES, youtubeReady });
   });
 
   // A show: new, with what we already know about them filled in.
@@ -583,6 +625,8 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       ...str("title", 200), ...str("description", 4000), ...str("author", 200), ...str("ownerName", 200), ...str("website", 300), ...str("copyright", 300),
       ...(category ? { category, subcategory: subcategory ?? "" } : subcategory !== undefined ? { subcategory } : {}),
       ...(typeof b.explicit === "boolean" ? { explicit: b.explicit } : {}),
+      ...(b.youtubeMode === "ask" || b.youtubeMode === "always" ? { youtubeMode: b.youtubeMode } : {}),
+      ...(["public", "unlisted", "private"].includes(b.youtubePrivacy) ? { youtubePrivacy: b.youtubePrivacy } : {}),
       ...(b.showType === "serial" || b.showType === "episodic" ? { showType: b.showType } : {}),
       ...(typeof b.language === "string" && /^[a-z]{2}(-[a-z]{2})?$/i.test(b.language) ? { language: b.language.toLowerCase() } : {}),
       // Directories: each app's state and link. Apple's and Spotify's links also fill the follow buttons.
@@ -701,7 +745,14 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       ...(typeof b.explicit === "boolean" ? { explicit: b.explicit } : {}),
       ...(publish ? { status: "published", publishedAt: at ?? (e.publishedAt || now()) } : b.status === "draft" ? { status: "draft" } : {}),
       ...(!publish && at ? { publishedAt: at } : {}),
+      ...(typeof b.youtube === "boolean" ? { youtubeWanted: b.youtube && hasVideo(e) } : {}),
     }).where(eq(hostedEpisodes.id, e.id)).returning();
+    // Out now and asked for YouTube: post it straight away (a scheduled one goes with the cron).
+    if (out.youtubeWanted && out.status === "published" && Date.parse(out.publishedAt) <= Date.now()) {
+      const show = await ownShow(emailOf(req), out.showId);
+      try { if (show) return res.json({ ...out, youtubeWanted: false, youtube: await postEpisodeToYouTube(out, show, show.youtubePrivacy) }); }
+      catch (err) { return res.json({ ...out, youtubeError: (err as Error).message }); }
+    }
     res.json(out);
   });
 
@@ -712,33 +763,40 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
     const show = e ? await ownShow(email, e.showId) : null;
     if (!e || !show) return res.status(404).json({ message: "No such episode." });
-    if (!isUploadPostConfigured()) return res.status(503).json({ message: "Posting to YouTube isn't switched on yet." });
-    let key = e.mime.startsWith("video/") && e.audioKey ? e.audioKey : "";
-    if (!key && e.recordingId) {
-      const rec = await storage.getRecording(e.recordingId);
-      if (rec && rec.status === "Ready" && rec.url && rec.email.trim().toLowerCase() === email) key = rec.url;
-    }
-    if (!key) return res.status(400).json({ message: "This episode is audio only. YouTube needs the video: upload the MP4, or make the episode from its Library recording." });
-    const profile = await storage.getProfileByEmail(email);
-    if (!profile?.uploadPostUsername) return res.status(400).json({ message: "Connect your YouTube channel on the Social screen first." });
-    const privacy = ["public", "unlisted", "private"].includes(String(req.body?.privacy)) ? String(req.body.privacy) as "public" : "public";
-    const plain = e.description.replace(/<[^>]+>/g, " ").replace(/\s+\n/g, "\n").trim();
-    const description = [plain, `Listen wherever you get podcasts: ${ORIGIN}/podcast/${show.slug}`].filter(Boolean).join("\n\n").slice(0, 4900);
-    const post = await storage.addHostPost({ email, kind: "episode", refId: e.id, shape: "", title: e.title, description, platforms: "youtube", scheduledAt: "", status: "sending", error: "", jobId: "", requestId: "", results: "", mediaKey: "", metrics: "", metricsAt: "" });
+    const privacy = ["public", "unlisted", "private"].includes(String(req.body?.privacy)) ? String(req.body.privacy) : show.youtubePrivacy;
     try {
-      const videoUrl = await signedRecordingUrl(key, 21_600);
-      const r = await publishVideo({ username: profile.uploadPostUsername, platforms: ["youtube"], videoUrl, title: e.title, description, externalId: `hp-${post.id}`,
-        youtube: { title: e.title.slice(0, 100), description, privacyStatus: privacy, thumbnailUrl: e.artworkUrl || show.artworkUrl || undefined, madeForKids: false, notifySubscribers: privacy === "public" } });
-      await storage.updateHostPost(post.id, { status: "sent", requestId: r.requestId ?? `hp-${post.id}`, jobId: r.jobId ?? "" });
-      const yt = JSON.stringify({ state: "sent", at: now(), privacy, post: post.id });
-      await db.update(hostedEpisodes).set({ youtube: yt }).where(eq(hostedEpisodes.id, e.id));
-      res.json({ ok: true, youtube: yt });
+      res.json({ ok: true, youtube: await postEpisodeToYouTube(e, show, privacy) });
     } catch (err) {
-      await storage.deleteHostPost(post.id);
-      const msg = (err as Error).message;
-      console.error("Episode to YouTube failed:", msg);
-      res.status(502).json({ message: /not connected|no .*account|youtube.*(missing|not found)/i.test(msg) ? "Connect your YouTube channel on the Social screen first." : "YouTube didn't take it just now. Try again in a few minutes." });
+      res.status((err as { status?: number }).status ?? 502).json({ message: (err as Error).message });
     }
+  });
+
+  // Not this one: it stays off YouTube, and "Always post" leaves it alone.
+  app.post("/api/host/hosting/episodes/:id/youtube/skip", requireHostSession, async (req, res) => {
+    const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
+    if (!e || !(await ownShow(emailOf(req), e.showId))) return res.status(404).json({ message: "No such episode." });
+    const skip = req.body?.skip !== false;
+    const [out] = await db.update(hostedEpisodes).set({ youtube: skip ? JSON.stringify({ state: "skipped", at: now() }) : "", youtubeWanted: false }).where(eq(hostedEpisodes.id, e.id)).returning();
+    res.json(out);
+  });
+
+  // Every 15 minutes: scheduled episodes that asked for YouTube, once they're out.
+  app.get("/api/cron/youtube-episodes", async (req, res) => {
+    const secret = process.env.CRON_SECRET;
+    if (secret && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== secret) return res.status(401).json({ message: "Not authorised." });
+    const due = await db.select().from(hostedEpisodes).where(and(eq(hostedEpisodes.youtubeWanted, true), eq(hostedEpisodes.status, "published"))).limit(50);
+    let sent = 0;
+    for (const e of due) {
+      if (!e.publishedAt || Date.parse(e.publishedAt) > Date.now()) continue;
+      // Claimed first, so it can't go twice.
+      const [mine] = await db.update(hostedEpisodes).set({ youtubeWanted: false }).where(and(eq(hostedEpisodes.id, e.id), eq(hostedEpisodes.youtubeWanted, true))).returning({ id: hostedEpisodes.id });
+      if (!mine) continue;
+      const [show] = await db.select().from(hostedShows).where(eq(hostedShows.id, e.showId)).limit(1);
+      if (!show) continue;
+      try { await postEpisodeToYouTube(e, show, show.youtubePrivacy); sent++; }
+      catch (err) { await db.update(hostedEpisodes).set({ youtube: JSON.stringify({ state: "failed", at: now(), error: (err as Error).message }) }).where(eq(hostedEpisodes.id, e.id)); }
+    }
+    res.json({ sent });
   });
 
   // Confirm the owner email with a code, before it goes in the feed.

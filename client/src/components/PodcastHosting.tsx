@@ -18,9 +18,9 @@ import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, ExternalLink, Film, I
  * Dashboard, Your analytics and the profile sponsors see.
  */
 
-type Ep = HostedEpisodeRow & { downloads: number; live: boolean };
+type Ep = HostedEpisodeRow & { downloads: number; live: boolean; hasVideo?: boolean };
 type Hosted = { show: HostedShowRow; feedUrl: string; missing: string[]; ownerConfirmed: boolean; episodes: Ep[]; stats: { total: number; last30: number; series: { date: string; count: number }[]; apps: Record<string, number> } };
-type Resp = { shows: Hosted[]; categories: Record<string, string[]> };
+type Resp = { shows: Hosted[]; categories: Record<string, string[]>; youtubeReady?: boolean };
 
 const KEY = ["/api/host/hosting"];
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
@@ -242,7 +242,7 @@ export function PodcastHosting() {
           {/* A moved show is in the apps already, by its old feed: forwarding that feed moves them all here. */}
           {s.importedFrom && <MoveSubscribers h={h} onDone={refresh} />}
           <Directories h={h} ready={ready} onSaved={refresh} />
-          <YouTubeEpisodes h={h} onDone={refresh} />
+          <YouTubeEpisodes h={h} ready={!!q.data?.youtubeReady} onDone={refresh} />
         </>
       )}
 
@@ -253,7 +253,7 @@ export function PodcastHosting() {
 
       {addShowDialog}
       <NewEpisodeDialog open={adding} onClose={() => setAdding(false)} show={s} onCreated={(e) => { refresh(); setAdding(false); setEditEp({ ...e, downloads: 0, live: false }); }} />
-      <EpisodeDialog ep={editEp} onClose={() => setEditEp(null)} onSaved={refresh} />
+      <EpisodeDialog ep={editEp} show={s} youtubeReady={!!q.data?.youtubeReady} onClose={() => setEditEp(null)} onSaved={refresh} />
     </section>
   );
 }
@@ -377,30 +377,39 @@ function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved
 }
 
 /** Episodes to their YouTube channel as videos (Upload-Post; their channel is connected on the Social screen). */
-function YouTubeEpisodes({ h, onDone }: { h: Hosted; onDone: () => void }) {
+function YouTubeEpisodes({ h, ready, onDone }: { h: Hosted; ready: boolean; onDone: () => void }) {
   const { toast } = useToast();
-  const [privacy, setPrivacy] = useState<"public" | "unlisted">("public");
   const [busy, setBusy] = useState<number | null>(null);
-  const videos = h.episodes.filter((e) => (e.mime.startsWith("video/") && e.audioKey) || e.recordingId);
-  const post = async (e: Ep) => {
+  const s = h.show;
+  const videos = h.episodes.filter((e) => e.hasVideo);
+  const setShow = async (patch: Record<string, string>) => {
+    try { await apiRequest("PATCH", `/api/host/hosting/shows/${s.id}`, patch); onDone(); }
+    catch (err) { toast({ title: "Didn't save", description: (err as Error).message, variant: "destructive" }); }
+  };
+  const act = async (e: Ep, path: string, body: object, done?: string) => {
     setBusy(e.id);
     try {
-      await apiRequest("POST", `/api/host/hosting/episodes/${e.id}/youtube`, { privacy });
-      toast({ title: "On its way to YouTube", description: "It uploads in the next few minutes. Its status is on the Social screen." });
+      await apiRequest("POST", `/api/host/hosting/episodes/${e.id}/${path}`, body);
+      if (done) toast({ title: done, description: "It uploads in the next few minutes. Its status is on the Social screen." });
       onDone();
     } catch (err) {
       const msg = (err as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "");
       toast({ title: /Social screen/.test(msg) ? "Connect YouTube first" : "Not posted", description: msg, variant: /Social screen/.test(msg) ? undefined : "destructive" });
     } finally { setBusy(null); }
   };
+  const sel = "h-9 rounded-md border border-input bg-background px-2 text-sm";
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="hosting-youtube">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold">Your episodes as videos on YouTube</h2>
-          <p className="text-xs text-muted-foreground">Posted to your channel with their title, notes and picture. Your channel is connected on the <a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Social</a> screen.</p>
-        </div>
-        <select value={privacy} onChange={(e) => setPrivacy(e.target.value as "public")} className="h-9 rounded-md border border-input bg-background px-2 text-sm" aria-label="Who can see it">
+      <h2 className="text-sm font-semibold">Your episodes as videos on YouTube</h2>
+      <p className="text-xs text-muted-foreground">Posted to your channel with their title, notes and picture. {ready ? "Your channel is connected on the " : "Connect your channel on the "}<a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Social</a> screen.</p>
+      {/* The choice, once: ask each time (a tick box when publishing) or always post. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-muted-foreground">When I publish an episode with video:</span>
+        <select value={s.youtubeMode} onChange={(e) => void setShow({ youtubeMode: e.target.value })} className={sel} aria-label="When I publish" data-testid="hosting-yt-mode">
+          <option value="ask">Ask me each time</option>
+          <option value="always">Always post it to YouTube</option>
+        </select>
+        <select value={s.youtubePrivacy} onChange={(e) => void setShow({ youtubePrivacy: e.target.value })} className={sel} aria-label="Who can see it">
           <option value="public">Public</option>
           <option value="unlisted">Unlisted (only with the link)</option>
         </select>
@@ -408,12 +417,26 @@ function YouTubeEpisodes({ h, onDone }: { h: Hosted; onDone: () => void }) {
       {videos.length ? (
         <ul className="mt-2 divide-y divide-border">
           {videos.map((e) => {
-            let yt: { at?: string } = {};
+            let yt: { at?: string; state?: string; error?: string } = {};
             try { yt = e.youtube ? JSON.parse(e.youtube) : {}; } catch { yt = {}; }
+            const sent = yt.state === "sent" || (!yt.state && !!yt.at);
+            const skipped = yt.state === "skipped";
+            const status = sent ? `On YouTube since ${dateOf(yt.at ?? "")}`
+              : skipped ? "Not for YouTube"
+              : e.youtubeWanted ? `Goes to YouTube when it's out (${dateOf(e.publishedAt)})`
+              : yt.state === "failed" ? `Didn't post: ${yt.error ?? "try again"}`
+              : "Not on YouTube";
             return (
-              <li key={e.id} className="flex items-center gap-3 py-2.5">
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{e.title}</span><span className="block text-xs text-muted-foreground">{yt.at ? `Sent to YouTube ${dateOf(yt.at)}` : "Not on YouTube yet"}</span></span>
-                <Button size="sm" variant="outline" onClick={() => void post(e)} disabled={busy != null} className="h-8 gap-1.5 rounded-full" data-testid={`hosting-yt-${e.id}`}>{busy === e.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} {yt.at ? "Post again" : "Post to YouTube"}</Button>
+              <li key={e.id} className="flex flex-wrap items-center gap-2 py-2.5">
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{e.title}</span><span className={`block text-xs ${yt.state === "failed" ? "text-destructive" : "text-muted-foreground"}`}>{status}</span></span>
+                {skipped ? (
+                  <Button size="sm" variant="ghost" onClick={() => void act(e, "youtube/skip", { skip: false })} disabled={busy != null} className="h-8 rounded-full">Undo</Button>
+                ) : (
+                  <>
+                    {!sent && <Button size="sm" variant="ghost" onClick={() => void act(e, "youtube/skip", { skip: true })} disabled={busy != null} className="h-8 rounded-full text-muted-foreground" data-testid={`hosting-yt-skip-${e.id}`}>Not this one</Button>}
+                    <Button size="sm" variant="outline" onClick={() => void act(e, "youtube", {}, "On its way to YouTube")} disabled={busy != null || !ready} className="h-8 gap-1.5 rounded-full" data-testid={`hosting-yt-${e.id}`}>{busy === e.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} {sent ? "Post again" : "Post now"}</Button>
+                  </>
+                )}
               </li>
             );
           })}
@@ -730,22 +753,29 @@ function NewEpisodeDialog({ open, onClose, show, onCreated }: { open: boolean; o
 }
 
 /** An episode's words and when it goes out: publish now, schedule it, or keep it as a draft. */
-function EpisodeDialog({ ep, onClose, onSaved }: { ep: Ep | null; onClose: () => void; onSaved: () => void }) {
+function EpisodeDialog({ ep, show, youtubeReady, onClose, onSaved }: { ep: Ep | null; show: HostedShowRow; youtubeReady: boolean; onClose: () => void; onSaved: () => void }) {
   const { toast } = useToast();
   const [f, setF] = useState<Record<string, unknown>>({});
   const [when, setWhen] = useState<"now" | "later">("now");
   const [at, setAt] = useState("");
+  // Also to YouTube? Ticked for them when the show says "Always post".
+  const [yt, setYt] = useState<boolean | null>(null);
   if (!ep) return null;
+  const ytState = (() => { try { return ep.youtube ? (JSON.parse(ep.youtube) as { state?: string }).state ?? "" : ""; } catch { return ""; } })();
+  const offerYt = ep.status === "draft" && !!ep.hasVideo && ytState !== "sent";
+  const ytOn = yt ?? (youtubeReady && show.youtubeMode === "always" && ytState !== "skipped");
   const v = { ...ep, ...f } as Ep;
   const set = (k: string, val: unknown) => setF((x) => ({ ...x, [k]: val }));
-  const close = () => { setF({}); setWhen("now"); setAt(""); onClose(); };
+  const close = () => { setF({}); setWhen("now"); setAt(""); setYt(null); onClose(); };
   const save = async (status?: "published" | "draft") => {
     try {
       const body: Record<string, unknown> = { ...f };
       if (status) body.status = status;
       if (status === "published" && when === "later" && at) body.publishedAt = new Date(at).toISOString();
       if (status === "published" && ep.status !== "published" && when === "now") body.publishedAt = new Date().toISOString();
-      const out = (await (await apiRequest("PATCH", `/api/host/hosting/episodes/${ep.id}`, body)).json()) as Ep;
+      if (status === "published" && offerYt && youtubeReady) body.youtube = ytOn;
+      const out = (await (await apiRequest("PATCH", `/api/host/hosting/episodes/${ep.id}`, body)).json()) as Ep & { youtubeError?: string };
+      if (out.youtubeError) toast({ title: "Published, but not on YouTube", description: out.youtubeError, variant: "destructive" });
       onSaved();
       const waiting = status === "published" && !out.audioKey && !out.audioUrl && !!out.audioJob;
       toast(waiting
@@ -790,6 +820,18 @@ function EpisodeDialog({ ep, onClose, onSaved }: { ep: Ep | null; onClose: () =>
                 <button key={w} type="button" onClick={() => setWhen(w)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${when === w ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`}>{w === "now" ? "Now" : "Pick a time"}</button>
               ))}
               {when === "later" && <Input type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className="h-8 w-56" />}
+            </div>
+          )}
+          {offerYt && (
+            <div className="rounded-xl border border-border px-3 py-2.5 text-sm sm:col-span-3" data-testid="hosting-ep-youtube">
+              {youtubeReady ? (
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={ytOn} onChange={(e) => setYt(e.target.checked)} />
+                  <span>Also post it to YouTube <span className="text-muted-foreground">({show.youtubePrivacy === "unlisted" ? "unlisted" : "public"}{when === "later" ? ", when it goes out" : ""})</span></span>
+                </label>
+              ) : (
+                <span className="text-muted-foreground">Want it on YouTube too? <a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Connect YouTube</a> first.</span>
+              )}
             </div>
           )}
         </div>
