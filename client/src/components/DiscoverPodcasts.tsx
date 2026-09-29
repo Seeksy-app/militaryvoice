@@ -1,9 +1,10 @@
 // Podcasts in Discovery: shows to pitch or be a guest on, and the people who
 // host them or have been on them (Podchaser's index, through our cache).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Bookmark, BookmarkCheck, CalendarDays, Check, ChevronRight, Copy, ExternalLink, Globe, Loader2, Lock, Mail, MapPin, Mic2, Rss, Users, X } from "lucide-react";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bookmark, BookmarkCheck, CalendarDays, Check, ChevronRight, Copy, ExternalLink, Globe, Loader2, Lock, Mail, MapPin, Mic2, Rss, Search, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 
@@ -492,5 +493,69 @@ function GuestActions({ person, saved, onSave, reveals, onRevealed }: { person: 
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Book a guest, on its own (the Podcast screen's tab): search people who've been guests on
+ * podcasts, open one, then invite, find their email or save them. Uses Discovery underneath;
+ * a podcaster who hasn't added Discovery gets it (free) with their first search.
+ */
+export function GuestFinder({ showTitle = "" }: { showTitle?: string }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const me = useQuery<{ signedIn?: boolean; member?: unknown; reveals?: { used: number; allowance: number } | null }>({ queryKey: ["/api/discover/me"], queryFn: async () => (await fetch("/api/discover/me", { credentials: "include" })).json() });
+  const lists = useQuery<{ id: number; name: string; items: { platform: string; handle: string }[] }[]>({ queryKey: ["/api/discover/lists"], enabled: !!me.data?.member, queryFn: async () => (await fetch("/api/discover/lists", { credentials: "include" })).json() });
+  const saved = useMemo(() => new Set((lists.data ?? []).flatMap((l) => l.items.map((i) => `${i.platform}:${i.handle}`))), [lists.data]);
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState("appearances");
+  const [ask, setAsk] = useState<PodAsk | null>(null);
+  const [open, setOpen] = useState<PodOpen | null>(null);
+  const [from, setFrom] = useState<PodOpen[]>([]);
+  const [joining, setJoining] = useState(false);
+  const run = async (words: string) => {
+    // Discovery is free for podcasters: added the first time they search here.
+    if (!me.data?.member) {
+      setJoining(true);
+      try {
+        const r = await fetch("/api/discover/join", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: "podcaster", source: "book-a-guest" }) });
+        if (r.ok) await qc.invalidateQueries({ queryKey: ["/api/discover/me"] });
+      } finally { setJoining(false); }
+    }
+    setQ(words);
+    setAsk({ q: words.trim(), kind: "people", branch: "", sort, hasGuests: false, active: false });
+  };
+  useEffect(() => { if (ask) setAsk({ ...ask, sort }); }, [sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  const saveGuest = async (card: ReturnType<typeof podCard>) => {
+    try {
+      let id = lists.data?.find((l) => l.name === "Guests")?.id;
+      if (!id) id = (await (await fetch("/api/discover/lists", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Guests" }) })).json()).id;
+      const r = await fetch(`/api/discover/lists/${id}/items`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ card }) });
+      if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message || "Not saved");
+      void qc.invalidateQueries({ queryKey: ["/api/discover/lists"] });
+      toast({ title: `${card.name} saved to Guests`, description: "Your Guests list is in Discovery, under Saved." });
+    } catch (e) { toast({ title: "Couldn't save that", description: (e as Error).message, variant: "destructive" }); }
+  };
+  const tries = ["Veteran authors", "Special operations", "Military historians", "Medal of Honor", showTitle && showTitle.split(/\s+/).slice(0, 3).join(" ")].filter(Boolean) as string[];
+  return (
+    <div className="space-y-4" data-testid="book-a-guest">
+      <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+        <h2 className="text-sm font-semibold">Find a guest</h2>
+        <p className="text-xs text-muted-foreground">People who've been guests on podcasts, the most-booked first. Open one to invite them onto your show, find their email, or save them for later.</p>
+        <form onSubmit={(e) => { e.preventDefault(); void run(q); }} className="mt-3 flex flex-wrap gap-2">
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="A topic they're known for, or a name…" className="h-11 min-w-0 flex-1" data-testid="guest-q" />
+          <select value={sort} onChange={(e) => setSort(e.target.value)} className="h-11 rounded-md border border-input bg-background px-3 text-sm" aria-label="Sort">
+            {POD_PEOPLE_SORTS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+          </select>
+          <Button type="submit" disabled={joining} className="h-11 gap-2 rounded-lg bg-[#053877] px-5 text-white hover:bg-[#0a4a99]" data-testid="guest-go">{joining ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} Search</Button>
+        </form>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Try</span>
+          {tries.map((t) => <button key={t} type="button" onClick={() => void run(t)} className="rounded-full bg-[#2563eb] px-3 py-1 text-xs font-medium text-white hover:bg-[#1d4ed8]">{t}</button>)}
+        </div>
+      </div>
+      {ask && <PodcastResults ask={ask} isMember={!!me.data?.member} onJoin={() => void run(q)} onOpen={(o, f) => { setFrom(f); setOpen(o); }} saved={saved} onSave={(card) => void saveGuest(card)} />}
+      <PodcastDrawer open={open} from={from} onGo={setOpen} onClose={() => setOpen(null)} isMember={!!me.data?.member} onJoin={() => void run(q)} saved={saved} onSave={(card) => void saveGuest(card)} reveals={me.data?.reveals ?? null} onRevealed={() => void qc.invalidateQueries({ queryKey: ["/api/discover/me"] })} />
+    </div>
   );
 }

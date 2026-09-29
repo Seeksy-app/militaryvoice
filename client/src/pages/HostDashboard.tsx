@@ -586,7 +586,7 @@ function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -599,6 +599,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   page: "page",
   greenroom: "green-room",
   discovery: "discovery",
+  verified: "verified",
   dashboard: "",
   editProfile: "profile",
   events: "events",
@@ -1292,7 +1293,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         ) : screen === "contacts" ? (
           <ContactsScreen contacts={data?.contacts ?? []} />
         ) : screen === "discovery" ? (
-          <Discover embedded />
+          <Discover embedded part="search" />
+        ) : screen === "verified" ? (
+          <Discover embedded part="verified" />
         ) : screen === "greenroom" ? (
           <>
             <BackToEvent onGo={goTo} />

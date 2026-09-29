@@ -159,7 +159,8 @@ function Avatar({ src, name, size = 56, ring = false }: { src: string; name: str
  * no site header, marketing hero, demo or footer, just the tool. The public
  * /discover page is the same component, whole.
  */
-export default function Discover({ embedded = false }: { embedded?: boolean } = {}) {
+/** `part`: in the dashboard, Discovery's search ("search"), or the Verified list on its own ("verified"). */
+export default function Discover({ embedded = false, part = "all" }: { embedded?: boolean; part?: "all" | "search" | "verified" } = {}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: me, isLoading: meLoading } = useQuery<Me>({ queryKey: ["/api/discover/me"], queryFn: async () => (await apiRequest("GET", "/api/discover/me")).json() });
@@ -461,7 +462,8 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
       {!embedded && <NavBar product="discovery" account={isMember ? { label: "Saved", icon: "saved", onClick: () => { setTab("lists"); document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }); } } : { label: me?.signedIn ? "Add Discovery" : "Sign in", onClick: () => setGate(true) }} />}
 
       {/* ---------------------------------------------------------------- hero */}
-      {(() => {
+      {/* The Verified screen is the list alone: no search above it. */}
+      {part !== "verified" && (() => {
         const bar = (
           <SearchBar
             platform={platform}
@@ -608,7 +610,7 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
             onSave={(card) => saveTo.mutate({ card })}
           />
         ) : !submitted || submitted.mode === "username" ? (
-          <Welcome sample={sample} onOpenSample={openIn(sample?.results ?? [])} isAdmin={!!me?.isAdmin} verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} hidden={demoHide} onJoin={() => setGate(true)} loading={meLoading} />
+          <Welcome sample={sample} onOpenSample={openIn(sample?.results ?? [])} isAdmin={!!me?.isAdmin} verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} hidden={demoHide} onJoin={() => setGate(true)} loading={meLoading} part={part} />
         ) : (
           <>
             {/* what ran */}
@@ -1474,13 +1476,13 @@ function ResultsSkeleton() {
 // Before a search: our creators, and what Discovery is
 // ===========================================================================
 
-function Welcome({ sample, onOpenSample, verified, isMember, isAdmin, signedIn, onOpenVerified, onSaveVerified, onSaveMany, saved, spotlight, hidden, onJoin, loading }: { sample: Sample | null; onOpenSample: (c: Card) => void; verified: Card[]; isMember: boolean; isAdmin?: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; saved: Set<string>; spotlight?: boolean; hidden?: boolean; onJoin: () => void; loading: boolean }) {
+function Welcome({ sample, onOpenSample, verified, isMember, isAdmin, signedIn, onOpenVerified, onSaveVerified, onSaveMany, saved, spotlight, hidden, onJoin, loading, part = "all" }: { part?: "all" | "search" | "verified"; sample: Sample | null; onOpenSample: (c: Card) => void; verified: Card[]; isMember: boolean; isAdmin?: boolean; signedIn: boolean; onOpenVerified: (c: Card) => void; onSaveVerified: (c: Card) => void; onSaveMany: (cs: Card[]) => Promise<void>; saved: Set<string>; spotlight?: boolean; hidden?: boolean; onJoin: () => void; loading: boolean }) {
   // The demo types the sample's question and "presses Search": the sample is
   // the answer it lights up. Without a sample yet, our verified list is.
   const answer = (on: boolean) => `rounded-2xl transition-all duration-700 ${on && hidden ? "pointer-events-none translate-y-6 opacity-0" : "translate-y-0 opacity-100"} ${on && spotlight ? "ring-4 ring-[#F0A71F]/50 shadow-[0_0_48px_rgba(240,167,31,0.35)]" : ""}`;
   return (
     <div className="flex flex-col gap-12">
-      {sample && (
+      {sample && part !== "verified" && (
         <section id="discover-sample" className="scroll-mt-24" data-testid="discover-sample">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <div className="min-w-0">
@@ -1494,7 +1496,7 @@ function Welcome({ sample, onOpenSample, verified, isMember, isAdmin, signedIn, 
           </div>
         </section>
       )}
-      <section>
+      {part !== "search" && <section>
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
             <BadgeCheck className="h-5 w-5 text-[#F0A71F]" /> Verified on MilitaryVoices
@@ -1504,7 +1506,7 @@ function Welcome({ sample, onOpenSample, verified, isMember, isAdmin, signedIn, 
         <div className={`mt-5 ${answer(!sample)}`}>
           {verified.length === 0 ? <ResultsSkeleton /> : <ResultsList rows={verified} saved={saved} isMember={isMember} isAdmin={isAdmin} onOpen={onOpenVerified} onSave={onSaveVerified} onSaveMany={onSaveMany} />}
         </div>
-      </section>
+      </section>}
       {!isMember && !loading && (
         <section className="grid gap-6 rounded-3xl border border-border bg-card p-6 sm:p-8 lg:grid-cols-[1.2fr_1fr] lg:items-center">
           <div>
