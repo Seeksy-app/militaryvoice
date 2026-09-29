@@ -477,22 +477,7 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { 
       {d.askEnabled && (
         <div>
           <p className="mb-1.5 text-sm font-semibold">Where the chat button goes</p>
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Where the chat button goes">
-            {([["top-left", "Top left"], ["top-right", "Top right"], ["socials", "With my icons"], ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"]] as const).map(([v, l]) => {
-              const on = (d.theme.chatAt ?? "top-right") === v;
-              return (
-                <button key={v} type="button" role="radio" aria-checked={on} onClick={() => change({ theme: { ...d.theme, chatAt: v } }, true)} className={`flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 text-[11px] font-semibold transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.05] dark:border-[#8fb5e8]" : "border-border text-muted-foreground hover:border-[#053877]/40"}`} data-testid={`bio-chat-at-${v}`}>
-                  {/* A little page, with the button where it goes. */}
-                  <span className="relative block h-10 w-8 rounded-md border border-border bg-muted/50">
-                    {v === "socials"
-                      ? <span className="absolute inset-x-0 top-4 flex justify-center gap-0.5">{[0, 1, 2].map((i) => <span key={i} className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />)}<span className="h-1.5 w-1.5 rounded-full bg-[#F0A71F]" /></span>
-                      : <span className={`absolute h-2.5 w-2.5 rounded-full bg-[#F0A71F] ${v.startsWith("top") ? "top-1" : "bottom-1"} ${v.endsWith("left") ? "left-1" : "right-1"}`} />}
-                  </span>
-                  {l}
-                </button>
-              );
-            })}
-          </div>
+          <SpotPicker value={(d.theme.chatAt ?? "top-right") as Spot} spots={["top-left", "top-right", "socials", "bottom-left", "bottom-right"]} onPick={(v) => change({ theme: { ...d.theme, chatAt: v as NonNullable<BioTheme["chatAt"]> } }, true)} testid="bio-chat-at" />
         </div>
       )}
       {d.askEnabled && (
@@ -1831,17 +1816,38 @@ function useFalJob(path: string, setPreview: (p: BioPublic) => void, onDone: () 
  * voice, or type it and pick an AI voice; made in a few minutes, then on or off.
  */
 const INTRO_VOICES = [["Brian", "Brian", "deep, steady"], ["George", "George", "warm, British"], ["Chris", "Chris", "easy-going"], ["Eric", "Eric", "friendly"], ["Sarah", "Sarah", "soft, calm"], ["Jessica", "Jessica", "bright"], ["Laura", "Laura", "upbeat"], ["Alice", "Alice", "clear, British"]] as const;
-/** A spot on the page, drawn as a little page with a dot where it goes. */
-function SpotTile({ v, label, on, onPick, testid }: { v: string; label: string; on: boolean; onPick: () => void; testid: string }) {
+/**
+ * Where something sits on the page, picked on one little phone: tap the spot.
+ * The chosen one is gold; `taken` shows where the other bubble already is.
+ */
+type Spot = "top-left" | "top-right" | "bottom-left" | "bottom-right" | "bio" | "socials";
+const SPOT_LABEL: Record<Spot, string> = { "top-left": "Top left", "top-right": "Top right", "bottom-left": "Bottom left", "bottom-right": "Bottom right", bio: "Under my bio", socials: "With my icons" };
+function SpotPicker({ value, spots, onPick, taken, testid }: { value: Spot; spots: Spot[]; onPick: (v: Spot) => void; taken?: { at: Spot; label: string }; testid: string }) {
+  const pos: Record<Spot, string> = { "top-left": "left-2 top-3", "top-right": "right-2 top-3", "bottom-left": "bottom-3 left-2", "bottom-right": "bottom-3 right-2", bio: "left-1/2 top-[52%] -translate-x-1/2", socials: "left-1/2 top-[40%] -translate-x-1/2" };
   return (
-    <button type="button" role="radio" aria-checked={on} onClick={onPick} className={`flex flex-col items-center gap-1.5 rounded-xl border-2 p-2 text-[11px] font-semibold transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.05] dark:border-[#8fb5e8]" : "border-border text-muted-foreground hover:border-[#053877]/40"}`} data-testid={testid}>
-      <span className="relative block h-10 w-8 rounded-md border border-border bg-muted/50">
-        {v === "socials" || v === "bio"
-          ? <span className="absolute inset-x-0 top-4 flex justify-center gap-0.5">{v === "bio" ? <span className="h-1 w-5 rounded bg-muted-foreground/40" /> : [0, 1, 2].map((i) => <span key={i} className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50" />)}<span className="h-1.5 w-1.5 rounded-full bg-[#F0A71F]" /></span>
-          : <span className={`absolute h-2.5 w-2.5 rounded-full bg-[#F0A71F] ${v.startsWith("top") ? "top-1" : "bottom-1"} ${v.endsWith("left") ? "left-1" : "right-1"}`} />}
-      </span>
-      {label}
-    </button>
+    <div className="flex items-center gap-4" data-testid={testid}>
+      <div className="relative h-[168px] w-[92px] shrink-0 rounded-[18px] border-2 border-border bg-muted/40 shadow-inner" role="radiogroup" aria-label="Where it goes">
+        {/* the page, faintly: a photo, a name, lines */}
+        <span className="absolute left-1/2 top-6 h-7 w-7 -translate-x-1/2 rounded-full bg-muted-foreground/20" />
+        <span className="absolute left-1/2 top-[38%] h-1 w-10 -translate-x-1/2 rounded bg-muted-foreground/25" />
+        {[60, 66, 72].map((t) => <span key={t} className="absolute left-3 right-3 h-1.5 rounded bg-muted-foreground/10" style={{ top: `${t}%` }} />)}
+        {taken && taken.at !== value && <span className={`absolute flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/40 text-white ${pos[taken.at]}`} title={taken.label}><MessageCircle className="h-3 w-3" /></span>}
+        {spots.map((v) => {
+          const on = v === value;
+          const wide = v === "bio" || v === "socials";
+          return (
+            <button key={v} type="button" role="radio" aria-checked={on} aria-label={SPOT_LABEL[v]} title={SPOT_LABEL[v]} onClick={() => onPick(v)}
+              className={`absolute flex items-center justify-center rounded-full border-2 transition-all ${wide ? "h-4 w-12" : "h-5 w-5"} ${pos[v]} ${on ? "border-[#F0A71F] bg-[#F0A71F] shadow-[0_0_0_3px_rgba(240,167,31,0.3)]" : "border-dashed border-muted-foreground/50 bg-background hover:border-[#053877] hover:bg-[#053877]/10"}`}
+              data-testid={`${testid}-${v}`} />
+          );
+        })}
+      </div>
+      <div className="min-w-0 text-sm">
+        <p className="font-semibold">{SPOT_LABEL[value]}</p>
+        <p className="text-xs text-muted-foreground">Tap a spot on the phone to move it.</p>
+        {taken && <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground"><MessageCircle className="h-3 w-3" /> {taken.label}: {SPOT_LABEL[taken.at]}</p>}
+      </div>
+    </div>
   );
 }
 
@@ -1867,11 +1873,7 @@ function IntroCard({ d, st, start, reset, on, setOn, at, setAt }: { d: Page; st:
       {st.status === "done" && st.url && on ? (
         <div>
           <p className="mb-1.5 text-sm font-semibold">Where it goes</p>
-          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Where your talking intro goes">
-            {([["top-left", "Top left"], ["top-right", "Top right"], ["bio", "Under my bio"], ["bottom-left", "Bottom left"], ["bottom-right", "Bottom right"]] as const).map(([v, l]) => (
-              <SpotTile key={v} v={v} label={l} on={at === v} onPick={() => setAt(v)} testid={`bio-intro-at-${v}`} />
-            ))}
-          </div>
+          <SpotPicker value={at as Spot} spots={["top-left", "top-right", "bio", "bottom-left", "bottom-right"]} onPick={(v) => setAt(v as NonNullable<BioTheme["introAt"]>)} taken={d.askEnabled ? { at: (d.theme.chatAt ?? "top-right") as Spot, label: "Your chat button" } : undefined} testid="bio-intro-at" />
           {d.askEnabled && at === (d.theme.chatAt ?? "top-right") && <p className="mt-1.5 text-[11px] text-muted-foreground">Your chat button is there, so it moves to the other side.</p>}
         </div>
       ) : st.status === "done" && st.url ? null : st.status === "running" ? (
