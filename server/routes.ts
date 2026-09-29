@@ -3341,11 +3341,12 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: "Connect your social accounts first." });
       return;
     }
+    // A whole episode goes to YouTube only; the other apps get its clips.
     const platforms = (Array.isArray(req.body?.platforms) ? req.body.platforms : [])
       .map((p: unknown) => String(p).toLowerCase().trim())
-      .filter(Boolean);
+      .filter((p: string) => p === "youtube");
     if (platforms.length === 0) {
-      res.status(400).json({ message: "Pick at least one account to post to." });
+      res.status(400).json({ message: "A whole episode goes to YouTube. For the other apps, post its clips." });
       return;
     }
     try {

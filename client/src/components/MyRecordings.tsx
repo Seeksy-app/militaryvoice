@@ -430,7 +430,7 @@ export function MyRecordings({
         url={`/api/host/folders/${removingFolder?.id}`}
         onDeleted={() => { setOpenFolder(null); void qc.invalidateQueries({ queryKey: ["/api/host/folders"] }); }}
       />
-      <PostDialog target={publishing ? { kind: "recording", id: publishing.id, title: publishing.title, durationSec: publishing.durationSec } : null} onClose={() => setPublishing(null)} />
+      <PostDialog target={publishing ? { kind: "recording", id: publishing.id, title: publishing.title, clipsFrom: sourceOf(publishing) ?? publishing.id } : null} onClose={() => setPublishing(null)} />
       <ConfirmDelete
         open={!!deleting}
         onOpenChange={(v) => !v && setDeleting(null)}

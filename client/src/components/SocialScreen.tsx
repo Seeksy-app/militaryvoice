@@ -101,7 +101,7 @@ export function SocialScreen() {
   const refresh = () => { void qc.invalidateQueries({ queryKey: ["/api/host/posts"] }); void qc.invalidateQueries({ queryKey: ["/api/host/social/queue"] }); };
   const shapesOf = (c: ClipRow) => ([["vertical", c.verticalUrl], ["square", c.squareUrl], ["wide", c.url]] as const).filter(([, u]) => u).map(([s]) => s);
   const postClip = (c: ClipRow, at?: string) => { setTargetAt(at); setTarget({ kind: "clip", id: c.id, title: c.title, caption: c.caption, shapes: [...shapesOf(c)] }); };
-  const postEpisode = (r: RecordingRow, at?: string) => { setTargetAt(at); setTarget({ kind: "recording", id: r.id, title: r.title, durationSec: r.durationSec }); };
+  const postEpisode = (r: RecordingRow, at?: string) => { setTargetAt(at); setTarget({ kind: "recording", id: r.id, title: r.title, clipsFrom: Number(r.egressId.match(/^CLEAN_(?:EDIT_)?(\d+)/)?.[1]) || r.id }); };
 
   const move = useMutation({
     mutationFn: async (v: { id: number; at: number }) => (await apiRequest("PATCH", `/api/host/posts/${v.id}`, { scheduledAt: new Date(v.at).toISOString() })).json(),
