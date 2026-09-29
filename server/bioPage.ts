@@ -683,7 +683,11 @@ export function registerBioPage(app: Express) {
         if (community && elevenKey) {
           // A community voice: spoken by ElevenLabs itself, kept with us so the avatar model can fetch it.
           const t = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${community}?output_format=mp3_44100_128`, { method: "POST", signal: AbortSignal.timeout(60_000), headers: { "xi-api-key": elevenKey, "content-type": "application/json" }, body: JSON.stringify({ text, model_id: "eleven_turbo_v2_5", voice_settings: { stability: 0.4, similarity_boost: 0.8 } }) });
-          if (!t.ok) throw new Error(`tts ${t.status}`);
+          if (!t.ok) {
+            const why = await t.text().catch(() => "");
+            console.error("ElevenLabs voice failed:", t.status, why.slice(0, 300));
+            throw Object.assign(new Error(`tts ${t.status}`), { say: t.status === 401 ? `The ${voice} voice was refused: the ElevenLabs key in Vercel isn't allowed to speak (it needs the Text to Speech permission).` : t.status === 402 || /quota|credits/i.test(why) ? `The ${voice} voice is out of ElevenLabs credits.` : `The ${voice} voice didn't answer (ElevenLabs ${t.status}). Try again, or pick another voice.` });
+          }
           audio = await uploadShowAsset(`bio/${row.id}-voice-${Date.now()}.mp3`, Buffer.from(await t.arrayBuffer()), "audio/mpeg");
         } else {
           // A stock voice through fal (or, with no ElevenLabs key, the gravelly stock one standing in).
@@ -699,12 +703,15 @@ export function registerBioPage(app: Express) {
         body: JSON.stringify({ image_url: row.avatarUrl, audio_url: audio, prompt: "The person speaks warmly and naturally to the camera with a friendly expression and small natural head movements." }),
       });
       const j = (await r.json().catch(() => ({}))) as { status_url?: string; response_url?: string };
-      if (!r.ok || !j.status_url || !j.response_url) throw new Error(`fal ${r.status}`);
+      if (!r.ok || !j.status_url || !j.response_url) {
+        console.error("Talking intro video failed to start:", r.status, JSON.stringify(j).slice(0, 400));
+        throw Object.assign(new Error(`fal ${r.status}`), { say: r.status === 402 || r.status === 403 ? "The video maker is out of credit (fal). Top it up, then try again." : `The video maker refused it (fal ${r.status}). Try a clear photo of your face, looking at the camera.` });
+      }
       await db.update(bioPages).set({ introJob: JSON.stringify({ status: j.status_url, response: j.response_url, from: row.avatarUrl, at: Date.now() } satisfies LivingState) }).where(eq(bioPages.id, row.id));
       res.json({ status: "running" });
     } catch (err) {
       console.error("Talking intro failed to start:", (err as Error).message);
-      res.status(502).json({ message: "Couldn't start that. Try again in a moment." });
+      res.status(502).json({ message: (err as { say?: string }).say ?? `Couldn't start that (${(err as Error).message}). Try again in a moment.` });
     }
   });
   app.get("/api/host/bio/intro", requireHostSession, async (req, res) => {
