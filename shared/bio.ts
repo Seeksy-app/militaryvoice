@@ -96,7 +96,7 @@ export const DEFAULT_PODCAST: BioPodcastOptions = { on: true, heading: "", count
 
 export type BioSection =
   | { id: string; type: "links"; visible: boolean; title: string; links: { id: string; label: string; url: string }[] }
-  | { id: string; type: "video"; visible: boolean; title: string; url: string }
+  | { id: string; type: "video"; visible: boolean; title: string; url: string; /** An uploaded video's address to play (public page only, a few hours). */ file?: string }
   /** Promo codes: a list of sponsors' codes (code/url/note are the one code from before the list, read as the first). */
   | { id: string; type: "promo"; visible: boolean; title: string; codes?: BioPromoCode[]; code: string; url: string; note: string }
   | { id: string; type: "meeting"; visible: boolean; title: string; url: string; note: string }

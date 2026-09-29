@@ -103,7 +103,8 @@ async function publicOf(row: BioPageRow): Promise<BioPublic> {
     branch: p?.branch ?? "",
     theme: parseTheme(row.theme),
     socials: parseSocials(row.socials).filter((s) => s.on && /^https?:\/\//.test(s.url)),
-    sections: parseSections(row.sections).filter((s) => s.visible),
+    // An uploaded video plays from a signed address, good for a few hours.
+    sections: await Promise.all(parseSections(row.sections).filter((s) => s.visible).map(async (s) => (s.type === "video" && s.url.startsWith("r2:") ? { ...s, file: (await uploadedVideo(s.url))?.url ?? "" } : s))),
     podcast: await podcastFor(row).catch(() => null),
     askEnabled: row.askEnabled,
     welcome: row.welcome.trim() || `Hi! Thanks for listening. What's on your mind?`,
@@ -323,7 +324,7 @@ function cleanSections(v: unknown): BioSection[] {
     const base = { id: /^[\w-]{1,40}$/.test(String(x.id)) ? String(x.id) : crypto.randomBytes(5).toString("hex"), visible: x.visible !== false, title: str(x.title, 80) };
     switch (x.type) {
       case "links": return [{ ...base, type: "links", links: (Array.isArray(x.links) ? x.links : []).slice(0, 30).map((l: Record<string, unknown>) => ({ id: /^[\w-]{1,40}$/.test(String(l.id)) ? String(l.id) : crypto.randomBytes(4).toString("hex"), label: str(l.label, 80), url: httpUrl(l.url) })).filter((l) => l.label || l.url) }];
-      case "video": return [{ ...base, type: "video", url: httpUrl(x.url) }];
+      case "video": return [{ ...base, type: "video", url: videoRef(String(x.url ?? "")) }];
       case "promo": return [{ ...base, type: "promo", code: str(x.code, 40), url: httpUrl(x.url), note: str(x.note, 200),
         codes: (Array.isArray(x.codes) ? x.codes : []).slice(0, 20).map((c: Record<string, unknown>) => ({ id: /^[\w-]{1,40}$/.test(String(c.id)) ? String(c.id) : crypto.randomBytes(4).toString("hex"), brand: str(c.brand, 60), code: str(c.code, 40), note: str(c.note, 200), url: httpUrl(c.url) })) }];
       case "music": return [{ ...base, type: "music", tracks: (Array.isArray(x.tracks) ? x.tracks : []).slice(0, 12).map((t: Record<string, unknown>) => ({ id: /^[\w-]{1,40}$/.test(String(t.id)) ? String(t.id) : crypto.randomBytes(4).toString("hex"), url: str(t.url, 500).trim() })).filter((t) => !t.url || /^https:\/\/\S+$/.test(t.url)) }];

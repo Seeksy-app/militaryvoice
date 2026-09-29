@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Calendar, Check, Copy, ExternalLink, Mail, MessageCircle, Music, Pause, Play, Radio, Send, Share2, Sparkles, Tag, X } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
-import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, musicEmbed, onColor, promoCodes, standOut, type BioChatAt, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
+import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, musicEmbed, onColor, promoCodes, standOut, videoEmbed, type BioChatAt, type BioPodcastOptions, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
 import { useBioFont } from "@/lib/bioFont";
 import type { SocialPlatform } from "@shared/schema";
 
@@ -21,12 +21,6 @@ type Ev = (kind: "view" | "click" | "play" | "share", label?: string) => void;
 const hms = (sec: number) => { const s = Math.round(sec); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
 const dateOf = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "");
 export { onColor, standOut };
-const youtubeEmbed = (u: string) => {
-  const m = u.match(/(?:youtu\.be\/|v=|shorts\/|embed\/|live\/)([\w-]{11})/);
-  if (m) return `https://www.youtube-nocookie.com/embed/${m[1]}`;
-  const v = u.match(/vimeo\.com\/(\d+)/);
-  return v ? `https://player.vimeo.com/video/${v[1]}` : "";
-};
 
 export type AiAnswer = { answer: string; sources: { n: number; title: string; startSec: number; audio: string; at: string }[]; unanswered: boolean };
 
@@ -98,7 +92,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   );
 
   return (
-    <div style={{ background: bg, color: ink, fontFamily: font, minHeight: "100%" }} className="relative pb-10" data-testid="bio-page">
+    <div style={{ background: bg, color: ink, fontFamily: font, minHeight: "100%" }} className="relative flex flex-col pb-6" data-testid="bio-page">
       {/* The chat at the top of the page (a top corner, or opened from their social icons) rides the top of the screen. */}
       {intro("top")}
       {data.askEnabled && chatTop && <Chat handle={data.handle} name={data.displayName} avatar={data.avatarUrl} welcome={data.welcome} accent={accent} ink={ink} sub={sub} line={line} dark={dark} preview={preview} open={chat} setOpen={setChat} onAsk={onAsk} onLoad={onLoadMessages} at={chatAt} />}
@@ -108,8 +102,9 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
         {/* Their blocks in their order; the podcast is one of them (they add it from Content). */}
         {data.sections.map((s) => s.type === "podcast" ? (data.podcast ? <PodcastCard key={s.id} p={data.podcast} onAsk={data.ai?.enabled ? setAskEp : undefined} opts={{ ...DEFAULT_PODCAST, ...(t.podcast ?? {}) }} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} /> : null) : <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} handle={data.handle} onSubscribe={onSubscribe} />)}
         {BRANDS_LIVE && data.brandsOn && <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : `/${data.handle}/brands`} className="font-semibold hover:underline" data-testid="bio-for-brands">For brands: sponsor this show</a></p>}
-        {(t.branding ?? true) && <p className="mt-4 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>}
       </div>
+      {/* At the foot of the screen, however short the page: it reads as the page's footer, not part of their icons. */}
+      {(t.branding ?? true) && <p className="mt-auto pt-12 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : "https://www.militaryvoices.ai"} className="hover:underline">Made with MilitaryVoices.ai</a></p>}
       {/* Last on the page so they stick to the foot of the screen: the chat bubble, and the sheet for asking about an episode. */}
       {(chat || askEp) && <div className={`${preview ? "absolute" : "fixed"} inset-0 z-20 ${askEp ? "bg-black/40" : ""}`} onClick={() => { setChat(false); setAskEp(null); }} aria-hidden />}
       {intro("bottom")}
@@ -452,8 +447,17 @@ function Section({ s, btn, ink, sub, card, line, accent, preview, ev, handle = "
     </section>
   );
   if (s.type === "video") {
-    const src = youtubeEmbed(s.url);
-    return src ? <section>{title}<div className="aspect-video overflow-hidden rounded-2xl" style={{ border: `1px solid ${line}` }}><iframe src={src} title={s.title || "Video"} className="h-full w-full" allow="accelerometer; autoplay; encrypted-media; picture-in-picture" allowFullScreen /></div></section> : null;
+    // Uploaded (played from its signed address) or a link: YouTube, Vimeo, an Instagram reel, TikTok.
+    if (s.url.startsWith("r2:")) {
+      return <section>{title}{s.file
+        ? <video src={s.file} controls playsInline preload="metadata" className="max-h-[640px] w-full overflow-hidden rounded-2xl bg-black" style={{ border: `1px solid ${line}` }} />
+        : <div className="flex aspect-video items-center justify-center rounded-2xl text-sm" style={{ border: `1px solid ${line}`, color: sub, background: card }}>Your video plays here</div>}</section>;
+    }
+    const v = videoEmbed(s.url);
+    if (!v) return null;
+    return <section>{title}{v.kind === "file"
+      ? <video src={v.src} controls playsInline preload="metadata" className="max-h-[640px] w-full overflow-hidden rounded-2xl bg-black" style={{ border: `1px solid ${line}` }} />
+      : <div className={`overflow-hidden rounded-2xl ${v.tall ? "h-[620px]" : "aspect-video"}`} style={{ border: `1px solid ${line}` }}><iframe src={v.src} title={s.title || "Video"} loading="lazy" className="h-full w-full" allow="accelerometer; autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen /></div>}</section>;
   }
   if (s.type === "promo") {
     // Each code a ticket: whose it is and what it saves, the code to tap and copy, and their shop.

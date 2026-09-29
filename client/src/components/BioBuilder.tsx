@@ -199,7 +199,13 @@ export function BioBuilder() {
     theme: draft.theme, askEnabled: draft.askEnabled, welcome: draft.welcome?.trim() || preview.welcome, brandsOn: draft.brands?.on ?? true,
     cutoutUrl: draft.cutoutFrom && draft.cutoutFrom === draft.avatarUrl ? draft.cutoutUrl : "",
     ai: { enabled: draft.aiEnabled && (preview.ai?.episodes ?? 0) > 0, episodes: preview.ai?.episodes ?? 0 },
-    socials: draft.socials.filter((s) => s.on && s.url), sections: draft.sections.filter((s) => s.visible),
+    socials: draft.socials.filter((s) => s.on && s.url),
+    // An uploaded video's playing address comes from the server's copy of the same block.
+    sections: draft.sections.filter((s) => s.visible).map((s) => {
+      if (s.type !== "video" || !s.url.startsWith("r2:")) return s;
+      const srv = preview.sections.find((x) => x.id === s.id && x.type === "video" && x.url === s.url);
+      return srv && srv.type === "video" ? { ...s, file: srv.file } : s;
+    }),
   } : null, [draft, preview]);
   // Cutout: made from their profile photo when they pick it, and again when the photo changes.
   const [cutting, setCutting] = useState(false);
@@ -253,7 +259,7 @@ export function BioBuilder() {
       if (j?.status === "done") {
         const d0 = draftRef.current;
         if (d0) change({ theme: { ...d0.theme, living: true } }, true);
-        toast({ title: "Your photo is alive", description: "It plays on the Hero, Cover photo and Classic tops." });
+        toast({ title: "Your photo is alive", description: "It plays on the Hero, Big photo and Classic tops." });
       }
       if (j?.status === "failed") toast({ title: "Couldn't bring it to life", description: j.message, variant: "destructive" });
     }, 6000);
@@ -340,7 +346,7 @@ export function BioBuilder() {
         <div className="min-w-0">
           {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} intro={<IntroCard d={draft} st={intro} start={(b) => void startIntro(b)} reset={resetIntro} on={draft.theme.intro ?? false} setOn={(v) => change({ theme: { ...draft.theme, intro: v } }, true)} at={draft.theme.introAt ?? "bottom-left"} setAt={(v) => change({ theme: { ...draft.theme, introAt: v } }, true)} patch={(p, now) => change({ theme: { ...draft.theme, ...p } }, now)} />} />}
           {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} living={living} startLiving={startLiving} />}
-          {tab === "content" && <ContentTab d={draft} change={change} view={view} />}
+          {tab === "content" && <ContentTab d={draft} change={change} view={view} knowledge={q.data?.knowledge} />}
           {tab === "social" && <SocialTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} />}
           {tab === "brands" && <BrandsTab d={draft} change={change} url={url} kit={kitView} episodes={q.data?.familyPreview?.podcast?.episodes ?? []} />}
@@ -445,9 +451,10 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { 
         </div>
       )}
       <Card icon={ImagePlus} tone="gold" title="Photos">
+      {/* The cover photo is only asked for when their top shows one (Hero, Big photo, Banner). */}
       <div className="grid grid-cols-2 gap-3">
         <ImagePick label="Profile photo" kind="avatar" url={d.avatarUrl} round onDone={(u, p) => { change({ avatarUrl: u }); setPreview(p); }} onClear={() => change({ avatarUrl: "" }, true)} onFixed={(u) => change({ avatarUrl: u }, true)} />
-        <ImagePick label="Cover photo" kind="hero" url={d.heroUrl} note="Used by the Hero, Cover photo and Banner tops. Without one, they use your profile photo." onDone={(u, p) => { change({ heroUrl: u }); setPreview(p); }} onClear={() => change({ heroUrl: "" }, true)} onFixed={(u) => change({ heroUrl: u }, true)} />
+        {(["hero", "blend", "landscape"] as string[]).includes(d.theme.layout) && <ImagePick label="Cover photo" kind="hero" url={d.heroUrl} note="The wide picture across the top of your page. Without one, your profile photo is used." onDone={(u, p) => { change({ heroUrl: u }); setPreview(p); }} onClear={() => change({ heroUrl: "" }, true)} onFixed={(u) => change({ heroUrl: u }, true)} />}
       </div>
       </Card>
       {intro}
@@ -467,16 +474,20 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { 
         </div>
       </Field>
       <div>
-        <div className="mb-1 flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2.5 text-sm font-semibold">
-            Bio
-            <Switch checked={!(d.theme.hideBio ?? false)} onCheckedChange={(v) => change({ theme: { ...d.theme, hideBio: !v } }, true)} aria-label="Show my bio on the page" data-testid="bio-about-bio-on" />
-          </span>
-          <button type="button" onClick={() => void draftBio()} disabled={drafting} className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-[#F0A71F] to-[#e08a00] px-2.5 py-1 text-xs font-bold text-[#1a1200] shadow-sm hover:opacity-90 disabled:opacity-60" data-testid="bio-draft">
-            {drafting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {d.bio.trim() ? "Rewrite it for me" : "Write it for me"}
-          </button>
-        </div>
-        <div className={d.theme.hideBio ? "opacity-50" : ""}><TextEditor body={d.bio} onBody={(bio) => change({ bio })} maxLength={500} rows={3} placeholder="Who you are, what the show is about, who it's for." testid="bio-bio" /></div>
+        <span className="mb-1 flex items-center gap-2.5 text-sm font-semibold">
+          Bio
+          <Switch checked={!(d.theme.hideBio ?? false)} onCheckedChange={(v) => change({ theme: { ...d.theme, hideBio: !v } }, true)} aria-label="Show my bio on the page" data-testid="bio-about-bio-on" />
+        </span>
+        <div className={d.theme.hideBio ? "opacity-50" : ""}><TextEditor body={d.bio} onBody={(bio) => change({ bio })} maxLength={500} rows={3} placeholder="Who you are, what the show is about, who it's for." testid="bio-bio" action={
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => void draftBio()} disabled={drafting} className="flex h-8 w-8 items-center justify-center rounded-lg text-[#b36b00] hover:bg-[#F0A71F]/15 disabled:opacity-60 dark:text-[#F0A71F]" aria-label={d.bio.trim() ? "Rewrite it for me" : "Write it for me"} data-testid="bio-draft">
+                {drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{d.bio.trim() ? "Rewrite it for me" : "Write it for me"}</TooltipContent>
+          </Tooltip>
+        } /></div>
         {d.theme.hideBio && <span className="mt-1 block text-xs text-muted-foreground">Hidden on your page. It's kept here for when you switch it back on.</span>}
       </div>
       </Card>
@@ -496,15 +507,6 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge, intro }: { 
           <SpotPicker value={(d.theme.chatAt ?? "top-right") as Spot} spots={["top-left", "top-right", "socials", "bottom-left", "bottom-right"]} onPick={(v) => change({ theme: { ...d.theme, chatAt: v as NonNullable<BioTheme["chatAt"]> } }, true)} testid="bio-chat-at" />
         </div>
       )}
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3" data-testid="bio-ai">
-        <div className="min-w-0">
-          <p className="flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-[#b36b00]" /> Ask my show (AI)</p>
-          <p className="text-xs text-muted-foreground">
-            {!view.podcast ? "Add your podcast first: it learns from your episodes." : !knowledge?.total ? "It starts learning your episodes as soon as your podcast is here." : knowledge.done < knowledge.total ? `Learning your episodes: ${knowledge.done} of ${knowledge.total} so far. It shows on your page once it knows one.` : `${knowledge.done === 1 ? "Knows your episode" : `Knows all ${knowledge.done} of your episodes`}. Listeners ask; it answers from what you said, with the episode and minute.`}
-          </p>
-        </div>
-        <Switch checked={d.aiEnabled} onCheckedChange={(v) => change({ aiEnabled: v }, true)} />
-      </div>
       </Card>
     </div>
   );
@@ -572,7 +574,7 @@ function LayoutTiles({ d, value, onPick, cutting = false, own, photo }: { d: Pag
   return (
         <div className="grid grid-cols-3 gap-3">
           {own && <Tile on={value === ""} onClick={() => onPick("")} label={own.label} testid="bio-layout-own">{own.art}</Tile>}
-          {([["portrait", "Classic"], ["hero", "Hero"], ["cutout", "Cutout"], ["popout", "Pop-out"], ["sticker", "Sticker"], ["magazine", "Magazine"], ["blend", "Cover photo"], ["landscape", "Banner"], ["shape", "Shape"]] as const).map(([v, l]) => {
+          {([["portrait", "Classic"], ["hero", "Hero"], ["cutout", "Cutout"], ["popout", "Pop-out"], ["sticker", "Sticker"], ["magazine", "Magazine"], ["blend", "Big photo"], ["landscape", "Banner"], ["shape", "Shape"]] as const).map(([v, l]) => {
             const face = avatar ? `center/cover url(${d.avatarUrl})` : "#888";
             return (
               <Tile key={v} on={value === v} onClick={() => onPick(v)} label={l} note={CUTOUT_LAYOUTS.includes(v) && cutting && value === v ? "Cutting you out…" : undefined} testid={`bio-layout-${v}`}>
@@ -1026,11 +1028,11 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
               <div className="mt-4 rounded-xl border-2 border-[#F0A71F]/40 bg-[#F0A71F]/5 p-3" data-testid="bio-living-elsewhere">
                 <div className="flex items-center gap-3">
                   {living.status === "done" && living.url ? <video src={living.url} autoPlay muted loop playsInline className="h-12 w-12 shrink-0 rounded-xl object-cover" /> : <Loader2 className="h-5 w-5 shrink-0 animate-spin text-[#b36b00]" />}
-                  <p className="min-w-0 flex-1 text-xs text-muted-foreground"><b className="text-foreground">{living.status === "done" ? "Your living photo is ready." : "Your living photo is on its way."}</b> It plays with the Classic, Hero and Cover photo tops, not this one.</p>
+                  <p className="min-w-0 flex-1 text-xs text-muted-foreground"><b className="text-foreground">{living.status === "done" ? "Your living photo is ready." : "Your living photo is on its way."}</b> It plays with the Classic, Hero and Big photo tops, not this one.</p>
                 </div>
                 <div className="mt-2 flex gap-2">
                   <Button type="button" size="sm" onClick={() => set({ layout: "hero", living: true })} className="h-8 rounded-full bg-[#053877] px-3 text-xs hover:bg-[#0a4a99]" data-testid="bio-living-use-hero">Use Hero</Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => set({ layout: "blend", living: true })} className="h-8 rounded-full px-3 text-xs">Use Cover photo</Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => set({ layout: "blend", living: true })} className="h-8 rounded-full px-3 text-xs">Use Big photo</Button>
                 </div>
               </div>
             ) : null}
@@ -1495,7 +1497,7 @@ function blank(type: BioSectionType): BioSection {
   }
 }
 
-function ContentTab({ d, change, view }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic }) {
+function ContentTab({ d, change, view, knowledge }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic; knowledge?: { done: number; total: number } }) {
   // The two cards start open; each block's editor starts closed.
   const fold = useFold("content");
   const items = useFold("content-items", false);
@@ -1532,7 +1534,7 @@ function ContentTab({ d, change, view }: { d: Page; change: (p: Partial<Page>, n
                 <button type="button" onClick={() => put(d.sections.filter((x) => x.id !== s.id), true)} className="rounded-full p-1.5 text-muted-foreground hover:bg-red-50 hover:text-destructive dark:hover:bg-red-950" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
                 <button type="button" onClick={f.toggle} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted" aria-label={f.open ? "Close" : "Edit"}><ChevronDown className={`h-4 w-4 transition-transform ${f.open ? "rotate-180" : ""}`} /></button>
               </div>
-              {f.open && <div className="space-y-2 border-t border-border p-3">{s.type === "podcast" ? <PodcastOptions d={d} change={change} view={view} /> : <SectionEditor s={s} upd={(p) => upd(s.id, p)} />}</div>}
+              {f.open && <div className="space-y-2 border-t border-border p-3">{s.type === "podcast" ? <PodcastOptions d={d} change={change} view={view} knowledge={knowledge} /> : <SectionEditor s={s} upd={(p) => upd(s.id, p)} />}</div>}
             </div>
           );
         }} />
@@ -1546,7 +1548,7 @@ function ContentTab({ d, change, view }: { d: Page; change: (p: Partial<Page>, n
  * Your podcast, as a block on the page (added from Content like the rest):
  * the show's feed (or the one hosted here), and how it looks.
  */
-function PodcastOptions({ d, change, view }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic }) {
+function PodcastOptions({ d, change, view, knowledge }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic; knowledge?: { done: number; total: number } }) {
   const o = { ...DEFAULT_PODCAST, ...(d.theme.podcast ?? {}) };
   const set = (p: Partial<BioPodcastOptions>, now = false) => change({ theme: { ...d.theme, podcast: { ...o, ...p } } }, now);
   const setTheme = (p: Partial<BioTheme>) => change({ theme: { ...d.theme, ...p } }, true);
@@ -1558,6 +1560,16 @@ function PodcastOptions({ d, change, view }: { d: Page; change: (p: Partial<Page
           <Field label="Your show" hint={hosted ? "Hosted here on MilitaryVoices: new episodes appear by themselves." : "Paste your show's RSS feed and your latest episodes appear, to play right on your page."}>
             {hosted ? <p className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-emerald-600" /> {view.podcast?.title}</p> : <Input value={d.rssUrl} onChange={(e) => change({ rssUrl: e.target.value })} placeholder="https://feeds.yourhost.com/your-show" data-testid="bio-rss" />}
           </Field>
+          {/* Listeners ask a question on the podcast; the AI answers from the episodes. */}
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3" data-testid="bio-ai">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-[#b36b00]" /> Listeners can ask your podcast</p>
+              <p className="text-xs text-muted-foreground">
+                {!view.podcast ? "Add your podcast first: AI learns it from your episodes." : !knowledge?.total ? "AI starts learning your episodes as soon as your podcast is here." : knowledge.done < knowledge.total ? `AI is learning your episodes: ${knowledge.done} of ${knowledge.total} so far. The Ask button shows once it knows one.` : `An Ask button on your episodes. Listeners type a question and AI answers from what you said, with the episode and minute. ${knowledge.done === 1 ? "It knows your episode." : `It knows all ${knowledge.done} episodes.`}`}
+              </p>
+            </div>
+            <Switch checked={d.aiEnabled} onCheckedChange={(v) => change({ aiEnabled: v }, true)} aria-label="Listeners can ask your podcast" />
+          </div>
           <Field label="Heading" hint="Optional: a small line over your episodes. Leave it empty to keep it tight.">
             <Input value={o.heading} onChange={(e) => set({ heading: e.target.value })} maxLength={80} placeholder="Latest from the show" />
           </Field>
@@ -1623,7 +1635,7 @@ function SectionEditor({ s, upd }: { s: BioSection; upd: (p: Partial<BioSection>
       <button type="button" onClick={() => upd({ links: [...s.links, { id: newId(), label: "", url: "" }] })} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] dark:text-[#8fb5e8]"><Plus className="h-3.5 w-3.5" /> Another link</button>
     </>
   );
-  if (s.type === "video") return <>{title}<Input value={s.url} onChange={(e) => upd({ url: e.target.value })} placeholder="https://youtube.com/watch?v=…" /></>;
+  if (s.type === "video") return <>{title}<VideoPick value={s.url} onChange={(url) => upd({ url })} testid={`bio-section-video-${s.id}`} /></>;
   if (s.type === "promo") {
     // The list of codes (an old single code becomes the first of it).
     const codes = promoCodes(s);
@@ -1685,7 +1697,7 @@ function SectionEditor({ s, upd }: { s: BioSection; upd: (p: Partial<BioSection>
  */
 const EMOJIS = ["❤️", "🥰", "😊", "😂", "🥹", "😍", "🙏", "👏", "💪", "🎉", "🎂", "🎁", "🏠", "👨‍👩‍👧‍👦", "👪", "🤗", "😢", "✨", "⭐", "🌟", "🇺🇸", "🦅", "🎖️", "🪖", "⚓", "✈️", "🫡", "💙", "💛", "🧡", "💚", "💜", "🌻", "🌹", "☀️", "🙌", "👍", "🎙️", "🎧", "📸"];
 
-function TextEditor({ body, align = "left", onBody, onAlign, rows = 5, maxLength = 2000, placeholder = "Write something. Select words, then B, I or U.", emoji = true, testid = "bio-text-body" }: { body: string; align?: BioAlign; onBody: (v: string) => void; onAlign?: (v: BioAlign) => void; rows?: number; maxLength?: number; placeholder?: string; emoji?: boolean; testid?: string }) {
+function TextEditor({ body, align = "left", onBody, onAlign, rows = 5, maxLength = 2000, placeholder = "Write something. Select words, then B, I or U.", emoji = true, testid = "bio-text-body", action }: { body: string; align?: BioAlign; onBody: (v: string) => void; onAlign?: (v: BioAlign) => void; rows?: number; maxLength?: number; placeholder?: string; emoji?: boolean; testid?: string; /** A tool of its own at the toolbar's right end (the bio's "write it for me"). */ action?: React.ReactNode }) {
   const box = useRef<HTMLTextAreaElement>(null);
   const [emojis, setEmojis] = useState(false);
   const insert = (text: string) => {
@@ -1735,6 +1747,7 @@ function TextEditor({ body, align = "left", onBody, onAlign, rows = 5, maxLength
             </div>
           </>
         )}
+        {action && <div className="ml-auto">{action}</div>}
       </div>
       <textarea ref={box} value={body} onChange={(e) => onBody(e.target.value)} rows={rows} maxLength={maxLength} placeholder={placeholder} className="block w-full resize-y bg-transparent px-3 py-2 text-sm outline-none" style={{ textAlign: align }} data-testid={testid} />
     </div>
