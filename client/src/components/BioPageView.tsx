@@ -136,7 +136,7 @@ export function PageTop({ t, avatar, hero, cutoutUrl, name, handle, latest, chil
     <>
       {CUTOUT_LAYOUTS.includes(t.layout) && cutoutUrl ? (
         <>
-          <CutoutTop kind={t.layout} src={cutoutUrl} name={name} theirs={theirs} stripe={/^#[0-9a-f]{6}$/i.test(t.stickerColor ?? "") ? t.stickerColor! : theirs} paper={paper} dark={dark} bigName={bigName} dy={t.cutoutY ?? 0} size={(t.cutoutSize ?? 100) / 100} latest={latest} handle={handle} />
+          <CutoutTop kind={t.layout} src={cutoutUrl} name={name} bg={/^#[0-9a-f]{6}$/i.test(t.stickerColor ?? "") ? t.stickerColor! : theirs} paper={paper} dark={dark} bigName={bigName} dy={t.cutoutY ?? 0} size={(t.cutoutSize ?? 100) / 100} latest={latest} handle={handle} />
           <div className={`relative z-30 mx-auto max-w-[560px] px-5 text-center ${t.layout === "popout" ? "pt-5" : "-mt-4"}`}>{children(false, t.layout !== "popout")}</div>
         </>
       ) : t.layout === "hero" && photo ? (
@@ -178,7 +178,7 @@ export function PageTop({ t, avatar, hero, cutoutUrl, name, handle, latest, chil
  * breaking out of a circle (popout), a sticker on stripes (sticker), or on a
  * magazine cover under a masthead (magazine). dy and size are their adjusters.
  */
-function CutoutTop({ kind, src, name, theirs, stripe, paper, dark, bigName, dy, size, latest, handle }: { kind: string; src: string; name: string; theirs: string; stripe: string; paper: string; dark: boolean; bigName: number; dy: number; size: number; latest?: string; handle: string }) {
+function CutoutTop({ kind, src, name, bg, paper, dark, bigName, dy, size, latest, handle }: { kind: string; src: string; name: string; bg: string; paper: string; dark: boolean; bigName: number; dy: number; size: number; latest?: string; handle: string }) {
   const move: React.CSSProperties = { transform: `translateY(${dy}px) scale(${size})`, transformOrigin: "bottom center" };
   const fade = <div className="absolute inset-x-0 bottom-0 z-20 h-24" style={{ background: `linear-gradient(to bottom, transparent, ${paper})` }} />;
   if (kind === "popout") {
@@ -187,7 +187,7 @@ function CutoutTop({ kind, src, name, theirs, stripe, paper, dark, bigName, dy, 
     return (
       <div className="flex justify-center pt-12" data-testid="bio-popout-header">
         <div className="relative h-[420px] w-[280px]">
-          <div className="absolute bottom-0 left-0 h-[280px] w-[280px] rounded-full" style={{ background: `radial-gradient(circle at 35% 30%, ${theirs}cc, ${theirs})`, boxShadow: `0 20px 50px -20px ${theirs}` }} />
+          <div className="absolute bottom-0 left-0 h-[280px] w-[280px] rounded-full" style={{ background: `radial-gradient(circle at 35% 30%, ${bg}cc, ${bg})`, boxShadow: `0 20px 50px -20px ${bg}` }} />
           <div className="absolute inset-0" style={{ WebkitMask: mask, mask }}>
             <img src={src} alt="" className="absolute bottom-0 left-1/2 h-[400px] max-w-none -translate-x-1/2 object-contain object-bottom" style={{ ...move, transform: `translateX(-50%) ${move.transform}` }} />
           </div>
@@ -198,22 +198,22 @@ function CutoutTop({ kind, src, name, theirs, stripe, paper, dark, bigName, dy, 
   if (kind === "sticker") {
     const edge = "drop-shadow(4px 0 0 #fff) drop-shadow(-4px 0 0 #fff) drop-shadow(0 4px 0 #fff) drop-shadow(0 -4px 0 #fff) drop-shadow(0 14px 18px rgba(0,0,0,0.35))";
     return (
-      <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `repeating-linear-gradient(135deg, ${stripe} 0 26px, ${stripe}d9 26px 52px)` }} data-testid="bio-sticker-header">
-        {name && <h1 className="absolute inset-x-0 top-14 z-0 -rotate-6 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName * 0.9, color: onColor(stripe), textShadow: onColor(stripe) === "#ffffff" ? "0 4px 0 rgba(0,0,0,0.25)" : "0 3px 0 rgba(255,255,255,0.5)" }}>{name}</h1>}
+      <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `repeating-linear-gradient(135deg, ${bg} 0 26px, ${bg}d9 26px 52px)` }} data-testid="bio-sticker-header">
+        {name && <h1 className="absolute inset-x-0 top-14 z-0 -rotate-6 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName * 0.9, color: onColor(bg), textShadow: onColor(bg) === "#ffffff" ? "0 4px 0 rgba(0,0,0,0.25)" : "0 3px 0 rgba(255,255,255,0.5)" }}>{name}</h1>}
         <img src={src} alt="" className="relative z-10 mx-auto block h-[380px] w-auto max-w-[90%] object-contain object-bottom" style={{ ...move, filter: edge }} />
         {fade}
       </div>
     );
   }
   if (kind === "magazine") {
-    const ink = onColor(theirs);
+    const ink = onColor(bg);
     return (
-      <div className="relative flex min-h-[520px] flex-col overflow-hidden" style={{ background: `linear-gradient(180deg, ${theirs} 0%, ${theirs} 70%, ${paper} 100%)` }} data-testid="bio-magazine-header">
+      <div className="relative flex min-h-[520px] flex-col overflow-hidden" style={{ background: `linear-gradient(180deg, ${bg} 0%, ${bg} 70%, ${paper} 100%)` }} data-testid="bio-magazine-header">
         {name ? <h1 className="z-0 break-words px-3 pt-7 text-center font-black uppercase leading-[0.82] tracking-tight" style={{ fontSize: bigName * 1.05, color: ink, fontFamily: FONTS.playfair.css }}>{name}</h1> : <div className="h-20" />}
         <img src={src} alt="" className="relative z-10 mx-auto -mt-12 block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={move} />
         {latest && (
           <div className="absolute bottom-10 left-4 z-20 max-w-[48%] text-left" style={{ color: "#fff", textShadow: "0 2px 10px rgba(0,0,0,0.6)" }}>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: theirs === "#000000" ? "#F0A71F" : "#ffffff" }}>New episode</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em]" style={{ color: bg === "#000000" ? "#F0A71F" : "#ffffff" }}>New episode</p>
             <p className="text-[15px] font-black uppercase leading-tight">{latest}</p>
           </div>
         )}
@@ -223,8 +223,8 @@ function CutoutTop({ kind, src, name, theirs, stripe, paper, dark, bigName, dy, 
     );
   }
   return (
-    <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `radial-gradient(120% 80% at 50% 30%, ${theirs} 0%, ${theirs} 45%, ${paper} 100%)` }} data-testid="bio-cutout-header">
-      {name && <h1 className="absolute inset-x-0 top-16 z-0 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName, color: onColor(theirs), opacity: 0.92 }}>{name}</h1>}
+    <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `radial-gradient(120% 80% at 50% 30%, ${bg} 0%, ${bg} 45%, ${paper} 100%)` }} data-testid="bio-cutout-header">
+      {name && <h1 className="absolute inset-x-0 top-16 z-0 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName, color: onColor(bg), opacity: 0.92 }}>{name}</h1>}
       <img src={src} alt="" className="relative z-10 mx-auto block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={move} />
       {fade}
     </div>

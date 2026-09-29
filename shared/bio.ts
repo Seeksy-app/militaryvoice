@@ -37,7 +37,7 @@ export interface BioTheme {
   linkColor: string;
   /** Their name's size at the top, percent (100 = as drawn). */
   nameSize?: number;
-  /** The Sticker top's stripes ("" = their colour). */
+  /** The cut-out tops' background: the colour behind them, the circle, the stripes, the cover ("" = their colour). */
   stickerColor?: string;
   background: BioBackground;
   /** Where the cover, hero or banner photo is cropped, top (0) to bottom (100). */
