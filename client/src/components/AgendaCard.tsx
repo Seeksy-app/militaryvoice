@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { ArrowRight, Check, Mic2, Play, Radio } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { PublicSignup } from "@shared/schema";
 import type { Marker } from "@shared/mileMarkers";
 import { deriveSocialAccounts } from "@shared/socialLinks";
@@ -78,6 +80,8 @@ export function AgendaCard({
   shareText: string;
   onSelect: (signup: PublicSignup) => void;
 }) {
+  // A guest's face sits beside the host's, as a co-host's does; theirs opens their intro.
+  const [guestOpen, setGuestOpen] = useState(false);
   return (
     <div
                               data-testid={`row-agenda-${index}`}
@@ -106,6 +110,7 @@ export function AgendaCard({
 
       {(() => {
         const co = signup.coHost ?? null;
+        const guest = !co ? signup.guests?.find((g) => g.name.trim()) ?? null : null;
         const firstOf = (n: string) => n.trim().split(/\s+/)[0] || n;
         // The co-host's dialog is built from their profile;
         // a show name that is just their own first name
@@ -133,7 +138,7 @@ export function AgendaCard({
               <Mic2 className="h-6 w-6" />
             </div>
           );
-        if (!co) {
+        if (!co && !guest) {
           return (
             <button
               type="button"
@@ -172,12 +177,12 @@ export function AgendaCard({
               </button>
               <button
                 type="button"
-                onClick={() => onSelect(asSignup())}
+                onClick={() => (co ? onSelect(asSignup()) : setGuestOpen(true))}
                 className="absolute left-10 top-6"
-                aria-label={`${co.hostName}'s profile`}
-                data-testid={`button-cohost-profile-${index}`}
+                aria-label={co ? `${co.hostName}'s profile` : `${guest!.name}, guest`}
+                data-testid={co ? `button-cohost-profile-${index}` : `button-guest-${index}`}
               >
-                {avatar(co.photoUrl, co.hostName, "h-14 w-14 ring-4 ring-card")}
+                {co ? avatar(co.photoUrl, co.hostName, "h-14 w-14 ring-4 ring-card") : avatar(guest!.photoUrl, guest!.name, "h-14 w-14 ring-4 ring-card")}
               </button>
             </span>
             <span className="min-w-0">
@@ -185,17 +190,29 @@ export function AgendaCard({
                 {signup.podcastName}
               </span>
               <span className="line-clamp-2 block text-sm text-muted-foreground">
-                with {signup.hostName} & {co.hostName}
+                {co ? <>with {signup.hostName} & {co.hostName}</> : <>with {signup.hostName}, and guest {guest!.name}</>}
               </span>
               <span className="mt-1 flex flex-wrap gap-x-3 text-xs font-medium text-primary">
                 <button type="button" onClick={() => onSelect(signup)} className="inline-flex items-center gap-1 hover:underline">
                   {firstOf(signup.hostName)}'s profile <ArrowRight className="h-3 w-3" />
                 </button>
-                <button type="button" onClick={() => onSelect(asSignup())} className="inline-flex items-center gap-1 hover:underline">
-                  {firstOf(co.hostName)}'s profile <ArrowRight className="h-3 w-3" />
+                <button type="button" onClick={() => (co ? onSelect(asSignup()) : setGuestOpen(true))} className="inline-flex items-center gap-1 hover:underline">
+                  {firstOf(co ? co.hostName : guest!.name)}{co ? "'s profile" : ", the guest"} <ArrowRight className="h-3 w-3" />
                 </button>
               </span>
             </span>
+            {guest && (
+              <Dialog open={guestOpen} onOpenChange={setGuestOpen}>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader className="items-center text-center">
+                    {avatar(guest.photoUrl, guest.name, "h-24 w-24 ring-4 ring-[#F0A71F]/40")}
+                    <DialogTitle className="pt-2">{guest.name}</DialogTitle>
+                    <DialogDescription>{guest.title ? `${guest.title} · ` : ""}Guest on {signup.podcastName}</DialogDescription>
+                  </DialogHeader>
+                  {guest.intro && <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{guest.intro}</p>}
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         );
       })()}

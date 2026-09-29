@@ -2,7 +2,7 @@ import type { Express, Request, RequestHandler } from "express";
 import crypto from "node:crypto";
 import multer from "multer";
 import sharp from "sharp";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
 import { uploadPhoto } from "./photoStorage.js";
@@ -24,6 +24,19 @@ const str = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
 const MAX_GUESTS = 12;
 
 /** Their link into the green room. */
+/** The public side of each show's guests (for the agenda): no emails, no links. */
+export async function publicGuestsFor(signupIds: number[]): Promise<Map<number, { name: string; title: string; photoUrl: string; intro: string }[]>> {
+  const out = new Map<number, { name: string; title: string; photoUrl: string; intro: string }[]>();
+  if (!signupIds.length) return out;
+  await schemaIsReady();
+  const rows = await db.select().from(showGuests).where(inArray(showGuests.signupId, signupIds)).orderBy(showGuests.id);
+  for (const g of rows) {
+    if (!g.name.trim()) continue;
+    out.set(g.signupId, [...(out.get(g.signupId) ?? []), { name: g.name, title: g.title, photoUrl: g.photoUrl, intro: g.intro }]);
+  }
+  return out;
+}
+
 export const guestLink = (g: Pick<ShowGuestRow, "signupId" | "token">) => `${ORIGIN}/studio?s=${g.signupId}&g=${g.token}`;
 
 /** A guest by the token in their link (only while the booking stands). */

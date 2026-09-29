@@ -179,6 +179,8 @@ export type PublicSignup = Pick<
   } | null;
   /** The company backing this show, when one has. Named on the card. */
   sponsor?: { id: number; name: string; logoUrl: string; url: string } | null;
+  /** Guests the host has added: name, title, face and intro (never their email). */
+  guests?: { name: string; title: string; photoUrl: string; intro: string }[];
 };
 
 // ---------------------------------------------------------------------------

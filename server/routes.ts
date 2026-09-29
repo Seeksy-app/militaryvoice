@@ -131,7 +131,7 @@ import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerHosting, claimEpisodeAudio, claimEpisodeStill } from "./hosting.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor } from "./bioPage.js";
-import { registerGuests, guestByToken, markGuestJoined } from "./guests.js";
+import { registerGuests, guestByToken, markGuestJoined, publicGuestsFor } from "./guests.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
 import { registerMail } from "./mail.js";
 import { registerAutomations } from "./automations.js";
@@ -362,6 +362,9 @@ async function sponsorsBySignup(eventId: number): Promise<Map<number, { id: numb
 
 async function withCoHosts(rows: PublicSignup[], all: { coHostEmail: string; id: number }[]): Promise<PublicSignup[]> {
   const byId = new Map(all.map((s) => [s.id, s.coHostEmail?.trim().toLowerCase() ?? ""]));
+  // Their guests too, for the faces on the card.
+  const guests = await publicGuestsFor(rows.map((r) => r.id)).catch(() => new Map());
+  rows = rows.map((r) => (guests.get(r.id) ? { ...r, guests: guests.get(r.id) } : r));
   return Promise.all(rows.map(async (r) => {
     const email = byId.get(r.id);
     if (!email) return r;
