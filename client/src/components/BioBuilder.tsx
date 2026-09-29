@@ -809,13 +809,10 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear, onFixed }: 
 
 const DESIGN_RAIL = [
   { id: "layout", label: "Layout", icon: LayoutTemplate },
-  { id: "color", label: "Color", icon: Palette },
-  { id: "shade", label: "Shade", icon: Contrast },
+  { id: "color", label: "Colours", icon: Palette },
   { id: "font", label: "Font", icon: Type },
   { id: "shape", label: "Shape", icon: Shapes },
   { id: "style", label: "Style", icon: Paintbrush },
-  { id: "link", label: "Link", icon: Droplets },
-  { id: "bg", label: "BG", icon: ImagePlus },
   { id: "brand", label: "Brand", icon: QrCode },
 ] as const;
 
@@ -933,29 +930,69 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
           )}
         </DesignSection>
 
-        <DesignSection bind={refs} id="color" title="Theme colour" sub="Accent for headings, badges and buttons.">
-          <ColourPick value={t.color} onPick={(v) => set({ color: v })} testid="bio-colour" />
-        </DesignSection>
-
-        <DesignSection bind={refs} id="shade" title="Shade" sub="Overall page brightness tone.">
-          <div className="space-y-2">
-            {([["none", "None", "#ffffff", "#111827"], ["minimal", "Minimal", "#f9fafb", "#111827"], ["light", "Light", "#f3f4f6", "#111827"], ["tint", "Colour tint", `${c}26`, "#111827"], ["dark", "Dark", "#0b1020", "#ffffff"]] as const).map(([v, l, bgc, tx]) => {
-              const on = (t.shade as string) === v;
-              return (
-                <button key={v} type="button" onClick={() => set({ shade: v, ...(bgv.mode === "solid" && bgv.color ? { background: { ...bgv, color: "" } } : {}) })} className={`flex w-full items-center gap-3 rounded-xl border-2 p-2.5 text-left transition-all ${on ? "border-[#053877] ring-2 ring-[#053877]/15 dark:border-[#8fb5e8]" : "border-border hover:border-[#053877]/30"}`} data-testid={`bio-shade-${v}`}>
-                  <span className="flex h-10 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-black/5" style={{ background: bgc }}>
-                    <span className="h-1 w-7 rounded-full" style={{ background: tx, opacity: 0.7 }} /><span className="h-1 w-4 rounded-full" style={{ background: tx, opacity: 0.4 }} />
-                  </span>
-                  <span className="flex-1 text-sm font-medium">{l}</span>
-                  {on && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#053877] text-white"><Check className="h-3 w-3" /></span>}
-                </button>
-              );
-            })}
+        <DesignSection bind={refs} id="color" title="Colours" sub="Everything with colour on your page, in one place.">
+          <div className="space-y-5">
+            <div>
+              <p className="mb-2 text-xs font-semibold">Theme colour <span className="font-normal text-muted-foreground">for headings, badges and buttons</span></p>
+              <ColourPick value={t.color} onPick={(v) => set({ color: v })} testid="bio-colour" />
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-semibold">Shade <span className="font-normal text-muted-foreground">how light or dark the page is</span></p>
+              <CardSelect testid="bio-shade" value={t.shade as string} onPick={(v) => set({ shade: v as BioTheme["shade"], ...(bgv.mode === "solid" && bgv.color ? { background: { ...bgv, color: "" } } : {}) })}
+                options={([["none", "None", "#ffffff", "#111827"], ["minimal", "Minimal", "#f9fafb", "#111827"], ["light", "Light", "#f3f4f6", "#111827"], ["tint", "Colour tint", `${c}26`, "#111827"], ["dark", "Dark", "#0b1020", "#ffffff"]] as const).map(([v, l, bgc, tx]) => ({
+                  value: v,
+                  node: <span className="flex items-center gap-3"><span className="flex h-10 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-black/5" style={{ background: bgc }}><span className="h-1 w-7 rounded-full" style={{ background: tx, opacity: 0.7 }} /><span className="h-1 w-4 rounded-full" style={{ background: tx, opacity: 0.4 }} /></span><span className="text-sm font-medium">{l}</span></span>,
+                }))} />
+            </div>
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold">Link colour <span className="font-normal text-muted-foreground">for your link buttons</span></p>
+                {t.linkColor && <button type="button" onClick={() => set({ linkColor: "" })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Same as the theme colour</button>}
+              </div>
+              <ColourPick value={t.linkColor || t.color} onPick={(v) => set({ linkColor: v })} testid="bio-link-colour" />
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-semibold">Background</p>
+              <div className="mb-3 flex gap-1 rounded-full border border-border p-1">
+                {(["solid", "gradient", "image"] as const).map((m) => <button key={m} type="button" onClick={() => setBg({ mode: m })} className={`${seg(bgv.mode === m)} capitalize`} data-testid={`bio-bg-${m}`}>{m}</button>)}
+              </div>
+              {bgv.mode === "solid" && (
+                <>
+                  <ColourPick value={bgv.color || pal.paper} onPick={(v) => setBg({ color: v })} testid="bio-bg-colour" />
+                  {bgv.color && <button type="button" onClick={() => setBg({ color: "" })} className="mt-2 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">Use the shade's colour</button>}
+                </>
+              )}
+              {bgv.mode === "gradient" && (
+                <>
+                  <div className="h-16 w-full rounded-xl border border-border" style={{ background: pal.background }} />
+                  <p className="my-2 text-[11px] text-muted-foreground">From your theme colour at the top, down to:</p>
+                  <ColourPick value={bgv.color || pal.paper} onPick={(v) => setBg({ color: v })} testid="bio-bg-gradient" />
+                </>
+              )}
+              {bgv.mode === "image" && (
+                <>
+                  <input ref={bgIn} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void uploadBg(e.target.files[0])} />
+                  <button type="button" onClick={() => bgIn.current?.click()} className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border p-4 transition-colors hover:border-[#053877]" data-testid="bio-bg-upload">
+                    {bgv.image ? <img src={bgv.image} alt="" className="h-24 w-full rounded-lg object-cover" /> : bgBusy ? <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /> : <ImagePlus className="h-7 w-7 text-muted-foreground" />}
+                    <span className="text-xs font-semibold text-muted-foreground">{bgv.image ? "Change image" : "Upload an image"}</span>
+                    <span className="text-[10px] text-muted-foreground/70">PNG or JPG, up to 12MB</span>
+                  </button>
+                  {bgv.image && <button type="button" onClick={() => setBg({ image: "", mode: "solid" })} className="mt-2 text-xs font-semibold text-destructive">Remove image</button>}
+                </>
+              )}
+              {/* Fine-tuning: how much of their colour, how light or dark, and how strong the wash over a photo is. */}
+              <div className="mt-4 space-y-3 rounded-xl bg-muted/40 p-3">
+                <RangeRow label="Tint" hint="How much of your colour" value={t.bgTint ?? 0} min={0} max={100} onChange={(v) => set({ bgTint: v })} unit="%" testid="bio-bg-tint" track={`linear-gradient(90deg, ${pal.paper}, ${c})`} />
+                <RangeRow label="Brightness" hint="Darker or lighter" value={t.bgBrightness ?? 0} min={-100} max={100} onChange={(v) => set({ bgBrightness: v })} testid="bio-bg-brightness" track="linear-gradient(90deg, #000000, #ffffff)" />
+                {bgv.mode === "image" && <RangeRow label="Wash" hint="Over your photo, so the words read" value={t.bgWash ?? 65} min={0} max={100} onChange={(v) => set({ bgWash: v })} unit="%" testid="bio-bg-wash" />}
+                {((t.bgTint ?? 0) !== 0 || (t.bgBrightness ?? 0) !== 0) && <button type="button" onClick={() => set({ bgTint: 0, bgBrightness: 0 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
+              </div>
+            </div>
           </div>
         </DesignSection>
 
         <DesignSection bind={refs} id="font" title="Font" sub="Choose a typeface for your page.">
-          <div className="space-y-2">{(Object.keys(FONTS) as BioFont[]).map((f) => <FontRow key={f} font={f} on={t.font === f} onPick={() => set({ font: f })} />)}</div>
+          <CardSelect testid="bio-font" value={t.font} onPick={(v) => set({ font: v as BioFont })} options={(Object.keys(FONTS) as BioFont[]).map((f) => ({ value: f, node: <FontFace font={f} /> }))} />
         </DesignSection>
 
         <DesignSection bind={refs} id="shape" title="Link shape" sub="Corner style for your link buttons.">
@@ -980,48 +1017,6 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
                 </Tile>
               );
             })}
-          </div>
-        </DesignSection>
-
-        <DesignSection bind={refs} id="link" title="Link colour" sub="Colour for your link buttons.">
-          <ColourPick value={t.linkColor || t.color} onPick={(v) => set({ linkColor: v })} testid="bio-link-colour" />
-          {t.linkColor && <button type="button" onClick={() => set({ linkColor: "" })} className="mt-3 rounded-full border border-[#053877]/40 px-3 py-1.5 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]">Reset to theme colour</button>}
-        </DesignSection>
-
-        <DesignSection bind={refs} id="bg" title="Background" sub="Set your page background style.">
-          <div className="mb-3 flex gap-1 rounded-full border border-border p-1">
-            {(["solid", "gradient", "image"] as const).map((m) => <button key={m} type="button" onClick={() => setBg({ mode: m })} className={`${seg(bgv.mode === m)} capitalize`} data-testid={`bio-bg-${m}`}>{m}</button>)}
-          </div>
-          {bgv.mode === "solid" && (
-            <>
-              <ColourPick value={bgv.color || pal.paper} onPick={(v) => setBg({ color: v })} testid="bio-bg-colour" />
-              {bgv.color && <button type="button" onClick={() => setBg({ color: "" })} className="mt-2 rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground">Use the shade's colour</button>}
-            </>
-          )}
-          {bgv.mode === "gradient" && (
-            <>
-              <div className="h-16 w-full rounded-xl border border-border" style={{ background: pal.background }} />
-              <p className="my-2 text-[11px] text-muted-foreground">From your theme colour at the top, down to:</p>
-              <ColourPick value={bgv.color || pal.paper} onPick={(v) => setBg({ color: v })} testid="bio-bg-gradient" />
-            </>
-          )}
-          {bgv.mode === "image" && (
-            <>
-              <input ref={bgIn} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void uploadBg(e.target.files[0])} />
-              <button type="button" onClick={() => bgIn.current?.click()} className="flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border p-4 transition-colors hover:border-[#053877]" data-testid="bio-bg-upload">
-                {bgv.image ? <img src={bgv.image} alt="" className="h-24 w-full rounded-lg object-cover" /> : bgBusy ? <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" /> : <ImagePlus className="h-7 w-7 text-muted-foreground" />}
-                <span className="text-xs font-semibold text-muted-foreground">{bgv.image ? "Change image" : "Upload an image"}</span>
-                <span className="text-[10px] text-muted-foreground/70">PNG or JPG, up to 12MB</span>
-              </button>
-              {bgv.image && <button type="button" onClick={() => setBg({ image: "", mode: "solid" })} className="mt-2 text-xs font-semibold text-destructive">Remove image</button>}
-            </>
-          )}
-          {/* Fine-tuning: how much of their colour, how light or dark, and how strong the wash over a photo is. */}
-          <div className="mt-4 space-y-3 rounded-xl bg-muted/40 p-3">
-            <RangeRow label="Tint" hint="How much of your colour" value={t.bgTint ?? 0} min={0} max={100} onChange={(v) => set({ bgTint: v })} unit="%" testid="bio-bg-tint" track={`linear-gradient(90deg, ${pal.paper}, ${c})`} />
-            <RangeRow label="Brightness" hint="Darker or lighter" value={t.bgBrightness ?? 0} min={-100} max={100} onChange={(v) => set({ bgBrightness: v })} testid="bio-bg-brightness" track="linear-gradient(90deg, #000000, #ffffff)" />
-            {bgv.mode === "image" && <RangeRow label="Wash" hint="Over your photo, so the words read" value={t.bgWash ?? 65} min={0} max={100} onChange={(v) => set({ bgWash: v })} unit="%" testid="bio-bg-wash" />}
-            {((t.bgTint ?? 0) !== 0 || (t.bgBrightness ?? 0) !== 0) && <button type="button" onClick={() => set({ bgTint: 0, bgBrightness: 0 })} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
           </div>
         </DesignSection>
 
@@ -1286,14 +1281,37 @@ function ColourPick({ value, onPick, testid }: { value: string; onPick: (v: stri
 }
 
 /** A typeface, shown in itself. */
-function FontRow({ font, on, onPick }: { font: BioFont; on: boolean; onPick: () => void }) {
+/** A font's name in itself, with a big Aa. */
+function FontFace({ font }: { font: BioFont }) {
   useBioFont(font);
   const f = FONTS[font];
+  return <span className="flex w-full items-center justify-between gap-3" style={{ fontFamily: f.css }}><span className="text-[15px]">{f.label}</span><span className="text-2xl font-bold">Aa</span></span>;
+}
+
+/**
+ * One card showing what's chosen; open it and every choice is a card
+ * underneath, the chosen one ticked. For Shade and Font.
+ */
+function CardSelect({ value, options, onPick, testid }: { value: string; options: { value: string; node: React.ReactNode }[]; onPick: (v: string) => void; testid?: string }) {
+  const [open, setOpen] = useState(false);
+  const current = options.find((o) => o.value === value) ?? options[0];
   return (
-    <button type="button" onClick={onPick} className={`flex w-full items-center justify-between rounded-2xl border-2 px-4 py-3 text-left transition-all ${on ? "border-[#053877] bg-[#053877]/[0.05] dark:border-[#8fb5e8]" : "border-border hover:border-[#053877]/40"}`} style={{ fontFamily: f.css }} data-testid={`bio-font-${font}`}>
-      <span className="text-[15px]">{f.label}</span>
-      <span className="flex items-center gap-2"><span className="text-2xl font-bold">Aa</span>{on && <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#053877] text-white"><Check className="h-3 w-3" /></span>}</span>
-    </button>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <button type="button" className="flex w-full items-center gap-3 rounded-xl border-2 border-[#053877] bg-card p-2.5 text-left ring-2 ring-[#053877]/10 transition-colors hover:bg-muted/30 dark:border-[#8fb5e8]" data-testid={testid}>
+          <span className="min-w-0 flex-1">{current.node}</span>
+          <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" sideOffset={6} className="max-h-[420px] w-[var(--radix-dropdown-menu-trigger-width)] space-y-1 overflow-y-auto p-1.5">
+        {options.map((o) => (
+          <DropdownMenuItem key={o.value} onSelect={() => onPick(o.value)} className={`flex cursor-pointer items-center gap-3 rounded-lg border-2 p-2.5 ${o.value === value ? "border-[#053877] bg-[#053877]/[0.05] dark:border-[#8fb5e8]" : "border-transparent"}`} data-testid={`${testid}-${o.value}`}>
+            <span className="min-w-0 flex-1">{o.node}</span>
+            {o.value === value && <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#053877] text-white"><Check className="h-3 w-3" /></span>}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
