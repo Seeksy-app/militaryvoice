@@ -11,7 +11,7 @@ import { sendPodcastOwnerCodeEmail } from "./email.js";
 import { isUploadPostConfigured, publishVideo } from "./uploadPost.js";
 import { toTrash } from "./trash.js";
 import { XMLParser } from "fast-xml-parser";
-import { bioPages, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
+import { bioPages, hostPosts, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
 
 /**
  * Podcast hosting, all MilitaryVoices: a podcaster's show and its episodes,
@@ -440,11 +440,34 @@ async function videoKeyOf(e: HostedEpisodeRow, owner: string): Promise<string> {
   }
   return "";
 }
+/** When the Library already sent this recording to YouTube (Library → Post), so the podcast doesn't send it twice. */
+export async function libraryYouTubeAt(recordingId: number | null): Promise<string> {
+  if (!recordingId) return "";
+  const [p] = await db.select({ createdAt: hostPosts.createdAt, scheduledAt: hostPosts.scheduledAt }).from(hostPosts)
+    .where(and(eq(hostPosts.kind, "recording"), eq(hostPosts.refId, recordingId), sql`${hostPosts.platforms} like '%youtube%'`, sql`${hostPosts.status} in ('sent','sending','scheduled','queued')`))
+    .orderBy(desc(hostPosts.id)).limit(1);
+  return p ? p.scheduledAt || p.createdAt : "";
+}
+/** When their podcast already sent this recording to YouTube (null: it hasn't), so the Library doesn't send it twice. */
+export async function podcastYouTubeAt(recordingId: number): Promise<string | null> {
+  const eps = await db.select({ youtube: hostedEpisodes.youtube }).from(hostedEpisodes).where(eq(hostedEpisodes.recordingId, recordingId));
+  for (const x of eps) {
+    try { const y = JSON.parse(x.youtube || "{}") as { state?: string; at?: string; via?: string }; if (y.state === "sent" && y.via !== "library") return y.at ?? ""; } catch { /* not posted */ }
+  }
+  return null;
+}
 const hasVideo = (e: HostedEpisodeRow) => (e.mime.startsWith("video/") && !!e.audioKey) || !!e.recordingId;
 
 /** Post one episode to the owner's YouTube channel. Throws with a message fit to show them. */
-async function postEpisodeToYouTube(e: HostedEpisodeRow, show: HostedShowRow, privacyIn: string): Promise<string> {
+async function postEpisodeToYouTube(e: HostedEpisodeRow, show: HostedShowRow, privacyIn: string, again = false): Promise<string> {
   const fail = (message: string, status = 400) => Object.assign(new Error(message), { status });
+  // Already sent from the Library: note it, don't post it twice (unless they press Post again themselves).
+  const fromLibrary = again ? "" : await libraryYouTubeAt(e.recordingId);
+  if (fromLibrary) {
+    const yt = JSON.stringify({ state: "sent", at: fromLibrary, via: "library" });
+    await db.update(hostedEpisodes).set({ youtube: yt, youtubeWanted: false }).where(eq(hostedEpisodes.id, e.id));
+    return yt;
+  }
   if (!isUploadPostConfigured()) throw fail("Posting to YouTube isn't switched on yet.", 503);
   const key = await videoKeyOf(e, show.email);
   if (!key) throw fail("This episode is audio only. YouTube needs the video: upload the MP4, or make the episode from its Library recording.");
@@ -576,7 +599,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
         feedUrl: feedUrl(s.slug),
         missing: readiness(s, eps),
         ownerConfirmed: feedOwnerEmail(s) === s.ownerEmail.trim(),
-        episodes: eps.map((e) => ({ ...e, downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e) })),
+        episodes: await Promise.all(eps.map(async (e) => ({ ...e, downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e), ytLibrary: await libraryYouTubeAt(e.recordingId) }))),
         stats: { total: st.total, last30: st.series.reduce((a, d) => a + d.count, 0), series: st.series, apps: st.apps },
       });
     }
@@ -766,7 +789,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     if (!e || !show) return res.status(404).json({ message: "No such episode." });
     const privacy = ["public", "unlisted", "private"].includes(String(req.body?.privacy)) ? String(req.body.privacy) : show.youtubePrivacy;
     try {
-      res.json({ ok: true, youtube: await postEpisodeToYouTube(e, show, privacy) });
+      res.json({ ok: true, youtube: await postEpisodeToYouTube(e, show, privacy, req.body?.again === true) });
     } catch (err) {
       res.status((err as { status?: number }).status ?? 502).json({ message: (err as Error).message });
     }

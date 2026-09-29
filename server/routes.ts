@@ -129,7 +129,7 @@ import { registerMusic } from "./music.js";
 import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
-import { registerHosting, claimEpisodeAudio, claimEpisodeStill } from "./hosting.js";
+import { registerHosting, claimEpisodeAudio, claimEpisodeStill, podcastYouTubeAt } from "./hosting.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor } from "./bioPage.js";
 import { registerGuests, guestByToken, markGuestJoined, publicGuestsFor } from "./guests.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
@@ -3358,6 +3358,11 @@ export function registerRoutes(app: Express): void {
       const title = String(req.body?.title ?? row.title ?? "").trim() || row.title || "My session";
       const description = String(req.body?.description ?? "").trim();
       const youtube = await youtubeFrom(req.body);
+      // Already on YouTube from their podcast: say so rather than post it twice (they can untick YouTube, or say again).
+      if (platforms.includes("youtube") && req.body?.again !== true) {
+        const sentAt = await podcastYouTubeAt(row.id);
+        if (sentAt !== null) return res.status(409).json({ message: `This one's already on YouTube: your podcast posted it${sentAt ? ` on ${new Date(sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}. Untick YouTube to post it everywhere else.` });
+      }
       const out = await publishAndRecord({
         email, kind: "recording", refId: row.id, shape: "", title, description, platforms, when: when || "", queue: req.body?.queue === true,
         publish: (x) => publishVideo({ username, platforms, videoUrl, title, description: description || undefined, scheduledDate: x.scheduledDate, timezone: x.scheduledDate ? String(req.body?.timezone ?? "") || undefined : undefined, youtube, addToQueue: x.addToQueue, externalId: x.externalId }),

@@ -18,7 +18,7 @@ import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, ExternalLink, Film, I
  * Dashboard, Your analytics and the profile sponsors see.
  */
 
-type Ep = HostedEpisodeRow & { downloads: number; live: boolean; hasVideo?: boolean };
+type Ep = HostedEpisodeRow & { downloads: number; live: boolean; hasVideo?: boolean; ytLibrary?: string };
 type Hosted = { show: HostedShowRow; feedUrl: string; missing: string[]; ownerConfirmed: boolean; episodes: Ep[]; stats: { total: number; last30: number; series: { date: string; count: number }[]; apps: Record<string, number> } };
 type Resp = { shows: Hosted[]; categories: Record<string, string[]>; youtubeReady?: boolean };
 
@@ -417,11 +417,12 @@ function YouTubeEpisodes({ h, ready, onDone }: { h: Hosted; ready: boolean; onDo
       {videos.length ? (
         <ul className="mt-2 divide-y divide-border">
           {videos.map((e) => {
-            let yt: { at?: string; state?: string; error?: string } = {};
+            let yt: { at?: string; state?: string; error?: string; via?: string } = {};
             try { yt = e.youtube ? JSON.parse(e.youtube) : {}; } catch { yt = {}; }
-            const sent = yt.state === "sent" || (!yt.state && !!yt.at);
+            const fromLibrary = yt.via === "library" || (!yt.state && !!e.ytLibrary);
+            const sent = yt.state === "sent" || (!yt.state && !!yt.at) || !!e.ytLibrary;
             const skipped = yt.state === "skipped";
-            const status = sent ? `On YouTube since ${dateOf(yt.at ?? "")}`
+            const status = sent ? `On YouTube since ${dateOf(yt.at ?? e.ytLibrary ?? "")}${fromLibrary ? ", posted from your Library" : ""}`
               : skipped ? "Not for YouTube"
               : e.youtubeWanted ? `Goes to YouTube when it's out (${dateOf(e.publishedAt)})`
               : yt.state === "failed" ? `Didn't post: ${yt.error ?? "try again"}`
@@ -434,7 +435,7 @@ function YouTubeEpisodes({ h, ready, onDone }: { h: Hosted; ready: boolean; onDo
                 ) : (
                   <>
                     {!sent && <Button size="sm" variant="ghost" onClick={() => void act(e, "youtube/skip", { skip: true })} disabled={busy != null} className="h-8 rounded-full text-muted-foreground" data-testid={`hosting-yt-skip-${e.id}`}>Not this one</Button>}
-                    <Button size="sm" variant="outline" onClick={() => void act(e, "youtube", {}, "On its way to YouTube")} disabled={busy != null || !ready} className="h-8 gap-1.5 rounded-full" data-testid={`hosting-yt-${e.id}`}>{busy === e.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} {sent ? "Post again" : "Post now"}</Button>
+                    <Button size="sm" variant="outline" onClick={() => { if (sent && !window.confirm("It's already on YouTube. Post it a second time?")) return; void act(e, "youtube", sent ? { again: true } : {}, "On its way to YouTube"); }} disabled={busy != null || !ready} className="h-8 gap-1.5 rounded-full" data-testid={`hosting-yt-${e.id}`}>{busy === e.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} {sent ? "Post again" : "Post now"}</Button>
                   </>
                 )}
               </li>
@@ -762,7 +763,8 @@ function EpisodeDialog({ ep, show, youtubeReady, onClose, onSaved }: { ep: Ep | 
   const [yt, setYt] = useState<boolean | null>(null);
   if (!ep) return null;
   const ytState = (() => { try { return ep.youtube ? (JSON.parse(ep.youtube) as { state?: string }).state ?? "" : ""; } catch { return ""; } })();
-  const offerYt = ep.status === "draft" && !!ep.hasVideo && ytState !== "sent";
+  // Already sent to YouTube from the Library: no second post.
+  const offerYt = ep.status === "draft" && !!ep.hasVideo && ytState !== "sent" && !ep.ytLibrary;
   const ytOn = yt ?? (youtubeReady && show.youtubeMode === "always" && ytState !== "skipped");
   const v = { ...ep, ...f } as Ep;
   const set = (k: string, val: unknown) => setF((x) => ({ ...x, [k]: val }));
@@ -821,6 +823,9 @@ function EpisodeDialog({ ep, show, youtubeReady, onClose, onSaved }: { ep: Ep | 
               ))}
               {when === "later" && <Input type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className="h-8 w-56" />}
             </div>
+          )}
+          {ep.status === "draft" && ep.ytLibrary && (
+            <p className="rounded-xl border border-border px-3 py-2.5 text-sm text-muted-foreground sm:col-span-3">Already on YouTube: you posted it from your Library on {dateOf(ep.ytLibrary)}, so it won't be posted again.</p>
           )}
           {offerYt && (
             <div className="rounded-xl border border-border px-3 py-2.5 text-sm sm:col-span-3" data-testid="hosting-ep-youtube">
