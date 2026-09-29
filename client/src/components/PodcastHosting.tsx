@@ -38,11 +38,16 @@ export function PodcastHosting() {
     onError: (e: Error) => toast({ title: "Couldn't set that up", description: e.message, variant: "destructive" }),
   });
   const [editing, setEditing] = useState(false);
+  // The field Show details opens on (from the checklist): the description, the name, the owner email.
+  const [focus, setFocus] = useState<"" | "title" | "description" | "ownerEmail">("");
   const [adding, setAdding] = useState(false);
+  // Which of their shows is open, and the way to add another.
+  const [pick, setPick] = useState<number | null>(null);
+  const [newShow, setNewShow] = useState(false);
   const [editEp, setEditEp] = useState<Ep | null>(null);
 
   if (q.isLoading) return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
-  const h = q.data?.shows[0];
+  const h = q.data?.shows.find((x) => x.show.id === pick) ?? q.data?.shows[0];
 
   if (!h) {
     return (
@@ -79,10 +84,25 @@ export function PodcastHosting() {
 
   const s = h.show;
   const ready = h.missing.length === 0;
+  // Each thing the apps need, one tap from where it's added.
+  const fix = (m: string) => {
+    if (/cover art/i.test(m)) return document.getElementById(`hosting-art-input-${s.id}`)?.click();
+    if (/published episode/i.test(m)) return setAdding(true);
+    if (/confirm the owner/i.test(m)) return document.getElementById("hosting-owner")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setFocus(/description/i.test(m) ? "description" : /show name/i.test(m) ? "title" : /owner email/i.test(m) ? "ownerEmail" : "");
+    setEditing(true);
+  };
   const topApp = Object.entries(h.stats.apps).sort((a, b) => b[1] - a[1])[0];
 
   return (
     <section className="mt-2 space-y-4" data-testid="podcast-hosting">
+      {/* Their shows (when there's more than one), and adding another. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {(q.data?.shows.length ?? 0) > 1 && q.data!.shows.map((x) => (
+          <button key={x.show.id} type="button" onClick={() => setPick(x.show.id)} className={`rounded-full border-2 px-3 py-1.5 text-xs font-semibold transition-colors ${x.show.id === s.id ? "border-[#053877] bg-[#053877] text-white" : "border-border text-muted-foreground hover:border-[#053877]/40"}`} data-testid={`hosting-pick-${x.show.id}`}>{x.show.title}</button>
+        ))}
+        <button type="button" onClick={() => setNewShow(true)} className="ml-auto inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]" data-testid="hosting-add-show"><Plus className="h-3.5 w-3.5" /> Add a show</button>
+      </div>
       {/* The show: its art, its name, its feed, and what's left before Apple takes it. */}
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <div className="flex flex-wrap items-start gap-5">
@@ -91,7 +111,7 @@ export function PodcastHosting() {
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Your podcast</p>
             <h1 className="mt-0.5 text-2xl font-bold tracking-tight">{s.title}</h1>
             <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{s.description || "No description yet."}</p>
-            <OwnerEmail h={h} onDone={refresh} />
+            <div id="hosting-owner"><OwnerEmail h={h} onDone={refresh} /></div>
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <FeedLink url={h.feedUrl} />
               <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-full" onClick={() => setEditing(true)} data-testid="hosting-edit-show"><Pencil className="h-3.5 w-3.5" /> Show details</Button>
@@ -100,10 +120,20 @@ export function PodcastHosting() {
           </div>
         </div>
         {!ready ? (
-          <div className="mt-4 rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/[0.07] p-3.5" data-testid="hosting-missing">
-            <p className="flex items-center gap-2 text-sm font-semibold"><AlertCircle className="h-4 w-4 text-[#b36b00]" /> Before Apple and Spotify will list it</p>
-            <ul className="mt-1.5 grid gap-1 pl-6 text-sm text-foreground/80 sm:grid-cols-2">
-              {h.missing.map((m) => <li key={m} className="list-disc">{m}</li>)}
+          <div className="mt-4 max-w-xl rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/[0.07] p-3.5" data-testid="hosting-missing">
+            <p className="flex items-center gap-2 text-sm font-semibold"><AlertCircle className="h-4 w-4 text-[#b36b00]" /> Before Apple and Spotify will list it
+              <a href="/help/podcast#ready" target="_blank" rel="noreferrer" className="flex h-5 w-5 items-center justify-center rounded-full border border-current text-[11px] font-bold text-[#b36b00] hover:bg-[#F0A71F]/20" title="How your show gets to Apple and Spotify" aria-label="How your show gets to Apple and Spotify">?</a>
+            </p>
+            <ul className="mt-2 space-y-1">
+              {h.missing.map((m) => (
+                <li key={m}>
+                  <button type="button" onClick={() => fix(m)} className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-foreground/85 transition-colors hover:bg-[#F0A71F]/15" data-testid="hosting-missing-item">
+                    <span className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-[#b36b00]/60" />
+                    <span className="min-w-0 flex-1">{m}</span>
+                    <span className="shrink-0 text-xs font-semibold text-[#b36b00] opacity-70 group-hover:opacity-100">Add it →</span>
+                  </button>
+                </li>
+              ))}
             </ul>
           </div>
         ) : (
@@ -114,7 +144,7 @@ export function PodcastHosting() {
               <p className="min-w-0 flex-1 text-sm"><span className="font-semibold">Ready.</span> Your show is already in Apple Podcasts and Spotify; forwarding your old feed moves them here, with nothing to submit again.</p>
             ) : (
               <>
-                <p className="min-w-0 flex-1 text-sm"><span className="font-semibold">Ready for the apps.</span> Submit your feed once to each; new episodes reach them on their own.</p>
+                <p className="min-w-0 flex-1 text-sm"><span className="font-semibold">Ready for the apps.</span> Submit your feed once to each; new episodes reach them on their own. <a href="/help/podcast#list" target="_blank" rel="noreferrer" className="font-semibold text-emerald-700 underline-offset-2 hover:underline dark:text-emerald-400">How?</a></p>
                 <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-full"><a href="https://podcastsconnect.apple.com/my-podcasts/new-feed" target="_blank" rel="noreferrer">Apple Podcasts <ExternalLink className="h-3 w-3" /></a></Button>
                 <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-full"><a href="https://creators.spotify.com/pod/dashboard/import" target="_blank" rel="noreferrer">Spotify <ExternalLink className="h-3 w-3" /></a></Button>
               </>
@@ -173,7 +203,17 @@ export function PodcastHosting() {
         )}
       </div>
 
-      <ShowDialog open={editing} onClose={() => setEditing(false)} show={s} categories={q.data?.categories ?? {}} onSaved={refresh} />
+      <ShowDialog open={editing} focus={focus} onClose={() => { setEditing(false); setFocus(""); }} show={s} categories={q.data?.categories ?? {}} onSaved={refresh} onDeleted={() => { setPick(null); refresh(); }} />
+      <Dialog open={newShow} onOpenChange={setNewShow}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Add a show</DialogTitle>
+            <DialogDescription>Start a new one here, or move one you host somewhere else.</DialogDescription>
+          </DialogHeader>
+          <Button onClick={() => create.mutate(undefined, { onSuccess: (r: { id?: number }) => { setNewShow(false); if (r?.id) setPick(r.id); } })} disabled={create.isPending} className="h-11 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-new-show">{create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Start a new show</Button>
+          <ImportShow onDone={() => { setNewShow(false); refresh(); }} />
+        </DialogContent>
+      </Dialog>
       <NewEpisodeDialog open={adding} onClose={() => setAdding(false)} show={s} onCreated={(e) => { refresh(); setAdding(false); setEditEp({ ...e, downloads: 0, live: false }); }} />
       <EpisodeDialog ep={editEp} onClose={() => setEditEp(null)} onSaved={refresh} />
     </section>
@@ -338,7 +378,7 @@ function ArtworkButton({ show, onDone }: { show: HostedShowRow; onDone: () => vo
   };
   return (
     <>
-      <input ref={input} type="file" accept="image/jpeg,image/png" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} />
+      <input ref={input} id={`hosting-art-input-${show.id}`} type="file" accept="image/jpeg,image/png" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} />
       <button type="button" onClick={() => input.current?.click()} disabled={busy} className="group relative h-32 w-32 shrink-0 overflow-hidden rounded-2xl border border-border bg-muted" title="Cover art: square JPG or PNG, 1400 to 3000 pixels" data-testid="hosting-artwork">
         {show.artworkUrl ? <img src={show.artworkUrl} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full flex-col items-center justify-center gap-1 text-xs font-medium text-muted-foreground"><ImagePlus className="h-6 w-6" /> Cover art</span>}
         <span className={`absolute inset-0 flex items-center justify-center bg-black/50 text-xs font-semibold text-white transition-opacity ${busy ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>{busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Change"}</span>
@@ -347,8 +387,16 @@ function ArtworkButton({ show, onDone }: { show: HostedShowRow; onDone: () => vo
   );
 }
 
-function ShowDialog({ open, onClose, show, categories, onSaved }: { open: boolean; onClose: () => void; show: HostedShowRow; categories: Record<string, string[]>; onSaved: () => void }) {
+function ShowDialog({ open, onClose, show, categories, onSaved, onDeleted, focus = "" }: { open: boolean; onClose: () => void; show: HostedShowRow; categories: Record<string, string[]>; onSaved: () => void; onDeleted: () => void; focus?: string }) {
   const { toast } = useToast();
+  // Deleting: they type the show's name to be sure.
+  const [deleting, setDeleting] = useState(false);
+  const [sure, setSure] = useState("");
+  const del = useMutation({
+    mutationFn: async () => (await apiRequest("DELETE", `/api/host/hosting/shows/${show.id}`, { confirm: sure })).json(),
+    onSuccess: () => { setDeleting(false); setSure(""); onClose(); onDeleted(); toast({ title: "Show deleted", description: "Its feed has stopped." }); },
+    onError: (e: Error) => toast({ title: "Not deleted", description: e.message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" }),
+  });
   const [f, setF] = useState<Partial<HostedShowRow>>({});
   const v = { ...show, ...f };
   const set = (k: keyof HostedShowRow, val: unknown) => setF((x) => ({ ...x, [k]: val }));
@@ -366,10 +414,10 @@ function ShowDialog({ open, onClose, show, categories, onSaved }: { open: boolea
           <DialogDescription>What Apple, Spotify and every podcast app show about your podcast.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className={`${label} sm:col-span-2`}>Show name<Input value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1" /></label>
-          <label className={`${label} sm:col-span-2`}>Description<Textarea value={v.description} onChange={(e) => set("description", e.target.value)} rows={4} className="mt-1" placeholder="What the show is about, who it's for, and who hosts it." /></label>
+          <label className={`${label} sm:col-span-2`}>Show name<Input autoFocus={focus === "title"} value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1" /></label>
+          <label className={`${label} sm:col-span-2`}>Description<Textarea autoFocus={focus === "description"} value={v.description} onChange={(e) => set("description", e.target.value)} rows={4} className="mt-1" placeholder="What the show is about, who it's for, and who hosts it." /></label>
           <label className={label}>Host or author<Input value={v.author} onChange={(e) => set("author", e.target.value)} className="mt-1" /></label>
-          <label className={label}>Owner email<Input type="email" value={v.ownerEmail} onChange={(e) => set("ownerEmail", e.target.value)} className="mt-1" /></label>
+          <label className={label}>Owner email<Input autoFocus={focus === "ownerEmail"} type="email" value={v.ownerEmail} onChange={(e) => set("ownerEmail", e.target.value)} className="mt-1" /></label>
           <label className={label}>Category
             <select value={v.category} onChange={(e) => { set("category", e.target.value); set("subcategory", ""); }} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground">
               {Object.keys(categories).map((c) => <option key={c}>{c}</option>)}
@@ -388,6 +436,21 @@ function ShowDialog({ open, onClose, show, categories, onSaved }: { open: boolea
           <label className={`${label} sm:col-span-2`}>Moving to another host? (optional)<Input value={v.newFeedUrl} onChange={(e) => set("newFeedUrl", e.target.value)} className="mt-1" placeholder="Your new host's feed address. Leave empty to stay." /><span className="mt-1 block font-normal">Your feed then forwards every app there (a 301), and your subscribers follow.</span></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.explicit} onChange={(e) => set("explicit", e.target.checked)} /> Explicit language</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.showType === "serial"} onChange={(e) => set("showType", e.target.checked ? "serial" : "episodic")} /> Listen in order (a series)</label>
+        </div>
+        {/* Deleting the show: the apps first (the help says how), then here; its feed stops. */}
+        <div className="rounded-xl border border-destructive/30 p-3">
+          {deleting ? (
+            <div className="space-y-2">
+              <p className="text-sm">This deletes <b>{show.title}</b> and its episodes, and its feed stops. If it's in Apple or Spotify, <a href="/help/podcast#unlist" target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">take it down there first</a>. Type the show's name to delete it.</p>
+              <Input value={sure} onChange={(e) => setSure(e.target.value)} placeholder={show.title} data-testid="hosting-delete-confirm" />
+              <div className="flex gap-2">
+                <Button onClick={() => del.mutate()} disabled={del.isPending || sure.trim().toLowerCase() !== show.title.trim().toLowerCase()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="hosting-delete-go">{del.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Delete this show</Button>
+                <Button variant="outline" onClick={() => { setDeleting(false); setSure(""); }}>Keep it</Button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setDeleting(true)} className="text-sm font-semibold text-destructive hover:underline" data-testid="hosting-delete">Delete this show…</button>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => { setF({}); onClose(); }}>Cancel</Button>

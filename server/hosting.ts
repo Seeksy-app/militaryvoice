@@ -739,6 +739,18 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     res.json({ ok, tagged, hops, show: out });
   });
 
+  // Delete a show: its episodes go with it and its feed stops, so apps still reading it drop the show.
+  // They typed its name to confirm; the help says to take it down in Apple and Spotify first.
+  app.delete("/api/host/hosting/shows/:id", requireHostSession, async (req, res) => {
+    const email = emailOf(req);
+    const s = await ownShow(email, Number(req.params.id));
+    if (!s) return res.status(404).json({ message: "No such show." });
+    if (String(req.body?.confirm ?? "").trim().toLowerCase() !== s.title.trim().toLowerCase()) return res.status(400).json({ message: "Type the show's name to delete it." });
+    await db.delete(hostedEpisodes).where(eq(hostedEpisodes.showId, s.id));
+    await db.delete(hostedShows).where(eq(hostedShows.id, s.id));
+    res.json({ ok: true });
+  });
+
   app.delete("/api/host/hosting/episodes/:id", requireHostSession, async (req, res) => {
     const email = emailOf(req);
     const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);

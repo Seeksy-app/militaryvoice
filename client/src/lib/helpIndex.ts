@@ -20,12 +20,36 @@ export type HelpCategory = "lineup" | "showday" | "youtube" | "watching" | "spon
 export const HELP_CATEGORIES: { key: HelpCategory; title: string; blurb: string }[] = [
   { key: "lineup", title: "Getting on the lineup", blurb: "Your sign-in, your slot, your photo and your card." },
   { key: "showday", title: "Show day", blurb: "The green room, going live, a recorded episode, co-hosting." },
-  { key: "youtube", title: "Your YouTube and Zoom", blurb: "Your segment on your channel, and your Zoom recordings in your Library." },
+  { key: "youtube", title: "Your podcast, YouTube and Zoom", blurb: "Your show in Apple and Spotify, your segment on your channel, your Zoom recordings in your Library." },
   { key: "watching", title: "Watching the marathon", blurb: "What it is, when it is, and how to catch a show." },
   { key: "sponsors", title: "Sponsors", blurb: "Backing a show, and what a sponsor gets." },
 ];
 
 export const HELP_INDEX: HelpEntry[] = [
+  {
+    title: "Get your podcast into Apple Podcasts and Spotify",
+    summary: "Your feed, what the apps need first, and submitting it once to each. New episodes then go out on their own.",
+    href: "/help/podcast",
+    keywords: "podcast hosting rss feed apple podcasts spotify list submit connect creators directory cover art description owner email category publish",
+    audience: "podcasters",
+    category: "youtube",
+  },
+  {
+    title: "Take your podcast down from Apple and Spotify",
+    summary: "Remove it in Podcasts Connect and Spotify for Creators first, then delete the show here.",
+    href: "/help/podcast#unlist",
+    keywords: "podcast unlist remove delete take down apple spotify hide show feed",
+    audience: "podcasters",
+    category: "youtube",
+  },
+  {
+    title: "Move your podcast here, or away, with a 301",
+    summary: "Import your feed, turn on the redirect at your old host, then Check the redirect. Moving away: Moving to another host? in Show details.",
+    href: "/help/podcast#move",
+    keywords: "podcast move host migrate import redirect 301 new feed url forward subscribers buzzsprout libsyn anchor spotify for creators podbean transistor",
+    audience: "podcasters",
+    category: "youtube",
+  },
   {
     title: "Send your slot to your own YouTube",
     summary: "Connect your channel once and your segment streams there too, live. A 45-second video and the steps.",

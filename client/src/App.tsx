@@ -18,6 +18,7 @@ import Faq from "@/pages/Faq";
 import HelpYoutube from "@/pages/HelpYoutube";
 import ReviewLogin from "@/pages/ReviewLogin";
 import HelpZoom from "@/pages/HelpZoom";
+import HelpPodcast from "@/pages/HelpPodcast";
 import HelpIndex from "@/pages/HelpIndex";
 import Discover from "@/pages/Discover";
 import Directory from "@/pages/Directory";
@@ -92,6 +93,7 @@ function AppRouter() {
       <Route path="/find">{() => { if (typeof window !== "undefined") window.location.replace("/discover?src=on-air"); return null; }}</Route>
       <Route path="/help/youtube">{() => <HelpYoutube />}</Route>
       <Route path="/help/zoom">{() => <HelpZoom />}</Route>
+      <Route path="/help/podcast">{() => <HelpPodcast />}</Route>
       {/* Registered on the Google OAuth consent screen — these URLs are
           load-bearing for verification, so don't rename them. */}
       <Route path="/policy">{() => <PrivacyPolicy />}</Route>
