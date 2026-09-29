@@ -229,6 +229,47 @@ export function BioBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft?.theme.layout, draft?.brands?.layout, draft?.family?.layout, draft?.avatarUrl, draft?.cutoutFrom]);
 
+  // The living photo: made on fal (a few minutes), checked here whatever tab or top they're on,
+  // so it finishes even when they go on working; switched on for them when it's ready.
+  const [living, setLiving] = useState<LivingState>({ status: "loading" });
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const checkLiving = useCallback(async () => {
+    try {
+      const j = (await (await apiRequest("GET", "/api/host/bio/living")).json()) as { status: LivingState["status"]; livingUrl?: string; message?: string; preview?: BioPublic };
+      if (j.preview) setPreview(j.preview);
+      setLiving({ status: j.status, url: j.livingUrl, message: j.message });
+      return j;
+    } catch { return null; }
+  }, []);
+  useEffect(() => { if (draft?.id) void checkLiving(); }, [draft?.id, draft?.heroUrl, draft?.avatarUrl, checkLiving]);
+  useEffect(() => {
+    if (living.status !== "running") return;
+    const t = setInterval(async () => {
+      const j = await checkLiving();
+      if (j?.status === "done") {
+        const d0 = draftRef.current;
+        if (d0) change({ theme: { ...d0.theme, living: true } }, true);
+        toast({ title: "Your photo is alive", description: "It plays on the Hero, Cover photo and Classic tops." });
+      }
+      if (j?.status === "failed") toast({ title: "Couldn't bring it to life", description: j.message, variant: "destructive" });
+    }, 6000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [living.status]);
+  const startLiving = async (again = false) => {
+    setLiving({ status: "running" });
+    try {
+      const r = await apiRequest("POST", "/api/host/bio/living", { again });
+      const j = (await r.json()) as { status: string; livingUrl?: string };
+      if (j.status === "done") setLiving({ status: "done", url: j.livingUrl });
+      else toast({ title: "Bringing your photo to life", description: "About three minutes. Keep working; we'll tell you when it's ready." });
+    } catch (e) {
+      setLiving({ status: "none" });
+      toast({ title: "Couldn't start it", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
+    }
+  };
+
   // The Brands view: the numbers from the server, what they write from the draft.
   const kitView: BioBrandsPublic | null = useMemo(() => draft && (kitSrv ?? q.data?.brandsPreview) ? {
     ...(kitSrv ?? q.data!.brandsPreview!), displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl, theme: draft.theme, kit: { ...DEFAULT_BRANDS, ...(draft.brands ?? {}) },
@@ -292,7 +333,7 @@ export function BioBuilder() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
         <div className="min-w-0">
           {tab === "profile" && <ProfileTab d={draft} view={view} change={change} flush={flush} setPreview={setPreview} knowledge={q.data?.knowledge} />}
-          {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} setPreview={setPreview} />}
+          {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} living={living} startLiving={startLiving} />}
           {tab === "content" && <ContentTab d={draft} change={change} />}
           {tab === "social" && <SocialTab d={draft} change={change} />}
           {tab === "share" && <ShareTab url={url} />}
@@ -302,6 +343,7 @@ export function BioBuilder() {
         </div>
         {/* The page, as listeners will see it. */}
         <div className="min-w-0 rounded-3xl bg-white p-4 dark:bg-card ring-1 ring-border lg:sticky lg:top-20 lg:self-start">
+          {living.status === "running" && <p className="mb-2 flex items-center justify-center gap-2 rounded-full bg-[#F0A71F]/15 px-3 py-1.5 text-xs font-semibold text-[#8a5300] dark:text-[#F0A71F]" data-testid="bio-living-pill"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Bringing your photo to life. Keep working; it's ready in about three minutes.</p>}
           <div className="mb-3 flex justify-center">
             <div className="inline-flex gap-1 rounded-full border border-border bg-card p-1">
               <DropdownMenu>
@@ -397,8 +439,8 @@ function ProfileTab({ d, view, change, flush, setPreview, knowledge }: { d: Page
       )}
       <Card icon={ImagePlus} tone="gold" title="Photos">
       <div className="grid grid-cols-2 gap-3">
-        <ImagePick label="Profile photo" kind="avatar" url={d.avatarUrl} round onDone={(u, p) => { change({ avatarUrl: u }); setPreview(p); }} onClear={() => change({ avatarUrl: "" }, true)} />
-        <ImagePick label="Cover photo" kind="hero" url={d.heroUrl} note="Used by the Hero, Cover photo and Banner tops. Without one, they use your profile photo." onDone={(u, p) => { change({ heroUrl: u }); setPreview(p); }} onClear={() => change({ heroUrl: "" }, true)} />
+        <ImagePick label="Profile photo" kind="avatar" url={d.avatarUrl} round onDone={(u, p) => { change({ avatarUrl: u }); setPreview(p); }} onClear={() => change({ avatarUrl: "" }, true)} onFixed={(u) => change({ avatarUrl: u }, true)} />
+        <ImagePick label="Cover photo" kind="hero" url={d.heroUrl} note="Used by the Hero, Cover photo and Banner tops. Without one, they use your profile photo." onDone={(u, p) => { change({ heroUrl: u }); setPreview(p); }} onClear={() => change({ heroUrl: "" }, true)} onFixed={(u) => change({ heroUrl: u }, true)} />
       </div>
       </Card>
       <Card icon={User} tone="blue" title="About you">
@@ -690,10 +732,22 @@ function ViewPhoto({ kind, url, fallback, note, onChange }: { kind: "brands" | "
   );
 }
 
-function ImagePick({ label, kind, url, round, note, onDone, onClear }: { label: string; kind: "avatar" | "hero"; url: string; round?: boolean; note?: string; onDone: (url: string, preview: BioPublic) => void; onClear: () => void }) {
+function ImagePick({ label, kind, url, round, note, onDone, onClear, onFixed }: { label: string; kind: "avatar" | "hero"; url: string; round?: boolean; note?: string; onDone: (url: string, preview: BioPublic) => void; onClear: () => void; onFixed: (url: string) => void }) {
   const { toast } = useToast();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  // Fix-up: a sharper, cleaner copy made on fal, shown next to theirs to choose.
+  const [fixing, setFixing] = useState(false);
+  const [fixed, setFixed] = useState("");
+  const fixUp = async () => {
+    setFixing(true);
+    try {
+      const r = await again(() => apiRequest("POST", "/api/host/bio/fixup", { kind }));
+      setFixed(((await r.json()) as { url: string }).url);
+    } catch (e) {
+      toast({ title: "Couldn't fix it up", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
+    } finally { setFixing(false); }
+  };
   const go = async (f: File) => {
     setBusy(true);
     try {
@@ -718,8 +772,35 @@ function ImagePick({ label, kind, url, round, note, onDone, onClear }: { label: 
         {url ? <img src={url} alt="" className={round ? "h-24 w-24 rounded-full object-cover" : "h-full w-full object-cover"} /> : <span className="flex flex-col items-center gap-1 text-xs text-muted-foreground"><ImagePlus className="h-5 w-5" /> Add</span>}
         <span className={`absolute inset-0 flex items-center justify-center bg-black/45 text-xs font-semibold text-white ${busy ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>{busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Change"}</span>
       </button>
-      {url && <button type="button" onClick={onClear} className="mt-1 text-xs text-muted-foreground hover:text-foreground">Remove</button>}
+      {url && (
+        <div className="mt-1 flex items-center justify-between gap-2">
+          {/-fixed-/.test(url)
+            ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><Check className="h-3.5 w-3.5" /> Fixed up</span>
+            : <button type="button" onClick={() => void fixUp()} disabled={fixing} className="inline-flex items-center gap-1 text-xs font-semibold text-[#b36b00] hover:underline disabled:opacity-70 dark:text-[#F0A71F]" data-testid={`bio-fixup-${kind}`}>{fixing ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Sharpening, about 20 seconds…</> : <><Sparkles className="h-3.5 w-3.5" /> Fix up</>}</button>}
+          <button type="button" onClick={onClear} className="text-xs text-muted-foreground hover:text-foreground">Remove</button>
+        </div>
+      )}
       {note && <p className="mt-1 text-xs text-muted-foreground">{note}</p>}
+      {fixed && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onClick={() => setFixed("")} role="dialog" aria-label="Your photo, fixed up" data-testid="bio-fixup-compare">
+          <div className="w-full max-w-2xl rounded-3xl bg-card p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <p className="text-lg font-bold">Your photo, fixed up</p>
+            <p className="text-sm text-muted-foreground">Sharper, cleaner, with the face brought out. Which do you want on your page?</p>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              {([["Before", url], ["After", fixed]] as const).map(([l, u]) => (
+                <figure key={l} className="overflow-hidden rounded-2xl border border-border">
+                  <img src={u} alt={l} className={`w-full object-cover ${round ? "aspect-square" : "aspect-[4/3]"}`} />
+                  <figcaption className={`px-3 py-1.5 text-center text-xs font-bold ${l === "After" ? "bg-[#F0A71F]/15 text-[#8a5300] dark:text-[#F0A71F]" : "text-muted-foreground"}`}>{l === "After" ? "✨ After" : "Before"}</figcaption>
+                </figure>
+              ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button onClick={() => { onFixed(fixed); setFixed(""); toast({ title: "Sharper photo in", description: "It's on your page now." }); }} className="flex-1 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-fixup-use"><Check className="h-4 w-4" /> Use the sharper one</Button>
+              <Button variant="outline" onClick={() => setFixed("")} className="rounded-full">Keep mine</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -742,7 +823,7 @@ const DESIGN_RAIL = [
  * Design, as MilCrunch lays it out: a rail of sections on the left (it follows
  * you as you scroll, and jumps when clicked) and every setting in one column.
  */
-function DesignTab({ d, change, view, cutting = false, cutError = "", setPreview }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic; cutting?: boolean; cutError?: string; setPreview: (p: BioPublic) => void }) {
+function DesignTab({ d, change, view, cutting = false, cutError = "", living, startLiving }: { d: Page; change: (p: Partial<Page>, now?: boolean) => void; view: BioPublic; cutting?: boolean; cutError?: string; living: LivingState; startLiving: (again?: boolean) => void }) {
   const t = d.theme;
   const set = (p: Partial<BioTheme>) => change({ theme: { ...t, ...p } });
   const c = t.color;
@@ -833,7 +914,7 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", setPreview
             </div>
           )}
           {CUTOUT_LAYOUTS.includes(t.layout) && t.layout !== "sticker" && d.cutoutUrl && d.cutoutFrom === d.avatarUrl && <ScenePicker scene={t.scene ?? ""} onPick={(scene) => set({ scene })} />}
-          {(t.layout === "hero" || t.layout === "blend" || (t.layout === "portrait" && !d.heroUrl)) && hasPhoto && <LivingPhoto on={t.living ?? false} setOn={(v) => set({ living: v })} photo={d.heroUrl || d.avatarUrl} setPreview={setPreview} />}
+          {(t.layout === "hero" || t.layout === "blend" || (t.layout === "portrait" && !d.heroUrl)) && hasPhoto && <LivingPhoto on={t.living ?? false} setOn={(v) => set({ living: v })} st={living} start={startLiving} />}
           {cutError && CUTOUT_LAYOUTS.includes(t.layout) && <p className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{cutError}</p>}
           {hasPhoto && !CUTOUT_LAYOUTS.includes(t.layout) && (
             <div className="mt-5">
@@ -1014,10 +1095,13 @@ function ScenePicker({ scene, onPick }: { scene: string; onPick: (url: string) =
       <p className="text-[11px] text-muted-foreground">Made for you by AI in a few seconds. Pick one, describe your own, or use a photo.</p>
       <div className="grid grid-cols-4 gap-2">
         {SCENE_PICKS.map(([k, l, e]) => {
-          const url = made[k];
+          // Only the one in use shows its picture and a tick; the others look like the rest (made ones come back instantly).
+          const on = !!made[k] && scene === made[k];
           return (
-            <button key={k} type="button" onClick={() => void make(k, { preset: k })} disabled={busy != null} className={chip(!!url && scene === url)} style={url ? { background: `center/cover url(${url})` } : undefined} data-testid={`bio-scene-${k}`}>
-              {busy === k ? <Loader2 className="h-4 w-4 animate-spin" /> : <span className={url ? "rounded bg-black/55 px-1.5 py-0.5 text-white" : ""}>{url ? l : <><span className="block text-lg leading-none">{e}</span>{l}</>}</span>}
+            <button key={k} type="button" onClick={() => void make(k, { preset: k })} disabled={busy != null} className={chip(on)} style={on ? { background: `center/cover url(${made[k]})` } : undefined} aria-pressed={on} data-testid={`bio-scene-${k}`}>
+              {busy === k ? <Loader2 className="h-4 w-4 animate-spin" /> : on
+                ? <><span className="rounded bg-black/55 px-1.5 py-0.5 text-white">{l}</span><span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#053877] text-white"><Check className="h-3 w-3" /></span></>
+                : <span><span className="block text-lg leading-none">{e}</span>{l}</span>}
             </button>
           );
         })}
@@ -1036,40 +1120,8 @@ function ScenePicker({ scene, onPick }: { scene: string; onPick: (url: string) =
  * The living photo: their top photo moving for a few seconds (a blink, a
  * breath, a smile), looping. Made once (about a minute), then on or off.
  */
-function LivingPhoto({ on, setOn, photo, setPreview }: { on: boolean; setOn: (v: boolean) => void; photo: string; setPreview: (p: BioPublic) => void }) {
-  const { toast } = useToast();
-  const [st, setSt] = useState<{ status: "none" | "running" | "done" | "failed" | "loading"; url?: string; message?: string }>({ status: "loading" });
-  const check = useCallback(async () => {
-    try {
-      const j = (await (await apiRequest("GET", "/api/host/bio/living")).json()) as { status: "none" | "running" | "done" | "failed"; livingUrl?: string; message?: string; preview?: BioPublic };
-      if (j.preview) setPreview(j.preview);
-      setSt({ status: j.status, url: j.livingUrl, message: j.message });
-      return j;
-    } catch { return null; }
-  }, [setPreview]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void check(); }, [photo]);
-  useEffect(() => {
-    if (st.status !== "running") return;
-    const t = setInterval(async () => {
-      const j = await check();
-      if (j?.status === "done") { setOn(true); toast({ title: "Your photo is alive", description: "It's on your page now." }); }
-      if (j?.status === "failed") toast({ title: "Couldn't bring it to life", description: j.message, variant: "destructive" });
-    }, 6000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [st.status]);
-  const start = async (again = false) => {
-    setSt({ status: "running" });
-    try {
-      const r = await apiRequest("POST", "/api/host/bio/living", { again });
-      const j = (await r.json()) as { status: string; livingUrl?: string };
-      if (j.status === "done") { setSt({ status: "done", url: j.livingUrl }); setOn(true); }
-    } catch (e) {
-      setSt({ status: "none" });
-      toast({ title: "Couldn't start it", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
-    }
-  };
+type LivingState = { status: "none" | "running" | "done" | "failed" | "loading"; url?: string; message?: string };
+function LivingPhoto({ on, setOn, st, start }: { on: boolean; setOn: (v: boolean) => void; st: LivingState; start: (again?: boolean) => void }) {
   return (
     <div className="mt-4 space-y-2 rounded-xl border-2 border-[#F0A71F]/40 bg-[#F0A71F]/5 p-3" data-testid="bio-living-card">
       <div className="flex items-center gap-2">
@@ -1086,10 +1138,10 @@ function LivingPhoto({ on, setOn, photo, setPreview }: { on: boolean; setOn: (v:
           </div>
         </div>
       ) : st.status === "running" ? (
-        <p className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="bio-living-running"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Bringing your photo to life. About a minute; you can keep working.</p>
+        <p className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="bio-living-running"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Bringing your photo to life. About three minutes; keep working, even on another tab.</p>
       ) : (
         <>
-          <p className="text-xs text-muted-foreground">Your photo, moving for a few seconds on a loop: a blink, a breath, a smile. Made by AI in about a minute.</p>
+          <p className="text-xs text-muted-foreground">Your photo, moving for a few seconds on a loop: a blink, a breath, a smile. Made by AI in about three minutes.</p>
           <Button type="button" onClick={() => void start()} disabled={st.status === "loading"} className="w-full gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-living-make"><Sparkles className="h-4 w-4" /> Bring my photo to life</Button>
         </>
       )}

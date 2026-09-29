@@ -483,6 +483,13 @@ export function registerBioPage(app: Express) {
     if (typeof b.aiEnabled === "boolean") patch.aiEnabled = b.aiEnabled;
     if (typeof b.published === "boolean") patch.published = b.published;
     if (b.avatarUrl === "" || b.heroUrl === "") { if (b.avatarUrl === "") patch.avatarUrl = ""; if (b.heroUrl === "") patch.heroUrl = ""; }
+    // A fixed-up copy they chose: only this page's own, from our photo storage.
+    const ours = (v: unknown, kind: "avatar" | "hero") => {
+      const base = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
+      return typeof v === "string" && !!base && v.startsWith(`${base}/storage/v1/object/public/`) && new RegExp(`/bio/${row.id}-${kind}-fixed-\\d+\\.jpg$`).test(v);
+    };
+    if (ours(b.avatarUrl, "avatar")) patch.avatarUrl = b.avatarUrl;
+    if (ours(b.heroUrl, "hero")) patch.heroUrl = b.heroUrl;
     if (b.theme) patch.theme = JSON.stringify(cleanTheme(b.theme, parseTheme(row.theme)));
     if (b.sections) patch.sections = JSON.stringify(cleanSections(b.sections));
     if (b.socials) patch.socials = JSON.stringify(cleanSocials(b.socials));
@@ -582,6 +589,36 @@ export function registerBioPage(app: Express) {
     } catch (err) {
       console.error("Living photo check failed:", (err as Error).message);
       res.json({ status: "running" });
+    }
+  });
+
+  // Photo fix-up: their profile or cover photo, sharper and cleaner (Topaz, faces enhanced), about 20 seconds.
+  // Sent back to look at first; it becomes their photo only when they choose it.
+  const fixRuns = new Map<number, number[]>();
+  app.post("/api/host/bio/fixup", requireHostSession, async (req, res) => {
+    const row = await pageFor(emailOf(req));
+    if (!process.env.FAL_KEY) return res.status(503).json({ message: "Fix-up isn't switched on yet." });
+    const kind = req.body?.kind === "hero" ? "hero" : "avatar";
+    const src = kind === "hero" ? row.heroUrl : row.avatarUrl;
+    if (!src) return res.status(400).json({ message: "Add a photo first." });
+    const hits = (fixRuns.get(row.id) ?? []).filter((t) => Date.now() - t < 24 * 3600_000);
+    if (hits.length >= 10) return res.status(429).json({ message: "That's ten today. Try again tomorrow." });
+    fixRuns.set(row.id, [...hits, Date.now()]);
+    try {
+      const r = await fetch("https://fal.run/fal-ai/topaz/upscale/image", {
+        method: "POST", headers: FAL(), signal: AbortSignal.timeout(120_000),
+        body: JSON.stringify({ image_url: src, model: "Standard V2", upscale_factor: 2, face_enhancement: true, face_enhancement_strength: 0.8, fix_compression: 0.5, denoise: 0.3, sharpen: 0.2, output_format: "jpeg" }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { image?: { url?: string } };
+      if (!r.ok || !j.image?.url) throw new Error(`fal ${r.status}`);
+      const raw = Buffer.from(await (await fetch(j.image.url, { signal: AbortSignal.timeout(60_000) })).arrayBuffer());
+      const img = kind === "avatar"
+        ? await sharp(raw).resize(1200, 1200, { fit: "cover", position: "attention" }).jpeg({ quality: 90, mozjpeg: true }).toBuffer()
+        : await sharp(raw).resize(2400, 2400, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 88, mozjpeg: true }).toBuffer();
+      res.json({ url: await uploadPhoto(`bio/${row.id}-${kind}-fixed-${Date.now()}.jpg`, img, "image/jpeg") });
+    } catch (err) {
+      console.error("Fix-up failed:", (err as Error).message);
+      res.status(502).json({ message: "Couldn't fix up that photo. Try again in a moment." });
     }
   });
 
