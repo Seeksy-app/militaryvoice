@@ -3189,7 +3189,10 @@ function ActivityLog({
   eventId,
   onViewEngagement,
   onSelectContact,
+  onReplies,
 }: {
+  /** To Replies, where a waiting one is sent. */
+  onReplies?: () => void;
   broadcasts: BroadcastRow[];
   eventId: number;
   onViewEngagement: (broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) => void;
@@ -3390,7 +3393,7 @@ function ActivityLog({
                   {m.ackAt && <span className="text-emerald-700 dark:text-emerald-400">⚡ Alex acknowledged</span>}
                   {m.status === "sent" ? <span className="text-emerald-700 dark:text-emerald-400">✓ Answered by {m.replyFrom === "riccoh" ? "Riccoh" : m.replyFrom === "michael" ? "Michael" : "the team"}</span>
                     : m.status === "ignored" ? <span className="text-muted-foreground">No follow-up needed</span>
-                    : <span className="text-muted-foreground">A person still owes a reply · see Replies</span>}
+                    : <span className="text-muted-foreground">A person still owes a reply · {onReplies ? <button type="button" onClick={onReplies} className="font-semibold text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]" data-testid="activity-to-replies">Open in Replies to send</button> : "see Replies"}</span>}
                 </div>
               </div>
             ) });
@@ -4711,7 +4714,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
       {/* ── ACTIVITY LOG ── */}
       {view === "activity" && (
         <div className="flex flex-col gap-4">
-          <ActivityLog broadcasts={broadcastList} eventId={eventId} onViewEngagement={openEngagementView} onSelectContact={setSelectedContact} />
+          <ActivityLog broadcasts={broadcastList} eventId={eventId} onViewEngagement={openEngagementView} onSelectContact={setSelectedContact} onReplies={() => setView("replies")} />
         </div>
       )}
 
