@@ -686,7 +686,9 @@ export function registerBioPage(app: Express) {
           if (!t.ok) {
             const why = await t.text().catch(() => "");
             console.error("ElevenLabs voice failed:", t.status, why.slice(0, 300));
-            throw Object.assign(new Error(`tts ${t.status}`), { say: t.status === 401 ? `The ${voice} voice was refused: the ElevenLabs key in Vercel isn't allowed to speak (it needs the Text to Speech permission).` : t.status === 402 || /quota|credits/i.test(why) ? `The ${voice} voice is out of ElevenLabs credits.` : `The ${voice} voice didn't answer (ElevenLabs ${t.status}). Try again, or pick another voice.` });
+            let reason = "";
+            try { const d = (JSON.parse(why) as { detail?: { message?: string } | string }).detail; reason = typeof d === "string" ? d : d?.message ?? ""; } catch { reason = why.slice(0, 160); }
+            throw Object.assign(new Error(`tts ${t.status}`), { say: t.status === 401 ? `The ${voice} voice was refused by ElevenLabs: ${reason || "the key in Vercel isn't allowed to use it"}` : t.status === 402 || /quota|credits/i.test(why) ? `The ${voice} voice is out of ElevenLabs credits.` : `The ${voice} voice didn't answer (ElevenLabs ${t.status}). Try again, or pick another voice.` });
           }
           audio = await uploadShowAsset(`bio/${row.id}-voice-${Date.now()}.mp3`, Buffer.from(await t.arrayBuffer()), "audio/mpeg");
         } else {
