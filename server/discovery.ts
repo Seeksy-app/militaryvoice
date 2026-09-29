@@ -12,6 +12,7 @@
 // is the expensive, personal step, so each member gets an allowance a month.
 import crypto from "node:crypto";
 import { buildProfile } from "./creatorProfile.js";
+import { registerPodcastRoutes } from "./podchaser.js";
 import type { Express, Request, Response } from "express";
 import { and, desc, eq, gte, inArray } from "drizzle-orm";
 import { db, storage } from "./storage.js";
@@ -615,6 +616,7 @@ async function lookupsThisMonth(email: string): Promise<number> {
 }
 
 export function registerDiscoveryRoutes(app: Express): void {
+  registerPodcastRoutes(app, requireMember);
   /** Who's asking: signed in or not, and whether Discovery is on their account. */
   app.get("/api/discover/me", (req, res) =>
     send(res, async () => {

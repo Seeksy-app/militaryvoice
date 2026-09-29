@@ -20,6 +20,7 @@ import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { CreatorProfileSections, type Profile, type ProfilePerson } from "@/components/CreatorProfileSections";
 import { DiscoverEnrich, type EnrichCard } from "@/components/DiscoverEnrich";
 import { FiltersPanel, FilterChips, activeFilters, filtersForServer, type Filters } from "@/components/DiscoverFilters";
+import { PodcastResults, PodcastDrawer, POD_AUDIENCE, POD_PEOPLE_SORTS, POD_SHOW_SORTS, type PodOpen } from "@/components/DiscoverPodcasts";
 
 const NAVY = "#04102b";
 const GOLD = "#F0A71F";
@@ -74,6 +75,7 @@ const PLATFORMS = [
   { v: "tiktok", label: "TikTok" },
   { v: "twitter", label: "X" },
   { v: "twitch", label: "Twitch" },
+  { v: "podcasts", label: "Podcasts" },
 ];
 const BRANCHES = ["Army", "Navy", "Air Force", "Marine Corps", "Coast Guard", "Space Force", "Military spouse"];
 const SIZES = [
@@ -114,14 +116,25 @@ const MODES = [
   { v: "keywords", label: "Keywords in bio", icon: TypeIcon, hint: "Words that appear in their bio. Separate with commas." },
   { v: "username", label: "Username", icon: AtSign, hint: "A handle or a profile link. Opens their full profile." },
 ] as const;
-type Mode = (typeof MODES)[number]["v"];
+/** With Podcasts picked: shows, or the people who host them and guest on them. */
+const PC_MODES = [
+  { v: "shows", label: "Shows", icon: Mic2, hint: "Podcasts by topic: to pitch, sponsor, or be a guest on." },
+  { v: "people", label: "Hosts & guests", icon: Users, hint: "People who host a show or have been a guest on one." },
+] as const;
+const PC_TRIES = {
+  shows: ["Transition out of the military", "Military spouse life", "PTSD and recovery", "Veteran entrepreneurs"],
+  people: ["Veteran authors", "Special operations", "Military historians", "Medal of Honor"],
+} as const;
+type Mode = (typeof MODES)[number]["v"] | (typeof PC_MODES)[number]["v"];
+const isPodMode = (m: Mode): m is "shows" | "people" => m === "shows" || m === "people";
 
 const compact = (n: number | null | undefined) =>
   n == null ? "–" : n >= 1_000_000 ? `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K` : String(Math.round(n));
 const pct = (n: number | null | undefined, d = 1) => (n == null ? "–" : `${n.toFixed(d)}%`);
+const isPod = (p: string) => p === "podcast" || p === "podperson";
 const profileUrl = (c: Pick<Card, "platform" | "handle">) =>
-  c.platform === "youtube" ? `https://youtube.com/@${c.handle}` : c.platform === "tiktok" ? `https://tiktok.com/@${c.handle}` : c.platform === "twitter" ? `https://x.com/${c.handle}` : c.platform === "twitch" ? `https://twitch.tv/${c.handle}` : `https://instagram.com/${c.handle}`;
-const platformLabel = (p: string) => PLATFORMS.find((x) => x.v === p)?.label ?? p;
+  isPod(c.platform) ? "" : c.platform === "youtube" ? `https://youtube.com/@${c.handle}` : c.platform === "tiktok" ? `https://tiktok.com/@${c.handle}` : c.platform === "twitter" ? `https://x.com/${c.handle}` : c.platform === "twitch" ? `https://twitch.tv/${c.handle}` : `https://instagram.com/${c.handle}`;
+const platformLabel = (p: string) => (p === "podcast" ? "Podcast" : p === "podperson" ? "Host or guest" : PLATFORMS.find((x) => x.v === p)?.label ?? p);
 
 /** An avatar that falls back to initials rather than a broken image. */
 function Avatar({ src, name, size = 56, ring = false }: { src: string; name: string; size?: number; ring?: boolean }) {
@@ -221,6 +234,21 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
     }
   });
   const [tab, setTab] = useState<"search" | "enrich" | "lists">("search");
+  // Podcasts: their own sort, audience floor and guests switch, and the show or person open.
+  const [pcSort, setPcSort] = useState("best");
+  const [pcMin, setPcMin] = useState(0);
+  const [pcGuests, setPcGuests] = useState(false);
+  const [podOpen, setPodOpen] = useState<PodOpen | null>(null);
+  const [podFrom, setPodFrom] = useState<PodOpen[]>([]);
+  const pcStatus = useQuery<{ on: boolean; locked?: string[] }>({ queryKey: ["/api/discover/podcasts/status"], enabled: platform === "podcasts", queryFn: async () => (await fetch("/api/discover/podcasts/status")).json(), staleTime: 10 * 60_000 });
+  const pcLocked = new Set(pcStatus.data?.locked ?? []);
+  // Crossing between creators and podcasts changes what the search asks, so it starts over.
+  const choosePlatform = (p: string) => {
+    const was = platform === "podcasts";
+    const now = p === "podcasts";
+    setPlatform(p);
+    if (was !== now) { setMode(now ? "shows" : "ai"); setPcSort("best"); setSubmitted(null); }
+  };
   const [open, setOpenRaw] = useState<Card | null>(null);
   // The list a creator was opened from, for back and next in the panel.
   const [openFrom, setOpenFrom] = useState<Card[]>([]);
@@ -314,7 +342,7 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
   // Ten at a time; "Load more" adds the next ten under them.
   const search = useInfiniteQuery<SearchResult>({
     queryKey: ["/api/discover/search", submitted],
-    enabled: !!submitted && submitted.mode !== "username" && (isMember || !meLoading),
+    enabled: !!submitted && submitted.mode !== "username" && !isPodMode(submitted.mode) && (isMember || !meLoading),
     initialPageParam: 0,
     getNextPageParam: (last) => (last.total > (last.page + 1) * last.pageSize && last.page < 40 ? last.page + 1 : undefined),
     queryFn: async ({ pageParam }) => {
@@ -405,12 +433,12 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
         const bar = (
           <SearchBar
             platform={platform}
-            setPlatform={setPlatform}
+            setPlatform={choosePlatform}
             mode={mode}
             setMode={setMode}
             q={q}
             setQ={setQ}
-            placeholder={mode === "ai" ? d.placeholder : mode === "keywords" ? "army wife, military spouse, milso" : "@handle, or paste a profile link"}
+            placeholder={mode === "shows" ? "Leadership, transition, fitness, faith…" : mode === "people" ? "A topic they're known for, or a name…" : mode === "ai" ? d.placeholder : mode === "keywords" ? "army wife, military spouse, milso" : "@handle, or paste a profile link"}
             ghost={ghost}
             callout={tryOwn && !tryOwnDone && !submitted && !q && !ghost ? <TryYourOwn onClose={() => setTryOwnDone(true)} /> : null}
             onFocusQ={() => { if (tryOwn) setTryOwnDone(true); }}
@@ -424,8 +452,8 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
         const tries = (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Try</span>
-            {d.tries.map((t) => (
-              <button key={t} type="button" onClick={() => run({ q: t, mode: "ai" })} className="rounded-full bg-[#2563eb] px-3.5 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#1d4ed8]" data-testid="discover-try">
+            {(isPodMode(mode) ? PC_TRIES[mode] : d.tries).map((t) => (
+              <button key={t} type="button" onClick={() => run({ q: t, mode: isPodMode(mode) ? mode : "ai" })} className="rounded-full bg-[#2563eb] px-3.5 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#1d4ed8]" data-testid="discover-try">
                 {t}
               </button>
             ))}
@@ -474,6 +502,21 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
                         );
                       })}
                     </div>
+                    {isPodMode(mode) ? (
+                      <>
+                        {mode === "shows" && !pcLocked.has("hasGuests") && (
+                          <button type="button" aria-pressed={pcGuests} onClick={() => setPcGuests((v) => !v)} className={`h-9 rounded-full border px-3 text-sm font-medium transition-colors ${pcGuests ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card hover:border-[#053877]/40"}`} data-testid="pod-guests">Takes guests</button>
+                        )}
+                        {mode === "shows" && !pcLocked.has("audienceEstimate") && (
+                          <select value={pcMin} onChange={(e) => setPcMin(Number(e.target.value))} className="h-9 rounded-full border border-border bg-card px-3 text-sm" aria-label="Audience size" data-testid="pod-audience">
+                            {POD_AUDIENCE.map((a, i) => <option key={a.label} value={i}>{a.label}</option>)}
+                          </select>
+                        )}
+                        <select value={pcSort} onChange={(e) => setPcSort(e.target.value)} className="h-9 rounded-full border border-border bg-card px-3 text-sm" aria-label="Sort" data-testid="pod-sort">
+                          {(mode === "shows" ? POD_SHOW_SORTS.filter((o) => !o.needs || !pcLocked.has(o.needs)) : POD_PEOPLE_SORTS).map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+                        </select>
+                      </>
+                    ) : (<>
                     <button type="button" onClick={() => setShowFilters((v) => !v)} className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-sm font-medium transition-colors ${showFilters || activeFilters(filters).length ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card hover:border-[#053877]/40"}`} data-testid="discover-filters">
                       <SlidersHorizontal className="h-4 w-4" /> Filters{activeFilters(filters).length ? ` · ${activeFilters(filters).length}` : ""}
                     </button>
@@ -483,6 +526,7 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
                     <select value={sort} onChange={(e) => setSort(e.target.value)} className="h-9 rounded-full border border-border bg-card px-3 text-sm" aria-label="Sort">
                       {SORTS.map((so) => <option key={so.v} value={so.v}>{so.label}</option>)}
                     </select>
+                    </>)}
                   </div>
                 )}
               </div>
@@ -518,8 +562,21 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
         ) : tab === "lists" && isMember ? (
           <>
           <button type="button" onClick={() => setTab("search")} className="mb-5 inline-flex items-center gap-1.5 text-sm font-medium text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="back-to-search"><ChevronRight className="h-4 w-4 rotate-180" /> Back to search</button>
-          <Lists lists={lists.data ?? []} onOpen={(c) => openIn((lists.data ?? []).flatMap((l) => l.items.map((i) => i.snapshot)))(c)} />
+          <Lists lists={lists.data ?? []} onOpen={(c) => {
+            // A saved show or podcast person opens in the podcast panel.
+            if (c.platform === "podcast" || c.platform === "podperson") { setPodFrom([]); setPodOpen(c.platform === "podcast" ? { kind: "show", id: c.handle, seed: { title: c.name, image: c.picture } } : { kind: "person", pcid: c.handle, seed: { name: c.name, image: c.picture } }); return; }
+            openIn((lists.data ?? []).flatMap((l) => l.items.map((i) => i.snapshot)).filter((x) => x.platform !== "podcast" && x.platform !== "podperson"))(c);
+          }} />
           </>
+        ) : submitted && isPodMode(submitted.mode) ? (
+          <PodcastResults
+            ask={{ q: submitted.q, kind: submitted.mode, branch: submitted.branch, sort: pcSort, minAudience: submitted.mode === "shows" ? POD_AUDIENCE[pcMin].min : null, hasGuests: submitted.mode === "shows" && pcGuests }}
+            isMember={isMember}
+            onJoin={() => setGate(true)}
+            onOpen={(o, from) => { setPodFrom(from); setPodOpen(o); }}
+            saved={saved}
+            onSave={(card) => saveTo.mutate({ card })}
+          />
         ) : !submitted || submitted.mode === "username" ? (
           <Welcome sample={sample} onOpenSample={openIn(sample?.results ?? [])} isAdmin={!!me?.isAdmin} verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} hidden={demoHide} onJoin={() => setGate(true)} loading={meLoading} />
         ) : (
@@ -585,6 +642,7 @@ export default function Discover({ embedded = false }: { embedded?: boolean } = 
       </main>
 
       <ProfileDrawer freeKeys={sampleKeys} card={open} siblings={openFrom} sharedKey={sharedKey} allowance={me?.reveals} onOpenCreator={setOpenRaw} onClose={() => setOpenRaw(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
+      <PodcastDrawer open={podOpen} from={podFrom} onGo={setPodOpen} onClose={() => setPodOpen(null)} isMember={isMember} onJoin={() => setGate(true)} saved={saved} onSave={(card) => saveTo.mutate({ card })} />
       <JoinDialog
         open={gate}
         me={me}
@@ -615,7 +673,8 @@ function ModeMenu({ mode, setMode, onOpenChange }: { mode: Mode; setMode: (m: Mo
     document.addEventListener("mousedown", off);
     return () => document.removeEventListener("mousedown", off);
   }, [open]);
-  const cur = MODES.find((m) => m.v === mode)!;
+  const list: readonly { v: Mode; label: string; icon: typeof Wand2; hint: string }[] = isPodMode(mode) ? PC_MODES : MODES;
+  const cur = list.find((m) => m.v === mode) ?? list[0];
   const Icon = cur.icon;
   return (
     <div ref={ref} className="relative">
@@ -625,7 +684,7 @@ function ModeMenu({ mode, setMode, onOpenChange }: { mode: Mode; setMode: (m: Mo
       </button>
       {open && (
         <ul role="listbox" className="absolute left-0 top-[calc(100%+6px)] z-30 w-72 overflow-hidden rounded-2xl border border-border bg-popover p-1.5 text-foreground shadow-2xl">
-          {MODES.map((m) => {
+          {list.map((m) => {
             const I = m.icon;
             return (
               <li key={m.v}>
@@ -688,7 +747,7 @@ function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder,
           {callout}
         </div>
         <div className="flex gap-2">
-          {mode !== "username" && (
+          {mode !== "username" && !isPodMode(mode) && (
             <button type="button" onClick={onFilters} className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground hover:border-[#053877]/40 hover:text-[#053877]" aria-label="Filters" title="All filters" data-testid="discover-bar-filters">
               <SlidersHorizontal className="h-5 w-5" />
               {filterCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#F0A71F] px-1 text-[11px] font-semibold text-[#1a1200]">{filterCount}</span>}
@@ -1299,7 +1358,7 @@ function ResultsList({ rows, total, saved, isMember, isAdmin, onOpen, onSave, on
                           <span className="truncate font-medium group-hover:text-[#053877] dark:group-hover:text-[#8fb5e8]">{c.name}</span>
                           {c.verified ? <BadgeCheck className="h-4 w-4 shrink-0 text-[#F0A71F]" aria-label="Verified on MilitaryVoices" /> : c.platformVerified ? <BadgeCheck className="h-4 w-4 shrink-0 text-[#2563eb]" aria-label="Verified on the platform" /> : null}
                         </span>
-                        <span className="block max-w-[16rem] truncate text-xs text-muted-foreground">{c.verified ? c.verified.show : c.handle ? `@${c.handle}` : ""}{c.branch ? ` · ${c.branch}` : c.category ? ` · ${c.category}` : ""}</span>
+                        <span className="block max-w-[16rem] truncate text-xs text-muted-foreground">{c.verified ? c.verified.show : isPod(c.platform) ? c.category ?? "" : c.handle ? `@${c.handle}` : ""}{c.branch ? ` · ${c.branch}` : c.category ? ` · ${c.category}` : ""}</span>
                       </span>
                     </button>
                   </td>
@@ -1471,7 +1530,7 @@ function CoverImage({ src, name }: { src: string; name: string }) {
  */
 function CreatorCard({ c, saved, onOpen, onSave }: { c: Card; saved: boolean; onOpen: () => void; onSave?: () => void }) {
   const stats = [
-    c.followers != null ? ["Followers", compact(c.followers)] : null,
+    c.followers != null ? [c.platform === "podcast" ? "Listeners" : "Followers", compact(c.followers)] : null,
     c.engagement != null ? ["Engagement", pct(c.engagement, 2)] : null,
     c.quality != null ? ["Quality", `${c.quality}`] : c.branch ? ["Branch", c.branch.replace("Military spouse", "Spouse").replace("Marine Corps", "Marines")] : null,
   ].filter(Boolean) as [string, string][];
@@ -1490,7 +1549,7 @@ function CreatorCard({ c, saved, onOpen, onSave }: { c: Card; saved: boolean; on
         </span>
         <span className="absolute inset-x-3 bottom-3">
           <span className="block truncate text-lg font-semibold leading-tight text-white drop-shadow">{c.name}</span>
-          <span className="block truncate text-xs text-white/75">{c.verified ? c.verified.show : c.handle ? `@${c.handle}` : ""}</span>
+          <span className="block truncate text-xs text-white/75">{c.verified ? c.verified.show : isPod(c.platform) ? c.category ?? "" : c.handle ? `@${c.handle}` : ""}</span>
         </span>
       </button>
       {onSave && (
@@ -1857,7 +1916,7 @@ function Lists({ lists, onOpen }: { lists: List[]; onOpen: (c: Card) => void }) 
   };
   const exportCsv = () => {
     if (!current) return;
-    const rows = [["Name", "Handle", "Platform", "Followers", "Engagement %", "Branch", "Profile"], ...current.items.map((i) => [i.snapshot.name, `@${i.handle}`, platformLabel(i.platform), String(i.snapshot.followers ?? ""), String(i.snapshot.engagement ?? ""), i.snapshot.branch ?? "", profileUrl(i)])];
+    const rows = [["Name", "Handle", "Platform", "Followers", "Engagement %", "Branch", "Profile"], ...current.items.map((i) => [i.snapshot.name, isPod(i.platform) ? "" : `@${i.handle}`, platformLabel(i.platform), String(i.snapshot.followers ?? ""), String(i.snapshot.engagement ?? ""), i.snapshot.branch ?? "", profileUrl(i)])];
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
