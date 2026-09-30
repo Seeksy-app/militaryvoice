@@ -694,9 +694,40 @@ export const bioSubscribers = pgTable(
     email: text("email").notNull(),
     name: text("name").notNull().default(""),
     createdAt: text("created_at").notNull(),
+    /** When they unsubscribed from this creator's emails (their list only). Empty: still on it. */
+    unsubscribedAt: text("unsubscribed_at").notNull().default(""),
   },
   (t) => ({ onePerPage: uniqueIndex("bio_subscribers_page_email_unique").on(t.pageId, t.email) }),
 );
+
+/**
+ * A creator's email to their fans (their SmartLink subscribers). Sending works through the
+ * list a batch a minute (status "sending"), so a big list never floods the mail service.
+ */
+export const creatorCampaigns = pgTable("creator_campaigns", {
+  id: serial("id").primaryKey(),
+  ownerEmail: text("owner_email").notNull(),
+  subject: text("subject").notNull().default(""),
+  preheader: text("preheader").notNull().default(""),
+  bodyText: text("body_text").notNull().default(""),
+  status: text("status").notNull().default("draft"), // draft | scheduled | sending | sent
+  scheduledFor: text("scheduled_for").notNull().default(""),
+  recipientCount: integer("recipient_count").notNull().default(0),
+  sentCount: integer("sent_count").notNull().default(0),
+  sentAt: text("sent_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull().default(""),
+}, (t) => [index("creator_campaigns_owner_idx").on(t.ownerEmail)]);
+export type CreatorCampaignRow = typeof creatorCampaigns.$inferSelect;
+
+export const creatorCampaignSends = pgTable("creator_campaign_sends", {
+  id: serial("id").primaryKey(),
+  campaignId: integer("campaign_id").notNull(),
+  subscriberId: integer("subscriber_id").notNull(),
+  email: text("email").notNull(),
+  resendId: text("resend_id").notNull().default(""),
+  sentAt: text("sent_at").notNull(),
+}, (t) => [index("creator_campaign_sends_campaign_idx").on(t.campaignId)]);
 
 /**
  * A podcaster's guest on their slot: who they are (as read and shown on air),

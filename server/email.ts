@@ -1212,6 +1212,37 @@ export interface BroadcastEmailOptions {
   kind?: string;
 }
 
+/**
+ * A creator's email to their own fans (SmartLink Stay in touch sign-ups): their show on the
+ * header, their words, their SmartLink as the button, and an unsubscribe from their list only.
+ * From "<Show> via MilitaryVoices.ai" on our address; replies go to the creator.
+ */
+export function renderCreatorEmail(o: { showName: string; banner?: string; firstName: string; subject: string; preheader?: string; bodyText: string; pageUrl: string; unsubscribeUrl: string }) {
+  const name = o.firstName.trim() || "there";
+  const fill = (t: string) => t.replace(/\{\{First_Name\}\}/gi, name);
+  const body = fill(o.bodyText);
+  return {
+    subject: fill(o.subject),
+    html: emailShell({
+      banner: o.banner || BROADCAST_BANNERS.podcasters,
+      bannerAlt: o.showName,
+      eyebrow: o.showName,
+      heading: "",
+      body: textToHtml(body),
+      cta: o.pageUrl ? { href: o.pageUrl, label: `More from ${o.showName}`.slice(0, 60) } : undefined,
+      footerNote: `You're getting this because you signed up on ${escapeHtml(o.showName)}'s SmartLink. · <a href="${o.unsubscribeUrl}" style="color:#6b7280;">Unsubscribe</a>`,
+      preheader: o.preheader ? fill(o.preheader) : "",
+    }),
+    text: `${body}\n\n---\n${o.pageUrl ? `${o.pageUrl}\n` : ""}Unsubscribe: ${o.unsubscribeUrl}`,
+  };
+}
+
+export async function sendCreatorEmail(o: Parameters<typeof renderCreatorEmail>[0] & { to: string; replyTo: string; campaignId: number }): Promise<string | null> {
+  const r = renderCreatorEmail(o);
+  const from = `${o.showName.replace(/[<>"]/g, "").slice(0, 60)} via MilitaryVoices.ai <hello@militaryvoices.ai>`;
+  return sendRawEmail({ kind: `creator-campaign:${o.campaignId}`, to: o.to, from, replyTo: o.replyTo, subject: r.subject, html: r.html, text: r.text, headers: { "List-Unsubscribe": `<${o.unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } });
+}
+
 export async function sendBroadcastEmail(opts: BroadcastEmailOptions): Promise<string | null> {
   const rendered = renderBroadcastEmail(opts);
   return sendRawEmail({ kind: opts.kind ?? "sendBroadcastEmail",

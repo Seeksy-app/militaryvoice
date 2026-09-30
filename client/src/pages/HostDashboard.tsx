@@ -69,6 +69,7 @@ import { EventSettings } from "@/components/EventSettings";
 import { PlanBilling } from "@/components/PlanBilling";
 import { RecentlyDeleted } from "@/components/RecentlyDeleted";
 import { StudioHome } from "@/components/StudioHome";
+import { FanEmails } from "@/components/FanEmails";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { PostStudio, NavCredits } from "@/components/PostStudio";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
@@ -589,7 +590,7 @@ function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -600,6 +601,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   billing: "billing",
   trash: "recently-deleted",
   studio: "rooms",
+  fans: "fans",
   social: "social",
   podcast: "podcast",
   page: "page",
@@ -1288,6 +1290,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <RecentlyDeleted />
         ) : screen === "studio" ? (
           <StudioHome />
+        ) : screen === "fans" ? (
+          <FanEmails />
         ) : screen === "postify" ? (
           <PostStudio />
         ) : screen === "social" ? (
