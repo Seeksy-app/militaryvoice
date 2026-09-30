@@ -1254,7 +1254,12 @@ export function registerRoutes(app: Express): void {
    * Once a day is the right cadence: the upstream call costs one request per
    * podcaster, and these are 30-day rolling figures that do not move hourly.
    */
-  const audienceRefreshHandler: RequestHandler = async (_req, res) => {
+  const audienceRefreshHandler: RequestHandler = async (req, res) => {
+    // Only Vercel's cron (it sends CRON_SECRET): anyone else could run it, and the reach refresh spends paid look-ups.
+    if (process.env.CRON_SECRET && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== process.env.CRON_SECRET) {
+      res.status(401).json({ message: "Not authorised." });
+      return;
+    }
     try {
       const featured = await storage.getFeaturedEvent();
       const snap = await buildAudienceSnapshot(featured?.id);
@@ -1285,7 +1290,12 @@ export function registerRoutes(app: Express): void {
    * Runs on the same sweep as the nudges, and never touches an egress LiveKit
    * still reports as running.
    */
-  const reconcileEgressHandler: RequestHandler = async (_req, res) => {
+  const reconcileEgressHandler: RequestHandler = async (req, res) => {
+    // Only Vercel's cron (it sends CRON_SECRET): anyone else could run it, and the reach refresh spends paid look-ups.
+    if (process.env.CRON_SECRET && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== process.env.CRON_SECRET) {
+      res.status(401).json({ message: "Not authorised." });
+      return;
+    }
     if (!isLiveKitConfigured()) {
       res.json({ skipped: "no media layer" });
       return;
