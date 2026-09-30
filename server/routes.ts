@@ -4256,7 +4256,9 @@ export function registerRoutes(app: Express): void {
     }
     for (const a of await storage.listAllAssets()) {
       if (a.email !== HOUSE_EMAIL || !a.storageKey?.startsWith("studio/") || !/\([^()]*\bloop\)\s*$/i.test(a.label ?? "")) continue;
-      out.push({ label: (a.label ?? "").replace(/\s*\([^()]*\bloop\)\s*$/i, "").trim(), url: `${PUBLIC_ORIGIN}/api/studio/media/${a.id}` });
+      const label = (a.label ?? "").replace(/\s*\([^()]*\bloop\)\s*$/i, "").trim();
+      if (out.some((o) => o.label.toLowerCase() === label.toLowerCase())) continue;
+      out.push({ label, url: `${PUBLIC_ORIGIN}/api/studio/media/${a.id}` });
     }
     res.json({ current: studio.fallbackVideoUrl, loops: out });
   });
