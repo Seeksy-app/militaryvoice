@@ -154,3 +154,15 @@ export async function deleteShowAsset(fileUrl: string): Promise<void> {
   const supabase = getClient();
   await supabase.storage.from(ASSET_BUCKET).remove([path]);
 }
+
+/** The files under one folder of the show-assets bucket, newest first, with their public addresses. */
+export async function listShowAssets(prefix: string): Promise<{ name: string; url: string; createdAt: string }[]> {
+  const supabase = getClient();
+  const { data, error } = await supabase.storage.from(ASSET_BUCKET).list(prefix, { limit: 200, sortBy: { column: "created_at", order: "desc" } });
+  if (error) throw error;
+  return (data ?? []).filter((f) => f.name && !f.name.endsWith("/")).map((f) => ({
+    name: f.name,
+    url: supabase.storage.from(ASSET_BUCKET).getPublicUrl(`${prefix}/${f.name}`).data.publicUrl,
+    createdAt: String(f.created_at ?? ""),
+  }));
+}

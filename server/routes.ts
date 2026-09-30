@@ -8,7 +8,7 @@ import { storage } from "./storage.js";
 import { requireHuman, turnstileSiteKey } from "./turnstile.js";
 import { answerHelp, isHelpAgentConfigured, type HelpTurn } from "./help.js";
 import { KINDS, effectiveSchedule, cardInput, caption as campaignCaption, isKind, type CampaignContext } from "./campaign.js";
-import { uploadPhoto, uploadShowAsset, signedAssetUpload } from "./photoStorage.js";
+import { uploadPhoto, uploadShowAsset, signedAssetUpload, listShowAssets } from "./photoStorage.js";
 import {
   insertSignupSchema,
   insertReminderSchema,
@@ -4181,7 +4181,7 @@ export function registerRoutes(app: Express): void {
       // Named and pictured, so the people waiting can see who is running the room.
       token: await studioToken({
         room,
-        identity: `producer-${email}`,
+        identity: `producer-${email}${/^[a-z0-9]{4,12}$/.test(String(req.body?.tabKey ?? "")) ? `-${req.body.tabKey}` : ""}`,
         name: person.name,
         canPublish: false,
         admin: true,
@@ -4227,6 +4227,39 @@ export function registerRoutes(app: Express): void {
       res.status(201).json(updated);
     },
   );
+
+  /**
+   * The loops the standby button can roll: the standby clips we've uploaded
+   * (latest of each, named for what they say) and any media-library clip
+   * named as a loop, "(10s loop)". The studio's current one is marked.
+   */
+  const STANDBY_NAMES: Record<string, string> = {
+    break_h3_10s: "We'll be right back",
+    tunein_h3_10s: "Tune in",
+    "tunein-lineup": "Tonight's lineup",
+    break_15s: "Short break",
+  };
+  app.get("/api/admin/studio/standby-loops", requireAdmin, async (req, res) => {
+    noStore(res);
+    const { studio } = await adminStudio(req);
+    const out: { label: string; url: string }[] = [];
+    const seen = new Set<string>();
+    try {
+      for (const f of await listShowAssets("standby")) {
+        const base = f.name.replace(/^\d+-[0-9a-f]+-/, "").replace(/\.[a-z0-9]+$/i, "");
+        if (seen.has(base)) continue;
+        seen.add(base);
+        out.push({ label: STANDBY_NAMES[base] ?? base.replace(/[_-]+/g, " "), url: f.url });
+      }
+    } catch (err) {
+      console.warn("Standby list failed:", (err as Error).message);
+    }
+    for (const a of await storage.listAllAssets()) {
+      if (a.email !== HOUSE_EMAIL || !a.storageKey?.startsWith("studio/") || !/\([^()]*\bloop\)\s*$/i.test(a.label ?? "")) continue;
+      out.push({ label: (a.label ?? "").replace(/\s*\([^()]*\bloop\)\s*$/i, "").trim(), url: `${PUBLIC_ORIGIN}/api/studio/media/${a.id}` });
+    }
+    res.json({ current: studio.fallbackVideoUrl, loops: out });
+  });
 
   app.patch("/api/admin/studio", requireAdmin, async (req, res) => {
     const parsed = studioUpdateSchema.safeParse(req.body);

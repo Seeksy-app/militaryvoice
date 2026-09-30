@@ -579,7 +579,7 @@ function YouTubeFrame({ id, title, muted, loop, onEnded }: { id: string; title: 
 /** A clip, a slide or a sponsor card, filling the frame. */
 /** A clip named as a loop ("We'll be right back (10s loop)") repeats on stage; everything else plays once. */
 function stageLoops(label?: string): boolean {
-  return /\bloop\b/i.test(label ?? "");
+  return /\([^()]*\bloop\)\s*$/i.test(label ?? "");
 }
 
 function FullFrameMedia({

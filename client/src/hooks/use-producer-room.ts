@@ -121,6 +121,8 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
           studioId,
           publish,
           displayName,
+          // One name per window: two consoles for the same admin used to share one and kick each other out.
+          tabKey: consoleTabKey(),
         });
         cfg = await res.json();
       } catch {
@@ -256,4 +258,15 @@ export function useProducerRoom({ enabled, adminSend, studioId, publish, display
   }, [status]);
 
   return { status, feeds, camOn, micOn, toggleCam, toggleMic, selfKey, level, micTrack, devices, activeDevice, switchDevice };
+}
+
+/** This window's own key, kept for its life so a reconnect rejoins as itself. */
+function consoleTabKey(): string {
+  try {
+    let k = sessionStorage.getItem("mv_console_tab");
+    if (!k) { k = Math.random().toString(36).slice(2, 8); sessionStorage.setItem("mv_console_tab", k); }
+    return k;
+  } catch {
+    return Math.random().toString(36).slice(2, 8);
+  }
 }

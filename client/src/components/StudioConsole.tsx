@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
@@ -589,6 +589,12 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   const isLive = view === "live";
   // The destinations form, from the To menu (the event studio has no Set view to find it in).
   const [destDialog, setDestDialog] = useState(false);
+  const standbyLoops = useQuery<{ current: string; loops: { label: string; url: string }[] }>({
+    queryKey: ["/api/admin/studio/standby-loops", fixedStudioId ?? eventId ?? 0],
+    queryFn: () => adminGet(`/api/admin/studio/standby-loops${fixedStudioId ? `?studioId=${fixedStudioId}` : ""}`),
+    enabled: view === "live" && kind !== "room",
+    staleTime: 60_000,
+  });
   // The stage monitor is a rule, not a button. You want to hear the show; you
   // never want to hear it while you are the one making it, because that is
   // your own voice back at you half a second late. So it follows where you
@@ -1376,6 +1382,21 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
         }`}
       >
         <div className="relative flex flex-wrap items-center gap-x-4 gap-y-3">
+          {focus && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 gap-1.5 rounded-full px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white"
+                onClick={() => {
+                  // Unsaved changes to a scene's look: ask before going.
+                  if (lookDirty) { setLeaveAsk(true); return; }
+                  leaveNow();
+                }}
+                data-testid="button-studio-exit-focus"
+              >
+                <LogOut className="h-3.5 w-3.5" /> {onLeave ? "Leave the room" : "Leave the studio"}
+              </Button>
+            )}
           <div className="flex min-w-0 items-center gap-2.5">
             <div
               className={`flex shrink-0 items-center justify-center rounded-xl bg-white/10 ${
@@ -1444,33 +1465,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               nobody could read anyway. Icons, in the bar, with tooltips. */}
           {isLive && (
             <div className="flex shrink-0 items-center gap-0.5">
-              {!isRoom && (
-                <BarButton
-                  icon={PlayCircle}
-                  label={
-                    studio?.fallbackPlaying
-                      ? "Stop the standby clip"
-                      : studio?.fallbackVideoUrl
-                        ? "Roll the standby clip"
-                        : "No standby clip set — add one under Studio set"
-                  }
-                  active={studio?.fallbackPlaying}
-                  amber
-                  disabled={!studio?.fallbackVideoUrl}
-                  onClick={() => patchStudio.mutate({ fallbackPlaying: !studio?.fallbackPlaying })}
-                  testId="button-deck-standby"
-                />
-              )}
-              {!isRoom && studio?.logoUrl && (
-                <BarButton
-                  icon={ImageIcon}
-                  label={studio.logoVisible ? "Logo is on the frame — switch it off" : "Put the logo on the frame"}
-                  active={studio.logoVisible}
-                  amber
-                  onClick={() => patchStudio.mutate({ logoVisible: !studio.logoVisible })}
-                  testId="button-deck-logo"
-                />
-              )}
               {countdownEnds !== null && (
                 <CountdownChip
                   endsAt={countdownEnds}
@@ -1575,25 +1569,43 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             </Button>
             )}
 
-            {focus && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 gap-1.5 rounded-full px-3 text-xs text-white/70 hover:bg-white/10 hover:text-white"
-                onClick={() => {
-                  // Unsaved changes to a scene's look: ask before going.
-                  if (lookDirty) { setLeaveAsk(true); return; }
-                  leaveNow();
-                }}
-                data-testid="button-studio-exit-focus"
-              >
-                <LogOut className="h-3.5 w-3.5" /> {onLeave ? "Leave the room" : "Leave the studio"}
-              </Button>
-            )}
 
             {isLive && (
               <>
                 <span className="mx-1 hidden h-7 w-px bg-white/15 sm:block" />
+
+                {/* Standby: roll or stop it, and which loop it plays. On the right with the
+                    other on-air controls, where the producer's hand already is. */}
+                {!isRoom && (
+                  <div className="flex items-center">
+                    <BarButton
+                      icon={PlayCircle}
+                      label={studio?.fallbackPlaying ? "Stop the standby clip" : studio?.fallbackVideoUrl ? `Roll the standby clip: ${studio?.fallbackLabel || "standby"}` : "Pick a standby clip first"}
+                      active={studio?.fallbackPlaying}
+                      amber
+                      disabled={!studio?.fallbackVideoUrl}
+                      onClick={() => patchStudio.mutate({ fallbackPlaying: !studio?.fallbackPlaying })}
+                      testId="button-deck-standby"
+                    />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button type="button" aria-label="Choose the standby clip" className="flex h-8 w-5 items-center justify-center rounded-md text-white/60 hover:bg-white/10 hover:text-white" data-testid="button-standby-pick">
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-64">
+                        <DropdownMenuLabel className="text-xs text-muted-foreground">Standby plays</DropdownMenuLabel>
+                        {(standbyLoops.data?.loops ?? []).map((l) => (
+                          <DropdownMenuItem key={l.url} onClick={() => patchStudio.mutate({ fallbackVideoUrl: l.url, fallbackLabel: l.label })} data-testid="menu-standby-loop">
+                            <Check className={`mr-2 h-3.5 w-3.5 ${studio?.fallbackVideoUrl === l.url ? "opacity-100" : "opacity-0"}`} />
+                            {l.label}
+                          </DropdownMenuItem>
+                        ))}
+                        {standbyLoops.data && standbyLoops.data.loops.length === 0 && <p className="px-2 py-1.5 text-xs text-muted-foreground">No loops yet.</p>}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                )}
 
                 {/* Where the stream goes. Icons for what's on; tap to switch any on or off. */}
                 {/* Only when there is somewhere else to send it. With no
