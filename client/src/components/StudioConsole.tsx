@@ -1683,7 +1683,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   </Popover>
                 )}
                 <Dialog open={destDialog} onOpenChange={setDestDialog}>
-                  <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+                  <DialogContent className="max-h-[85vh] w-[min(96vw,60rem)] max-w-none overflow-y-auto">
                     <DialogHeader>
                       <DialogTitle>Where it goes</DialogTitle>
                       <DialogDescription>Our watch page is always on. Add YouTube from a connected channel (no stream key), or any stream key.</DialogDescription>

@@ -66,12 +66,12 @@ export default function Watch({ slug }: { slug?: string }) {
   const endMs = Date.parse(meta.eventEndAtUtc ?? "");
   const beforeEvent = Number.isFinite(startMs) && now < startMs;
   const afterEvent = Number.isFinite(endMs) && now >= endMs;
-  // Before the day, never — a studio left switched on, or a rehearsal, is not
-  // something to announce to the public. After the window, only with someone
-  // actually on stage: an event that runs long must not lose its badge
-  // mid-show, but a studio nobody turned off must not keep it forever.
+  // LIVE whenever the producer has pressed Go live: from that moment the page
+  // shows the live stage, so the badge says what viewers are watching (a test
+  // before the day included). Rehearsals don't count: until Go live the page
+  // shows the pre-show video and says when it starts. After the window, only
+  // with someone on stage, so a studio nobody turned off doesn't keep it forever.
   const live =
-    !beforeEvent &&
     (meta.status ?? data?.status) === "Live" &&
     (!afterEvent || tiles.length > 0);
   const startLabel = Number.isFinite(startMs)
