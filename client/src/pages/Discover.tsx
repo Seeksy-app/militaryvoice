@@ -242,8 +242,11 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
   const [pcGuests, setPcGuests] = useState(false);
   const [podOpen, setPodOpen] = useState<PodOpen | null>(null);
   const [podFrom, setPodFrom] = useState<PodOpen[]>([]);
-  const pcStatus = useQuery<{ on: boolean; locked?: string[] }>({ queryKey: ["/api/discover/podcasts/status"], enabled: platform === "podcasts", queryFn: async () => (await fetch("/api/discover/podcasts/status")).json(), staleTime: 10 * 60_000 });
+  const pcStatus = useQuery<{ on: boolean; ok?: boolean; people?: boolean; locked?: string[] }>({ queryKey: ["/api/discover/podcasts/status"], queryFn: async () => (await fetch("/api/discover/podcasts/status")).json(), staleTime: 10 * 60_000 });
   const pcLocked = new Set(pcStatus.data?.locked ?? []);
+  // Hosts & guests opens Oct 5 (admins sooner); until then Book guests searches creators.
+  const peopleOpen = pcStatus.data?.people === true;
+  useEffect(() => { if (!pcStatus.isLoading && !peopleOpen && mode === "people") setMode("shows"); }, [peopleOpen, mode, pcStatus.isLoading]); // eslint-disable-line react-hooks/exhaustive-deps
   // Shows and people sort by different things.
   // Shows and people sort by different things: a sort the new kind hasn't got goes back to Best match.
   useEffect(() => { if (!(mode === "people" ? POD_PEOPLE_SORTS : POD_SHOW_SORTS).some((o) => o.v === pcSort)) setPcSort("best"); }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -259,19 +262,19 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
   const pickDoor = (k: (typeof DOORS)[number]["key"]) => {
     setDoor(k);
     // Guests: people who've been on shows, the most-booked first.
-    if (k === "podcaster") { if (platform !== "podcasts") choosePlatform("podcasts"); setMode("people"); setPcSort("appearances"); setSubmitted(null); }
+    if (k === "podcaster" && peopleOpen) { if (platform !== "podcasts") choosePlatform("podcasts"); setMode("people"); setPcSort("appearances"); setSubmitted(null); }
     else if (door === "podcaster" && platform === "podcasts") choosePlatform("instagram");
   };
   // A podcaster opens on Book guests (and ?door=guests, brands or speakers opens that door for anyone).
   const doorPicked = useRef(false);
   useEffect(() => {
-    if (doorPicked.current || meLoading) return;
+    if (doorPicked.current || meLoading || pcStatus.isLoading) return;
     doorPicked.current = true;
     const want = (() => { try { return new URLSearchParams(window.location.search).get("door") ?? ""; } catch { return ""; } })();
     const k = want === "guests" ? "podcaster" : want === "brands" ? "brand" : want === "speakers" ? "event" : me?.isPodcaster ? "podcaster" : "";
     if (k && k !== door) pickDoor(k as (typeof DOORS)[number]["key"]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meLoading, me?.isPodcaster]);
+  }, [meLoading, me?.isPodcaster, pcStatus.isLoading]);
   // Book guests: people saved into a list of their own, "Guests" (made the first time).
   const saveGuest = async (card: ReturnType<typeof podCard>) => {
     try {
@@ -466,6 +469,7 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
       {part !== "verified" && (() => {
         const bar = (
           <SearchBar
+            peopleOpen={peopleOpen}
             platform={platform}
             setPlatform={choosePlatform}
             mode={mode}
@@ -695,7 +699,7 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
 // The search bar: platform, how to search, what, and the filters
 // ===========================================================================
 
-function ModeMenu({ mode, setMode, onOpenChange }: { mode: Mode; setMode: (m: Mode) => void; onOpenChange?: (open: boolean) => void }) {
+function ModeMenu({ mode, setMode, onOpenChange, peopleOpen }: { mode: Mode; setMode: (m: Mode) => void; onOpenChange?: (open: boolean) => void; peopleOpen?: boolean }) {
   const [open, setOpen] = useState(false);
   useEffect(() => onOpenChange?.(open), [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const ref = useRef<HTMLDivElement>(null);
@@ -718,11 +722,12 @@ function ModeMenu({ mode, setMode, onOpenChange }: { mode: Mode; setMode: (m: Mo
         <ul role="listbox" className="absolute left-0 top-[calc(100%+6px)] z-30 w-72 overflow-hidden rounded-2xl border border-border bg-popover p-1.5 text-foreground shadow-2xl">
           {list.map((m) => {
             const I = m.icon;
+            const soon = m.v === "people" && !peopleOpen;
             return (
               <li key={m.v}>
-                <button type="button" role="option" aria-selected={m.v === mode} onClick={() => { setMode(m.v); setOpen(false); }} className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-muted ${m.v === mode ? "bg-[#053877]/[0.06]" : ""}`} data-testid={`discover-mode-${m.v}`}>
+                <button type="button" role="option" aria-selected={m.v === mode} aria-disabled={soon} disabled={soon} onClick={() => { setMode(m.v); setOpen(false); }} className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left ${soon ? "cursor-default opacity-60" : "hover:bg-muted"} ${m.v === mode ? "bg-[#053877]/[0.06]" : ""}`} data-testid={`discover-mode-${m.v}`}>
                   <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#053877]/10 text-[#053877]"><I className="h-4 w-4" /></span>
-                  <span><span className="block text-sm font-semibold">{m.label}</span><span className="block text-xs text-muted-foreground">{m.hint}</span></span>
+                  <span><span className="flex items-center gap-2 text-sm font-semibold">{m.label}{soon && <span className="rounded-full bg-[#053877]/10 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">Opens Oct 5</span>}</span><span className="block text-xs text-muted-foreground">{m.hint}</span></span>
                 </button>
               </li>
             );
@@ -753,8 +758,9 @@ function TryYourOwn({ onClose }: { onClose: () => void }) {
   );
 }
 
-function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder, onSubmit, busy, filterCount, onFilters, onMenu, ghost, callout, onFocusQ }: {
+function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder, onSubmit, busy, filterCount, onFilters, onMenu, ghost, callout, onFocusQ, peopleOpen }: {
   onMenu?: (open: boolean) => void;
+  peopleOpen?: boolean;
   /** A pointer under the box, e.g. "Now try your own". */
   callout?: React.ReactNode;
   onFocusQ?: () => void;
@@ -771,7 +777,7 @@ function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder,
           <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="h-12 rounded-xl border-0 bg-muted/60 px-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#053877] sm:w-[8.5rem]" aria-label="Platform" data-testid="discover-platform">
             {PLATFORMS.map((p) => <option key={p.v} value={p.v}>{p.label}</option>)}
           </select>
-          <ModeMenu mode={mode} setMode={setMode} onOpenChange={onMenu} />
+          <ModeMenu mode={mode} setMode={setMode} onOpenChange={onMenu} peopleOpen={peopleOpen} />
         </div>
         <div className="relative flex-1">
           <Lead className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />

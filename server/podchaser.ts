@@ -192,6 +192,9 @@ const SHOW_SORTS: Record<string, string> = { best: "relevance", power: "power_sc
 const PERSON_SORTS: Record<string, string> = { best: "relevance", appearances: "appearance_count", recent: "recent_episode" };
 /** Starter leaves audience numbers out of search: the page hides what would always be empty. */
 const LOCKED = ["audienceEstimate"];
+/** Hosts & guests opens to everyone on Oct 5 (midnight Eastern); admins can use it before. */
+const PEOPLE_OPENS = Date.parse("2026-10-05T04:00:00Z");
+const peopleOpen = (req: Request) => Boolean(getAdminEmail(req)) || Date.now() >= PEOPLE_OPENS;
 
 /** A fresh request, counted against who caused it: a visitor by address, a member by email. */
 async function spendOne(who: string, allowed: number, message: string): Promise<void> {
@@ -222,7 +225,7 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
       if (!podchaserOn()) return { on: false };
       try {
         const u = await monthUsage(true);
-        return { on: true, ok: true, locked: LOCKED, ...(getAdminEmail(req) ? { month: { tier: u.tier, used: u.used, left: u.remaining, quota: u.quota, resets: u.cycleEnd } } : {}) };
+        return { on: true, ok: true, people: peopleOpen(req), locked: LOCKED, ...(getAdminEmail(req) ? { month: { tier: u.tier, used: u.used, left: u.remaining, quota: u.quota, resets: u.cycleEnd } } : {}) };
       } catch (err) {
         return { on: true, ok: false, why: (err as Error).message };
       }
@@ -235,6 +238,7 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
       const page = Math.max(0, Math.min(20, Number(req.body?.page) || 0));
       if (w.visitor && page > 0) throw new HttpError(403, "Create a free account to see more.");
       const kind = req.body?.kind === "people" ? "people" : "shows";
+      if (kind === "people" && !peopleOpen(req)) throw new HttpError(403, "Hosts & guests opens Oct 5.");
       const q = String(req.body?.q ?? "").trim().slice(0, 200);
       const branches = String(req.body?.branch ?? "").split(",").map((b) => b.trim()).filter((b) => BRANCH_WORDS[b]).slice(0, 7);
       // A person is found by what they're known for: their own words, with "veteran" only when there are none.
@@ -322,6 +326,7 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
     send(res, async () => {
       const w = await who(req);
       if (w.visitor) throw new HttpError(401, "Create a free account to open a profile.");
+      if (!peopleOpen(req)) throw new HttpError(403, "Hosts & guests opens Oct 5.");
       const pcid = String(req.query.pcid ?? "").replace(/[^0-9A-Za-z]/g, "").slice(0, 30);
       if (!pcid) throw new HttpError(400, "Who?");
       return cached(`pc2:person:${pcid}`, 30 * DAY, async () => {

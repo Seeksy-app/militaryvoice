@@ -548,6 +548,8 @@ export function GuestFinder({ showTitle = "" }: { showTitle?: string }) {
   const lists = useQuery<SavedList[]>({ queryKey: ["/api/discover/lists"], enabled: !!me.data?.member, queryFn: async () => (await fetch("/api/discover/lists", { credentials: "include" })).json() });
   const saved = useMemo(() => new Set((lists.data ?? []).flatMap((l) => l.items.map((i) => `${i.platform}:${i.handle}`))), [lists.data]);
   const guestList = lists.data?.find((l) => l.name === "Guests");
+  // Hosts & guests opens Oct 5 (admins sooner).
+  const status = useQuery<{ people?: boolean }>({ queryKey: ["/api/discover/podcasts/status"], queryFn: async () => (await fetch("/api/discover/podcasts/status")).json(), staleTime: 10 * 60_000 });
   const [view, setView] = useState<"search" | "saved">("search");
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("appearances");
@@ -583,6 +585,13 @@ export function GuestFinder({ showTitle = "" }: { showTitle?: string }) {
     <div className="space-y-4" data-testid="book-a-guest">
       <ViewSwitch view={view} setView={setView} saved={guestList?.items.filter((i) => i.platform === "podperson").length ?? 0} label="Saved guests" />
       {view === "saved" ? <SavedPanel list={guestList} kind="person" onOpen={(o, f) => { setFrom(f); setOpen(o); }} onRemoved={() => void qc.invalidateQueries({ queryKey: ["/api/discover/lists"] })} /> : <>
+      {status.data && status.data.people !== true ? (
+        <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm" data-testid="guest-soon">
+          <Users className="mx-auto h-6 w-6 text-[#053877]" />
+          <h2 className="mt-2 text-sm font-semibold">Find a guest opens Oct 5</h2>
+          <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">Search people who've been guests on podcasts, the most-booked first, and invite them onto your show.</p>
+        </div>
+      ) : <>
       <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
         <h2 className="text-sm font-semibold">Find a guest</h2>
         <p className="text-xs text-muted-foreground">People who've been guests on podcasts, the most-booked first. Open one to invite them onto your show, find their email, or save them for later.</p>
@@ -599,6 +608,7 @@ export function GuestFinder({ showTitle = "" }: { showTitle?: string }) {
         </div>
       </div>
       {ask && <PodcastResults ask={ask} isMember={!!me.data?.member} onJoin={() => void run(q)} onOpen={(o, f) => { setFrom(f); setOpen(o); }} saved={saved} onSave={(card) => void saveGuest(card)} />}
+      </>}
       </>}
       <PodcastDrawer open={open} from={from} onGo={setOpen} onClose={() => setOpen(null)} isMember={!!me.data?.member} onJoin={() => void run(q)} saved={saved} onSave={(card) => void saveGuest(card)} reveals={me.data?.reveals ?? null} onRevealed={() => void qc.invalidateQueries({ queryKey: ["/api/discover/me"] })} />
     </div>
