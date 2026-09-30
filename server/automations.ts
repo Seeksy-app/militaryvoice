@@ -86,7 +86,7 @@ export const RECIPES: Record<string, { name: string; trigger: string; steps: Ste
         delayHours: 0, banner: "conversation",
         subject: "How to find your next guest",
         preheader: "Search by topic and see who's booked most",
-        bodyText: "Hi {{First_Name}},\n\nWelcome to Discovery. Two things most people do first:\n\n- **Book a guest:** search a topic and see who's been on the most shows\n- **Be a guest:** find shows that take guests, and have AI write your pitch\n\n[[Open Discovery]](https://www.militaryvoices.ai/host/dashboard/discovery)",
+        bodyText: "Hi {{First_Name}},\n\nWelcome to Discovery. Two things most people do first:\n\n- **Book a guest:** search a topic and see who's been on the most shows\n- **Be a guest:** find shows that take guests, and have SI write your pitch\n\n[[Open Discovery]](https://www.militaryvoices.ai/host/dashboard/discovery)",
       },
     ],
   },

@@ -112,7 +112,7 @@ export function WaitingRoomMock() {
       <div className="rounded-2xl bg-white p-4 text-slate-900 shadow-2xl">
         <div className="flex items-center gap-2.5">
           <img src="/alex.jpg" alt="" className="h-8 w-8 rounded-full object-cover ring-2 ring-[#F0A71F]" />
-          <p className="text-sm font-semibold">Alex <span className="font-normal text-slate-500">· AI producer</span></p>
+          <p className="text-sm font-semibold">Alex <span className="font-normal text-slate-500">· SI producer</span></p>
           <span className="ml-auto flex items-center gap-1 text-[11px] text-emerald-600"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> answering</span>
         </div>
         <div className="mt-3 flex flex-col gap-2 text-[13px] leading-snug">

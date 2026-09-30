@@ -1264,7 +1264,7 @@ function ScenePicker({ scene, sceneKey, onPick }: { scene: string; sceneKey: str
         <p className="text-sm font-semibold">Scene behind you</p>
         {scene && <button type="button" onClick={() => onPick("", "")} className="text-[11px] font-semibold text-muted-foreground hover:text-foreground">Back to the colour</button>}
       </div>
-      <p className="text-[11px] text-muted-foreground">Made for you by AI in a few seconds. Pick one, describe your own, or use a photo.</p>
+      <p className="text-[11px] text-muted-foreground">Made for you by SI in a few seconds. Pick one, describe your own, or use a photo.</p>
       <div className="grid grid-cols-4 gap-2">
         {SCENE_PICKS.map(([k, l, e]) => {
           // Only the one in use shows its picture and a tick; the others look like the rest (made ones come back instantly).
@@ -1323,7 +1323,7 @@ function LivingPhoto({ on, setOn, st, start }: { on: boolean; setOn: (v: boolean
         <p className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="bio-living-running"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Bringing your photo to life. About three minutes; keep working, even on another tab.</p>
       ) : (
         <>
-          <p className="text-xs text-muted-foreground">Your photo, moving for a few seconds on a loop: a blink, a breath, a smile. Made by AI in about three minutes.</p>
+          <p className="text-xs text-muted-foreground">Your photo, moving for a few seconds on a loop: a blink, a breath, a smile. Made by SI in about three minutes.</p>
           <Button type="button" onClick={() => void start()} disabled={st.status === "loading"} className="w-full gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-living-make"><Sparkles className="h-4 w-4" /> Bring my photo to life</Button>
         </>
       )}
@@ -1713,7 +1713,7 @@ function PodcastOptions({ d, change, view, knowledge }: { d: Page; change: (p: P
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-sm font-semibold"><Sparkles className="h-4 w-4 text-[#b36b00]" /> Listeners can ask your podcast</p>
               <p className="text-xs text-muted-foreground">
-                {!view.podcast ? "Add your podcast first: AI learns it from your episodes." : !knowledge?.total ? "AI starts learning your episodes as soon as your podcast is here." : knowledge.done < knowledge.total ? `AI is learning your episodes: ${knowledge.done} of ${knowledge.total} so far. The Ask button shows once it knows one.` : `An Ask button on your episodes. Listeners type a question and AI answers from what you said, with the episode and minute. ${knowledge.done === 1 ? "It knows your episode." : `It knows all ${knowledge.done} episodes.`}`}
+                {!view.podcast ? "Add your podcast first: SI learns it from your episodes." : !knowledge?.total ? "SI starts learning your episodes as soon as your podcast is here." : knowledge.done < knowledge.total ? `SI is learning your episodes: ${knowledge.done} of ${knowledge.total} so far. The Ask button shows once it knows one.` : `An Ask button on your episodes. Listeners type a question and SI answers from what you said, with the episode and minute. ${knowledge.done === 1 ? "It knows your episode." : `It knows all ${knowledge.done} episodes.`}`}
               </p>
             </div>
             <Switch checked={d.aiEnabled} onCheckedChange={(v) => change({ aiEnabled: v }, true)} aria-label="Listeners can ask your podcast" />

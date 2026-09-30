@@ -207,7 +207,7 @@ export function registerAskShow(app: Express, requireAgent: RequestHandler) {
       res.json({ answer: text, sources, unanswered: !cited.length });
     } catch (err) {
       console.error("Ask my show failed:", (err as Error).message);
-      res.status(502).json({ message: "The show's AI is taking a break. Try again in a moment, or send your question to the host." });
+      res.status(502).json({ message: "The show's SI is taking a break. Try again in a moment, or send your question to the host." });
     }
   });
 }

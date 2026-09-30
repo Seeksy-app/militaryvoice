@@ -177,7 +177,7 @@ export function HelpChat() {
             <div className="flex items-center gap-3">
               <img src="/alex.jpg" alt="Alex" className="h-10 w-10 rounded-full object-cover ring-2 ring-white/30" />
               <div>
-                <p className="text-sm font-semibold">Alex · AI help desk</p>
+                <p className="text-sm font-semibold">Alex · SI help desk</p>
                 <p className="text-[11px] text-white/80">{cfg?.agent === false ? "A person will reply by email" : "Answers now · a person if you need one"}</p>
               </div>
             </div>

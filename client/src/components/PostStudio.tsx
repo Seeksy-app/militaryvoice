@@ -900,7 +900,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   const iconBtn = "flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background transition-colors hover:bg-muted disabled:opacity-50";
   const editTools = (
     <>
-      {tip(sugBusy ? "Listening to the episode…" : "Suggest edits: the AI finds tech checks, restarts and interruptions, and you decide", (
+      {tip(sugBusy ? "Listening to the episode…" : "Suggest edits: the SI finds tech checks, restarts and interruptions, and you decide", (
         <button type="button" onClick={() => suggest.mutate()} disabled={suggest.isPending || sugBusy} aria-label="Suggest edits" className={iconBtn} data-testid="suggest-edits">
           {suggest.isPending || sugBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-[#b7791f]" />}
         </button>
@@ -1162,7 +1162,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
       {tab === "edit" && (ed?.status === "failed" || sug?.status === "failed" || (sug?.status === "done" && sug.source === source && !(sug.items ?? []).length)) && (
         <p className="mt-2 text-xs text-muted-foreground">
           {ed?.status === "failed" ? <span className="text-destructive">The last edit didn't work: {ed.error || "try again"}. </span> : null}
-          {sug?.status === "failed" ? <span className="text-destructive">The suggestions didn't work: {sug.error || "try again"}.</span> : sug?.status === "done" && !(sug.items ?? []).length ? "The AI found nothing to cut: it starts and ends cleanly." : null}
+          {sug?.status === "failed" ? <span className="text-destructive">The suggestions didn't work: {sug.error || "try again"}.</span> : sug?.status === "done" && !(sug.items ?? []).length ? "The SI found nothing to cut: it starts and ends cleanly." : null}
         </p>
       )}
       {tab === "edit" && pending.length > 0 && (

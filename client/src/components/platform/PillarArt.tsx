@@ -143,7 +143,7 @@ function VerifiedArt() {
   );
 }
 
-const ART = { Events: EventsArt, "Run by AI": AiArt, Discovery: DiscoveryArt, Verified: VerifiedArt } as const;
+const ART = { Events: EventsArt, "Run by SI": AiArt, Discovery: DiscoveryArt, Verified: VerifiedArt } as const;
 
 /** The illustrated band across the top of a pillar card. */
 export function PillarArt({ kicker }: { kicker: string }) {

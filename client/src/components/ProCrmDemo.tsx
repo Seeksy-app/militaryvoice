@@ -347,7 +347,7 @@ export function ProCrmDemo({ initialTab = "contacts" }: { initialTab?: Tab }) {
                           <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">They wrote</p>
                           <p>{r.body}</p>
                           <p className="mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Alex acknowledged, automatically</p>
-                          <p className="text-xs text-muted-foreground">Hi {r.from.split(" ")[0]}, thank you for contacting us. Your message is very important to us. If this doesn't answer your question, reply to this email and someone will reach out shortly. — Alex, AI help desk</p>
+                          <p className="text-xs text-muted-foreground">Hi {r.from.split(" ")[0]}, thank you for contacting us. Your message is very important to us. If this doesn't answer your question, reply to this email and someone will reach out shortly. — Alex, SI help desk</p>
                         </div>
                         <div>
                           <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{r.status === "sent" ? "Sent by you" : "Human follow-up · draft, written for you"}</p>

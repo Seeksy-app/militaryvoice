@@ -112,7 +112,7 @@ const DOORS = [
 
 /** Three ways to ask: describe them, name the words in their bio, or name the account. */
 const MODES = [
-  { v: "ai", label: "AI search", icon: Wand2, hint: "Describe who you want, in plain English." },
+  { v: "ai", label: "SI search", icon: Wand2, hint: "Describe who you want, in plain English." },
   { v: "keywords", label: "Keywords in bio", icon: TypeIcon, hint: "Words that appear in their bio. Separate with commas." },
   { v: "username", label: "Username", icon: AtSign, hint: "A handle or a profile link. Opens their full profile." },
 ] as const;

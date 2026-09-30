@@ -166,7 +166,7 @@ export function CrewDashboard({ crew, email, onPickEvent, cohost }: { crew: Crew
               <div className="rounded-2xl border border-border bg-card p-5">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Call time</p>
                 <p className="text-sm text-foreground/85">
-                  {callTime ? <>Be in the green room by <span className="font-semibold text-foreground tabular-nums">{callTime} Eastern</span>, half an hour before the first show. Alex, the AI producer, runs the rail; you can take scenes from the green room too.</> : "Your call time appears here once the day is set."}
+                  {callTime ? <>Be in the green room by <span className="font-semibold text-foreground tabular-nums">{callTime} Eastern</span>, half an hour before the first show. Alex, the SI producer, runs the rail; you can take scenes from the green room too.</> : "Your call time appears here once the day is set."}
                 </p>
               </div>
               <div className="rounded-2xl border border-border bg-card p-5">

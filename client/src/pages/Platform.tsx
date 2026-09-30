@@ -56,9 +56,9 @@ const PILLARS = [
   },
   {
     icon: Wand2,
-    kicker: "Run by AI",
+    kicker: "Run by SI",
     title: "The agenda and the show, handled",
-    body: "Alex, our AI producer, turns your lineup into an agenda and a minute-by-minute run of show, writes the host lines and the reminders, keeps every file cued, and after the last segment cuts the clips for each speaker. Your team steers; the busywork is done.",
+    body: "Alex, our SI producer, turns your lineup into an agenda and a minute-by-minute run of show, writes the host lines and the reminders, keeps every file cued, and after the last segment cuts the clips for each speaker. Your team steers; the busywork is done.",
     points: ["Agenda and run of show from your lineup", "Host lines, reminders and follow-ups written for you", "Clips for every speaker, after the show"],
   },
   {
@@ -80,7 +80,7 @@ const PILLARS = [
 /** What Discovery does, capability by capability. */
 const DISCOVERY_FEATURES = [
   { icon: Search, title: "300M+ profiles", body: "Instagram, YouTube and TikTok, searched by name, by bio, or by what you describe." },
-  { icon: Wand2, title: "AI search", body: "Ask in plain English: \"Army veterans who talk about life after service.\"" },
+  { icon: Wand2, title: "SI search", body: "Ask in plain English: \"Army veterans who talk about life after service.\"" },
   { icon: BadgeCheck, title: "Verified military", body: "The gold badge means our team checked who they are and that they served or serve alongside." },
   { icon: Globe2, title: "Who's really listening", body: "Audience age, gender, country, city and language, with a credibility score and real reach." },
   { icon: TrendingUp, title: "Engagement & growth", body: "Engagement rate, six months of follower growth, and how often they post." },
@@ -241,7 +241,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
               <span className="block text-[#F0A71F]">without running it yourself.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-white/75 lg:mx-0">
-              MilitaryVoices is the platform for military and veteran voices. It runs your event, runs the show with AI, and finds and verifies the people worth putting on it.
+              MilitaryVoices is the platform for military and veteran voices. It runs your event, runs the show with SI, and finds and verifies the people worth putting on it.
             </p>
             <div className="mt-9 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center lg:justify-start">
               <InterestDialog
@@ -261,7 +261,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
             <ul className="mx-auto mt-10 hidden max-w-md grid-cols-3 gap-4 border-t border-white/10 pt-6 text-left sm:grid lg:mx-0">
               {[
                 ["Live", "to YouTube · more platforms soon"],
-                ["AI", "producer in the green room"],
+                ["SI", "producer in the green room"],
                 ["300M+", "creators in Discovery"],
               ].map(([v, l]) => (
                 <li key={v}>
@@ -434,13 +434,13 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
               <Kicker>Pōstify</Kicker>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Post-production, in real time</h2>
               <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-                The recording stops and the clips are already on their way. Every word was transcribed live while the show went out, so there is no upload and no queue: AI reads the segment, picks the moments that stand on their own, and cuts each one in the shapes the networks take, captions burned in.
+                The recording stops and the clips are already on their way. Every word was transcribed live while the show went out, so there is no upload and no queue: SI reads the segment, picks the moments that stand on their own, and cuts each one in the shapes the networks take, captions burned in.
               </p>
             </div>
             <ul className="grid gap-3 text-sm sm:grid-cols-2">
               {[
                 ["Live transcript", "Written while it aired; no second pass."],
-                ["Moments picked by AI", "Each one starts on a thought and stands alone."],
+                ["Moments picked by SI", "Each one starts on a thought and stands alone."],
                 ["Three shapes", "16:9, 9:16 and 1:1, plus a caption file."],
                 ["A clean episode", "The ums, false starts and long pauses taken out, as audio and video."],
               ].map(([t, b]) => (

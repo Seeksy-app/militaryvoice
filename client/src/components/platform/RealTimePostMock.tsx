@@ -17,7 +17,7 @@ const STEP_MS = 3400;
 const STEPS = [
   { icon: Square, title: "The segment ends", body: "The recorder stops. Nothing to upload." },
   { icon: FileText, title: "The transcript is already written", body: "Captioned live while it went out." },
-  { icon: Sparkles, title: "AI picks the moments", body: "Ones that stand up on their own, 20–75 seconds." },
+  { icon: Sparkles, title: "SI picks the moments", body: "Ones that stand up on their own, 20–75 seconds." },
   { icon: Crop, title: "Cut in three shapes", body: "16:9, 9:16 and 1:1, captions burned in." },
   { icon: Send, title: "Ready to post", body: "In their dashboard, before they're home." },
 ] as const;

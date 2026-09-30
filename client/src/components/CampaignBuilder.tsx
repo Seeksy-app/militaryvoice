@@ -358,7 +358,7 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
                   </div>
                 </>
               )}
-              <button type="button" onClick={() => setAiOpen(true)} className="mt-4 flex items-center gap-1.5 text-sm font-medium text-violet-700 hover:underline dark:text-violet-400" data-testid="builder-ai-start"><Sparkles className="h-4 w-4" /> Or have AI write it</button>
+              <button type="button" onClick={() => setAiOpen(true)} className="mt-4 flex items-center gap-1.5 text-sm font-medium text-violet-700 hover:underline dark:text-violet-400" data-testid="builder-ai-start"><Sparkles className="h-4 w-4" /> Or have SI write it</button>
             </section>
           ) : (
             <section className="flex flex-col gap-2" data-testid="builder-blocks">
@@ -394,7 +394,7 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
                   {BLOCK_KINDS.map((k) => (
                     <button key={k.type} type="button" onClick={() => add(k.type)} className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-sm hover:border-[#053877] hover:bg-accent" data-testid={`add-${k.type}`}><k.icon className="h-4 w-4" />{k.label}</button>
                   ))}
-                  <button type="button" onClick={() => setAiOpen(true)} className="flex items-center gap-1.5 rounded-full border border-violet-300 px-3 py-1.5 text-sm text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-950/30" data-testid="builder-ai"><Sparkles className="h-4 w-4" />Rewrite with AI</button>
+                  <button type="button" onClick={() => setAiOpen(true)} className="flex items-center gap-1.5 rounded-full border border-violet-300 px-3 py-1.5 text-sm text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-950/30" data-testid="builder-ai"><Sparkles className="h-4 w-4" />Rewrite with SI</button>
                 </div>
               </div>
             </section>
@@ -433,7 +433,7 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
       <Dialog open={aiOpen} onOpenChange={setAiOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Have AI write it</DialogTitle>
+            <DialogTitle>Have SI write it</DialogTitle>
             <DialogDescription>Say who it's for and what you want them to do. It writes the subject and the email; you edit from there.</DialogDescription>
           </DialogHeader>
           <Textarea autoFocus rows={4} value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} placeholder="Invite military podcasters to claim a slot on October 5. Warm and short, one button to sign up." />

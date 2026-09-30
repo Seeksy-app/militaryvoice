@@ -68,7 +68,7 @@ export function DiscoverySearchMock() {
       <div className="border-b border-border bg-gradient-to-b from-[#f5f7fc] to-card p-3 dark:from-[#0b1433] sm:p-4">
         <div className="flex flex-wrap items-center gap-1.5">
           {[
-            { icon: Wand2, label: "AI search", on: true },
+            { icon: Wand2, label: "SI search", on: true },
             { icon: TypeIcon, label: "Keywords in bio" },
             { icon: AtSign, label: "Username" },
           ].map(({ icon: Icon, label, on }) => (

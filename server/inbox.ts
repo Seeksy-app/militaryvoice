@@ -188,7 +188,7 @@ export function alexSignatureHtml(): string {
   <td style="padding-right:14px;vertical-align:middle"><img src="https://www.militaryvoices.ai/alex.jpg" width="56" height="56" alt="Alex" style="display:block;width:56px;height:56px;border-radius:50%;object-fit:cover"></td>
   <td style="vertical-align:middle;font-family:Helvetica,Arial,sans-serif">
     <div style="font-size:15px;font-weight:700;color:#0b1a3a">Alex</div>
-    <div style="font-size:12px;color:#5b6478">AI help desk · The Podcast Marathon</div>
+    <div style="font-size:12px;color:#5b6478">SI help desk · The Podcast Marathon</div>
   </td></tr></table>`;
 }
 
