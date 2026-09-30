@@ -2000,6 +2000,15 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   there's no agenda behind them. */}
               <div className="flex min-h-0 flex-1 flex-col">
                   <SceneRail
+                    livePreview={onStage.length ? (
+                      <div className={`grid h-full w-full gap-0.5 ${onStage.length > 1 ? "grid-cols-2" : "grid-cols-1"}`}>
+                        {onStage.slice(0, 4).map((p) => (
+                          <div key={p.id} className="relative overflow-hidden">
+                            <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={(p.displayName || "?").slice(0, 2).toUpperCase()} photo={p.photoUrl} fill />
+                          </div>
+                        ))}
+                      </div>
+                    ) : undefined}
                     scenes={scenes ?? []}
                     currentSceneId={studio?.currentSceneId ?? 0}
                     anchorToLive={broadcasting}

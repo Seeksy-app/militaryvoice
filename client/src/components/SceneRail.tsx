@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -156,7 +156,10 @@ export function SceneRail({
   onDelete,
   onReorder,
   onGenerate,
+  livePreview,
 }: {
+  /** The on-air camera scene's card shows this: a live picture of who's on stage. */
+  livePreview?: ReactNode;
   scenes: SceneRow[];
   currentSceneId: number;
   zone: string;
@@ -533,7 +536,12 @@ export function SceneRail({
                 data-testid={`button-scene-${sc.id}`}
               >
                 <div className="relative w-full" style={{ aspectRatio: "16/9" }}>
-                  {sceneVideo ? (
+                  {on && k === "camera" && !sceneVideo && livePreview ? (
+                    <>
+                      <div className="absolute inset-0 overflow-hidden bg-[#053877]">{livePreview}</div>
+                      <span className="absolute bottom-2 right-2 rounded-md bg-[#ED1C24] px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Live</span>
+                    </>
+                  ) : sceneVideo ? (
                     <>
                       {/* On air, the card plays: what the producer sees on the
                           monitor is what the rail shows, so a glance at the
