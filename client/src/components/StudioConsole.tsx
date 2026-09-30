@@ -35,45 +35,7 @@ import { stageMetaFromStudio } from "@shared/stageMeta";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { STUDIO_STATUSES, LOGO_CORNERS, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow, type SceneRow } from "@shared/schema";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
-import {
-  MonitorPlay,
-  Users,
-  Headphones,
-  Mic,
-  MicOff,
-  Video,
-  VideoOff,
-  ArrowUp,
-  ArrowDown,
-  X,
-  PlayCircle,
-  Radio,
-  Copy,
-  AlertTriangle,
-  Clock,
-  Disc,
-  Pause,
-  Play,
-  Square,
-  Signal,
-  Cable,
-  Trash2,
-  Check,
-  Upload,
-  Volume2,
-  VolumeX,
-  Film,
-  Image as ImageIcon,
-  Clapperboard,
-  ListOrdered,
-  Plus,
-  Maximize2,
-  Minimize2,
-  LogOut,
-  ChevronDown,
-  Settings2,
-  Timer,
-} from "lucide-react";
+import { MonitorPlay, Users, Headphones, Mic, MicOff, Video, VideoOff, ArrowUp, ArrowDown, X, PlayCircle, Radio, Copy, AlertTriangle, Clock, Disc, Pause, Play, Square, Signal, Cable, Trash2, Check, Upload, Volume2, VolumeX, Film, Image as ImageIcon, Clapperboard, ListOrdered, Plus, Maximize2, Minimize2, LogOut, ChevronDown, Settings2, Timer, Loader2 } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -589,6 +551,24 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   const isLive = view === "live";
   // The destinations form, from the To menu (the event studio has no Set view to find it in).
   const [destDialog, setDestDialog] = useState(false);
+  // Go live counts down 5 to 1 first, so the room is ready when the red light comes on.
+  const [goCount, setGoCount] = useState<number | null>(null);
+  const goRun = useRef<(() => void) | null>(null);
+  const goLiveIn5 = (run: () => void) => { goRun.current = run; setGoCount(5); };
+  useEffect(() => {
+    if (goCount === null) return;
+    if (goCount === 0) { const run = goRun.current; goRun.current = null; setGoCount(null); run?.(); return; }
+    const t = setTimeout(() => setGoCount((n) => (n === null ? null : n - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [goCount]);
+  // After the show: the recording goes up to the cloud, then shows in Recordings & clips.
+  const [savingSince, setSavingSince] = useState<number | null>(null);
+  const savedRecs = useQuery<{ id: number; studioId: number; status: string; startedAt: string; endedAt: string | null }[]>({
+    queryKey: ["/api/admin/recordings", "saving", eventId ?? 0],
+    queryFn: () => adminGet(`/api/admin/recordings${eventId ? `?eventId=${eventId}` : ""}`),
+    enabled: savingSince !== null,
+    refetchInterval: savingSince !== null ? 10_000 : false,
+  });
   const standbyLoops = useQuery<{ current: string; loops: { label: string; url: string }[] }>({
     queryKey: ["/api/admin/studio/standby-loops", fixedStudioId ?? eventId ?? 0],
     queryFn: () => adminGet(`/api/admin/studio/standby-loops${fixedStudioId ? `?studioId=${fixedStudioId}` : ""}`),
@@ -1375,6 +1355,39 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
           : "overflow-hidden"
       }
     >
+      {/* 5, 4, 3, 2, 1: the room sees it coming. Cancel stops it before anything goes out. */}
+      {goCount !== null && goCount > 0 && (
+        <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-black/70 text-white" data-testid="golive-countdown">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-white/70">Going live in</p>
+          <p key={goCount} className="mt-2 animate-in zoom-in-50 fade-in text-[9rem] font-bold leading-none tabular-nums" style={HEADLINE_FONT}>{goCount}</p>
+          <Button variant="outline" className="mt-8 rounded-full border-white/40 bg-transparent text-white hover:bg-white/10" onClick={() => { goRun.current = null; setGoCount(null); }} data-testid="golive-cancel">
+            Cancel
+          </Button>
+        </div>
+      )}
+
+      {/* After the show: the recording's way to the cloud, then a link to it. */}
+      {savingSince !== null && (() => {
+        const mine = (savedRecs.data ?? []).filter((r) => r.studioId === studioId && Date.parse(r.endedAt || r.startedAt) >= savingSince - 10 * 60_000);
+        const ready = mine.length > 0 && mine.every((r) => r.status !== "Recording");
+        const failed = mine.some((r) => r.status === "Failed");
+        return (
+          <div className="fixed bottom-24 left-1/2 z-[70] flex w-[min(92vw,34rem)] -translate-x-1/2 items-start gap-3 rounded-2xl border border-white/15 bg-[#000741] p-4 text-sm text-white shadow-2xl" data-testid="recording-saving">
+            {ready ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> : <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-[#F0A71F]" />}
+            <div className="min-w-0 flex-1">
+              {failed ? (
+                <p>The recording didn't save. The details are in <a href="/admin/clips" className="font-semibold text-[#F0A71F] hover:underline">Recordings &amp; clips</a>.</p>
+              ) : ready ? (
+                <p>Your recording is in the cloud. <a href="/admin/clips" className="font-semibold text-[#F0A71F] hover:underline">Open Recordings &amp; clips →</a> Clips follow in a few minutes.</p>
+              ) : (
+                <p>Saving your recording to the cloud. It'll be in <span className="font-semibold">Recordings &amp; clips</span> shortly, and the clips follow from there.</p>
+              )}
+            </div>
+            <button type="button" onClick={() => setSavingSince(null)} className="rounded p-0.5 text-white/60 hover:text-white" aria-label="Close"><X className="h-4 w-4" /></button>
+          </div>
+        );
+      })()}
+
       {/* ---------------------------------------------------- the control bar */}
       <div
         className={`relative bg-[#000741] text-white ${isLive ? "px-4 py-2" : "px-5 py-4"} ${
@@ -1770,7 +1783,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                         <AlertDialogAction
                           className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                           onClick={() => {
-                            if (recording) record.mutate({ action: "stop" });
+                            if (recording) { record.mutate({ action: "stop" }); setSavingSince(Date.now()); }
                             if (broadcasting) broadcast.mutate("stop");
                           }}
                           data-testid="button-end-confirm"
@@ -1856,10 +1869,10 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                       size="sm"
                       className="h-9 gap-1.5 rounded-l-full rounded-r-none border-r border-white/20 bg-[#ED1C24] px-4 font-semibold text-white shadow-[0_6px_20px_rgba(237,28,36,0.45)] hover:bg-[#c81820]"
                       disabled={broadcast.isPending || record.isPending}
-                      onClick={() => {
+                      onClick={() => goLiveIn5(() => {
                         broadcast.mutate("start");
                         record.mutate({ action: "start", signupId: current?.signupId ?? undefined });
-                      }}
+                      })}
                       data-testid="button-broadcast-toggle"
                     >
                       <Signal className="h-3.5 w-3.5" />
@@ -1878,14 +1891,14 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-72">
-                      <DropdownMenuItem onClick={() => { broadcast.mutate("start"); record.mutate({ action: "start", signupId: current?.signupId ?? undefined }); }} data-testid="menu-go-live-record">
+                      <DropdownMenuItem onClick={() => goLiveIn5(() => { broadcast.mutate("start"); record.mutate({ action: "start", signupId: current?.signupId ?? undefined }); })} data-testid="menu-go-live-record">
                         <Signal className="mr-2 h-4 w-4 text-[#ED1C24]" />
                         <span>
                           <span className="block font-semibold">Live stream + record <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Go live</span></span>
                           <span className="block text-xs text-muted-foreground">Out to every destination, and the file is saved</span>
                         </span>
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => broadcast.mutate("start")} data-testid="menu-go-live">
+                      <DropdownMenuItem onClick={() => goLiveIn5(() => broadcast.mutate("start"))} data-testid="menu-go-live">
                         <Signal className="mr-2 h-4 w-4" />
                         <span>
                           <span className="block font-semibold">Live stream only</span>

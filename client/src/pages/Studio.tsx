@@ -871,6 +871,28 @@ export default function Studio({ slug }: { slug?: string }) {
   const showIsLive =
     state?.studio.status === "Live" && !state?.studio.fallbackPlaying && onAirPeers.length > 0;
 
+  // The show ends while they're here: say thank you, then leave in 15 seconds.
+  const wasLive = useRef(false);
+  const [overIn, setOverIn] = useState<number | null>(null);
+  const studioStatus = state?.studio.status;
+  useEffect(() => {
+    if (!joined || !studioStatus) return;
+    if (studioStatus === "Live") { wasLive.current = true; setOverIn(null); return; }
+    if (wasLive.current) { wasLive.current = false; setOverIn(15); }
+  }, [joined, studioStatus]);
+  const leaveRoom = async () => {
+    await fetch("/api/studio/leave", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ clientKey: key, slug, studioId }) }).catch(() => {});
+    // A window we opened can close itself; otherwise home to the dashboard.
+    window.close();
+    window.location.href = "/host/dashboard";
+  };
+  useEffect(() => {
+    if (overIn === null) return;
+    if (overIn <= 0) { void leaveRoom(); return; }
+    const t = setTimeout(() => setOverIn((n) => (n === null ? null : n - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [overIn]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // The way in, Restream-style: your camera, your devices, your name and title.
   // A returning guest (already a participant) goes straight to the room.
   if (!joined && !state?.me && state?.mayJoin !== false) {
@@ -915,6 +937,19 @@ export default function Studio({ slug }: { slug?: string }) {
             exactly over the programme and the two cards over the rail. */}
         <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)_320px] xl:items-start">
           <div>
+            {overIn !== null && (
+              <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4" data-testid="show-over">
+                <div className="w-full max-w-md rounded-2xl border border-white/15 bg-[#000741] p-6 text-center text-white shadow-2xl">
+                  <p className="text-xl font-bold" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>The live stream is over.</p>
+                  <p className="mt-2 text-white/75">Thank you for your participation.</p>
+                  <p className="mt-4 text-sm text-white/60">This window will close in <span className="font-bold tabular-nums text-white">{overIn}</span> seconds.</p>
+                  <div className="mt-5 flex justify-center gap-2">
+                    <Button variant="outline" className="rounded-full border-white/30 bg-transparent text-white hover:bg-white/10" onClick={() => setOverIn(null)} data-testid="show-over-stay">Stay a moment</Button>
+                    <Button className="rounded-full bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b944]" onClick={() => void leaveRoom()} data-testid="show-over-leave">Close now</Button>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* Leaving is a real leave: off the room's list and out of the
                 call, then home. A plain link left you listed as waiting. */}
             <button
