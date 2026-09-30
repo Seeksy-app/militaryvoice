@@ -62,8 +62,17 @@ export function Destinations({ adminGet, adminSend, broadcasting, signups }: Pro
   const fail = (e: Error) => toast({ title: "That didn't work", description: e.message, variant: "destructive" });
 
   const setLive = useMutation({
-    mutationFn: async ({ id, live }: { id: number; live: boolean }) =>
-      adminSend("POST", `/api/admin/destinations/${id}/live`, { live }),
+    mutationFn: async ({ id, live }: { id: number; live: boolean }) => {
+      try {
+        return await adminSend("POST", `/api/admin/destinations/${id}/live`, { live });
+      } catch (e) {
+        // A podcaster's channel before its time: only on a deliberate yes.
+        const msg = (e as Error).message;
+        if (!live || !/^Not their time yet/.test(msg)) throw e;
+        if (!window.confirm(`${msg}\n\nSend to their channel anyway, as a test?`)) return null;
+        return adminSend("POST", `/api/admin/destinations/${id}/live`, { live, test: true });
+      }
+    },
     onSuccess: refresh,
     onError: fail,
   });

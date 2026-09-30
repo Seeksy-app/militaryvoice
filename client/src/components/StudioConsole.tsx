@@ -1636,7 +1636,10 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                         {houseDestRows.map((d) => (
                           <label key={d.id} className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-sm">
                             <DestIcon platform={d.platform} />
-                            <span className="min-w-0 flex-1 truncate">{d.label || d.platform}</span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate">{d.label || d.platform}</span>
+                              {(d as { opensLabel?: string }).opensLabel && <span className="block truncate text-[11px] text-muted-foreground">{(d as { opensLabel?: string }).opensLabel}</span>}
+                            </span>
                             {d.live && <span className="text-[11px] font-semibold text-[#ED1C24]">live</span>}
                             <Switch checked={d.enabled} onCheckedChange={(v) => toggleDest.mutate({ id: d.id, enabled: v })} />
                           </label>

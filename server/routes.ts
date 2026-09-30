@@ -2798,6 +2798,14 @@ export function registerRoutes(app: Express): void {
       res.status(404).json({ message: "No such booking" });
       return;
     }
+    if (req.body?.test !== true) {
+      const ev0 = await storage.getEventById(signup.eventId);
+      const slot = ev0 ? Date.parse(ev0.startAtUtc) + signup.slotIndex * ev0.slotMinutes * 60_000 : 0;
+      if (!ev0 || Date.now() < slot - 15 * 60_000 || Date.now() > slot + ev0.slotMinutes * 60_000) {
+        res.status(409).json({ code: "not_yet", message: `Not ${signup.hostName}'s time yet: their channel opens ${slot ? new Intl.DateTimeFormat("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(slot - 15 * 60_000)) + " ET" : "on the day"}.` });
+        return;
+      }
+    }
     const acctRow = await storage.getYoutubeAccount(signup.email.toLowerCase().trim());
     if (acctRow && acctRow.enabled === false) {
       res.status(409).json({ message: `${signup.hostName}'s channel is switched off under Streaming to.` });
@@ -5000,6 +5008,33 @@ export function registerRoutes(app: Express): void {
     res.json(updated);
   });
 
+  /**
+   * A podcaster's own channel carries the show only from its time: the whole
+   * day from 15 minutes before the first show, their segment from 15 minutes
+   * before their slot to its end. Before that, going live (a rehearsal, a
+   * test, the studio started early) reaches our watch page and our own house
+   * destinations only, never their audience. House rows have no owner.
+   */
+  const CHANNEL_EARLY_MS = 15 * 60_000;
+  async function channelWindow(d: DestinationRow): Promise<{ open: boolean; opensAt: string }> {
+    if (!d.ownerEmail) return { open: true, opensAt: "" };
+    const ev = await storage.getEventById(d.eventId);
+    if (!ev) return { open: false, opensAt: "" };
+    const start = Date.parse(ev.startAtUtc);
+    let from = start - CHANNEL_EARLY_MS;
+    let to = start + ev.durationHours * 3600_000;
+    if (d.signupId) {
+      const sg = await storage.getSignupById(d.signupId);
+      if (!sg) return { open: false, opensAt: "" };
+      const slot = start + sg.slotIndex * ev.slotMinutes * 60_000;
+      from = slot - CHANNEL_EARLY_MS;
+      to = slot + ev.slotMinutes * 60_000;
+    }
+    const now = Date.now();
+    return { open: now >= from && now <= to, opensAt: new Date(from).toISOString() };
+  }
+  const etLabel = (iso: string) => new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(iso)) + " ET";
+
   app.post("/api/admin/studio/broadcast", requireAdmin, async (req, res) => {
     if (!isLiveKitConfigured()) {
       res.status(503).json({ message: "No media layer configured for this event." });
@@ -5044,7 +5079,11 @@ export function registerRoutes(app: Express): void {
     // room directly, no egress involved. An egress is only needed to push to
     // somebody else's RTMP, so with no external destinations we simply go Live
     // and the audience watches on our site.
-    const rows = (await storage.listDestinations(eventId)).filter((d) => d.enabled && !d.signupId);
+    // Podcasters' whole-show channels join only once the day has begun (the cron adds them then).
+    const rows: DestinationRow[] = [];
+    for (const d of (await storage.listDestinations(eventId)).filter((x) => x.enabled && !x.signupId)) {
+      if ((await channelWindow(d)).open) rows.push(d);
+    }
     let egressId = "";
     if (rows.length > 0) {
       egressId = await startBroadcast(
@@ -5058,6 +5097,28 @@ export function registerRoutes(app: Express): void {
     const ev = await storage.getEventById(eventId);
     if (updated) await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
     res.json(updated);
+  });
+
+  /**
+   * Every minute: when the day begins and the studio is already on air, the
+   * podcasters' whole-show channels join the broadcast (going live earlier
+   * left them out on purpose).
+   */
+  app.get("/api/cron/studio-channels", async (req, res) => {
+    const secret = process.env.CRON_SECRET;
+    if (secret && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== secret) return res.status(401).json({ message: "Not authorised." });
+    const ev = await storage.getFeaturedEvent();
+    const studio = await storage.getOrCreateStudio(ev.id);
+    if (!studio.broadcastEgressId) return res.json({ added: 0, reason: "not on air" });
+    const due: DestinationRow[] = [];
+    for (const d of await storage.listDestinations(ev.id)) {
+      if (d.ownerEmail && !d.signupId && d.enabled && !d.live && (await channelWindow(d)).open) due.push(d);
+    }
+    if (due.length) {
+      await updateBroadcastTargets(studio.broadcastEgressId, due.map((d) => ingestUrl(d)), []);
+      for (const d of due) await storage.updateDestination(d.id, { live: true });
+    }
+    res.json({ added: due.length });
   });
 
   /** Add or drop one destination while the broadcast is already running. */
@@ -5140,7 +5201,11 @@ export function registerRoutes(app: Express): void {
     noStore(res);
     const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
     const ev = await storage.getEventById(eventId);
-    const house = (await storage.listDestinations(eventId)).map((d) => ({ ...publicDestination(d), kind: "house" as const }));
+    const house = await Promise.all((await storage.listDestinations(eventId)).map(async (d) => {
+      // A podcaster's whole-show channel says when it opens, so "on but not live" reads right.
+      const w = d.ownerEmail ? await channelWindow(d) : null;
+      return { ...publicDestination(d), kind: "house" as const, ...(w && !w.open && w.opensAt ? { opensLabel: `Opens ${etLabel(w.opensAt)}` } : {}) };
+    }));
     const signups = (await storage.listSignups(eventId)).filter((s) => s.status !== "cancelled");
     const at = (slot: number) => ev ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(Date.parse(ev.startAtUtc) + slot * ev.slotMinutes * 60_000)) + " ET" : "";
     const channels: PublicDestination[] = [];
@@ -5222,6 +5287,14 @@ export function registerRoutes(app: Express): void {
     if (want === d.live) {
       res.json(publicDestination(d));
       return;
+    }
+    // A podcaster's channel before its time needs a deliberate "yes, it's a test".
+    if (want && req.body?.test !== true) {
+      const w = await channelWindow(d);
+      if (!w.open) {
+        res.status(409).json({ code: "not_yet", message: `Not their time yet: ${d.label || "this channel"} opens ${w.opensAt ? etLabel(w.opensAt) : "on the day"}. Anything sent now goes to their audience.` });
+        return;
+      }
     }
     try {
       await updateBroadcastTargets(
