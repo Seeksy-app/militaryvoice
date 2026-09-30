@@ -6247,11 +6247,13 @@ export function registerRoutes(app: Express): void {
     const rec = await storage.getRecording(Number(req.params.id));
     if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
     // An upload or a Zoom import: our copy of their file (the Zoom original stays in Zoom).
-    const upload = rec.egressId.startsWith("UPLOAD_") || rec.egressId.startsWith("ZOOM_") || rec.egressId.startsWith("LINK_");
+    // Or recorded in their own Room: no event, no studio, theirs alone.
+    const upload = rec.egressId.startsWith("UPLOAD_") || rec.egressId.startsWith("ZOOM_") || rec.egressId.startsWith("LINK_") || (rec.eventId === 0 && rec.studioId === 0);
     // A test episode we staged into someone's Library: theirs to remove; its file may be shared, so it stays.
     const staged = rec.egressId.startsWith("STAGED_");
     if (!upload && !staged && !rec.egressId.startsWith("CLEAN_")) return res.status(403).json({ message: "Studio recordings stay with the event, so they can't be deleted here." });
     if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.status(409).json({ message: "Pōstify is still working on this one." });
+    if (rec.status === "Recording") return res.status(409).json({ message: "It's still recording. Stop the recording first." });
     // The episode goes as a whole: its clean and edited copies share its Library card.
     const copies = upload || staged ? (await storage.listRecordingsByEmail(rec.email)).filter((r) => new RegExp(`^CLEAN_(EDIT_)?${rec.id}(_|$)`).test(r.egressId)) : [];
     const all = [rec, ...copies];

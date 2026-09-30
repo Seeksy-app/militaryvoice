@@ -33,7 +33,8 @@ function size(bytes: string): string {
 }
 
 /** Ours to delete: uploads, imports, Pōstify's copies and staged test episodes. Studio sessions belong to the event. */
-const deletable = (r: RecordingRow) => /^(UPLOAD_|CLEAN_|ZOOM_|LINK_|STAGED_)/.test(r.egressId);
+// Theirs to delete: uploads, imports, Pōstify's copies, staged test episodes, and what they recorded in their Room (no event).
+const deletable = (r: RecordingRow) => /^(UPLOAD_|CLEAN_|ZOOM_|LINK_|STAGED_)/.test(r.egressId) || (r.eventId === 0 && r.studioId === 0);
 
 /** The episode a clean or edited copy was made from (CLEAN_12, CLEAN_EDIT_12_…). */
 function sourceOf(r: RecordingRow): number | null {
