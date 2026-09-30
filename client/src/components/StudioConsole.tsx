@@ -1898,13 +1898,8 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                           <span className="block text-xs text-muted-foreground">Out to every destination, and the file is saved</span>
                         </span>
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => goLiveIn5(() => broadcast.mutate("start"))} data-testid="menu-go-live">
-                        <Signal className="mr-2 h-4 w-4" />
-                        <span>
-                          <span className="block font-semibold">Live stream only</span>
-                          <span className="block text-xs text-muted-foreground">Watch page and the destinations above</span>
-                        </span>
-                      </DropdownMenuItem>
+                      {/* No "live stream only": every live show is recorded to our own cloud, so we never
+                          depend on YouTube's copy (a 28-minute test went out with no file of ours). */}
                       <DropdownMenuItem onClick={() => record.mutate({ action: "start", signupId: current?.signupId ?? undefined })} data-testid="menu-record">
                         <Disc className="mr-2 h-4 w-4" />
                         <span>
