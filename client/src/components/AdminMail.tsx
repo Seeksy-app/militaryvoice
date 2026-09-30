@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertTriangle, Archive, ArchiveRestore, ArrowDownLeft, ArrowUpRight, Check, CheckCheck, Eye, Inbox, Loader2, Mail, MailOpen, Megaphone, MousePointerClick, PenSquare, Search, Send, SendHorizontal, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -126,18 +127,18 @@ export function AdminMail() {
           {search && <button type="button" onClick={() => { setQ(""); setSearch(""); }} className="rounded p-1 text-muted-foreground hover:text-foreground" aria-label="Clear search"><X className="h-4 w-4" /></button>}
         </form>
         {pickable && items.length > 0 && (
-          <div className="flex min-h-[44px] flex-wrap items-center gap-1 border-b border-border px-3 py-1.5" data-testid="mail-bulkbar">
+          <div className="flex min-h-[44px] flex-nowrap items-center gap-1 border-b border-border px-3 py-1.5" data-testid="mail-bulkbar">
             <input type="checkbox" checked={allPicked} onChange={() => setPicked(allPicked ? new Set() : new Set(items.map((i) => i.key)))} className="mr-1 h-4 w-4 accent-[#053877]" aria-label="Select all" data-testid="mail-pick-all" />
             {picked.size === 0 ? <span className="text-xs text-muted-foreground">Select to mark read, archive or delete</span> : (
               <>
                 <span className="mr-1 text-xs font-semibold">{picked.size} selected</span>
-                {anyIn && <button type="button" onClick={() => void bulk("read")} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted" title="Mark as read" data-testid="mail-bulk-read"><MailOpen className="h-3.5 w-3.5" /> Read</button>}
-                {anyIn && <button type="button" onClick={() => void bulk("unread")} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted" title="Mark as unread"><Mail className="h-3.5 w-3.5" /> Unread</button>}
+                {anyIn && <BulkIcon label="Mark as read" icon={MailOpen} onClick={() => void bulk("read")} testId="mail-bulk-read" />}
+                {anyIn && <BulkIcon label="Mark as unread" icon={Mail} onClick={() => void bulk("unread")} />}
                 {anyIn && (folder === "archive"
-                  ? <button type="button" onClick={() => void bulk("unarchive")} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted"><ArchiveRestore className="h-3.5 w-3.5" /> Move to Inbox</button>
-                  : <button type="button" onClick={() => void bulk("archive")} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted" data-testid="mail-bulk-archive"><Archive className="h-3.5 w-3.5" /> Archive</button>)}
-                {anyWaiting && <button type="button" onClick={() => void bulk("noreply")} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium hover:bg-muted"><Check className="h-3.5 w-3.5" /> No reply needed</button>}
-                <button type="button" onClick={() => void bulk("delete")} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10" data-testid="mail-bulk-delete"><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+                  ? <BulkIcon label="Move to Inbox" icon={ArchiveRestore} onClick={() => void bulk("unarchive")} />
+                  : <BulkIcon label="Archive" icon={Archive} onClick={() => void bulk("archive")} testId="mail-bulk-archive" />)}
+                {anyWaiting && <BulkIcon label="No reply needed" icon={Check} onClick={() => void bulk("noreply")} />}
+                <BulkIcon label="Delete" icon={Trash2} onClick={() => void bulk("delete")} testId="mail-bulk-delete" danger />
               </>
             )}
           </div>
@@ -324,5 +325,20 @@ function Compose({ onSent }: { onSent: () => void }) {
       <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={12} placeholder="Write your email…" className="text-sm" />
       <Button onClick={() => void send()} disabled={busy || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to.trim()) || !subject.trim() || !text.trim()} className="h-10 gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send</Button>
     </div>
+  );
+}
+
+/** One bulk action: just the icon, its name on hover (and for screen readers). */
+function BulkIcon({ label, icon: Icon, onClick, testId, danger }: { label: string; icon: typeof Mail; onClick: () => void; testId?: string; danger?: boolean }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" onClick={onClick} aria-label={label} data-testid={testId}
+          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${danger ? "text-destructive hover:bg-destructive/10" : "text-foreground hover:bg-muted"}`}>
+          <Icon className="h-4 w-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
