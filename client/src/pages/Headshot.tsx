@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
+import { fitForUpload } from "@/lib/cropImage";
 import { Camera, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 
 // One page, one job: take one good photograph of a podcaster.
@@ -41,10 +42,13 @@ export default function Headshot({ token }: { token: string }) {
     setError("");
     setBusy(true);
     try {
+      // A camera original is often over the 4.5MB a request can carry: shrink it here, still well past print size.
+      const photo = await fitForUpload(file);
       const form = new FormData();
-      form.append("photo", file);
+      form.append("photo", photo, photo === file ? file.name : file.name.replace(/\.[^.]+$/, "") + ".jpg");
       const res = await fetch(`/api/headshot/${token}`, { method: "POST", body: form });
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || "That didn't go through.");
+      if (res.status === 413) throw new Error("That file is too big for us to take here. Email it to hello@militaryvoices.ai and we'll add it for you.");
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || "That didn't go through. Email the photo to hello@militaryvoices.ai and we'll add it for you.");
       setDone(true);
     } catch (err) {
       setError((err as Error).message);
@@ -141,7 +145,7 @@ export default function Headshot({ token }: { token: string }) {
                     {busy ? "Sending…" : done ? "Send a different one" : "Choose a photo"}
                   </Button>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Up to 25MB. It goes straight to us — nothing is posted anywhere.
+                    Any size, straight off the camera. It goes straight to us — nothing is posted anywhere.
                   </p>
                 </div>
               </div>
