@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { PlatformIcon } from "@/components/SocialIcons";
-import { Check, LogOut, HelpCircle, PlayCircle } from "lucide-react";
+import { Check, LogOut, HelpCircle, PlayCircle, Plug } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Link } from "wouter";
@@ -178,7 +178,7 @@ export function ConnectYoutube({ locked = false, lockedReason = "", row = false 
               }}
               data-testid="button-youtube-connect"
             >
-              <Check className="h-3.5 w-3.5" /> Connect YouTube
+              <Plug className="h-3.5 w-3.5" /> Connect YouTube
             </Button>
           )}
         </div>

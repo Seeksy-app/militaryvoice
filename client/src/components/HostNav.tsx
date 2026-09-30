@@ -1,4 +1,5 @@
 import { useToast } from "@/hooks/use-toast";
+import { useAdminAuth } from "@/lib/admin-auth";
 import { useState, type ComponentType, type ReactNode } from "react";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
@@ -80,6 +81,8 @@ export function HostNav({
   proOpen?: boolean;
 }) {
   const { toast } = useToast();
+  // Admins get into the studio now (to run the Marathon and test it); everyone else sees Oct 5.
+  const { isAuthenticated: isAdmin } = useAdminAuth();
   const groups: { title: string; items: Item[] }[] = [
     // Most-used first. Promotion lives inside Events (it's about an event);
     // Profile lives in the account card at the foot; Integrations is in both.
@@ -158,9 +161,10 @@ export function HostNav({
     return (
       <a
         key={`${it.key}-${it.feature ?? ""}`}
-        href={inert || it.soon ? undefined : it.locked ? `${pathFor("pro")}#${it.feature}` : pathFor(it.key)}
+        href={it.soon && it.feature === "studio" && isAdmin ? "/admin/studio" : inert || it.soon ? undefined : it.locked ? `${pathFor("pro")}#${it.feature}` : pathFor(it.key)}
         aria-disabled={inert || undefined}
         onClick={(e) => {
+          if (it.soon && it.feature === "studio" && isAdmin) return;
           if (it.soon) { e.preventDefault(); toast({ title: it.soon, description: "The full marathon studio for your own show. Until then, Rooms has you covered for recording and going live." }); return; }
           if (inert) { e.preventDefault(); return; }
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;

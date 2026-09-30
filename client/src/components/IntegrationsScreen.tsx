@@ -112,7 +112,7 @@ export function IntegrationsScreen({
         title="Live streaming"
         line="Optional. Your slot airs on MilitaryVoices.ai either way; this sends it to your own channel too. YouTube is the only one we can send to directly."
       >
-        <ConnectYoutube row locked={youtubeLocked} lockedReason="Claim a time slot first — the event is full at the moment." />
+        <ConnectYoutube row />
       </Group>
 
       <Group

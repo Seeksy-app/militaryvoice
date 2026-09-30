@@ -2725,6 +2725,55 @@ export function registerRoutes(app: Express): void {
     res.redirect(consentUrl(youtubeRedirect(req), Buffer.from(`admin:${email}`).toString("base64url")));
   });
 
+  /**
+   * The studio's own YouTube, no stream key: an admin connects a channel with
+   * Google (it lands back in the studio), then "Add YouTube" opens a live
+   * broadcast on it and files that as a house destination. Only channels an
+   * admin connected are offered: never a podcaster's.
+   */
+  app.get("/api/admin/youtube/connect-studio", requireAdmin, async (req, res) => {
+    if (!isYoutubeConfigured()) return res.status(503).json({ message: "YouTube connecting isn't switched on yet." });
+    const email = (getAdminEmail(req) ?? "").toLowerCase().trim();
+    if (!email) return res.status(401).json({ message: "Sign in again." });
+    res.redirect(consentUrl(youtubeRedirect(req), Buffer.from(`admin:${email}`).toString("base64url")));
+  });
+  const adminChannels = async () => {
+    const admins = new Set((await storage.listAdmins()).map((a) => a.email.trim().toLowerCase()));
+    return (await storage.listYoutubeAccounts()).filter((a) => a.channelId && admins.has(a.email.trim().toLowerCase()));
+  };
+  app.get("/api/admin/studio/youtube-channels", requireAdmin, async (_req, res) => {
+    noStore(res);
+    res.json({ configured: isYoutubeConfigured(), channels: (await adminChannels()).map((a) => ({ id: a.id, title: a.channelTitle || a.email, email: a.email })) });
+  });
+  app.post("/api/admin/studio/youtube", requireAdmin, async (req, res) => {
+    const acct = (await adminChannels()).find((a) => a.id === Number(req.body?.accountId));
+    if (!acct) return res.status(404).json({ message: "Connect a YouTube channel first." });
+    const privacy = req.body?.privacy === "public" ? "public" : req.body?.privacy === "private" ? "private" : "unlisted";
+    const token = await youtubeToken(acct.email.trim().toLowerCase());
+    if (!token) return res.status(409).json({ message: "YouTube isn't answering for that channel. Connect it again." });
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const ev = await storage.getEventById(eventId);
+    try {
+      const b = await createBroadcast(token, {
+        title: String(req.body?.title ?? "").trim().slice(0, 100) || ev?.name || "MilitaryVoices.ai live",
+        description: `Live from ${ev?.name ?? "MilitaryVoices.ai"} on MilitaryVoices.ai.`,
+        startAtIso: new Date().toISOString(),
+        privacy,
+      });
+      const row = await storage.createDestination(eventId, "", {
+        platform: "youtube",
+        label: `${acct.channelTitle || "YouTube"} · ${privacy}`,
+        rtmpUrl: b.ingestAddress,
+        streamKey: b.streamName,
+        enabled: true,
+      });
+      res.status(201).json({ ...publicDestination(row), watchUrl: b.watchUrl });
+    } catch (err: any) {
+      console.error("Studio YouTube broadcast failed:", err);
+      res.status(502).json({ message: err?.message ?? "YouTube wouldn't open the broadcast. Is live streaming on for that channel?" });
+    }
+  });
+
   app.get("/api/youtube/callback", async (req, res) => {
     // Arrived on the old domain: pass Google's answer on to the site's domain.
     const siteHost = new URL(PUBLIC_ORIGIN).host;
@@ -2741,7 +2790,9 @@ export function registerRoutes(app: Express): void {
     const adminEmail = getAdminEmail(req);
     const adminOk = onBehalf && !!adminEmail && (await storage.isAdminEmail(adminEmail));
     // Where to land: the podcaster's dashboard, or the admin's podcasters list.
-    const back = (result: string) => (onBehalf ? `/admin/podcasters?youtube=${result}&for=${encodeURIComponent(email)}` : `/host/dashboard?youtube=${result}`);
+    // An admin connecting their own channel is setting up the studio: back to it.
+    const forStudio = onBehalf && !!adminEmail && email === adminEmail.toLowerCase().trim();
+    const back = (result: string) => (forStudio ? `/admin/studio?youtube=${result}` : onBehalf ? `/admin/podcasters?youtube=${result}&for=${encodeURIComponent(email)}` : `/host/dashboard?youtube=${result}`);
 
     if (!code || !email || (onBehalf ? !adminOk : email !== sessionEmail)) {
       res.redirect(back("failed"));

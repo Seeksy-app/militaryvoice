@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { adminGet as getAdmin } from "@/lib/adminApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -210,6 +211,32 @@ function AddForm({
   const [rtmpUrl, setRtmpUrl] = useState<string>(PLATFORMS[0].hint);
   const [streamKey, setStreamKey] = useState("");
   const [saving, setSaving] = useState(false);
+  // YouTube, no key: a channel an admin connected with Google, and the studio opens the broadcast.
+  const channels = useQuery<{ configured: boolean; channels: { id: number; title: string; email: string }[] }>({
+    queryKey: ["/api/admin/studio/youtube-channels"],
+    queryFn: () => getAdmin("/api/admin/studio/youtube-channels"),
+  });
+  const list = channels.data?.channels ?? [];
+  const [channelId, setChannelId] = useState<number | null>(null);
+  const [privacy, setPrivacy] = useState<"unlisted" | "public">("unlisted");
+  const [useKey, setUseKey] = useState(false);
+  const pickedChannel = channelId ?? list[0]?.id ?? null;
+  const connected = platform === "youtube" && !useKey;
+
+  async function addYoutube() {
+    if (!pickedChannel) return;
+    setSaving(true);
+    try {
+      const r = await adminSend("POST", "/api/admin/studio/youtube", { accountId: pickedChannel, privacy });
+      const out = (await r.json()) as { watchUrl?: string };
+      toast({ title: "YouTube is ready", description: out.watchUrl ? `It goes live there when you press Go live: ${out.watchUrl}` : "It goes live there when you press Go live." });
+      onDone();
+    } catch (err) {
+      toast({ title: "Couldn't open YouTube", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function save() {
     setSaving(true);
@@ -247,6 +274,40 @@ function AddForm({
           </SelectContent>
         </Select>
       </div>
+      {connected ? (
+        <div className="sm:col-span-2">
+          {list.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No channel connected yet.{" "}
+              <a href="/api/admin/youtube/connect-studio" className="font-semibold text-[#053877] hover:underline dark:text-white" data-testid="link-studio-connect-youtube">Connect a YouTube channel</a>{" "}
+              with Google (no stream key) and you'll come straight back here.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>Channel</Label>
+                <Select value={String(pickedChannel ?? "")} onValueChange={(v) => setChannelId(Number(v))}>
+                  <SelectTrigger className="mt-1" data-testid="select-studio-youtube-channel"><SelectValue /></SelectTrigger>
+                  <SelectContent>{list.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.title}</SelectItem>)}</SelectContent>
+                </Select>
+                <a href="/api/admin/youtube/connect-studio" className="mt-1 inline-block text-xs text-muted-foreground hover:underline">Connect another channel</a>
+              </div>
+              <div>
+                <Label>Who can watch</Label>
+                <Select value={privacy} onValueChange={(v) => setPrivacy(v as "unlisted" | "public")}>
+                  <SelectTrigger className="mt-1" data-testid="select-studio-youtube-privacy"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unlisted">Unlisted (only with the link): for a test</SelectItem>
+                    <SelectItem value="public">Public</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <button type="button" onClick={() => setUseKey(true)} className="mt-2 text-xs text-muted-foreground hover:underline">Use a stream key instead</button>
+        </div>
+      ) : (
+      <>
       <div>
         <Label htmlFor="dest-label">Name it</Label>
         <Input
@@ -282,10 +343,18 @@ function AddForm({
         />
         <p className="mt-1 text-xs text-muted-foreground">Stored server-side. Only the last four ever come back.</p>
       </div>
+      </>
+      )}
       <div className="flex items-center gap-2 sm:col-span-2">
-        <Button size="sm" disabled={saving || !rtmpUrl.trim() || !streamKey.trim()} onClick={() => void save()} data-testid="button-destination-save">
-          {saving ? "Saving…" : "Add destination"}
-        </Button>
+        {connected ? (
+          <Button size="sm" disabled={saving || !pickedChannel} onClick={() => void addYoutube()} data-testid="button-studio-youtube-add">
+            {saving ? "Opening YouTube…" : "Add YouTube"}
+          </Button>
+        ) : (
+          <Button size="sm" disabled={saving || !rtmpUrl.trim() || !streamKey.trim()} onClick={() => void save()} data-testid="button-destination-save">
+            {saving ? "Saving…" : "Add destination"}
+          </Button>
+        )}
         <Button size="sm" variant="ghost" onClick={onDone}>
           Cancel
         </Button>
