@@ -66,6 +66,13 @@ export function AdminMail() {
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState<Item | null>(null);
+  // Opened from a link (Slack's "Open in Mail"): straight to that conversation.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const withEmail = (p.get("with") ?? "").trim().toLowerCase();
+    if (!withEmail.includes("@")) return;
+    setOpen({ key: p.get("focus") ?? "", dir: "in", email: withEmail } as Item);
+  }, []);
   const [composing, setComposing] = useState(false);
   const [profile, setProfile] = useState<string | null>(null);
   const { toast } = useToast();

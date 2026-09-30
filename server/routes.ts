@@ -117,6 +117,7 @@ import {
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
 import { alexAnswer, type AlexTurn } from "./alex.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
+import { slackInbound } from "./slack.js";
 import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml, threadKey } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
@@ -7397,23 +7398,29 @@ export function registerRoutes(app: Express): void {
     const job = (async () => {
       const row = await storage.getInbound(rowId);
       if (!row) return;
-      let draft;
+      let draft: Awaited<ReturnType<typeof draftReply>> | undefined;
       try {
         draft = await draftReply(row);
         await storage.updateInbound(row.id, { category: draft.category, summary: draft.summary, draftFrom: draft.from, draftSubject: draft.subject, draftText: draft.reply, status: "drafted" });
       } catch (err) {
         console.error("Inbound draft failed:", err);
       }
-      if (!opts.ack) return;
+      // The team's Slack channel hears about it once Alex has done his part (or not).
+      let alex: "answered" | "person" | "followup" | "none" | "skip" = "none";
+      const tellSlack = () => alex === "skip" ? Promise.resolve() : slackInbound({
+        inboundId: row.id, fromName: row.fromName, fromEmail: row.fromEmail, subject: row.subject,
+        summary: draft?.summary ?? "", source: row.toAddr === "Help chat" ? "help" : "email", alex,
+      });
+      if (!opts.ack) { await tellSlack(); return; }
       // Alex's first reply: everyone who writes in hears back at once — thanks,
       // the answer when the help desk knows it, and a person if that did not
       // cover it — then follow-ups while he has the answers. Never to a
       // machine, a newsletter or a pitch (the drafter says which), and never
       // to a mail filed by hand. If the drafter failed, only people we know.
       try {
-        if (looksAutomatic(row)) return;
+        if (looksAutomatic(row)) { alex = "skip"; return; }
         const known = await isKnownSender(row.fromEmail, row.subject);
-        if (draft ? !draft.respond : !known) return;
+        if (draft ? !draft.respond : !known) { alex = "skip"; return; }
         // The first mail in a conversation always hears back. After that Alex
         // follows up only when he has the answer, only until a person on the
         // team has replied in the thread, and at most four times a day (so two
@@ -7441,12 +7448,15 @@ export function registerRoutes(app: Express): void {
         const now = new Date().toISOString();
         // Answered in full: off Needs a reply (it shows as Answered). Otherwise the person's draft waits there.
         const settled = draft && draft.ack && !draft.needsPerson;
+        alex = followUp ? "followup" : settled ? "answered" : "person";
         await storage.updateInbound(row.id, { ackAt: now, ackResendId: id, ackText: text, ...(settled ? { status: "sent", repliedAt: now, replyResendId: id, replyFrom: "alex", replyText: text } : {}) });
         const featured = await storage.getFeaturedEvent();
         await storage.recordOneOffSend({ eventId: featured?.id ?? null, subject, bodyText: text, sender: "team", banner: "podcasters", email: row.fromEmail, resendId: id });
         console.log(`Auto-acknowledged ${row.fromEmail}: ${subject}`);
       } catch (err) {
         console.error("Inbound ack failed:", err);
+      } finally {
+        await tellSlack();
       }
     })();
     try { waitUntil(job); } catch { /* not on Vercel */ }
