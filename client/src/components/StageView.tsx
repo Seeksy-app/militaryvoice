@@ -610,26 +610,11 @@ function FullFrameMedia({
       ) : (
         <video src={url} autoPlay playsInline loop={loop} muted={muted} onEnded={onEnded} className="h-full w-full object-contain" />
       )}
-      {onAirLabel(label) && (
-        <div
-          // Small enough to sit under the artwork rather than across it. At
-          // text-xl with that padding it reached the middle of the frame and
-          // covered whichever podcaster's logo happened to be bottom-left —
-          // the standby reel is a grid of faces, so something always lost.
-          className="pointer-events-none absolute bottom-4 left-4 rounded-md bg-[#000741]/85 px-3 py-1.5 text-sm font-semibold text-white backdrop-blur-sm sm:bottom-5 sm:left-5 sm:text-base"
-          style={HEADLINE_FONT}
-        >
-          {onAirLabel(label)}
-        </div>
-      )}
+      {/* No caption over a clip or picture on air: viewers see the content, not our name for the file. */}
     </div>
   );
 }
 
-/** What viewers see of a clip's name: the name, never our notes on the file ("(broadcast cut, ×1.3, fades at 24:35)", "(10s loop)"). */
-function onAirLabel(label?: string): string {
-  return (label ?? "").replace(/\s*\((?:[^()]*\b(?:broadcast cut|fades at|loop|×\d)[^()]*)\)/gi, "").replace(/\s*[-–|]\s*$/, "").trim();
-}
 
 /** mm:ss, or h:mm:ss once there's an hour on the clock. */
 export function clockText(totalSeconds: number): string {
