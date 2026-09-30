@@ -577,6 +577,11 @@ function YouTubeFrame({ id, title, muted, loop, onEnded }: { id: string; title: 
 }
 
 /** A clip, a slide or a sponsor card, filling the frame. */
+/** A clip named as a loop ("We'll be right back (10s loop)") repeats on stage; everything else plays once. */
+function stageLoops(label?: string): boolean {
+  return /\bloop\b/i.test(label ?? "");
+}
+
 function FullFrameMedia({
   url,
   kind,
@@ -826,7 +831,7 @@ export function StageGrid({
       <>
         <BackgroundLayer url={meta.backgroundUrl ?? ""} />
         <div className="absolute overflow-hidden rounded-xl bg-black" style={{ left: "1.2%", top: "10.5%", width: "76%", height: "79%" }}>
-          <FullFrameMedia url={meta.stageMediaUrl} kind={meta.stageMediaKind ?? "video"} muted={muted} onEnded={onMediaEnded} />
+          <FullFrameMedia loop={stageLoops(meta.stageMediaLabel)} url={meta.stageMediaUrl} kind={meta.stageMediaKind ?? "video"} muted={muted} onEnded={onMediaEnded} />
         </div>
         <PeopleColumn tiles={tiles} muted={muted} order={meta.stageOrder} />
       </>
@@ -836,6 +841,7 @@ export function StageGrid({
         kind={meta.stageMediaKind ?? "video"}
         label={meta.stageMediaLabel}
         muted={muted}
+        loop={stageLoops(meta.stageMediaLabel)}
         onEnded={onMediaEnded}
       />
     ) : tiles.length === 0 ? (
