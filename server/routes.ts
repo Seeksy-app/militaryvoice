@@ -5160,12 +5160,16 @@ export function registerRoutes(app: Express): void {
     if (secret && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== secret) return res.status(401).json({ message: "Not authorised." });
     const ev = await storage.getFeaturedEvent();
     const studio = await storage.getOrCreateStudio(ev.id);
-    if (!studio.broadcastEgressId) return res.json({ added: 0, reason: "not on air" });
+    if (!studio.broadcastEgressId && studio.status !== "Live") return res.json({ added: 0, reason: "not on air" });
     const due: DestinationRow[] = [];
     for (const d of await storage.listDestinations(ev.id)) {
       if (d.ownerEmail && !d.signupId && d.enabled && !d.live && (await channelWindow(d)).open) due.push(d);
     }
-    if (due.length) {
+    if (due.length && !studio.broadcastEgressId) {
+      const egressId = await startBroadcast(roomName(studio.id), due.map((d) => ({ url: ingestUrl(d), label: d.label || d.platform })), PUBLIC_ORIGIN);
+      await storage.updateStudio(studio.id, { broadcastEgressId: egressId });
+      for (const d of due) await storage.updateDestination(d.id, { live: true });
+    } else if (due.length) {
       await updateBroadcastTargets(studio.broadcastEgressId, due.map((d) => ingestUrl(d)), []);
       for (const d of due) await storage.updateDestination(d.id, { live: true });
     }
@@ -5331,7 +5335,7 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const studio = await storage.getOrCreateStudio(d.eventId);
-    if (!studio.broadcastEgressId) {
+    if (!studio.broadcastEgressId && studio.status !== "Live") {
       res.status(409).json({ message: "Nothing is going out yet." });
       return;
     }
@@ -5349,11 +5353,18 @@ export function registerRoutes(app: Express): void {
       }
     }
     try {
-      await updateBroadcastTargets(
-        studio.broadcastEgressId,
-        want ? [ingestUrl(d)] : [],
-        want ? [] : [ingestUrl(d)],
-      );
+      if (!studio.broadcastEgressId) {
+        // Live on the watch page only (no sender yet): the first outside destination starts one.
+        if (!want) { res.json(publicDestination((await storage.updateDestination(d.id, { live: false }))!)); return; }
+        const egressId = await startBroadcast(roomName(studio.id), [{ url: ingestUrl(d), label: d.label || d.platform }], templateBaseUrl(req));
+        await storage.updateStudio(studio.id, { broadcastEgressId: egressId });
+      } else {
+        await updateBroadcastTargets(
+          studio.broadcastEgressId,
+          want ? [ingestUrl(d)] : [],
+          want ? [] : [ingestUrl(d)],
+        );
+      }
     } catch (err: any) {
       res.status(502).json({ message: err?.message ?? "The broadcast wouldn't take that change." });
       return;
