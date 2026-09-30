@@ -248,6 +248,7 @@ export function ThreadView({ email, focus, onChanged, onProfile }: { email: stri
               </div>
               <p className="text-sm font-semibold">{m.subject || "(no subject)"}</p>
               <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">{m.body || "(no words kept)"}</p>
+              {m.dir === "in" && m.inbound && <Attachments inboundId={m.inbound.id} />}
             </div>
           </li>
         ))}
@@ -347,5 +348,44 @@ function BulkIcon({ label, icon: Icon, onClick, testId, danger }: { label: strin
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
+  );
+}
+
+/** Files that came with an inbound email: download them, or make a photo the sender's headshot. */
+function Attachments({ inboundId }: { inboundId: number }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState("");
+  const q = useQuery<{ id: string; filename: string; contentType: string; size: number; url: string }[]>({
+    queryKey: ["/api/admin/inbound", inboundId, "attachments"],
+    queryFn: async () => (await apiRequest("GET", `/api/admin/inbound/${inboundId}/attachments`)).json(),
+    staleTime: 5 * 60_000,
+  });
+  const files = q.data ?? [];
+  if (!files.length) return null;
+  const headshot = async (id: string) => {
+    setBusy(id);
+    try {
+      await apiRequest("POST", `/api/admin/inbound/${inboundId}/attachments/${id}/headshot`);
+      toast({ title: "Headshot updated", description: "It's their photo now, with a print copy for the magazine." });
+    } catch (e) {
+      toast({ title: "Couldn't use it", description: clean((e as Error).message), variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  };
+  return (
+    <div className="mt-3 flex flex-wrap gap-2" data-testid="mail-attachments">
+      {files.map((f) => (
+        <div key={f.id} className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs">
+          <a href={f.url} target="_blank" rel="noreferrer" className="max-w-[14rem] truncate font-semibold hover:underline">{f.filename}</a>
+          <span className="text-muted-foreground">{f.size > 1048576 ? `${(f.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(f.size / 1024))} KB`}</span>
+          {f.contentType.startsWith("image/") && (
+            <button type="button" disabled={!!busy} onClick={() => void headshot(f.id)} className="rounded-md bg-[#053877] px-2 py-0.5 font-semibold text-white hover:bg-[#0a4a99] disabled:opacity-50" data-testid="mail-use-headshot">
+              {busy === f.id ? "Saving…" : "Use as their headshot"}
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }

@@ -7540,6 +7540,44 @@ export function registerRoutes(app: Express): void {
    * threaded under their message; filed as a one-off send so it shows in the
    * activity log and in the contact's history like everything else we send.
    */
+  /**
+   * What came attached to an inbound email: listed from the mail service
+   * (Resend keeps the files), each with a short-lived download link. Our
+   * forward to the inbox carries only the words, so this is where the files are.
+   */
+  async function inboundAttachments(resendId: string): Promise<{ id: string; filename: string; contentType: string; size: number; url: string }[]> {
+    if (!resendId || !process.env.RESEND_API_KEY) return [];
+    const r = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(resendId)}/attachments`, { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` }, signal: AbortSignal.timeout(15_000) });
+    if (!r.ok) return [];
+    const j = (await r.json().catch(() => ({}))) as { data?: any[] };
+    return (j.data ?? []).map((a) => ({ id: String(a.id ?? ""), filename: String(a.filename ?? "attachment"), contentType: String(a.content_type ?? ""), size: Number(a.size) || 0, url: String(a.download_url ?? "") })).filter((a) => a.id && a.url);
+  }
+  app.get("/api/admin/inbound/:id/attachments", requireAdmin, async (req, res) => {
+    noStore(res);
+    const row = await storage.getInbound(Number(req.params.id));
+    if (!row) return res.status(404).json({ message: "No such email." });
+    res.json(await inboundAttachments(row.resendId));
+  });
+  /** A photo someone emailed in: made their headshot, as the headshot page does (web copy and print copy). */
+  app.post("/api/admin/inbound/:id/attachments/:aid/headshot", requireAdmin, async (req, res) => {
+    const row = await storage.getInbound(Number(req.params.id));
+    if (!row) return res.status(404).json({ message: "No such email." });
+    const a = (await inboundAttachments(row.resendId)).find((x) => x.id === req.params.aid);
+    if (!a || !/^image\//.test(a.contentType)) return res.status(400).json({ message: "That isn't a picture." });
+    try {
+      const file = await fetch(a.url, { signal: AbortSignal.timeout(60_000) });
+      if (!file.ok) throw new Error(`download ${file.status}`);
+      const saved = await enhanceAndSavePhoto(Buffer.from(await file.arrayBuffer()));
+      const email = row.fromEmail.trim().toLowerCase();
+      const updated = await storage.upsertProfile(email, { photoUrl: saved.url, ...(saved.originalUrl ? { photoOriginalUrl: saved.originalUrl } : {}) } as never);
+      await storage.syncSignupsFromProfile(email, updated);
+      res.json({ ok: true, photoUrl: saved.url, print: !!saved.originalUrl });
+    } catch (err) {
+      console.error("Headshot from email failed:", err);
+      res.status(502).json({ message: "Couldn't use that picture. Download it and upload it on their profile instead." });
+    }
+  });
+
   app.post("/api/admin/inbound/:id/reply", requireAdmin, async (req, res) => {
     const row = await storage.getInbound(Number(req.params.id));
     if (!row) return res.status(404).json({ message: "No such reply." });
