@@ -1602,11 +1602,13 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     default. */}
                 {!isRoom && anyDestRows && (
                   <Popover>
+                    <Tooltip>
+                    <TooltipTrigger asChild>
                     <PopoverTrigger asChild>
                       <button
                         type="button"
                         className="flex h-9 items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 text-xs font-medium text-white/85 hover:bg-white/15"
-                        title="Where the live stream goes"
+                        aria-label="Where the live stream goes"
                         data-testid="button-destinations"
                       >
                         <span className="text-white/55">To</span>
@@ -1627,6 +1629,17 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                         <ChevronDown className="h-3 w-3 text-white/60" />
                       </button>
                     </PopoverTrigger>
+                    </TooltipTrigger>
+                    {/* The whole answer on hover: where it goes now, and how many podcasters' channels are on. */}
+                    <TooltipContent side="bottom" className="max-w-xs text-xs">
+                      {(() => {
+                        const now = houseDestRows.filter((d) => d.enabled && !(d as { opensLabel?: string }).opensLabel).map((d) => d.label || d.platform);
+                        const later = houseDestRows.filter((d) => d.enabled && (d as { opensLabel?: string }).opensLabel).length;
+                        const on = channelRows.filter((d) => d.enabled).length;
+                        return `Going to: our watch page${now.length ? `, ${now.join(", ")}` : ""}${later ? ` (+${later} whole-show channel${later === 1 ? "" : "s"} from Oct 5)` : ""} · ${on} of ${channelRows.length} podcaster channels on (each opens at their slot)`;
+                      })()}
+                    </TooltipContent>
+                    </Tooltip>
                     <PopoverContent align="end" className="w-80 p-3">
                       <p className="text-sm font-semibold">Streaming to</p>
                       <p className="text-xs text-muted-foreground">Our watch page is always on. Switch the others on or off here.</p>
