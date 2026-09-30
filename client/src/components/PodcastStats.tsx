@@ -317,3 +317,53 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
     </section>
   );
 }
+
+/** Where each hosted show is live (its Directories tab): Apple Podcasts, Spotify, Listen Notes… one chip each. */
+const LISTING: Record<string, { name: string; domain: string }> = {
+  apple: { name: "Apple Podcasts", domain: "podcasts.apple.com" },
+  spotify: { name: "Spotify", domain: "open.spotify.com" },
+  youtube: { name: "YouTube Music", domain: "music.youtube.com" },
+  amazon: { name: "Amazon Music", domain: "music.amazon.com" },
+  iheart: { name: "iHeartRadio", domain: "iheart.com" },
+  pocketcasts: { name: "Pocket Casts", domain: "pocketcasts.com" },
+  podcastindex: { name: "Podcast Index", domain: "podcastindex.org" },
+  listennotes: { name: "Listen Notes", domain: "listennotes.com" },
+};
+type Listing = { key: string; show: string; artwork: string; url: string };
+export function useListings(): Listing[] {
+  const q = useQuery<{ shows: { show: { id: number; title: string; artworkUrl?: string; directories?: string; appleUrl?: string; spotifyUrl?: string } }[] }>({
+    queryKey: ["/api/host/hosting"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(),
+    staleTime: 60_000,
+  });
+  const out: Listing[] = [];
+  for (const { show } of q.data?.shows ?? []) {
+    let dirs: Record<string, { state?: string; url?: string }> = {};
+    try { dirs = JSON.parse(show.directories || "{}"); } catch { /* none */ }
+    if (show.appleUrl && !dirs.apple?.url) dirs.apple = { state: "live", url: show.appleUrl };
+    if (show.spotifyUrl && !dirs.spotify?.url) dirs.spotify = { state: "live", url: show.spotifyUrl };
+    for (const [key, d] of Object.entries(dirs)) {
+      if (d?.state === "live" && d.url && LISTING[key]) out.push({ key, show: show.title, artwork: show.artworkUrl ?? "", url: d.url });
+    }
+  }
+  return out;
+}
+export function ListingChips() {
+  const listings = useListings();
+  return (
+    <>
+      {listings.map((l) => (
+        <a key={`${l.key}-${l.url}`} href={l.url} target="_blank" rel="noopener noreferrer" title={`${l.show} on ${LISTING[l.key].name}`} className="group flex shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-2.5 py-1.5 transition-colors hover:border-primary/40 hover:shadow-sm sm:gap-2.5 sm:px-3 sm:py-2" data-testid={`chip-listing-${l.key}`}>
+          <span className="relative shrink-0">
+            {l.artwork ? <img src={l.artwork} alt="" className="h-8 w-8 rounded-full object-cover" /> : <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">{l.show[0]}</span>}
+            <img src={`https://www.google.com/s2/favicons?domain=${LISTING[l.key].domain}&sz=64`} alt="" className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-white object-contain p-px ring-2 ring-card" />
+          </span>
+          <span className="min-w-0">
+            <span className="hidden max-w-[9.5rem] truncate text-sm font-medium leading-tight text-foreground sm:block">{l.show}</span>
+            <span className="block truncate text-xs font-semibold leading-tight text-foreground sm:font-normal sm:text-muted-foreground">{LISTING[l.key].name}</span>
+          </span>
+        </a>
+      ))}
+    </>
+  );
+}

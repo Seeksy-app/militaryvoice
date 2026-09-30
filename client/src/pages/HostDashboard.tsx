@@ -82,7 +82,7 @@ import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
 import { MyAnalytics } from "@/components/MyAnalytics";
-import { PodcastChips, usePodcastSources } from "@/components/PodcastStats";
+import { PodcastChips, usePodcastSources, ListingChips, useListings } from "@/components/PodcastStats";
 import { PodcastHosting } from "@/components/PodcastHosting";
 import { BioBuilder } from "@/components/BioBuilder";
 import { GetTheApp, AppInstallCard } from "@/components/GetTheApp";
@@ -720,6 +720,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   });
 
   const podcastSources = usePodcastSources();
+  // Where their hosted shows are live (Apple Podcasts, Spotify…), from each show's Directories tab.
+  const listings = useListings();
   const { data: social } = useQuery<SocialStatus>({
     queryKey: ["/api/host/social"],
     retry: false,
@@ -1484,7 +1486,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   <div className="relative z-10 -mt-8 px-3 sm:px-5">
                     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                       {social?.configured && (social.accounts?.length ?? 0) > 0 ? (
-                        <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} extra={<PodcastChips onOpen={() => goTo("analytics")} />} extraCount={podcastSources.length} />
+                        <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} extra={<><PodcastChips onOpen={() => goTo("analytics")} /><ListingChips /></>} extraCount={podcastSources.length + listings.length} />
                       ) : (
                         <button type="button" onClick={() => goTo("integrations")} className="flex w-full items-center gap-3 text-left text-sm text-muted-foreground hover:text-foreground" data-testid="button-connect-accounts">
                           <Link2 className="h-4 w-4 text-[#053877]" /> Connect the accounts you post from — they show as follow buttons on your card, and we post your promo cards for you.
