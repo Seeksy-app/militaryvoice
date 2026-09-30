@@ -1,19 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  LayoutDashboard,
-  MonitorPlay,
-  ListOrdered,
-  Users,
-  Handshake,
-  Megaphone,
-  Mail,
-  Contact,
-  DollarSign,
-  Settings2,
-  CalendarDays,
-  DoorOpen,
-  PanelLeftClose,
-  PanelLeftOpen, Film, Compass } from "lucide-react";
+import { LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen } from "lucide-react";
 
 // The admin's nav, down the left.
 //
@@ -57,6 +43,7 @@ export const EVENT_GROUPS: { title: string; items: AdminSection[] }[] = [
     title: "Getting an audience",
     items: [
       { key: "promotion", label: "Promotion", icon: Megaphone },
+      { key: "magazine", label: "Magazine", icon: BookOpen },
       { key: "social", label: "Social calendar", icon: CalendarDays },
       { key: "crm", label: "CRM", icon: Mail },
     ],

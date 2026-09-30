@@ -1,0 +1,202 @@
+// The keepsake magazine for an event: a cover, Riccoh's welcome, the lineup,
+// one page per show and the sponsors. Built from what we already hold (the
+// lineup, print-quality headshots, show art, SmartLinks); SI drafts each
+// show's paragraph and the welcome, and a person edits them in admin. A pull
+// quote is only ever the podcaster's own words, lifted from an episode
+// transcript we hold, and checked word for word before it's kept.
+//
+// The same data drives the digital magazine (/magazine) and the print file
+// (the same page, printed to PDF at US Letter).
+import type { Express, RequestHandler } from "express";
+import Anthropic from "@anthropic-ai/sdk";
+import { and, eq, inArray, ne } from "drizzle-orm";
+import { db, storage, schemaIsReady } from "./storage.js";
+import { getAdminEmail } from "./session.js";
+import { bioPages, clips, hostedShows, magazinePages, podcasterProfiles, signups, sponsors } from "../shared/schema.js";
+
+const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
+const now = () => new Date().toISOString();
+/** The row that says the magazine is out: until then only admins can open it. */
+const PUBLISHED = -1;
+const WELCOME = 0;
+
+const clean = (s: unknown, n: number) => {
+  const t = String(s ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+  return t.length > n ? `${t.slice(0, n - 1).trimEnd()}…` : t;
+};
+const norm = (s: string) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[^a-z0-9' ]+/g, " ").replace(/\s+/g, " ").trim();
+
+async function eventFor(slug?: string) {
+  if (slug) return storage.getEventBySlug(slug);
+  return storage.getFeaturedEvent();
+}
+
+/** Everything the magazine prints, in running order. */
+async function buildMagazine(eventId: number) {
+  const ev = await storage.getEventById(eventId);
+  if (!ev) return null;
+  const lineup = (await db.select().from(signups).where(and(eq(signups.eventId, eventId), ne(signups.status, "cancelled")))).sort((a, b) => a.slotIndex - b.slotIndex);
+  const emails = lineup.map((s) => s.email.trim().toLowerCase());
+  const profiles = emails.length ? await db.select().from(podcasterProfiles).where(inArray(podcasterProfiles.email, emails)) : [];
+  const pages = await db.select().from(bioPages).where(eq(bioPages.published, true));
+  const hosted = await db.select({ ownerEmail: hostedShows.ownerEmail, slug: hostedShows.slug }).from(hostedShows);
+  const words = await db.select().from(magazinePages).where(eq(magazinePages.eventId, eventId));
+  const byEmail = <T extends { email: string }>(rows: T[], e: string) => rows.find((r) => r.email.trim().toLowerCase() === e);
+  const start = Date.parse(ev.startAtUtc);
+  const et = (ms: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(ms)) + " ET";
+  const shows = lineup.map((s, i) => {
+    const e = s.email.trim().toLowerCase();
+    const p = byEmail(profiles, e);
+    const bio = byEmail(pages, e);
+    const show = hosted.find((h) => h.ownerEmail.trim().toLowerCase() === e);
+    const w = words.find((x) => x.signupId === s.id);
+    const at = start + s.slotIndex * ev.slotMinutes * 60_000;
+    return {
+      signupId: s.id,
+      number: i + 1,
+      time: et(at),
+      podcastName: s.podcastName,
+      hostName: s.hostName,
+      branch: s.branch || p?.branch || "",
+      service: s.serviceStatus || p?.serviceStatus || "",
+      headshot: p?.photoOriginalUrl || s.photoUrl || p?.photoUrl || "",
+      printQuality: Boolean(p?.photoOriginalUrl),
+      art: p?.artworkPrintUrl || w?.art || "",
+      blurb: w?.blurb ?? "",
+      quote: w?.quote ?? "",
+      edited: w?.edited ?? false,
+      // Where the QR goes: their SmartLink, else the show we host, else their share page.
+      link: bio?.handle ? `${ORIGIN}/${bio.handle}` : show ? `${ORIGIN}/podcast/${show.slug}` : `${ORIGIN}/s/${s.id}`,
+    };
+  });
+  const sponsorRows = (await db.select().from(sponsors).where(and(eq(sponsors.eventId, eventId), eq(sponsors.active, true)))).sort((a, b) => a.sortOrder - b.sortOrder);
+  const riccoh = await storage.getProfileByEmail("riccoh.player@drphil.tv").catch(() => undefined);
+  const day = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" }).format(new Date(start));
+  return {
+    event: { id: ev.id, name: ev.name, tagline: ev.tagline || "", day, occasion: (ev as { occasion?: string }).occasion || "National Military Podcast Day" },
+    published: words.some((x) => x.signupId === PUBLISHED),
+    welcome: words.find((x) => x.signupId === WELCOME)?.blurb ?? "",
+    host: { name: "Riccoh Player", title: "USMC (Ret.) · Host", photo: riccoh?.photoOriginalUrl || riccoh?.photoUrl || "" },
+    shows,
+    sponsors: sponsorRows.map((r) => ({ name: r.name, logo: r.logoUrl, url: r.url })),
+  };
+}
+
+async function saveWords(eventId: number, signupId: number, patch: Partial<{ blurb: string; quote: string; art: string; edited: boolean }>) {
+  await db.insert(magazinePages).values({ eventId, signupId, blurb: patch.blurb ?? "", quote: patch.quote ?? "", art: patch.art ?? "", edited: patch.edited ?? false, updatedAt: now() })
+    .onConflictDoUpdate({ target: [magazinePages.eventId, magazinePages.signupId], set: { ...patch, updatedAt: now() } });
+}
+
+/** A show's own description and cover, from its feed. */
+async function feedFacts(rss: string): Promise<{ about: string; image: string }> {
+  if (!/^https?:\/\//.test(rss)) return { about: "", image: "" };
+  try {
+    const xml = await (await fetch(rss, { signal: AbortSignal.timeout(8_000) })).text();
+    const channel = xml.split(/<item[\s>]/i)[0] ?? "";
+    const desc = /<itunes:summary>([\s\S]*?)<\/itunes:summary>/i.exec(channel)?.[1] ?? /<description>([\s\S]*?)<\/description>/i.exec(channel)?.[1] ?? "";
+    const image = /<itunes:image[^>]*href="([^"]+)"/i.exec(channel)?.[1] ?? /<image>[\s\S]*?<url>([^<]+)<\/url>/i.exec(channel)?.[1] ?? "";
+    return { about: clean(desc.replace(/<!\[CDATA\[|\]\]>/g, ""), 1500), image: image.trim() };
+  } catch {
+    return { about: "", image: "" };
+  }
+}
+
+/** SI writes one show's paragraph, and picks a quote only from transcripts we hold (checked verbatim). */
+async function draftShow(ai: Anthropic, eventId: number, s: { signupId: number; podcastName: string; hostName: string; branch: string; service: string }, rss: string, smartBio: string, transcripts: string[]) {
+  const feed = await feedFacts(rss);
+  const facts = [
+    `Show: ${s.podcastName}`, `Host: ${s.hostName}`,
+    s.branch && `Branch: ${s.branch}`, s.service && `Service: ${s.service}`,
+    feed.about && `The show describes itself: ${feed.about}`,
+    smartBio && `The host's own bio: ${clean(smartBio, 800)}`,
+  ].filter(Boolean).join("\n");
+  const out = await ai.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 900,
+    system: `You write one page's text for a keepsake magazine of The Podcast Marathon, a day of military and veteran podcasts. Return JSON only: {"blurb": "...", "quote": "..."}.
+"blurb": 60 to 90 words, third person, present tense, warm and specific, 8th-grade reading level. Say what the show is and who it's for, and who the host is. Use ONLY the facts given; never invent ranks, awards, numbers or history. No hype words ("amazing", "incredible").
+"quote": copy ONE sentence (at most 28 words) EXACTLY as it appears in the transcripts, word for word, that says something true and striking in the host's own voice. If there are no transcripts, or nothing fits, return "".`,
+    messages: [{ role: "user", content: `${facts}\n\nTranscripts from their episode:\n${transcripts.length ? transcripts.map((t) => `- ${clean(t, 900)}`).join("\n") : "(none)"}` }],
+  });
+  const text = out.content.map((c) => ("text" in c ? c.text : "")).join("");
+  const j = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { blurb?: string; quote?: string };
+  let quote = clean(j.quote, 240).replace(/^["“]|["”]$/g, "");
+  // Their own words or nothing: the quote must appear in a transcript we hold.
+  if (quote && !transcripts.some((t) => norm(t).includes(norm(quote)))) quote = "";
+  await saveWords(eventId, s.signupId, { blurb: clean(j.blurb, 900), quote, art: feed.image });
+}
+
+async function draftWelcome(ai: Anthropic, eventId: number, m: NonNullable<Awaited<ReturnType<typeof buildMagazine>>>) {
+  const out = await ai.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 700,
+    system: `You write the welcome letter that opens a keepsake magazine, in the voice of Riccoh Player, USMC (Ret.), the host of the day. First person, warm, direct, short sentences, 140 to 190 words, 8th-grade reading level. Use only the facts given. No sign-off (it's added). Return the letter as plain text with blank lines between paragraphs.`,
+    messages: [{ role: "user", content: `Event: ${m.event.name}\nDay: ${m.event.day}\nOccasion: ${m.event.occasion}\nShows on the day: ${m.shows.length}\nWho they are: military and veteran podcasters, back to back all day, live and recorded.\nThis magazine: one page for every show, to keep.` }],
+  });
+  const letter = out.content.map((c) => ("text" in c ? c.text : "")).join("").trim();
+  await saveWords(eventId, WELCOME, { blurb: letter.slice(0, 2500) });
+}
+
+export function registerMagazine(app: Express, requireAdmin: RequestHandler) {
+  /** The magazine. Before it's published, only admins can open it. */
+  app.get(["/api/magazine", "/api/magazine/:slug"], async (req, res) => {
+    await schemaIsReady();
+    res.setHeader("Cache-Control", "no-store");
+    const ev = await eventFor(typeof req.params.slug === "string" && req.params.slug ? req.params.slug : undefined);
+    if (!ev) return res.status(404).json({ message: "No such magazine." });
+    const m = await buildMagazine(ev.id);
+    if (!m) return res.status(404).json({ message: "No such magazine." });
+    const admin = !!getAdminEmail(req) && (await storage.isAdminEmail(getAdminEmail(req)!));
+    if (!m.published && !admin) return res.status(404).json({ message: "The magazine isn't out yet." });
+    res.json({ ...m, admin });
+  });
+
+  /** SI drafts every show page that has no words yet (or all, with ?all=1), and the welcome. */
+  app.post("/api/admin/magazine/:eventId/draft", requireAdmin, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const m = await buildMagazine(eventId);
+    if (!m) return res.status(404).json({ message: "No such event." });
+    const all = req.query.all === "1";
+    const ai = new Anthropic();
+    const lineup = await db.select().from(signups).where(eq(signups.eventId, eventId));
+    const bios = await db.select({ email: bioPages.email, bio: bioPages.bio }).from(bioPages);
+    const episodeClips = await db.select({ signupId: clips.signupId, transcript: clips.transcript }).from(clips).where(and(eq(clips.eventId, eventId), eq(clips.recordingId, 0)));
+    const todo = m.shows.filter((s) => all ? !s.edited : !s.blurb);
+    let done = 0;
+    const failed: string[] = [];
+    // A few at a time: 33 shows in well under a minute.
+    for (let i = 0; i < todo.length; i += 6) {
+      await Promise.all(todo.slice(i, i + 6).map(async (s) => {
+        const sg = lineup.find((x) => x.id === s.signupId);
+        const p = sg ? await storage.getProfileByEmail(sg.email.trim().toLowerCase()).catch(() => undefined) : undefined;
+        const rss = sg?.rssUrl || p?.rssUrl || "";
+        const bio = bios.find((b) => b.email.trim().toLowerCase() === sg?.email.trim().toLowerCase())?.bio ?? "";
+        const transcripts = episodeClips.filter((c) => c.signupId === s.signupId && c.transcript).map((c) => c.transcript).slice(0, 4);
+        try { await draftShow(ai, eventId, s, rss, bio, transcripts); done++; } catch (err) { failed.push(s.podcastName); console.warn("Magazine draft failed for", s.podcastName, (err as Error).message); }
+      }));
+    }
+    if (!m.welcome || all) await draftWelcome(ai, eventId, m).catch((err) => console.warn("Welcome draft failed:", (err as Error).message));
+    res.json({ drafted: done, failed });
+  });
+
+  /** A person's edit: the paragraph, the quote (their words only), or the welcome letter (signupId 0). */
+  app.put("/api/admin/magazine/:eventId/pages/:signupId", requireAdmin, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const signupId = Number(req.params.signupId);
+    if (!Number.isInteger(signupId) || signupId < 0) return res.status(400).json({ message: "Which page?" });
+    await saveWords(eventId, signupId, {
+      ...(typeof req.body?.blurb === "string" ? { blurb: req.body.blurb.slice(0, 2500) } : {}),
+      ...(typeof req.body?.quote === "string" ? { quote: req.body.quote.slice(0, 300) } : {}),
+      edited: true,
+    });
+    res.json({ ok: true });
+  });
+
+  /** Out to the world, or back to admins only. */
+  app.post("/api/admin/magazine/:eventId/publish", requireAdmin, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    if (req.body?.published === false) await db.delete(magazinePages).where(and(eq(magazinePages.eventId, eventId), eq(magazinePages.signupId, PUBLISHED)));
+    else await saveWords(eventId, PUBLISHED, { blurb: "published" });
+    res.json({ ok: true, published: req.body?.published !== false });
+  });
+}

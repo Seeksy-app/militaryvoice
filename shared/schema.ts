@@ -2777,3 +2777,21 @@ export const transcriptChunks = pgTable("transcript_chunks", {
   startSec: integer("start_sec").notNull().default(0),
   text: text("text").notNull(),
 }, (t) => [index("transcript_chunks_email").on(t.email), index("transcript_chunks_transcript").on(t.transcriptId)]);
+
+/**
+ * The keepsake magazine: one row per show page (signupId) plus the welcome
+ * letter (signupId 0). SI drafts the words; a person edits them. A pull quote
+ * is only ever the podcaster's own words, taken from their episode transcript.
+ */
+export const magazinePages = pgTable("magazine_pages", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  signupId: integer("signup_id").notNull().default(0),
+  blurb: text("blurb").notNull().default(""),
+  quote: text("quote").notNull().default(""),
+  /** The show's cover, from its feed when the profile has none. */
+  art: text("art").notNull().default(""),
+  edited: boolean("edited").notNull().default(false),
+  updatedAt: text("updated_at").notNull().default(""),
+}, (t) => [uniqueIndex("magazine_pages_event_signup_idx").on(t.eventId, t.signupId)]);
+export type MagazinePageRow = typeof magazinePages.$inferSelect;

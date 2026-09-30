@@ -37,6 +37,7 @@ import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
 import { AdminClips } from "@/components/AdminClips";
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
+import { MagazineAdmin } from "@/components/MagazineAdmin";
 import { SponsorLeads } from "@/components/SponsorLeads";
 import { SponsorFinder } from "@/components/SponsorFinder";
 import { ShowSponsorsCard } from "@/components/ShowSponsors";
@@ -4934,6 +4935,9 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                 </TabsContent>
                 <TabsContent value="team" className="mt-2 lg:mt-0">
                   <EventTeamPanel eventId={selectedEventId} />
+                </TabsContent>
+                <TabsContent value="magazine" className="mt-2 lg:mt-0">
+                  <MagazineAdmin eventId={selectedEventId} slug={selectedEvent.slug} />
                 </TabsContent>
                 <TabsContent value="promotion" className="mt-2 flex flex-col gap-12 lg:mt-0">
                   <DiscoveryStats />

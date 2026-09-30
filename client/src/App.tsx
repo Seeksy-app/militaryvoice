@@ -42,6 +42,7 @@ import EventAbout from "@/pages/EventAbout";
 import Studio from "@/pages/Studio";
 import StudioComposite from "@/pages/StudioComposite";
 import Watch from "@/pages/Watch";
+import Magazine from "@/pages/Magazine";
 import { PrivacyPolicy, TermsOfService } from "@/pages/Legal";
 import NationalMilitaryPodcastDay from "@/pages/NationalMilitaryPodcastDay";
 import SponsorVFW from "@/pages/SponsorVFW";
@@ -122,6 +123,8 @@ function AppRouter() {
       <Route path="/event/:slug/about">{(params) => <EventAbout slug={params.slug} />}</Route>
       <Route path="/studio/composite">{() => <StudioComposite />}</Route>
       <Route path="/watch">{() => <Watch />}</Route>
+      <Route path="/magazine">{() => <Magazine />}</Route>
+      <Route path="/magazine/:slug">{(p) => <Magazine slug={p.slug} />}</Route>
       <Route path="/event/:slug/watch">{(params) => <Watch slug={params.slug} />}</Route>
       <Route path="/directory">{() => <Directory />}</Route>
       <Route path="/podcast/:slug">{(p) => <PodcastPage slug={p.slug} />}</Route>

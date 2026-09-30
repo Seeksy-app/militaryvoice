@@ -118,6 +118,7 @@ import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./em
 import { alexAnswer, type AlexTurn } from "./alex.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
 import { slackInbound } from "./slack.js";
+import { registerMagazine } from "./magazine.js";
 import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml, threadKey } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
@@ -5760,6 +5761,7 @@ export function registerRoutes(app: Express): void {
   registerTrash(app, requireHostSession);
   registerMyStudio(app, requireHostSession, { youtubeToken });
   registerCreatorCampaigns(app, requireHostSession);
+  registerMagazine(app, requireAdmin);
   registerAutomations(app, requireAdmin, {
     unsubscribeUrl: (req, email) => unsubscribeUrl(req, email),
     resolveRecipients: (segment, eventId) => resolveBroadcastRecipients({ segment, eventId } as BroadcastRow),
