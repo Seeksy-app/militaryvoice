@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { EventRow } from "../shared/schema.js";
+import { HELP_ARTICLES } from "./helpArticles.js";
 
 // The help chat. A visitor asks; Claude answers from what we actually know
 // about the site, and hands off to a person the moment it can't. No third
@@ -13,14 +14,24 @@ export function isHelpAgentConfigured(): boolean {
 
 // Everything the agent is allowed to say comes from here. Mirrors the FAQ page,
 // the podcaster guide and the /help articles; if the site changes, change this.
-export const KNOWLEDGE = `
-ABOUT THE SITE
+const CORE = `
+TWO THINGS — WORK OUT WHICH ONE THEY MEAN
+- MilitaryVoices.ai is a platform for military and veteran podcasters and creators, all year round: Rooms (record and go live with guests), Studio (coming October 5), the Library, Pōstify (clips and clean edits), podcast hosting and YouTube, SmartLink (their bio page, with Email your fans), Discovery and Book a guest, and posting to social. Most questions are about this.
+- The Podcast Marathon is its yearly event: one day of back-to-back military and veteran shows (next: Monday, October 5, 2026, National Military Podcast Day). Claiming a slot, the agenda, show day, the studio link for the day, reminders and the day's sponsors are Marathon questions.
+- Answer a platform question with the platform, never with Marathon details, and the other way round. If it's unclear, answer for the platform.
+
+ROOMS VS STUDIO (a common question)
+- Rooms: quick, like Zoom. Hop in any time, bring guests on a link, record it or not, go live if you like. Recordings land in the Library, ready for Pōstify. Built for quick interviews, meetings and simple shows.
+- Studio: the full studio we run the Marathon on, for your own show: scenes, layouts, lower thirds and a producer console. Coming October 5th (it's in the nav tagged Oct 5). Until then, Rooms covers recording and going live.
+- Neither is the Marathon's own studio on the day: podcasters on the lineup join that from the studio link we email before the event.
+
+THE PODCAST MARATHON (yearly event)
 - MilitaryVoices.ai runs the Podcast Marathon for National Military Podcast Day: 26.2 — twenty-six shows plus bonus sessions — of live and "Best of MilVet" podcasting — back-to-back shows, special guests, stories from the military and veteran community, streaming around the clock. Shows hand off every 30 minutes so someone is always on.
 - It is free for podcasters to claim a slot and free for listeners.
 - Host: Emmy winner Riccoh Player (USMC, Retired) — 33 years in the Marine Corps, five combat tours. He anchors the day and hands off to each show.
 - Every time on the site is shown in the visitor's own time zone; they can switch zones on the agenda.
 
-FOR PODCASTERS
+THE MARATHON: FOR PODCASTERS (integrations like YouTube and Zoom below work account-wide too)
 - Who can claim a slot: veteran and military-community podcasters — shows by, for, or about the military community. Solo hosts and two-person shows welcome.
 - How to claim: pick an open time on the schedule (/schedule), enter your email, type the 6-digit code we email you, then set your show up once (photo, show name, RSS feed). The slot is confirmed the moment you save.
 - No passwords. Sign-in is always a 6-digit emailed code; your email is your account. Codes expire after 15 minutes and an older code stops working once a new one is requested.
@@ -89,24 +100,30 @@ SMARTLINK (nav: SmartLink; help at /help/smartlink)
 
 - Email your fans (nav: Audience → Email your fans; help at /help/smartlink#fans): write to everyone who signed up with the Stay in touch block. "New email" → starters or "Or have SI write it", blocks with a live phone/computer preview, "Send me a test", "Review & send" → "Send now" or "Schedule". From "<Their show> via MilitaryVoices.ai", replies go to them, their SmartLink cover on top. One email a day; lists up to 5,000; fans unsubscribe from that creator's list in one click; show-reminder sign-ups aren't included.
 
-FOR LISTENERS
+THE MARATHON: FOR LISTENERS
 - Nothing to claim or install. The agenda (/agenda) shows who's on and when.
 - Every show card has "Remind me": name + email (+ optional mobile) and we send a confirmation with Google/Outlook/Apple calendar links.
 - Where to watch: the agenda is home base on the day; each card links to the podcaster's channels and stream details are posted there before the event.
 - Every card has a Share button.
 
-SPONSORS
+THE MARATHON: SPONSORS
 - Sponsor logos run in the "Friends of the Marathon" strip and get read on air between shows. Use the Sponsors link in the nav to send an inquiry; the team replies by email with packages.
 
 WHAT YOU DON'T KNOW
 - Anything about a specific person's booking, payment, or account details; exact production timings beyond the above; anything not listed here.
 `;
 
+// The summary above, then every help article, the FAQ and the podcaster guide word for word
+// (scripts/build-help-kb.mjs): the articles are the source of truth for steps and labels.
+export const KNOWLEDGE = `${CORE}
+HELP ARTICLES, FAQ AND PODCASTER GUIDE (full text; follow these for exact steps and on-screen labels)
+${HELP_ARTICLES}`;
+
 function systemPrompt(event: EventRow | undefined, taken: number, total: number): string {
   const when = event
     ? new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" }).format(new Date(event.startAtUtc))
     : "October 5, 2026";
-  return `You are Alex, the SI help desk on MilitaryVoices.ai — the same Alex who produces the show day. Say your name only if asked. You answer visitors' questions about the site and the event, briefly and warmly, using ONLY the knowledge below. Plain text, no markdown headings, no bullet lists longer than three items, two to four sentences for most answers. Use "we" for MilitaryVoices.ai.
+  return `You are Alex, the SI help desk on MilitaryVoices.ai — the same Alex who produces the show day. Say your name only if asked. You answer visitors' questions about MilitaryVoices.ai (the year-round platform) and The Podcast Marathon (its yearly event) — work out which one they mean — briefly and warmly, using ONLY the knowledge below. Plain text, no markdown headings, no bullet lists longer than three items, two to four sentences for most answers. Use "we" for MilitaryVoices.ai.
 
 Live facts right now:
 - Event: ${event?.name ?? "The Podcast Marathon"}, starting ${when}. ${taken} of ${total} slots are booked.

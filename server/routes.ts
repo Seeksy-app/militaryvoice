@@ -7253,7 +7253,14 @@ export function registerRoutes(app: Express): void {
           if (!draft?.ack || personReplied || alexToday >= 4) return;
         }
         const { subject, text, html: body } = composeAck(row, draft?.ack ?? "", await firstNameFor(row), followUp);
-        const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: known ? "The Podcast Marathon · 5 October" : "MilitaryVoices.ai", heading: followUp ? subject.replace(/^re:\s*/i, "") : "We got your email", body });
+        // The Marathon's frame for the yearly event; the platform's for everything else.
+        const marathon = draft ? draft.topic === "marathon" : known;
+        const html = emailShell({
+          banner: marathon ? EMAIL_BANNERS.podcasters : EMAIL_BANNERS.studio,
+          eyebrow: marathon ? "The Podcast Marathon · 5 October" : "MilitaryVoices.ai",
+          heading: followUp ? subject.replace(/^(re:\s*)+/i, "") : draft?.ack ? "Here's your answer" : "We got your email",
+          body,
+        });
         const headers: Record<string, string> = {};
         if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
         const id = await sendOneOffEmail({ kind: "ack", to: row.fromEmail, subject, html, text, headers });

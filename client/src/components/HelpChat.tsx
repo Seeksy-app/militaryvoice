@@ -60,7 +60,7 @@ const HIDDEN_ON = ["/promo", "/studio", "/watch", "/podcast/"];
 
 const OPENER: Msg = {
   role: "assistant",
-  content: "Hi, I'm Alex. Ask me anything about the Podcast Marathon: claiming a slot, how show day works, reminders, YouTube. If I can't help, I'll get you to a person.",
+  content: "Hi, I'm Alex. Ask me anything about MilitaryVoices.ai: Rooms, your Library, Pōstify, your podcast, SmartLink, or the Podcast Marathon. If I can't help, I'll get you to a person.",
 };
 
 export function HelpChat() {

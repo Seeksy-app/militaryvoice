@@ -25,6 +25,8 @@ export interface InboundDraft {
   respond: boolean;
   /** False when "ack" fully answers them and nothing is left for a person to do. */
   needsPerson: boolean;
+  /** The yearly event, or the year-round platform: decides the email's frame and voice. */
+  topic: "marathon" | "platform";
 }
 
 /** One conversation: the subject without its Re:/Fwd: prefixes. */
@@ -58,6 +60,7 @@ export async function inboundContext(m: InboundEmailRow): Promise<string> {
   const ev = await storage.getFeaturedEvent();
   const lines: string[] = [];
   const day = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: ET }).format(new Date(ev.startAtUtc));
+  lines.push("Marathon facts (only for questions about the event):");
   lines.push(`Event: ${ev.name}. Day: ${day}. First show ${at(ev.startAtUtc, ev.slotMinutes, 0)} Eastern. Slots are ${ev.slotMinutes} minutes.`);
   const all = await storage.listSignups(ev.id);
   const total = Math.floor((ev.durationHours * 60) / ev.slotMinutes);
@@ -97,14 +100,16 @@ export async function inboundContext(m: InboundEmailRow): Promise<string> {
 export async function draftReply(m: InboundEmailRow): Promise<InboundDraft> {
   const context = await inboundContext(m);
   const client = new Anthropic();
-  const system = `You draft replies for The Podcast Marathon, a one-day livestream of military and veteran podcasts. A person will read, edit and send your draft; it is not sent automatically.
+  const system = `You draft replies for MilitaryVoices.ai, a year-round platform for military and veteran podcasters and creators (Rooms, Studio, the Library, Pōstify, podcast hosting, SmartLink, Discovery), which also runs The Podcast Marathon, a yearly one-day livestream of military and veteran shows. A person will read, edit and send your "reply" draft; it is not sent automatically.
+
+First decide "topic": "marathon" when they're asking about the event — a slot, the agenda, show day, their segment, reminders, the day's sponsors — and "platform" for everything else (recording, Rooms, Studio, the Library, Pōstify, clips, posting, their podcast, SmartLink, their account). Never answer a platform question with Marathon details. If unsure, "platform".
 
 Voices:
-- "riccoh": Riccoh Player, USMC retired, the host of the day. Host to host. Use for anything about a slot, a time change, a swap, co-hosting, an interview, a favour, a complaint, or anything personal. Warm, direct, short sentences. Signs "Riccoh".
-- "team": The Podcast Marathon team. Use for files, links, uploads, technical setup, YouTube, promo materials, receipts and logistics. Plain and helpful. Signs "The Podcast Marathon team".
+- "riccoh": Riccoh Player, USMC retired, the host of the Marathon. Host to host. Only for Marathon matters: a slot, a time change, a swap, co-hosting, an interview, a favour, a complaint about the day. Warm, direct, short sentences. Signs "Riccoh".
+- "team": everything else. Plain and helpful. Signs "The Podcast Marathon team" on Marathon matters and "The MilitaryVoices.ai team" on the platform.
 
 Rules:
-- 8th-grade reading level. Short. No corporate phrases. Never say "MilitaryVoices.ai" as the sender name; the event is "The Podcast Marathon".
+- 8th-grade reading level. Short. No corporate phrases. The event is "The Podcast Marathon"; the platform is "MilitaryVoices.ai".
 - Use only the facts in the context. Never invent times, links, names or promises.
 - Never say a change is done. Say what will happen and who will confirm ("I'll move you and confirm by tomorrow").
 - If they ask to cancel, acknowledge it kindly, do not argue, and say a person will confirm.
@@ -123,13 +128,14 @@ Also set "respond": false when no person wrote this to us — a newsletter, a ma
 Site knowledge (what the help desk knows):
 ${KNOWLEDGE}
 
-Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other","summary":"one line on what they want","from":"riccoh|team","subject":"Re: ...","reply":"the email body, plain text","ack":"...","needsPerson":true,"respond":true}`;
+Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other","summary":"one line on what they want","from":"riccoh|team","subject":"Re: ...","reply":"the email body, plain text","ack":"...","needsPerson":true,"respond":true,"topic":"platform|marathon"}`;
   const said = stripQuoted(m.bodyText) || m.bodyText;
   const user = `Context:\n${context}\n\nInbound email\nFrom: ${m.fromName ? `${m.fromName} <${m.fromEmail}>` : m.fromEmail}\nSubject: ${m.subject}\n\n${said.slice(0, 4000)}`;
   const res = await client.messages.create({
     model: "claude-sonnet-5",
-    max_tokens: 1400,
-    system,
+    max_tokens: 3000,
+    // The same long prompt (with the whole help desk) every time: cached, so it's quick and cheap.
+    system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   });
   const text = res.content.map((c) => ("text" in c ? c.text : "")).join("");
@@ -145,6 +151,7 @@ Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other
     ack: String(parsed.ack ?? "").trim().slice(0, 900),
     respond: parsed.respond !== false,
     needsPerson: parsed.needsPerson !== false || !String(parsed.ack ?? "").trim(),
+    topic: parsed.topic === "marathon" ? "marathon" : "platform",
   };
 }
 
