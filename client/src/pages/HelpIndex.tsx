@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ArrowRight, ExternalLink, KeyRound, Headphones, Youtube, Radio, Handshake } from "lucide-react";
+import { ArrowRight, ExternalLink, KeyRound, Headphones, Youtube, Radio, Handshake, Clapperboard, Globe, CreditCard, Wand2 } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { HelpSearch, askAlex } from "@/components/HelpSearch";
@@ -10,7 +10,11 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 const CATEGORY_ICON: Record<HelpCategory, typeof KeyRound> = {
   lineup: KeyRound,
   showday: Headphones,
+  create: Clapperboard,
+  postify: Wand2,
   youtube: Youtube,
+  grow: Globe,
+  account: CreditCard,
   watching: Radio,
   sponsors: Handshake,
 };
@@ -116,14 +120,14 @@ export default function HelpIndex() {
               );
             })}
 
-            {/* Alex, on the shelf with the rest */}
-            <div className="flex flex-col justify-between rounded-3xl bg-[#04102b] p-6 text-white" data-testid="help-category-alex">
+            {/* Alex, on the shelf with the rest: on a wide screen, the whole last row. */}
+            <div className="flex flex-col justify-between rounded-3xl bg-[#04102b] p-6 text-white lg:col-span-3 lg:flex-row lg:items-center lg:gap-8" data-testid="help-category-alex">
               <div>
                 <img src="/alex.jpg" alt="Alex" className="h-14 w-14 rounded-full object-cover ring-4 ring-[#F0A71F]/40" />
                 <h3 className="mt-4 text-lg font-bold leading-tight" style={HEADLINE_FONT}>Didn't find it? Ask Alex.</h3>
                 <p className="mt-2 text-sm text-white/75">She knows the day, the site and your dashboard. If it needs a person, she hands you to one and someone emails you back.</p>
               </div>
-              <button type="button" onClick={() => askAlex()} className="mt-5 rounded-full bg-[#F0A71F] px-5 py-2.5 text-sm font-semibold text-[#1a1200] hover:brightness-105" data-testid="help-ask-alex-bottom">Ask Alex</button>
+              <button type="button" onClick={() => askAlex()} className="mt-5 shrink-0 rounded-full bg-[#F0A71F] lg:mt-0 px-5 py-2.5 text-sm font-semibold text-[#1a1200] hover:brightness-105" data-testid="help-ask-alex-bottom">Ask Alex</button>
             </div>
           </div>
         </section>

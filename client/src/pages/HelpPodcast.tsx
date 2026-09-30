@@ -26,7 +26,7 @@ export default function HelpPodcast() {
         eyebrow="Help · Your podcast"
         title="Your podcast in Apple Podcasts, Spotify and every app"
         lead={<>When you host your show here, MilitaryVoices.ai keeps its <strong>feed</strong>: one web address, listed in your Podcast screen, that every app reads. You give it to Apple and Spotify once. After that, each new episode you publish reaches them on its own, usually within the hour.</>}
-        toc={[["#how", "How it reaches the apps"], ["#ready", "Before the apps will take it"], ["#list", "Listing your show"], ["#unlist", "Taking it down"], ["#move", "Moving hosts (the 301)"], ["#support", "Help and contact"]]}
+        toc={[["#how", "How it reaches the apps"], ["#ready", "Before the apps will take it"], ["#list", "Listing your show"], ["#youtube", "Your episodes on YouTube"], ["#unlist", "Taking it down"], ["#move", "Moving hosts (the 301)"], ["#support", "Help and contact"]]}
       >
         <Section n={1} id="how" title="How it reaches the apps">
           <p>Podcast apps don't take uploads. They read your show's <strong>RSS feed</strong>, a list of your episodes that we publish at an address like <code className="rounded bg-muted px-1.5 py-0.5 text-sm">militaryvoices.ai/feed/your-show</code>. You'll find yours at the top of your Podcast screen; press it to copy it.</p>
@@ -63,17 +63,39 @@ export default function HelpPodcast() {
           <Step k="d" text={<>Paste the Spotify link under Spotify in <em>Directories</em> and press <strong>It's live</strong>. YouTube Music, Amazon Music, iHeartRadio, Pocket Casts and Podcast Index are listed there the same way.</>} />
         </Section>
 
-        <Section n={4} id="unlist" title="Taking it down">
+        <Section n={4} id="youtube" title="Your episodes on YouTube">
+          <p>An episode made from a video (an MP4 you upload, or a Library recording) can go to your YouTube channel too, with its title, notes and picture. Connect your channel once on the <strong>Social</strong> screen.</p>
+          <p className="mt-5 font-semibold text-foreground">Choose once, for each show</p>
+          <Step k="a" text={<>Open your show on the Podcast screen. Find <strong>Your episodes as videos on YouTube</strong>.</>} />
+          <Step k="b" text={<>Under <strong>When I publish an episode with video</strong>, pick <strong>Ask me each time</strong> or <strong>Always post it to YouTube</strong>.</>} />
+          <Step k="c" text={<>Pick <strong>Public</strong> or <strong>Unlisted</strong> (only people with the link can see it). We remember both.</>} />
+
+          <p className="mt-6 font-semibold text-foreground">When you publish</p>
+          <p className="mt-2">The publish window has an <strong>Also post it to YouTube</strong> box, ticked for you on Always. Leave it ticked to post it, or untick it. An episode set for later goes to YouTube when it goes out.</p>
+
+          <p className="mt-6 font-semibold text-foreground">The YouTube list</p>
+          <ul className="mt-2 list-disc space-y-2 pl-5">
+            <li>Each video episode says where it stands: on YouTube, going when it's out, not on YouTube, or why it didn't post.</li>
+            <li><strong>Post now</strong> sends one that isn't there yet.</li>
+            <li><strong>Not this one</strong> keeps an episode off YouTube, even on Always. <strong>Undo</strong> brings it back.</li>
+          </ul>
+
+          <p className="mt-6 font-semibold text-foreground">Never the same video twice</p>
+          <p className="mt-2">Your Library and your podcast know about each other. If you already posted a recording to YouTube from your Library, publishing it as a podcast episode won't post it again, and the publish window tells you when it went. It works the other way too. Want it there twice on purpose? <strong>Post again</strong> asks you first.</p>
+        </Section>
+
+        <Section n={5} id="unlist" title="Taking it down">
           <p>The apps keep a show listed for as long as they can read its feed, so take it down in the apps first, then here.</p>
           <ul className="mt-3 list-disc space-y-2 pl-5">
             <li><strong>Apple Podcasts:</strong> in Podcasts Connect, open your show and remove it from Apple Podcasts. It disappears within about a day.</li>
             <li><strong>Spotify:</strong> in Spotify for Creators, open your show's settings and remove it from Spotify, or ask Spotify's support to.</li>
             <li><strong>Here:</strong> on your Podcast screen, <em>Delete this show</em>. Its feed stops, so any app still reading it drops the show.</li>
           </ul>
-          <p className="mt-3">Just want one episode gone? Open it on your Podcast screen and unpublish or delete it; the apps drop it the next time they check.</p>
+          <p className="mt-3">Just want one episode gone? Open it on your Podcast screen and press <strong>Delete</strong>. It leaves your feed, and the apps drop it the next time they check. Deleting it here doesn't take it off YouTube; remove it in YouTube Studio if you posted it there.</p>
+          <p className="mt-3">Deleted the wrong one? An episode, or a whole show with its episodes, waits in <strong>Recently deleted</strong> in your account menu for 15 days. <strong>Put it back</strong> and it returns as the same episode, in your feed again. See <Link href="/help/account#deleted" className="font-medium text-primary hover:underline">Recently deleted</Link>.</p>
         </Section>
 
-        <Section n={5} id="move" title="Moving hosts (the 301)">
+        <Section n={6} id="move" title="Moving hosts (the 301)">
           <p>Your listeners follow your feed's address. When a show moves, the old address has to <strong>forward</strong> to the new one with a <strong>301 redirect</strong>, so every app moves over by itself and nobody has to subscribe again.</p>
 
           <p className="mt-5 font-semibold text-foreground">Moving your show here</p>
@@ -87,7 +109,7 @@ export default function HelpPodcast() {
           <Step k="c" text={<>Leave it in place for at least four weeks before deleting the show here, so every app has time to follow.</>} />
         </Section>
 
-        <Section n={6} id="support" title="Help and contact">
+        <Section n={7} id="support" title="Help and contact">
           <ul className="list-disc space-y-2 pl-5">
             <li><strong>Email us:</strong>{" "}<a href={`mailto:${CONTACT}`} className="font-medium text-primary hover:underline">{CONTACT}</a>. A person reads every message and writes back.</li>
             <li><strong>Search the help, or ask Alex:</strong>{" "}<Link href="/help" className="font-medium text-primary hover:underline">militaryvoices.ai/help</Link>.</li>

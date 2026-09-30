@@ -21,6 +21,12 @@ import ReviewLogin from "@/pages/ReviewLogin";
 import HelpZoom from "@/pages/HelpZoom";
 import HelpPodcast from "@/pages/HelpPodcast";
 import HelpIndex from "@/pages/HelpIndex";
+import HelpRooms from "@/pages/HelpRooms";
+import HelpLibrary from "@/pages/HelpLibrary";
+import HelpPostify from "@/pages/HelpPostify";
+import HelpAccount from "@/pages/HelpAccount";
+import HelpSmartlink from "@/pages/HelpSmartlink";
+import HelpGuests from "@/pages/HelpGuests";
 import Discover from "@/pages/Discover";
 import Directory from "@/pages/Directory";
 import PodcastPage from "@/pages/PodcastPage";
@@ -95,6 +101,12 @@ function AppRouter() {
       <Route path="/help/youtube">{() => <HelpYoutube />}</Route>
       <Route path="/help/zoom">{() => <HelpZoom />}</Route>
       <Route path="/help/podcast">{() => <HelpPodcast />}</Route>
+      <Route path="/help/rooms">{() => <HelpRooms />}</Route>
+      <Route path="/help/library">{() => <HelpLibrary />}</Route>
+      <Route path="/help/postify">{() => <HelpPostify />}</Route>
+      <Route path="/help/account">{() => <HelpAccount />}</Route>
+      <Route path="/help/smartlink">{() => <HelpSmartlink />}</Route>
+      <Route path="/help/guests">{() => <HelpGuests />}</Route>
       {/* Registered on the Google OAuth consent screen — these URLs are
           load-bearing for verification, so don't rename them. */}
       <Route path="/policy">{() => <PrivacyPolicy />}</Route>

@@ -28,7 +28,7 @@ export function HelpSearch({ compact = false, autoFocus = false }: { compact?: b
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && q.trim() && results.length === 0) askAlex(q.trim()); }}
             autoFocus={autoFocus}
-            placeholder="Search help — YouTube, sign in, your slot, the green room…"
+            placeholder="Search help — Rooms, Pōstify, YouTube, your slot…"
             className="h-11 pl-10 text-base"
             data-testid="help-search-input"
           />
