@@ -232,6 +232,7 @@ export default function Faq() {
     },
   ];
 
+  const showAll = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("all");
   // A link to one question (#its-slug) opens it and scrolls to it.
   const [open, setOpen] = useState<string>(() => (typeof window !== "undefined" ? window.location.hash.slice(1) : ""));
   useEffect(() => {
@@ -255,6 +256,14 @@ export default function Faq() {
           {title}
         </h2>
       </div>
+      {/* ?all lays every answer open: what scripts/build-help-kb.mjs reads for Alex. */}
+      {showAll ? (
+        <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
+          {items.map((item) => (
+            <div key={item.q}><h3 className="font-semibold">{item.q}</h3><div className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.a}</div></div>
+          ))}
+        </div>
+      ) : (
       <Accordion type="single" collapsible value={items.some((it) => faqSlug(it.q) === open) ? open : undefined} onValueChange={(v) => setOpen(v ?? "")} className="overflow-hidden rounded-2xl border border-border bg-card">
         {items.map((item, i) => (
           <AccordionItem key={item.q} id={faqSlug(item.q)} value={faqSlug(item.q)} className="scroll-mt-24 border-border px-5 last:border-b-0">
@@ -265,6 +274,7 @@ export default function Faq() {
           </AccordionItem>
         ))}
       </Accordion>
+      )}
     </section>
   );
 
