@@ -140,6 +140,16 @@ const importSoon = (id: number) => {
   try { waitUntil(job); } catch { /* not on Vercel */ }
 };
 
+/** When a Zoom download token stops working (its "exp"), or null if it can't be read. */
+function tokenExpiry(token: string): number | null {
+  try {
+    const exp = (JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as { exp?: number }).exp;
+    return typeof exp === "number" ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
 /** For the worker: where to fetch an Importing recording from, with the auth it needs right now. */
 export async function importFetch(rec: { email: string; importSource: string }): Promise<{ url: string; headers: Record<string, string> } | null> {
   let s: { provider?: string; url?: string; token?: string } = {};
@@ -148,9 +158,13 @@ export async function importFetch(rec: { email: string; importSource: string }):
   // Sent to their import link (Zapier): the address as given, with Zoom's download token if one came with it.
   if (s.provider === "link") return { url: s.token ? `${s.url}${s.url.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(s.token)}` : s.url, headers: {} };
   if (s.provider !== "zoom") return null;
+  // The recording's own download token first, while it's good (a day): it's how Zoom
+  // says webhook downloads are made, and it survives Zoom's hop to its file storage,
+  // which a Bearer header doesn't (every Zoom reviewer import failed with 401).
+  const tokenGood = !!s.token && (tokenExpiry(s.token) ?? 0) > Date.now() + 5 * 60_000;
+  if (tokenGood) return { url: `${s.url}${s.url.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(s.token!)}`, headers: {} };
   const c = await storage.getZoom(rec.email);
   if (c) return { url: s.url, headers: { Authorization: `Bearer ${await zoomAccessToken(c)}` } };
-  // Disconnected since: the event's own download token still works for a day.
   return s.token ? { url: `${s.url}${s.url.includes("?") ? "&" : "?"}access_token=${encodeURIComponent(s.token)}`, headers: {} } : null;
 }
 
