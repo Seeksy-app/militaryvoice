@@ -5269,6 +5269,7 @@ export function registerRoutes(app: Express): void {
         label: `${a.channelTitle || a.email} · their segment`, rtmpUrl: "", keyHint: "",
         enabled: a.enabled !== false, live: false, ownerEmail: a.email,
         hostName: sg.hostName, podcastName: sg.podcastName, slotLabel: at(sg.slotIndex),
+        ...(ev ? { opensLabel: `Opens ${etLabel(new Date(Date.parse(ev.startAtUtc) + sg.slotIndex * ev.slotMinutes * 60_000 - 15 * 60_000).toISOString())}` } : {}),
       });
     }
     channels.sort((x, y) => (signups.find((s) => s.id === x.signupId)?.slotIndex ?? 0) - (signups.find((s) => s.id === y.signupId)?.slotIndex ?? 0));

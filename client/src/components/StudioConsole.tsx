@@ -587,6 +587,8 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   // Setup is a form you scroll. Live is a control surface that must never
   // scroll — once you're on air you can't go hunting for a button.
   const isLive = view === "live";
+  // The destinations form, from the To menu (the event studio has no Set view to find it in).
+  const [destDialog, setDestDialog] = useState(false);
   // The stage monitor is a rule, not a button. You want to hear the show; you
   // never want to hear it while you are the one making it, because that is
   // your own voice back at you half a second late. So it follows where you
@@ -1631,8 +1633,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                       <div className="mt-3 flex flex-col gap-2">
                         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Whole show</p>
                         {houseDestRows.length === 0 && (
-                          <p className="text-xs text-muted-foreground">No whole-show destinations yet — add YouTube, X or a custom RTMP under Studio set.</p>
+                          <p className="text-xs text-muted-foreground">No whole-show destinations yet.</p>
                         )}
+                        <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 self-start rounded-full text-xs" onClick={() => setDestDialog(true)} data-testid="button-open-destinations">
+                          <Plus className="h-3 w-3" /> Add a destination
+                        </Button>
                         {houseDestRows.map((d) => (
                           <label key={d.id} className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-sm">
                             <DestIcon platform={d.platform} />
@@ -1647,13 +1652,13 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                         {channelRows.length > 0 && (
                           <>
                             <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Their segment only</p>
-                            <p className="-mt-1 text-[11px] text-muted-foreground">Each goes out to the podcaster's own channel while their slot is on. Off means our watch page only.</p>
+                            <p className="-mt-1 text-[11px] text-muted-foreground">On: their slot also goes to their own channel, from 15 minutes before it. Nothing reaches them before then, tests included. Off: our watch page only.</p>
                             {channelRows.map((d) => (
                               <label key={d.id} className="flex items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-sm" data-testid={`dest-channel-${-d.id}`}>
                                 <DestIcon platform={d.platform} />
                                 <span className="min-w-0 flex-1">
                                   <span className="block truncate">{d.label.replace(" · their segment", "")}</span>
-                                  <span className="block truncate text-[11px] text-muted-foreground">{d.podcastName?.trim() || d.hostName} · {d.slotLabel}</span>
+                                  <span className="block truncate text-[11px] text-muted-foreground">{d.podcastName?.trim() || d.hostName} · {(d as { opensLabel?: string }).opensLabel ?? d.slotLabel}</span>
                                 </span>
                                 <Switch checked={d.enabled} onCheckedChange={(v) => toggleChannel.mutate({ id: -d.id, enabled: v })} />
                               </label>
@@ -1664,6 +1669,15 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     </PopoverContent>
                   </Popover>
                 )}
+                <Dialog open={destDialog} onOpenChange={setDestDialog}>
+                  <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Where it goes</DialogTitle>
+                      <DialogDescription>Our watch page is always on. Add YouTube from a connected channel (no stream key), or any stream key.</DialogDescription>
+                    </DialogHeader>
+                    <Destinations adminGet={adminGet} adminSend={adminSend} broadcasting={broadcasting} signups={signups ?? []} />
+                  </DialogContent>
+                </Dialog>
 
                 {/* One control, and its colour is the answer to "are we on".
                     Red means the button will put you on air; green means you
