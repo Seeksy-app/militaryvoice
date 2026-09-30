@@ -259,7 +259,7 @@ export function PodcastHosting() {
 }
 
 type PodTab = "episodes" | "directories" | "details" | "guests" | "pitch";
-type DirState = { state: "" | "submitted" | "live"; url: string; at?: string };
+type DirState = { state: "" | "submitted" | "live" | "rejected"; url: string; at?: string };
 const parseDirs = (raw: string | null | undefined): Record<string, DirState> => { try { const v = raw ? JSON.parse(raw) : {}; return v && typeof v === "object" ? v : {}; } catch { return {}; } };
 
 /**
@@ -276,13 +276,14 @@ const FIND: Record<string, (t: string) => string> = {
   pocketcasts: (t) => `https://pocketcasts.com/search?q=${encodeURIComponent(t)}`,
   podcastindex: (t) => `https://podcastindex.org/search?q=${encodeURIComponent(t)}&type=all`,
 };
-const DIRS: { key: string; name: string; reach: string; url: string; steps: string[]; link: string }[] = [
+const DIRS: { key: string; name: string; reach: string; url: string; steps: string[]; link: string; auto?: boolean }[] = [
   { key: "apple", name: "Apple Podcasts", reach: "Apple Podcasts, and the apps that read Apple's list (Overcast, Castro)", url: "https://podcastsconnect.apple.com/my-podcasts/new-feed", steps: ["Sign in with your Apple ID.", "Choose to add a show with an RSS feed, and paste your feed (it's copied).", "Submit. Apple reviews it, usually in a day or two, and writes to your owner email."], link: "https://podcasts.apple.com/…" },
   { key: "spotify", name: "Spotify", reach: "Spotify", url: "https://creators.spotify.com/pod/dashboard/import", steps: ["Sign in to Spotify for Creators.", "Pick the option to add an existing podcast, and paste your feed.", "Spotify emails a code to your owner email: type it in. It's live within hours."], link: "https://open.spotify.com/show/…" },
   { key: "youtube", name: "YouTube Music", reach: "YouTube and YouTube Music, as an audio podcast", url: "https://studio.youtube.com", steps: ["Open YouTube Studio on your channel.", "Create, then New podcast, then submit an RSS feed. Paste your feed.", "Confirm with the code YouTube emails to your owner email."], link: "https://music.youtube.com/playlist?list=…" },
   { key: "amazon", name: "Amazon Music & Audible", reach: "Amazon Music, Audible and Alexa", url: "https://podcasters.amazon.com/", steps: ["Sign in with an Amazon account.", "Add your podcast and paste your feed.", "Confirm with the code sent to your owner email."], link: "https://music.amazon.com/podcasts/…" },
   { key: "iheart", name: "iHeartRadio", reach: "iHeartRadio", url: "https://www.iheart.com/content/submit-your-podcast/", steps: ["Open iHeart's podcast submission page and sign in.", "Paste your feed and submit."], link: "https://www.iheart.com/podcast/…" },
   { key: "pocketcasts", name: "Pocket Casts", reach: "Pocket Casts", url: "https://pocketcasts.com/submit/", steps: ["Paste your feed and press Submit. No account needed."], link: "https://pca.st/…" },
+  { key: "listennotes", name: "Listen Notes", reach: "The podcast search engine. We list your show there for you once an episode is out.", url: "https://www.listennotes.com", steps: [], link: "https://www.listennotes.com/podcasts/…", auto: true },
   { key: "podcastindex", name: "Podcast Index", reach: "Dozens of newer apps (Fountain, Podverse, Castamatic and more)", url: "https://podcastindex.org/add", steps: ["Paste your feed and press Submit. That's all."], link: "https://podcastindex.org/podcast/…" },
 ];
 
@@ -336,11 +337,16 @@ function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved
               <div className="flex flex-wrap items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-sm font-bold text-[#053877] dark:bg-white/10 dark:text-[#8fb5e8]">{d.name[0]}</span>
                 <button type="button" onClick={() => setOpen(isOpen || st?.state === "submitted" ? `-${d.key}` : d.key)} className="min-w-0 flex-1 text-left">
-                  <span className="block text-sm font-semibold">{d.name}</span>
+                  <span className="block text-sm font-semibold">{d.name}{d.auto && <span className="ml-2 align-middle text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Powered by Listen Notes</span>}</span>
                   <span className="block truncate text-xs text-muted-foreground">{d.reach}</span>
                 </button>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st?.state === "live" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground"}`}>{st?.state === "live" ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "submitted" ? "Submitted" : moved ? "Moves with your forward" : "Not listed"}</span>
-                {st?.state === "live" ? (st.url
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st?.state === "live" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground"}`}>{st?.state === "live" ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "submitted" ? "Submitted" : d.auto ? "Automatic" : moved ? "Moves with your forward" : "Not listed"}</span>
+                {d.auto && !(st?.state === "live" && st.url) ? (
+                  // Listed for them (our Listen Notes submission): nothing to press.
+                  <span className="shrink-0 text-xs text-muted-foreground" data-testid={`hosting-dir-auto-${d.key}`}>
+                    {st?.state === "submitted" ? "In review (up to 12 hours)" : st?.state === "rejected" ? "Not accepted" : "When your first episode is out"}
+                  </span>
+                ) : st?.state === "live" ? (st.url
                   ? <Button asChild size="sm" variant="outline" className="h-8 gap-1 rounded-full"><a href={st.url} target="_blank" rel="noreferrer">Open <ExternalLink className="h-3 w-3" /></a></Button>
                   : <Button size="sm" variant="outline" onClick={() => setOpen(d.key)} className="h-8 rounded-full">Add its link</Button>
                 ) : (

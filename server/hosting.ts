@@ -11,6 +11,8 @@ import { sendPodcastOwnerCodeEmail } from "./email.js";
 import { isUploadPostConfigured, publishVideo } from "./uploadPost.js";
 import { toTrash } from "./trash.js";
 import { XMLParser } from "fast-xml-parser";
+import { waitUntil } from "@vercel/functions";
+import { isListenNotesConfigured, submitToListenNotes } from "./listenNotes.js";
 import { bioPages, hostPosts, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
 
 /**
@@ -493,6 +495,32 @@ async function postEpisodeToYouTube(e: HostedEpisodeRow, show: HostedShowRow, pr
   }
 }
 
+/**
+ * A show on Listen Notes: once it has an episode out, its feed is submitted
+ * (one request), and the Directories tab shows "live" with its page when
+ * Listen Notes has it. Resubmitting is how a pending one is checked: it
+ * answers "found" once accepted. At most once a day per show.
+ */
+export async function listOnListenNotes(showId: number, force = false): Promise<void> {
+  if (!isListenNotesConfigured()) return;
+  const [show] = await db.select().from(hostedShows).where(eq(hostedShows.id, showId)).limit(1);
+  if (!show) return;
+  const dirs = (() => { try { return JSON.parse(show.directories || "{}") as Record<string, { state: string; url: string; at?: string }>; } catch { return {}; } })();
+  const cur = dirs.listennotes;
+  if (cur?.state === "live" && cur.url) return;
+  if (!force && cur?.state === "rejected") return;
+  if (!force && cur?.at && Date.now() - Date.parse(cur.at) < 23 * 3600_000) return;
+  const [ep] = await db.select({ id: hostedEpisodes.id }).from(hostedEpisodes).where(and(eq(hostedEpisodes.showId, show.id), eq(hostedEpisodes.status, "published"))).limit(1);
+  if (!ep) return;
+  try {
+    const r = await submitToListenNotes(feedUrl(show.slug));
+    dirs.listennotes = r.status === "found" && r.url ? { state: "live", url: r.url, at: now() } : { state: r.status === "rejected" ? "rejected" : "submitted", url: "", at: now() };
+    await db.update(hostedShows).set({ directories: JSON.stringify(dirs), updatedAt: now() }).where(eq(hostedShows.id, show.id));
+  } catch (err) {
+    console.warn("Listen Notes submit failed for show", show.id, (err as Error).message);
+  }
+}
+
 export function registerHosting(app: Express, requireAgent: import("express").RequestHandler) {
   app.post("/api/agent/episode-still/:id/done", requireAgent, async (req, res) => {
     const id = Number(req.params.id);
@@ -771,6 +799,8 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       ...(!publish && at ? { publishedAt: at } : {}),
       ...(typeof b.youtube === "boolean" ? { youtubeWanted: b.youtube && hasVideo(e) } : {}),
     }).where(eq(hostedEpisodes.id, e.id)).returning();
+    // First episode out: the show goes to Listen Notes by itself.
+    if (out.status === "published") { const job = listOnListenNotes(out.showId); try { waitUntil(job); } catch { /* not on Vercel */ } }
     // Out now and asked for YouTube: post it straight away (a scheduled one goes with the cron).
     if (out.youtubeWanted && out.status === "published" && Date.parse(out.publishedAt) <= Date.now()) {
       const show = await ownShow(emailOf(req), out.showId);
@@ -805,6 +835,19 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
   });
 
   // Every 15 minutes: scheduled episodes that asked for YouTube, once they're out.
+  /** Daily: shows with an episode out that aren't live on Listen Notes yet are (re)submitted; a pending one comes back "found" once accepted. */
+  app.get("/api/cron/listennotes", async (req, res) => {
+    const secret = process.env.CRON_SECRET;
+    if (secret && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== secret) return res.status(401).json({ message: "Not authorised." });
+    if (!isListenNotesConfigured()) return res.json({ checked: 0, reason: "no key" });
+    await schemaIsReady();
+    const ids = (await db.selectDistinct({ id: hostedEpisodes.showId }).from(hostedEpisodes).where(eq(hostedEpisodes.status, "published"))).map((r) => r.id);
+    let checked = 0;
+    // A few a day at most: the free plan is 150 requests a month.
+    for (const id of ids.slice(0, 25)) { await listOnListenNotes(id); checked++; }
+    res.json({ checked });
+  });
+
   app.get("/api/cron/youtube-episodes", async (req, res) => {
     const secret = process.env.CRON_SECRET;
     if (secret && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== secret) return res.status(401).json({ message: "Not authorised." });
