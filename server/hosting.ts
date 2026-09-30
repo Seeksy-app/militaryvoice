@@ -12,7 +12,7 @@ import { isUploadPostConfigured, publishVideo } from "./uploadPost.js";
 import { toTrash } from "./trash.js";
 import { XMLParser } from "fast-xml-parser";
 import { waitUntil } from "@vercel/functions";
-import { isListenNotesConfigured, submitToListenNotes } from "./listenNotes.js";
+import { isListenNotesConfigured, submitToListenNotes, spendListenNotes } from "./listenNotes.js";
 import { bioPages, hostPosts, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
 
 /**
@@ -512,6 +512,7 @@ export async function listOnListenNotes(showId: number, force = false): Promise<
   if (!force && cur?.at && Date.now() - Date.parse(cur.at) < 23 * 3600_000) return;
   const [ep] = await db.select({ id: hostedEpisodes.id }).from(hostedEpisodes).where(and(eq(hostedEpisodes.showId, show.id), eq(hostedEpisodes.status, "published"))).limit(1);
   if (!ep) return;
+  if (!(await spendListenNotes())) return;
   try {
     const r = await submitToListenNotes(feedUrl(show.slug));
     dirs.listennotes = r.status === "found" && r.url ? { state: "live", url: r.url, at: now() } : { state: r.status === "rejected" ? "rejected" : "submitted", url: "", at: now() };

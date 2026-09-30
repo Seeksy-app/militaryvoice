@@ -11,6 +11,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./storage.js";
 import { discoveryCache } from "../shared/schema.js";
 import { getAdminEmail, getSessionEmail } from "./session.js";
+import { isListenNotesConfigured, spendListenNotes, lnSearchShows, lnShowFull } from "./listenNotes.js";
 
 const BASE = "https://developers.podchaser.com/api/rest/v1";
 const DAY = 86_400_000;
@@ -233,6 +234,14 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
       const guests = kind === "shows" && req.body?.hasGuests === true;
       const active = kind === "shows" && req.body?.active === true;
       const k = `pc2:search:${kind}:${JSON.stringify({ term, sort, page, guests, active })}`;
+      // Shows, for a member: Listen Notes (3.8 million shows), fetched fresh each time as its terms
+      // require, while the month's allowance lasts. Past it, or for visitors, Podchaser as before.
+      const lnPages = process.env.LISTEN_PLAN === "pro" ? 30 : 3;
+      if (kind === "shows" && !w.visitor && isListenNotesConfigured() && page < lnPages && (await spendListenNotes(w.id))) {
+        const since = active ? Date.now() - 90 * DAY : undefined;
+        const r = await lnSearchShows({ term, page, byDate: sort !== "relevance", activeSince: since });
+        return { kind, term, page, pageSize: r.perPage, total: Math.min(r.total, lnPages * 10), results: r.results, preview: false, locked: LOCKED, source: "listennotes" };
+      }
 
       let found = await readCache<{ total: number; perPage: number; results: (PodShow | PodPerson)[] }>(k, 7 * DAY);
       if (!found) {
@@ -257,6 +266,12 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
     send(res, async () => {
       const w = await who(req);
       if (w.visitor) throw new HttpError(401, "Create a free account to open a show.");
+      // A Listen Notes show: asked fresh (their terms), from the month's allowance.
+      const lnId = /^ln:([A-Za-z0-9]{8,40})$/.exec(String(req.query.id ?? ""))?.[1];
+      if (lnId) {
+        if (!isListenNotesConfigured() || !(await spendListenNotes(w.id))) throw new HttpError(429, "That's all the show lookups for today. Try again tomorrow.");
+        return lnShowFull(lnId);
+      }
       const id = String(req.query.id ?? "").replace(/[^0-9]/g, "").slice(0, 20);
       if (!id) throw new HttpError(400, "Which show?");
       return cached(`pc2:show:${id}`, 30 * DAY, async () => {

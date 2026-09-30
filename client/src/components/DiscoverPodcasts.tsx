@@ -102,6 +102,9 @@ export function PodcastResults({ ask, isMember, onJoin, onOpen, saved, onSave }:
             {/* Plain search counts every show with any of the words; past a few thousand, the count says nothing. */}
             {search.isLoading ? "Searching…" : first ? first.total > 2000 ? "Best matches" : `${first.total.toLocaleString()} ${people ? (first.total === 1 ? "host or guest" : "hosts and guests") : first.total === 1 ? "podcast" : "podcasts"}` : "Search"}
           </h2>
+          {(first as { source?: string } | undefined)?.source === "listennotes" && (
+            <a href="https://www.listennotes.com" target="_blank" rel="noreferrer" className="mt-1 inline-block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground" data-testid="powered-by-listennotes">Powered by Listen Notes</a>
+          )}
           {first && <p className="mt-1 text-sm text-muted-foreground">{people ? "People who host a show or have been a guest on one" : "Shows"}{ask.q ? <> about <span className="font-medium text-foreground">"{ask.q}"</span></> : null}{ask.branch ? <> · {ask.branch.split(",").join(", ")}</> : !people ? " in the military and veteran community" : ""}</p>}
         </div>
       </div>
@@ -296,6 +299,23 @@ export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, sav
                   {show.rating != null && show.ratings ? <Stat label="Rating" value={`${show.rating.toFixed(1)} ★`} sub={`${show.ratings.toLocaleString()} ratings`} /> : null}
                   {show.hasGuests != null ? <Stat label="Guests" value={show.hasGuests ? "Yes" : "No"} sub={show.hasGuests ? "takes guests" : "host only"} /> : null}
                 </div>
+              )}
+              {/* A Listen Notes show: its latest episodes, and the credit their terms ask for. */}
+              {show && Array.isArray((show as { recent?: unknown[] }).recent) && ((show as { recent: unknown[] }).recent.length > 0) && (
+                <div>
+                  <h3 className="mb-2 text-sm font-semibold">Latest episodes</h3>
+                  <ul className="divide-y divide-border rounded-xl border border-border">
+                    {((show as unknown as { recent: { title: string; date: string; web: string; minutes: number | null }[] }).recent).map((e) => (
+                      <li key={e.web || e.title} className="flex items-center gap-3 px-3 py-2 text-sm">
+                        <a href={e.web || undefined} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate font-medium hover:underline">{e.title}</a>
+                        <span className="shrink-0 text-xs text-muted-foreground">{e.date ? ago(e.date) : ""}{e.minutes ? ` · ${e.minutes} min` : ""}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {show && id.startsWith("ln:") && (
+                <a href={show.web || "https://www.listennotes.com"} target="_blank" rel="noreferrer" className="inline-block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground">Powered by Listen Notes</a>
               )}
               {person && (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
