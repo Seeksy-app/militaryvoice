@@ -6681,7 +6681,9 @@ export function registerRoutes(app: Express): void {
         clipStatus: "done", clipError: "", clipClaimedAt: "", clips: list.sort((a, b) => a.startSec - b.startSec),
       };
     }).sort((a, b) => (signups.find((x) => x.id === a.signupId)?.slotIndex ?? 0) - (signups.find((x) => x.id === b.signupId)?.slotIndex ?? 0));
-    res.json([...episodeRows, ...withClips]);
+    // Clips cut from a podcaster's own episode live on their dashboard, not here
+    // (Andrew, 30 Sep): admin shows the event's own recordings only. ?episodes=1 still lists them.
+    res.json(req.query.episodes === "1" ? [...episodeRows, ...withClips] : withClips);
   });
 
   /**
