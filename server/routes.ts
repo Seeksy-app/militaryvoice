@@ -9015,6 +9015,48 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  /**
+   * Ask one podcaster for a photo of themselves (the magazine's Ask for a photo): their own
+   * no-sign-in upload link, sent from hello@ when an admin presses the button.
+   */
+  app.post("/api/admin/signups/:id/ask-photo", requireAdmin, async (req, res) => {
+    const signup = await storage.getSignupById(Number(req.params.id));
+    if (!signup) return res.status(404).json({ message: "No such show." });
+    const origin = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
+    const link = `${origin}/headshot/${headshotToken(signup.email)}`;
+    const escapeHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const first = (signup.hostName || "").replace(/^(dr|mr|mrs|ms|sgt|sergeant major|sgtmaj)\.?\s+(\(ret\.\)\s+)?/i, "").trim().split(/\s+/)[0] || "there";
+    const show = signup.podcastName.trim();
+    const text = `Hi ${first},
+
+We're putting together the keepsake magazine for Monday's Podcast Marathon, and ${show} gets a full page. It opens with a big photo of you, and right now all we have is your show's artwork or a small photo that blurs when it's printed.
+
+Could you send us a photo of yourself? Upload it here, no sign-in needed:
+${link}
+
+The biggest file you have is best, straight off the camera or phone. A photo of you, not the show logo, and don't crop it.
+
+If you can send it by Friday, you'll be in the magazine on Monday.
+
+Thank you,
+The Podcast Marathon team`;
+    const html = emailShell({
+      banner: EMAIL_BANNERS.podcasters,
+      eyebrow: "The Podcast Marathon · keepsake magazine",
+      heading: "A photo of you, for your page",
+      body: `<p>Hi ${escapeHtml(first)},</p>
+<p>We're putting together the keepsake magazine for Monday's Podcast Marathon, and <strong>${escapeHtml(show)}</strong> gets a full page. It opens with a big photo of you, and right now all we have is your show's artwork or a small photo that blurs when it's printed.</p>
+<p>Could you send us a photo of yourself? The button opens your own upload page, no sign-in needed.</p>
+<ul><li>The biggest file you have, straight off the camera or phone.</li><li>A photo of you, not the show logo.</li><li>Don't crop it. We'll do that.</li></ul>
+<p>If you can send it by Friday, you'll be in the magazine on Monday.</p>
+<p>Thank you,<br/>The Podcast Marathon team</p>`,
+      cta: { href: link, label: "Send us your photo" },
+    });
+    const id = await sendOneOffEmail({ kind: "photo-request", to: signup.email, subject: "A photo of you, for your page in the magazine", html, text });
+    if (!id) return res.status(502).json({ message: "The email didn't go. Try again in a minute." });
+    res.json({ ok: true, to: signup.email });
+  });
+
   app.post("/api/headshot/:token", headshotUpload.single("photo"), async (req, res) => {
     const email = emailFromToken(String(req.params.token ?? ""));
     if (!email) {

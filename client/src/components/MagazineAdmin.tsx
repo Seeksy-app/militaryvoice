@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Camera, Check, EyeOff, ExternalLink, Loader2, Printer, Sparkles, Undo2 } from "lucide-react";
+import { BookOpen, Camera, Check, EyeOff, ExternalLink, Loader2, Mail, Printer, Sparkles, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -38,6 +38,19 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
       toast({ title: `${s.hostName}'s photo is in`, description: small ? `It's ${r.width} × ${r.height}: sharp online, a little soft on the printed page. Ask them for the original file if they have it.` : "On their page, the cover and their SmartLink." });
     } catch (e) {
       toast({ title: "Couldn't change the photo", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setSaving(null);
+    }
+  };
+  const [asked, setAsked] = useState<Set<number>>(new Set());
+  const askPhoto = async (s: Show) => {
+    setSaving(s.signupId);
+    try {
+      const r = (await (await adminSend("POST", `/api/admin/signups/${s.signupId}/ask-photo`)).json()) as { to: string };
+      setAsked((a) => new Set(a).add(s.signupId));
+      toast({ title: `Asked ${s.hostName} for a photo`, description: `Sent to ${r.to} with their own upload link.` });
+    } catch (e) {
+      toast({ title: "Couldn't send", description: (e as Error).message, variant: "destructive" });
     } finally {
       setSaving(null);
     }
@@ -120,6 +133,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
               <Textarea defaultValue={s.blurb} key={`b-${s.signupId}-${s.blurb.length}`} rows={3} placeholder="Their paragraph: SI drafts it, you edit it." onBlur={(e) => { if (e.target.value !== s.blurb) void save(s.signupId, { blurb: e.target.value }); }} />
               <div className="flex flex-wrap gap-2 pt-0.5">
                 <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 rounded-full" disabled={saving === s.signupId} onClick={() => { setPhotoFor(s); file.current?.click(); }} data-testid={`magazine-photo-${s.signupId}`}><Camera className="h-3.5 w-3.5" /> Change photo</Button>
+                <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 rounded-full" disabled={saving === s.signupId || asked.has(s.signupId)} onClick={() => void askPhoto(s)} data-testid={`magazine-ask-photo-${s.signupId}`}>{asked.has(s.signupId) ? <><Check className="h-3.5 w-3.5" /> Asked</> : <><Mail className="h-3.5 w-3.5" /> Ask for a photo</>}</Button>
                 <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 rounded-full text-muted-foreground" disabled={saving === s.signupId} onClick={() => void leaveOut(s.signupId, true, s.podcastName)} data-testid={`magazine-leave-out-${s.signupId}`}><EyeOff className="h-3.5 w-3.5" /> Leave out</Button>
               </div>
               <input defaultValue={s.quote} key={`q-${s.signupId}-${s.quote.length}`} placeholder="Pull quote: their own words only, from an episode (optional)" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" onBlur={(e) => { if (e.target.value !== s.quote) void save(s.signupId, { quote: e.target.value }); }} />
