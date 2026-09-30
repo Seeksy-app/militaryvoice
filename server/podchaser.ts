@@ -21,6 +21,15 @@ const RESERVE = 40;
 const VISITOR_FRESH = 2;
 const MEMBER_FRESH = 40;
 
+/**
+ * Who gets Listen Notes in Discovery while it's being tried: LISTEN_TESTERS (comma-separated
+ * emails), or just the Marine OCS Blog account. "*" opens it to every member.
+ */
+const listenNotesTester = (email: string) => {
+  const list = (process.env.LISTEN_TESTERS || "marineocsblog@gmail.com").toLowerCase().split(",").map((e) => e.trim()).filter(Boolean);
+  return list.includes("*") || list.includes(email.trim().toLowerCase());
+};
+
 class HttpError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -237,7 +246,7 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
       // Shows, for a member: Listen Notes (3.8 million shows), fetched fresh each time as its terms
       // require, while the month's allowance lasts. Past it, or for visitors, Podchaser as before.
       const lnPages = process.env.LISTEN_PLAN === "pro" ? 30 : 3;
-      if (kind === "shows" && !w.visitor && isListenNotesConfigured() && page < lnPages && (await spendListenNotes(w.id))) {
+      if (kind === "shows" && !w.visitor && listenNotesTester(w.id) && isListenNotesConfigured() && page < lnPages && (await spendListenNotes(w.id))) {
         const since = active ? Date.now() - 90 * DAY : undefined;
         const r = await lnSearchShows({ term, page, byDate: sort !== "relevance", activeSince: since });
         return { kind, term, page, pageSize: r.perPage, total: Math.min(r.total, lnPages * 10), results: r.results, preview: false, locked: LOCKED, source: "listennotes" };
@@ -269,6 +278,7 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
       // A Listen Notes show: asked fresh (their terms), from the month's allowance.
       const lnId = /^ln:([A-Za-z0-9]{8,40})$/.exec(String(req.query.id ?? ""))?.[1];
       if (lnId) {
+        if (!listenNotesTester(w.id)) throw new HttpError(403, "That show isn't open to you yet.");
         if (!isListenNotesConfigured() || !(await spendListenNotes(w.id))) throw new HttpError(429, "That's all the show lookups for today. Try again tomorrow.");
         return lnShowFull(lnId);
       }
