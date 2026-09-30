@@ -1331,10 +1331,10 @@ export default function Studio({ slug }: { slug?: string }) {
                   <Clock className="h-3.5 w-3.5 shrink-0 text-[#F0A71F]" />
                   <span className="min-w-0">
                     <span className="block truncate text-[13px] font-semibold text-white">
-                      {slotLabel || "No slot for this sign-in"}
+                      {slotLabel || (guest ? `Guest on ${guest.show || guest.host.name || "the show"}` : "No slot for this sign-in")}
                     </span>
                     <span className="block truncate text-[11px] text-white/45">
-                      {slotLabel
+                      {slotLabel || guest
                         ? "Wait here — the producer brings you up"
                         : state?.myEmail
                           ? `${state.myEmail}${state?.isCrew ? " · crew" : ""}`
