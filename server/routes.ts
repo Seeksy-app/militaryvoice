@@ -3448,6 +3448,14 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  /** The recording itself, for admin's thumbnail and player (a fresh signed link each time). */
+  app.get("/api/admin/recordings/:id/video", requireAdmin, async (req, res) => {
+    noStore(res);
+    const row = await storage.getRecording(Number(req.params.id));
+    if (!row || row.status !== "Ready" || !row.url) return res.status(404).end();
+    res.redirect(302, /^https?:\/\//.test(row.url) ? row.url : await signedRecordingUrl(row.url, 6 * 3600));
+  });
+
   app.get("/api/admin/recordings/:id/download", requireAdmin, async (req, res) => {
     const row = await storage.getRecording(Number(req.params.id));
     if (!row || row.status !== "Ready" || !row.url) {

@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Film, RefreshCw, Download, Clock, AlertTriangle, Loader2 } from "lucide-react";
+import { Film, RefreshCw, Download, Clock, AlertTriangle, Loader2, Play } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 // What the clipper produced, where a producer can actually look at it.
 //
@@ -73,6 +74,8 @@ export function AdminClips({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<number | null>(null);
+  // The recording that's open in the player.
+  const [watching, setWatching] = useState<{ id: number; title: string } | null>(null);
   const qKey = ["/api/admin/clips", eventId];
 
   const { data: rows = [], isLoading } = useQuery<RecordingWithClips[]>({
@@ -125,10 +128,37 @@ export function AdminClips({
         </p>
       )}
 
+      <Dialog open={!!watching} onOpenChange={(o) => !o && setWatching(null)}>
+        <DialogContent className="max-w-4xl overflow-hidden p-0">
+          <DialogTitle className="px-5 pt-4 text-base">{watching?.title}</DialogTitle>
+          {watching && <video controls autoPlay playsInline src={`/api/admin/recordings/${watching.id}/video`} className="aspect-video w-full bg-black" data-testid="admin-recording-player" />}
+          {watching && (
+            <div className="flex justify-end px-5 pb-4">
+              <a href={`/api/admin/recordings/${watching.id}/video`} download className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-semibold hover:bg-muted"><Download className="h-3.5 w-3.5" /> Download</a>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {rows.map((r) => (
         <div key={r.id} className="rounded-xl border border-border" data-testid={`row-recording-${r.id}`}>
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2.5">
-            <div className="min-w-0">
+            {/* A frame of the recording, as in the Library: click it to watch. */}
+            {r.id > 0 && r.status === "Ready" && (
+              <button
+                type="button"
+                onClick={() => setWatching({ id: r.id, title: r.title || `Recording #${r.id}` })}
+                className="group relative h-16 w-28 shrink-0 overflow-hidden rounded-lg bg-black"
+                aria-label={`Watch ${r.title || "the recording"}`}
+                data-testid={`button-watch-${r.id}`}
+              >
+                <video src={`/api/admin/recordings/${r.id}/video#t=8`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+                <span className="absolute inset-0 flex items-center justify-center bg-black/25 opacity-80 transition-opacity group-hover:opacity-100">
+                  <Play className="h-5 w-5 fill-white text-white" />
+                </span>
+              </button>
+            )}
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-semibold">{r.title || `Recording #${r.id}`}</span>
                 <StatusBadge status={r.clipStatus} claimedAt={r.clipClaimedAt} />
