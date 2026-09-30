@@ -13,7 +13,7 @@ export function isHelpAgentConfigured(): boolean {
 
 // Everything the agent is allowed to say comes from here. Mirrors the FAQ page,
 // the podcaster guide and the /help articles; if the site changes, change this.
-const KNOWLEDGE = `
+export const KNOWLEDGE = `
 ABOUT THE SITE
 - MilitaryVoices.ai runs the Podcast Marathon for National Military Podcast Day: 26.2 — twenty-six shows plus bonus sessions — of live and "Best of MilVet" podcasting — back-to-back shows, special guests, stories from the military and veteran community, streaming around the clock. Shows hand off every 30 minutes so someone is always on.
 - It is free for podcasters to claim a slot and free for listeners.

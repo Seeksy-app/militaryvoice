@@ -7232,12 +7232,15 @@ export function registerRoutes(app: Express): void {
         console.error("Inbound draft failed:", err);
       }
       if (!opts.ack) return;
-      // The automatic acknowledgement: every podcaster or sponsor who writes
-      // in hears back at once — thanks, the answer when we have one, and a
-      // person if that did not cover it. Never to a machine, never twice in a
-      // day to the same thread, and never to a mail filed by hand.
+      // Alex's first reply: everyone who writes in hears back at once — thanks,
+      // the answer when the help desk knows it, and a person if that did not
+      // cover it. Never to a machine, a newsletter or a pitch (the drafter
+      // says which), never twice in a day to the same thread, and never to a
+      // mail filed by hand. If the drafter failed, only people we know.
       try {
-        if (looksAutomatic(row) || !(await isKnownSender(row.fromEmail, row.subject))) return;
+        if (looksAutomatic(row)) return;
+        const known = await isKnownSender(row.fromEmail, row.subject);
+        if (draft ? !draft.respond : !known) return;
         // Once per conversation, not once per day: three questions in an
         // afternoon are three answers, but a second mail in the same thread
         // an hour later is someone adding a line, not asking again.
@@ -7247,7 +7250,7 @@ export function registerRoutes(app: Express): void {
         );
         if (recent) return;
         const { subject, text, html: body } = composeAck(row, draft?.ack ?? "", await firstNameFor(row));
-        const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: "We got your email", body });
+        const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: known ? "The Podcast Marathon · 5 October" : "MilitaryVoices.ai", heading: "We got your email", body });
         const headers: Record<string, string> = {};
         if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
         const id = await sendOneOffEmail({ kind: "ack", to: row.fromEmail, subject, html, text, headers });
@@ -8418,6 +8421,21 @@ export function registerRoutes(app: Express): void {
     const row = await storage.createHelpRequest({ name, email, question, transcript, page });
     const to = (process.env.SIGNUP_NOTIFY_EMAIL || "appletonab@gmail.com").trim();
     const sent = await sendHelpRequestAlert({ to, name, email, question, transcript, page });
+    // Into Mail's Needs a reply, and Alex writes to them straight away: they asked for a
+    // person, so they hear from us now, not whenever someone next opens the inbox.
+    try {
+      const inbound = await storage.createInbound({
+        resendId: "", messageId: "", fromEmail: email, fromName: name, toAddr: "Help chat",
+        subject: `Your question: ${question.replace(/\s+/g, " ").slice(0, 70)}${question.length > 70 ? "…" : ""}`,
+        bodyText: `${question}\n\n(From the Help chat${page ? ` on ${page}` : ""}.)\n\nThe chat so far:\n${transcript}`,
+        receivedAt: new Date().toISOString(), broadcastId: null, category: "", summary: "",
+        draftFrom: "team", draftSubject: "", draftText: "", status: "new",
+        repliedAt: null, replyResendId: "", replyFrom: "", replyText: "", ackAt: null, ackResendId: "", ackText: "",
+      });
+      draftLater(inbound.id, { ack: true });
+    } catch (err) {
+      console.error("Help handoff filing failed:", err);
+    }
     res.json({ ok: true, id: row.id, sent });
   });
 

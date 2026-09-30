@@ -9,6 +9,7 @@
 // links and technical questions.
 import Anthropic from "@anthropic-ai/sdk";
 import { storage } from "./storage.js";
+import { KNOWLEDGE } from "./help.js";
 import type { InboundEmailRow } from "../shared/schema.js";
 
 export interface InboundDraft {
@@ -20,6 +21,8 @@ export interface InboundDraft {
   /** One to three sentences answering what they asked, for the automatic
    *  acknowledgement — or empty when nothing in the context answers it. */
   ack: string;
+  /** False for mail no person wrote to us: newsletters, sales pitches, notifications. Alex doesn't answer those. */
+  respond: boolean;
 }
 
 const ET = "America/New_York";
@@ -92,14 +95,19 @@ Rules:
 - Give times in Eastern and, when the sender's signature shows another zone, in theirs too.
 - Address them by first name if known. End with the signature line only.
 
-Also write "ack": one to three plain sentences, team voice, no greeting and no sign-off, that answer what they asked using only the context — the part of an automatic acknowledgement that goes out the moment their mail arrives. If the context does not answer it, or they asked to cancel or change a slot, make "ack" an empty string so the acknowledgement only promises a person.
+Also write "ack": one to three plain sentences, team voice, no greeting and no sign-off, that answer what they asked using only the context or the site knowledge below — the part of Alex's first reply that goes out the moment their mail arrives. When the site knowledge has the steps, give them and name the page as a full link (https://www.militaryvoices.ai/help/library and so on). If neither answers it, or they asked to cancel or change a slot, or it's about a charge, refund or their account, make "ack" an empty string so the reply only promises a person. Say "SI", never "AI"; write Pōstify with the ō.
 
-Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other","summary":"one line on what they want","from":"riccoh|team","subject":"Re: ...","reply":"the email body, plain text","ack":"..."}`;
+Also set "respond": false when no person wrote this to us — a newsletter, a marketing or sales pitch, a cold outreach selling a service, a notification, a receipt — and true for anyone asking, answering, thanking or telling us something.
+
+Site knowledge (what the help desk knows):
+${KNOWLEDGE}
+
+Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other","summary":"one line on what they want","from":"riccoh|team","subject":"Re: ...","reply":"the email body, plain text","ack":"...","respond":true}`;
   const said = stripQuoted(m.bodyText) || m.bodyText;
   const user = `Context:\n${context}\n\nInbound email\nFrom: ${m.fromName ? `${m.fromName} <${m.fromEmail}>` : m.fromEmail}\nSubject: ${m.subject}\n\n${said.slice(0, 4000)}`;
   const res = await client.messages.create({
     model: "claude-sonnet-5",
-    max_tokens: 900,
+    max_tokens: 1400,
     system,
     messages: [{ role: "user", content: user }],
   });
@@ -113,7 +121,8 @@ Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other
     from: parsed.from === "riccoh" ? "riccoh" : "team",
     subject: String(parsed.subject ?? (m.subject.startsWith("Re:") ? m.subject : `Re: ${m.subject}`)).slice(0, 200),
     reply: String(parsed.reply ?? "").trim(),
-    ack: String(parsed.ack ?? "").trim().slice(0, 600),
+    ack: String(parsed.ack ?? "").trim().slice(0, 900),
+    respond: parsed.respond !== false,
   };
 }
 
@@ -164,20 +173,26 @@ export async function firstNameFor(m: { fromName: string; fromEmail: string }): 
 }
 
 export function composeAck(m: InboundEmailRow, ack: string, first = (m.fromName || "").trim().split(/\s+/)[0] || ""): { subject: string; text: string; html: string } {
-  const subject = m.subject.trim() ? (/^re:/i.test(m.subject) ? m.subject.trim() : `Re: ${m.subject.trim()}`) : "Re: your email to The Podcast Marathon";
+  const subject = m.subject.trim() ? (/^re:/i.test(m.subject) ? m.subject.trim() : `Re: ${m.subject.trim()}`) : "Re: your email to MilitaryVoices.ai";
   const answer = ack.trim();
   const greeting = first ? `Hi ${first},` : "Hi,";
   const paragraphs = [
     "Thank you for contacting us. Your message is very important to us.",
-    ...(answer ? [answer] : []),
-    "If this doesn't answer your question, please reply to this email. We'll get a human on it, and someone will reach out to you shortly.",
+    ...(answer
+      ? [answer, "If this doesn't answer your question, please reply to this email. We'll get a human on it, and someone will reach out to you shortly."]
+      : ["I've passed this to a person on our team, and someone will get back to you shortly. If you have anything to add, just reply to this email."]),
     "For quick answers any time, I'm the Help button on militaryvoices.ai.",
   ];
-  const text = `${greeting}\n\n${paragraphs.join("\n\n")}\n\nAlex\nAI help desk · The Podcast Marathon`;
+  const text = `${greeting}\n\n${paragraphs.join("\n\n")}\n\nAlex\nSI help desk · MilitaryVoices.ai`;
   const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  // Full addresses in the answer become links; the bare "militaryvoices.ai" in the last line opens the Help button.
+  const link = (h: string) => h.replace(/https?:\/\/[^\s<]+/g, (u) => {
+    const m = u.match(/^(.*?)([.,;:!?)\]]*)$/)!;
+    return `<a href="${m[1]}" style="color:#053877;font-weight:600">${m[1]}</a>${m[2]}`;
+  });
   const html =
     `<p>${esc(greeting)}</p>` +
-    paragraphs.map((t) => `<p>${esc(t).replace("militaryvoices.ai", '<a href="https://www.militaryvoices.ai/#help" style="color:#053877;font-weight:600">militaryvoices.ai</a>')}</p>`).join("") +
+    paragraphs.map((t) => `<p>${/https?:\/\//.test(t) ? link(esc(t)) : esc(t).replace("militaryvoices.ai", '<a href="https://www.militaryvoices.ai/#help" style="color:#053877;font-weight:600">militaryvoices.ai</a>')}</p>`).join("") +
     alexSignatureHtml();
   return { subject, text, html };
 }
@@ -188,7 +203,7 @@ export function alexSignatureHtml(): string {
   <td style="padding-right:14px;vertical-align:middle"><img src="https://www.militaryvoices.ai/alex.jpg" width="56" height="56" alt="Alex" style="display:block;width:56px;height:56px;border-radius:50%;object-fit:cover"></td>
   <td style="vertical-align:middle;font-family:Helvetica,Arial,sans-serif">
     <div style="font-size:15px;font-weight:700;color:#0b1a3a">Alex</div>
-    <div style="font-size:12px;color:#5b6478">SI help desk · The Podcast Marathon</div>
+    <div style="font-size:12px;color:#5b6478">SI help desk · MilitaryVoices.ai</div>
   </td></tr></table>`;
 }
 
