@@ -8998,6 +8998,23 @@ export function registerRoutes(app: Express): void {
     });
   });
 
+  /** An admin puts in a podcaster's photo for them (the magazine's Change photo): web and print copies, as the headshot page does. */
+  app.post("/api/admin/signups/:id/photo", requireAdmin, headshotUpload.single("photo"), async (req, res) => {
+    const signup = await storage.getSignupById(Number(req.params.id));
+    if (!signup) return res.status(404).json({ message: "No such show." });
+    if (!req.file) return res.status(400).json({ message: "Pick a photo first." });
+    try {
+      const saved = await enhanceAndSavePhoto(req.file.buffer);
+      const updated = await storage.upsertProfile(signup.email, { photoUrl: saved.url, ...(saved.originalUrl ? { photoOriginalUrl: saved.originalUrl } : {}) } as never);
+      await storage.syncSignupsFromProfile(signup.email, updated);
+      const meta = await sharp(req.file.buffer).metadata().catch(() => ({} as { width?: number; height?: number }));
+      res.json({ ok: true, photoUrl: saved.url, width: meta.width ?? 0, height: meta.height ?? 0 });
+    } catch (err) {
+      console.error("Admin photo upload failed:", err);
+      res.status(400).json({ message: "That photo couldn't be processed. Try a different file." });
+    }
+  });
+
   app.post("/api/headshot/:token", headshotUpload.single("photo"), async (req, res) => {
     const email = emailFromToken(String(req.params.token ?? ""));
     if (!email) {

@@ -44,7 +44,8 @@ async function buildMagazine(eventId: number) {
   const byEmail = <T extends { email: string }>(rows: T[], e: string) => rows.find((r) => r.email.trim().toLowerCase() === e);
   const start = Date.parse(ev.startAtUtc);
   const et = (ms: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(ms)) + " ET";
-  const shows = lineup.map((s, i) => {
+  const out = new Set(words.filter((x) => x.hidden).map((x) => x.signupId));
+  const shows = lineup.filter((s) => !out.has(s.id)).map((s, i) => {
     const e = s.email.trim().toLowerCase();
     const p = byEmail(profiles, e);
     const bio = byEmail(pages, e);
@@ -78,12 +79,14 @@ async function buildMagazine(eventId: number) {
     welcome: words.find((x) => x.signupId === WELCOME)?.blurb ?? "",
     host: { name: "Riccoh Player", title: "USMC (Ret.) · Host", photo: riccoh?.photoOriginalUrl || riccoh?.photoUrl || "" },
     shows,
+    /** Left out by an admin (listed for admin only, so they can be put back). */
+    leftOut: lineup.filter((s) => out.has(s.id)).map((s) => ({ signupId: s.id, podcastName: s.podcastName, hostName: s.hostName })),
     sponsors: sponsorRows.map((r) => ({ name: r.name, logo: r.logoUrl, url: r.url })),
   };
 }
 
-async function saveWords(eventId: number, signupId: number, patch: Partial<{ blurb: string; quote: string; art: string; edited: boolean }>) {
-  await db.insert(magazinePages).values({ eventId, signupId, blurb: patch.blurb ?? "", quote: patch.quote ?? "", art: patch.art ?? "", edited: patch.edited ?? false, updatedAt: now() })
+async function saveWords(eventId: number, signupId: number, patch: Partial<{ blurb: string; quote: string; art: string; edited: boolean; hidden: boolean }>) {
+  await db.insert(magazinePages).values({ eventId, signupId, blurb: patch.blurb ?? "", quote: patch.quote ?? "", art: patch.art ?? "", edited: patch.edited ?? false, hidden: patch.hidden ?? false, updatedAt: now() })
     .onConflictDoUpdate({ target: [magazinePages.eventId, magazinePages.signupId], set: { ...patch, updatedAt: now() } });
 }
 
@@ -148,7 +151,7 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler) {
     if (!m) return res.status(404).json({ message: "No such magazine." });
     const admin = !!getAdminEmail(req) && (await storage.isAdminEmail(getAdminEmail(req)!));
     if (!m.published && !admin) return res.status(404).json({ message: "The magazine isn't out yet." });
-    res.json({ ...m, admin });
+    res.json({ ...m, leftOut: admin ? m.leftOut : [], admin });
   });
 
   /** SI drafts every show page that has no words yet (or all, with ?all=1), and the welcome. */
@@ -187,7 +190,7 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler) {
     await saveWords(eventId, signupId, {
       ...(typeof req.body?.blurb === "string" ? { blurb: req.body.blurb.slice(0, 2500) } : {}),
       ...(typeof req.body?.quote === "string" ? { quote: req.body.quote.slice(0, 300) } : {}),
-      edited: true,
+      ...(typeof req.body?.hidden === "boolean" ? { hidden: req.body.hidden } : { edited: true }),
     });
     res.json({ ok: true });
   });

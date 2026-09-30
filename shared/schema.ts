@@ -2792,6 +2792,8 @@ export const magazinePages = pgTable("magazine_pages", {
   /** The show's cover, from its feed when the profile has none. */
   art: text("art").notNull().default(""),
   edited: boolean("edited").notNull().default(false),
+  /** Left out of the magazine by an admin: no page, not in the lineup or on the cover. */
+  hidden: boolean("hidden").notNull().default(false),
   updatedAt: text("updated_at").notNull().default(""),
 }, (t) => [uniqueIndex("magazine_pages_event_signup_idx").on(t.eventId, t.signupId)]);
 export type MagazinePageRow = typeof magazinePages.$inferSelect;
