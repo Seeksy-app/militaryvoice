@@ -4801,7 +4801,7 @@ export default function Admin({ tab }: { tab?: string } = {}) {
           {/* One line at the top: the mark, and who you are. "Admin dashboard"
               is gone — the rail below already says which section you are in,
               and the mark says which product. */}
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
             <Link href="/" className="shrink-0" title="Back to the public site" data-testid="link-admin-home">
               <LogoLockup className="h-8 w-auto" />
             </Link>
@@ -4847,27 +4847,30 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                 {/* The event header lives in the content column, not above the
                     whole shell: left-justified with the tiles it belongs to,
                     rather than floating over the rail. */}
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <div>
+              {/* The event's header: where you are, and the two switches that say what the public
+                  gets. Room above and below, the controls grouped on one quiet bar, and the invite
+                  link a button rather than a raw address across the page. */}
+              <div className="mb-6 flex flex-wrap items-end justify-between gap-4 pt-1" data-testid="event-header">
+                <div className="min-w-0">
                   <button
                     type="button"
                     onClick={() => pickEvent(null)}
-                    className="mb-2 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                    className="mb-1.5 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground"
                     data-testid="button-all-events"
                   >
                     ← All events
                   </button>
-                  <h2 className="text-2xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
-                    {selectedEvent.name}
+                  <h2 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
+                    <span className="min-w-0">{selectedEvent.name}</span>
                     {selectedEvent.isFeatured && selectedEvent.visible !== false && (
-                      <Badge className="ml-3 bg-[#F0A71F] align-middle text-[#1a1200] hover:bg-[#F0A71F]">Live site</Badge>
+                      <Badge className="bg-[#F0A71F] text-[#1a1200] hover:bg-[#F0A71F]">Live site</Badge>
                     )}
                   </h2>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1 rounded-2xl border border-border bg-card p-1.5 shadow-sm">
                   <label
-                    className={`flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm font-medium ${
-                      selectedEvent.isFeatured ? "opacity-60" : ""
+                    className={`flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium ${
+                      selectedEvent.isFeatured ? "opacity-70" : "hover:bg-muted"
                     }`}
                     title={
                       selectedEvent.isFeatured
@@ -4875,11 +4878,7 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                         : undefined
                     }
                   >
-                    {/* Green for live. This is the one switch on the page whose
-                        "on" state means the public can see something, and the
-                        default navy read as off at a glance — worse still when
-                        the live-site event locks it on and the disabled styling
-                        greys it out. */}
+                    {/* Green for live: the one switch whose "on" means the public can see something. */}
                     <Switch
                       checked={selectedEvent.visible !== false}
                       disabled={selectedEvent.isFeatured}
@@ -4891,11 +4890,9 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                       {selectedEvent.visible !== false ? "Public" : "Hidden"}
                     </span>
                   </label>
-                  {/* Visible and closed answer different questions — whether
-                      anyone can find it, and whether anyone can still get on
-                      it. A full event stays public all the way through the
-                      show; it just stops taking people. */}
-                  <label className="flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm font-medium">
+                  <span className="h-6 w-px bg-border" aria-hidden="true" />
+                  {/* Visible and closed answer different questions: can anyone find it, and can anyone still get on it. */}
+                  <label className="flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium hover:bg-muted">
                     <Switch
                       checked={selectedEvent.closed === true}
                       onCheckedChange={(v) => setEventClosed(selectedEvent.id, v)}
@@ -4906,11 +4903,19 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                       {selectedEvent.closed === true ? "Lineup closed" : "Taking signups"}
                     </span>
                   </label>
-                  {selectedEvent.closed === true && <InviteLink eventId={selectedEvent.id} />}
+                  {selectedEvent.closed === true && (
+                    <>
+                      <span className="h-6 w-px bg-border" aria-hidden="true" />
+                      <InviteLink eventId={selectedEvent.id} />
+                    </>
+                  )}
                   {!selectedEvent.isFeatured && (
-                    <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => makeLive(selectedEvent.id)} data-testid="button-make-live">
-                      <Star className="h-3.5 w-3.5" /> Make this the live-site event
-                    </Button>
+                    <>
+                      <span className="h-6 w-px bg-border" aria-hidden="true" />
+                      <Button variant="ghost" size="sm" className="gap-1.5 rounded-xl" onClick={() => makeLive(selectedEvent.id)} data-testid="button-make-live">
+                        <Star className="h-3.5 w-3.5" /> Make this the live-site event
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
@@ -5037,15 +5042,14 @@ function InviteLink({ eventId }: { eventId: number }) {
   });
   const url = data?.url ?? "";
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm" data-testid="invite-link">
+    <div className="flex items-center gap-0.5 text-sm" data-testid="invite-link">
       {url ? (
         <>
-          <code className="max-w-[22rem] truncate rounded-md bg-muted px-2 py-1 text-xs" title={url}>{url}</code>
-          <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => { navigator.clipboard?.writeText(url); toast({ title: "Copied" }); }} data-testid="button-invite-copy"><Copy className="h-3.5 w-3.5" /> Copy invite link</Button>
-          <button type="button" className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground" onClick={() => clear.mutate()}>clear</button>
+          <Button variant="ghost" size="sm" className="gap-1.5 rounded-xl" title={url} onClick={() => { navigator.clipboard?.writeText(url); toast({ title: "Invite link copied", description: url }); }} data-testid="button-invite-copy"><Copy className="h-3.5 w-3.5" /> Copy invite link</Button>
+          <button type="button" className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground" title="Clear the invite link" aria-label="Clear the invite link" onClick={() => clear.mutate()}>×</button>
         </>
       ) : (
-        <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => make.mutate()} disabled={make.isPending} data-testid="button-invite-make"><KeyRound className="h-3.5 w-3.5" /> Invite one person</Button>
+        <Button variant="ghost" size="sm" className="gap-1.5 rounded-xl" onClick={() => make.mutate()} disabled={make.isPending} data-testid="button-invite-make"><KeyRound className="h-3.5 w-3.5" /> Invite one person</Button>
       )}
     </div>
   );
