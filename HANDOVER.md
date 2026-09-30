@@ -30,11 +30,13 @@ MilitaryVoice.ai · handover
 
   - **The site** · Vercel, deploys on push to `main` · live
 
-  - **Clip worker** · VPS `187.77.217.123` · `clipper.service` · live
+  - **Clip worker** · Render background worker `militaryvoices-clipper` (Docker, `render.yaml`, plan `4c-8g`) · redeploys on push to `main` when `agent/**` changes · live
 
-  - **Alex** — green room co-host · same VPS · `alex.service` · live
+  - **Alex** — green room co-host · VPS `187.77.217.123` · `alex.service` (ship changes with `scripts/deploy-agents.sh`) · live
 
-  - **Inbound email** · Resend → `/api/webhooks/resend-inbound` → forwarded to you · live
+  - **Inbound email** · Resend → `/api/webhooks/resend-inbound` → forwarded to you, and filed in Admin → Mail with a draft reply · live
+
+  - **Scheduled jobs** · Vercel crons in `vercel.json` (nudges, campaigns, automations, YouTube episodes, trash and more; see `docs/TECHNICAL.md`) · live
 
 ```bash
 ssh root@187.77.217.123
