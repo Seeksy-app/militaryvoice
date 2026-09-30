@@ -66,13 +66,6 @@ export function AdminMail() {
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState<Item | null>(null);
-  // Opened from a link (Slack's "Open in Mail"): straight to that conversation.
-  useEffect(() => {
-    const p = new URLSearchParams(window.location.search);
-    const withEmail = (p.get("with") ?? "").trim().toLowerCase();
-    if (!withEmail.includes("@")) return;
-    setOpen({ key: p.get("focus") ?? "", dir: "in", email: withEmail } as Item);
-  }, []);
   const [composing, setComposing] = useState(false);
   const [profile, setProfile] = useState<string | null>(null);
   const { toast } = useToast();
@@ -81,6 +74,13 @@ export function AdminMail() {
   const counts = useQuery<{ needs: number; unread: number; sentToday: number; failedWeek: number }>({ queryKey: ["/api/admin/mail/counts"], queryFn: async () => (await apiRequest("GET", "/api/admin/mail/counts")).json(), refetchInterval: 60_000 });
   const list = useQuery<{ items: Item[] }>({ queryKey: ["/api/admin/mail", folder, search], queryFn: async () => (await apiRequest("GET", `/api/admin/mail?folder=${folder}&q=${encodeURIComponent(search)}`)).json(), refetchInterval: 60_000 });
   useEffect(() => { setOpen(null); setPicked(new Set()); }, [folder, search]);
+  // Opened from a link (Slack's "Open in Mail"): straight to that conversation. After the reset above, which runs on load too.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const withEmail = (p.get("with") ?? "").trim().toLowerCase();
+    if (!withEmail.includes("@")) return;
+    setOpen({ key: p.get("focus") ?? "", dir: "in", email: withEmail } as Item);
+  }, []);
   const bulk = async (action: string, keys = Array.from(picked), quiet = false) => {
     if (!keys.length) return;
     if (action === "delete" && !window.confirm(`Delete ${keys.length === 1 ? "this email" : `these ${keys.length} emails`}? What came in is gone for good; anything we sent leaves the list (it was still sent).`)) return;
