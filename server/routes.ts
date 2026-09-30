@@ -117,7 +117,7 @@ import {
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
 import { alexAnswer, type AlexTurn } from "./alex.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
-import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml } from "./inbox.js";
+import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml, threadKey } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
 import { notify, pushPublicKey, type PushMessage } from "./push.js";
@@ -7234,29 +7234,34 @@ export function registerRoutes(app: Express): void {
       if (!opts.ack) return;
       // Alex's first reply: everyone who writes in hears back at once — thanks,
       // the answer when the help desk knows it, and a person if that did not
-      // cover it. Never to a machine, a newsletter or a pitch (the drafter
-      // says which), never twice in a day to the same thread, and never to a
-      // mail filed by hand. If the drafter failed, only people we know.
+      // cover it — then follow-ups while he has the answers. Never to a
+      // machine, a newsletter or a pitch (the drafter says which), and never
+      // to a mail filed by hand. If the drafter failed, only people we know.
       try {
         if (looksAutomatic(row)) return;
         const known = await isKnownSender(row.fromEmail, row.subject);
         if (draft ? !draft.respond : !known) return;
-        // Once per conversation, not once per day: three questions in an
-        // afternoon are three answers, but a second mail in the same thread
-        // an hour later is someone adding a line, not asking again.
-        const thread = (v: string) => v.replace(/^\s*((re|fwd?|aw)\s*:\s*)+/i, "").trim().toLowerCase();
-        const recent = (await storage.listInboundByEmail(row.fromEmail)).some(
-          (r) => r.id !== row.id && r.ackAt && Date.now() - Date.parse(r.ackAt) < 24 * 3600_000 && thread(r.subject) === thread(row.subject),
-        );
-        if (recent) return;
-        const { subject, text, html: body } = composeAck(row, draft?.ack ?? "", await firstNameFor(row));
-        const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: known ? "The Podcast Marathon · 5 October" : "MilitaryVoices.ai", heading: "We got your email", body });
+        // The first mail in a conversation always hears back. After that Alex
+        // follows up only when he has the answer, only until a person on the
+        // team has replied in the thread, and at most four times a day (so two
+        // machines can never talk to each other all night).
+        const thread = (await storage.listInboundByEmail(row.fromEmail)).filter((r) => r.id !== row.id && threadKey(r.subject) === threadKey(row.subject));
+        const alexToday = thread.filter((r) => r.ackAt && Date.now() - Date.parse(r.ackAt) < 24 * 3600_000).length;
+        const followUp = alexToday > 0;
+        if (followUp) {
+          const personReplied = thread.some((r) => r.repliedAt && r.replyFrom && r.replyFrom !== "alex");
+          if (!draft?.ack || personReplied || alexToday >= 4) return;
+        }
+        const { subject, text, html: body } = composeAck(row, draft?.ack ?? "", await firstNameFor(row), followUp);
+        const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: known ? "The Podcast Marathon · 5 October" : "MilitaryVoices.ai", heading: followUp ? subject.replace(/^re:\s*/i, "") : "We got your email", body });
         const headers: Record<string, string> = {};
         if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
         const id = await sendOneOffEmail({ kind: "ack", to: row.fromEmail, subject, html, text, headers });
         if (!id) return;
         const now = new Date().toISOString();
-        await storage.updateInbound(row.id, { ackAt: now, ackResendId: id, ackText: text });
+        // Answered in full: off Needs a reply (it shows as Answered). Otherwise the person's draft waits there.
+        const settled = draft && draft.ack && !draft.needsPerson;
+        await storage.updateInbound(row.id, { ackAt: now, ackResendId: id, ackText: text, ...(settled ? { status: "sent", repliedAt: now, replyResendId: id, replyFrom: "alex", replyText: text } : {}) });
         const featured = await storage.getFeaturedEvent();
         await storage.recordOneOffSend({ eventId: featured?.id ?? null, subject, bodyText: text, sender: "team", banner: "podcasters", email: row.fromEmail, resendId: id });
         console.log(`Auto-acknowledged ${row.fromEmail}: ${subject}`);

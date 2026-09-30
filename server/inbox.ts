@@ -23,7 +23,12 @@ export interface InboundDraft {
   ack: string;
   /** False for mail no person wrote to us: newsletters, sales pitches, notifications. Alex doesn't answer those. */
   respond: boolean;
+  /** False when "ack" fully answers them and nothing is left for a person to do. */
+  needsPerson: boolean;
 }
+
+/** One conversation: the subject without its Re:/Fwd: prefixes. */
+export const threadKey = (subject: string) => subject.replace(/^\s*((re|fwd?|aw)\s*:\s*)+/i, "").trim().toLowerCase();
 
 const ET = "America/New_York";
 
@@ -74,6 +79,18 @@ export async function inboundContext(m: InboundEmailRow): Promise<string> {
     const b = sent.find((x) => x.id === m.broadcastId);
     if (b) lines.push(`They are replying to our email "${b.subject}", which said: ${b.bodyText.slice(0, 700)}`);
   }
+  // Earlier in this same conversation, oldest first, so a follow-up is answered in context.
+  const earlier = (await storage.listInboundByEmail(m.fromEmail))
+    .filter((r) => r.id !== m.id && threadKey(r.subject) === threadKey(m.subject) && Date.parse(r.receivedAt) <= Date.parse(m.receivedAt || new Date().toISOString()))
+    .reverse().slice(-4);
+  if (earlier.length) {
+    lines.push("Earlier in this conversation (oldest first):");
+    for (const r of earlier) {
+      lines.push(`- They wrote: ${(stripQuoted(r.bodyText) || r.bodyText).slice(0, 600)}`);
+      if (r.ackText) lines.push(`- Alex replied: ${r.ackText.slice(0, 600)}`);
+      if (r.replyText && r.replyFrom !== "alex") lines.push(`- A person on the team replied: ${r.replyText.slice(0, 600)}`);
+    }
+  }
   return lines.join("\n");
 }
 
@@ -97,12 +114,16 @@ Rules:
 
 Also write "ack": one to three plain sentences, team voice, no greeting and no sign-off, that answer what they asked using only the context or the site knowledge below — the part of Alex's first reply that goes out the moment their mail arrives. When the site knowledge has the steps, give them and name the page as a full link (https://www.militaryvoices.ai/help/library and so on). If neither answers it, or they asked to cancel or change a slot, or it's about a charge, refund or their account, make "ack" an empty string so the reply only promises a person. Say "SI", never "AI"; write Pōstify with the ō.
 
+When the context shows earlier messages in this conversation, this is a follow-up: "ack" answers their newest message in light of what was already said, without repeating it.
+
+Also set "needsPerson": false only when "ack" fully answers them and nothing is left for a person to do (no change to make, no account or booking to check, no decision, no complaint); true otherwise.
+
 Also set "respond": false when no person wrote this to us — a newsletter, a marketing or sales pitch, a cold outreach selling a service, a notification, a receipt — and true for anyone asking, answering, thanking or telling us something.
 
 Site knowledge (what the help desk knows):
 ${KNOWLEDGE}
 
-Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other","summary":"one line on what they want","from":"riccoh|team","subject":"Re: ...","reply":"the email body, plain text","ack":"...","respond":true}`;
+Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other","summary":"one line on what they want","from":"riccoh|team","subject":"Re: ...","reply":"the email body, plain text","ack":"...","needsPerson":true,"respond":true}`;
   const said = stripQuoted(m.bodyText) || m.bodyText;
   const user = `Context:\n${context}\n\nInbound email\nFrom: ${m.fromName ? `${m.fromName} <${m.fromEmail}>` : m.fromEmail}\nSubject: ${m.subject}\n\n${said.slice(0, 4000)}`;
   const res = await client.messages.create({
@@ -123,6 +144,7 @@ Return JSON only: {"category":"scheduling|materials|question|cancel|thanks|other
     reply: String(parsed.reply ?? "").trim(),
     ack: String(parsed.ack ?? "").trim().slice(0, 900),
     respond: parsed.respond !== false,
+    needsPerson: parsed.needsPerson !== false || !String(parsed.ack ?? "").trim(),
   };
 }
 
@@ -172,11 +194,12 @@ export async function firstNameFor(m: { fromName: string; fromEmail: string }): 
   return name.trim().split(/\s+/)[0] || "";
 }
 
-export function composeAck(m: InboundEmailRow, ack: string, first = (m.fromName || "").trim().split(/\s+/)[0] || ""): { subject: string; text: string; html: string } {
+export function composeAck(m: InboundEmailRow, ack: string, first = (m.fromName || "").trim().split(/\s+/)[0] || "", followUp = false): { subject: string; text: string; html: string } {
   const subject = m.subject.trim() ? (/^re:/i.test(m.subject) ? m.subject.trim() : `Re: ${m.subject.trim()}`) : "Re: your email to MilitaryVoices.ai";
   const answer = ack.trim();
   const greeting = first ? `Hi ${first},` : "Hi,";
-  const paragraphs = [
+  // A follow-up is a conversation already under way: the answer, and the way to a person.
+  const paragraphs = followUp && answer ? [answer, "If that doesn't cover it, just reply and we'll get a person on it."] : [
     "Thank you for contacting us. Your message is very important to us.",
     ...(answer
       ? [answer, "If this doesn't answer your question, please reply to this email. We'll get a human on it, and someone will reach out to you shortly."]
