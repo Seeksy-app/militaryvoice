@@ -1142,7 +1142,7 @@ Answer with the pick_moments tool.` }],
     if ((raw as unknown[]).length) break;
     console.warn(`   the pick came back empty (stop: ${res.stop_reason})${attempt < 3 ? " — asking again" : ""}`);
   }
-  if (!(raw as unknown[]).length) return more ? [] : densestStretches(lines, n, "no-answer");
+  if (!(raw as unknown[]).length) return more ? [] : await titled(client, job, lines, densestStretches(lines, n, "no-answer"));
   const moments = (raw as Moment[]).map((m) => ({
     title: String(m.title ?? "").slice(0, 120),
     caption: String(m.caption ?? "").slice(0, 400),
@@ -1160,6 +1160,38 @@ Answer with the pick_moments tool.` }],
  * otherwise — it exists so a missing API key degrades the clips rather than
  * dropping the whole job on the floor.
  */
+/**
+ * Real headlines for rough cuts. When the picker never answered, the stretches are chosen by
+ * speech density, and their first words make a poor title ("A Chevelle? An Evella. Or Impala. It")
+ * that ends up burned into the video. One quick call titles them all from what's said in each;
+ * if that fails too, the first-words title stays.
+ */
+async function titled(client: Anthropic, job: Job, lines: Line[], moments: Moment[]): Promise<Moment[]> {
+  if (!moments.length) return moments;
+  const said = moments.map((m, i) => `Clip ${i + 1}:\n${lines.filter((l) => l.startSec >= m.startSec && l.endSec <= m.endSec).map((l) => l.text).join(" ").slice(0, 2500)}`).join("\n\n");
+  try {
+    const res = await client.messages.create({
+      model: "claude-sonnet-5",
+      max_tokens: 800,
+      system: "You title short video clips from military and veteran podcasts. Each title is 4 to 7 words, says what happens or the claim made, reads cleanly on a phone, and would make someone stop scrolling without being bait. Never turn someone's service, injury or loss into a hook. No quotation marks, no emoji, no hashtags, no trailing punctuation. Use only what is said.",
+      tools: [{ name: "titles", description: "One title per clip, in order.", input_schema: { type: "object" as const, properties: { titles: { type: "array", items: { type: "string" } } }, required: ["titles"] } }],
+      tool_choice: { type: "tool", name: "titles" },
+      messages: [{ role: "user", content: `${job.show ? `Show: ${job.show}\n` : ""}${said}\n\nTitle each clip.` }],
+    });
+    const use = res.content.find((c) => c.type === "tool_use");
+    const titles = use && use.type === "tool_use" ? ((use.input as { titles?: unknown }).titles as unknown[] | undefined) ?? [] : [];
+    const out = moments.map((m, i) => {
+      const t = String(titles[i] ?? "").replace(/^["'“]|["'”]$/g, "").replace(/[.!?,;:]+$/, "").trim();
+      return t && t.split(/\s+/).length <= 10 ? { ...m, title: t.slice(0, 90) } : m;
+    });
+    console.log(`   titled ${out.filter((m, i) => m.title !== moments[i].title).length} of ${moments.length} rough cuts`);
+    return out;
+  } catch (err) {
+    console.warn(`   couldn't title the rough cuts (${(err as Error).message}); keeping their first words`);
+    return moments;
+  }
+}
+
 /** A title from what was said: seven words, no fillers or false starts, a capital, no trailing comma. */
 export function roughTitle(text: string): string {
   const words = text.split(/\s+/).filter((w) => w && !/-$/.test(w) && !/^(um+|uh+|erm*|ah+|hmm+|mm+|so|and|but|like)[,.!?]*$/i.test(w)).slice(0, 7);
