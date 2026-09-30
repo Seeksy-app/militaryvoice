@@ -22,11 +22,11 @@ const VISITOR_FRESH = 2;
 const MEMBER_FRESH = 40;
 
 /**
- * Who gets Listen Notes in Discovery while it's being tried: LISTEN_TESTERS (comma-separated
- * emails), or just the Marine OCS Blog account. "*" opens it to every member.
+ * Who gets Listen Notes for show search: every member ("*", the default since 30 Sep 2026,
+ * while Podchaser's key is refused), or LISTEN_TESTERS as comma-separated emails.
  */
 const listenNotesTester = (email: string) => {
-  const list = (process.env.LISTEN_TESTERS || "marineocsblog@gmail.com").toLowerCase().split(",").map((e) => e.trim()).filter(Boolean);
+  const list = (process.env.LISTEN_TESTERS || "*").toLowerCase().split(",").map((e) => e.trim()).filter(Boolean);
   return list.includes("*") || list.includes(email.trim().toLowerCase());
 };
 
@@ -258,6 +258,11 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
 
       let found = await readCache<{ total: number; perPage: number; results: (PodShow | PodPerson)[] }>(k, 7 * DAY);
       if (!found) {
+        // With Podchaser refusing us, say something a person can act on rather than its error.
+        if (kind === "shows" && !(await monthUsage().then(() => true, () => false))) {
+          if (w.visitor) throw new HttpError(401, "Create a free account to search podcasts.");
+          throw new HttpError(429, "That's all the podcast searches for today. Try again tomorrow, or reopen one you've run.");
+        }
         await spendOne(w.id, w.visitor ? VISITOR_FRESH : MEMBER_FRESH, w.visitor ? "Create a free account to keep searching podcasts." : "That's a lot of new podcast searches today. Try again tomorrow, or reopen one you've run.");
         const since = new Date(Date.now() - 90 * DAY).toISOString().slice(0, 10);
         const j = kind === "people"
