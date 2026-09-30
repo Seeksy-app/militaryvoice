@@ -675,11 +675,12 @@ export default function Studio({ slug }: { slug?: string }) {
     tracks.forEach((t) => (t.enabled = next));
     if (kind === "video") setCamOn(next);
     else setMicOn(next);
+    void setPublishedMuted(kind, !next);
   }
 
   // Real audio and video, when the event has a media layer configured. Without
   // it the page still works as a green room; it just doesn't carry sound.
-  const { status: roomStatus, peers, reconnect, quality } = useStudioRoom({
+  const { status: roomStatus, peers, reconnect, quality, setPublishedMuted } = useStudioRoom({
     enabled: joined,
     clientKey: key,
     slug,

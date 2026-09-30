@@ -153,7 +153,9 @@ export function useStudioRoom({ enabled, clientKey, slug, studioId, stream }: Ar
         // meter keep working off the same stream.
         for (const track of stream?.getTracks() ?? []) {
           if (track.readyState === "ended") continue;
-          await room.localParticipant.publishTrack(track);
+          const pub = await room.localParticipant.publishTrack(track);
+          // Joined with the camera or mic already off: the room hears "muted", so the stage shows the photo, not black.
+          if (!track.enabled) await pub.mute().catch(() => {});
         }
         if (cancelled) return;
         dropsRef.current = 0;
@@ -208,5 +210,15 @@ export function useStudioRoom({ enabled, clientKey, slug, studioId, stream }: Ar
     return () => clearInterval(id);
   }, [enabled, status]);
 
-  return { status, peers, reconnect, quality };
+  /** Camera or mic off, as the room sees it: muted, so the stage shows their photo instead of a black frame. */
+  const setPublishedMuted = useCallback(async (kind: "video" | "audio", muted: boolean) => {
+    const me = roomRef.current?.localParticipant;
+    if (!me) return;
+    for (const pub of Array.from(me.trackPublications.values())) {
+      if (pub.kind !== (kind === "video" ? Track.Kind.Video : Track.Kind.Audio) || !pub.track) continue;
+      await (muted ? pub.track.mute() : pub.track.unmute()).catch(() => {});
+    }
+  }, []);
+
+  return { status, peers, reconnect, quality, setPublishedMuted };
 }
