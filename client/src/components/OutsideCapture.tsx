@@ -14,14 +14,13 @@ import { Input } from "@/components/ui/input";
  */
 
 type Capture = { id: number; title: string; ownerEmail: string; url: string; streamKey: string; status: string; recordingId: number | null; createdAt: string; live: string };
-const RICCOH = "riccoh.player@drphil.tv";
 
 export function OutsideCapture() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const key = ["/api/admin/captures"];
   const { data } = useQuery<{ captures: Capture[]; ready: boolean }>({ queryKey: key, queryFn: () => adminGet("/api/admin/captures"), refetchInterval: 10_000 });
-  const [f, setF] = useState({ title: "", ownerEmail: RICCOH });
+  const [f, setF] = useState({ title: "", ownerEmail: "" });
   const [busy, setBusy] = useState(false);
   const say = (e: unknown) => (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "");
   const make = async () => {
@@ -56,8 +55,8 @@ export function OutsideCapture() {
       {data && !data.ready && <p className="mt-3 rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">The studio's recording storage isn't switched on, so this can't record yet.</p>}
       <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
         <Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="The show: e.g. Riccoh on The Vet Life" maxLength={160} data-testid="capture-title" />
-        <Input type="email" value={f.ownerEmail} onChange={(e) => setF({ ...f, ownerEmail: e.target.value })} placeholder="Whose Library it goes to (email)" data-testid="capture-owner" />
-        <Button onClick={() => void make()} disabled={busy || !f.title.trim()} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="capture-make">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />} Make a stream key</Button>
+        <Input type="email" value={f.ownerEmail} onChange={(e) => setF({ ...f, ownerEmail: e.target.value })} placeholder="Email" data-testid="capture-owner" />
+        <Button onClick={() => void make()} disabled={busy || !f.title.trim() || !f.ownerEmail.includes("@")} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="capture-make">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />} Make a stream key</Button>
       </div>
       {(data?.captures ?? []).length > 0 && (
         <div className="mt-4 space-y-3">
