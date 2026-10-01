@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { CampaignBuilder } from "@/components/CampaignBuilder";
+import { IconTile } from "@/components/ui/icon-tile";
 
 type Campaign = { id: number; subject: string; preheader: string; bodyText: string; status: "draft" | "scheduled" | "sending" | "sent"; scheduledFor: string; recipientCount: number; sentCount: number; sentAt: string; updatedAt: string; opened?: number; clicked?: number };
 type Data = { showName: string; hasPage: boolean; audience: number; sample: { email: string; name: string }[]; campaigns: Campaign[] };
@@ -58,7 +59,7 @@ export function FanEmails() {
       </div>
 
       <section className="flex items-center gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
-        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-[#053877] dark:text-white"><Users className="h-6 w-6" /></span>
+        <IconTile icon={Users} />
         <div className="min-w-0 flex-1">
           <p className="text-2xl font-bold tabular-nums">{d.audience}</p>
           <p className="text-sm text-muted-foreground">{d.audience === 1 ? "fan has" : "fans have"} signed up on your SmartLink{d.audience ? "" : " yet"}.</p>

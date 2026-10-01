@@ -21,6 +21,7 @@ import { CreatorProfileSections, type Profile, type ProfilePerson } from "@/comp
 import { DiscoverEnrich, type EnrichCard } from "@/components/DiscoverEnrich";
 import { FiltersPanel, FilterChips, activeFilters, filtersForServer, type Filters } from "@/components/DiscoverFilters";
 import { PodcastResults, PodcastDrawer, POD_PEOPLE_SORTS, POD_SHOW_SORTS, podCard, type PodOpen } from "@/components/DiscoverPodcasts";
+import { IconTile } from "@/components/ui/icon-tile";
 
 const NAVY = "#04102b";
 const GOLD = "#F0A71F";
@@ -726,7 +727,7 @@ function ModeMenu({ mode, setMode, onOpenChange, peopleOpen }: { mode: Mode; set
             return (
               <li key={m.v}>
                 <button type="button" role="option" aria-selected={m.v === mode} aria-disabled={soon} disabled={soon} onClick={() => { setMode(m.v); setOpen(false); }} className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left ${soon ? "cursor-default opacity-60" : "hover:bg-muted"} ${m.v === mode ? "bg-[#053877]/[0.06]" : ""}`} data-testid={`discover-mode-${m.v}`}>
-                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#053877]/10 text-[#053877]"><I className="h-4 w-4" /></span>
+                  <IconTile icon={I} size="sm" />
                   <span><span className="flex items-center gap-2 text-sm font-semibold">{m.label}{soon && <span className="rounded-full bg-[#053877]/10 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">Opens Oct 5</span>}</span><span className="block text-xs text-muted-foreground">{m.hint}</span></span>
                 </button>
               </li>
@@ -828,7 +829,7 @@ function HeroA({ raised, door, setDoor, bar, tries, onEnrich, allowance }: HeroP
             const on = door === x.key;
             return (
               <button key={x.key} type="button" role="tab" aria-selected={on} onClick={() => setDoor(x.key)} className={`group flex items-start gap-3 rounded-2xl border p-4 text-left transition-all ${on ? "border-[#F0A71F] bg-white text-foreground shadow-lg" : "border-white/10 bg-white/[0.04] text-white hover:border-white/25 hover:bg-white/[0.08]"}`} data-testid={`door-${x.key}`}>
-                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${on ? "bg-[#053877] text-white" : "bg-white/10 text-[#F0A71F]"}`}><Icon className="h-5 w-5" /></span>
+                <IconTile icon={Icon} />
                 <span className="min-w-0"><span className="block text-base font-semibold">{x.title}</span><span className={`block text-sm ${on ? "text-muted-foreground" : "text-white/60"}`}>{x.blurb}</span></span>
               </button>
             );
@@ -1536,7 +1537,7 @@ function Welcome({ sample, onOpenSample, verified, isMember, isAdmin, signedIn, 
               const I = Icon as typeof ShieldCheck;
               return (
                 <li key={t as string} className="flex gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F0A71F]/15 text-[#8a5a00]"><I className="h-4 w-4" /></span>
+                  <IconTile icon={I} />
                   <span><span className="block font-semibold">{t as string}</span><span className="text-muted-foreground">{b as string}</span></span>
                 </li>
               );

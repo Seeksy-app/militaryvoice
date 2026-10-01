@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend } from "@/lib/adminApi";
 import type { SponsorLeadRow } from "@/components/SponsorLeads";
+import { IconTile } from "@/components/ui/icon-tile";
 
 type Search = {
   id: number;
@@ -245,7 +246,7 @@ function CompanyCard({ c, sources, contact, added, onAdd, adding, onFindContact 
   return (
     <div className="flex flex-col rounded-xl border border-border bg-background p-3" data-testid="sponsor-finder-company">
       <div className="flex items-start gap-2">
-        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#053877]/10 text-[#053877] dark:bg-blue-900/40 dark:text-blue-300"><Building2 className="h-3.5 w-3.5" /></span>
+        <IconTile icon={Building2} size="sm" />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{c.name}</p>
           <p className="truncate text-[11px] text-muted-foreground">{[c.category, c.hq].filter(Boolean).join(" · ")}</p>

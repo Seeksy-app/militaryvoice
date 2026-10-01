@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
 import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -74,9 +75,7 @@ function CleanCard({ rec, clean, saved, onSaved }: { rec: Rec; clean: CleanResul
   return (
     <div className={`mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-4 ${ready ? "border-emerald-400/50 bg-emerald-500/[0.04]" : "border-border bg-card"}`} data-testid="post-clean">
       <div className="flex min-w-0 items-center gap-3">
-        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${ready ? "bg-emerald-500 text-white" : "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"}`}>
-          {ready ? <Check className="h-5 w-5" /> : clean.status === "running" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Wand2 className="h-5 w-5" />}
-        </span>
+        <IconTile icon={ready ? Check : clean.status === "running" ? Loader2 : Wand2} spin={!ready && clean.status === "running"} />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">
             {ready ? `Your clean episode is ready${clean.removedSec ? ` — ${mmss(clean.removedSec)} shorter` : ""}` : clean.status === "failed" ? "Clean episode" : "Cleaning your episode…"}
@@ -562,7 +561,7 @@ function GenerateMore({ rec, beta, plan, count, captions }: { rec: Rec; beta?: B
         className="flex min-h-[14rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] p-4 text-center transition-colors hover:border-[#053877]/50 hover:bg-[#053877]/[0.06] disabled:opacity-60"
         data-testid="post-generate-more"
       >
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#053877] text-[#F0A71F]">{more.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}</span>
+        <IconTile icon={more.isPending ? Loader2 : Sparkles} spin={more.isPending} />
         <span className="text-sm font-semibold text-foreground">{count} more clips</span>
         <span className="max-w-[14rem] text-balance text-xs text-muted-foreground">
           Different moments from this episode, in all three shapes.{" "}
@@ -2087,7 +2086,7 @@ export function PostStudio() {
             ) : (
               // Not started: one button. Every clip comes in all three shapes; captions are under Options.
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-white">
-                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F0A71F] text-[#1a1200] shadow-lg shadow-[#F0A71F]/20"><Wand2 className="h-7 w-7" /></span>
+                <IconTile icon={Wand2} />
                 <p className="text-xl font-bold sm:text-2xl">Ready for Pōstify</p>
                 <p className="max-w-md text-sm text-white/70">{clipsN} clips in vertical, square and wide, with {opts.captions === "classic" ? "Classic" : "animated"} captions, and a clean episode. You can add music at the end.</p>
                 {!affordable(rec) ? (

@@ -5,6 +5,7 @@ import { adminGet, adminSend } from "@/lib/adminApi";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { IconTile } from "@/components/ui/icon-tile";
 
 /**
  * Record an outside show (Riverside, StreamYard, OBS): a stream address and
@@ -46,7 +47,7 @@ export function OutsideCapture() {
   return (
     <section className="mb-8 rounded-2xl border border-border bg-card p-5 shadow-sm" data-testid="outside-capture">
       <div className="flex items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#053877] text-[#F0A71F]"><Radio className="h-5 w-5" /></span>
+        <IconTile icon={Radio} />
         <div>
           <h2 className="text-lg font-bold">Record an outside show</h2>
           <p className="text-sm text-muted-foreground">On someone else's show (Riverside, StreamYard, OBS)? Make a stream key, and the host adds it as a <b>custom RTMP</b> live-stream destination. When they go live it records here by itself, and the file goes to the Library you pick, clips and all.</p>

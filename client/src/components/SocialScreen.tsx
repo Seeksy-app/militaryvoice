@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { ClipRow, HostPostRow, PostMetrics, PostResult, RecordingRow, SocialPlatform } from "@shared/schema";
 import { AlertTriangle, BarChart3, Heart, Lightbulb, MessageCircle, Repeat2, TrendingDown, TrendingUp, Users, Eye, ChevronDown, Clapperboard, Film, ImagePlus, Upload, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, Loader2, Play, Plus, Send, Settings2, Share2, Sparkles, Target, Trash2, X } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 /**
  * Social: the podcaster's own social desk, the way Later or Buffer lay it out.
@@ -457,7 +458,7 @@ function LibraryPicker({ initial = "clips", initialFile = null, clips, episodes,
         <div className="grid gap-3 sm:grid-cols-2">
           <label className={`flex min-h-[12rem] cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border p-6 text-center transition-colors hover:border-[#053877]/50 ${pct !== null ? "pointer-events-none opacity-70" : ""}`} data-testid="social-upload-photo">
             <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void photo(e.target.files[0])} />
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]">{pct === null ? <ImagePlus className="h-5 w-5" /> : <Loader2 className="h-5 w-5 animate-spin" />}</span>
+            <IconTile icon={pct === null ? ImagePlus : Loader2} spin={pct !== null} />
             <span className="text-sm font-semibold">{pct === null ? "A picture" : `Uploading ${pct}%`}</span>
             <span className="text-xs text-muted-foreground">JPG, PNG or WebP. Posts to everything but YouTube.</span>
           </label>

@@ -5,6 +5,7 @@ import { HelpArticle } from "@/components/HelpArticle";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, ArrowLeft, Video } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const CONTACT = "hello@militaryvoices.ai";
@@ -266,7 +267,7 @@ export default function HelpZoom() {
         </Section>
 
         <div className="mt-12 flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card p-5">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0B5CFF] text-white"><Video className="h-5 w-5" /></span>
+          <IconTile icon={Video} />
           <p className="min-w-0 flex-1 text-sm text-muted-foreground">Ready? It takes about a minute.</p>
           <Button asChild className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">
             <Link href="/host/dashboard/integrations">Connect my Zoom <ArrowRight className="h-4 w-4" /></Link>

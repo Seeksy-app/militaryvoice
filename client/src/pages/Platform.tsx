@@ -42,6 +42,7 @@ import {
 import { SiteFooter } from "@/components/SiteFooter";
 import { useAudienceSnapshot } from "@/components/AudienceReach";
 import { InterestDialog } from "@/components/InterestDialog";
+import { IconTile } from "@/components/ui/icon-tile";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -313,7 +314,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
           <div className="mt-16 grid grid-cols-2 gap-x-5 gap-y-9 sm:mt-20 sm:gap-x-8 sm:gap-y-10 lg:grid-cols-4">
             {DISCOVERY_FEATURES.map(({ icon: Icon, title, body }, i) => (
               <motion.div key={title} initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-40px" }} transition={{ duration: 0.4, delay: (i % 4) * 0.06 }}>
-                <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${title === "Verified military" ? "bg-[#F0A71F] text-[#1a1200]" : "bg-[#053877]/10 text-[#053877] dark:bg-white/10 dark:text-[#8fb5e8]"}`}><Icon className="h-5 w-5" /></span>
+                <IconTile icon={Icon} />
                 <h3 className="mt-4 font-semibold">{title}</h3>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground sm:text-sm">{body}</p>
               </motion.div>
@@ -325,7 +326,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
             {DISCOVERY_FOR.map(({ icon: Icon, who, body, ask }) => (
               <Link key={who} href="/discover" className="group flex h-full flex-col rounded-3xl border border-border bg-card p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg">
                   <span className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Icon className="h-5 w-5" /></span>
+                    <IconTile icon={Icon} />
                     <span className="text-lg font-semibold">{who}</span>
                   </span>
                   <p className="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground">{body}</p>
@@ -362,7 +363,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
               >
                 <PillarArt kicker={kicker} />
                 <div className="flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Icon className="h-5 w-5" /></span>
+                  <IconTile icon={Icon} />
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{String(i + 1).padStart(2, "0")} · {kicker}</span>
                 </div>
                 <h3 className="mt-5 text-xl font-semibold tracking-tight">{title}</h3>
@@ -414,7 +415,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
             <ul className="mt-10 grid gap-x-8 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">
               {STUDIO_FEATURES.map(({ icon: Icon, title, body }) => (
                 <li key={title} className="flex gap-3.5">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[#F0A71F]"><Icon className="h-5 w-5" /></span>
+                  <IconTile icon={Icon} />
                   <span>
                     <span className="block font-semibold text-white">{title}</span>
                     <span className="mt-1 block text-sm leading-relaxed text-white/70">{body}</span>
@@ -478,7 +479,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
                 const I = Icon as typeof Check;
                 return (
                   <li key={t as string} className="flex gap-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#053877] text-[#F0A71F]"><I className="h-4 w-4" /></span>
+                    <IconTile icon={I} />
                     <span><span className="font-medium text-foreground">{t as string}.</span> <span className="text-muted-foreground">{b as string}</span></span>
                   </li>
                 );

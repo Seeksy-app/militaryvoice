@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { ArrowRight, BadgeCheck, Mic2, Megaphone, CalendarDays, Sparkles } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 const HEADLINE = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -41,7 +42,7 @@ export function DiscoveryPromo({ src, audience = "everyone" }: { src: string; au
             <li key={t}>
               <Link href={href}>
                 <span className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition hover:border-white/25 hover:bg-white/[0.08]">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[#F0A71F]"><Icon className="h-5 w-5" /></span>
+                  <IconTile icon={Icon} />
                   <span>
                     <span className="block font-bold" style={HEADLINE}>{t}</span>
                     <span className="block text-sm text-white/60">{b}</span>

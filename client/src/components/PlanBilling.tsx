@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { PLANS, ADDONS, FREE_DISCOVERY, CREDIT_PACKS, cents } from "@shared/tokens";
 import { startPlanCheckout, startAddonCheckout, startTokenCheckout, openBillingPortal } from "@/lib/tokens";
+import { IconTile } from "@/components/ui/icon-tile";
 
 type Features = {
   beta: { tokens: number; payments: boolean };
@@ -82,7 +83,7 @@ export function PlanBilling() {
       {/* Credits: what's left, and a top-up. */}
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-600"><Coins className="h-5 w-5" /></span>
+          <IconTile icon={Coins} />
           <div className="min-w-0">
             <p className="font-semibold">{credits} credit{credits === 1 ? "" : "s"}</p>
             <p className="text-sm text-muted-foreground">For clips, clean episodes and contact emails past your monthly ones. They don't run out.</p>
@@ -96,7 +97,7 @@ export function PlanBilling() {
       {/* Discovery Pro: its own monthly add-on. */}
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-[#053877] dark:text-white"><Search className="h-5 w-5" /></span>
+          <IconTile icon={Search} />
           <div className="min-w-0">
             <p className="font-semibold">{ADDONS.discovery.name}{pro ? " · on" : ""}</p>
             <p className="text-sm text-muted-foreground">

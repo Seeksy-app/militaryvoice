@@ -8,6 +8,7 @@ import type { PublicEvent } from "@shared/schema";
 import { detectLocalTimeZone, formatDateInZone, formatTimeInZone } from "@/lib/schedule";
 import { SiteFooter } from "@/components/SiteFooter";
 import { InterestDialog } from "@/components/InterestDialog";
+import { IconTile } from "@/components/ui/icon-tile";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -81,7 +82,7 @@ export default function Events() {
             intent="register"
             trigger={
               <button type="button" className="flex min-h-64 flex-col items-center justify-center rounded-3xl border-2 border-dashed border-[#053877]/30 bg-[#053877]/[0.03] p-8 text-center transition-colors hover:border-[#053877]/60 hover:bg-[#053877]/[0.06] dark:border-white/20 dark:bg-white/[0.03]" data-testid="card-add-event">
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Plus className="h-6 w-6" /></span>
+                <IconTile icon={Plus} />
                 <span className="mt-4 text-xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>Add your event</span>
                 <span className="mt-2 max-w-xs text-sm text-muted-foreground">
                   Running a day for your community? Put it on MilitaryVoices, with the studio, the green room and a page like this one.

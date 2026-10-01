@@ -4,6 +4,7 @@ import { Clapperboard, FileAudio, Film, Image as ImageIcon, Loader2, Podcast, Ro
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { IconTile } from "@/components/ui/icon-tile";
 
 type Item = { id: number; kind: "recording" | "clip" | "episode" | "show" | "asset"; label: string; deletedAt: string; expiresAt: string };
 
@@ -59,7 +60,7 @@ export function RecentlyDeleted() {
             const d = daysLeft(it.expiresAt);
             return (
               <li key={it.id} className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 last:border-0">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"><K.icon className="h-5 w-5" /></span>
+                <IconTile icon={K.icon} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-semibold">{it.label}</span>
                   <span className={`block text-sm ${d <= 3 ? "text-destructive" : "text-muted-foreground"}`}>{K.name} · {d <= 1 ? "Gone for good tomorrow" : `${d} days left`}</span>
