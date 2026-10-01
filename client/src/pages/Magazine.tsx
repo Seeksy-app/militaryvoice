@@ -355,14 +355,19 @@ export default function Magazine({ slug }: { slug?: string }) {
       <div className="absolute inset-x-14 top-16">
         <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>Welcome</p>
         <div className="mt-6 flex items-start gap-8">
-          {m.host.photo && <img src={m.host.photo} alt="" className="h-44 w-44 shrink-0 rounded-2xl object-cover" style={{ objectPosition: "50% 20%" }} />}
+          <img src="/nmpd-logo.png" alt="National Military Podcast Day" className="h-44 w-44 shrink-0 object-contain" />
           <h2 className="text-[40px] font-bold leading-[1.05] tracking-tight" style={{ ...HEAD, color: NAVY }}>Thank you for being part of the day.</h2>
         </div>
         <div className="mt-8 space-y-4 text-[16px] leading-[1.65] text-slate-800">
           {(m.welcome || "Welcome letter to come.").split(/\n{2,}/).map((p, i) => <p key={i}>{p}</p>)}
         </div>
-        <p className="mt-8 text-[18px] font-bold" style={{ ...HEAD, color: NAVY }}>{m.host.name}</p>
-        <p className="text-[14px] text-slate-500">{m.host.title}</p>
+        <div className="mt-8 flex items-center gap-4">
+          <img src={m.shows.find((x) => /ceremon/i.test(x.podcastName) && x.headshot)?.headshot || "/riccoh.jpeg"} alt={m.host.name} className="h-16 w-16 shrink-0 rounded-full object-cover" style={{ objectPosition: "50% 22%", boxShadow: `0 0 0 3px ${GOLD}` }} />
+          <div>
+            <p className="text-[18px] font-bold" style={{ ...HEAD, color: NAVY }}>{m.host.name}</p>
+            <p className="text-[14px] text-slate-500">{m.host.title}</p>
+          </div>
+        </div>
       </div>
     </Page>,
     ...(ads[0] ? [<AdPage key={`ad-${ads[0].id}`} ad={ads[0]} n={++n} />] : []),
@@ -394,8 +399,8 @@ export default function Magazine({ slug }: { slug?: string }) {
       </div>
       {/* Every face the same size, rows that fit the page, the last row centred (with the day's badge). */}
       <div className="absolute inset-x-10 flex flex-wrap content-start justify-center gap-1.5" style={{ top: 190, bottom: 48 }}>
-        {[...faces.map((f) => ({ id: String(f.id), src: f.src, badge: false })), { id: "badge", src: "/nmpd-logo.jpg", badge: true }].map((t) => (
-          <div key={t.id} className={`overflow-hidden rounded-md ${t.badge ? "flex items-center justify-center bg-white p-2" : ""}`} style={{ width: pageTileW, height: pageTileH }}>
+        {[...faces.map((f) => ({ id: String(f.id), src: f.src, badge: false })), { id: "badge", src: "/nmpd-logo.png", badge: true }].map((t) => (
+          <div key={t.id} className={`overflow-hidden rounded-md ${t.badge ? "flex items-center justify-center p-1" : ""}`} style={{ width: pageTileW, height: pageTileH }}>
             <img src={t.src} alt="" className={t.badge ? "max-h-full max-w-full object-contain" : "h-full w-full object-cover"} style={t.badge ? undefined : { objectPosition: "50% 25%" }} />
           </div>
         ))}
