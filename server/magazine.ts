@@ -125,6 +125,7 @@ const MARGIN_MS = 45_000;
  * worker hasn't made yet. Safe to run again: a cut already made from the same place is kept.
  */
 export async function planSegments(eventId: number): Promise<{ queued: number; kept: number; notRecorded: string[] }> {
+  await schemaIsReady();
   const ev = await storage.getEventById(eventId);
   if (!ev) return { queued: 0, kept: 0, notRecorded: [] };
   const recs = (await db.select().from(recordings).where(and(eq(recordings.eventId, eventId), eq(recordings.status, "Ready"))))
@@ -156,6 +157,7 @@ export async function planSegments(eventId: number): Promise<{ queued: number; k
 
 /** The next cut for the worker (or one a worker took and went quiet on for half an hour). */
 export async function claimSegmentCut(): Promise<{ id: number; title: string; startSec: number; durationSec: number; downloadUrl: string } | null> {
+  await schemaIsReady();
   const stale = new Date(Date.now() - 30 * 60_000).toISOString();
   const [c] = (await db.select().from(segmentCuts).where(inArray(segmentCuts.status, ["queued", "claimed"])))
     .filter((x) => x.status === "queued" || x.claimedAt < stale)
@@ -307,6 +309,7 @@ async function draftWelcome(ai: Anthropic, eventId: number, m: NonNullable<Await
 export function registerMagazine(app: Express, requireAdmin: RequestHandler, requireAgent: RequestHandler) {
   /** A show's segment from the day, to play: a fresh link to the MP3 each time. */
   app.get("/api/magazine/segment/:signupId", async (req, res) => {
+    await schemaIsReady();
     const [c] = await db.select().from(segmentCuts).where(and(eq(segmentCuts.signupId, Number(req.params.signupId)), eq(segmentCuts.status, "done")));
     if (!c?.audioKey) return res.status(404).end();
     res.setHeader("Cache-Control", "no-store");
