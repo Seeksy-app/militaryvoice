@@ -18,7 +18,7 @@ type Mag = {
   published: boolean; admin?: boolean; welcome: string;
   host: { name: string; title: string; photo: string };
   shows: Show[]; sponsors: { name: string; logo: string; url: string }[];
-  cover?: { photo: string };
+  cover?: { photo: string; style?: string };
   ads?: Ad[];
 };
 type Ad = { id: number; name: string; headline: string; body: string; site: string; link: string; logo: string; artwork: string };
@@ -70,6 +70,93 @@ function AdPage({ ad, n }: { ad: Ad; n: number }) {
         )}
       </div>
     </Page>
+  );
+}
+
+type Face = { id: number; src: string };
+export type CoverStyle = "glass" | "medallion" | "prints";
+
+/** A highlight across a picture, as light catches a gloss-coated print. */
+const SHEEN = "linear-gradient(135deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.14) 32%, rgba(255,255,255,0) 46%)";
+
+/** The same faces over and over, in an order where a face never sits beside itself. */
+const cycle = (faces: Face[], n: number) => Array.from({ length: n }, (_, i) => faces[(i * 7) % faces.length]);
+/** Repeatable "random": the same scatter every time the page is drawn. */
+const rnd = (i: number, k: number) => { const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); };
+
+/**
+ * The cover as a collage of everyone on the day, three ways, each made to look glossy:
+ * "glass" a tilted wall of gloss tiles, "medallion" the day's badge ringed by every face as
+ * glass buttons, "prints" a scatter of glossy photo prints.
+ */
+function CoverCollage({ faces, style }: { faces: Face[]; style: CoverStyle }) {
+  if (!faces.length) return null;
+  if (style === "medallion") {
+    const cx = 408, cy = 350;
+    const inner = faces.slice(0, Math.min(11, faces.length));
+    const outer = faces.slice(inner.length);
+    const ring = (list: Face[], r: number, size: number, turn: number) => list.map((f, i) => {
+      const a = (i / list.length) * Math.PI * 2 + turn;
+      return (
+        <div key={`${r}-${f.id}-${i}`} className="absolute rounded-full" style={{ left: cx + r * Math.cos(a) - size / 2, top: cy + r * Math.sin(a) - size / 2, width: size, height: size, padding: 3, background: `linear-gradient(145deg, #fff3c4, ${GOLD} 45%, #8a5a00)`, boxShadow: "0 10px 22px rgba(0,0,0,0.55)" }}>
+          <div className="relative h-full w-full overflow-hidden rounded-full">
+            <img src={f.src} alt="" className="h-full w-full object-cover" style={{ objectPosition: "50% 25%" }} />
+            <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 32% 24%, rgba(255,255,255,0.7), rgba(255,255,255,0.12) 30%, rgba(255,255,255,0) 48%)", boxShadow: "inset 0 -10px 18px rgba(0,0,0,0.45)" }} />
+          </div>
+        </div>
+      );
+    });
+    return (
+      <div className="absolute inset-x-0 top-0" style={{ height: 720, background: `radial-gradient(circle at 50% 33%, rgba(240,167,31,0.28), rgba(0,7,65,0) 55%)` }}>
+        {ring(outer, 318, 96, Math.PI / 20)}
+        {ring(inner, 196, 112, 0)}
+        <div className="absolute rounded-full" style={{ left: cx - 92, top: cy - 92, width: 184, height: 184, padding: 4, background: `linear-gradient(145deg, #fff3c4, ${GOLD} 45%, #8a5a00)`, boxShadow: "0 0 50px rgba(240,167,31,0.55)" }}>
+          <div className="relative h-full w-full overflow-hidden rounded-full bg-white">
+            <img src="/nmpd-logo.jpg" alt="" className="h-full w-full object-contain" />
+            <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 32% 22%, rgba(255,255,255,0.75), rgba(255,255,255,0) 40%)" }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (style === "prints") {
+    const cols = 6, rows = 5, w = 150, h = 176;
+    const tiles = cycle(faces, Math.max(faces.length, cols * rows)).slice(0, Math.max(faces.length, cols * rows));
+    return (
+      <div className="absolute inset-x-0 top-0 overflow-hidden" style={{ height: 700 }}>
+        {tiles.map((f, i) => {
+          const c = i % cols, r = Math.floor(i / cols) % rows, layer = Math.floor(i / (cols * rows));
+          const x = -30 + c * 140 + (rnd(i, 1) - 0.5) * 40 + layer * 70;
+          const y = -20 + r * 132 + (rnd(i, 2) - 0.5) * 36 + layer * 60;
+          return (
+            <div key={`${f.id}-${i}`} className="absolute bg-white" style={{ left: x, top: y, width: w, height: h, padding: "8px 8px 26px", transform: `rotate(${(rnd(i, 3) - 0.5) * 18}deg)`, boxShadow: "0 14px 26px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.35)", zIndex: Math.round(rnd(i, 4) * 100) }}>
+              <div className="relative h-full w-full overflow-hidden">
+                <img src={f.src} alt="" className="h-full w-full object-cover" style={{ objectPosition: "50% 25%" }} />
+                <div className="absolute inset-0" style={{ background: SHEEN }} />
+              </div>
+            </div>
+          );
+        })}
+        <div className="absolute inset-x-0 bottom-0" style={{ height: 260, background: `linear-gradient(to bottom, rgba(0,7,65,0), ${NAVY})`, zIndex: 200 }} />
+      </div>
+    );
+  }
+  // Glass: a tilted wall of gloss tiles, bleeding off the page, one sweep of light across it.
+  const cols = 7, rows = 7;
+  return (
+    <div className="absolute inset-x-0 top-0 overflow-hidden" style={{ height: 720 }}>
+      <div className="absolute grid gap-2.5" style={{ left: -120, top: -150, width: 1060, gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, transform: "rotate(-9deg)" }}>
+        {cycle(faces, cols * rows).map((f, i) => (
+          <div key={`${f.id}-${i}`} className="relative overflow-hidden rounded-2xl" style={{ height: 170, boxShadow: "0 12px 24px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.25)" }}>
+            <img src={f.src} alt="" className="h-full w-full object-cover" style={{ objectPosition: "50% 25%" }} />
+            <div className="absolute inset-0" style={{ background: SHEEN }} />
+            <div className="absolute inset-0 rounded-2xl" style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7), inset 0 -8px 16px rgba(0,0,0,0.3)" }} />
+          </div>
+        ))}
+      </div>
+      <div className="absolute inset-0" style={{ background: "linear-gradient(112deg, rgba(255,255,255,0) 28%, rgba(255,255,255,0.22) 40%, rgba(255,255,255,0) 52%)", mixBlendMode: "screen" }} />
+      <div className="absolute inset-x-0 bottom-0" style={{ height: 300, background: `linear-gradient(to bottom, rgba(0,7,65,0), ${NAVY} 85%)` }} />
+    </div>
   );
 }
 
@@ -218,6 +305,9 @@ export default function Magazine({ slug }: { slug?: string }) {
   const cols = faces.length > 24 ? 8 : 6;
   // A full last row: any gap gets the day's own badge.
   const fill = (cols - (faces.length % cols)) % cols;
+  // The cover: a collage style, or their photo (?cover= previews one without saving it).
+  const asked = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("cover") : null;
+  const coverStyle: CoverStyle | "photo" = (["glass", "medallion", "prints", "photo"] as const).find((x) => x === asked) ?? (m.cover?.style as CoverStyle | "photo" | undefined) ?? (m.cover?.photo ? "photo" : "glass");
   // The faces page is portrait: fewer across, so each face stays a face.
   const pageCols = 6;
   const pageRows = Math.ceil((faces.length + 1) / pageCols);
@@ -236,7 +326,9 @@ export default function Magazine({ slug }: { slug?: string }) {
   const pages: ReactNode[] = [
     // Cover
     <Page key="cover" bg={NAVY} color="#fff">
-      {m.cover?.photo ? (
+      {coverStyle !== "photo" ? (
+        <CoverCollage faces={faces} style={coverStyle} />
+      ) : m.cover?.photo ? (
         <>
           <img src={m.cover.photo} alt="" className="absolute inset-0 h-full w-full object-cover" />
           <div className="absolute inset-x-0 bottom-0" style={{ height: 620, background: `linear-gradient(to bottom, transparent, ${NAVY} 62%)` }} />

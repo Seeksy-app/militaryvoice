@@ -10,7 +10,7 @@ import { fitForUpload } from "@/lib/cropImage";
 
 type Show = { signupId: number; number: number; time: string; podcastName: string; hostName: string; headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; audio?: string };
 type Ad = { id: number; sponsorId: number; name: string; headline: string; body: string; site: string; logo: string; artwork: string };
-type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string }; ads?: Ad[]; segments?: { done: number; working: number; failed: number } };
+type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string; style?: string }; ads?: Ad[]; segments?: { done: number; working: number; failed: number } };
 
 /**
  * The keepsake magazine, from admin: SI drafts every page, a person reads and
@@ -117,7 +117,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
       </div>
 
       <SegmentsPanel eventId={eventId} seg={m.segments} total={m.shows.length} onChanged={refresh} />
-      <CoverPanel eventId={eventId} photo={m.cover?.photo ?? ""} onChanged={refresh} />
+      <CoverPanel eventId={eventId} photo={m.cover?.photo ?? ""} style={m.cover?.style || (m.cover?.photo ? "photo" : "glass")} slug={slug} onChanged={refresh} />
       <AdsPanel eventId={eventId} ads={m.ads ?? []} onChanged={refresh} />
 
       <section className="rounded-2xl border border-border bg-card p-5">
@@ -169,7 +169,14 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
 }
 
 /** The cover: a photo of our choosing, or (none set) every podcaster's face. */
-function CoverPanel({ eventId, photo, onChanged }: { eventId: number; photo: string; onChanged: () => unknown }) {
+const COVER_STYLES = [
+  { v: "glass", label: "Glass mosaic", hint: "Every face as a gloss tile, the wall tilted" },
+  { v: "medallion", label: "Medallion", hint: "The day's badge, ringed by every face" },
+  { v: "prints", label: "Glossy prints", hint: "Photo prints scattered on the page" },
+  { v: "photo", label: "One photo", hint: "A single photo, full page" },
+] as const;
+
+function CoverPanel({ eventId, photo, style, slug, onChanged }: { eventId: number; photo: string; style: string; slug: string; onChanged: () => unknown }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const put = async (f: File) => {
@@ -185,12 +192,19 @@ function CoverPanel({ eventId, photo, onChanged }: { eventId: number; photo: str
     finally { setBusy(false); }
   };
   const clear = async () => { setBusy(true); try { await adminSend("DELETE", `/api/admin/magazine/${eventId}/cover`); await onChanged(); } finally { setBusy(false); } };
+  const pick = async (v: string) => { setBusy(true); try { await adminSend("PUT", `/api/admin/magazine/${eventId}/cover-style`, { style: v }); await onChanged(); } finally { setBusy(false); } };
   return (
     <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card p-5" data-testid="magazine-cover">
       <div className="h-28 w-[86px] shrink-0 overflow-hidden rounded-md bg-[#000741]">{photo && <img src={photo} alt="" className="h-full w-full object-cover" />}</div>
       <div className="min-w-0 flex-1">
         <h3 className="font-semibold">Cover</h3>
-        <p className="mt-0.5 text-sm text-muted-foreground">{photo ? "Your photo, full page, with the title over the bottom." : "Every podcaster's photo (their show art until a photo comes in). Or put in one photo for the whole cover."}</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">Every podcaster's face, three glossy ways, or one photo for the whole cover.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {COVER_STYLES.filter((c) => c.v !== "photo" || photo).map((c) => (
+            <button key={c.v} type="button" disabled={busy} title={c.hint} onClick={() => void pick(c.v)} className={`rounded-full border px-3 py-1.5 text-sm font-medium ${style === c.v ? "border-[#053877] bg-[#053877] text-white" : "border-input hover:bg-muted"}`} data-testid={`magazine-cover-${c.v}`}>{c.label}</button>
+          ))}
+          <a href={`/magazine/${encodeURIComponent(slug)}`} target="_blank" rel="noreferrer" className="px-2 py-1.5 text-sm font-medium text-[#053877] hover:underline">See it</a>
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <label className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-input bg-background px-4 text-sm font-medium hover:bg-muted ${busy ? "pointer-events-none opacity-50" : ""}`}>

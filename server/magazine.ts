@@ -236,7 +236,7 @@ async function buildMagazine(eventId: number) {
     /** Left out by an admin (listed for admin only, so they can be put back). */
     leftOut: lineup.filter((s) => out.has(s.id)).map((s) => ({ signupId: s.id, podcastName: s.podcastName, hostName: s.hostName })),
     sponsors: sponsorRows.map((r) => ({ name: r.name, logo: r.logoUrl, url: r.url })),
-    cover: { photo: words.find((x) => x.signupId === COVER)?.art ?? "" },
+    cover: { photo: words.find((x) => x.signupId === COVER)?.art ?? "", style: words.find((x) => x.signupId === COVER)?.quote ?? "" },
     segments: { done: cuts.filter((c) => c.status === "done").length, working: cuts.filter((c) => c.status === "queued" || c.status === "claimed").length, failed: cuts.filter((c) => c.status === "failed").length },
     // A sponsor's QR goes through the counted link, so the magazine's scans show in their numbers.
     ads: adRows.map((a) => {
@@ -455,8 +455,15 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
     if (!req.file) return res.status(400).json({ message: "Pick a photo first." });
     const meta = await sharp(req.file.buffer).metadata().catch(() => ({} as { width?: number; height?: number }));
     const art = await savePage(req.file.buffer, "cover");
-    await saveWords(Number(req.params.eventId), COVER, { art });
+    await saveWords(Number(req.params.eventId), COVER, { art, quote: "photo" });
     res.json({ ok: true, photo: art, width: meta.width ?? 0, height: meta.height ?? 0 });
+  });
+  /** Which cover: a collage style ("glass", "medallion", "prints") or "photo". Kept in the cover row's quote field. */
+  app.put("/api/admin/magazine/:eventId/cover-style", requireAdmin, async (req, res) => {
+    const style = ["glass", "medallion", "prints", "photo"].includes(String(req.body?.style)) ? String(req.body.style) : "";
+    if (!style) return res.status(400).json({ message: "Which cover?" });
+    await saveWords(Number(req.params.eventId), COVER, { quote: style });
+    res.json({ ok: true, style });
   });
   app.delete("/api/admin/magazine/:eventId/cover", requireAdmin, async (req, res) => {
     await db.delete(magazinePages).where(and(eq(magazinePages.eventId, Number(req.params.eventId)), eq(magazinePages.signupId, COVER)));
