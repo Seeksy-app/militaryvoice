@@ -38,6 +38,8 @@ import { FinancesCard } from "@/components/FinancesCard";
 import { AdminClips } from "@/components/AdminClips";
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
 import { MagazineAdmin } from "@/components/MagazineAdmin";
+import Discover from "@/pages/Discover";
+import Directory from "@/pages/Directory";
 import { SponsorLeads } from "@/components/SponsorLeads";
 import { SponsorFinder } from "@/components/SponsorFinder";
 import { ShowSponsorsCard } from "@/components/ShowSponsors";
@@ -4998,14 +5000,14 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   </TabsContent>
                   <TabsContent value="discovery" className="mt-2 flex flex-col gap-6 lg:mt-0">
                     <DiscoveryStats />
-                    {/* The brand's view, live: the same page a brand gets, with your admin access. */}
-                    <div className="overflow-hidden rounded-2xl border border-border">
-                      <div className="flex items-center justify-between border-b border-border bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-                        <span>What a brand sees at militaryvoices.ai/discover</span>
-                        <a href="/discover?src=admin" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">Open full screen</a>
-                      </div>
-                      <iframe src="/discover?src=admin" title="Discovery, as a brand sees it" className="h-[1100px] w-full bg-background" data-testid="admin-discovery-frame" />
-                    </div>
+                    {/* The search itself, as in a member's dashboard: no landing-page banner. */}
+                    <Discover embedded part="search" />
+                  </TabsContent>
+                  <TabsContent value="verified" className="mt-2 lg:mt-0">
+                    <Discover embedded part="verified" />
+                  </TabsContent>
+                  <TabsContent value="directory" className="mt-2 lg:mt-0">
+                    <Directory embedded />
                   </TabsContent>
                   <TabsContent value="crm" className="mt-2 lg:mt-0">
                     <CrmPanel />

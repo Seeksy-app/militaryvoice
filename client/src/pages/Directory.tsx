@@ -39,7 +39,8 @@ interface Card {
 
 const HEADLINE = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
-export default function Directory() {
+/** `embedded`: inside admin (Member Directory), without the site's bar, banner and footer. */
+export default function Directory({ embedded = false }: { embedded?: boolean } = {}) {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<"all" | "podcasters" | "others">("all");
   const [branch, setBranch] = useState("any");
@@ -68,10 +69,10 @@ export default function Directory() {
   }, [cards, q, kind, branch]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <NavBar />
+    <div className={embedded ? "text-foreground" : "min-h-screen bg-background text-foreground"}>
+      {!embedded && <NavBar />}
 
-      <section className="bg-[#04102b] text-white">
+      {!embedded && <section className="bg-[#04102b] text-white">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#F0A71F]">The directory</p>
           <h1 className="mt-2 max-w-3xl text-balance text-3xl font-bold tracking-tight sm:text-5xl" style={HEADLINE}>
@@ -93,9 +94,10 @@ export default function Directory() {
             </Link>
           </div>
         </div>
-      </section>
+      </section>}
 
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <main className={embedded ? "w-full" : "mx-auto max-w-6xl px-4 py-8 sm:px-6"}>
+        {embedded && <h2 className="mb-4 text-xl font-bold tracking-tight">Member Directory</h2>}
         {/* Search and filters */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
@@ -145,7 +147,7 @@ export default function Directory() {
         )}
       </main>
 
-      <SiteFooter />
+      {!embedded && <SiteFooter />}
 
       <CardDialog card={open} onClose={() => setOpen(null)} canInvite={!!me} />
     </div>
