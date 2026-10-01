@@ -57,7 +57,7 @@ function AdPage({ ad, n }: { ad: Ad; n: number }) {
       <div className="absolute inset-0 flex flex-col items-center px-16 pb-16 pt-24 text-center">
         <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>A word from our sponsor</p>
         <div className="mt-14 flex h-40 w-full items-center justify-center">
-          {ad.logo ? <img src={ad.logo} alt={ad.name} className="max-h-full max-w-[460px] object-contain" /> : <span className="text-[44px] font-bold" style={HEAD}>{ad.name}</span>}
+          {ad.logo ? <img src={ad.logo} alt={ad.name} className="h-full w-auto max-w-[520px] object-contain" /> : <span className="text-[44px] font-bold" style={HEAD}>{ad.name}</span>}
         </div>
         {ad.headline && <h2 className="mt-14 text-balance text-[48px] font-bold leading-[1.05] tracking-tight" style={HEAD}>{ad.headline}</h2>}
         {ad.body && <p className="mt-6 max-w-[560px] text-pretty text-[19px] leading-[1.55] text-white/80">{ad.body}</p>}
