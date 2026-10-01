@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import QRCode from "qrcode";
-import { Loader2, Pause, Play, Printer } from "lucide-react";
+import { ExternalLink, Loader2, Pause, Play, Printer } from "lucide-react";
 
 // The keepsake magazine. Every page is drawn at US Letter, 816 × 1056 CSS
 // pixels (8.5 × 11 inches at 96 dpi), so printing it to PDF is the print file
@@ -10,7 +10,7 @@ import { Loader2, Pause, Play, Printer } from "lucide-react";
 
 type Show = {
   signupId: number; number: number; time: string; podcastName: string; hostName: string; branch: string; service: string;
-  headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; about?: string; audio?: string; episodes?: Episode[];
+  headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; about?: string; aboutOwn?: string; audio?: string; episodes?: Episode[]; links?: { title: string; url: string }[];
 };
 type Episode = { title: string; date: string; audioUrl: string };
 type Mag = {
@@ -311,11 +311,27 @@ function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) 
           )}
           {s.about && (
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>About {first}, in their words</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>{s.aboutOwn ? `About ${first}` : `About ${first}, in their words`}</p>
               <p className="mt-2 text-[14.5px] leading-[1.6] text-slate-700">{s.about}</p>
             </div>
           )}
-          {eps.length > 0 && (
+          {!!s.links?.length && (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>Watch and listen</p>
+              <ol className="mt-2 divide-y divide-slate-200 border-y border-slate-200">
+                {s.links.slice(0, s.about || s.quote ? 3 : 4).map((l) => (
+                  <li key={l.url}>
+                    <a href={l.url} target="_blank" rel="noreferrer" className="group flex w-full items-baseline gap-3 py-2 text-left">
+                      <ExternalLink className="relative top-0.5 h-3.5 w-3.5 shrink-0" style={{ color: GOLD }} />
+                      <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold text-slate-800 group-hover:underline">{l.title}</span>
+                      <span className="shrink-0 text-[12px] text-slate-400">{l.url.replace(/^https?:\/\/(www\.)?/, "").split("/")[0]}</span>
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+          {!s.links?.length && eps.length > 0 && (
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>Start with these episodes</p>
               <ol className="mt-2 divide-y divide-slate-200 border-y border-slate-200">

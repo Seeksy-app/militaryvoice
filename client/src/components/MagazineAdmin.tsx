@@ -9,7 +9,7 @@ import { adminSend, adminUpload } from "@/lib/adminApi";
 import { fitForUpload } from "@/lib/cropImage";
 import { CoverCollage, type CoverStyle, type Face } from "@/pages/Magazine";
 
-type Show = { signupId: number; number: number; time: string; podcastName: string; hostName: string; headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; audio?: string; about?: string; aboutOwn?: string };
+type Show = { signupId: number; number: number; time: string; podcastName: string; hostName: string; headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; audio?: string; about?: string; aboutOwn?: string; links?: { title: string; url: string }[] };
 type Ad = { id: number; sponsorId: number; name: string; headline: string; body: string; site: string; logo: string; artwork: string };
 type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string; style?: string }; ads?: Ad[]; segments?: { done: number; working: number; failed: number }; distributed?: { at: string; sent: number } | null };
 
@@ -79,7 +79,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
       setDrafting(false);
     }
   };
-  const save = async (signupId: number, patch: { blurb?: string; quote?: string; audio?: string; about?: string }) => {
+  const save = async (signupId: number, patch: { blurb?: string; quote?: string; audio?: string; about?: string; links?: string }) => {
     setSaving(signupId);
     try { await adminSend("PUT", `/api/admin/magazine/${eventId}/pages/${signupId}`, patch); await refresh(); }
     catch (e) { toast({ title: "Couldn't save", description: (e as Error).message, variant: "destructive" }); }
@@ -145,6 +145,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
                 <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 rounded-full text-muted-foreground" disabled={saving === s.signupId} onClick={() => void leaveOut(s.signupId, true, s.podcastName)} data-testid={`magazine-leave-out-${s.signupId}`}><EyeOff className="h-3.5 w-3.5" /> Leave out</Button>
               </div>
               <Textarea defaultValue={s.aboutOwn || s.about || ""} key={`ab-${s.signupId}-${(s.aboutOwn || s.about || "").length}`} rows={2} placeholder="About them, in their words: their service, what they're known for. Empty uses their SmartLink bio." onBlur={(e) => { if (e.target.value.trim() !== (s.aboutOwn || s.about || "").trim()) void save(s.signupId, { about: e.target.value }); }} data-testid={`magazine-about-${s.signupId}`} />
+              <Textarea defaultValue={(s.links ?? []).map((l) => `${l.title} | ${l.url}`).join("\n")} key={`l-${s.signupId}-${(s.links ?? []).length}`} rows={2} placeholder={"Watch and listen links, one a line: Title | https://… (up to 4). They replace the episodes from their feed."} className="text-sm" onBlur={(e) => { const now = (s.links ?? []).map((l) => `${l.title} | ${l.url}`).join("\n"); if (e.target.value.trim() !== now.trim()) void save(s.signupId, { links: e.target.value }); }} data-testid={`magazine-links-${s.signupId}`} />
               <input defaultValue={s.audio ?? ""} key={`a-${s.signupId}-${s.audio ?? ""}`} placeholder="Their segment from the day: a link to the audio (after Oct 5). Until then the page plays their latest episode." className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" onBlur={(e) => { if (e.target.value.trim() !== (s.audio ?? "")) void save(s.signupId, { audio: e.target.value.trim() }); }} data-testid={`magazine-audio-${s.signupId}`} />
               <input defaultValue={s.quote} key={`q-${s.signupId}-${s.quote.length}`} placeholder="Pull quote: their own words only, from an episode (optional)" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" onBlur={(e) => { if (e.target.value !== s.quote) void save(s.signupId, { quote: e.target.value }); }} />
             </div>
