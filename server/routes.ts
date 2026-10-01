@@ -7566,6 +7566,19 @@ export function registerRoutes(app: Express): void {
     res.json(await inboundAttachments(row.resendId));
   });
   /** A photo someone emailed in: made their headshot, as the headshot page does (web copy and print copy). */
+  /** An inbound email's attachment, through us: the mail service's own link refuses a browser on our site. */
+  app.get("/api/admin/inbound/:id/attachments/:aid/file", requireAdmin, async (req, res) => {
+    const row = await storage.getInbound(Number(req.params.id));
+    if (!row) return res.status(404).json({ message: "No such email." });
+    const a = (await inboundAttachments(row.resendId)).find((x) => x.id === req.params.aid);
+    if (!a) return res.status(404).json({ message: "No such file." });
+    const file = await fetch(a.url, { signal: AbortSignal.timeout(60_000) }).catch(() => null);
+    if (!file?.ok) return res.status(502).json({ message: "The mail service didn't hand it over." });
+    res.setHeader("Content-Type", a.contentType || "application/octet-stream");
+    res.setHeader("Cache-Control", "no-store");
+    res.send(Buffer.from(await file.arrayBuffer()));
+  });
+
   app.post("/api/admin/inbound/:id/attachments/:aid/headshot", requireAdmin, async (req, res) => {
     const row = await storage.getInbound(Number(req.params.id));
     if (!row) return res.status(404).json({ message: "No such email." });
