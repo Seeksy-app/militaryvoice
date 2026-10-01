@@ -218,6 +218,9 @@ export default function Magazine({ slug }: { slug?: string }) {
   const cols = faces.length > 24 ? 8 : 6;
   // A full last row: any gap gets the day's own badge.
   const fill = (cols - (faces.length % cols)) % cols;
+  // The faces page is portrait: fewer across, so each face stays a face.
+  const pageCols = 6;
+  const pageFill = (pageCols - (faces.length % pageCols)) % pageCols;
   const half = Math.ceil(m.shows.length / 2);
   const ads = m.ads ?? [];
   // The first ad faces the welcome; the rest are spread evenly through the show pages.
@@ -287,6 +290,17 @@ export default function Magazine({ slug }: { slug?: string }) {
           ))}
         </div>
         <p className="mt-6 text-[12px] text-slate-400">All times Eastern.</p>
+      </div>
+    </Page>,
+    // Faces of the Marathon: everyone who's on, one page (each person once).
+    <Page key="faces" bg={NAVY} color="#fff" n={++n}>
+      <div className="absolute inset-x-10 top-12">
+        <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>The voices of the day</p>
+        <h2 className="mt-3 text-[40px] font-bold tracking-tight" style={HEAD}>Faces of the Marathon</h2>
+      </div>
+      <div className="absolute inset-x-10 grid gap-1.5" style={{ top: 190, bottom: 48, gridTemplateColumns: `repeat(${pageCols}, minmax(0, 1fr))`, gridAutoRows: "1fr" }}>
+        {faces.map((f) => <img key={f.id} src={f.src} alt="" className="h-full w-full rounded-md object-cover" style={{ objectPosition: "50% 25%" }} />)}
+        {Array.from({ length: pageFill }, (_, i) => <div key={`fill-${i}`} className="flex items-center justify-center rounded-md bg-white p-2"><img src="/nmpd-logo.jpg" alt="" className="max-h-full max-w-full object-contain" /></div>)}
       </div>
     </Page>,
     ...m.shows.flatMap((s, i) => [
