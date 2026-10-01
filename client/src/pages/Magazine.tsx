@@ -249,7 +249,7 @@ export default function Magazine({ slug }: { slug?: string }) {
         <p className="text-[13px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>Keepsake edition · {m.event.occasion}</p>
         <h1 className="mt-3 text-[76px] font-bold leading-[0.95] tracking-tight" style={HEAD}>{m.event.name}</h1>
         <p className="mt-5 text-[20px] font-medium text-white/80">{m.event.day}</p>
-        <p className="mt-2 text-[16px] text-white/60">{m.shows.length} military and veteran shows, back to back, one day.</p>
+        <p className="mt-2 text-[16px] text-white/60">{m.shows.filter((s) => !/ceremon/i.test(s.podcastName)).length} military and veteran shows, back to back, one day.</p>
       </div>
       <p className="absolute bottom-10 left-12 text-[14px] font-bold tracking-wide" style={{ color: GOLD }}>MILITARYVOICES.AI</p>
     </Page>,
