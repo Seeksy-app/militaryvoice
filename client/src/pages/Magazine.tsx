@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import QRCode from "qrcode";
-import { Loader2, Printer } from "lucide-react";
+import { Loader2, Pause, Play, Printer } from "lucide-react";
 
 // The keepsake magazine. Every page is drawn at US Letter, 816 × 1056 CSS
 // pixels (8.5 × 11 inches at 96 dpi), so printing it to PDF is the print file
@@ -10,7 +10,7 @@ import { Loader2, Printer } from "lucide-react";
 
 type Show = {
   signupId: number; number: number; time: string; podcastName: string; hostName: string; branch: string; service: string;
-  headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string;
+  headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; about?: string; audio?: string;
 };
 type Mag = {
   event: { name: string; day: string; occasion: string; tagline: string };
@@ -72,36 +72,97 @@ function AdPage({ ad, n }: { ad: Ad; n: number }) {
   );
 }
 
+/**
+ * In the digital magazine, their show plays right on the page: their segment from the day once
+ * we have it, their latest episode until then. Hidden in print, where the QR does the job.
+ */
+function Listen({ s }: { s: Show }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const [ep, setEp] = useState<{ title: string; audioUrl: string; durationLabel?: string } | null | undefined>(s.audio ? { title: "Their segment from the Marathon", audioUrl: s.audio } : undefined);
+  const [playing, setPlaying] = useState(false);
+  const [t, setT] = useState({ at: 0, of: 0 });
+  // The feed is only asked for once the page is near the screen.
+  useEffect(() => {
+    if (ep !== undefined || !ref.current) return;
+    const io = new IntersectionObserver((es) => {
+      if (!es.some((e) => e.isIntersecting)) return;
+      io.disconnect();
+      void fetch(`/api/signups/${s.signupId}/latest-episode`).then((r) => r.json()).then((j) => setEp(j?.audioUrl ? j : null)).catch(() => setEp(null));
+    }, { rootMargin: "600px" });
+    io.observe(ref.current);
+    return () => io.disconnect();
+  }, [ep, s.signupId]);
+  if (ep === null) return null;
+  const mmss = (x: number) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
+  const toggle = () => {
+    const a = audio.current;
+    if (!a) return;
+    if (a.paused) {
+      // One show at a time: starting this one stops any other.
+      document.querySelectorAll("audio[data-mag]").forEach((o) => { if (o !== a) (o as HTMLAudioElement).pause(); });
+      void a.play();
+    } else a.pause();
+  };
+  return (
+    <div ref={ref} className="mag-listen flex items-center gap-4 rounded-2xl px-4 py-3 print:hidden" style={{ background: NAVY }}>
+      <button type="button" onClick={toggle} disabled={!ep} aria-label={playing ? "Pause" : `Play ${s.podcastName}`} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full" style={{ background: GOLD, color: NAVY }} data-testid={`mag-play-${s.signupId}`}>
+        {playing ? <Pause className="h-5 w-5" fill="currentColor" /> : <Play className="ml-0.5 h-5 w-5" fill="currentColor" />}
+      </button>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>{s.audio ? "Listen to their segment" : "Listen to their latest episode"}</p>
+        <p className="truncate text-[14px] font-semibold text-white">{ep?.title ?? "Loading…"}</p>
+        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/15">
+          <div className="h-full rounded-full" style={{ width: `${t.of ? (t.at / t.of) * 100 : 0}%`, background: GOLD }} />
+        </div>
+      </div>
+      <span className="shrink-0 text-[12px] tabular-nums text-white/60">{t.of ? `${mmss(t.at)} / ${mmss(t.of)}` : ep?.durationLabel ?? ""}</span>
+      {ep && <audio ref={audio} data-mag src={ep.audioUrl} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={(e) => setT({ at: e.currentTarget.currentTime, of: e.currentTarget.duration || 0 })} />}
+    </div>
+  );
+}
+
 function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) {
   const who = [s.branch, s.service].filter(Boolean).join(" · ");
+  const first = s.hostName.replace(/^(dr|mr|mrs|ms|sgt|sergeant major)\.?\s+(\(ret\.\)\s+)?/i, "").trim().split(/\s+/)[0];
   return (
     <Page n={n}>
-      {/* The host, big: the reason we asked for the print-quality photo. */}
-      <div className="absolute inset-x-0 top-0" style={{ height: 560 }}>
-        {s.headshot ? <img src={s.headshot} alt="" className="h-full w-full object-cover" style={{ objectPosition: "50% 22%" }} /> : <div className="h-full w-full" style={{ background: NAVY }} />}
-        <div className="absolute inset-x-0 bottom-0 h-40" style={{ background: "linear-gradient(to top, rgba(0,7,65,0.55), transparent)" }} />
-        <span className="absolute left-8 top-8 rounded-full px-3.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.14em]" style={{ background: GOLD, color: "#1a1200" }}>
-          Show {s.number} · {s.time}
-        </span>
+      <div className="absolute inset-x-0 top-0 flex flex-col px-12 pb-36 pt-12" style={{ height: H }}>
+        {/* Who they are: their photo beside the show, not across the page. */}
+        <div className="flex gap-7">
+          <div className="relative shrink-0" style={{ width: 230, height: 288 }}>
+            {s.headshot ? <img src={s.headshot} alt="" className="h-full w-full rounded-2xl object-cover" style={{ objectPosition: "50% 22%" }} /> : <div className="h-full w-full rounded-2xl" style={{ background: NAVY }} />}
+            {s.art && <img src={s.art} alt="" className="absolute -bottom-4 -right-4 rounded-xl object-cover shadow-lg" style={{ width: 92, height: 92, border: "4px solid #fff" }} />}
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col pt-1">
+            <span className="self-start rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em]" style={{ background: GOLD, color: "#1a1200" }}>Show {s.number} · {s.time}</span>
+            <h2 className="mt-4 text-balance text-[36px] font-bold leading-[1.04] tracking-tight" style={{ ...HEAD, color: NAVY }}>{s.podcastName}</h2>
+            <p className="mt-2 text-[16px] font-semibold text-slate-700">with {s.hostName}</p>
+            {who && <p className="mt-0.5 text-[14px] text-slate-500">{who}</p>}
+          </div>
+        </div>
+
+        <div className="mt-10 flex min-h-0 flex-1 flex-col gap-6 overflow-hidden">
+          {s.blurb && <p className="text-[16px] leading-[1.6] text-slate-800">{s.blurb}</p>}
+          {s.quote && (
+            <blockquote className="border-l-4 pl-5" style={{ borderColor: GOLD }}>
+              <p className="text-[22px] font-semibold italic leading-snug" style={{ ...HEAD, color: NAVY }}>“{s.quote}”</p>
+              <footer className="mt-1.5 text-[13px] font-semibold text-slate-500">{s.hostName}</footer>
+            </blockquote>
+          )}
+          {s.about && (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>About {first}, in their words</p>
+              <p className="mt-2 text-[14.5px] leading-[1.6] text-slate-700">{s.about}</p>
+            </div>
+          )}
+          <div className="mt-auto"><Listen s={s} /></div>
+        </div>
       </div>
-      {s.art && <img src={s.art} alt="" className="absolute rounded-xl object-cover shadow-xl" style={{ left: 40, top: 480, width: 150, height: 150, border: "5px solid #fff" }} />}
-      <div className="absolute" style={{ left: s.art ? 212 : 40, right: 40, top: 578 }}>
-        <h2 className="text-balance text-[34px] font-bold leading-[1.05] tracking-tight" style={{ ...HEAD, color: NAVY }}>{s.podcastName}</h2>
-        <p className="mt-1.5 text-[15px] font-medium text-slate-600">with {s.hostName}{who ? ` · ${who}` : ""}</p>
-      </div>
-      <div className="absolute" style={{ left: 40, right: 40, top: 670 }}>
-        {s.blurb && <p className="text-[15.5px] leading-[1.55] text-slate-800">{s.blurb}</p>}
-        {s.quote && (
-          <blockquote className="mt-5 border-l-4 pl-5" style={{ borderColor: GOLD }}>
-            <p className="text-[21px] font-semibold italic leading-snug" style={{ ...HEAD, color: NAVY }}>“{s.quote}”</p>
-            <footer className="mt-1.5 text-[13px] font-semibold text-slate-500">{s.hostName}</footer>
-          </blockquote>
-        )}
-      </div>
-      <footer className="absolute inset-x-0 bottom-0 flex items-center gap-4 px-10 pb-10 pt-4" style={{ borderTop: "1px solid #e5e7eb" }}>
+      <footer className="absolute inset-x-0 bottom-0 flex items-center gap-4 px-12 pb-10 pt-4" style={{ borderTop: "1px solid #e5e7eb" }}>
         <Qr url={s.link} size={84} />
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-bold" style={{ color: NAVY }}>Scan to follow {s.podcastName}</p>
+          <p className="text-[13px] font-bold" style={{ color: NAVY }}>Scan to listen and follow {s.podcastName}</p>
           <p className="truncate text-[12px] text-slate-500">{s.link.replace(/^https?:\/\/(www\.)?/, "")}</p>
         </div>
         <p className="text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{event.name}<br />{event.day}</p>
@@ -141,8 +202,11 @@ export default function Magazine({ slug }: { slug?: string }) {
   if (q.isError || !q.data) return <div className="flex min-h-screen items-center justify-center bg-slate-200 p-6 text-center text-slate-600">{(q.error as Error)?.message ?? "The magazine isn't out yet."}</div>;
   const m = q.data;
   // Every show on the cover: their photo, or their show's art when we haven't got one.
-  const faces = m.shows.map((s) => ({ id: s.signupId, src: s.headshot || s.art })).filter((f) => f.src);
+  // (Each person once: Riccoh opens and closes the day but is one face.)
+  const faces = m.shows.map((s) => ({ id: s.signupId, src: s.headshot || s.art, who: s.hostName.trim().toLowerCase() })).filter((f, i, all) => f.src && all.findIndex((x) => x.src === f.src || x.who === f.who) === i);
   const cols = faces.length > 24 ? 8 : 6;
+  // A full last row: any gap gets the day's own badge.
+  const fill = (cols - (faces.length % cols)) % cols;
   const half = Math.ceil(m.shows.length / 2);
   const ads = m.ads ?? [];
   // The first ad faces the welcome; the rest are spread evenly through the show pages.
@@ -165,6 +229,7 @@ export default function Magazine({ slug }: { slug?: string }) {
         <>
           <div className="absolute inset-x-0 top-0 grid gap-1 p-1" style={{ height: 620, gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
             {faces.map((f) => <img key={f.id} src={f.src} alt="" className="h-full w-full object-cover" style={{ objectPosition: "50% 25%" }} />)}
+            {Array.from({ length: fill }, (_, i) => <div key={`fill-${i}`} className="flex items-center justify-center bg-white p-2"><img src="/nmpd-logo.jpg" alt="" className="max-h-full max-w-full object-contain" /></div>)}
           </div>
           <div className="absolute inset-x-0" style={{ top: 440, height: 200, background: `linear-gradient(to bottom, transparent, ${NAVY})` }} />
         </>

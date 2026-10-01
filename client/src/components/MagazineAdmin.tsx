@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { adminSend, adminUpload } from "@/lib/adminApi";
 import { fitForUpload } from "@/lib/cropImage";
 
-type Show = { signupId: number; number: number; time: string; podcastName: string; hostName: string; headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string };
+type Show = { signupId: number; number: number; time: string; podcastName: string; hostName: string; headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; audio?: string };
 type Ad = { id: number; sponsorId: number; name: string; headline: string; body: string; site: string; logo: string; artwork: string };
 type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string }; ads?: Ad[] };
 
@@ -78,7 +78,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
       setDrafting(false);
     }
   };
-  const save = async (signupId: number, patch: { blurb?: string; quote?: string }) => {
+  const save = async (signupId: number, patch: { blurb?: string; quote?: string; audio?: string }) => {
     setSaving(signupId);
     try { await adminSend("PUT", `/api/admin/magazine/${eventId}/pages/${signupId}`, patch); await refresh(); }
     catch (e) { toast({ title: "Couldn't save", description: (e as Error).message, variant: "destructive" }); }
@@ -141,6 +141,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
                 <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 rounded-full" disabled={saving === s.signupId || asked.has(s.signupId)} onClick={() => void askPhoto(s)} data-testid={`magazine-ask-photo-${s.signupId}`}>{asked.has(s.signupId) ? <><Check className="h-3.5 w-3.5" /> Asked</> : <><Mail className="h-3.5 w-3.5" /> Ask for a photo</>}</Button>
                 <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 rounded-full text-muted-foreground" disabled={saving === s.signupId} onClick={() => void leaveOut(s.signupId, true, s.podcastName)} data-testid={`magazine-leave-out-${s.signupId}`}><EyeOff className="h-3.5 w-3.5" /> Leave out</Button>
               </div>
+              <input defaultValue={s.audio ?? ""} key={`a-${s.signupId}-${s.audio ?? ""}`} placeholder="Their segment from the day: a link to the audio (after Oct 5). Until then the page plays their latest episode." className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" onBlur={(e) => { if (e.target.value.trim() !== (s.audio ?? "")) void save(s.signupId, { audio: e.target.value.trim() }); }} data-testid={`magazine-audio-${s.signupId}`} />
               <input defaultValue={s.quote} key={`q-${s.signupId}-${s.quote.length}`} placeholder="Pull quote: their own words only, from an episode (optional)" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" onBlur={(e) => { if (e.target.value !== s.quote) void save(s.signupId, { quote: e.target.value }); }} />
             </div>
             {s.blurb && <Check className="mt-1 h-4 w-4 shrink-0 text-emerald-600" aria-label="Written" />}

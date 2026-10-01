@@ -71,6 +71,9 @@ async function buildMagazine(eventId: number) {
       art: p?.artworkPrintUrl || w?.art || "",
       blurb: w?.blurb ?? "",
       quote: w?.quote ?? "",
+      // In their own words: the bio on their SmartLink.
+      about: clean(bio?.bio, 650),
+      audio: w?.audio ?? "",
       edited: w?.edited ?? false,
       // Where the QR goes: their SmartLink, else the show we host, else their share page.
       link: bio?.handle ? `${ORIGIN}/${bio.handle}` : show ? `${ORIGIN}/podcast/${show.slug}` : `${ORIGIN}/s/${s.id}`,
@@ -104,8 +107,8 @@ async function buildMagazine(eventId: number) {
   };
 }
 
-async function saveWords(eventId: number, signupId: number, patch: Partial<{ blurb: string; quote: string; art: string; edited: boolean; hidden: boolean }>) {
-  await db.insert(magazinePages).values({ eventId, signupId, blurb: patch.blurb ?? "", quote: patch.quote ?? "", art: patch.art ?? "", edited: patch.edited ?? false, hidden: patch.hidden ?? false, updatedAt: now() })
+async function saveWords(eventId: number, signupId: number, patch: Partial<{ blurb: string; quote: string; art: string; edited: boolean; hidden: boolean; audio: string }>) {
+  await db.insert(magazinePages).values({ eventId, signupId, blurb: patch.blurb ?? "", quote: patch.quote ?? "", art: patch.art ?? "", edited: patch.edited ?? false, hidden: patch.hidden ?? false, audio: patch.audio ?? "", updatedAt: now() })
     .onConflictDoUpdate({ target: [magazinePages.eventId, magazinePages.signupId], set: { ...patch, updatedAt: now() } });
 }
 
@@ -209,7 +212,8 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler) {
     await saveWords(eventId, signupId, {
       ...(typeof req.body?.blurb === "string" ? { blurb: req.body.blurb.slice(0, 2500) } : {}),
       ...(typeof req.body?.quote === "string" ? { quote: req.body.quote.slice(0, 300) } : {}),
-      ...(typeof req.body?.hidden === "boolean" ? { hidden: req.body.hidden } : { edited: true }),
+      ...(typeof req.body?.audio === "string" ? { audio: /^https?:\/\//i.test(req.body.audio.trim()) ? req.body.audio.trim().slice(0, 800) : "" } : {}),
+      ...(typeof req.body?.hidden === "boolean" ? { hidden: req.body.hidden } : typeof req.body?.audio === "string" ? {} : { edited: true }),
     });
     res.json({ ok: true });
   });
