@@ -79,8 +79,13 @@ export type CoverStyle = "glass" | "medallion" | "prints" | "letters";
 /** A highlight across a picture, as light catches a gloss-coated print. */
 const SHEEN = "linear-gradient(135deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.14) 32%, rgba(255,255,255,0) 46%)";
 
-/** The same faces over and over, in an order where a face never sits beside itself. */
-const cycle = (faces: Face[], n: number) => Array.from({ length: n }, (_, i) => faces[(i * 7) % faces.length]);
+const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+/** The same faces over and over, in an order where a face never sits beside itself, and every face comes once before any comes twice. */
+const cycle = (faces: Face[], n: number) => {
+  let step = 7;
+  while (faces.length > 1 && gcd(step, faces.length) !== 1) step++;
+  return Array.from({ length: n }, (_, i) => faces[(i * step) % faces.length]);
+};
 /** Repeatable "random": the same scatter every time the page is drawn. */
 const rnd = (i: number, k: number) => { const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); };
 
@@ -93,8 +98,11 @@ function CoverCollage({ faces, style }: { faces: Face[]; style: CoverStyle }) {
   if (!faces.length) return null;
   if (style === "letters") {
     // One giant word cut out of everyone's photos, black and white, a gold script across it.
-    const cols = 10, rows = 2, x0 = 30, y0 = 268, w = 756 / cols, h = 330 / rows;
+    // Everyone in the word: enough tiles that each face appears at least once (cycle() walks them all first).
+    const rows = 3, cols = Math.ceil(faces.length / rows), x0 = 30, y0 = 262, w = 756 / cols, h = 340 / rows;
     const tiles = cycle(faces, cols * rows);
+    // And everyone in the crowd behind it, so nobody is lost in the gap between two letters.
+    const crowdCols = 8, crowdRows = Math.ceil(faces.length / crowdCols);
     return (
       <svg className="absolute inset-0" viewBox={`0 0 ${W} ${H}`} width={W} height={H}>
         <defs>
@@ -105,8 +113,8 @@ function CoverCollage({ faces, style }: { faces: Face[]; style: CoverStyle }) {
         </defs>
         <rect width={W} height={H} fill="#ffffff" />
         {/* The crowd, faint, behind the word. */}
-        <g opacity={0.16} filter="url(#mag-bw)">
-          {cycle(faces, 24).map((f, i) => <image key={`bg-${i}`} href={f.src} x={(i % 8) * 102} y={Math.floor(i / 8) * 130} width={102} height={130} preserveAspectRatio="xMidYMid slice" />)}
+        <g opacity={0.2} filter="url(#mag-bw)">
+          {cycle(faces, crowdCols * crowdRows).map((f, i) => <image key={`bg-${i}`} href={f.src} x={(i % crowdCols) * (W / crowdCols)} y={Math.floor(i / crowdCols) * 130} width={W / crowdCols} height={130} preserveAspectRatio="xMidYMid slice" />)}
         </g>
         <rect y={330} width={W} height={300} fill="url(#mag-band)" opacity={0.55} />
         <rect y={250} width={W} height={150} fill="url(#mag-fade)" opacity={0.35} />

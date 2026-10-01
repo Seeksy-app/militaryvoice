@@ -2792,6 +2792,8 @@ export const magazinePages = pgTable("magazine_pages", {
   /** The show's cover, from its feed when the profile has none. */
   art: text("art").notNull().default(""),
   edited: boolean("edited").notNull().default(false),
+  /** "About them" written for the magazine; empty uses the bio on their SmartLink. */
+  about: text("about").notNull().default(""),
   /** Their segment from the day (an audio or video link), played in the digital magazine instead of their latest episode. */
   audio: text("audio").notNull().default(""),
   /** Left out of the magazine by an admin: no page, not in the lineup or on the cover. */
