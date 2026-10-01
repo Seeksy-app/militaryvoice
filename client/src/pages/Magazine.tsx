@@ -123,7 +123,7 @@ function CoverCollage({ faces, style }: { faces: Face[]; style: CoverStyle }) {
     const cols = 6, rows = 5, w = 150, h = 176;
     const tiles = cycle(faces, Math.max(faces.length, cols * rows)).slice(0, Math.max(faces.length, cols * rows));
     return (
-      <div className="absolute inset-x-0 top-0 overflow-hidden" style={{ height: 650 }}>
+      <div className="absolute inset-x-0 top-0 overflow-hidden" style={{ height: 760 }}>
         {tiles.map((f, i) => {
           const c = i % cols, r = Math.floor(i / cols) % rows, layer = Math.floor(i / (cols * rows));
           const x = -30 + c * 140 + (rnd(i, 1) - 0.5) * 40 + layer * 70;
@@ -137,7 +137,7 @@ function CoverCollage({ faces, style }: { faces: Face[]; style: CoverStyle }) {
             </div>
           );
         })}
-        <div className="absolute inset-x-0 bottom-0" style={{ height: 260, background: `linear-gradient(to bottom, rgba(0,7,65,0), ${NAVY})`, zIndex: 200 }} />
+        <div className="absolute inset-x-0 bottom-0" style={{ height: 340, background: `linear-gradient(to bottom, rgba(0,7,65,0), ${NAVY} 70%)`, zIndex: 200 }} />
       </div>
     );
   }
